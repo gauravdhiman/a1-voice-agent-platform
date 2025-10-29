@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth-context';
 import Link from 'next/link';
+import { EmailVerificationBanner } from '@/components/auth/email-verification-banner';
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -23,6 +24,8 @@ export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState<string>('');
+  const [showVerificationBanner, setShowVerificationBanner] = useState(false);
   const { signIn, signInWithOAuth } = useAuth();
 
   const {
@@ -36,6 +39,9 @@ export function SignInForm() {
   const handleSignIn = async (data: SignInData) => {
     setIsLoading('password');
     setError('');
+    setEmail(data.email);
+    setShowVerificationBanner(false);
+    
     try {
       const result = await signIn(data);
       if (result?.error) {
@@ -48,7 +54,8 @@ export function SignInForm() {
       if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
         const errCode = error.code.toLowerCase();
         if (errCode === 'email_not_confirmed') {
-          setError('Please verify your email address before signing in. Check your email for a verification link.');
+          setShowVerificationBanner(true);
+          setError(null);
         } else if (errCode === 'invalid_credentials') {
           setError('Invalid credentials. Please try again with the correct credentials.');
         } else {
@@ -96,8 +103,20 @@ export function SignInForm() {
     }
   };
 
+  const handleCloseVerificationBanner = () => {
+    setShowVerificationBanner(false);
+    setEmail('');
+  };
+
   return (
     <div className="w-full max-w-md mx-auto">
+      {showVerificationBanner && email && (
+        <EmailVerificationBanner 
+          email={email} 
+          onClose={handleCloseVerificationBanner}
+        />
+      )}
+      
       <form onSubmit={handleSubmit(handleSignIn)} className="space-y-6">
         {error && (
           <Alert variant="destructive" className="bg-red-100 border-red-300">
