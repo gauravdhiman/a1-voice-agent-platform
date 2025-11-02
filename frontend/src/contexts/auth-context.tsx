@@ -187,8 +187,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signUp = withTelemetrySignUp(
     async (data: SignUpData) => {
       recordMetric(authAttemptsCounter, 1, { operation: 'signup', source: 'frontend' });
-      
-      const { data: signUpData, error } = await supabase.auth.signUp({
+
+      // Get the invitation token from URL params if not provided in data
+      let invitationToken = data.invitationToken;
+      if (!invitationToken) {
+        const urlParams = new URLSearchParams(window.location.search);
+        invitationToken = urlParams.get('token') || undefined;
+      }
+
+      // Use Supabase Auth directly for signup
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -199,20 +207,44 @@ export function AuthProvider({ children }: AuthProviderProps) {
         },
       });
 
-      if (error) {
-        recordMetric(authFailureCounter, 1, { operation: 'signup', error: error.status || 'unknown' });
-        throw error;
-      } else {
-        recordMetric(authSuccessCounter, 1, { operation: 'signup' });
+      if (authError) {
+        recordMetric(authFailureCounter, 1, { operation: 'signup', error: authError.status?.toString() || 'unknown' });
+        throw authError;
       }
 
-      // Transform the signed up user data to our AuthUser type
-      let signedUpUser = null;
-      if (signUpData.user) {
-        signedUpUser = transformSupabaseUser(signUpData.user, []);
+      if (!authData.user) {
+        recordMetric(authFailureCounter, 1, { operation: 'signup', error: 'no_user_returned' });
+        throw new Error('Failed to create user account');
       }
 
-      return { user: signedUpUser, error };
+      recordMetric(authSuccessCounter, 1, { operation: 'signup' });
+
+      // If there's an invitation token, process it via backend API
+      if (invitationToken && authData.user) {
+        try {
+          // Import auth service dynamically to avoid circular dependencies
+          const { authService } = await import('@/services/auth-service');
+          const result = await authService.processInvitation(invitationToken, authData.user.id);
+
+          if (!result.success) {
+            console.warn('Failed to process invitation:', result.error);
+            // Don't throw error here - user can still sign up, invitation will be processed later
+          } else {
+            console.log('Invitation processed successfully:', result.data);
+          }
+        } catch (inviteError) {
+          console.warn('Error processing invitation:', inviteError);
+          // Don't throw error - user can still sign up
+        }
+      }
+
+      // Transform the user for our AuthUser type
+      const user = transformSupabaseUser(
+        authData.user,
+        [] // Empty array - roles will be fetched on sign in
+      );
+
+      return { user, error: null };
     },
     { name: 'auth.signup', attributes: { operation: 'signup' } },
     { operation: 'Signup', attributes: { operation: 'signup' } }

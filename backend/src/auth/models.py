@@ -11,12 +11,13 @@ from src.rbac.roles.models import UserRoleWithPermissions
 
 class SignUpRequest(BaseModel):
     """User registration request model."""
-    
+
     email: EmailStr = Field(..., description="User email address")
     password: str = Field(..., min_length=8, max_length=128, description="User password")
     password_confirm: str = Field(..., description="Password confirmation")
     first_name: str = Field(..., min_length=1, max_length=50, description="User first name")
     last_name: str = Field(..., min_length=1, max_length=50, description="User last name")
+    invitation_token: Optional[str] = Field(None, description="Invitation token for organization membership")
     
     @field_validator('password')
     @classmethod

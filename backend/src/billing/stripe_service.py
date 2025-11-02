@@ -20,9 +20,9 @@ class StripeService:
         """Initialize Stripe service."""
         if not stripe.api_key:
             logger.warning("Stripe API key not configured. Stripe functionality will be disabled.")
-        
-        # Set frontend URL for redirects (default to localhost for development)
-        self.frontend_url = "http://localhost:3000"
+
+        # Set frontend URL for redirects
+        self.frontend_url = settings.app_base_url or "http://localhost:3000"
     
     async def create_customer(
         self, 

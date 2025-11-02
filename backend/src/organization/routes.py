@@ -3,16 +3,19 @@ Organization API routes for the multi-tenant SaaS platform.
 """
 
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from opentelemetry import trace
 
 from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
 from src.organization.member_models import OrganizationMember
+from src.organization.invitation_models import Invitation, InvitationCreate
 from src.organization.service import organization_service
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.service import user_role_service
+from src.rbac.user_roles.models import UserRoleCreate
+from src.common.errors import ErrorCode
 
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)
@@ -78,7 +81,6 @@ async def create_self_organization(org_data: OrganizationCreate, user_data: tupl
             current_span.add_event("org_admin_role_not_found", {"error": str(role_error)})
         else:
             # Assign org_admin role to user for their organization
-            from src.rbac.user_roles.models import UserRoleCreate
             user_role_data = UserRoleCreate(
                 user_id=current_user_id,
                 role_id=org_admin_role.id,
@@ -122,7 +124,7 @@ async def get_organization_members(org_id: UUID, user_data: tuple[UUID, UserProf
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Insufficient permissions to view organization members"
                 )
-    
+
     members, error = await user_role_service.get_users_by_organization(org_id)
     if error:
         current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
@@ -130,10 +132,87 @@ async def get_organization_members(org_id: UUID, user_data: tuple[UUID, UserProf
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=error
         )
-    
+
     current_span.set_attribute("members.count", len(members))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return members
+
+
+@organization_router.post("/{org_id}/invite", response_model=Invitation, status_code=status.HTTP_201_CREATED)
+@tracer.start_as_current_span("organization.routes.invite_member")
+async def invite_member(
+    org_id: UUID,
+    request: Request,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user)
+):
+    """Invite a new member to an organization."""
+    current_user_id, user_profile = user_data
+    current_span = trace.get_current_span()
+    current_span.set_attribute("user.id", str(current_user_id))
+    current_span.set_attribute("organization.id", str(org_id))
+
+    # Check if user has permission to invite members
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            if not user_profile.has_permission("member:invite", str(org_id)):
+                current_span.set_status(trace.Status(trace.StatusCode.ERROR, "Insufficient permissions to invite members"))
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error_code": ErrorCode.INSUFFICIENT_PERMISSIONS.value,
+                        "message": "Insufficient permissions to invite members"
+                    }
+                )
+
+    # Parse request body manually to get email
+    body = await request.json()
+    email = body.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": ErrorCode.VALIDATION_ERROR.value,
+                "message": "Email is required"
+            }
+        )
+
+    # Create InvitationCreate with the current user as invited_by
+    invite_data = InvitationCreate(
+        email=email,
+        organization_id=org_id,
+        invited_by=current_user_id
+    )
+
+    # Import here to avoid circular imports
+    from src.organization.service import organization_service as org_service
+
+    invitation, error = await org_service.create_invitation(invite_data)
+    if error:
+        current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
+
+        # Handle specific error codes with appropriate HTTP status codes
+        if error == ErrorCode.USER_ALREADY_MEMBER.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error_code": ErrorCode.USER_ALREADY_MEMBER.value,
+                    "message": "User is already a member of this organization"
+                }
+            )
+        else:
+            # Generic error
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error_code": ErrorCode.VALIDATION_ERROR.value,
+                    "message": error
+                }
+            )
+
+    current_span.set_attribute("invitation.id", str(invitation.id))
+    current_span.set_attribute("invitation.email", email)
+    current_span.set_status(trace.Status(trace.StatusCode.OK))
+    return invitation
 
 
 @organization_router.get("/{org_id}", response_model=Organization)

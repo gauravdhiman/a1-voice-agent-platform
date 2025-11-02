@@ -37,8 +37,50 @@ def upgrade() -> None:
     op.create_index('idx_email_verification_tokens_token', 'email_verification_tokens', ['token'])
     op.create_index('idx_email_verification_tokens_expires_at', 'email_verification_tokens', ['expires_at'])
 
+    # Enable RLS on email_verification_tokens table
+    op.execute("ALTER TABLE email_verification_tokens ENABLE ROW LEVEL SECURITY")
+
+    # Create policy for email_verification_tokens - users can only access their own tokens
+    op.execute("""
+        CREATE POLICY "Users can view own email verification tokens"
+        ON email_verification_tokens FOR SELECT
+        TO authenticated
+        USING (user_id = auth.uid())
+    """)
+
+    op.execute("""
+        CREATE POLICY "Users can insert own email verification tokens"
+        ON email_verification_tokens FOR INSERT
+        TO authenticated
+        WITH CHECK (user_id = auth.uid())
+    """)
+
+    op.execute("""
+        CREATE POLICY "Users can update own email verification tokens"
+        ON email_verification_tokens FOR UPDATE
+        TO authenticated
+        USING (user_id = auth.uid())
+        WITH CHECK (user_id = auth.uid())
+    """)
+
+    op.execute("""
+        CREATE POLICY "Users can delete own email verification tokens"
+        ON email_verification_tokens FOR DELETE
+        TO authenticated
+        USING (user_id = auth.uid())
+    """)
+
 
 def downgrade() -> None:
+    # Drop RLS policies
+    op.execute('DROP POLICY IF EXISTS "Users can delete own email verification tokens" ON email_verification_tokens')
+    op.execute('DROP POLICY IF EXISTS "Users can update own email verification tokens" ON email_verification_tokens')
+    op.execute('DROP POLICY IF EXISTS "Users can insert own email verification tokens" ON email_verification_tokens')
+    op.execute('DROP POLICY IF EXISTS "Users can view own email verification tokens" ON email_verification_tokens')
+
+    # Disable RLS on email_verification_tokens table
+    op.execute("ALTER TABLE email_verification_tokens DISABLE ROW LEVEL SECURITY")
+
     # Drop indexes
     op.drop_index('idx_email_verification_tokens_expires_at')
     op.drop_index('idx_email_verification_tokens_token')

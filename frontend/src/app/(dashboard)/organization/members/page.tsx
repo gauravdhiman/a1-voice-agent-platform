@@ -13,11 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Users, UserPlus } from 'lucide-react';
 import { DataTable } from '@/components/data-table/data-table';
 import { organizationMembersColumns } from '@/components/organization-members/organization-members-data-table-columns';
+import { InviteMemberDialog } from '@/components/organization-members/invite-member-dialog';
 import type { Organization } from '@/types/organization';
+import { useState } from 'react';
 
 function MembersPageContent({ validatedOrg }: { validatedOrg: Organization | null }) {
   const { data: members = [], isLoading, error, refetch } = useOrganizationMembers();
   const userPermissions = useUserPermissions();
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   if (isLoading) {
     return <LoadingState message="Loading members..." />;
@@ -58,7 +61,10 @@ function MembersPageContent({ validatedOrg }: { validatedOrg: Organization | nul
           </div>
 
           {userPermissions.canManageMembers && (
-            <Button className="flex items-center space-x-2">
+            <Button
+              className="flex items-center space-x-2"
+              onClick={() => setInviteDialogOpen(true)}
+            >
               <UserPlus className="h-4 w-4" />
               <span>Invite Member</span>
             </Button>
@@ -124,14 +130,21 @@ function MembersPageContent({ validatedOrg }: { validatedOrg: Organization | nul
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DataTable 
-            columns={organizationMembersColumns} 
-            data={members} 
+          <DataTable
+            columns={organizationMembersColumns}
+            data={members}
             filterColumn="member"
             filterPlaceholder="Filter members..."
           />
         </CardContent>
       </Card>
+
+      {/* Invite Member Dialog */}
+      <InviteMemberDialog
+        open={inviteDialogOpen}
+        onOpenChange={setInviteDialogOpen}
+        onSuccess={() => refetch()}
+      />
     </div>
   );
 }

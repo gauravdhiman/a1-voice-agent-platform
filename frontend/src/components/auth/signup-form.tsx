@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Loader2, Mail, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Mail, Lock, User, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth-context';
+import { useSearchParams } from 'next/navigation';
 
 const signUpSchema = z.object({
   firstName: z.string().min(1, 'First name is required').max(50),
@@ -38,8 +39,11 @@ export function SignUpForm() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+  const [isSignUpComplete, setIsSignUpComplete] = useState(false);
+
   const { signUp, signInWithOAuth } = useAuth();
+  const searchParams = useSearchParams();
+  const invitationToken = searchParams?.get('token');
   
   const {
     register,
@@ -47,6 +51,7 @@ export function SignUpForm() {
     formState: { errors },
     watch,
     trigger,
+    reset,
   } = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
     mode: 'onChange', // Validate on change
@@ -88,14 +93,21 @@ export function SignUpForm() {
         passwordConfirm: data.passwordConfirm || '',
         firstName: data.firstName,
         lastName: data.lastName,
+        invitationToken: invitationToken || undefined,
       });
 
       if (error) {
         setError(error.message);
       } else if (user) {
+        // Clear the form after successful signup
+        reset();
+        setIsSignUpComplete(true);
 
-        setSuccess('Account created! Please check your email for verification.');
-        // Note: Organization creation will be handled after email verification and sign in
+        if (invitationToken) {
+          setSuccess('Account created! Please check your email for verification. You will be added to the organization after email confirmation.');
+        } else {
+          setSuccess('Account created! Please check your email for verification.');
+        }
       } else {
         setError('User details not returned after signup. Please try again.');
       }
@@ -147,12 +159,21 @@ export function SignUpForm() {
   return (
     <div className="w-full max-w-md mx-auto">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {invitationToken && !isSignUpComplete && (
+          <Alert className="border-cyan-100 bg-cyan-50">
+            <Users className="h-4 w-4 text-cyan-700" />
+            <AlertDescription className="text-cyan-700">
+              You&apos;ve been invited to join an organization! Create your account to get started.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive" className="bg-red-100 border-red-50">
             <AlertDescription className="text-red-700">{error}</AlertDescription>
           </Alert>
         )}
-        
+
         {success && (
           <Alert className="border-green-100 bg-green-50">
             <AlertDescription className="text-green-700">{success}</AlertDescription>

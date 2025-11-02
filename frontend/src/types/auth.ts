@@ -5,6 +5,19 @@
 import { Organization } from './organization';
 import { UserRoleAssignment } from './rbac';
 
+// User profile type for backend API responses
+export interface UserProfile {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  email_confirmed_at: boolean;
+  created_at: string;
+  updated_at: string;
+  has_organizations?: boolean;
+  roles: UserRoleAssignment[];
+}
+
 // Supabase types (to avoid importing the entire library in types)
 export interface SupabaseProvider {
   provider: string;
@@ -46,6 +59,7 @@ export interface SignUpData {
   passwordConfirm: string;
   firstName: string;
   lastName: string;
+  invitationToken?: string;
 }
 
 // Sign in form data

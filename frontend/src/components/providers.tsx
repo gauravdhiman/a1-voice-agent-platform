@@ -11,6 +11,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ThemeProvider } from '@/contexts/theme-context';
 import { OrganizationProvider } from '@/contexts/organization-context';
+import { Toaster } from '@/components/ui/sonner';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -52,6 +53,7 @@ export function Providers({ children }: ProvidersProps) {
             {process.env.NODE_ENV === 'development' && (
               <ReactQueryDevtools initialIsOpen={false} />
             )}
+            <Toaster />
           </OrganizationProvider>
         </AuthProvider>
       </ThemeProvider>

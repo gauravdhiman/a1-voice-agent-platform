@@ -76,7 +76,7 @@ class OrganizationService {
         
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          const errorMessage = errorData.detail || `HTTP error! status: ${response.status}`;
+          const errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
           span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
           throw new Error(errorMessage);
         }
@@ -237,6 +237,22 @@ class OrganizationService {
  // Get organization members
   async getOrganizationMembers(orgId: string): Promise<Member[]> {
     const response = await this.fetchWithAuth(`/organizations/${orgId}/members`);
+    return response.json();
+  }
+
+  // Invite a member to the organization
+  async inviteMember(orgId: string, email: string) {
+    const response = await this.fetchWithAuth(`/organizations/${orgId}/invite`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        organization_id: orgId,
+      }),
+    });
+    console.log(response.json());
     return response.json();
   }
 }
