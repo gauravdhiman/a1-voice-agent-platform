@@ -29,7 +29,7 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 # Create router
-router = APIRouter(prefix="/api/notifications", tags=["notifications"])
+router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 
 

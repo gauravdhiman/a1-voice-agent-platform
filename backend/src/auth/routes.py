@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
 # Create auth router
-auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+auth_router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
 
 class ProcessInvitationRequest(BaseModel):

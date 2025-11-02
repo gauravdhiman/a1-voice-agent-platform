@@ -21,7 +21,7 @@ from src.common.errors import ErrorCode
 tracer = trace.get_tracer(__name__)
 
 # Create organization router
-organization_router = APIRouter(prefix="/organizations", tags=["Organizations"])
+organization_router = APIRouter(prefix="/api/v1/organizations", tags=["Organizations"])
 
 
 @organization_router.post("/", response_model=Organization, status_code=status.HTTP_201_CREATED)

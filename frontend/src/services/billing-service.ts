@@ -19,7 +19,7 @@ import type {
 } from '@/types/billing';
 
 class BillingService {
-  private baseUrl = '/api/billing';
+  private baseUrl = '/api/v1/billing';
 
   // Subscription Plans
   async getSubscriptionPlans(activeOnly: boolean = true): Promise<SubscriptionPlan[]> {

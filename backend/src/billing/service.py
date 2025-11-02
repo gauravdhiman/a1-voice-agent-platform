@@ -4,7 +4,7 @@ Core billing service for subscription and credit management.
 
 from typing import Optional, Any
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 from config.supabase import supabase_config
@@ -90,7 +90,7 @@ class BillingService:
         """Update a subscription plan."""
         try:
             update_data = {k: v for k, v in plan_data.model_dump().items() if v is not None}
-            update_data["updated_at"] = datetime.utcnow().isoformat()
+            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
             
             result = self.supabase.table("subscription_plans").update(
                 update_data
@@ -148,7 +148,7 @@ class BillingService:
             
             # Set trial period if applicable
             if plan.trial_period_days:
-                trial_start = datetime.utcnow()
+                trial_start = datetime.now(timezone.utc)
                 trial_end = trial_start + timedelta(days=plan.trial_period_days)
                 sub_data.update({
                     "trial_start": trial_start.isoformat(),
@@ -226,7 +226,7 @@ class BillingService:
                 if isinstance(value, UUID):
                     update_data[key] = str(value)
 
-            update_data["updated_at"] = datetime.utcnow().isoformat()
+            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             result = self.supabase.table("organization_subscriptions").update(
                 update_data
@@ -271,7 +271,7 @@ class BillingService:
             total_credits = org_result.data[0]["credit_balance"]
             
             # Get breakdown of subscription vs purchased credits
-            thirty_days_from_now = (datetime.utcnow() + timedelta(days=30)).isoformat()
+            thirty_days_from_now = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
             
             # Subscription credits (with expiry)
             subscription_credits_result = self.supabase.table("credit_transactions").select(
@@ -280,7 +280,7 @@ class BillingService:
                 "source", TransactionSource.SUBSCRIPTION.value
             ).eq("transaction_type", TransactionType.EARNED.value).not_.is_(
                 "expires_at", "null"
-            ).gte("expires_at", datetime.utcnow().isoformat()).execute()
+            ).gte("expires_at", datetime.now(timezone.utc).isoformat()).execute()
             
             subscription_credits = sum(
                 tx["amount"] for tx in subscription_credits_result.data
@@ -305,7 +305,7 @@ class BillingService:
             ).eq("organization_id", str(organization_id)).not_.is_(
                 "expires_at", "null"
             ).lte("expires_at", thirty_days_from_now).gte(
-                "expires_at", datetime.utcnow().isoformat()
+                "expires_at", datetime.now(timezone.utc).isoformat()
             ).order("expires_at").execute()
             
             expiring_soon = sum(tx["amount"] for tx in expiring_soon_result.data)
@@ -376,7 +376,7 @@ class BillingService:
             # Update organization balance to the exact target amount
             self.supabase.table("organizations").update({
                 "credit_balance": credits,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", str(organization_id)).execute()
 
             # Create transaction record for the adjustment
@@ -461,7 +461,7 @@ class BillingService:
             # Update organization balance
             self.supabase.table("organizations").update({
                 "credit_balance": new_balance,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", str(organization_id)).execute()
             
             # Create transaction record using the validated model
@@ -546,7 +546,7 @@ class BillingService:
             # Update organization balance
             self.supabase.table("organizations").update({
                 "credit_balance": new_balance,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", str(consumption_request.organization_id)).execute()
             
             # Create consumption transaction using validated model

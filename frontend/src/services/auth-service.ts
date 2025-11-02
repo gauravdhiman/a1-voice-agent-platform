@@ -4,7 +4,7 @@ import type { UserProfile } from '@/types/auth';
 
 // Auth Service class
 class AuthService {
-  private baseUrl = '/auth';
+  private baseUrl = '/api/v1/auth';
 
   // Process invitation to add user to organization
   async processInvitation(token: string, userId: string): Promise<{

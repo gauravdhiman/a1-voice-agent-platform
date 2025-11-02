@@ -27,7 +27,7 @@ from src.rbac.user_roles.service import user_role_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/billing", tags=["billing"])
+router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
 
 # Subscription Plans

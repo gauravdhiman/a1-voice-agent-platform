@@ -6,8 +6,7 @@ import logging
 import html
 from typing import Optional, Dict, Any, List
 from uuid import UUID
-import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 import resend
 from config.settings import settings
 from config import supabase_config
@@ -222,7 +221,7 @@ class NotificationService:
             if event_data.metadata is not None:
                 update_data["metadata"] = event_data.metadata
             
-            update_data["updated_at"] = datetime.utcnow().isoformat()
+            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
             
             response = self.supabase.table("notification_events").update(update_data).eq("id", str(event_id)).execute()
             return NotificationEvent(**response.data[0]) if response.data else None
@@ -317,7 +316,7 @@ class NotificationService:
             if template_data.is_active is not None:
                 update_data["is_active"] = template_data.is_active
             
-            update_data["updated_at"] = datetime.utcnow().isoformat()
+            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
             
             response = self.supabase.table("notification_templates").update(update_data).eq("id", str(template_id)).execute()
             return NotificationTemplate(**response.data[0]) if response.data else None
@@ -447,7 +446,7 @@ class NotificationService:
                 self.supabase.table("notification_logs").update({
                     "status": NotificationStatus.SENT.value,
                     "provider_message_id": email_response.get("id"),
-                    "sent_at": datetime.utcnow().isoformat()
+                    "sent_at": datetime.now(timezone.utc).isoformat()
                 }).eq("id", str(notification_log_id)).execute()
                 
                 logger.info(f"Notification sent successfully: {request.event_key} to {request.recipient_email}")
