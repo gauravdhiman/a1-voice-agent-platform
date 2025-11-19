@@ -51,9 +51,6 @@ Thumbs.db
 *.log
 logs/
 
-# Docker
-.dockerignore
-
 # Testing (anywhere in the project)
 .coverage
 .pytest_cache/
