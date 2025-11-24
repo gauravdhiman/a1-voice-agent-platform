@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 
@@ -39,7 +40,7 @@ const navigationItems = [
     name: 'Users',
     href: '/users',
     icon: Users,
- },
+  },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -62,8 +63,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // Check if user is a platform admin
   const isPlatformAdmin = user?.hasRole('platform_admin');
 
-   // Filter navigation items based on user permissions
- const filteredNavigationItems = navigationItems.filter(item => {
+  // Filter navigation items based on user permissions
+  const filteredNavigationItems = navigationItems.filter(item => {
     if (item.name === 'Users') {
       return isPlatformAdmin; // Only show Users to platform admins
     }
@@ -85,8 +86,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const getBreadcrumbs = () => {
     const breadcrumbs = [];
-
-    // Extract orgId from the search params
     const orgId = searchParams.get('org_id');
 
     if (pathname === '/dashboard') {
@@ -101,7 +100,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       breadcrumbs.push({ name: 'Members', href: null });
 
     } else if (pathname === '/users') {
-      // Only show users breadcrumb if user has permission
       if (isPlatformAdmin) {
         breadcrumbs.push({ name: 'Users', href: null });
       } else {
@@ -114,7 +112,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     } else if (pathname === '/settings') {
       breadcrumbs.push({ name: 'Settings', href: null });
     } else if (pathname.startsWith('/organization')) {
-      // Handle dynamic organization routes
       const orgHref = orgId ? `/organization?org_id=${orgId}` : '/organization';
       if (pathname.includes('/members')) {
         breadcrumbs.push({ name: 'Organization', href: orgHref });
@@ -131,26 +128,39 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
-      {/* Sidebar - Fixed height, full viewport */}
-      <div className={`bg-card border-r border-border shadow-lg transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-64'} flex flex-col h-full`}>
-        {/* Sidebar Header - Fixed */}
-        <div className="p-4 border-b border-border flex items-center justify-between flex-shrink-0">
+    <div className="h-screen bg-background flex overflow-hidden font-sans">
+      {/* Sidebar */}
+      <aside
+        className={`bg-sidebar border-r border-sidebar-border shadow-sm transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-16' : 'w-64'
+          } flex flex-col h-full z-20`}
+      >
+        {/* Sidebar Header */}
+        <div className="h-14 flex items-center justify-between px-4 border-b border-sidebar-border bg-sidebar">
           {!sidebarCollapsed && (
-            <h2 className="text-lg font-semibold text-foreground">SaaS Platform</h2>
+            <div className="flex items-center space-x-2">
+              <div className="bg-sidebar-primary w-7 h-7 rounded-md flex items-center justify-center">
+                <span className="text-sidebar-primary-foreground font-bold text-base">AI</span>
+              </div>
+              <span className="text-base font-bold text-sidebar-foreground tracking-tight">NeuraSaaS</span>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <div className="mx-auto bg-sidebar-primary w-7 h-7 rounded-md flex items-center justify-center">
+              <span className="text-sidebar-primary-foreground font-bold text-base">AI</span>
+            </div>
           )}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="p-1 h-8 w-8"
+            className={`h-8 w-8 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent ${sidebarCollapsed ? 'hidden' : ''}`}
           >
-            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            <ChevronLeft className="h-4 w-4" />
           </Button>
         </div>
 
-        {/* Navigation - Scrollable if needed */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        {/* Navigation */}
+        <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           {filteredNavigationItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href ||
@@ -160,122 +170,170 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <button
                 key={item.name}
                 onClick={() => handleNavigation(item.href)}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                } ${sidebarCollapsed ? 'justify-center' : ''}`}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md transition-all duration-200 group relative text-sm ${isActive
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                  } ${sidebarCollapsed ? 'justify-center' : ''}`}
                 title={sidebarCollapsed ? item.name : undefined}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                {!sidebarCollapsed && <span className="font-medium">{item.name}</span>}
+                <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-sidebar-primary' : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground'}`} />
+                {!sidebarCollapsed && <span>{item.name}</span>}
+                {sidebarCollapsed && isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full" />
+                )}
               </button>
             );
           })}
-        </nav>
-      </div>
+        </div>
 
-      {/* Main Content Area - Fixed height */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header - Fixed */}
-        <header className="bg-card shadow-sm border-b border-border flex-shrink-0">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div>
-                <nav className="flex" aria-label="Breadcrumb">
-                  <ol className="inline-flex items-center space-x-1 md:space-x-2">
-                    {getBreadcrumbs().map((breadcrumb, index) => (
-                      <li key={index} className="inline-flex items-center">
-                        {index > 0 && (
-                          <svg className="w-3 h-3 text-muted-foreground mx-1" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 6 10">
-                            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 9 4-4-4-4"/>
-                          </svg>
-                        )}
-                        {breadcrumb.href ? (
-                          <button
-                            onClick={() => router.push(breadcrumb.href!)}
-                            className="text-xl font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            {breadcrumb.name}
-                          </button>
-                        ) : (
-                          <span className="text-xl font-semibold text-foreground">
-                            {breadcrumb.name}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </nav>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-foreground">
-                  Welcome, {user?.firstName}
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-sidebar-border bg-sidebar">
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
+            <Avatar className="h-8 w-8 border border-sidebar-border">
+              <AvatarFallback className="bg-sidebar-primary/10 text-sidebar-primary font-medium text-xs">
+                {user?.firstName ? getInitials(`${user.firstName} ${user.lastName || ''}`) : 'U'}
+              </AvatarFallback>
+            </Avatar>
+            {!sidebarCollapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  {user?.firstName} {user?.lastName}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/60 truncate">
                   {user?.email}
                 </p>
               </div>
-              <ThemeToggle />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-blue-500 text-white">
-                        {user?.firstName ? getInitials(`${user.firstName} ${user.lastName || ''}`) : 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onClick={() => router.push('/settings')}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
-                  </DropdownMenuItem>
-                  {currentOrganization && user && (user.hasRole('platform_admin') || user.hasRole('org_admin', currentOrganization.id)) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      {organizations.length > 1 && (
-                        <DropdownMenuItem onClick={() => router.push('/organizations')}>
-                          <Building2 className="mr-2 h-4 w-4" />
-                          <span>Organizations</span>
-                        </DropdownMenuItem>
-                      )}
-                      {organizations.length === 1 && currentOrganization && (
-                        <>
-                          <DropdownMenuItem onClick={() => router.push(`/organization?org_id=${currentOrganization.id}`)}>
-                            <Building2 className="mr-2 h-4 w-4" />
-                            <span>Organization</span>
-                          </DropdownMenuItem>
+            )}
+          </div>
+        </div>
+      </aside>
 
-                          <DropdownMenuItem onClick={() => router.push(`/organization/members?org_id=${currentOrganization.id}`)}>
-                            <Users className="mr-2 h-4 w-4" />
-                            <span>Members</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/organization/billing?org_id=${currentOrganization.id}`)}>
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            <span>Billing & Subscriptions</span>
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
-                  <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Sign out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-muted/30">
+        {/* Header */}
+        <header className="h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-6 z-10">
+          <div className="flex items-center">
+            {sidebarCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarCollapsed(false)}
+                className="mr-4 h-8 w-8 text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Breadcrumbs */}
+            <nav className="hidden md:flex" aria-label="Breadcrumb">
+              <ol className="inline-flex items-center space-x-1 md:space-x-2">
+                {getBreadcrumbs().map((breadcrumb, index) => (
+                  <li key={index} className="inline-flex items-center">
+                    {index > 0 && (
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground mx-1" />
+                    )}
+                    {breadcrumb.href ? (
+                      <button
+                        onClick={() => router.push(breadcrumb.href!)}
+                        className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {breadcrumb.name}
+                      </button>
+                    ) : (
+                      <span className="text-sm font-semibold text-foreground">
+                        {breadcrumb.name}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            {/* Search and Notifications - Hidden for now as they are not yet functional */}
+            {/* <div className="relative hidden md:block w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search..."
+                className="pl-9 h-9 bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary"
+              />
             </div>
+
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground relative">
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-background"></span>
+            </Button> */}
+
+            <ThemeToggle />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0 ring-2 ring-transparent hover:ring-primary/20 transition-all">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground font-medium text-xs">
+                      {user?.firstName ? getInitials(`${user.firstName} ${user.lastName || ''}`) : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 p-2">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push('/settings')} className="cursor-pointer">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+                {currentOrganization && user && (user.hasRole('platform_admin') || user.hasRole('org_admin', currentOrganization.id)) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Organization</DropdownMenuLabel>
+                    {organizations.length > 1 && (
+                      <DropdownMenuItem onClick={() => router.push('/organizations')} className="cursor-pointer">
+                        <Building2 className="mr-2 h-4 w-4" />
+                        <span>Switch Org</span>
+                      </DropdownMenuItem>
+                    )}
+                    {organizations.length === 1 && currentOrganization && (
+                      <>
+                        <DropdownMenuItem onClick={() => router.push(`/organization?org_id=${currentOrganization.id}`)} className="cursor-pointer">
+                          <Building2 className="mr-2 h-4 w-4" />
+                          <span>Overview</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem onClick={() => router.push(`/organization/members?org_id=${currentOrganization.id}`)} className="cursor-pointer">
+                          <Users className="mr-2 h-4 w-4" />
+                          <span>Members</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/organization/billing?org_id=${currentOrganization.id}`)} className="cursor-pointer">
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          <span>Billing</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
-        {/* Page Content - Scrollable */}
-        <main className="flex-1 overflow-y-auto bg-background">
-          {children}
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-6xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -6,10 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  CreditCard, 
-  Zap, 
-  Calendar, 
+import {
+  CreditCard,
+  Zap,
+  Calendar,
   RefreshCw,
   Loader2,
   AlertTriangle
@@ -27,7 +27,7 @@ import { AccessDenied } from '@/components/ui/access-denied';
 
 export default function BillingPage() {
   const { loading: authLoading } = useAuth();
- const { currentOrganization, loading: orgLoading, setCurrentOrganization } = useOrganization();
+  const { currentOrganization, loading: orgLoading, setCurrentOrganization } = useOrganization();
   const searchParams = useSearchParams();
   const orgId = searchParams.get('org_id');
 
@@ -39,7 +39,7 @@ export default function BillingPage() {
     setCurrentOrganization(validatedOrg);
   }
 
-  const { 
+  const {
     data: billingSummary,
     isLoading: loading,
     error: queryError,
@@ -52,15 +52,15 @@ export default function BillingPage() {
   const error = queryError ? (queryError instanceof Error ? queryError.message : 'Unknown error') : null;
 
   // Make orgId mandatory - if not provided, redirect to organizations page
- if (!orgId) {
-    return <AccessDenied 
+  if (!orgId) {
+    return <AccessDenied
       title="Organization ID Required"
       description="Organization ID is required to access this page. Please select an organization from the organizations page."
       redirectPath="/organizations"
     />;
   }
 
-  const hasActiveSubscription = billingSummary?.subscription && 
+  const hasActiveSubscription = billingSummary?.subscription &&
     ['active', 'trial'].includes(billingSummary.subscription.status);
 
   const activeTab = userSelectedTab ?? (hasActiveSubscription ? 'overview' : 'plans');
@@ -91,18 +91,16 @@ export default function BillingPage() {
 
   if (authLoading || orgLoading || validationLoading || loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin mr-2" />
-          <span>Loading billing information...</span>
-        </div>
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-muted-foreground">Loading billing information...</span>
       </div>
     );
   }
 
   // Check if orgId is invalid (provided but validation failed)
   if (!isOrgValid) {
-    return <AccessDenied 
+    return <AccessDenied
       title="Access Denied"
       description="You do not have permission to access this organization. Please contact your organization administrator or platform admin for access."
       redirectPath="/organizations"
@@ -111,28 +109,29 @@ export default function BillingPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert className="border-red-200 bg-red-50">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
+      <div className="py-8">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Billing & Subscriptions</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl font-bold text-foreground">Billing & Subscriptions</h1>
+            <p className="text-sm text-muted-foreground">
               Manage your subscription, credits, and billing information
             </p>
           </div>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={refresh}
             disabled={isRefetching}
           >
@@ -144,30 +143,30 @@ export default function BillingPage() {
             Refresh
           </Button>
         </div>
-        
+
         {/* Organization Info */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>Organization:</span>
-          <span className="font-medium">{validatedOrg?.name}</span>
+          <span className="font-medium text-foreground">{validatedOrg?.name}</span>
         </div>
       </div>
 
       {/* Overview Cards */}
       {billingSummary && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Current Plan */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Current Plan</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Current Plan</CardTitle>
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0">
               <div className="text-2xl font-bold">
                 {billingSummary.subscription?.plan?.name || 'No Plan'}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-1">
                 {billingSummary.subscription?.status && (
-                  <Badge className="capitalize">
+                  <Badge variant="outline" className="capitalize font-normal">
                     {billingSummary.subscription.status}
                   </Badge>
                 )}
@@ -177,15 +176,15 @@ export default function BillingPage() {
 
           {/* Credit Balance */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Credit Balance</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Credit Balance</CardTitle>
               <Zap className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0">
               <div className="text-2xl font-bold">
                 {billingSummary.credit_balance?.toLocaleString() || '0'}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-1">
                 Available credits
               </p>
             </CardContent>
@@ -193,19 +192,19 @@ export default function BillingPage() {
 
           {/* Next Billing */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Next Billing</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Next Billing</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0">
               <div className="text-2xl font-bold">
-                {billingSummary.next_billing_date 
+                {billingSummary.next_billing_date
                   ? formatDate(billingSummary.next_billing_date)
                   : 'N/A'
                 }
               </div>
-              <p className="text-xs text-muted-foreground">
-                {billingSummary.amount_due 
+              <p className="text-xs text-muted-foreground mt-1">
+                {billingSummary.amount_due
                   ? formatCurrency(billingSummary.amount_due)
                   : 'No amount due'
                 }
@@ -231,25 +230,29 @@ export default function BillingPage() {
           {hasActiveSubscription ? (
             <div className="space-y-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>Subscription Overview</CardTitle>
+                <CardHeader className="p-5 pb-3">
+                  <CardTitle className="text-lg">Subscription Overview</CardTitle>
                   <CardDescription>
                     Current subscription details and usage information
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-5 pt-0">
                   {billingSummary?.subscription && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <h4 className="font-semibold">Plan Details</h4>
-                          <p>Plan: {billingSummary.subscription.plan?.name}</p>
-                          <p>Status: {billingSummary.subscription.status}</p>
+                          <h4 className="font-semibold text-sm mb-2">Plan Details</h4>
+                          <div className="space-y-1 text-sm">
+                            <p><span className="text-muted-foreground">Plan:</span> {billingSummary.subscription.plan?.name}</p>
+                            <p><span className="text-muted-foreground">Status:</span> {billingSummary.subscription.status}</p>
+                          </div>
                         </div>
                         <div>
-                          <h4 className="font-semibold">Usage This Period</h4>
-                          <p>Credits Used: {billingSummary.current_period_usage?.toLocaleString() || '0'}</p>
-                          <p>Credits Remaining: {billingSummary.credit_balance?.toLocaleString() || '0'}</p>
+                          <h4 className="font-semibold text-sm mb-2">Usage This Period</h4>
+                          <div className="space-y-1 text-sm">
+                            <p><span className="text-muted-foreground">Credits Used:</span> {billingSummary.current_period_usage?.toLocaleString() || '0'}</p>
+                            <p><span className="text-muted-foreground">Credits Remaining:</span> {billingSummary.credit_balance?.toLocaleString() || '0'}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -259,17 +262,17 @@ export default function BillingPage() {
             </div>
           ) : (
             <Card>
-              <CardHeader>
-                <CardTitle>Welcome to Billing</CardTitle>
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="text-lg">Welcome to Billing</CardTitle>
                 <CardDescription>
                   Choose a plan to get started with your subscription
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-4">
+              <CardContent className="p-5 pt-0">
+                <p className="text-muted-foreground mb-4 text-sm">
                   You don&apos;t have an active subscription yet. Browse our plans to get started.
                 </p>
-                <Button onClick={() => handleTabChange('plans')}>
+                <Button onClick={() => handleTabChange('plans')} size="sm">
                   View Plans
                 </Button>
               </CardContent>
@@ -280,7 +283,7 @@ export default function BillingPage() {
         {/* Plans Tab */}
         <TabsContent value="plans" className="space-y-6">
           {validatedOrg && (
-            <PlanSelection 
+            <PlanSelection
               organizationId={validatedOrg.id}
               currentSubscription={billingSummary?.subscription}
               onPlanSelected={() => refetch()}
@@ -291,7 +294,7 @@ export default function BillingPage() {
         {/* Credits Tab */}
         <TabsContent value="credits" className="space-y-6">
           {validatedOrg && (
-            <CreditPurchase 
+            <CreditPurchase
               organizationId={validatedOrg.id}
               onCreditsPurchased={() => refetch()}
             />
@@ -302,7 +305,7 @@ export default function BillingPage() {
         {hasActiveSubscription && (
           <TabsContent value="manage" className="space-y-6">
             {billingSummary?.subscription && validatedOrg && (
-              <SubscriptionManagement 
+              <SubscriptionManagement
                 organizationId={validatedOrg.id}
                 subscription={billingSummary.subscription}
                 onSubscriptionUpdated={() => refetch()}

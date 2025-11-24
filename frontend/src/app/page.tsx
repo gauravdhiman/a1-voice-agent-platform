@@ -1,382 +1,271 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/auth-context';
-import { useRouter } from 'next/navigation';
-import { useSubscriptionPlans } from '@/hooks/use-subscription-plans';
+import React from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import {
+  CheckCircle2,
+  BarChart3,
+  Users,
+  Shield,
+  Zap,
+  Globe,
+} from 'lucide-react';
 
-export default function HomePage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const { data: pricingPlans = [], isLoading: isLoadingPricing } = useSubscriptionPlans();
-  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
-
-  // Calculate average savings percentage across all plan tiers
-  const calculateAverageSavings = () => {
-    if (pricingPlans.length === 0) return 0; // fallback to 0%
-
-    const monthlyPlans = pricingPlans.filter(p => p.interval === 'monthly');
-    const annualPlans = pricingPlans.filter(p => p.interval === 'annual');
-
-    let totalSavings = 0;
-    let savingsCount = 0;
-
-    for (const monthlyPlan of monthlyPlans) {
-      // Find the corresponding annual plan (same name)
-      const annualPlan = annualPlans.find(ap =>
-        ap.name === monthlyPlan.name &&
-        ap.currency === monthlyPlan.currency
-      );
-
-      if (annualPlan) {
-        const monthlyTotal = monthlyPlan.price_amount * 12;
-        const annualTotal = annualPlan.price_amount;
-        const savings = monthlyTotal - annualTotal;
-        const savingsPercentage = (savings / monthlyTotal) * 100;
-
-        totalSavings += savingsPercentage;
-        savingsCount++;
-      }
-    }
-
-    return savingsCount > 0 ? Math.round(totalSavings / savingsCount) : 20;
-  };
-
-  // Show loading state while checking auth status
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
-          <p className="mt-4 text-white">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+export default function LandingPage() {
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-pink-800">
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
       {/* Header */}
-      <header className="bg-white/10 backdrop-blur-md">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <div className="bg-gradient-to-r from-cyan-400 to-blue-500 w-10 h-10 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">AI</span>
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 items-center justify-between max-w-6xl mx-auto px-4">
+          <div className="flex items-center gap-2">
+            <div className="bg-primary w-8 h-8 rounded-lg flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-lg">AI</span>
             </div>
-            <h1 className="text-2xl font-bold text-white">NeuraSaaS</h1>
+            <span className="text-xl font-bold tracking-tight">NeuraSaaS</span>
           </div>
-          <div className="flex space-x-4">
-            {user ? (
-              <Button 
-                variant="ghost" 
-                onClick={() => router.push('/dashboard')}
-                className="text-white hover:bg-white/20 cursor-pointer"
-              >
-                Dashboard
+          <nav className="hidden md:flex gap-6">
+            <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Features
+            </a>
+            <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Pricing
+            </a>
+            <a href="#about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              About
+            </a>
+          </nav>
+          <div className="flex items-center gap-4">
+            <Link href="/auth/signin">
+              <Button variant="ghost" size="sm">
+                Sign In
               </Button>
-            ) : (
-              <>
-                <Button 
-                  variant="ghost" 
-                  onClick={() => router.push('/auth/signin')}
-                  className="text-white hover:bg-white/20 cursor-pointer"
-                >
-                  Sign In
-                </Button>
-                <Button 
-                  onClick={() => router.push('/auth/signup')}
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white cursor-pointer"
-                >
-                  Get Started
-                </Button>
-              </>
-            )}
+            </Link>
+            <Link href="/auth/signup">
+              <Button size="sm">Get Started</Button>
+            </Link>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center max-w-4xl mx-auto">
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            Transform Your Business with <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">AI-Powered</span> Solutions
-          </h1>
-          <p className="text-xl text-gray-200 mb-10 max-w-2xl mx-auto">
-            Our cutting-edge AI platform helps businesses automate processes, gain insights, and drive innovation with advanced machine learning capabilities.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-16">
-            {user ? (
-              <Button 
-                size="lg" 
-                onClick={() => router.push('/dashboard')}
-                className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 py-3 rounded-full text-lg font-medium transition-all cursor-pointer shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                Go to Dashboard
-              </Button>
-            ) : (
-              <>
-                <Button 
-                  size="lg" 
-                  onClick={() => router.push('/auth/signup')}
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 py-3 rounded-full text-lg font-medium transition-all cursor-pointer shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                >
-                  Get Started - Free Trial
-                </Button>
-                <Button 
-                  size="lg" 
-                  variant="outline"
-                  onClick={() => router.push('/auth/signin')}
-                  className="border-white text-white bg-white/10 hover:bg-white/20 px-8 py-3 rounded-full text-lg font-medium transition-all cursor-pointer shadow-lg"
-                >
-                  Sign In
-                </Button>
-              </>
-            )}
-          </div>
-
-          {/* Features Section */}
-          <div className="mt-20">
-            <h2 className="text-3xl font-bold text-white mb-4">Powerful AI Features</h2>
-            <p className="text-gray-300 mb-12 max-w-2xl mx-auto">
-              Our platform provides state-of-the-art artificial intelligence capabilities to help your business thrive in the digital age.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl border border-white/20 hover:bg-white/15 transition-all">
-                <div className="bg-gradient-to-r from-cyan-500 to-blue-500 w-16 h-16 rounded-xl flex items-center justify-center mb-6 mx-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
+      <main className="flex-1">
+        {/* Hero Section */}
+        <section className="py-16 md:py-24 bg-gradient-to-b from-background to-secondary/20">
+          <div className="container px-4 md:px-6 max-w-6xl mx-auto">
+            <div className="grid gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
+              <div className="flex flex-col justify-center space-y-4">
+                <div className="space-y-2">
+                  <h1 className="text-3xl font-bold tracking-tighter sm:text-5xl xl:text-6xl/none">
+                    The Complete SaaS Platform for Your Business
+                  </h1>
+                  <p className="max-w-[600px] text-muted-foreground md:text-xl">
+                    Streamline your workflow, manage your team, and scale your business with our all-in-one solution.
+                  </p>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-3">AI Automation</h3>
-                <p className="text-gray-300">
-                  Automate repetitive tasks and processes with intelligent algorithms that learn and adapt over time.
-                </p>
-              </div>
-              
-              <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl border border-white/20 hover:bg-white/15 transition-all">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 w-16 h-16 rounded-xl flex items-center justify-center mb-6 mx-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
+                <div className="flex flex-col gap-2 min-[400px]:flex-row">
+                  <Link href="/auth/signup">
+                    <Button size="lg" className="px-8">
+                      Start Free Trial
+                    </Button>
+                  </Link>
+                  <Link href="#features">
+                    <Button size="lg" variant="outline" className="px-8">
+                      Learn More
+                    </Button>
+                  </Link>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Predictive Analytics</h3>
-                <p className="text-gray-300">
-                  Make data-driven decisions with advanced analytics that predict trends and customer behaviors.
-                </p>
-              </div>
-              
-              <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl border border-white/20 hover:bg-white/15 transition-all">
-                <div className="bg-gradient-to-r from-yellow-500 to-orange-500 w-16 h-16 rounded-xl flex items-center justify-center mb-6 mx-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+                <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                  <div className="flex items-center">
+                    <CheckCircle2 className="mr-1 h-4 w-4 text-primary" />
+                    <span>No credit card required</span>
+                  </div>
+                  <div className="flex items-center">
+                    <CheckCircle2 className="mr-1 h-4 w-4 text-primary" />
+                    <span>14-day free trial</span>
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Real-time Processing</h3>
-                <p className="text-gray-300">
-                  Process and analyze data in real-time for instant insights and immediate responses to market changes.
-                </p>
               </div>
-              
-              <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl border border-white/20 hover:bg-white/15 transition-all">
-                <div className="bg-gradient-to-r from-green-500 to-teal-500 w-16 h-16 rounded-xl flex items-center justify-center mb-6 mx-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Secure Infrastructure</h3>
-                <p className="text-gray-300">
-                  Enterprise-grade security with encrypted data processing and compliance with privacy regulations.
-                </p>
-              </div>
-              
-              <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl border border-white/20 hover:bg-white/15 transition-all">
-                <div className="bg-gradient-to-r from-red-500 to-pink-500 w-16 h-16 rounded-xl flex items-center justify-center mb-6 mx-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Custom AI Models</h3>
-                <p className="text-gray-300">
-                  Build and deploy custom AI models tailored specifically to your business requirements.
-                </p>
-              </div>
-              
-              <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl border border-white/20 hover:bg-white/15 transition-all">
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-500 w-16 h-16 rounded-xl flex items-center justify-center mb-6 mx-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">24/7 Support</h3>
-                <p className="text-gray-300">
-                  Access our expert team around the clock to help you maximize your AI investment.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Pricing Section */}
-          <div className="mt-20 py-16">
-            <h2 className="text-3xl font-bold text-white mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-gray-300 mb-8 max-w-2xl mx-auto">
-              Choose the plan that works best for your business. All plans include our core AI capabilities.
-            </p>
-            
-            {/* Billing Interval Toggle */}
-            <div className="flex justify-center mb-8">
-              <div className="inline-flex p-1 bg-white/10 rounded-xl border border-white/20">
-                <button
-                  onClick={() => setBillingInterval('monthly')}
-                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    billingInterval === 'monthly'
-                      ? 'bg-cyan-600 text-white'
-                      : 'text-gray-200 hover:text-white'
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBillingInterval('annual')}
-                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    billingInterval === 'annual'
-                      ? 'bg-cyan-600 text-white'
-                      : 'text-gray-200 hover:text-white'
-                  }`}
-                >
-                  Annual <span className="text-cyan-300 ml-1">
-                    (Save {calculateAverageSavings()}%)
-                  </span>
-                </button>
-              </div>
-            </div>
-            
-            {isLoadingPricing ? (
-              <div className="flex justify-center items-center h-40">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                {pricingPlans
-                  .filter(plan => plan.interval === billingInterval)
-                  .sort((a, b) => a.price_amount - b.price_amount) // Sort from lowest to highest price
-                  .map((plan, index) => (
-                    <div 
-                      key={plan.id} 
-                      className={`bg-white/10 backdrop-blur-sm rounded-2xl border ${
-                        index === 1 ? 'border-cyan-400 ring-2 ring-cyan-400/30 transform -translate-y-2' : 'border-white/20'
-                      } p-8 transition-all hover:scale-[1.02] relative overflow-hidden flex flex-col h-full`}
-                    >
-                      {index === 1 && (
-                        <div className="absolute top-0 right-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-bold px-4 py-1 rounded-bl-lg">
-                          MOST POPULAR
-                        </div>
-                      )}
-                      
-                      <div className="flex-grow">
-                        <h3 className="text-2xl font-bold text-white mb-2">{plan.name.split(':')[0]}</h3>
-                        <p className="text-gray-300 mb-6">{plan.description}</p>
-                        
-                        <div className="mb-6">
-                          <span className="text-4xl font-bold text-white">${plan.price_amount / 100}</span>
-                        </div>
-                        
-                        {plan.trial_period_days && plan.trial_period_days > 0 && (
-                          <div className="text-sm text-cyan-300 mb-6">
-                            {plan.trial_period_days}-day free trial
-                          </div>
-                        )}
-                        
-                        <ul className="space-y-3 mb-8">
-                          <li className="flex items-center text-gray-200">
-                            <svg className="h-5 w-5 text-green-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            {plan.included_credits} AI Credits
-                          </li>
-                          <li className="flex items-center text-gray-200">
-                            <svg className="h-5 w-5 text-green-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            {plan.max_users ? `${plan.max_users} Users` : 'Unlimited Users'}
-                          </li>
-                          
-                          {plan.features && (plan.features as { ai_features?: string[] }).ai_features?.map((feature, idx) => (
-                            <li key={idx} className="flex items-center text-gray-200">
-                              <svg className="h-5 w-5 text-green-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              {feature}
-                            </li>
-                          ))}
-                          
-                          {plan.features && (plan.features as { support?: string }).support && (
-                            <li className="flex items-center text-gray-200">
-                              <svg className="h-5 w-5 text-green-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              {(plan.features as { support?: string }).support}
-                            </li>
-                          )}
-                        </ul>
+              <div className="mx-auto flex w-full max-w-[500px] items-center justify-center lg:max-w-none">
+                <div className="relative w-full aspect-video overflow-hidden rounded-xl border border-border bg-background shadow-xl">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-background to-background" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center space-y-2">
+                      <div className="w-16 h-16 bg-primary/20 rounded-2xl mx-auto flex items-center justify-center mb-4">
+                        <Zap className="h-8 w-8 text-primary" />
                       </div>
-                      
-                      <Button 
-                        className={`w-full ${
-                          index === 1 
-                            ? 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white' 
-                            : 'bg-white/20 hover:bg-white/30 text-white'
-                        }`}
-                        onClick={() => {
-                          if (user) {
-                            router.push('/dashboard');
-                          } else {
-                            router.push('/auth/signup');
-                          }
-                        }}
-                      >
-                        {user ? 'Upgrade Plan' : 'Get Started'}
-                      </Button>
+                      <p className="text-sm font-medium text-muted-foreground">Powerful Dashboard Interface</p>
                     </div>
-                  ))}
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </div>
+        </section>
 
-          {/* CTA Section */}
-          <div className="mt-20 bg-gradient-to-r from-cyan-600/30 to-blue-600/30 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-            <h2 className="text-3xl font-bold text-white mb-4">Ready to transform your business?</h2>
-            <p className="text-gray-200 mb-6 max-w-2xl mx-auto">
-              Join thousands of forward-thinking companies using our AI platform to drive innovation and growth.
+        {/* Features Section */}
+        <section id="features" className="py-16 bg-background">
+          <div className="container px-4 md:px-6 max-w-6xl mx-auto">
+            <div className="flex flex-col items-center justify-center space-y-4 text-center">
+              <div className="space-y-2">
+                <div className="inline-block rounded-lg bg-secondary px-3 py-1 text-sm text-secondary-foreground">
+                  Key Features
+                </div>
+                <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
+                  Everything you need to succeed
+                </h2>
+                <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+                  Our platform provides comprehensive tools to help you manage every aspect of your business.
+                </p>
+              </div>
+            </div>
+            <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 mt-12">
+              {[
+                {
+                  title: "Analytics",
+                  description: "Get detailed insights into your performance with our advanced analytics dashboard.",
+                  icon: BarChart3,
+                },
+                {
+                  title: "Team Management",
+                  description: "Easily manage your team, assign roles, and track productivity in one place.",
+                  icon: Users,
+                },
+                {
+                  title: "Security",
+                  description: "Enterprise-grade security to keep your data safe and compliant with regulations.",
+                  icon: Shield,
+                },
+                {
+                  title: "Automation",
+                  description: "Automate repetitive tasks and workflows to save time and reduce errors.",
+                  icon: Zap,
+                },
+                {
+                  title: "Integrations",
+                  description: "Connect with your favorite tools and services seamlessly.",
+                  icon: Globe,
+                },
+                {
+                  title: "24/7 Support",
+                  description: "Our dedicated support team is available around the clock to assist you.",
+                  icon: CheckCircle2,
+                },
+              ].map((feature, index) => (
+                <div key={index} className="flex flex-col items-start space-y-2 rounded-lg border border-border p-5 shadow-sm transition-all hover:shadow-md">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <feature.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-bold">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing Section */}
+        <section id="pricing" className="py-16 bg-secondary/30">
+          <div className="container px-4 md:px-6 max-w-6xl mx-auto">
+            <div className="flex flex-col items-center justify-center space-y-4 text-center">
+              <div className="space-y-2">
+                <div className="inline-block rounded-lg bg-background px-3 py-1 text-sm border border-border shadow-sm">
+                  Pricing
+                </div>
+                <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
+                  Simple, transparent pricing
+                </h2>
+                <p className="max-w-[600px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+                  Choose the plan that&apos; right for your business. No hidden fees.
+                </p>
+              </div>
+            </div>
+            <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-3 mt-12 items-start">
+              {[
+                {
+                  name: "Starter",
+                  price: "$29",
+                  description: "Perfect for small teams just getting started.",
+                  features: ["Up to 5 users", "Basic analytics", "Email support", "1GB storage"],
+                  cta: "Get Started",
+                  popular: false,
+                },
+                {
+                  name: "Pro",
+                  price: "$79",
+                  description: "For growing businesses that need more power.",
+                  features: ["Up to 20 users", "Advanced analytics", "Priority support", "10GB storage", "API access"],
+                  cta: "Start Free Trial",
+                  popular: true,
+                },
+                {
+                  name: "Enterprise",
+                  price: "Custom",
+                  description: "Tailored solutions for large organizations.",
+                  features: ["Unlimited users", "Custom reporting", "24/7 dedicated support", "Unlimited storage", "SSO & Audit logs"],
+                  cta: "Contact Sales",
+                  popular: false,
+                },
+              ].map((plan, index) => (
+                <div
+                  key={index}
+                  className={`flex flex-col rounded-xl border ${plan.popular
+                      ? 'border-primary shadow-lg scale-105 bg-background z-10'
+                      : 'border-border bg-background/50 shadow-sm'
+                    } p-6`}
+                >
+                  {plan.popular && (
+                    <div className="mb-4 inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary w-fit">
+                      Most Popular
+                    </div>
+                  )}
+                  <h3 className="text-xl font-bold">{plan.name}</h3>
+                  <div className="mt-4 flex items-baseline text-3xl font-bold">
+                    {plan.price}
+                    {plan.price !== "Custom" && <span className="ml-1 text-sm font-medium text-muted-foreground">/mo</span>}
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
+                  <ul className="mt-6 space-y-3 flex-1">
+                    {plan.features.map((feature, i) => (
+                      <li key={i} className="flex items-center text-sm">
+                        <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    className={`mt-8 w-full ${plan.popular ? '' : 'variant-outline'}`}
+                    variant={plan.popular ? 'default' : 'outline'}
+                  >
+                    {plan.cta}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-border bg-background py-6 md:py-0">
+        <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row max-w-6xl mx-auto px-4">
+          <div className="flex flex-col items-center gap-4 px-8 md:flex-row md:gap-2 md:px-0">
+            <div className="bg-primary/10 w-8 h-8 rounded-lg flex items-center justify-center">
+              <span className="text-primary font-bold text-lg">AI</span>
+            </div>
+            <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
+              © 2024 NeuraSaaS Inc. All rights reserved.
             </p>
-            {user ? (
-              <Button 
-                size="lg" 
-                onClick={() => router.push('/dashboard')}
-                className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 py-3 rounded-full text-lg font-medium transition-all cursor-pointer shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                Continue to Dashboard
-              </Button>
-            ) : (
-              <Button 
-                size="lg" 
-                onClick={() => router.push('/auth/signup')}
-                className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 py-3 rounded-full text-lg font-medium transition-all cursor-pointer shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                Start Free Trial
-              </Button>
-            )}
           </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-white/10 backdrop-blur-md mt-20">
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center text-gray-300">
-            <p>© {new Date().getFullYear()} NeuraSaaS. All rights reserved.</p>
+          <div className="flex gap-4">
+            <Link href="/terms" className="text-sm font-medium hover:underline underline-offset-4">
+              Terms
+            </Link>
+            <Link href="/privacy" className="text-sm font-medium hover:underline underline-offset-4">
+              Privacy
+            </Link>
+            <Link href="/contact" className="text-sm font-medium hover:underline underline-offset-4">
+              Contact
+            </Link>
           </div>
         </div>
       </footer>

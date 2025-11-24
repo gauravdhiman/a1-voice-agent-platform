@@ -79,7 +79,7 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
     size: 150,
     minSize: 100,
     cell: ({ row }) => {
-      const roles = row.getValue("roles") as Array<{id: string, name: string, description: string}>;
+      const roles = row.getValue("roles") as Array<{ id: string, name: string, description: string }>;
       return (
         <div className="space-y-1">
           {roles.map((role) => (
@@ -141,9 +141,7 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => {
-      const member = row.original;
-
+    cell: () => {
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { organizationService } from "@/services/organization-service";
 import { supabase } from "@/lib/supabase";
 import { extractFirstLastName } from "@/lib/user-utils";
 import { authService } from "@/services/auth-service";
+import { Button } from "@/components/ui/button";
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, refreshUserProfile } = useAuth();
@@ -169,42 +170,29 @@ export default function OAuthCallbackPage() {
   // Show invitation processing status if there was an invitation token
   if (invitationError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto bg-yellow-100 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8 text-yellow-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
+          <div className="bg-card rounded-xl border border-border shadow-lg p-8 text-center">
+            <div className="mx-auto bg-yellow-100 dark:bg-yellow-900/30 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+              <AlertTriangle className="h-8 w-8 text-yellow-600 dark:text-yellow-500" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl font-bold text-foreground mb-2">
               Invitation Processing
             </h1>
-            <p className="text-gray-600 mb-4">
+            <p className="text-muted-foreground mb-4">
               Your account has been created successfully!
             </p>
-            <p className="text-red-600 mb-6">{invitationError}</p>
-            <p className="text-gray-600 text-sm mb-6">
+            <p className="text-destructive mb-6 font-medium">{invitationError}</p>
+            <p className="text-muted-foreground text-sm mb-6">
               You can still access the platform. Contact your organization admin
               if you believe there was an error.
             </p>
-            <button
+            <Button
               onClick={() => router.replace("/dashboard")}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="w-full"
             >
               Go to Dashboard
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -213,38 +201,25 @@ export default function OAuthCallbackPage() {
 
   if (invitationProcessed) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto bg-green-100 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8 text-green-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+          <div className="bg-card rounded-xl border border-border shadow-lg p-8 text-center">
+            <div className="mx-auto bg-green-100 dark:bg-green-900/30 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-500" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome!</h1>
-            <p className="text-gray-600 mb-4">
+            <h1 className="text-2xl font-bold text-foreground mb-2">Welcome!</h1>
+            <p className="text-muted-foreground mb-4">
               Your account has been created successfully!
             </p>
-            <p className="text-green-600 mb-6">
+            <p className="text-green-600 dark:text-green-500 mb-6 font-medium">
               You have been added to the organization successfully.
             </p>
-            <button
+            <Button
               onClick={() => router.replace("/dashboard")}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="w-full"
             >
               Go to Dashboard
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -253,35 +228,22 @@ export default function OAuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto bg-red-100 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8 text-red-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
+          <div className="bg-card rounded-xl border border-border shadow-lg p-8 text-center">
+            <div className="mx-auto bg-red-100 dark:bg-red-900/30 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+              <XCircle className="h-8 w-8 text-destructive" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl font-bold text-foreground mb-2">
               OAuth Error
             </h1>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <button
+            <p className="text-muted-foreground mb-6">{error}</p>
+            <Button
               onClick={() => router.push("/auth/signin")}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="w-full"
             >
               Try Again
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -291,16 +253,16 @@ export default function OAuthCallbackPage() {
   // Show loading state while processing
   if (isProcessing) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto bg-blue-100 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
-              <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+          <div className="bg-card rounded-xl border border-border shadow-lg p-8 text-center">
+            <div className="mx-auto bg-primary/10 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl font-bold text-foreground mb-2">
               Completing Sign In...
             </h1>
-            <p className="text-gray-600">
+            <p className="text-muted-foreground">
               Please wait while we complete your sign in and set up your
               account.
             </p>
@@ -312,4 +274,27 @@ export default function OAuthCallbackPage() {
 
   // This should rarely be reached since we redirect on success
   return null;
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <div className="bg-card rounded-xl border border-border shadow-lg p-8 text-center">
+              <div className="mx-auto bg-primary/10 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                Loading...
+              </h1>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <OAuthCallbackContent />
+    </Suspense>
+  );
 }

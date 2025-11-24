@@ -41,7 +41,7 @@ export function SignInForm() {
     setError('');
     setEmail(data.email);
     setShowVerificationBanner(false);
-    
+
     try {
       const result = await signIn(data);
       if (result?.error) {
@@ -111,60 +111,60 @@ export function SignInForm() {
   return (
     <div className="w-full max-w-md mx-auto">
       {showVerificationBanner && email && (
-        <EmailVerificationBanner 
-          email={email} 
+        <EmailVerificationBanner
+          email={email}
           onClose={handleCloseVerificationBanner}
         />
       )}
-      
+
       <form onSubmit={handleSubmit(handleSignIn)} className="space-y-6">
         {error && (
-          <Alert variant="destructive" className="bg-red-100 border-red-300">
-            <AlertDescription className="text-red-700">{error}</AlertDescription>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="email" className="text-gray-200">Email Address</Label>
+          <Label htmlFor="email">Email Address</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-300" />
+            <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               id="email"
               type="email"
               {...register('email')}
               placeholder="john@example.com"
-              className="pl-10 bg-white/10 border-white/30 text-white placeholder:text-gray-400"
+              className="pl-10"
               disabled={!!isLoading}
             />
           </div>
           {errors.email && (
-            <p className="text-sm text-red-400">{errors.email.message}</p>
+            <p className="text-sm text-destructive">{errors.email.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-gray-200">Password</Label>
+          <Label htmlFor="password">Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-300" />
+            <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
               {...register('password')}
               placeholder="Enter your password"
-              className="pl-10 pr-10 bg-white/10 border-white/30 text-white placeholder:text-gray-400"
+              className="pl-10 pr-10"
               disabled={!!isLoading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-3 h-4 w-4 text-gray-300 hover:text-gray-100 cursor-pointer"
+              className="absolute right-3 top-3 h-4 w-4 text-muted-foreground hover:text-foreground cursor-pointer"
               disabled={!!isLoading}
             >
               {showPassword ? <EyeOff /> : <Eye />}
             </button>
           </div>
           {errors.password && (
-            <p className="text-sm text-red-400">{errors.password.message}</p>
+            <p className="text-sm text-destructive">{errors.password.message}</p>
           )}
         </div>
 
@@ -173,16 +173,16 @@ export function SignInForm() {
             <input
               id="remember"
               type="checkbox"
-              className="h-4 w-4 text-cyan-600 focus:ring-cyan-500 border-gray-300 rounded bg-transparent"
+              className="h-4 w-4 text-primary focus:ring-primary border-input rounded bg-background"
               disabled={!!isLoading}
             />
-            <Label htmlFor="remember" className="text-sm text-gray-300">
+            <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground cursor-pointer">
               Remember me
             </Label>
           </div>
           <button
             type="button"
-            className="text-sm font-medium text-cyan-400 hover:text-cyan-300 cursor-pointer"
+            className="text-sm font-medium text-primary hover:text-primary/80 cursor-pointer"
             disabled={!!isLoading}
           >
             Forgot password?
@@ -203,18 +203,19 @@ export function SignInForm() {
 
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-300" />
+          <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-white text-gray-500">Or continue with</span>
+          <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
         </div>
       </div>
 
       <div className="space-y-4">
-        <button
+        <Button
+          variant="outline"
           onClick={handleGoogleSignIn}
           disabled={!!isLoading}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-200 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer bg-transparent"
+          className="w-full flex items-center justify-center cursor-pointer h-11"
         >
           {isLoading === 'google' ? (
             <>
@@ -222,26 +223,35 @@ export function SignInForm() {
               Signing in with Google...
             </>
           ) : (
-            <>
-              <div className="flex items-center">
-                <div className="bg-white border border-gray-300 rounded-md p-1 mr-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"></path>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"></path>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"></path>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"></path>
-                  </svg>
-                </div>
-                <span>Sign in with Google</span>
-              </div>
-            </>
+            <div className="flex items-center justify-center gap-3">
+              <svg className="h-5 w-5" viewBox="0 0 24 24">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
+              </svg>
+              <span>Sign in with Google</span>
+            </div>
           )}
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="outline"
           onClick={handleLinkedInSignIn}
           disabled={!!isLoading}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-200 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer bg-transparent"
+          className="w-full flex items-center justify-center cursor-pointer h-11"
         >
           {isLoading === 'linkedin_oidc' ? (
             <>
@@ -249,28 +259,24 @@ export function SignInForm() {
               Signing in with LinkedIn...
             </>
           ) : (
-            <>
-              <div className="flex items-center">
-                <div className="bg-white border border-gray-300 rounded-md p-1 mr-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
-                    <path fill="#0077B5" d="M19.7 3H4.3A1.3 1.3 0 0 0 3 4.3v15.4A1.3 1.3 0 0 0 4.3 21h15.4a1.3 1.3 0 0 0 1.3-1.3V4.3A1.3 1.3 0 0 0 19.7 3zM8.3 18.3H5.7v-8.7h2.6v8.7zM7 8.7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11.3 9.6h-2.6v-4.2c0-1 0-2.3-1.4-2.3s-1.6 1.1-1.6 2.2v4.3H10V9.6h2.5v1.2h.1c.4-.7 1.2-1.4 2.5-1.4 2.7 0 3.2 1.8 3.2 4.1v4.8z"/>
-                  </svg>
-                </div>
-                <span>Sign in with LinkedIn</span>
-              </div>
-            </>
+            <div className="flex items-center justify-center gap-3">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#0077B5">
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+              </svg>
+              <span>Sign in with LinkedIn</span>
+            </div>
           )}
-        </button>
+        </Button>
       </div>
 
       <div className="mt-6 text-center">
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           By signing in, you agree to the{' '}
-          <Link href="/terms" className="text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer">
+          <Link href="/terms" className="text-primary hover:text-primary/80 hover:underline cursor-pointer">
             Terms of Service
           </Link>{' '}
           and{' '}
-          <Link href="/privacy" className="text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer">
+          <Link href="/privacy" className="text-primary hover:text-primary/80 hover:underline cursor-pointer">
             Privacy Policy
           </Link>
         </p>

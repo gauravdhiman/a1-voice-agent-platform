@@ -37,8 +37,8 @@ function MembersPageContent({ validatedOrg }: { validatedOrg: Organization | nul
     );
   }
 
- if (!userPermissions.canViewMembers) {
-    return <AccessDenied 
+  if (!userPermissions.canViewMembers) {
+    return <AccessDenied
       title="Access Denied"
       description="You do not have permission to view organization members. Only platform admins and organization admins can access this page."
       redirectPath="/dashboard"
@@ -46,23 +46,24 @@ function MembersPageContent({ validatedOrg }: { validatedOrg: Organization | nul
   }
 
   return (
-    <div className="p-6">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="mb-6">
+      <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
-            <div className="bg-blue-10 p-3 rounded-lg">
-              <Users className="h-8 w-8 text-blue-600" />
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Users className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">{validatedOrg?.name || 'Organization'} Members</h1>
-              <p className="text-muted-foreground">Manage organization members and their roles</p>
+              <h1 className="text-2xl font-bold text-foreground">{validatedOrg?.name || 'Organization'} Members</h1>
+              <p className="text-sm text-muted-foreground">Manage organization members and their roles</p>
             </div>
           </div>
 
           {userPermissions.canManageMembers && (
             <Button
               className="flex items-center space-x-2"
+              size="sm"
               onClick={() => setInviteDialogOpen(true)}
             >
               <UserPlus className="h-4 w-4" />
@@ -73,63 +74,63 @@ function MembersPageContent({ validatedOrg }: { validatedOrg: Organization | nul
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Members</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Members</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0">
             <div className="text-2xl font-bold">{members.length}</div>
-            <p className="text-xs text-gray-500">Organization members</p>
+            <p className="text-xs text-muted-foreground">Organization members</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Active Members</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active Members</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0">
             <div className="text-2xl font-bold text-green-600">
               {members.filter(m => m.is_verified).length}
             </div>
-            <p className="text-xs text-gray-50">Verified accounts</p>
+            <p className="text-xs text-muted-foreground">Verified accounts</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Administrators</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Administrators</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-60">
+          <CardContent className="p-4 pt-0">
+            <div className="text-2xl font-bold text-primary">
               {members.filter(m => m.roles.some(r => r.name.includes('admin'))).length}
             </div>
-            <p className="text-xs text-gray-500">Admin roles</p>
+            <p className="text-xs text-muted-foreground">Admin roles</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Pending</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0">
             <div className="text-2xl font-bold text-yellow-600">
               {members.filter(m => !m.is_verified).length}
             </div>
-            <p className="text-xs text-gray-500">Awaiting verification</p>
+            <p className="text-xs text-muted-foreground">Awaiting verification</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Members Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Organization Members</CardTitle>
+        <CardHeader className="p-5 pb-3">
+          <CardTitle className="text-lg">Organization Members</CardTitle>
           <CardDescription>
             A list of all members in your organization including their roles and status.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-5 pt-0">
           <DataTable
             columns={organizationMembersColumns}
             data={members}
@@ -163,22 +164,22 @@ export default function OrganizationMembersPage() {
   }
 
   // Make orgId mandatory - if not provided, redirect to organizations page
- if (!orgId) {
-    return <AccessDenied 
+  if (!orgId) {
+    return <AccessDenied
       title="Organization ID Required"
       description="Organization ID is required to access this page. Please select an organization from the organizations page."
       redirectPath="/organizations"
     />;
   }
 
- // Handle organization loading states at the top level
+  // Handle organization loading states at the top level
   if (orgLoading || validationLoading) {
     return <LoadingState message="Loading organization..." />;
   }
 
   // Check if orgId is invalid (provided but validation failed)
   if (!isOrgValid) {
-    return <AccessDenied 
+    return <AccessDenied
       title="Access Denied"
       description="You do not have permission to access this organization. Please contact your organization administrator or platform admin for access."
       redirectPath="/organizations"
@@ -193,8 +194,8 @@ export default function OrganizationMembersPage() {
         variant="default"
       />
     );
- }
+  }
 
   // Once organization is loaded, render the main content
- return <MembersPageContent validatedOrg={validatedOrg} />;
+  return <MembersPageContent validatedOrg={validatedOrg} />;
 }

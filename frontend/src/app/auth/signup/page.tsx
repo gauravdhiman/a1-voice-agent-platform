@@ -4,42 +4,76 @@ import React from 'react';
 import { SignUpForm } from '@/components/auth/signup-form';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import Link from 'next/link';
+import { Rocket } from 'lucide-react';
 
 export default function SignUpPage() {
   return (
     <ProtectedRoute reverse>
-      <div className="min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-pink-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-gradient-to-r from-cyan-400 to-blue-500 w-12 h-12 rounded-lg flex items-center justify-center">
+      <div className="min-h-screen w-full flex">
+        {/* Left Side - Brand & Testimonial (Hidden on mobile) */}
+        <div className="hidden lg:flex w-1/2 bg-zinc-900 relative flex-col justify-between p-12 text-white">
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=2070&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/80 to-transparent" />
+
+          <div className="relative z-10">
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="bg-white/10 backdrop-blur-sm w-10 h-10 rounded-lg flex items-center justify-center border border-white/20">
                 <span className="text-white font-bold text-xl">AI</span>
               </div>
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
-            <p className="text-gray-300">Join our platform to get started</p>
-          </div>
-          
-          <div className="bg-white/20 backdrop-blur-sm rounded-2xl border border-white/30 p-8 shadow-xl">
-            <SignUpForm />
-          </div>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-300">
-              Already have an account?{' '}
-              <Link href="/auth/signin" className="font-medium text-cyan-400 hover:text-cyan-300 cursor-pointer">
-                Sign in here
-              </Link>
-            </p>
-          </div>
-          
-          <div className="mt-6 text-center">
-            <Link href="/" className="text-sm text-gray-300 hover:text-white flex items-center justify-center cursor-pointer">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              Back to home
+              <span className="text-xl font-bold tracking-tight">NeuraSaaS</span>
             </Link>
+          </div>
+
+          <div className="relative z-10 max-w-lg">
+            <Rocket className="h-10 w-10 text-white/50 mb-6" />
+            <h2 className="text-3xl font-bold mb-4">Start building the future</h2>
+            <p className="text-lg text-white/80 leading-relaxed">
+              Join thousands of developers and businesses who are already using NeuraSaaS to power their next-generation voice applications.
+            </p>
+            <div className="mt-8 flex gap-4">
+              <div className="flex flex-col">
+                <span className="text-2xl font-bold">10k+</span>
+                <span className="text-sm text-white/60">Active Users</span>
+              </div>
+              <div className="w-px bg-white/20" />
+              <div className="flex flex-col">
+                <span className="text-2xl font-bold">99.9%</span>
+                <span className="text-sm text-white/60">Uptime</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative z-10 text-sm text-white/40">
+            &copy; {new Date().getFullYear()} NeuraSaaS Inc. All rights reserved.
+          </div>
+        </div>
+
+        {/* Right Side - Form */}
+        <div className="flex-1 flex items-center justify-center p-8 bg-background">
+          <div className="w-full max-w-md space-y-8">
+            <div className="text-center lg:text-left">
+              <div className="lg:hidden flex justify-center mb-6">
+                <div className="bg-primary w-10 h-10 rounded-lg flex items-center justify-center shadow-md">
+                  <span className="text-primary-foreground font-bold text-xl">AI</span>
+                </div>
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">Create an account</h1>
+              <p className="text-muted-foreground mt-2">
+                Enter your details below to create your account
+              </p>
+            </div>
+
+            <SignUpForm />
+
+            <div className="text-center text-sm text-muted-foreground">
+              Already have an account?{' '}
+              <Link
+                href="/auth/signin"
+                className="font-medium text-primary hover:text-primary/80 underline-offset-4 hover:underline transition-colors"
+              >
+                Sign in
+              </Link>
+            </div>
           </div>
         </div>
       </div>

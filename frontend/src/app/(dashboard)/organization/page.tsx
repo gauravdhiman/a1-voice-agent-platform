@@ -27,7 +27,6 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import type { UserRoleWithPermissions } from '@/types/user';
 
 export default function OrganizationPage() {
   const { user } = useAuth();
@@ -93,275 +92,269 @@ export default function OrganizationPage() {
   };
 
   // Make orgId mandatory - if not provided, redirect to organizations page
- if (!orgId) {
-   return <AccessDenied 
-     title="Organization ID Required"
-     description="Organization ID is required to access this page. Please select an organization from the organizations page."
-     redirectPath="/organizations"
-   />;
- }
+  if (!orgId) {
+    return <AccessDenied
+      title="Organization ID Required"
+      description="Organization ID is required to access this page. Please select an organization from the organizations page."
+      redirectPath="/organizations"
+    />;
+  }
 
- if (orgLoading || validationLoading) {
-   return (
-     <div className="p-6">
-       <div className="flex items-center justify-center h-64">
-         <div className="text-gray-50">Loading organization...</div>
-       </div>
-     </div>
-   );
- }
+  if (orgLoading || validationLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading organization...</div>
+      </div>
+    );
+  }
 
- // Check if orgId is invalid (provided but validation failed)
- if (!isOrgValid) {
-   return <AccessDenied 
-     title="Access Denied"
-     description="You do not have permission to access this organization. Please contact your organization administrator or platform admin for access."
-     redirectPath="/organizations"
-   />;
- }
+  // Check if orgId is invalid (provided but validation failed)
+  if (!isOrgValid) {
+    return <AccessDenied
+      title="Access Denied"
+      description="You do not have permission to access this organization. Please contact your organization administrator or platform admin for access."
+      redirectPath="/organizations"
+    />;
+  }
 
- if (!isPlatformAdmin && !isOrgAdmin) {
-   return <AccessDenied 
-     title="Access Denied"
-     description="You do not have permission to view organization pages. Please contact your organization administrator or platform admin for access."
-     redirectPath="/dashboard"
-   />;
- }
+  if (!isPlatformAdmin && !isOrgAdmin) {
+    return <AccessDenied
+      title="Access Denied"
+      description="You do not have permission to view organization pages. Please contact your organization administrator or platform admin for access."
+      redirectPath="/dashboard"
+    />;
+  }
 
- if (!validatedOrg) {
-   return (
-     <div className="p-6">
-       <div className="flex items-center justify-center h-64">
-         <div className="text-red-50">Organization not found</div>
-       </div>
-     </div>
-   );
- }
+  if (!validatedOrg) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-destructive">Organization not found</div>
+      </div>
+    );
+  }
 
- const userRoles = user?.roles
-   ?.filter(userRole => !userRole.organization_id || userRole.organization_id === validatedOrg.id)
-   .map(userRole => userRole.role) || [];
+  const userRoles = user?.roles
+    ?.filter(userRole => !userRole.organization_id || userRole.organization_id === validatedOrg.id)
+    .map(userRole => userRole.role) || [];
 
- const displayOrg = (isEditing && editedOrg) ? editedOrg : validatedOrg;
+  const displayOrg = (isEditing && editedOrg) ? editedOrg : validatedOrg;
 
- if (!displayOrg) {
-   return (
-     <div className="p-6">
-       <div className="flex items-center justify-center h-64">
-         <div className="text-red-50">Organization data not available</div>
-       </div>
-     </div>
-   );
- }
+  if (!displayOrg) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-destructive">Organization data not available</div>
+      </div>
+    );
+  }
 
- return (
-   <div className="p-6">
-     {/* Organization Header */}
-     <div className="mb-6">
-       <div className="flex items-center justify-between mb-4">
-         <div className="flex items-center space-x-4">
-           <div className="bg-primary/10 p-3 rounded-lg">
-             <Building2 className="h-8 w-8 text-primary" />
-           </div>
-           <div>
-             <h1 className="text-3xl font-bold text-foreground">{displayOrg.name}</h1>
-             <p className="text-muted-foreground">Organization Details</p>
-           </div>
-         </div>
+  return (
+    <div className="space-y-6">
+      {/* Organization Header */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-4">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Building2 className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">{displayOrg.name}</h1>
+              <p className="text-sm text-muted-foreground">Organization Details</p>
+            </div>
+          </div>
 
-         {canUpdateOrganization && (
-           <div className="flex items-center space-x-2">
-             {isEditing ? (
-               <>
-                 <Button onClick={handleSave} disabled={saving} className="flex items-center space-x-2">
-                   <Save className="h-4 w-4" />
-                   <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-                 </Button>
-                 <Button variant="outline" onClick={handleCancel} className="flex items-center space-x-2">
-                   <X className="h-4 w-4" />
-                   <span>Cancel</span>
-                 </Button>
-               </>
-             ) : (
-               <div className="relative">
-                 <DropdownMenu>
-                   <DropdownMenuTrigger asChild>
-                     <Button className="flex items-center space-x-2">
-                       <Activity className="h-4 w-4" />
-                       <span>Actions</span>
-                     </Button>
-                   </DropdownMenuTrigger>
-                   <DropdownMenuContent align="end" className="w-56">
-                     <DropdownMenuItem className="flex items-center space-x-2" onClick={handleEdit}>
-                       <Edit3 className="h-4 w-4" />
-                       <span>Edit Organization</span>
-                     </DropdownMenuItem>
-                     {canViewMembers && (
-                       <Link href={`/organization/members?org_id=${validatedOrg.id}`}>
-                         <DropdownMenuItem className="flex items-center space-x-2">
-                           <Users className="h-4 w-4" />
-                           <span>Manage Members</span>
-                         </DropdownMenuItem>
-                       </Link>
-                     )}
-                     <Link href={`/organization/billing?org_id=${validatedOrg.id}`}>
-                       <DropdownMenuItem className="flex items-center space-x-2">
-                         <CreditCard className="h-4 w-4" />
-                         <span>Billing & Subscriptions</span>
-                       </DropdownMenuItem>
-                     </Link>
-                   </DropdownMenuContent>
-                 </DropdownMenu>
-               </div>
-             )}
-           </div>
-         )}
-       </div>
+          {canUpdateOrganization && (
+            <div className="flex items-center space-x-2">
+              {isEditing ? (
+                <>
+                  <Button onClick={handleSave} disabled={saving} size="sm" className="flex items-center space-x-2">
+                    <Save className="h-4 w-4" />
+                    <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleCancel} className="flex items-center space-x-2">
+                    <X className="h-4 w-4" />
+                    <span>Cancel</span>
+                  </Button>
+                </>
+              ) : (
+                <div className="relative">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" className="flex items-center space-x-2">
+                        <Activity className="h-4 w-4" />
+                        <span>Actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer" onClick={handleEdit}>
+                        <Edit3 className="h-4 w-4" />
+                        <span>Edit Organization</span>
+                      </DropdownMenuItem>
+                      {canViewMembers && (
+                        <Link href={`/organization/members?org_id=${validatedOrg.id}`}>
+                          <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
+                            <Users className="h-4 w-4" />
+                            <span>Manage Members</span>
+                          </DropdownMenuItem>
+                        </Link>
+                      )}
+                      <Link href={`/organization/billing?org_id=${validatedOrg.id}`}>
+                        <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
+                          <CreditCard className="h-4 w-4" />
+                          <span>Billing & Subscriptions</span>
+                        </DropdownMenuItem>
+                      </Link>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-       <div className="flex items-center space-x-4">
-         <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
-           {displayOrg.is_active ? 'Active' : 'Inactive'}
-         </Badge>
-         <span className="text-muted-foreground flex items-center">
-           <Calendar className="h-4 w-4 mr-1" />
-           Created {new Date(validatedOrg.created_at).toLocaleDateString()}
-         </span>
-         {userRoles.length > 0 && (
-           <span className="text-muted-foreground flex items-center">
-             <Crown className="h-4 w-4 mr-1" />
-             {userRoles.length === 1 
-               ? userRoles[0].name 
-               : `${userRoles.length} roles`
-             }
-           </span>
-         )}
-       </div>
-     </div>
+        <div className="flex items-center space-x-4">
+          <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
+            {displayOrg.is_active ? 'Active' : 'Inactive'}
+          </Badge>
+          <span className="text-sm text-muted-foreground flex items-center">
+            <Calendar className="h-4 w-4 mr-1" />
+            Created {new Date(validatedOrg.created_at).toLocaleDateString()}
+          </span>
+          {userRoles.length > 0 && (
+            <span className="text-sm text-muted-foreground flex items-center">
+              <Crown className="h-4 w-4 mr-1" />
+              {userRoles.length === 1
+                ? userRoles[0].name
+                : `${userRoles.length} roles`
+              }
+            </span>
+          )}
+        </div>
+      </div>
 
-     <div className="space-y-6">
-       {/* Organization Info */}
-       <Card>
-         <CardHeader>
-           <CardTitle className="flex items-center space-x-2">
-             <Building2 className="h-5 w-5" />
-             <span>Organization Information</span>
-           </CardTitle>
-           <CardDescription>
-             {isEditing ? 'Edit your organization details' : 'Your organization details and settings'}
-           </CardDescription>
-         </CardHeader>
-         <CardContent className="space-y-4">
-           {isEditing ? (
-             <>
-               <div className="space-y-2">
-                 <Label htmlFor="name">Name</Label>
-                 <Input
-                   id="name"
-                   value={editedOrg?.name || ''}
-                   onChange={(e) => editedOrg && setEditedOrg({...editedOrg, name: e.target.value})}
-                   placeholder="Enter organization name"
-                 />
-               </div>
-               
-               <div className="space-y-2">
-                 <Label htmlFor="description">Description</Label>
-                 <Textarea 
-                   id="description" 
-                   value={editedOrg?.description || ''}
-                   onChange={(e) => editedOrg && setEditedOrg({...editedOrg, description: e.target.value})}
-                   placeholder="Tell us about your organization"
-                   className="min-h-[100px]"
-                 />
-               </div>
-               
-               <div className="space-y-2">
-                 <Label htmlFor="website">Website</Label>
-                 <Input 
-                   id="website" 
-                   type="url"
-                   value={editedOrg?.website || ''}
-                   onChange={(e) => editedOrg && setEditedOrg({...editedOrg, website: e.target.value})}
-                   placeholder="https://www.example.com"
-                 />
-               </div>
-               
-               <div className="space-y-2">
-                 <Label htmlFor="slug">Slug</Label>
-                 <Input
-                   id="slug"
-                   value={editedOrg?.slug || ''}
-                   onChange={(e) => editedOrg && setEditedOrg({...editedOrg, slug: e.target.value})}
-                   placeholder="organization-slug"
-                 />
-                 <p className="text-xs text-muted-foreground">Used in URLs and API calls</p>
-               </div>
+      <div className="space-y-6">
+        {/* Organization Info */}
+        <Card>
+          <CardHeader className="p-5 pb-3">
+            <CardTitle className="flex items-center space-x-2 text-lg">
+              <Building2 className="h-5 w-5" />
+              <span>Organization Information</span>
+            </CardTitle>
+            <CardDescription>
+              {isEditing ? 'Edit your organization details' : 'Your organization details and settings'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-5 pt-0 space-y-4">
+            {isEditing ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={editedOrg?.name || ''}
+                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, name: e.target.value })}
+                    placeholder="Enter organization name"
+                  />
+                </div>
 
-               <div className="space-y-2">
-                 <Label>Status</Label>
-                 <div className="flex items-center space-x-2">
-                   <input 
-                     type="checkbox" 
-                     id="isActive" 
-                     checked={editedOrg?.is_active ?? true}
-                     onChange={(e) => editedOrg && setEditedOrg({...editedOrg, is_active: e.target.checked})}
-                     className="rounded"
-                   />
-                   <label htmlFor="isActive" className="text-sm">Organization is active</label>
-                 </div>
-               </div>
-             </>
-           ) : (
-             <>
-               <div>
-                 <label className="text-sm font-medium text-muted-foreground">Name</label>
-                 <p className="text-foreground">{displayOrg.name}</p>
-               </div>
-               <div>
-                 <label className="text-sm font-medium text-muted-foreground">Description</label>
-                 <p className="text-foreground">{displayOrg.description || 'No description'}</p>
-               </div>
-               <div>
-                 <label className="text-sm font-medium text-muted-foreground">Website</label>
-                 {displayOrg.website ? (
-                   <a
-                     href={displayOrg.website}
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="text-primary hover:text-primary/80 underline"
-                   >
-                     {displayOrg.website}
-                   </a>
-                 ) : (
-                   <p className="text-muted-foreground">No website</p>
-                 )}
-               </div>
-               <div>
-                 <label className="text-sm font-medium text-muted-foreground">Slug</label>
-                 <p className="text-foreground font-mono">{displayOrg.slug}</p>
-               </div>
-               <div>
-                 <label className="text-sm font-medium text-muted-foreground">Status</label>
-                 <div className="flex items-center space-x-2">
-                   <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
-                     {displayOrg.is_active ? 'Active' : 'Inactive'}
-                   </Badge>
-                 </div>
-               </div>
-             </>
-           )}
-         </CardContent>
-       </Card>
-     </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={editedOrg?.description || ''}
+                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, description: e.target.value })}
+                    placeholder="Tell us about your organization"
+                    className="min-h-[100px]"
+                  />
+                </div>
 
-     {/* Edit Dialog (for fallback) */}
-     {validatedOrg && (
-       <OrganizationEditDialog
-         open={editDialogOpen}
-         onOpenChange={setEditDialogOpen}
-         organization={validatedOrg}
-         onSuccess={handleEditSuccess}
-       />
-     )}
-   </div>
- );
+                <div className="space-y-2">
+                  <Label htmlFor="website">Website</Label>
+                  <Input
+                    id="website"
+                    type="url"
+                    value={editedOrg?.website || ''}
+                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, website: e.target.value })}
+                    placeholder="https://www.example.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="slug">Slug</Label>
+                  <Input
+                    id="slug"
+                    value={editedOrg?.slug || ''}
+                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, slug: e.target.value })}
+                    placeholder="organization-slug"
+                  />
+                  <p className="text-xs text-muted-foreground">Used in URLs and API calls</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="isActive"
+                      checked={editedOrg?.is_active ?? true}
+                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, is_active: e.target.checked })}
+                      className="rounded"
+                    />
+                    <label htmlFor="isActive" className="text-sm">Organization is active</label>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Name</label>
+                  <p className="text-foreground">{displayOrg.name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Description</label>
+                  <p className="text-foreground">{displayOrg.description || 'No description'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Website</label>
+                  {displayOrg.website ? (
+                    <a
+                      href={displayOrg.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:text-primary/80 underline"
+                    >
+                      {displayOrg.website}
+                    </a>
+                  ) : (
+                    <p className="text-muted-foreground">No website</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Slug</label>
+                  <p className="text-foreground font-mono">{displayOrg.slug}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
+                      {displayOrg.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Edit Dialog (for fallback) */}
+      {validatedOrg && (
+        <OrganizationEditDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          organization={validatedOrg}
+          onSuccess={handleEditSuccess}
+        />
+      )}
+    </div>
+  );
 }
