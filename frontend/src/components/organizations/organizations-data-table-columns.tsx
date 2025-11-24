@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, Settings, Users, CreditCard, Edit3, Trash2 } from "lucide-react";
+import { MoreHorizontal, Eye, Users, CreditCard } from "lucide-react";
 import Link from "next/link";
 import { isDummyOrganization } from "@/lib/organization-utils";
 
@@ -172,24 +172,8 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
                 <span>Billing</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/organization/settings?org_id=${org.id}`} className="flex items-center">
-                <Settings className="h-4 w-4 mr-2" />
-                <span>Settings</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/organization/edit?org_id=${org.id}`} className="flex items-center">
-                <Edit3 className="h-4 w-4 mr-2" />
-                <span>Edit</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/organization/delete?org_id=${org.id}`} className="flex items-center text-red-600">
-                <Trash2 className="h-4 w-4 mr-2" />
-                <span>Delete</span>
-              </Link>
-            </DropdownMenuItem>
+
+
           </DropdownMenuContent>
         </DropdownMenu>
       );

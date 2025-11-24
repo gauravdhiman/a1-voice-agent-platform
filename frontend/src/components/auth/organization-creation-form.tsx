@@ -265,7 +265,7 @@ export function OrganizationCreationForm({ onSkip, onSuccess }: OrganizationCrea
           <div className="mt-4 p-3 bg-gray-50 rounded-md">
             <p className="text-xs text-gray-700 text-center">
               If you skip, we&apos;ll create an organization with default settings. 
-              You can update these details later in your organization settings.
+              You can update these details later in your organization page.
             </p>
           </div>
         )}

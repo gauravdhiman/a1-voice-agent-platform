@@ -75,7 +75,7 @@ export default function OrganizationsPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Organizations</h1>
             <p className="text-gray-600 mt-2">
-              Manage your organizations and their settings
+              Manage your organizations and view their details
             </p>
           </div>
           {isPlatformAdmin && (

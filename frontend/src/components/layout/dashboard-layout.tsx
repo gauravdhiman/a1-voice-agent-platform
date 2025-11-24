@@ -99,10 +99,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       const orgHref = orgId ? `/organization?org_id=${orgId}` : '/organization';
       breadcrumbs.push({ name: 'Organization', href: orgHref });
       breadcrumbs.push({ name: 'Members', href: null });
-    } else if (pathname === '/organization/settings') {
-      const orgHref = orgId ? `/organization?org_id=${orgId}` : '/organization';
-      breadcrumbs.push({ name: 'Organization', href: orgHref });
-      breadcrumbs.push({ name: 'Settings', href: null });
+
     } else if (pathname === '/users') {
       // Only show users breadcrumb if user has permission
       if (isPlatformAdmin) {
@@ -122,9 +119,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       if (pathname.includes('/members')) {
         breadcrumbs.push({ name: 'Organization', href: orgHref });
         breadcrumbs.push({ name: 'Members', href: null });
-      } else if (pathname.includes('/settings')) {
-        breadcrumbs.push({ name: 'Organization', href: orgHref });
-        breadcrumbs.push({ name: 'Settings', href: null });
+
       } else {
         breadcrumbs.push({ name: 'Organization', href: null });
       }
@@ -254,10 +249,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             <Building2 className="mr-2 h-4 w-4" />
                             <span>Organization</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/organization/settings?org_id=${currentOrganization.id}`)}>
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>Org Settings</span>
-                          </DropdownMenuItem>
+
                           <DropdownMenuItem onClick={() => router.push(`/organization/members?org_id=${currentOrganization.id}`)}>
                             <Users className="mr-2 h-4 w-4" />
                             <span>Members</span>
