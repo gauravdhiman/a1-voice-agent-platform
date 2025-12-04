@@ -9,10 +9,14 @@ export interface Organization {
   description: string | null;
   slug: string;
   website: string | null;
-  plan?: 'free' | 'pro' | 'enterprise';
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// Enhanced Organization interface with business details field
+export interface OrganizationEnhanced extends Organization {
+  business_details?: string | null;
 }
 
 // Invitation type for organization membership invitations
@@ -57,4 +61,9 @@ export interface OrganizationForDetection {
 export interface OrganizationWithStats extends Organization {
   memberCount?: number;
   activeProjects?: number;
+}
+
+// Combined organization data structure
+export interface OrganizationCompleteData {
+  organization: OrganizationEnhanced;
 }

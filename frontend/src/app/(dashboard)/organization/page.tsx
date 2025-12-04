@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useOrganization } from '@/contexts/organization-context';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { TabsContent, TabsList, TabsTrigger, AnimatedTabs } from '@/components/ui/tabs';
 import {
   Building2,
   Users,
@@ -23,10 +24,32 @@ import {
   Save,
   X,
   Crown,
+  Bot,
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { OrganizationCompleteData } from '@/types/organization';
+
+// Mock API service - in real implementation, this would be actual API calls
+const apiService = {
+ async getOrganizationData(orgId: string): Promise<OrganizationCompleteData> {
+    // Mock data - replace with actual API call
+    return {
+      organization: {
+        id: orgId,
+        name: 'Acme Corp',
+        description: 'A leading technology company',
+        slug: 'acme-corp',
+        website: 'https://acme.com',
+        is_active: true,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        business_details: 'We offer premium software solutions and professional consulting services to help businesses grow. Our products include advanced software tools and comprehensive consulting packages.',
+      },
+    };
+ },
+};
 
 export default function OrganizationPage() {
   const { user } = useAuth();
@@ -37,19 +60,48 @@ export default function OrganizationPage() {
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [organizationData, setOrganizationData] = useState<OrganizationCompleteData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [editedOrg, setEditedOrg] = useState<{
     name: string;
     description: string;
     website: string;
     slug: string;
     is_active: boolean;
+    business_details: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
+
   const loadOrganizationData = useCallback(async () => {
-    // This function is now primarily for re-fetching data after an update.
-    // The initial data loading is handled by the hooks.
-  }, []);
+    if (!orgId) return;
+    
+    setLoading(true);
+    try {
+      const data = await apiService.getOrganizationData(orgId);
+      setOrganizationData(data);
+      setEditedOrg({
+        name: data.organization.name,
+        description: data.organization.description || '',
+        website: data.organization.website || '',
+        slug: data.organization.slug,
+        is_active: data.organization.is_active,
+        business_details: data.organization.business_details || '',
+      });
+    } catch (error) {
+      console.error('Failed to load organization data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId]);
+
+  // Load data when component mounts or orgId changes
+  useEffect(() => {
+    if (orgId) {
+      loadOrganizationData();
+    }
+  }, [orgId, loadOrganizationData]);
 
   // Validate organization access when orgId is provided
   const { isValid: isOrgValid, loading: validationLoading, organization: validatedOrg } = useOrganizationById(orgId);
@@ -60,14 +112,7 @@ export default function OrganizationPage() {
   }
 
   const handleEdit = () => {
-    if (validatedOrg) {
-      setEditedOrg({
-        name: validatedOrg.name,
-        description: validatedOrg.description || '',
-        website: validatedOrg.website || '',
-        slug: validatedOrg.slug,
-        is_active: validatedOrg.is_active
-      });
+    if (organizationData) {
       setIsEditing(true);
     }
   };
@@ -83,13 +128,13 @@ export default function OrganizationPage() {
     await new Promise(resolve => setTimeout(resolve, 1000));
     setSaving(false);
     setIsEditing(false);
-    setEditedOrg(null);
   };
 
   const handleCancel = () => {
     setIsEditing(false);
-    setEditedOrg(null);
+    loadOrganizationData(); // Reload to reset changes
   };
+
 
   // Make orgId mandatory - if not provided, redirect to organizations page
   if (!orgId) {
@@ -100,7 +145,7 @@ export default function OrganizationPage() {
     />;
   }
 
-  if (orgLoading || validationLoading) {
+  if (orgLoading || validationLoading || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Loading organization...</div>
@@ -137,7 +182,7 @@ export default function OrganizationPage() {
     ?.filter(userRole => !userRole.organization_id || userRole.organization_id === validatedOrg.id)
     .map(userRole => userRole.role) || [];
 
-  const displayOrg = (isEditing && editedOrg) ? editedOrg : validatedOrg;
+  const displayOrg = (isEditing && editedOrg) ? editedOrg : organizationData?.organization;
 
   if (!displayOrg) {
     return (
@@ -158,7 +203,7 @@ export default function OrganizationPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">{displayOrg.name}</h1>
-              <p className="text-sm text-muted-foreground">Organization Details</p>
+              <p className="text-sm text-muted-foreground">Organization Configuration</p>
             </div>
           </div>
 
@@ -231,120 +276,169 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Organization Info */}
-        <Card>
-          <CardHeader className="p-5 pb-3">
-            <CardTitle className="flex items-center space-x-2 text-lg">
-              <Building2 className="h-5 w-5" />
-              <span>Organization Information</span>
-            </CardTitle>
-            <CardDescription>
-              {isEditing ? 'Edit your organization details' : 'Your organization details and settings'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-5 pt-0 space-y-4">
-            {isEditing ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={editedOrg?.name || ''}
-                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, name: e.target.value })}
-                    placeholder="Enter organization name"
-                  />
-                </div>
+      <AnimatedTabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="w-full">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
+        </TabsList>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={editedOrg?.description || ''}
-                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, description: e.target.value })}
-                    placeholder="Tell us about your organization"
-                    className="min-h-[100px]"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    id="website"
-                    type="url"
-                    value={editedOrg?.website || ''}
-                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, website: e.target.value })}
-                    placeholder="https://www.example.com"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="slug">Slug</Label>
-                  <Input
-                    id="slug"
-                    value={editedOrg?.slug || ''}
-                    onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, slug: e.target.value })}
-                    placeholder="organization-slug"
-                  />
-                  <p className="text-xs text-muted-foreground">Used in URLs and API calls</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="isActive"
-                      checked={editedOrg?.is_active ?? true}
-                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, is_active: e.target.checked })}
-                      className="rounded"
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <Card>
+            <CardHeader className="p-5 pb-3">
+              <CardTitle className="flex items-center space-x-2 text-lg">
+                <Building2 className="h-5 w-5" />
+                <span>Organization Information</span>
+              </CardTitle>
+              <CardDescription>
+                {isEditing ? 'Edit your organization details' : 'Your organization details and settings'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5 pt-0 space-y-4">
+              {isEditing ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={editedOrg?.name || ''}
+                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, name: e.target.value })}
+                      placeholder="Enter organization name"
                     />
-                    <label htmlFor="isActive" className="text-sm">Organization is active</label>
                   </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Name</label>
-                  <p className="text-foreground">{displayOrg.name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Description</label>
-                  <p className="text-foreground">{displayOrg.description || 'No description'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Website</label>
-                  {displayOrg.website ? (
-                    <a
-                      href={displayOrg.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:text-primary/80 underline"
-                    >
-                      {displayOrg.website}
-                    </a>
-                  ) : (
-                    <p className="text-muted-foreground">No website</p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Slug</label>
-                  <p className="text-foreground font-mono">{displayOrg.slug}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <div className="flex items-center space-x-2">
-                    <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
-                      {displayOrg.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={editedOrg?.description || ''}
+                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, description: e.target.value })}
+                      placeholder="Tell us about your organization, like little background, about team etc. This will be used by AI agent for context."
+                      className="min-h-[100px]"
+                    />
                   </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="website">Website</Label>
+                    <Input
+                      id="website"
+                      type="url"
+                      value={editedOrg?.website || ''}
+                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, website: e.target.value })}
+                      placeholder="https://www.example.com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="slug">Slug</Label>
+                    <Input
+                      id="slug"
+                      value={editedOrg?.slug || ''}
+                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, slug: e.target.value })}
+                      placeholder="organization-slug"
+                    />
+                    <p className="text-xs text-muted-foreground">Used in URLs and API calls</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="isActive"
+                        checked={editedOrg?.is_active ?? true}
+                        onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, is_active: e.target.checked })}
+                        className="rounded"
+                      />
+                      <label htmlFor="isActive" className="text-sm">Organization is active</label>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Name</label>
+                    <p className="text-foreground">{displayOrg.name}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Description</label>
+                    <p className="text-foreground">{displayOrg.description || 'No description'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Website</label>
+                    {displayOrg.website ? (
+                      <a
+                        href={displayOrg.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:text-primary/80 underline"
+                      >
+                        {displayOrg.website}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">No website</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Slug</label>
+                    <p className="text-foreground font-mono">{displayOrg.slug}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Status</label>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
+                        {displayOrg.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI Voice Agent Tab */}
+        <TabsContent value="ai-agent">
+          <Card>
+            <CardHeader className="p-5 pb-3">
+              <CardTitle className="flex items-center space-x-2 text-lg">
+                <Bot className="h-5 w-5" />
+                <span>AI Voice Agent Configuration</span>
+              </CardTitle>
+              <CardDescription>
+                Configure your AI voice agent with business information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5 pt-0 space-y-4">
+              {isEditing ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="business_details">Business Details for AI Agent</Label>
+                    <Textarea
+                      id="business_details"
+                      value={editedOrg?.business_details || ''}
+                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, business_details: e.target.value })}
+                      placeholder="Enter details about your business, products, services, hours, and other information for the AI agent to know..."
+                      className="min-h-[200px]"
+                    />
+                    <p className="text-xs text-muted-foreground">This information will be used by the AI voice agent to answer customer questions</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Business Details</label>
+                    <p className="text-foreground">
+                      {organizationData?.organization.business_details || 'No business details provided'}
+                    </p>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+      </AnimatedTabs>
 
       {/* Edit Dialog (for fallback) */}
       {validatedOrg && (

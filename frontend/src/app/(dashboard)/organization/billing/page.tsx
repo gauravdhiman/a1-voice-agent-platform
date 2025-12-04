@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabsContent, TabsList, TabsTrigger, AnimatedTabs } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CreditCard,
@@ -215,8 +215,8 @@ export default function BillingPage() {
       )}
 
       {/* Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList>
+      <AnimatedTabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
           <TabsTrigger value="credits">Credits</TabsTrigger>
@@ -313,7 +313,7 @@ export default function BillingPage() {
             )}
           </TabsContent>
         )}
-      </Tabs>
+      </AnimatedTabs>
     </div>
   );
 }

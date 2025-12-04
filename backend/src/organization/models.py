@@ -31,6 +31,14 @@ class OrganizationUpdate(BaseModel):
     is_active: Optional[bool] = Field(None, description="Whether the organization is active")
 
 
+class OrganizationEnhanced(OrganizationBase):
+    """Enhanced organization model with business details field."""
+    id: UUID = Field(..., description="Organization ID")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    business_details: Optional[str] = Field(None, description="Text field containing business products and services information for AI agent")
+
+
 class Organization(OrganizationBase):
     """Model for an organization with all attributes."""
     id: UUID = Field(..., description="Organization ID")
