@@ -2,10 +2,43 @@
 
 import * as React from "react"
 import * as TabsPrimitive from "@radix-ui/react-tabs"
+import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
-const Tabs = TabsPrimitive.Root
+const TabsContext = React.createContext<{ activeTab?: string }>({})
+
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ className, value, onValueChange, defaultValue, ...props }, ref) => {
+  const [internalValue, setInternalValue] = React.useState(value || defaultValue)
+
+  const handleValueChange = (newValue: string) => {
+    setInternalValue(newValue)
+    onValueChange?.(newValue)
+  }
+
+  React.useEffect(() => {
+    if (value !== undefined) {
+      setInternalValue(value)
+    }
+  }, [value])
+
+  return (
+    <TabsContext.Provider value={{ activeTab: value !== undefined ? value : internalValue }}>
+      <TabsPrimitive.Root
+        ref={ref}
+        value={value}
+        defaultValue={defaultValue}
+        onValueChange={handleValueChange}
+        className={className}
+        {...props}
+      />
+    </TabsContext.Provider>
+  )
+})
+Tabs.displayName = TabsPrimitive.Root.displayName
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
@@ -14,7 +47,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
+      "inline-flex h-auto items-center justify-start bg-background rounded-none border-b border-border p-0 gap-0 w-full",
       className
     )}
     {...props}
@@ -25,16 +58,34 @@ TabsList.displayName = TabsPrimitive.List.displayName
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, value, children, ...props }, ref) => {
+  const { activeTab } = React.useContext(TabsContext)
+  const isActive = activeTab === value
+
+  return (
+    <TabsPrimitive.Trigger
+      ref={ref}
+      value={value}
+      className={cn(
+        "relative bg-background dark:data-[state=active]:bg-background z-10 rounded-none border-0 data-[state=active]:shadow-none px-6 py-3 text-sm font-medium transition-all duration-200 whitespace-nowrap",
+        "hover:text-foreground/80 data-[state=active]:text-foreground hover:bg-accent/50",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {isActive && (
+        <motion.div
+          layoutId="active-tab-underline"
+          className="absolute bottom-0 left-0 h-[2px] w-full bg-primary z-20"
+          transition={{ type: "spring", stiffness: 400, damping: 40 }}
+        />
+      )}
+    </TabsPrimitive.Trigger>
+  )
+})
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
 
 const TabsContent = React.forwardRef<
@@ -44,7 +95,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       className
     )}
     {...props}
@@ -52,4 +103,7 @@ const TabsContent = React.forwardRef<
 ))
 TabsContent.displayName = TabsPrimitive.Content.displayName
 
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+// Backward compatibility for AnimatedTabs
+const AnimatedTabs = Tabs
+
+export { Tabs, TabsList, TabsTrigger, TabsContent, AnimatedTabs }
