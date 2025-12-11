@@ -336,4 +336,36 @@
       background-position: -200% 0;
     }
   }
+
+  /* Smooth Modal Animation */
+  @keyframes modal-fade-in {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
+  @keyframes modal-fade-out {
+    0% {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.95);
+    }
+  }
+
+  /* Apply smooth modal animations */
+  .dialog-content {
+    animation: modal-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .dialog-content[data-state="closed"] {
+    animation: modal-fade-out 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 }
