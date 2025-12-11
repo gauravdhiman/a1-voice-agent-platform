@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth-context';
 import Link from 'next/link';
 import { EmailVerificationBanner } from '@/components/auth/email-verification-banner';
+import { ForgotPasswordDialog } from '@/components/auth/forgot-password-dialog';
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -26,6 +27,7 @@ export function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState<string>('');
   const [showVerificationBanner, setShowVerificationBanner] = useState(false);
+  const [showForgotPasswordDialog, setShowForgotPasswordDialog] = useState(false);
   const { signIn, signInWithOAuth } = useAuth();
 
   const {
@@ -109,6 +111,7 @@ export function SignInForm() {
   };
 
   return (
+  <>
     <div className="w-full max-w-md mx-auto">
       {showVerificationBanner && email && (
         <EmailVerificationBanner
@@ -184,6 +187,7 @@ export function SignInForm() {
             type="button"
             className="text-sm font-medium text-primary hover:text-primary/80 cursor-pointer"
             disabled={!!isLoading}
+            onClick={() => setShowForgotPasswordDialog(true)}
           >
             Forgot password?
           </button>
@@ -282,5 +286,12 @@ export function SignInForm() {
         </p>
       </div>
     </div>
+
+    {/* Forgot Password Dialog */}
+    <ForgotPasswordDialog
+      open={showForgotPasswordDialog}
+      onOpenChange={setShowForgotPasswordDialog}
+    />
+  </>
   );
 }
