@@ -5,8 +5,6 @@
 -r requirements.txt
 
 # Development and testing tools
-alembic==1.13.1
-SQLAlchemy==2.0.31
 pytest==8.3.4
 pytest-asyncio==0.24.0
 black==24.10.0

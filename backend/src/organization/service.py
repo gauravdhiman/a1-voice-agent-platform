@@ -65,7 +65,9 @@ class OrganizationService:
                 "name": org_data.name,
                 "description": org_data.description,
                 "slug": org_data.slug,
-                "is_active": org_data.is_active
+                "website": str(org_data.website) if org_data.website else None,
+                "is_active": org_data.is_active,
+                "business_details": org_data.business_details
             }).execute()
             
             if not response.data:
@@ -80,7 +82,9 @@ class OrganizationService:
                 name=org_dict["name"],
                 description=org_dict["description"],
                 slug=org_dict["slug"],
+                website=org_dict.get("website"),
                 is_active=org_dict["is_active"],
+                business_details=org_dict.get("business_details"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"]
             )
@@ -117,7 +121,9 @@ class OrganizationService:
                 name=org_dict["name"],
                 description=org_dict["description"],
                 slug=org_dict["slug"],
+                website=org_dict.get("website"),
                 is_active=org_dict["is_active"],
+                business_details=org_dict.get("business_details"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"]
             )
@@ -181,7 +187,9 @@ class OrganizationService:
                     name=org_dict["name"],
                     description=org_dict["description"],
                     slug=org_dict["slug"],
+                    website=org_dict.get("website"),
                     is_active=org_dict["is_active"],
+                    business_details=org_dict.get("business_details"),
                     created_at=org_dict["created_at"],
                     updated_at=org_dict["updated_at"]
                 ))
@@ -213,6 +221,10 @@ class OrganizationService:
                 current_span.set_attribute("organization.slug.updated", True)
             if org_data.is_active is not None:
                 update_data["is_active"] = org_data.is_active
+            if org_data.website is not None:
+                update_data["website"] = str(org_data.website) if org_data.website else None
+            if org_data.business_details is not None:
+                update_data["business_details"] = org_data.business_details
             
             if not update_data:
                 return await self.get_organization_by_id(org_id)

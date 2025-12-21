@@ -29,27 +29,33 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { OrganizationCompleteData } from '@/types/organization';
+import { OrganizationCompleteData, OrganizationEnhanced } from '@/types/organization';
 
-// Mock API service - in real implementation, this would be actual API calls
-const apiService = {
- async getOrganizationData(orgId: string): Promise<OrganizationCompleteData> {
-    // Mock data - replace with actual API call
-    return {
-      organization: {
-        id: orgId,
-        name: 'Acme Corp',
-        description: 'A leading technology company',
-        slug: 'acme-corp',
-        website: 'https://acme.com',
-        is_active: true,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-        business_details: 'We offer premium software solutions and professional consulting services to help businesses grow. Our products include advanced software tools and comprehensive consulting packages.',
-      },
-    };
- },
-};
+import { organizationService } from '@/services/organization-service';
+import { agentService } from '@/services/agent-service';
+import { VoiceAgent, PlatformTool, AgentTool } from '@/types/agent';
+import { toast } from 'sonner';
+import { 
+  Plus,
+  Trash2,
+  Settings,
+  Phone,
+  MessageSquare,
+  Wrench,
+  ShieldCheck,
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+
+// Use real services
 
 export default function OrganizationPage() {
   const { user } = useAuth();
@@ -63,6 +69,9 @@ export default function OrganizationPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [organizationData, setOrganizationData] = useState<OrganizationCompleteData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [agents, setAgents] = useState<VoiceAgent[]>([]);
+  const [platformTools, setPlatformTools] = useState<PlatformTool[]>([]);
+  
   const [editedOrg, setEditedOrg] = useState<{
     name: string;
     description: string;
@@ -73,24 +82,50 @@ export default function OrganizationPage() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Agent management state
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<VoiceAgent | null>(null);
+  const [agentForm, setAgentForm] = useState({
+    name: '',
+    phone_number: '',
+    system_prompt: '',
+    is_active: true
+  });
+  const [agentSaving, setAgentSaving] = useState(false);
+
+  // Tool management state
+  const [toolDialogOpen, setToolDialogOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<VoiceAgent | null>(null);
+  const [agentTools, setAgentTools] = useState<AgentTool[]>([]);
+  const [loadingTools, setLoadingTools] = useState(false);
+
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
     
     setLoading(true);
     try {
-      const data = await apiService.getOrganizationData(orgId);
-      setOrganizationData(data);
+      const org = await organizationService.getOrganizationById(orgId) as OrganizationEnhanced;
+      setOrganizationData({ organization: org });
       setEditedOrg({
-        name: data.organization.name,
-        description: data.organization.description || '',
-        website: data.organization.website || '',
-        slug: data.organization.slug,
-        is_active: data.organization.is_active,
-        business_details: data.organization.business_details || '',
+        name: org.name,
+        description: org.description || '',
+        website: org.website || '',
+        slug: org.slug,
+        is_active: org.is_active,
+        business_details: org.business_details || '',
       });
+
+      // Load agents and tools
+      const [orgAgents, tools] = await Promise.all([
+        agentService.getOrgAgents(orgId),
+        agentService.getPlatformTools()
+      ]);
+      setAgents(orgAgents);
+      setPlatformTools(tools);
     } catch (error) {
       console.error('Failed to load organization data:', error);
+      toast.error('Failed to load organization data');
     } finally {
       setLoading(false);
     }
@@ -123,16 +158,150 @@ export default function OrganizationPage() {
   };
 
   const handleSave = async () => {
+    if (!orgId || !editedOrg) return;
+    
     setSaving(true);
-    // Simulate save operation
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setSaving(false);
-    setIsEditing(false);
+    try {
+      await organizationService.updateOrganization(orgId, {
+        name: editedOrg.name,
+        description: editedOrg.description,
+        website: editedOrg.website,
+        slug: editedOrg.slug,
+        is_active: editedOrg.is_active,
+        business_details: editedOrg.business_details
+      });
+      
+      toast.success('Organization updated successfully');
+      setIsEditing(false);
+      loadOrganizationData();
+    } catch (error) {
+      console.error('Failed to update organization:', error);
+      toast.error('Failed to update organization');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
     setIsEditing(false);
     loadOrganizationData(); // Reload to reset changes
+  };
+
+  const handleAddAgent = () => {
+    setEditingAgent(null);
+    setAgentForm({
+      name: '',
+      phone_number: '',
+      system_prompt: '',
+      is_active: true
+    });
+    setAgentDialogOpen(true);
+  };
+
+  const handleEditAgent = (agent: VoiceAgent) => {
+    setEditingAgent(agent);
+    setAgentForm({
+      name: agent.name,
+      phone_number: agent.phone_number || '',
+      system_prompt: agent.system_prompt || '',
+      is_active: agent.is_active
+    });
+    setAgentDialogOpen(true);
+  };
+
+  const handleDeleteAgent = async (agentId: string) => {
+    if (!confirm('Are you sure you want to delete this agent?')) return;
+    
+    try {
+      await agentService.deleteAgent(agentId);
+      toast.success('Agent deleted successfully');
+      loadOrganizationData();
+    } catch (error) {
+      console.error('Failed to delete agent:', error);
+      toast.error('Failed to delete agent');
+    }
+  };
+
+  const handleSaveAgent = async () => {
+    if (!orgId) return;
+    
+    setAgentSaving(true);
+    try {
+      if (editingAgent) {
+        await agentService.updateAgent(editingAgent.id, agentForm);
+        toast.success('Agent updated successfully');
+      } else {
+        await agentService.createAgent({
+          ...agentForm,
+          organization_id: orgId
+        });
+        toast.success('Agent created successfully');
+      }
+      setAgentDialogOpen(false);
+      loadOrganizationData();
+    } catch (error) {
+      console.error('Failed to save agent:', error);
+      toast.error('Failed to save agent');
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
+  const handleConfigureTools = async (agent: VoiceAgent) => {
+    setSelectedAgent(agent);
+    setToolDialogOpen(true);
+    setLoadingTools(true);
+    try {
+      const tools = await agentService.getAgentTools(agent.id);
+      setAgentTools(tools);
+    } catch (error) {
+      console.error('Failed to load agent tools:', error);
+      toast.error('Failed to load tools for this agent');
+    } finally {
+      setLoadingTools(false);
+    }
+  };
+
+  const handleToggleTool = async (toolId: string, isEnabled: boolean) => {
+    if (!selectedAgent) return;
+    
+    try {
+      const existingAgentTool = agentTools.find(at => at.tool_id === toolId);
+      
+      if (existingAgentTool) {
+        await agentService.updateAgentTool(existingAgentTool.id, { is_enabled: isEnabled });
+      } else {
+        await agentService.configureAgentTool({
+          agent_id: selectedAgent.id,
+          tool_id: toolId,
+          is_enabled: isEnabled,
+          config: {}
+        });
+      }
+      
+      // Refresh tools
+      const updatedTools = await agentService.getAgentTools(selectedAgent.id);
+      setAgentTools(updatedTools);
+      toast.success(isEnabled ? 'Tool enabled' : 'Tool disabled');
+    } catch (error) {
+      console.error('Failed to toggle tool:', error);
+      toast.error('Failed to update tool status');
+    }
+  };
+
+  const handleSaveToolConfig = async (agentToolId: string, config: Record<string, unknown>) => {
+    try {
+      await agentService.updateAgentTool(agentToolId, { config });
+      toast.success('Tool configuration updated');
+      
+      if (selectedAgent) {
+        const updatedTools = await agentService.getAgentTools(selectedAgent.id);
+        setAgentTools(updatedTools);
+      }
+    } catch (error) {
+      console.error('Failed to save tool config:', error);
+      toast.error('Failed to update tool configuration');
+    }
   };
 
 
@@ -399,46 +568,278 @@ export default function OrganizationPage() {
 
         {/* AI Voice Agent Tab */}
         <TabsContent value="ai-agent">
-          <Card>
-            <CardHeader className="p-5 pb-3">
-              <CardTitle className="flex items-center space-x-2 text-lg">
-                <Bot className="h-5 w-5" />
-                <span>AI Voice Agent Configuration</span>
-              </CardTitle>
-              <CardDescription>
-                Configure your AI voice agent with business information
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-5 pt-0 space-y-4">
-              {isEditing ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="business_details">Business Details for AI Agent</Label>
-                    <Textarea
-                      id="business_details"
-                      value={editedOrg?.business_details || ''}
-                      onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, business_details: e.target.value })}
-                      placeholder="Enter details about your business, products, services, hours, and other information for the AI agent to know..."
-                      className="min-h-[200px]"
-                    />
-                    <p className="text-xs text-muted-foreground">This information will be used by the AI voice agent to answer customer questions</p>
-                  </div>
-                </>
-              ) : (
-                <>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="flex items-center space-x-2 text-lg">
+                  <Bot className="h-5 w-5" />
+                  <span>AI Voice Agent Configuration</span>
+                </CardTitle>
+                <CardDescription>
+                  Configure your AI voice agent with business information
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 pt-0 space-y-4">
+                {isEditing ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="business_details">Business Details for AI Agent</Label>
+                      <Textarea
+                        id="business_details"
+                        value={editedOrg?.business_details || ''}
+                        onChange={(e) => editedOrg && setEditedOrg({ ...editedOrg, business_details: e.target.value })}
+                        placeholder="Enter details about your business, products, services, hours, and other information for the AI agent to know..."
+                        className="min-h-[200px]"
+                      />
+                      <p className="text-xs text-muted-foreground">This information will be used by the AI voice agent to answer customer questions</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Business Details</label>
+                      <p className="text-foreground whitespace-pre-wrap">
+                        {organizationData?.organization.business_details || 'No business details provided'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="p-5 pb-3">
+                <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Business Details</label>
-                    <p className="text-foreground">
-                      {organizationData?.organization.business_details || 'No business details provided'}
-                    </p>
+                    <CardTitle className="flex items-center space-x-2 text-lg">
+                      <Phone className="h-5 w-5" />
+                      <span>Voice Agents</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Manage your AI voice agents and their phone numbers
+                    </CardDescription>
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                  <Button size="sm" onClick={handleAddAgent}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Agent
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                {agents.length === 0 ? (
+                  <div className="text-center py-8 bg-muted/20 rounded-lg border-2 border-dashed">
+                    <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-muted-foreground">No voice agents configured yet</p>
+                    <Button variant="link" onClick={handleAddAgent} className="mt-2">
+                      Create your first agent
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {agents.map((agent) => (
+                      <Card key={agent.id} className="overflow-hidden border-muted/60 hover:border-primary/50 transition-colors">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-semibold text-base">{agent.name}</h4>
+                              <div className="flex items-center text-xs text-muted-foreground mt-1">
+                                <Badge variant={agent.is_active ? "default" : "secondary"} className="h-5 scale-90 origin-left">
+                                  {agent.is_active ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex space-x-1">
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditAgent(agent)}>
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteAgent(agent.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2 mt-4">
+                            <div className="flex items-center text-sm">
+                              <Phone className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                              <span className="truncate">{agent.phone_number || 'No phone assigned'}</span>
+                            </div>
+                            <div className="flex items-center text-sm">
+                              <MessageSquare className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                              <span className="truncate text-xs italic text-muted-foreground">
+                                {agent.system_prompt ? 'Custom prompt configured' : 'Using default prompt'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <Separator className="my-4" />
+                          
+                          <Button variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => handleConfigureTools(agent)}>
+                            <Wrench className="h-3.5 w-3.5 mr-2" />
+                            Configure Tools
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
       </AnimatedTabs>
+
+      {/* Agent Create/Edit Dialog */}
+      <Dialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{editingAgent ? 'Edit Voice Agent' : 'Create New Voice Agent'}</DialogTitle>
+            <DialogDescription>
+              {editingAgent 
+                ? 'Update your voice agent configuration and settings.' 
+                : 'Create a new AI voice agent for your organization.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="agent-name">Name</Label>
+              <Input
+                id="agent-name"
+                value={agentForm.name}
+                onChange={(e) => setAgentForm({ ...agentForm, name: e.target.value })}
+                placeholder="Support Agent, Sales Bot, etc."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="agent-phone">Phone Number (Optional)</Label>
+              <Input
+                id="agent-phone"
+                value={agentForm.phone_number}
+                onChange={(e) => setAgentForm({ ...agentForm, phone_number: e.target.value })}
+                placeholder="+1234567890"
+              />
+              <p className="text-xs text-muted-foreground">Twilio phone number for this agent</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="agent-prompt">System Prompt (Optional)</Label>
+              <Textarea
+                id="agent-prompt"
+                value={agentForm.system_prompt}
+                onChange={(e) => setAgentForm({ ...agentForm, system_prompt: e.target.value })}
+                placeholder="You are a helpful customer support agent..."
+                className="min-h-[150px]"
+              />
+              <p className="text-xs text-muted-foreground">Instructions for the AI on how to behave</p>
+            </div>
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="agent-active"
+                checked={agentForm.is_active}
+                onCheckedChange={(checked) => setAgentForm({ ...agentForm, is_active: checked === true })}
+              />
+              <Label htmlFor="agent-active" className="text-sm font-normal cursor-pointer">
+                Agent is active and ready to handle calls
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAgentDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveAgent} disabled={agentSaving || !agentForm.name}>
+              {agentSaving ? 'Saving...' : (editingAgent ? 'Update Agent' : 'Create Agent')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tool Configuration Dialog */}
+      <Dialog open={toolDialogOpen} onOpenChange={setToolDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Configure Tools: {selectedAgent?.name}</DialogTitle>
+            <DialogDescription>
+              Enable and configure platform tools for this agent.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto py-4 space-y-4">
+            {loadingTools ? (
+              <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <p className="text-sm text-muted-foreground">Loading tools...</p>
+              </div>
+            ) : platformTools.length === 0 ? (
+              <div className="text-center py-12 bg-muted/20 rounded-lg">
+                <Wrench className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                <p className="text-muted-foreground">No platform tools available</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {platformTools.map((tool) => {
+                  const agentTool = agentTools.find(at => at.tool_id === tool.id);
+                  const isEnabled = agentTool?.is_enabled || false;
+                  
+                  return (
+                    <Card key={tool.id} className={`overflow-hidden border-2 transition-colors ${isEnabled ? 'border-primary/20 bg-primary/5' : 'border-muted/50'}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center space-x-3">
+                            <div className={`p-2 rounded-lg ${isEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                              <Wrench className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-sm">{tool.name}</h4>
+                              <p className="text-xs text-muted-foreground line-clamp-1">{tool.description}</p>
+                            </div>
+                          </div>
+                          <Checkbox
+                            id={`tool-${tool.id}`}
+                            checked={isEnabled}
+                            onCheckedChange={(checked) => handleToggleTool(tool.id, checked === true)}
+                          />
+                        </div>
+                        
+                        {isEnabled && (
+                          <div className="mt-4 pt-4 border-t border-primary/10 space-y-4">
+                            <div className="flex items-center text-xs font-medium text-primary">
+                              <Settings className="h-3 w-3 mr-1" />
+                              Configuration
+                            </div>
+                            <div className="bg-background/50 rounded-md p-3 border border-primary/5">
+                              {/* Simple JSON config editor for now */}
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-mono text-muted-foreground uppercase">Tool Config (JSON)</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-6 text-[10px]" 
+                                  onClick={() => agentTool && handleSaveToolConfig(agentTool.id, agentTool.config || {})}
+                                >
+                                  Save Config
+                                </Button>
+                              </div>
+                              <pre className="text-[10px] font-mono p-2 bg-muted/50 rounded overflow-x-auto">
+                                {JSON.stringify(agentTool?.config || tool.config_schema || {}, null, 2)}
+                              </pre>
+                            </div>
+                            <div className="flex items-center space-x-2 text-[10px] text-muted-foreground">
+                              <ShieldCheck className="h-3 w-3 text-green-500" />
+                              <span>This tool is active for {selectedAgent?.name}</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="pt-4 border-t">
+            <Button variant="outline" onClick={() => setToolDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog (for fallback) */}
       {validatedOrg && (

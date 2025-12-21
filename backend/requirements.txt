@@ -16,6 +16,9 @@ python-dotenv==1.0.1
 # Supabase integration
 supabase==2.10.0
 
+# For connection to postgress / supabase (mainly for Alembic)
+psycopg2-binary==2.9.11
+
 # Future Redis integration  
 redis==5.2.1
 
@@ -27,6 +30,13 @@ stripe==12.5.1
 
 # Resend integration for email notifications
 resend==2.15.0
+
+# Security and encryption
+cryptography==43.0.1
+
+# Database and migrations
+sqlalchemy==2.0.36
+alembic==1.14.0
 
 # HTTP client library (required by OpenTelemetry requests instrumentation)
 requests==2.32.3

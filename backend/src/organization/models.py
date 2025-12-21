@@ -3,9 +3,9 @@ Pydantic models for Organization functionality.
 """
 
 from typing import Optional
-from pydantic import BaseModel, Field, HttpUrl
 from uuid import UUID
 from datetime import datetime
+from pydantic import BaseModel, Field
 
 
 class OrganizationBase(BaseModel):
@@ -13,8 +13,9 @@ class OrganizationBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Organization name")
     description: Optional[str] = Field(None, max_length=500, description="Organization description")
     slug: str = Field(..., min_length=1, max_length=100, description="Organization slug (unique identifier)")
-    website: Optional[HttpUrl] = Field(None, description="Organization website URL")
+    website: Optional[str] = Field(None, description="Organization website URL")
     is_active: bool = Field(default=True, description="Whether the organization is active")
+    business_details: Optional[str] = Field(None, description="Text field containing business products and services information for AI agent")
 
 
 class OrganizationCreate(OrganizationBase):
@@ -27,8 +28,9 @@ class OrganizationUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100, description="Organization name")
     description: Optional[str] = Field(None, max_length=500, description="Organization description")
     slug: Optional[str] = Field(None, min_length=1, max_length=100, description="Organization slug (unique identifier)")
-    website: Optional[HttpUrl] = Field(None, description="Organization website URL")
+    website: Optional[str] = Field(None, description="Organization website URL")
     is_active: Optional[bool] = Field(None, description="Whether the organization is active")
+    business_details: Optional[str] = Field(None, description="Text field containing business products and services information for AI agent")
 
 
 class OrganizationEnhanced(OrganizationBase):

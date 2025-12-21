@@ -17,5 +17,8 @@ export * from './api';
 // RBAC types
 export * from './rbac';
 
+// Voice Agent types
+export * from './agent';
+
 // Common types
 export * from './common';
