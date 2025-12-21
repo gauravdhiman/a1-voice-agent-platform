@@ -1,0 +1,4 @@
+[TYPECHECK]
+# Do not type-check members on this module (or mark specific members as generated)
+ignored-modules=alembic.op
+

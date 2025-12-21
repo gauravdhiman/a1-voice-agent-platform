@@ -48,6 +48,7 @@ export interface OrganizationUpdate {
   slug?: string;
   website?: string | null;
   is_active?: boolean;
+  business_details?: string | null;
 }
 
 // Minimal organization interface for utility functions
