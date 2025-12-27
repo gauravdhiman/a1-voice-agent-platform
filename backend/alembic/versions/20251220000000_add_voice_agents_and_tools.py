@@ -21,7 +21,7 @@ def upgrade() -> None:
     # Create platform_tools table
     op.create_table(
         'platform_tools',
-        sa.Column('id', sa.UUID(), nullable=False),
+        sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('config_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -35,7 +35,7 @@ def upgrade() -> None:
     # Create voice_agents table
     op.create_table(
         'voice_agents',
-        sa.Column('id', sa.UUID(), nullable=False),
+        sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
         sa.Column('organization_id', sa.UUID(), nullable=False),
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('phone_number', sa.String(length=20), nullable=True),
@@ -50,7 +50,7 @@ def upgrade() -> None:
     # Create agent_tools table
     op.create_table(
         'agent_tools',
-        sa.Column('id', sa.UUID(), nullable=False),
+        sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
         sa.Column('agent_id', sa.UUID(), nullable=False),
         sa.Column('tool_id', sa.UUID(), nullable=False),
         sa.Column('config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -64,8 +64,16 @@ def upgrade() -> None:
         sa.UniqueConstraint('agent_id', 'tool_id', name='uq_agent_tool')
     )
 
+    # Enable Row Level Security (RLS) on voice agent tables
+    op.execute("ALTER TABLE voice_agents ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE agent_tools ENABLE ROW LEVEL SECURITY")
+    
+    # Platform tools don't need RLS as they're shared across all organizations
+    # The platform_tools table contains system-wide tools available to all organizations
+
 
 def downgrade() -> None:
+    # Drop tables in reverse order
     op.drop_table('agent_tools')
     op.drop_table('voice_agents')
     op.drop_table('platform_tools')
