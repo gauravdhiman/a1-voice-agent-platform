@@ -9,11 +9,17 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including gobject/glib for LiveKit)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
+        pkg-config \
+        libglib2.0-0 \
+        libglib2.0-dev \
+        libcairo2 \
+        libcairo2-dev \
+        libgirepository1.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

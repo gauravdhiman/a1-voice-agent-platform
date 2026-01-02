@@ -11,7 +11,7 @@ from opentelemetry import trace, metrics
 from config import supabase_config
 from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
 from src.organization.invitation_models import Invitation, InvitationCreate, InvitationStatus
-from src.common.errors import ErrorCode
+from shared.common.errors import ErrorCode
 from src.notifications.service import notification_service
 from src.notifications.models import SendNotificationRequest
 from src.rbac.roles.service import role_service

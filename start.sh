@@ -35,8 +35,12 @@ print_usage() {
     echo "Options:"
     echo "  start dev     - Start containers in development mode"
     echo "  start prod    - Start containers in production mode"
+    echo "  start worker dev - Start worker in development mode"
+    echo "  start worker prod - Start worker in production mode"
     echo "  stop dev      - Stop development containers"
     echo "  stop prod     - Stop production containers"
+    echo "  stop worker dev - Stop development worker"
+    echo "  stop worker prod - Stop production worker"
     echo "  restart dev   - Restart development containers"
     echo "  restart prod  - Restart production containers"
     echo "  logs dev      - View development container logs"
@@ -48,8 +52,8 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  ./start.sh start dev"
+    echo "  ./start.sh start worker dev"
     echo "  ./start.sh stop prod"
-    echo "  ./start.sh restart dev"
     echo "  ./start.sh build dev"
 }
 
@@ -60,7 +64,7 @@ check_docker() {
         echo "Please install Docker first: https://docs.docker.com/get-docker/"
         exit 1
     fi
-    
+
     if ! command -v docker compose &> /dev/null; then
         echo -e "${RED}Error: Docker Compose is not installed or not in PATH${NC}"
         echo "Please install Docker Compose: https://docs.docker.com/compose/install/"
@@ -76,7 +80,7 @@ validate_env_file() {
         echo "You can copy .env.example to $ENV_FILE and update with your values"
         exit 1
     fi
-    
+
     # Check for required environment variables
     local missing_vars=()
     for var in "${REQUIRED_ENV_VARS[@]}"; do
@@ -84,7 +88,7 @@ validate_env_file() {
             missing_vars+=("$var")
         fi
     done
-    
+
     if [ ${#missing_vars[@]} -ne 0 ]; then
         echo -e "${RED}Error: Missing required environment variables in $ENV_FILE:${NC}"
         for var in "${missing_vars[@]}"; do
@@ -100,7 +104,7 @@ validate_env_file() {
 check_containers_running() {
     local mode=$1
     local compose_file=""
-    
+
     if [ "$mode" = "dev" ]; then
         compose_file="$COMPOSE_FILE_DEV"
     elif [ "$mode" = "prod" ]; then
@@ -108,12 +112,42 @@ check_containers_running() {
     else
         return 1
     fi
-    
+
     # Check if any containers are running for this compose file
     if docker compose -f "$compose_file" ps --format "table {{.Names}}\t{{.Status}}" | grep -q "Up"; then
         return 0  # Containers are running
     else
         return 1  # Containers are not running
+    fi
+}
+
+# Function to check if worker is running
+check_worker_running() {
+    local mode=$1
+    local service_name=""
+
+    if [ "$mode" = "dev" ]; then
+        service_name="worker-dev"
+    elif [ "$mode" = "prod" ]; then
+        service_name="worker"
+    else
+        return 1
+    fi
+
+    local compose_file=""
+    if [ "$mode" = "dev" ]; then
+        compose_file="$COMPOSE_FILE_DEV"
+    elif [ "$mode" = "prod" ]; then
+        compose_file="$COMPOSE_FILE_PROD"
+    else
+        return 1
+    fi
+
+    # Check if worker service is running
+    if docker compose -f "$compose_file" ps "$service_name" | grep -q "Up"; then
+        return 0  # Worker is running
+    else
+        return 1  # Worker is not running
     fi
 }
 
@@ -135,22 +169,57 @@ build_prod() {
     echo -e "${GREEN}Production images built successfully!${NC}"
 }
 
+# Function to start development worker
+start_worker_dev() {
+    echo -e "${GREEN}Starting development worker...${NC}"
+    cd "$PROJECT_DIR"
+    validate_env_file
+
+    # Check if worker is already running
+    if check_worker_running "dev"; then
+        echo -e "${YELLOW}Development worker is already running${NC}"
+        return 0
+    fi
+
+    docker compose -f "$COMPOSE_FILE_DEV" up -d worker-dev
+    echo -e "${GREEN}Development worker started successfully!${NC}"
+}
+
+# Function to start production worker
+start_worker_prod() {
+    echo -e "${GREEN}Starting production worker...${NC}"
+    cd "$PROJECT_DIR"
+    validate_env_file
+
+    # Check if worker is already running
+    if check_worker_running "prod"; then
+        echo -e "${YELLOW}Production worker is already running${NC}"
+        return 0
+    fi
+
+    docker compose -f "$COMPOSE_FILE_PROD" up -d worker
+    echo -e "${GREEN}Production worker started successfully!${NC}"
+}
+
 # Function to start development containers
 start_dev() {
     echo -e "${GREEN}Starting development containers...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
-    
+
     # Check if containers are already running
     if check_containers_running "dev"; then
         echo -e "${YELLOW}Development containers are already running${NC}"
         show_dev_urls
         return 0
     fi
-    
+
     docker compose -f "$COMPOSE_FILE_DEV" up -d
     echo -e "${GREEN}Development containers started successfully!${NC}"
     show_dev_urls
+
+    # Start worker
+    start_worker_dev
 }
 
 # Function to start production containers
@@ -158,17 +227,20 @@ start_prod() {
     echo -e "${GREEN}Starting production containers...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
-    
+
     # Check if containers are already running
     if check_containers_running "prod"; then
         echo -e "${YELLOW}Production containers are already running${NC}"
         show_prod_urls
         return 0
     fi
-    
+
     docker compose -f "$COMPOSE_FILE_PROD" up -d
     echo -e "${GREEN}Production containers started successfully!${NC}"
     show_prod_urls
+
+    # Start worker
+    start_worker_prod
 }
 
 # Function to show development URLs
@@ -191,34 +263,70 @@ show_prod_urls() {
     echo ""
 }
 
+# Function to stop development worker
+stop_worker_dev() {
+    echo -e "${YELLOW}Stopping development worker...${NC}"
+    cd "$PROJECT_DIR"
+
+    # Check if worker is running
+    if ! check_worker_running "dev"; then
+        echo -e "${YELLOW}Development worker is not running${NC}"
+        return 0
+    fi
+
+    docker compose -f "$COMPOSE_FILE_DEV" stop worker-dev
+    echo -e "${GREEN}Development worker stopped successfully!${NC}"
+}
+
+# Function to stop production worker
+stop_worker_prod() {
+    echo -e "${YELLOW}Stopping production worker...${NC}"
+    cd "$PROJECT_DIR"
+
+    # Check if worker is running
+    if ! check_worker_running "prod"; then
+        echo -e "${YELLOW}Production worker is not running${NC}"
+        return 0
+    fi
+
+    docker compose -f "$COMPOSE_FILE_PROD" stop worker
+    echo -e "${GREEN}Production worker stopped successfully!${NC}"
+}
+
 # Function to stop development containers
 stop_dev() {
     echo -e "${YELLOW}Stopping development containers...${NC}"
     cd "$PROJECT_DIR"
-    
+
     # Check if containers are running
     if ! check_containers_running "dev"; then
         echo -e "${YELLOW}Development containers are not running${NC}"
         return 0
     fi
-    
+
     docker compose -f "$COMPOSE_FILE_DEV" down
     echo -e "${GREEN}Development containers stopped successfully!${NC}"
+
+    # Stop worker
+    stop_worker_dev
 }
 
 # Function to stop production containers
 stop_prod() {
     echo -e "${YELLOW}Stopping production containers...${NC}"
     cd "$PROJECT_DIR"
-    
+
     # Check if containers are running
     if ! check_containers_running "prod"; then
         echo -e "${YELLOW}Production containers are not running${NC}"
         return 0
     fi
-    
+
     docker compose -f "$COMPOSE_FILE_PROD" down
     echo -e "${GREEN}Production containers stopped successfully!${NC}"
+
+    # Stop worker
+    stop_worker_prod
 }
 
 # Function to restart development containers
@@ -241,7 +349,7 @@ restart_prod() {
 show_logs() {
     local mode=$1
     cd "$PROJECT_DIR"
-    
+
     if [ "$mode" = "dev" ]; then
         echo -e "${BLUE}Showing development container logs...${NC}"
         if ! check_containers_running "dev"; then
@@ -267,31 +375,41 @@ show_status() {
     echo -e "${BLUE}Development containers status:${NC}"
     cd "$PROJECT_DIR"
     docker compose -f "$COMPOSE_FILE_DEV" ps
-    
+
     echo -e "\n${BLUE}Production containers status:${NC}"
+    cd "$PROJECT_DIR"
     docker compose -f "$COMPOSE_FILE_PROD" ps
 }
 
 # Main script logic
 main() {
     check_docker
-    
+
     if [ $# -eq 0 ]; then
         print_usage
         exit 1
     fi
-    
+
     local action=$1
     local mode=$2
-    
+
     case $action in
         start)
             if [ "$mode" = "dev" ]; then
                 start_dev
             elif [ "$mode" = "prod" ]; then
                 start_prod
+            elif [ "$mode" = "worker" ]; then
+                if [ "$3" = "dev" ]; then
+                    start_worker_dev
+                elif [ "$3" = "prod" ]; then
+                    start_worker_prod
+                else
+                    echo -e "${RED}Invalid worker mode. Use 'dev' or 'prod'.${NC}"
+                    exit 1
+                fi
             else
-                echo -e "${RED}Invalid mode. Use 'dev' or 'prod'.${NC}"
+                echo -e "${RED}Invalid mode. Use 'dev', 'prod', or 'worker'.${NC}"
                 exit 1
             fi
             ;;
@@ -300,8 +418,17 @@ main() {
                 stop_dev
             elif [ "$mode" = "prod" ]; then
                 stop_prod
+            elif [ "$mode" = "worker" ]; then
+                if [ "$3" = "dev" ]; then
+                    stop_worker_dev
+                elif [ "$3" = "prod" ]; then
+                    stop_worker_prod
+                else
+                    echo -e "${RED}Invalid worker mode. Use 'dev' or 'prod'.${NC}"
+                    exit 1
+                fi
             else
-                echo -e "${RED}Invalid mode. Use 'dev' or 'prod'.${NC}"
+                echo -e "${RED}Invalid mode. Use 'dev', 'prod', or 'worker'.${NC}"
                 exit 1
             fi
             ;;

@@ -15,7 +15,7 @@ from src.auth.models import UserProfile
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.service import user_role_service
 from src.rbac.user_roles.models import UserRoleCreate
-from src.common.errors import ErrorCode
+from shared.common.errors import ErrorCode
 
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)

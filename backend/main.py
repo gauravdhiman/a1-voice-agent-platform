@@ -17,7 +17,7 @@ from src.rbac.routes import rbac_router
 from src.organization.routes import organization_router
 from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
-from src.voice_agents import agent_router, tool_router
+from src.voice_agents import agent_router, tool_router, voice_router
 
 # Import the OpenTelemetry setup function first to ensure proper logging configuration
 from config.opentelemetry import emit_log, emit_metric, setup_manual_opentelemetry, logging_level
@@ -97,6 +97,23 @@ def create_app() -> FastAPI:
     # Include voice agent and tool routes
     app.include_router(agent_router)
     app.include_router(tool_router)
+    app.include_router(voice_router)
+
+    @app.on_event("startup")
+    async def startup_event():
+        from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+        from shared.voice_agents.tool_service import ToolService
+
+        # Register tools using LiveKit native registry
+        livekit_tool_registry.register_tools_from_package("shared.voice_agents.tools.implementations")
+
+        # Sync with database
+        tool_service = ToolService()
+
+        # Sync LiveKit-based registry
+        logging.info("Syncing tools to database using LiveKit native registry...")
+        await livekit_tool_registry.sync_with_db(tool_service)
+        logging.info("Tools synchronized with database")
     
     
     return app

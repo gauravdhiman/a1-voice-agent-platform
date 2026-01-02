@@ -29,6 +29,10 @@ services:
       # Stripe Configuration
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      # Google OAuth Configuration for Tools
+      - GOOGLE_OAUTH_TOOL_CLIENT_ID=${GOOGLE_OAUTH_TOOL_CLIENT_ID}
+      - GOOGLE_OAUTH_TOOL_CLIENT_SECRET=${GOOGLE_OAUTH_TOOL_CLIENT_SECRET}
+      - GOOGLE_OAUTH_TOOL_REDIRECT_URI=${GOOGLE_OAUTH_TOOL_REDIRECT_URI}
       # Opentelemetry Configuration
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=saas-platform-backend
@@ -44,6 +48,8 @@ services:
       - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
       - OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
+    volumes:
+      - ./shared:/app/shared
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -99,6 +105,37 @@ services:
       - otel-collector
     networks:
       - saas-network
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      # LiveKit Configuration
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_SIP_DOMAIN=${LIVEKIT_SIP_DOMAIN}
+      # Gemini Configuration
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Opentelemetry Configuration
+      - OTEL_ENABLED=true
+      - OTEL_SERVICE_NAME=voice-worker
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
+      - OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+    volumes:
+      - ./backend:/app/backend
+      - ./shared:/app/shared
+    networks:
+      - saas-network
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
 
 networks:
   saas-network:

@@ -6,11 +6,10 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status, Depends
 from opentelemetry import trace
 
-from src.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
-from src.voice_agents.service import voice_agent_service
+from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
+from shared.voice_agents.service import voice_agent_service
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
-from src.common.errors import ErrorCode
 
 tracer = trace.get_tracer(__name__)
 agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])

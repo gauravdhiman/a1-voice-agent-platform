@@ -5,8 +5,8 @@ import logging
 from typing import Optional, List
 from uuid import UUID
 from opentelemetry import trace, metrics
-from config import supabase_config
-from src.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
+from shared.config import supabase_config
+from .models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -67,6 +67,19 @@ class VoiceAgentService:
             return VoiceAgent(**response.data[0]), None
         except Exception as e:
             logger.error(f"Error getting agent {agent_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("voice_agent.get_agent_by_phone")
+    async def get_agent_by_phone(self, phone_number: str) -> tuple[Optional[VoiceAgent], Optional[str]]:
+        """Get an agent by its phone number."""
+        try:
+            # Handle phone number formats if necessary
+            response = self.supabase.table("voice_agents").select("*").eq("phone_number", phone_number).execute()
+            if not response.data:
+                return None, f"Agent with phone number {phone_number} not found"
+            return VoiceAgent(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error getting agent by phone {phone_number}: {e}")
             return None, str(e)
 
     @tracer.start_as_current_span("voice_agent.get_agents_by_organization")

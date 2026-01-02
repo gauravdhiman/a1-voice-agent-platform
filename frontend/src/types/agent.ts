@@ -2,6 +2,12 @@
  * Voice Agent and Tool related type definitions
  */
 
+export enum AuthStatus {
+  NOT_AUTHENTICATED = "not_authenticated", // No tokens exist
+  AUTHENTICATED = "authenticated", // Valid tokens exist
+  EXPIRED = "expired" // Tokens exist but have expired
+}
+
 export interface VoiceAgent {
   id: string;
   organization_id: string;
@@ -28,11 +34,29 @@ export interface VoiceAgentUpdate {
   is_active?: boolean;
 }
 
+export interface PlatformToolFunction {
+  type: string;
+  name: string;
+  description: string;
+  parameters?: {
+    type: string;
+    properties?: Record<string, {
+      type: string;
+      description?: string;
+      default?: unknown;
+    }>;
+    required?: string[];
+  };
+}
+
 export interface PlatformTool {
   id: string;
   name: string;
   description: string | null;
   config_schema: Record<string, unknown> | null;
+  tool_functions_schema: {
+    functions: PlatformToolFunction[];
+  } | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -44,7 +68,10 @@ export interface AgentTool {
   tool_id: string;
   config: Record<string, unknown> | null;
   sensitive_config: Record<string, unknown> | null;
+  unselected_functions: string[] | null;
   is_enabled: boolean;
+  auth_status: AuthStatus;
+  token_expires_at: number | null;
   created_at: string;
   updated_at: string;
   tool?: PlatformTool;
@@ -55,11 +82,13 @@ export interface AgentToolCreate {
   tool_id: string;
   config?: Record<string, unknown> | null;
   sensitive_config?: Record<string, unknown> | null;
+  unselected_functions?: string[] | null;
   is_enabled?: boolean;
 }
 
 export interface AgentToolUpdate {
   config?: Record<string, unknown> | null;
   sensitive_config?: Record<string, unknown> | null;
+  unselected_functions?: string[] | null;
   is_enabled?: boolean;
 }

@@ -59,6 +59,24 @@ class AgentService {
     const response = await apiClient.put<AgentTool>(`${this.toolBaseUrl}/agent/${agentToolId}`, updateData);
     return response.data;
   }
+
+  async toggleFunction(agentToolId: string, functionName: string, isEnabled: boolean): Promise<AgentTool> {
+    const response = await apiClient.put<AgentTool>(`${this.toolBaseUrl}/agent/${agentToolId}`, {
+      unselected_functions: isEnabled ? [functionName] : []
+    });
+    return response.data;
+  }
+
+
+  async startOAuth(toolName: string, agentId: string): Promise<{ auth_url: string }> {
+    const response = await apiClient.get<{ auth_url: string }>(`${this.toolBaseUrl}/auth/${toolName}?agent_id=${agentId}`);
+    return response.data;
+  }
+
+  async logoutAgentTool(agentToolId: string): Promise<AgentTool> {
+    const response = await apiClient.post<AgentTool>(`${this.toolBaseUrl}/agent/${agentToolId}/logout`);
+    return response.data;
+  }
 }
 
 export const agentService = new AgentService();
