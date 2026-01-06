@@ -2,7 +2,6 @@ import os
 import logging
 from typing import Optional
 from livekit import api
-from uuid import UUID
 
 logger = logging.getLogger(__name__)
 

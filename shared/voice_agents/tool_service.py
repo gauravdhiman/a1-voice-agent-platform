@@ -8,7 +8,7 @@ from datetime import datetime
 from opentelemetry import trace
 from shared.config import supabase_config
 from shared.common.security import encrypt_data, decrypt_data
-from .tool_models import PlatformTool, PlatformToolCreate, AgentToolCreate, AgentToolUpdate, AgentToolResponse, AuthStatus
+from .tool_models import PlatformTool, PlatformToolCreate, AgentToolCreate, AgentToolUpdate, AgentToolResponse, AgentTool, AuthStatus
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -166,7 +166,7 @@ class ToolService:
 
     @tracer.start_as_current_span("tool.get_agent_tools")
     async def get_agent_tools(self, agent_id: UUID) -> tuple[List[AgentToolResponse], Optional[str]]:
-        """Get all tools configured for an agent, including platform tool details."""
+        """Get all tools configured for an agent, including platform tool details (excludes sensitive config)."""
         try:
             # Get agent tool configurations
             response = self.supabase.table("agent_tools")\
@@ -210,6 +210,54 @@ class ToolService:
             return agent_tools, None
         except Exception as e:
             logger.error(f"Error getting agent tools for agent {agent_id}: {e}")
+            return [], str(e)
+
+    @tracer.start_as_current_span("tool.get_agent_tools_with_sensitive_config")
+    async def get_agent_tools_with_sensitive_config(self, agent_id: UUID) -> tuple[List[AgentTool], Optional[str]]:
+        """Get all tools configured for an agent with full details including sensitive config (for worker)."""
+        try:
+            # Get agent tool configurations
+            response = self.supabase.table("agent_tools")\
+                .select("*, tool:platform_tools(*)")\
+                .eq("agent_id", str(agent_id))\
+                .execute()
+
+            agent_tools = []
+            for item in response.data:
+                # Extract tool details from the joined query
+                tool_data = item.pop("tool")
+
+                # Decrypt sensitive config
+                sensitive_config = None
+                if item.get("sensitive_config"):
+                    try:
+                        decrypted_config = decrypt_data(item.get("sensitive_config"))
+                        if decrypted_config and isinstance(decrypted_config, dict):
+                            sensitive_config = decrypted_config
+                    except Exception as e:
+                        logger.error(f"Error decrypting sensitive config: {e}")
+
+                # Build full AgentTool with sensitive config
+                agent_tool_dict = {
+                    "id": item["id"],
+                    "agent_id": item["agent_id"],
+                    "tool_id": item["tool_id"],
+                    "config": item.get("config"),
+                    "sensitive_config": sensitive_config,
+                    "unselected_functions": item.get("unselected_functions"),
+                    "is_enabled": item.get("is_enabled", True),
+                    "created_at": item["created_at"],
+                    "updated_at": item["updated_at"]
+                }
+
+                agent_tool = AgentTool(**agent_tool_dict)
+                if tool_data:
+                    agent_tool.tool = PlatformTool(**tool_data)
+                agent_tools.append(agent_tool)
+
+            return agent_tools, None
+        except Exception as e:
+            logger.error(f"Error getting agent tools with sensitive config for agent {agent_id}: {e}")
             return [], str(e)
 
     @tracer.start_as_current_span("tool.update_agent_tool")

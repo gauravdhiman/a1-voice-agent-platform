@@ -143,8 +143,25 @@ async def start_oauth(
         "timestamp": datetime.now().isoformat()
     }
     state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
-    
-    auth_url = f"{metadata.auth_config['auth_url']}?client_id={quote(client_id)}&redirect_uri={quote(redirect_uri)}&response_type=code&scope={' '.join(metadata.auth_config['scopes'])}&state={quote(state)}"
+
+    # Build OAuth URL with dynamic parameters
+    auth_params = {
+        "client_id": quote(client_id),
+        "redirect_uri": quote(redirect_uri),
+        "response_type": "code",
+        "scope": quote(' '.join(metadata.auth_config['scopes'])),
+        "state": quote(state)
+    }
+
+    # Add access_type and prompt if configured (required for refresh_token)
+    if metadata.auth_config.get("access_type"):
+        auth_params["access_type"] = quote(metadata.auth_config["access_type"])
+    if metadata.auth_config.get("prompt"):
+        auth_params["prompt"] = quote(metadata.auth_config["prompt"])
+
+    # Construct URL
+    auth_query = "&".join(f"{k}={v}" for k, v in auth_params.items())
+    auth_url = f"{metadata.auth_config['auth_url']}?{auth_query}"
     return {"auth_url": auth_url}
 
 @tool_router.get("/callback")
@@ -225,15 +242,23 @@ async def oauth_callback(
     access_token = token_data.get("access_token")
     refresh_token = token_data.get("refresh_token")
     expires_in = token_data.get("expires_in", 3600)
-    
+
     if not access_token:
         raise HTTPException(status_code=500, detail="No access_token returned from OAuth provider")
-    
+
     sensitive_config = {
         "access_token": access_token,
-        "refresh_token": refresh_token,
-        "expires_at": (datetime.now().timestamp() + expires_in)
     }
+
+    # Only add refresh_token if it was returned (requires access_type=offline)
+    if refresh_token:
+        sensitive_config["refresh_token"] = refresh_token
+
+    # Calculate expiration time
+    if expires_in:
+        sensitive_config["expires_at"] = datetime.now().timestamp() + expires_in
+    else:
+        sensitive_config["expires_at"] = datetime.now().timestamp() + 3600  # Default 1 hour
     
     # 6. Get tool_id from DB
     tools, _ = await tool_service.get_platform_tools(only_active=False)

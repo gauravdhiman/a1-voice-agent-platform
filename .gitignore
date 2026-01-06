@@ -38,6 +38,9 @@ wheels/
 *.swo
 *~
 
+# AI assistants
+.claude/
+
 # OS generated files
 .DS_Store
 .DS_Store?
@@ -117,3 +120,7 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/.pnpm-debug.log*
+
+# Others
+.scratchpad/
+e2e/

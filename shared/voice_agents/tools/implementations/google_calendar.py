@@ -1,12 +1,39 @@
 import httpx
-from typing import Any
+from typing import Any, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel, Field
 
 from livekit.agents import function_tool, RunContext
-from shared.voice_agents.tools.base.base_tool import BaseTool, ToolMetadata
+from shared.voice_agents.tools.base.base_tool import (
+    BaseTool,
+    ToolMetadata,
+    BaseConfig,
+    BaseAuthConfig,
+    BaseSensitiveConfig
+)
 
 
 class GoogleCalendarTool(BaseTool):
+    class AuthConfig(BaseAuthConfig):
+        provider: str = "google"
+        scopes: list[str] = [
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.readonly"
+        ]
+        auth_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+        token_url: str = "https://oauth2.googleapis.com/token"
+        access_type: str = "offline"  # Required to get refresh_token
+        prompt: str = "consent"  # Required to get refresh_token
+
+    class Config(BaseConfig):
+        calendar_id: str = Field(default="primary", description="The ID of calendar to use (e.g., 'primary' or an email address)")
+        default_event_duration: int = Field(default=30, description="Default event duration in minutes")
+
+    class SensitiveConfig(BaseSensitiveConfig):
+        access_token: str = ""
+        refresh_token: Optional[str] = None
+        token_expiry: Optional[str] = None
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -14,32 +41,10 @@ class GoogleCalendarTool(BaseTool):
             description="Manage Google Calendar events, check availability, and schedule meetings.",
             requires_auth=True,
             auth_type="oauth2",
-            auth_config={
-                "provider": "google",
-                "scopes": ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"],
-                "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-                "token_url": "https://oauth2.googleapis.com/token"
-            },
-            config_schema={
-                "type": "object",
-                "properties": {
-                    "calendar_id": {
-                        "type": "string",
-                        "title": "Calendar ID",
-                        "default": "primary",
-                        "description": "The ID of the calendar to use (e.g., 'primary' or an email address)."
-                    },
-                    "default_event_duration": {
-                        "type": "integer",
-                        "title": "Default Event Duration (minutes)",
-                        "default": 30
-                    }
-                },
-                "required": ["calendar_id"]
-            }
+            auth_config=self.AuthConfig().model_dump(),
+            config_schema=self.Config.model_json_schema()
         )
 
-    @function_tool()
     async def list_events(
         self,
         context: RunContext,
@@ -56,20 +61,17 @@ class GoogleCalendarTool(BaseTool):
             time_max: End of time range in ISO format (optional)
             max_results: Maximum number of events to return (default: 10)
         """
-        calendar_id = context.userdata.get("tool_config", {}).get("calendar_id", "primary")
-        access_token = context.userdata.get("sensitive_config", {}).get("access_token")
-
-        if not access_token:
-            raise ValueError("No access token found in context")
+        if not self.sensitive_config or not self.sensitive_config.access_token:
+            raise ValueError("No access token found in sensitive config")
 
         headers = {
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {self.sensitive_config.access_token}",
             "Content-Type": "application/json"
         }
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                f"https://www.googleapis.com/calendar/v3/calendars/{self.config.calendar_id}/events",
                 headers=headers,
                 params={
                     "timeMin": time_min,
@@ -83,7 +85,6 @@ class GoogleCalendarTool(BaseTool):
             data = response.json()
             return {"events": data.get("items", [])}
 
-    @function_tool()
     async def create_event(
         self,
         context: RunContext,
@@ -91,25 +92,23 @@ class GoogleCalendarTool(BaseTool):
         start_time: str,
         duration_minutes: int = 30,
         attendees: list[str] | None = None,
-        description: str = ""
+        description: str | None = None
     ) -> dict[str, Any]:
         """
         Create a new calendar event.
+        In case user provides attendees email ids, always confirm each one of them by spelling them letter by letter like for test.email-1@example.com, the spelling is T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM.
+        Once user confirm all the details, then only create the event.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
             title: Event title
             start_time: Event start time in ISO format
             duration_minutes: Duration in minutes (default: 30 from config)
-            attendees: List of attendee email addresses (optional)
+            attendees: List of attendee email addresses (optional). Its option, but prefer asking it to the user.
             description: Event description (optional)
         """
-        calendar_id = context.userdata.get("tool_config", {}).get("calendar_id", "primary")
-        access_token = context.userdata.get("sensitive_config", {}).get("access_token")
-        default_duration = context.userdata.get("tool_config", {}).get("default_event_duration", 30)
-
-        if not access_token:
-            raise ValueError("No access token found in context")
+        if not self.sensitive_config or not self.sensitive_config.access_token:
+            raise ValueError("No access token found in sensitive config")
 
         event = {
             "summary": title,
@@ -127,20 +126,19 @@ class GoogleCalendarTool(BaseTool):
             event["attendees"] = [{"email": email} for email in attendees]
 
         headers = {
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {self.sensitive_config.access_token}",
             "Content-Type": "application/json"
         }
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                f"https://www.googleapis.com/calendar/v3/calendars/{self.config.calendar_id}/events",
                 headers=headers,
                 json=event
             )
             response.raise_for_status()
             return response.json()
 
-    @function_tool()
     async def check_availability(
         self,
         context: RunContext,
@@ -155,12 +153,8 @@ class GoogleCalendarTool(BaseTool):
             date: Date and time to check in ISO format
             duration_minutes: Duration to check in minutes (default: 30)
         """
-        calendar_id = context.userdata.get("tool_config", {}).get("calendar_id", "primary")
-        access_token = context.userdata.get("sensitive_config", {}).get("access_token")
-        default_duration = context.userdata.get("tool_config", {}).get("default_event_duration", 30)
-
-        if not access_token:
-            raise ValueError("No access token found in context")
+        if not self.sensitive_config or not self.sensitive_config.access_token:
+            raise ValueError("No access token found in sensitive config")
 
         end_dt = (
             datetime.fromisoformat(date.replace("Z", "+00:00"))
@@ -168,13 +162,13 @@ class GoogleCalendarTool(BaseTool):
         ).isoformat()
 
         headers = {
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {self.sensitive_config.access_token}",
             "Content-Type": "application/json"
         }
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                f"https://www.googleapis.com/calendar/v3/calendars/{self.config.calendar_id}/events",
                 headers=headers,
                 params={
                     "timeMin": date,
