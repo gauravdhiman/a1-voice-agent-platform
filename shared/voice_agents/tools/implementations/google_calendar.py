@@ -1,7 +1,7 @@
 import httpx
 from typing import Any, Optional
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from livekit.agents import function_tool, RunContext
 from shared.voice_agents.tools.base.base_tool import (
@@ -54,6 +54,8 @@ class GoogleCalendarTool(BaseTool):
     ) -> dict[str, Any]:
         """
         List calendar events within a time range.
+        Important points to consider:
+        1. For time related parameters always pass the time in ISO format with timezone (e.g., 2025-12-30T09:00:00Z). If you do not have timezone or cannot infer it, always ask user to provide it.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -96,8 +98,11 @@ class GoogleCalendarTool(BaseTool):
     ) -> dict[str, Any]:
         """
         Create a new calendar event.
-        In case user provides attendees email ids, always confirm each one of them by spelling them letter by letter like for test.email-1@example.com, the spelling is T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM.
-        Once user confirm all the details, then only create the event.
+        Important points to consider:
+        1. In case user provides attendees email ids, always confirm each one of them by spelling them letter by letter like for test.email-1@example.com, the spelling is T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM.
+        2. Once user confirm all the details, then only create the event.
+        3. For time parameters always pass the time in ISO format with timezone (e.g., 2025-12-30T09:00:00Z). If you do not have timezone or cannot infer it, always ask user to provide it.
+        4. Before creating the event, always check the availability of that timeslot on calendar using check_availability tool (if available).
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -147,6 +152,8 @@ class GoogleCalendarTool(BaseTool):
     ) -> dict[str, Any]:
         """
         Check if time slots are free.
+        Important points to consider:
+        2. For date and time related parameters always pass the time in ISO format with timezone (e.g., 2025-12-30T09:00:00Z). If you do not have timezone, always ask user to provide it.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
