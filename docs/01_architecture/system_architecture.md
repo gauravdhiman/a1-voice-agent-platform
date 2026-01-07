@@ -48,6 +48,67 @@ graph TB
     OTEL --> DOCKER
 ```
 
+## Incoming Call Flow (Twilio → LiveKit)
+
+The platform uses Twilio for phone number provisioning and incoming call handling, then bridges calls to LiveKit for AI agent processing.
+
+### Call Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant User as Caller
+    participant Twilio as Twilio
+    participant Backend as FastAPI
+    participant LiveKit as LiveKit SIP
+    participant Worker as AI Agent
+
+    User->>Twilio: Dials Agent Phone Number
+    Twilio->>Backend: POST /api/v1/voice/twilio/incoming
+    Note over Backend: Look up agent by phone number
+    Backend->>Backend: Fetch agent config from DB
+    Backend->>Backend: Create LiveKit room
+    Backend-->>Twilio: Return TwiML with SIP Dial
+    Note over Twilio: TwiML: <Dial><Sip>sip:room@lk.domain</Sip></Dial>
+    Twilio->>LiveKit: Connect via SIP trunk
+    LiveKit->>Worker: Dispatch Job with room
+    Worker->>Worker: Load agent tools
+    Worker->>User: AI Agent speaks to user
+```
+
+### Twilio Webhook Endpoint
+
+**Location**: `backend/src/voice_agents/voice_routes.py`
+
+**Endpoint**: `POST /api/v1/voice/twilio/incoming`
+
+**Process**:
+1. Twilio sends POST request when someone calls your Twilio phone number
+2. Backend looks up agent by phone number via `voice_agent_service.get_agent_by_phone()`
+3. Backend returns TwiML (Twilio Markup Language) response with `<Dial><Sip>` element
+4. Twilio bridges the call to LiveKit SIP domain
+5. LiveKit creates room and dispatches job to worker
+6. Worker joins room with AI agent and handles the call
+
+**Key Configuration**:
+- `LIVEKIT_SIP_DOMAIN`: LiveKit SIP domain for bridging
+- `voice_agents.phone_number`: Phone number associated with agent
+- `voice_routes.py`: Handles Twilio webhook and returns TwiML
+
+**Example TwiML Response**:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Dial>
+        <Sip>sip:+1234567890@your-livekit-sip-domain.livekit.cloud</Sip>
+    </Dial>
+</Response>
+```
+
+This design separates telephony (Twilio) from AI processing (LiveKit), allowing the platform to:
+- Use Twilio for phone numbers and incoming call routing
+- Use LiveKit for real-time AI voice interaction
+- Bridge calls via SIP protocol
+
 ## Core Components
 
 ### 1. Frontend (Next.js)

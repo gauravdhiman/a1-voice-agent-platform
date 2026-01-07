@@ -1,58 +1,46 @@
-# Multi-Tenant SaaS Platform
+# AI Voice Agent Platform
 
-A production-ready template for building multi-tenant SaaS applications with Next.js frontend and Python FastAPI backend.
+A production-grade multi-tenant SaaS platform for managing AI voice agents with LiveKit real-time communication, dynamic tool integration, and comprehensive billing/RBAC systems.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ 
-- npm
+- Node.js 18+
+- Python 3.11+
 - Docker and Docker Compose
-- Python 3.11+ (for backend development)
+- Supabase account (for database)
+- LiveKit Cloud account (for real-time voice)
+- Google Cloud account (for OAuth + Gemini API)
 
 ### Automated Setup
 
-Run the setup script to automatically configure your development environment:
-
 ```bash
+# Clone repository
+git clone <repository-url>
+cd ai-voice-agent-platform
+
+# Run setup script
 ./scripts/setup.sh
-```
 
-This script will:
-- Create environment files from examples
-- Install frontend dependencies
-- Set up the Python virtual environment
-- Install backend dependencies
-
-### Notification Events Setup
-
-After setting up the environment, you need to initialize the notification events in the database by running the seed script:
-
-```bash
+# Run database migrations
 cd backend
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+alembic upgrade head
+
+# Seed notification events
 python scripts/seed_notification_events.py
+
+# Start development containers
+cd ..
+./start.sh start dev
 ```
-
-This script creates the default notification events needed for the notification system to function properly. It should be run after the database migrations are applied.
-
-### Easy Container Management
-
-For simplified Docker container management, we provide a comprehensive startup script:
-
-```bash
-./start.sh
-```
-
-This script allows you to easily start, stop, restart, and manage containers in both development and production modes without remembering complex Docker commands. For detailed usage instructions, see [README_STARTUP.md](README_STARTUP.md).
 
 ### Manual Setup
 
 1. **Clone and setup environment**
    ```bash
    git clone <repository-url>
-   cd multi-tanent-saas-platform-python-supabase-nextjs
+   cd ai-voice-agent-platform
    ```
 
 2. **Frontend Development (Non-containerized)**
@@ -76,25 +64,29 @@ This script allows you to easily start, stop, restart, and manage containers in 
    python main.py
    ```
 
-4. **Using Docker for Development (Containerized)**
+4. **Worker Development (Non-containerized)**
+   ```bash
+   cd worker
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   cp .env.example .env
+   # Edit .env with your configuration
+   python -m livekit.agents.cli --dev
+   ```
+
+5. **Using Docker for Development (Containerized)**
    ```bash
    # Copy and configure environment file
    cp .env.example .env
-   # Edit .env with your configuration (this file is used by Docker containers)
+   # Edit .env with your configuration
    
-   # Run both frontend and backend with development settings (hot reloading)
-   docker compose -f docker-compose.dev.yml up --build
+   # Run all services with development settings (hot reloading)
+   ./start.sh start dev
    
-   # Run both frontend and backend with production settings
-   docker compose up --build
+   # Run all services with production settings
+   ./start.sh start prod
    ```
-
-### Production Deployment
-
-```bash
-# Build and run production containers
-docker compose up --build -d
-```
 
 ## 🏗️ Architecture
 
@@ -103,187 +95,366 @@ docker compose up --build -d
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
 - **Components**: Shadcn/ui
-- **State Management**: React Query (planned)
-- **Detailed Architecture**: [Frontend Architecture Overview](docs/FRONTEND_ARCHITECTURE.md)
+- **State Management**: React Context
+- **Routing**: App Router with protected routes
 
 ### Backend (FastAPI)
 - **Framework**: Python FastAPI
-- **Database**: Supabase
-- **Authentication**: JWT with Supabase Auth
-- **Multi-tenancy**: Organization-based isolation
+- **Database**: Supabase (PostgreSQL with RLS)
+- **Authentication**: JWT with OAuth (Google, LinkedIn)
+- **Multi-tenancy**: Organization-based isolation with Row-Level Security
+- **Billing**: Stripe integration with credit-based billing
+- **RBAC**: Role-based access control with fine-grained permissions
+
+### Worker (LiveKit)
+- **Framework**: LiveKit Agents SDK
+- **LLM Integration**: Gemini Realtime API
+- **Tool System**: Dynamic tool loading and wrapping
+- **Real-time Communication**: Voice streaming via WebRTC
+- **Tool Wrapping**: Automatic wrapper creation for LLM compatibility
 
 ### Infrastructure
 - **Containerization**: Docker & Docker Compose
 - **Scalability**: Horizontal scaling ready
-- **Load Balancing**: Nginx (planned)
-- **Observability**: OpenTelemetry with Collector architecture and manual instrumentation
+- **Observability**: OpenTelemetry with Collector architecture
+- **Monitoring**: New Relic integration
 
 ## 📁 Project Structure
 
 ```
+ai-voice-agent-platform/
 ├── frontend/                 # Next.js application
 │   ├── src/
 │   │   ├── app/             # App Router pages
+│   │   │   ├── (dashboard)/  # Protected dashboard
+│   │   │   └── auth/          # Authentication
 │   │   ├── components/      # React components
-│   │   │   ├── ui/          # Shadcn/ui components
-│   │   │   ├── auth/        # Authentication components
-│   │   │   ├── dashboard/   # Dashboard components
-│   │   │   └── layout/      # Layout components
-│   │   ├── lib/            # Utilities and configs
-│   │   │   └── api/        # API client
-│   │   ├── types/          # TypeScript definitions
-│   │   └── hooks/          # Custom React hooks
+│   │   ├── contexts/        # React Context providers
+│   │   ├── hooks/          # Custom React hooks
+│   │   ├── lib/            # Utilities and API client
+│   │   ├── services/        # Business logic services
+│   │   └── types/          # TypeScript definitions
 │   ├── Dockerfile          # Production Docker config
 │   ├── Dockerfile.dev      # Development Docker config
 │   └── package.json
 ├── backend/                 # FastAPI application
 │   ├── src/
-│   │   ├── auth/            # Authentication and RBAC modules
-│   │   ├── billing/         # Billing and subscription management
-│   │   ├── core/            # Core application logic and utilities
-│   │   ├── database/        # Database models and migrations
-│   │   ├── organizations/   # Organization management
-│   │   └── main.py          # Main FastAPI application entry point
-│   ├── alembic/             # Alembic migration scripts
+│   │   ├── auth/            # Authentication and RBAC
+│   │   ├── billing/         # Stripe billing integration
+│   │   ├── notifications/    # Email notification system
+│   │   ├── organization/     # Organization management
+│   │   ├── voice_agents/    # Voice agent API endpoints
+│   │   └── shared/         # Shared utilities
+│   ├── config/              # Configuration management
+│   ├── alembic/             # Database migrations
 │   ├── tests/               # Backend tests
 │   ├── Dockerfile           # Production Docker config
 │   ├── Dockerfile.dev       # Development Docker config
 │   └── requirements.txt
+├── worker/                  # LiveKit worker service
+│   ├── src/
+│   │   ├── worker.py        # Main entry point
+│   │   └── default_system_prompt.py
+│   ├── .docs/              # Worker documentation
+│   ├── test_livekit_wrapping.py  # Tool wrapping tests
+│   ├── Dockerfile
+│   ├── Dockerfile.dev
+│   └── requirements.txt
+├── shared/                  # Shared code (backend + worker)
+│   ├── voice_agents/         # Voice agent services and models
+│   │   ├── service.py       # Voice agent CRUD
+│   │   ├── tool_service.py  # Tool management
+│   │   ├── tools/          # Tool implementations
+│   │   └── models.py       # Data models
+│   ├── config/              # Shared configuration
+│   └── common/             # Common utilities
+├── docs/                   # Documentation
+│   ├── 00_introduction/     # Project overview
+│   ├── 01_architecture/     # System architecture
+│   ├── 02_implementation/  # Implementation details
+│   ├── 03_development_guides/  # Development guides
+│   ├── 04_operations/       # Operations & deployment
+│   ├── 05_business/        # Business requirements
+│   ├── legacy/             # Historical documentation
+│   └── new_docs/          # Old documentation (to be migrated)
 ├── docker-compose.yml       # Production Docker Compose
 ├── docker-compose.dev.yml   # Development Docker Compose
+├── start.sh                # Container management script
+├── AGENTS.md               # AI agent guidelines
 └── README.md
 ```
 
-## 🛠️ Development
+## 📦 Features
 
-### Frontend Commands
+### Core Platform
+- ✅ Multi-tenant SaaS architecture with organization-based isolation
+- ✅ Row-Level Security (RLS) for data isolation
+- ✅ Role-Based Access Control (RBAC) with fine-grained permissions
+- ✅ Password-based authentication with strong password policies
+- ✅ Google OAuth integration
+- ✅ Stripe billing integration with credit-based subscriptions
+- ✅ Email notification system (Resend.com)
+- ✅ OpenTelemetry observability (traces, metrics, logs)
 
-```bash
-cd frontend
+### Voice Agent System
+- ✅ AI voice agents with LiveKit real-time communication
+- ✅ Dynamic tool loading from database
+- ✅ LiveKit tool wrapping for LLM compatibility
+- ✅ Tool function-level enable/disable
+- ✅ Google Calendar tool implementation
+- ✅ Agent greeting on room entry
+- ✅ OAuth token management for tools
+- ✅ Two-tier tool service (safe API, full worker)
 
-# Development
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run start        # Start production server
-npm run lint         # Run ESLint
-npm run type-check   # TypeScript type checking
+### Developer Experience
+- ✅ Docker containerization (dev & prod)
+- ✅ Docker Compose orchestration
+- ✅ Automated setup script
+- ✅ OpenTelemetry manual instrumentation
+- ✅ Type-safe APIs (Pydantic, TypeScript)
+- ✅ Comprehensive documentation
+- ✅ Pre-commit hooks (Black, isort, ESLint)
 
-# Docker Development
-docker build -f Dockerfile.dev -t saas-frontend-dev .
-docker run -p 3000:3000 saas-frontend-dev
+### Testing & Quality
+- ✅ Pytest for backend testing
+- ✅ Playwright for E2E testing
+- ✅ Code formatting (Black, Prettier)
+- ✅ Linting (Flake8, ESLint)
+- 🚧 Comprehensive test coverage
+
+### Infrastructure
+- ✅ Supabase database (PostgreSQL)
+- ✅ LiveKit Cloud integration
+- ✅ Google Realtime API (Gemini)
+- ✅ OpenTelemetry Collector architecture
+- ✅ Environment-based configuration
+- 🚧 Kubernetes deployment manifests
+- 🚧 CI/CD pipeline
+
+## 🎯 Key Features
+
+### Voice Agent System
+
+**Dynamic Tool Loading**: Tools are loaded from database at runtime, enabling:
+- Runtime tool configuration without code deployment
+- Per-organization tool customization
+- Easy addition of new tools
+
+**Two-Tier Tool Service**:
+- **API Layer**: Returns safe metadata (no OAuth tokens)
+- **Worker Layer**: Returns full tool instances with all secrets
+
+**LiveKit Tool Wrapping**: Innovative wrapper pattern solves:
+- Tool methods have `self` parameter (for state)
+- LiveKit requires functions without `self`
+- Solution: Dynamic wrapper creation with `exec()`
+
+**Agent Greeting**: Automatic greeting when agent enters room eliminates awkward silence.
+
+### Multi-Tenancy
+
+**Shared Database + Shared Schema**:
+- `organization_id` column on all tenant tables
+- Row-Level Security (RLS) policies enforce isolation
+- Tenant context injected via middleware
+
+**RBAC System**:
+- Predefined roles: platform_admin, org_admin, member, billing
+- Platform admins can create custom roles
+- Fine-grained permissions: `resource.action` format
+- One role per user per organization
+
+### Billing & Credits
+
+**Stripe Integration**:
+- Plan-based subscriptions (monthly/annual)
+- Credit allocation on payment
+- Webhook-driven status updates
+- Idempotent event handling
+
+**Credit Management**:
+- Track usage, top-ups, and adjustments
+- Enforce restrictions on low balance
+- Low credit alerts via notifications
+
+### Observability
+
+**OpenTelemetry Stack**:
+- Manual instrumentation for precise control
+- Collector architecture for centralized processing
+- CORS-enabled for browser telemetry
+- New Relic integration for visualization
+
+## 🔄 Development Priorities
+
+1. **Voice Agent Enhancements**:
+   - Multi-LLM support (OpenAI, Claude, etc.)
+   - Conversation state persistence
+   - Advanced error handling and recovery
+   - Agent analytics dashboard
+
+2. **Tool Expansion**:
+   - More tool implementations (CRM, messaging, custom APIs)
+   - Tool composition and chaining
+   - Tool dependencies and versioning
+   - Tool health monitoring
+
+3. **Testing**:
+   - Comprehensive test coverage (>80%)
+   - E2E test scenarios for voice agents
+   - Performance testing (load, stress)
+   - Integration tests for tool wrapping
+
+4. **Operations**:
+   - CI/CD pipeline (GitHub Actions)
+   - Kubernetes deployment manifests
+   - Production runbooks
+   - Monitoring and alerting setup
+
+5. **Features**:
+   - Agent analytics dashboard
+   - Conversation history and playback
+   - Tool usage metrics
+   - Advanced RBAC permissions
+   - Multi-language support
+
+## 📚 Documentation
+
+### Documentation Structure
+
+```
+docs/
+├── 00_getting_started/     # Getting started guides
+│   ├── project_overview.md       # Platform overview and features
+│   ├── quick_start.md           # Quick start with Docker
+│   ├── setup.md                # Detailed setup guide
+│   └── introduction.md          # Platform introduction
+├── 01_architecture/          # System architecture
+│   ├── overview.md              # High-level system design
+│   ├── system_architecture.md    # Complete architecture
+│   ├── frontend_architecture.md  # Frontend design
+│   ├── backend_architecture.md   # Backend design
+│   ├── database_schema.md        # Database schema
+│   └── twilio_call_flow.md     # Call handling flow
+├── 02_features/             # Platform features (NEW)
+│   ├── voice_agents/           # Voice agents system
+│   ├── authentication_rbac/     # Authentication & RBAC
+│   ├── multi_tenancy/          # Multi-tenant support
+│   ├── billing/                # Billing and payments
+│   ├── notifications/           # Email notifications
+│   └── observability/         # Monitoring & metrics
+├── 03_implementation/       # Implementation details
+│   ├── tool_system.md          # Tool architecture
+│   ├── livekit_tool_wrapping.md  # Tool wrapping details
+│   ├── tool_calling_challenges.md  # Problems & solutions
+│   ├── dynamic_tool_architecture.md  # Dynamic tool loading
+│   ├── tool_implementation_summary.md  # Implementation summary
+│   ├── payment_flow.md        # Payment workflows
+│   ├── stripe_integration.md    # Stripe integration
+│   └── polymorphic_relationships.md  # Database patterns
+├── 03_development/          # Development workflows (NEW)
+│   ├── getting_started.md      # Quick start for developers
+│   ├── frontend/              # Frontend development
+│   ├── backend/               # Backend development
+│   ├── worker/                # Worker development
+│   └── shared_module/         # Shared code guide
+├── 04_development_guides/  # Development guidelines
+│   ├── development_setup.md    # Local dev setup
+│   ├── api_guidelines.md      # API standards
+│   ├── database_migrations.md  # Migration best practices
+│   └── testing.md            # Testing strategies
+├── 05_operations/           # Operations & deployment
+│   ├── environment_configuration.md  # Environment setup
+│   ├── stripe_management.md   # Stripe tool
+│   └── docker_deployment.md  # Container deployment
+└── 05_business/             # Business requirements
+    ├── prd.md                 # Product requirements
+    └── SUMMARY.md              # Business summary
 ```
 
-### Backend Commands
+### Key Documentation
+
+- **[Documentation Summary](docs/SUMMARY.md)** - Complete documentation index
+- **[Getting Started](docs/00_getting_started/)** - Quick start and setup guides
+- **[Feature Documentation](docs/02_features/)** - Comprehensive feature guides
+- **[Development Guides](docs/03_development/)** - Developer workflows
+- **[System Architecture](docs/01_architecture/system_architecture.md)** - Complete architecture
+- **[AGENTS.md](AGENTS.md)** - AI agent coding guidelines
+
+### Component Documentation
+
+- **[Frontend README](frontend/README.md)** - Next.js application
+- **[Backend README](backend/README.md)** - FastAPI application
+- **[Worker README](worker/README.md)** - LiveKit worker service
+- **[Shared Module README](shared/README.md)** - Shared code architecture
+
+## 🔧 Quick Reference
+
+### Starting Services
+
+```bash
+# Development containers
+./start.sh start dev
+
+# Production containers
+./start.sh start prod
+
+# View logs
+./start.sh logs dev
+
+# Stop services
+./start.sh stop dev
+```
+
+### Database Migrations
 
 ```bash
 cd backend
+alembic upgrade head              # Apply all migrations
+alembic revision -m "message"   # Create new migration
+alembic downgrade -1             # Rollback one migration
+```
 
-# Development with hot reload
-uvicorn main:app --reload
+### Testing
 
-# Production
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+```bash
+# Backend tests
+cd backend
+pytest tests/
+
+# Frontend tests
+cd frontend
+npm test
+
+# E2E tests
+cd e2e
+npm run test
 ```
 
 ### Code Quality
 
-The project includes:
-- **ESLint**: Code linting with Next.js recommended rules
-- **TypeScript**: Type safety and better developer experience
-- **Prettier**: Code formatting (can be added)
-- **Tailwind CSS**: Utility-first styling
+```bash
+# Backend
+cd backend
+black .                    # Format code
+isort .                    # Sort imports
+flake8 src/                 # Lint
 
-## 🔧 Configuration
-
-### Environment Variables
-
-Environment variables can be configured in multiple ways depending on your development approach:
-
-1. **Local Development (Non-containerized)**:
-   - Backend: `backend/.env` (copy from `backend/.env.example`)
-   - Frontend: `frontend/.env.local` (copy from `frontend/.env.local.example`)
-   - **Purpose**: Used only when running services directly on the host machine
-
-2. **Containerized Development**:
-   - Root: `.env` (copy from `.env.example`)
-   - **Purpose**: Used when running services in Docker containers
-
-**Important**: The service-specific environment files (`backend/.env` and `frontend/.env.local`) are **only for non-containerized local development**. When running services in Docker containers, the root `.env` file is used instead.
-
-For detailed information about environment configuration, see [ENVIRONMENT.md](docs/ENVIRONMENT.md).
-
-#### Supabase Configuration Keys
-
-The Supabase configuration requires different environment variables for frontend and backend:
-
-1. **SUPABASE_SERVICE_KEY**: Used only by the backend for administrative operations (service role key)
-2. **SUPABASE_ANON_KEY**: Used by the backend for certain operations (anon key)
-3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT_PUBLIC_ to be accessible in browser)
-4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT_PUBLIC_ to be accessible in browser)
-
-**Important**: Both the root `.env` file and the service-specific files should contain the appropriate Supabase keys for their respective environments.
-
-### OpenTelemetry Configuration
-
-This project uses a comprehensive OpenTelemetry implementation with the following features:
-
-- **OpenTelemetry Collector**: Centralized telemetry processing service
-- **Manual Instrumentation**: Both frontend and backend use manual OpenTelemetry setup for better control
-- **Traces, Metrics, Logs**: All three telemetry signals are collected and exported
-- **New Relic Integration**: Collector forwards data to New Relic for visualization
-- **CORS Support**: Collector configured to allow browser-based telemetry collection
-
-For detailed information about the OpenTelemetry setup, see [OPENTELEMETRY_CONSOLIDATED.md](docs/OPENTELEMETRY_CONSOLIDATED.md).
-
-## 🔄 Next Steps
-
-1. **Authentication**: Implement JWT-based auth flow
-2. **Multi-tenancy**: Organization-based data isolation
-3. **Database**: Supabase schema and migrations
-4. **API Integration**: Connect frontend to backend APIs
-5. **Testing**: Unit and integration tests
-6. **CI/CD**: GitHub Actions workflows
-7. **Monitoring**: Logging and metrics
-
-## 📦 Features
-
-### ✅ Completed
-- [x] Next.js 15 with TypeScript setup
-- [x] Tailwind CSS configuration
-- [x] Shadcn/ui component library
-- [x] Docker containerization (frontend)
-- [x] Type-safe API client foundation
-- [x] Project structure and documentation
-- [x] FastAPI backend with health endpoints
-- [x] Docker containerization (backend)
-- [x] Docker Compose setup for development and production
-- [x] CORS configuration for frontend-backend communication
-- [x] Environment variable management strategy
-- [x] Automated setup script
-- [x] Consistent environment variable loading across all Docker Compose files
-- [x] Password-based authentication with strong password policies
-- [x] Google OAuth authentication for signup and login
-- [x] OpenTelemetry Collector architecture with manual instrumentation for improved observability
-
-### 🚧 In Progress
-- [ ] Multi-tenant architecture
-- [ ] Database integration
-
-### 📋 Planned
-- [ ] Subscription billing
-- [ ] Real-time features
-- [ ] Email notifications
-- [ ] Comprehensive testing
-- [ ] CI/CD pipeline
-- [ ] Production deployment guides
+# Frontend
+cd frontend
+npm run lint                # Run ESLint
+npx tsc --noEmit         # Type check
+```
 
 ## 🤝 Contributing
 
 1. Follow the established code style and linting rules
-2. Use TypeScript for all new code
+2. Use TypeScript for frontend, type hints for backend
 3. Add tests for new features
 4. Update documentation as needed
 5. Use conventional commit messages
+
+See [AGENTS.md](AGENTS.md) for detailed coding guidelines.
 
 ## 📄 License
 
@@ -294,38 +465,11 @@ For detailed information about the OpenTelemetry setup, see [OPENTELEMETRY_CONSO
 ## 🛟 Support
 
 For questions and support:
-- Review the documentation
+- Review the documentation in `docs/`
+- Check [Worker Documentation](worker/README.md) for voice agent details
+- Check [Shared Module Documentation](shared/README.md) for shared code
+- Review [Development Guidelines](AGENTS.md) for coding standards
 - Check existing issues
 - Create a new issue if needed
 
-Built with ❤️ using Next.js, FastAPI, and modern web technologies.
-
-## Role-Based Access Control (RBAC)
-
-This platform includes a comprehensive Role-Based Access Control (RBAC) system that allows fine-grained control over user permissions. The RBAC system supports:
-
-- **Predefined Roles**: platform_admin, org_admin, and regular_user
-- **Custom Roles**: Platform administrators can create additional roles
-- **Flexible Permissions**: Permissions follow the format `resource:action`
-- **Organization-Level Permissions**: Users can have different roles in different organizations
-- **API Security**: All endpoints check user permissions before allowing access
-
-### RBAC Components
-
-1. **Database Schema**: Defined in Alembic migration `backend/alembic/versions/91759229c32b_add_initial_rbac_tables.py`
-2. **Backend Services**: Implemented in `backend/src/auth/rbac_service.py`
-3. **API Routes**: Defined in `backend/src/auth/rbac_routes.py`
-4. **Frontend Service**: Implemented in `frontend/src/services/rbac-service.ts`
-5. **React Hook**: Implemented in `frontend/src/hooks/use-rbac.ts`
-6. **Dashboard UI**: Implemented in `frontend/src/components/dashboard/rbac-dashboard.tsx`
-
-### Getting Started with RBAC
-
-1. **Database Setup**: Run Alembic migrations with `alembic upgrade head` to create the necessary tables
-2. **Default Roles**: The system automatically creates three predefined roles on first run
-3. **User Registration**: New users are automatically assigned the `regular_user` role
-4. **Role Management**: Platform administrators can manage roles and permissions through the RBAC dashboard
-
-### Documentation
-
-For comprehensive documentation, please refer to our [Documentation Summary](docs/new_docs/SUMMARY.md).
+Built with ❤️ using Next.js, FastAPI, LiveKit, and modern web technologies.

@@ -199,16 +199,21 @@ Run `pre-commit run --all-files` manually before pushing.
 
 ## Important Notes
 
-- Try to keep the project documentation up-to-date in `.docs` folder, organized properly in sub-folders for each module / functionality
-    - If you are working on a new feature, create a new folder in `.docs` and add the documentation there
-    - For diagrams, use mermaid syntax - ensure it is valid
-- For each key directories (`backend`, `frontend`, `worker`, `shared`), add a `README.md` file with the module documentation)
+### Documentation
+- Keep the project documentation always up-to-date in `docs` folder, organized properly in sub-folders for each module / functionality
+    - Always ensure the structure of documentation in `docs` folder is rational, intuitive to user and easy to follow.
+    - Always ensure cross references to other documents or files (docs and code) are accurate and not broken.
+    - For diagrams, use mermaid syntax - ensure it is valid.
+- For each key directories (`backend`, `frontend`, `worker`, `shared`), add a `README.md` file with the module documentation) and keep that always up to date.
 - For each key files, add a docstring with the file documentation
+
+### Development
 - Use `async/await` for all async operations
 - Use `pydantic` for data validation
 - Use `FastAPI` for backend APIs
 - Use `Next.js` for frontend
 - Use Docker for development and production. Even when start application on local machine for dev, use `./start.sh` script to manage docker containers.
+- Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
 
 
 <skills_system priority="1">
