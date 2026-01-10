@@ -8,7 +8,7 @@ from uuid import UUID
 import logging
 from opentelemetry import trace, metrics
 
-from config import supabase_config
+from shared.config import supabase_config
 from .models import SignUpRequest, SignInRequest, AuthResponse, UserProfile
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.service import user_role_service

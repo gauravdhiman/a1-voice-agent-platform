@@ -25,12 +25,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY worker/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Copy shared module (for production builds)
+COPY shared/ /app/shared
+
 # Copy application code
-COPY . .
+COPY worker/ /app
 
 # Create non-root user
 RUN addgroup --system --gid 1001 worker \

@@ -7,7 +7,7 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 import logging
 
-from config.supabase import supabase_config
+from shared.config import supabase_config
 from .models import (
     SubscriptionPlan, SubscriptionPlanCreate, SubscriptionPlanUpdate,
     OrganizationSubscription, OrganizationSubscriptionCreate, OrganizationSubscriptionUpdate,

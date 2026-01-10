@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 from uuid import UUID
 from opentelemetry import trace, metrics
-from config import supabase_config
+from shared.config import supabase_config
 from src.rbac.roles.models import Role, RoleCreate, RoleUpdate, RoleWithPermissions
 from src.rbac.permissions.service import permission_service
 

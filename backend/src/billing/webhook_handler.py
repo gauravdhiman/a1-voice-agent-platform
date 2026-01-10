@@ -12,7 +12,7 @@ from .models import (
     OrganizationSubscriptionUpdate, BillingHistoryCreate,
     SubscriptionStatus, BillingStatus, TransactionType, TransactionSource
 )
-from config.settings import settings
+from shared.config import settings
 
 logger = logging.getLogger(__name__)
 

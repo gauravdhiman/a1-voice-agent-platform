@@ -6,7 +6,7 @@ from typing import Optional
 from uuid import UUID
 import jwt
 from fastapi import HTTPException, status, Header
-from config import supabase_config
+from shared.config import supabase_config
 
 
 from src.auth.models import UserProfile

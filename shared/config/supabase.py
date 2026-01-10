@@ -5,7 +5,7 @@ Handles authentication, database, and other Supabase services.
 
 from typing import Optional
 from supabase import Client, create_client
-from config.settings import settings
+from shared.config.settings import settings
 
 
 class SupabaseConfig:

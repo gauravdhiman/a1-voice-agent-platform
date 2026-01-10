@@ -8,8 +8,8 @@ from typing import Optional, Dict, Any, List
 from uuid import UUID
 from datetime import datetime, timezone
 import resend
-from config.settings import settings
-from config import supabase_config
+from shared.config import settings
+from shared.config import supabase_config
 from src.notifications.models import (
     NotificationEvent,
     NotificationEventCreate,
@@ -55,7 +55,7 @@ def validate_template_variables(required_variables: List[str], template_variable
     # Apply default app-level variables if requested
     all_vars = template_variables.copy()
     if apply_defaults:
-        from config.settings import settings
+        from shared.config import settings
         default_vars = {
             "app_name": settings.app_name,
             "app_url": settings.app_base_url,

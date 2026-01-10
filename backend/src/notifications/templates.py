@@ -2,8 +2,6 @@
 Email template definitions with beautiful HTML layouts.
 """
 
-from config.settings import settings
-
 # Base HTML template with modern styling
 BASE_TEMPLATE = """
 <!DOCTYPE html>

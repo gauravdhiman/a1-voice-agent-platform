@@ -10,8 +10,7 @@ from datetime import datetime
 import uvicorn
 import logging
 from opentelemetry import trace
-from config import settings
-from config import supabase_config
+from shared.config import settings, supabase_config
 from src.auth.routes import auth_router
 from src.rbac.routes import rbac_router
 from src.organization.routes import organization_router
@@ -19,8 +18,8 @@ from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
 from src.voice_agents import agent_router, tool_router, voice_router
 
-# Import the OpenTelemetry setup function first to ensure proper logging configuration
-from config.opentelemetry import emit_log, emit_metric, setup_manual_opentelemetry, logging_level
+# Import OpenTelemetry setup function first to ensure proper logging configuration
+from shared.config.opentelemetry import emit_log, emit_metric, setup_manual_opentelemetry, logging_level
 
 # Configure logging to ensure it outputs to stdout with proper formatting
 # The OpenTelemetry logging handler is added in the setup_manual_opentelemetry function

@@ -24,7 +24,7 @@ from .models import (
 )
 from pydantic import BaseModel
 from .service import notification_service
-from config.settings import settings
+from shared.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -442,7 +442,7 @@ async def get_notification_stats(
 @router.get("/health")
 async def notification_health_check():
     """Health check endpoint for notification service."""
-    from config.settings import settings
+    from shared.config import settings
     
     return {
         "status": "healthy",

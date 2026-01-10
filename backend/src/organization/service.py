@@ -8,7 +8,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from opentelemetry import trace, metrics
-from config import supabase_config
+from shared.config import supabase_config
 from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
 from src.organization.invitation_models import Invitation, InvitationCreate, InvitationStatus
 from shared.common.errors import ErrorCode
@@ -518,7 +518,7 @@ class OrganizationService:
 
     def _get_frontend_url(self) -> str:
         """Get the frontend URL from environment variables."""
-        from config.settings import settings
+        from shared.config import settings
         return settings.app_base_url or "http://localhost:3000"
 
     @tracer.start_as_current_span("organization.process_invitation")
