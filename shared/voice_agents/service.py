@@ -93,6 +93,39 @@ class VoiceAgentService:
             logger.error(f"Error getting agents for org {org_id}: {e}")
             return [], str(e)
 
+    @tracer.start_as_current_span("voice_agent.get_agents_for_user")
+    async def get_agents_for_user(self, user_id: UUID) -> tuple[List[VoiceAgent], Optional[str]]:
+        """Get all agents for a user across all organizations they are a member of."""
+        try:
+            # Step 1: Get all organizations for user
+            logger.info(f"Step 1: Fetching user_roles for user {user_id}")
+            user_roles_response = self.supabase.table("user_roles").select("organization_id").eq("user_id", str(user_id)).execute()
+            logger.info(f"Step 1: Data count: {len(user_roles_response.data) if user_roles_response.data else 0}")
+            
+            if not user_roles_response.data:
+                logger.warning(f"No user_roles found for user {user_id}")
+                return [], None
+            
+            # Step 2: Extract organization IDs
+            org_ids = [item["organization_id"] for item in user_roles_response.data if item.get("organization_id")]
+            logger.info(f"Step 2: Extracted org_ids: {org_ids}")
+            
+            if not org_ids:
+                logger.warning(f"No organization_ids found for user {user_id}")
+                return [], None
+            
+            # Step 3: Get all agents for those organizations
+            logger.info(f"Step 3: Fetching voice_agents for org_ids: {org_ids}")
+            response = self.supabase.table("voice_agents").select("*").in_("organization_id", org_ids).execute()
+            logger.info(f"Step 3: Data count: {len(response.data) if response.data else 0}")
+            
+            agents = [VoiceAgent(**item) for item in response.data]
+            logger.info(f"Returning {len(agents)} agents for user {user_id}")
+            return agents, None
+        except Exception as e:
+            logger.error(f"Error getting agents for user {user_id}: {e}", exc_info=True)
+            return [], str(e)
+
     @tracer.start_as_current_span("voice_agent.update_agent")
     async def update_agent(self, agent_id: UUID, agent_data: VoiceAgentUpdate) -> tuple[Optional[VoiceAgent], Optional[str]]:
         """Update a voice agent."""

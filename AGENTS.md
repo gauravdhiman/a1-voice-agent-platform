@@ -214,6 +214,7 @@ Run `pre-commit run --all-files` manually before pushing.
 - Use `Next.js` for frontend
 - Use Docker for development and production. Even when start application on local machine for dev, use `./start.sh` script to manage docker containers.
 - Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
+- You can create alembic migrations scripts but never run them without user's permission. Always ask first.
 
 
 <skills_system priority="1">

@@ -22,6 +22,11 @@ class OrganizationService {
     return response.data;
   }
 
+  // Alias for getUserOrganizations for consistency
+  async getOrganizations(): Promise<Organization[]> {
+    return this.getUserOrganizations();
+  }
+
   // Create organization (platform admin only)
   async createOrganization(orgData: OrganizationCreate): Promise<Organization> {
     const response = await apiClient.post<Organization>(this.baseUrl, orgData);

@@ -25,6 +25,11 @@ class AgentService {
     return response.data;
   }
 
+  async getMyAgents(): Promise<VoiceAgent[]> {
+    const response = await apiClient.get<VoiceAgent[]>(`${this.agentBaseUrl}/my-agents`);
+    return response.data;
+  }
+
   async getAgentById(agentId: string): Promise<VoiceAgent> {
     const response = await apiClient.get<VoiceAgent>(`${this.agentBaseUrl}/${agentId}`);
     return response.data;

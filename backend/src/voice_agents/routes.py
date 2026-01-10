@@ -1,6 +1,7 @@
 """
-Voice Agent API routes for the multi-tenant SaaS platform.
+Voice Agent API routes for multi-tenant SaaS platform.
 """
+import logging
 from uuid import UUID
 from typing import List
 from fastapi import APIRouter, HTTPException, status, Depends
@@ -11,6 +12,7 @@ from shared.voice_agents.service import voice_agent_service
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
+logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])
 
@@ -58,6 +60,38 @@ async def get_org_agents(
             
     agents, error = await voice_agent_service.get_agents_by_organization(org_id)
     if error:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+    return agents
+
+
+@agent_router.get("/my-agents", response_model=List[VoiceAgent])
+@tracer.start_as_current_span("voice_agent.routes.get_user_agents")
+async def get_user_agents(
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user)
+):
+    """Get all agents for current user across all organizations."""
+    current_user_id, user_profile = user_data
+    
+    logger.info(f"Fetching agents for user: {current_user_id}, is_platform_admin: {user_profile.has_role('platform_admin')}")
+    
+    # If user is platform admin, get all agents
+    if user_profile.has_role("platform_admin"):
+        logger.info("User is platform admin, fetching all agents")
+        try:
+            response = voice_agent_service.supabase.table("voice_agents").select("*").execute()
+            agents = [VoiceAgent(**item) for item in response.data]
+            logger.info(f"Found {len(agents)} agents (platform admin)")
+            return agents
+        except Exception as e:
+            logger.error(f"Error fetching all agents for platform admin: {e}", exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
+    # Otherwise, get agents for user's organizations
+    agents, error = await voice_agent_service.get_agents_for_user(current_user_id)
+    
+    logger.info(f"Found {len(agents)} agents for user {current_user_id}")
+    if error:
+        logger.error(f"Error fetching agents: {error}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
     return agents
 
