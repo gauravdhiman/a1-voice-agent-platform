@@ -1,3 +1,69 @@
+/**
+ * Animated Tabs Component with URL Synchronization
+ *
+ * CURRENT PATTERN (Single Section per Page):
+ * ---------------------------------------
+ * Each page uses a single tab section with a `?tab=` query parameter:
+ *
+ *   const searchParams = useSearchParams();
+ *   const [activeTab, setActiveTab] = useState('default');
+ *
+ *   useEffect(() => {
+ *     const tabParam = searchParams.get('tab');
+ *     if (tabParam) setActiveTab(tabParam);
+ *   }, [searchParams]);
+ *
+ *   const handleTabChange = (value: string) => {
+ *     setActiveTab(value);
+ *     router.push(`/page?tab=${value}`, { scroll: false });
+ *   };
+ *
+ *   <AnimatedTabs value={activeTab} onValueChange={handleTabChange}>
+ *     <TabsTrigger value="tab1">Tab 1</TabsTrigger>
+ *     <TabsTrigger value="tab2">Tab 2</TabsTrigger>
+ *   </AnimatedTabs>
+ *
+ *
+ * EXTENDING FOR MULTIPLE SECTIONS:
+ * ---------------------------------------
+ * If a page has multiple independent tab sections, use prefixed query parameters:
+ *
+ *   URL: /agents?view_tab=list&filter_tab=org&tools_tab=enabled
+ *
+ *   const [viewTab, setViewTab] = useTabState('view', 'list');
+ *   const [filterTab, setFilterTab] = useTabState('filter', 'org');
+ *   const [toolsTab, setToolsTab] = useTabState('tools', 'enabled');
+ *
+ *   Create a reusable hook (hooks/use-tab-state.ts):
+ *
+ *   export function useTabState(sectionId: string, defaultValue: string) {
+ *     const searchParams = useSearchParams();
+ *     const router = useRouter();
+ *     const paramKey = `${sectionId}_tab`;
+ *
+ *     const [activeTab, setActiveTabState] = useState(() =>
+ *       searchParams.get(paramKey) || defaultValue
+ *     );
+ *
+ *     useEffect(() => {
+ *       const tabParam = searchParams.get(paramKey);
+ *       if (tabParam) setActiveTabState(tabParam);
+ *     }, [searchParams, paramKey]);
+ *
+ *     const setActiveTab = useCallback((value: string) => {
+ *       setActiveTabState(value);
+ *       const params = new URLSearchParams(searchParams.toString());
+ *       params.set(paramKey, value);
+ *       router.push(`${window.location.pathname}?${params}`, { scroll: false });
+ *     }, [router, searchParams, paramKey]);
+ *
+ *     return [activeTab, setActiveTab];
+ *   }
+ *
+ * Migration from current to multi-section approach is minimal - just replace
+ * useState/useEffect pattern with the useTabState hook.
+ */
+
 "use client"
 
 import * as React from "react"

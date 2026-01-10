@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import { PlanSelection } from '@/components/billing/plan-selection';
 import { CreditPurchase } from '@/components/billing/credit-purchase';
 import { SubscriptionManagement } from '@/components/billing/subscription-management';
 import { toast } from 'sonner';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrganizationById } from '@/hooks/use-organization-by-id';
 import { AccessDenied } from '@/components/ui/access-denied';
 
@@ -29,6 +29,7 @@ export default function BillingPage() {
   const { loading: authLoading } = useAuth();
   const { currentOrganization, loading: orgLoading, setCurrentOrganization } = useOrganization();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const orgId = searchParams.get('org_id');
 
   // Validate organization access when orgId is provided
@@ -51,6 +52,24 @@ export default function BillingPage() {
 
   const error = queryError ? (queryError instanceof Error ? queryError.message : 'Unknown error') : null;
 
+  const hasActiveSubscription = billingSummary?.subscription &&
+    ['active', 'trial'].includes(billingSummary.subscription.status);
+
+  const activeTab = userSelectedTab ?? (hasActiveSubscription ? 'overview' : 'plans');
+
+  // Sync tab state with URL
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['overview', 'plans', 'credits', 'manage'].includes(tabParam)) {
+      setUserSelectedTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (value: string) => {
+    setUserSelectedTab(value);
+    router.push(`/organization/billing?org_id=${orgId}&tab=${value}`, { scroll: false });
+  };
+
   // Make orgId mandatory - if not provided, redirect to organizations page
   if (!orgId) {
     return <AccessDenied
@@ -59,15 +78,6 @@ export default function BillingPage() {
       redirectPath="/organizations"
     />;
   }
-
-  const hasActiveSubscription = billingSummary?.subscription &&
-    ['active', 'trial'].includes(billingSummary.subscription.status);
-
-  const activeTab = userSelectedTab ?? (hasActiveSubscription ? 'overview' : 'plans');
-
-  const handleTabChange = (value: string) => {
-    setUserSelectedTab(value);
-  };
 
   const refresh = async () => {
     await refetch();

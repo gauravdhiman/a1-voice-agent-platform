@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect } from 'react';
 import { useOrganization } from '@/contexts/organization-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +29,7 @@ import {
   ChevronRight,
   Loader2,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { AnimatedTabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useMyAgents, useCreateAgent, useDeleteAgent } from '@/hooks/use-agent-queries';
@@ -39,10 +39,12 @@ import type { VoiceAgent } from '@/types/agent';
 export default function AgentsPage() {
   const { organizations, currentOrganization } = useOrganization();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [selectedOrgId, setSelectedOrgId] = React.useState<string>('all');
   const [searchQuery, setSearchQuery] = React.useState('');
-  
+  const [activeTab, setActiveTab] = React.useState('list');
+
   // Agent creation state
   const [agentDialogOpen, setAgentDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
@@ -54,6 +56,19 @@ export default function AgentsPage() {
     is_active: true,
     organization_id: ''
   });
+
+  // Sync tab state with URL
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'list' || tabParam === 'grid') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    router.push(`/agents?tab=${value}`, { scroll: false });
+  }, [router]);
 
   // Fetch agents with React Query
   const { data: agents = [], isLoading, error } = useMyAgents();
@@ -174,7 +189,7 @@ export default function AgentsPage() {
         </Button>
       </div>
 
-      <AnimatedTabs defaultValue="list" className="space-y-6">
+      <AnimatedTabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="w-full">
           <TabsTrigger value="list">List View</TabsTrigger>
           <TabsTrigger value="grid">Grid View</TabsTrigger>

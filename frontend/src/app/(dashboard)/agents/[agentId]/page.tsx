@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useAgent, usePlatformTools, useAgentTools, useUpdateAgent, useToggleFunction, useUpdateAgentTool, useStartOAuth, useLogoutAgentTool } from '@/hooks/use-agent-queries';
@@ -30,8 +30,7 @@ import {
   Loader2,
   Wrench,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { formatToolName } from '@/lib/utils';
 
 export default function AgentDetailPage() {
@@ -39,11 +38,13 @@ export default function AgentDetailPage() {
   const { isPlatformAdmin } = useUserPermissions();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const agentId = params.agentId as string;
 
   const [organization, setOrganization] = React.useState<Organization | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
+  const [activeTab, setActiveTab] = React.useState('properties');
 
   // Agent form state
   const [agentForm, setAgentForm] = React.useState({
@@ -94,6 +95,19 @@ export default function AgentDetailPage() {
       setLocalAgentTools(agentTools);
     }
   }, [agentTools]);
+
+  // Sync tab state with URL
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'properties' || tabParam === 'tools') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    router.push(`/agents/${agentId}?tab=${value}`, { scroll: false });
+  }, [router, agentId]);
 
   const handleSaveAgent = useCallback(async () => {
     if (!agentId) return;
@@ -455,7 +469,7 @@ export default function AgentDetailPage() {
         )}
       </div>
 
-      <AnimatedTabs defaultValue="properties" className="space-y-6">
+      <AnimatedTabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="w-full">
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>

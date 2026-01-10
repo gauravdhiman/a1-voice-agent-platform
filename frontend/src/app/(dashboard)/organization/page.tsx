@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { AuthStatus } from '@/types/agent';
 import { OrganizationCompleteData, OrganizationEnhanced } from '@/types/organization';
 
@@ -66,6 +66,7 @@ export default function OrganizationPage() {
   const { currentOrganization, loading: orgLoading, setCurrentOrganization } = useOrganization();
   const { canUpdateOrganization, canViewMembers, isPlatformAdmin, isOrgAdmin } = useUserPermissions();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const orgId = searchParams.get('org_id');
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -141,6 +142,19 @@ export default function OrganizationPage() {
       loadOrganizationData();
     }
   }, [orgId, loadOrganizationData]);
+
+  // Sync tab state with URL
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'overview' || tabParam === 'ai-agent') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    router.push(`/organization?org_id=${orgId}&tab=${value}`, { scroll: false });
+  }, [router, orgId]);
 
   // Validate organization access when orgId is provided
   const { isValid: isOrgValid, loading: validationLoading, organization: validatedOrg } = useOrganizationById(orgId);
@@ -766,7 +780,7 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      <AnimatedTabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <AnimatedTabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
