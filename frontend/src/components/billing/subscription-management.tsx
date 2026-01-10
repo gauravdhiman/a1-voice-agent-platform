@@ -5,18 +5,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Calendar, 
-  CreditCard, 
-  Users, 
-  Zap, 
-  AlertTriangle, 
+import {
+  Calendar,
+  CreditCard,
+  Users,
+  Zap,
+  AlertTriangle,
   CheckCircle,
   ExternalLink,
   Settings,
   Loader2
 } from 'lucide-react';
 import { billingService } from '@/services/billing-service';
+import { CancelSubscriptionDialog } from '@/components/billing/cancel-subscription-dialog';
 import { OrganizationSubscriptionWithPlan } from '@/types/billing';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -35,21 +36,23 @@ export function SubscriptionManagement({
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
   const [reactivatingSubscription, setReactivatingSubscription] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const handleCancelSubscription = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? It will remain active until the end of your current billing period.')) {
-      return;
-    }
+    setCancelDialogOpen(true);
+  };
 
-    setCancelingSubscription(true);
-
+  const handleCancelConfirm = async () => {
     try {
+      setCancelingSubscription(true);
       await billingService.cancelSubscription(organizationId);
-      toast.success('Subscription will be cancelled at the end of your billing period');
+      toast.success('Subscription will be cancelled at end of your billing period');
+      setCancelDialogOpen(false);
       onSubscriptionUpdated?.();
     } catch (error) {
       console.error('Failed to cancel subscription:', error);
       toast.error('Failed to cancel subscription');
+      throw error;
     } finally {
       setCancelingSubscription(false);
     }
@@ -253,11 +256,7 @@ export function SubscriptionManagement({
                 disabled={cancelingSubscription}
                 className="text-red-600 border-red-200 hover:bg-red-50"
               >
-                {cancelingSubscription ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                )}
+                <AlertTriangle className="w-4 h-4 mr-2" />
                 Cancel Subscription
               </Button>
             )}
@@ -305,8 +304,14 @@ export function SubscriptionManagement({
               <li>• Change subscription plan</li>
             </ul>
           </div>
-        </CardContent>
+          </CardContent>
       </Card>
+
+      <CancelSubscriptionDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        onCancel={handleCancelConfirm}
+      />
     </div>
   );
 }

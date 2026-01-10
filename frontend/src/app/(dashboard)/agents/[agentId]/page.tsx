@@ -3,12 +3,13 @@
 import React, { useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
-import { useAgent, usePlatformTools, useAgentTools, useUpdateAgent, useToggleFunction, useUpdateAgentTool, useStartOAuth, useLogoutAgentTool } from '@/hooks/use-agent-queries';
+import { useAgent, usePlatformTools, useAgentTools, useUpdateAgent, useToggleFunction, useUpdateAgentTool, useStartOAuth, useLogoutAgentTool, useDeleteAgent } from '@/hooks/use-agent-queries';
 import { organizationService } from '@/services/organization-service';
 import { agentService } from '@/services/agent-service';
 import type { PlatformTool, AgentTool } from '@/types/agent';
 import type { Organization } from '@/types/organization';
 import { AuthStatus } from '@/types/agent';
+import { AgentDeleteDialog } from '@/components/agents/agent-delete-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +45,7 @@ export default function AgentDetailPage() {
   const [organization, setOrganization] = React.useState<Organization | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState('properties');
 
   // Agent form state
@@ -61,6 +63,7 @@ export default function AgentDetailPage() {
 
   // Mutations
   const updateAgentMutation = useUpdateAgent();
+  const deleteAgentMutation = useDeleteAgent();
   const toggleFunctionMutation = useToggleFunction();
   const updateAgentToolMutation = useUpdateAgentTool();
   const startOAuthMutation = useStartOAuth();
@@ -126,10 +129,19 @@ export default function AgentDetailPage() {
   }, [agentId, agentForm, updateAgentMutation]);
 
   const handleDeleteAgent = async () => {
-    if (!agent || !confirm(`Are you sure you want to delete "${agent.name}"? This action cannot be undone.`)) return;
-    
-    router.back();
+    setDeleteDialogOpen(true);
   };
+
+  const handleDeleteSuccess = useCallback(async (agentId: string) => {
+    try {
+      await deleteAgentMutation.mutateAsync(agentId);
+      setDeleteDialogOpen(false);
+      router.push('/agents');
+    } catch (error) {
+      console.error('Failed to delete agent:', error);
+      throw error;
+    }
+  }, [deleteAgentMutation, router]);
 
   const handleToggleTool = useCallback(async (toolId: string, isEnabled: boolean) => {
     try {
@@ -622,6 +634,15 @@ export default function AgentDetailPage() {
           </Card>
         </TabsContent>
       </AnimatedTabs>
+
+      {agent && (
+        <AgentDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          agent={agent}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </div>
   );
 }

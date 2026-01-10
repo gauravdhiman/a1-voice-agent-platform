@@ -12,39 +12,36 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, AlertTriangle } from 'lucide-react';
-import type { VoiceAgent } from '@/types/agent';
 
-interface AgentDeleteDialogProps {
+interface CancelSubscriptionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agent: VoiceAgent;
-  onSuccess: (agentId: string) => void;
+  onCancel: () => void;
 }
 
-export function AgentDeleteDialog({
+export function CancelSubscriptionDialog({
   open,
   onOpenChange,
-  agent,
-  onSuccess,
-}: AgentDeleteDialogProps) {
+  onCancel,
+}: CancelSubscriptionDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
 
-  const expectedConfirmation = 'Delete this agent';
+  const expectedConfirmation = 'Cancel subscription';
   const isConfirmationValid = confirmationText === expectedConfirmation;
 
-  const handleDelete = async () => {
+  const handleConfirm = async () => {
     if (!isConfirmationValid) return;
 
     try {
       setLoading(true);
       setError(null);
-      await onSuccess(agent.id);
+      await onCancel();
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('Error deleting agent:', err);
-      setError(error.message || 'Failed to delete agent');
+      console.error('Error cancelling subscription:', err);
+      setError(error.message || 'Failed to cancel subscription');
     } finally {
       setLoading(false);
     }
@@ -66,11 +63,10 @@ export function AgentDeleteDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600">
             <AlertTriangle className="h-5 w-5" />
-            Delete Voice Agent
+            Cancel Subscription
           </DialogTitle>
           <DialogDescription>
-            This action cannot be undone. This will permanently delete the voice agent
-            and remove all associated data.
+            This action will cancel your subscription at the end of your current billing period.
           </DialogDescription>
         </DialogHeader>
 
@@ -85,11 +81,12 @@ export function AgentDeleteDialog({
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-red-800">
-                <p className="font-medium mb-1">Warning: This action is irreversible</p>
+                <p className="font-medium mb-1">Important: Cancellation Details</p>
                 <ul className="space-y-1 text-red-700">
-                  <li>• All agent data will be permanently deleted</li>
-                  <li>• All tool configurations will be removed</li>
-                  <li>• Call history and settings will be lost</li>
+                  <li>• Subscription will remain active until end of current billing period</li>
+                  <li>• You will not be charged for next billing period</li>
+                  <li>• All access to premium features will be removed</li>
+                  <li>• You can reactivate subscription anytime before cancellation date</li>
                 </ul>
               </div>
             </div>
@@ -97,13 +94,13 @@ export function AgentDeleteDialog({
 
           <div className="space-y-2">
             <Label htmlFor="confirmation">
-              Type <strong>&quot;{expectedConfirmation}&quot;</strong> to confirm deletion:
+              Type <strong>&quot;{expectedConfirmation}&quot;</strong> to confirm cancellation:
             </Label>
             <Input
               id="confirmation"
               value={confirmationText}
               onChange={(e) => setConfirmationText(e.target.value)}
-              placeholder='Delete this agent'
+              placeholder='Cancel subscription'
               disabled={loading}
               className="font-mono"
             />
@@ -117,10 +114,10 @@ export function AgentDeleteDialog({
               disabled={loading}
               className="flex-1"
             >
-              Cancel
+              Keep Subscription
             </Button>
             <Button
-              onClick={handleDelete}
+              onClick={handleConfirm}
               disabled={loading || !isConfirmationValid}
               variant="destructive"
               className="flex-1"
@@ -128,10 +125,10 @@ export function AgentDeleteDialog({
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
+                  Cancelling...
                 </>
               ) : (
-                'Delete Agent'
+                'Cancel Subscription'
               )}
             </Button>
           </div>

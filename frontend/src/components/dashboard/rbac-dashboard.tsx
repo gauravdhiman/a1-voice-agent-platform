@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Plus, Edit, Trash2, Users, Shield } from 'lucide-react';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+import { Loader2, Plus, Edit, Users, Shield, Trash2 } from 'lucide-react';
 
 export function RBACDashboard() {
   const [state, actions] = useRBAC();
@@ -17,7 +18,9 @@ export function RBACDashboard() {
   const [activeTab, setActiveTab] = useState('roles');
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [isCreatingPermission, setIsCreatingPermission] = useState(false);
-  
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<{ id: string; name: string; type: string } | null>(null);
+
   // Form states
   const [newRole, setNewRole] = useState({ name: '', description: '' });
   const [newPermission, setNewPermission] = useState({ name: '', description: '', resource: '', action: '' });
@@ -64,23 +67,30 @@ export function RBACDashboard() {
     }
   };
   
-  const handleDeleteRole = async (roleId: string) => {
-    if (window.confirm('Are you sure you want to delete this role?')) {
-      try {
-        await actions.deleteRole(roleId);
-      } catch (error) {
-        console.error('Failed to delete role:', error);
-      }
-    }
+  const handleDeleteRole = (roleId: string, roleName: string) => {
+    setDeleteItem({ id: roleId, name: roleName, type: 'role' });
+    setDeleteDialogOpen(true);
   };
-  
-  const handleDeletePermission = async (permissionId: string) => {
-    if (window.confirm('Are you sure you want to delete this permission?')) {
-      try {
-        await actions.deletePermission(permissionId);
-      } catch (error) {
-        console.error('Failed to delete permission:', error);
+
+  const handleDeletePermission = (permissionId: string, permissionName: string) => {
+    setDeleteItem({ id: permissionId, name: permissionName, type: 'permission' });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteItem) return;
+
+    try {
+      if (deleteItem.type === 'role') {
+        await actions.deleteRole(deleteItem.id);
+      } else if (deleteItem.type === 'permission') {
+        await actions.deletePermission(deleteItem.id);
       }
+      setDeleteDialogOpen(false);
+      setDeleteItem(null);
+    } catch (error) {
+      console.error(`Failed to delete ${deleteItem.type}:`, error);
+      throw error;
     }
   };
   
@@ -211,11 +221,11 @@ export function RBACDashboard() {
                         <Button variant="ghost" size="sm" disabled>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           disabled={role.is_system_role}
-                          onClick={() => handleDeleteRole(role.id)}
+                          onClick={() => handleDeleteRole(role.id, role.name)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -328,10 +338,10 @@ export function RBACDashboard() {
                         <Button variant="ghost" size="sm" disabled>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleDeletePermission(permission.id)}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeletePermission(permission.id, permission.name)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -401,6 +411,21 @@ export function RBACDashboard() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {deleteItem && (
+          <DeleteConfirmationDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            itemName={deleteItem.name}
+            itemType={deleteItem.type === 'role' ? 'Role' : 'Permission'}
+            warnings={[
+              `${deleteItem.type === 'role' ? 'Role' : 'Permission'} data will be permanently deleted`,
+              'All associated permissions will be removed',
+              'Users assigned to this role may need reassignment',
+            ]}
+            onDelete={handleDeleteConfirm}
+          />
         )}
       </div>
     </div>

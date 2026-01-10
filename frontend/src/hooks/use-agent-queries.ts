@@ -357,7 +357,7 @@ export function useLogoutAgentTool() {
 
   return useMutation({
     mutationFn: (agentToolId: string) => agentService.logoutAgentTool(agentToolId),
-    onSuccess: (_, agentToolId) => {
+    onSuccess: () => {
       toast.success('Logged out successfully');
       
       // Find and invalidate the agent tools query

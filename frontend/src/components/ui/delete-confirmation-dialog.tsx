@@ -12,26 +12,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, AlertTriangle } from 'lucide-react';
-import type { VoiceAgent } from '@/types/agent';
 
-interface AgentDeleteDialogProps {
+interface DeleteConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agent: VoiceAgent;
-  onSuccess: (agentId: string) => void;
+  itemName: string;
+  itemType: string;
+  warnings: string[];
+  onDelete: () => void;
 }
 
-export function AgentDeleteDialog({
+export function DeleteConfirmationDialog({
   open,
   onOpenChange,
-  agent,
-  onSuccess,
-}: AgentDeleteDialogProps) {
+  itemName,
+  itemType,
+  warnings,
+  onDelete,
+}: DeleteConfirmationDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
 
-  const expectedConfirmation = 'Delete this agent';
+  const expectedConfirmation = 'Delete';
   const isConfirmationValid = confirmationText === expectedConfirmation;
 
   const handleDelete = async () => {
@@ -40,11 +43,11 @@ export function AgentDeleteDialog({
     try {
       setLoading(true);
       setError(null);
-      await onSuccess(agent.id);
+      await onDelete();
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('Error deleting agent:', err);
-      setError(error.message || 'Failed to delete agent');
+      console.error(`Error deleting ${itemType}:`, err);
+      setError(error.message || `Failed to delete ${itemType}`);
     } finally {
       setLoading(false);
     }
@@ -66,11 +69,11 @@ export function AgentDeleteDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600">
             <AlertTriangle className="h-5 w-5" />
-            Delete Voice Agent
+            Delete {itemType}
           </DialogTitle>
           <DialogDescription>
-            This action cannot be undone. This will permanently delete the voice agent
-            and remove all associated data.
+            This action cannot be undone. This will permanently delete {itemType}
+            {itemName && ` "${itemName}"`} and remove all associated data.
           </DialogDescription>
         </DialogHeader>
 
@@ -81,19 +84,21 @@ export function AgentDeleteDialog({
             </div>
           )}
 
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-red-800">
-                <p className="font-medium mb-1">Warning: This action is irreversible</p>
-                <ul className="space-y-1 text-red-700">
-                  <li>• All agent data will be permanently deleted</li>
-                  <li>• All tool configurations will be removed</li>
-                  <li>• Call history and settings will be lost</li>
-                </ul>
+          {warnings.length > 0 && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-800">
+                  <p className="font-medium mb-1">Warning: This action is irreversible</p>
+                  <ul className="space-y-1 text-red-700">
+                    {warnings.map((warning, index) => (
+                      <li key={index}>• {warning}</li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="confirmation">
@@ -103,7 +108,7 @@ export function AgentDeleteDialog({
               id="confirmation"
               value={confirmationText}
               onChange={(e) => setConfirmationText(e.target.value)}
-              placeholder='Delete this agent'
+              placeholder='Delete'
               disabled={loading}
               className="font-mono"
             />
@@ -131,7 +136,7 @@ export function AgentDeleteDialog({
                   Deleting...
                 </>
               ) : (
-                'Delete Agent'
+                `Delete ${itemType}`
               )}
             </Button>
           </div>

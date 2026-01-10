@@ -45,6 +45,7 @@ import { OrganizationCompleteData, OrganizationEnhanced } from '@/types/organiza
 import { organizationService } from '@/services/organization-service';
 import { agentService } from '@/services/agent-service';
 import { VoiceAgent, PlatformTool, AgentTool } from '@/types/agent';
+import { AgentDeleteDialog } from '@/components/agents/agent-delete-dialog';
 import { toast } from 'sonner';
 import { formatToolName } from '@/lib/utils';
 
@@ -103,6 +104,7 @@ export default function OrganizationPage() {
   const [selectedAgent, setSelectedAgent] = useState<VoiceAgent | null>(null);
   const [agentTools, setAgentTools] = useState<AgentTool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
 
   const loadOrganizationData = useCallback(async () => {
@@ -227,18 +229,24 @@ export default function OrganizationPage() {
     setAgentDialogOpen(true);
   };
 
-  const handleDeleteAgent = async (agentId: string) => {
-    if (!confirm('Are you sure you want to delete this agent?')) return;
-    
+  const handleDeleteAgent = useCallback((agent: VoiceAgent) => {
+    setSelectedAgent(agent);
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const handleDeleteSuccess = useCallback(async (agentId: string) => {
     try {
       await agentService.deleteAgent(agentId);
       toast.success('Agent deleted successfully');
+      setDeleteDialogOpen(false);
+      setSelectedAgent(null);
       loadOrganizationData();
     } catch (error) {
       console.error('Failed to delete agent:', error);
       toast.error('Failed to delete agent');
+      throw error;
     }
-  };
+  }, [loadOrganizationData]);
 
   const handleSaveAgent = async () => {
     if (!orgId) return;
@@ -987,7 +995,7 @@ export default function OrganizationPage() {
                               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditAgent(agent)}>
                                 <Edit3 className="h-4 w-4" />
                               </Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteAgent(agent.id)}>
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteAgent(agent)}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -1169,6 +1177,16 @@ export default function OrganizationPage() {
           onOpenChange={setEditDialogOpen}
           organization={validatedOrg}
           onSuccess={handleEditSuccess}
+        />
+      )}
+
+      {/* Agent Delete Dialog */}
+      {selectedAgent && (
+        <AgentDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          agent={selectedAgent}
+          onSuccess={handleDeleteSuccess}
         />
       )}
     </div>
