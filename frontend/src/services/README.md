@@ -5,31 +5,36 @@ This directory contains service classes for making API calls to the backend. Eac
 ## Available Services
 
 ### AuthService (`auth-service.ts`)
+
 Handles authentication-related API calls to the backend.
 
 **Methods:**
+
 - `processInvitation(token, userId)` - Process an invitation to add a user to an organization
 - `getCurrentUser()` - Get the current user profile
 - `refreshToken(refreshToken)` - Refresh an auth token
 - `signOut()` - Sign out and invalidate session
 
 **Example Usage:**
+
 ```typescript
-import { authService } from '@/services/auth-service';
+import { authService } from "@/services/auth-service";
 
 // Process an invitation
 const result = await authService.processInvitation(token, userId);
 if (result.success) {
-  console.log('User added to organization:', result.data);
+  console.log("User added to organization:", result.data);
 } else {
-  console.error('Failed to process invitation:', result.error);
+  console.error("Failed to process invitation:", result.error);
 }
 ```
 
 ### OrganizationService (`organization-service.ts`)
+
 Handles organization-related API calls.
 
 **Methods:**
+
 - `createOrganization(data)` - Create a new organization
 - `getOrganization(id)` - Get organization details
 - `updateOrganization(id, data)` - Update organization
@@ -38,18 +43,22 @@ Handles organization-related API calls.
 - And more...
 
 ### BillingService (`billing-service.ts`)
+
 Handles billing and subscription-related API calls.
 
 **Methods:**
+
 - `createCheckoutSession(data)` - Create Stripe checkout session
 - `createPortalSession(data)` - Create billing portal session
 - `getSubscription()` - Get current subscription
 - And more...
 
 ### RBACService (`rbac-service.ts`)
+
 Handles role-based access control API calls.
 
 **Methods:**
+
 - `getRoles()` - Get all roles
 - `getPermissions()` - Get all permissions
 - `assignRole(data)` - Assign role to user

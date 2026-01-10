@@ -1,11 +1,14 @@
-'use client';
+"use client";
 
-import React, { useEffect } from 'react';
-import { useAuth } from '@/contexts/auth-context';
-import { useRouter } from 'next/navigation';
-import type { ProtectedRouteProps } from '@/types/auth';
+import React, { useEffect } from "react";
+import { useAuth } from "@/contexts/auth-context";
+import { useRouter } from "next/navigation";
+import type { ProtectedRouteProps } from "@/types/auth";
 
-export function ProtectedRoute({ children, reverse = false }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  children,
+  reverse = false,
+}: ProtectedRouteProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -17,12 +20,12 @@ export function ProtectedRoute({ children, reverse = false }: ProtectedRouteProp
     // and the user is authenticated, redirect to dashboard
     // Note: The OrganizationCheck component will handle redirecting to org creation if needed
     if (reverse && user) {
-      router.replace('/dashboard');
+      router.replace("/dashboard");
     }
     // If this is a normal protected route (only for authenticated users)
     // and the user is not authenticated, redirect to signin
     else if (!reverse && !user) {
-      router.replace('/auth/signin');
+      router.replace("/auth/signin");
     }
   }, [user, loading, reverse, router]);
 
@@ -32,7 +35,9 @@ export function ProtectedRoute({ children, reverse = false }: ProtectedRouteProp
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Checking authentication status...</p>
+          <p className="mt-4 text-gray-600">
+            Checking authentication status...
+          </p>
         </div>
       </div>
     );

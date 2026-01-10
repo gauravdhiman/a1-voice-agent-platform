@@ -1,15 +1,16 @@
-import httpx
-from typing import Any, Optional
 from datetime import datetime, timedelta
+from typing import Any, Optional
+
+import httpx
+from livekit.agents import RunContext, function_tool
 from pydantic import Field
 
-from livekit.agents import function_tool, RunContext
 from shared.voice_agents.tools.base.base_tool import (
+    BaseAuthConfig,
+    BaseConfig,
+    BaseSensitiveConfig,
     BaseTool,
     ToolMetadata,
-    BaseConfig,
-    BaseAuthConfig,
-    BaseSensitiveConfig
 )
 
 
@@ -18,7 +19,7 @@ class GoogleCalendarTool(BaseTool):
         provider: str = "google"
         scopes: list[str] = [
             "https://www.googleapis.com/auth/calendar.events",
-            "https://www.googleapis.com/auth/calendar.readonly"
+            "https://www.googleapis.com/auth/calendar.readonly",
         ]
         auth_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
         token_url: str = "https://oauth2.googleapis.com/token"
@@ -26,8 +27,13 @@ class GoogleCalendarTool(BaseTool):
         prompt: str = "consent"  # Required to get refresh_token
 
     class Config(BaseConfig):
-        calendar_id: str = Field(default="primary", description="The ID of calendar to use (e.g., 'primary' or an email address)")
-        default_event_duration: int = Field(default=30, description="Default event duration in minutes")
+        calendar_id: str = Field(
+            default="primary",
+            description="The ID of calendar to use (e.g., 'primary' or an email address)",
+        )
+        default_event_duration: int = Field(
+            default=30, description="Default event duration in minutes"
+        )
 
     class SensitiveConfig(BaseSensitiveConfig):
         access_token: str = ""
@@ -42,7 +48,7 @@ class GoogleCalendarTool(BaseTool):
             requires_auth=True,
             auth_type="oauth2",
             auth_config=self.AuthConfig().model_dump(),
-            config_schema=self.Config.model_json_schema()
+            config_schema=self.Config.model_json_schema(),
         )
 
     async def list_events(
@@ -50,7 +56,7 @@ class GoogleCalendarTool(BaseTool):
         context: RunContext,
         time_min: str,
         time_max: str | None = None,
-        max_results: int = 10
+        max_results: int = 10,
     ) -> dict[str, Any]:
         """
         List calendar events within a time range.
@@ -68,7 +74,7 @@ class GoogleCalendarTool(BaseTool):
 
         headers = {
             "Authorization": f"Bearer {self.sensitive_config.access_token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         async with httpx.AsyncClient() as client:
@@ -80,8 +86,8 @@ class GoogleCalendarTool(BaseTool):
                     "timeMax": time_max,
                     "maxResults": max_results,
                     "singleEvents": "true",
-                    "orderBy": "startTime"
-                }
+                    "orderBy": "startTime",
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -94,7 +100,7 @@ class GoogleCalendarTool(BaseTool):
         start_time: str,
         duration_minutes: int = 30,
         attendees: list[str] | None = None,
-        description: str | None = None
+        description: str | None = None,
     ) -> dict[str, Any]:
         """
         Create a new calendar event.
@@ -124,7 +130,7 @@ class GoogleCalendarTool(BaseTool):
                     datetime.fromisoformat(start_time.replace("Z", "+00:00"))
                     + timedelta(minutes=duration_minutes)
                 ).isoformat()
-            }
+            },
         }
 
         if attendees:
@@ -132,23 +138,20 @@ class GoogleCalendarTool(BaseTool):
 
         headers = {
             "Authorization": f"Bearer {self.sensitive_config.access_token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"https://www.googleapis.com/calendar/v3/calendars/{self.config.calendar_id}/events",
                 headers=headers,
-                json=event
+                json=event,
             )
             response.raise_for_status()
             return response.json()
 
     async def check_availability(
-        self,
-        context: RunContext,
-        date: str,
-        duration_minutes: int = 30
+        self, context: RunContext, date: str, duration_minutes: int = 30
     ) -> dict[str, Any]:
         """
         Check if time slots are free.
@@ -170,7 +173,7 @@ class GoogleCalendarTool(BaseTool):
 
         headers = {
             "Authorization": f"Bearer {self.sensitive_config.access_token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         async with httpx.AsyncClient() as client:
@@ -181,14 +184,11 @@ class GoogleCalendarTool(BaseTool):
                     "timeMin": date,
                     "timeMax": end_dt,
                     "singleEvents": "true",
-                    "orderBy": "startTime"
-                }
+                    "orderBy": "startTime",
+                },
             )
             response.raise_for_status()
             data = response.json()
 
             has_conflict = len(data.get("items", [])) > 0
-            return {
-                "available": not has_conflict,
-                "conflicts": data.get("items", [])
-            }
+            return {"available": not has_conflict, "conflicts": data.get("items", [])}

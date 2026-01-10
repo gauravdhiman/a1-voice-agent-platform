@@ -1,28 +1,36 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useOrganization } from '@/contexts/organization-context';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Building2, Loader2 } from 'lucide-react';
+import React from "react";
+import { useOrganization } from "@/contexts/organization-context";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Building2, Loader2 } from "lucide-react";
 
 interface OrganizationSelectorProps {
   className?: string;
 }
 
 export function OrganizationSelector({ className }: OrganizationSelectorProps) {
-  const { 
-    organizations, 
-    currentOrganization, 
-    setCurrentOrganization, 
-    loading 
+  const {
+    organizations,
+    currentOrganization,
+    setCurrentOrganization,
+    loading,
   } = useOrganization();
 
   if (loading) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-sm text-muted-foreground">Loading organizations...</span>
+        <span className="text-sm text-muted-foreground">
+          Loading organizations...
+        </span>
       </div>
     );
   }
@@ -31,7 +39,9 @@ export function OrganizationSelector({ className }: OrganizationSelectorProps) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">No organizations found</span>
+        <span className="text-sm text-muted-foreground">
+          No organizations found
+        </span>
       </div>
     );
   }
@@ -52,9 +62,9 @@ export function OrganizationSelector({ className }: OrganizationSelectorProps) {
     <div className={`flex items-center gap-2 ${className}`}>
       <Building2 className="h-4 w-4" />
       <Select
-        value={currentOrganization?.id || ''}
+        value={currentOrganization?.id || ""}
         onValueChange={(value) => {
-          const selectedOrg = organizations.find(org => org.id === value);
+          const selectedOrg = organizations.find((org) => org.id === value);
           if (selectedOrg) {
             setCurrentOrganization(selectedOrg);
           }

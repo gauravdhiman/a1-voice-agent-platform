@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  output: "standalone",
   experimental: {
     // Optimize imports for production
-    optimizePackageImports: ['@/components/ui'],
+    optimizePackageImports: ["@/components/ui"],
   },
 };
 

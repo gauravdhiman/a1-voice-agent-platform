@@ -9,11 +9,13 @@ Ensure you have **Docker & Docker Compose** installed on your system.
 ## Environment Configuration
 
 1. **Copy the example environment file**:
+
    ```bash
    cp .env.example .env
    ```
 
 2. **Update `.env` with your Supabase credentials**:
+
    - `SUPABASE_URL` - Your Supabase project URL
    - `SUPABASE_SERVICE_KEY` - Backend service role key (admin access)
    - `SUPABASE_ANON_KEY` - Anon key for public access
@@ -22,16 +24,19 @@ Ensure you have **Docker & Docker Compose** installed on your system.
 
 3. **Update `DATABASE_URL` in `.env` for Alembic migrations**:
    Replace `your-database-password-here` and `your-project-ref` with your actual Supabase database password and project reference.
+
    ```
    DATABASE_URL=postgresql://postgres:your-database-password-here@your-project-ref.supabase.co:5432/postgres
    ```
 
    **To get your database password**:
+
    1. Go to your Supabase project dashboard
    2. Navigate to "Settings" → "Database"
    3. Under "Connection Info", you'll see your database password (different from your Supabase project password)
 
 4. **Add your New Relic License Key (Optional)**:
+
    ```
    NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
    ```
@@ -56,6 +61,7 @@ Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collect
 ```
 
 **Access URLs (Development Mode)**:
+
 - **Frontend**: `http://localhost:3000`
 - **Backend**: `http://localhost:8000`
 - **Backend API Docs**: `http://localhost:8000/docs`
@@ -71,6 +77,7 @@ Starts the frontend, backend, and worker in a production-like environment.
 ```
 
 **Access URLs (Production Mode)**:
+
 - **Frontend**: `http://localhost:3000`
 - **Backend**: `http://localhost:8000`
 - **Backend API Docs**: `http://localhost:8000/docs`
@@ -78,30 +85,35 @@ Starts the frontend, backend, and worker in a production-like environment.
 ## Other Useful Commands
 
 ### Stop Services
+
 ```bash
 ./start.sh stop dev    # Stop development containers
 ./start.sh stop prod   # Stop production containers
 ```
 
 ### Restart Services
+
 ```bash
 ./start.sh restart dev  # Restart development containers
 ./start.sh restart prod # Restart production containers
 ```
 
 ### Build Images
+
 ```bash
 ./start.sh build dev   # Build development images
 ./start.sh build prod  # Build production images
 ```
 
 ### View Logs
+
 ```bash
 ./start.sh logs dev    # View development logs
 ./start.sh logs prod   # View production logs
 ```
 
 ### Check Status
+
 ```bash
 ./start.sh status      # Check container status
 ./start.sh help        # Show help message
@@ -112,16 +124,19 @@ Starts the frontend, backend, and worker in a production-like environment.
 After starting containers, run database migrations:
 
 ### Using Docker (Development)
+
 ```bash
 docker compose -f docker-compose.dev.yml run --rm backend-dev alembic upgrade head
 ```
 
 ### Using Docker (Production)
+
 ```bash
 docker compose -f docker-compose.yml run --rm backend alembic upgrade head
 ```
 
 ### Using Local Environment
+
 ```bash
 cd backend
 alembic upgrade head
@@ -140,21 +155,25 @@ Once the application is running:
 ## Troubleshooting
 
 ### Docker Issues
+
 - **Port Conflicts**: Ensure no other services are using ports 3000, 8000, 54323, or 4318
 - **Docker Not Running**: Start Docker Desktop or Docker daemon
 - **Build Failures**: Try `docker system prune -a` to clean up and rebuild
 
 ### Database Issues
+
 - **Connection Failures**: Verify DATABASE_URL in `.env` is correct
 - **Migration Failures**: Check Supabase is accessible and credentials are valid
 - **RLS Issues**: Ensure Row-Level Security policies are applied
 
 ### Application Issues
+
 - **Frontend Not Loading**: Check browser console for errors
 - **Backend 500 Errors**: Check backend logs with `./start.sh logs dev`
 - **Worker Issues**: Worker logs are available via `./start.sh logs dev`
 
 ### Common Fixes
+
 ```bash
 # Rebuild all containers
 ./start.sh build dev

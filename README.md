@@ -38,12 +38,14 @@ cd ..
 ### Manual Setup
 
 1. **Clone and setup environment**
+
    ```bash
    git clone <repository-url>
    cd ai-voice-agent-platform
    ```
 
 2. **Frontend Development (Non-containerized)**
+
    ```bash
    cd frontend
    npm install
@@ -53,6 +55,7 @@ cd ..
    ```
 
 3. **Backend Development (Non-containerized)**
+
    ```bash
    cd backend
    # Create virtual environment
@@ -65,6 +68,7 @@ cd ..
    ```
 
 4. **Worker Development (Non-containerized)**
+
    ```bash
    cd worker
    python -m venv .venv
@@ -76,14 +80,15 @@ cd ..
    ```
 
 5. **Using Docker for Development (Containerized)**
+
    ```bash
    # Copy and configure environment file
    cp .env.example .env
    # Edit .env with your configuration
-   
+
    # Run all services with development settings (hot reloading)
    ./start.sh start dev
-   
+
    # Run all services with production settings
    ./start.sh start prod
    ```
@@ -91,6 +96,7 @@ cd ..
 ## 🏗️ Architecture
 
 ### Frontend (Next.js)
+
 - **Framework**: Next.js 15 with App Router
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
@@ -99,6 +105,7 @@ cd ..
 - **Routing**: App Router with protected routes
 
 ### Backend (FastAPI)
+
 - **Framework**: Python FastAPI
 - **Database**: Supabase (PostgreSQL with RLS)
 - **Authentication**: JWT with OAuth (Google, LinkedIn)
@@ -107,6 +114,7 @@ cd ..
 - **RBAC**: Role-based access control with fine-grained permissions
 
 ### Worker (LiveKit)
+
 - **Framework**: LiveKit Agents SDK
 - **LLM Integration**: Gemini Realtime API
 - **Tool System**: Dynamic tool loading and wrapping
@@ -114,6 +122,7 @@ cd ..
 - **Tool Wrapping**: Automatic wrapper creation for LLM compatibility
 
 ### Infrastructure
+
 - **Containerization**: Docker & Docker Compose
 - **Scalability**: Horizontal scaling ready
 - **Observability**: OpenTelemetry with Collector architecture
@@ -187,6 +196,7 @@ ai-voice-agent-platform/
 ## 📦 Features
 
 ### Core Platform
+
 - ✅ Multi-tenant SaaS architecture with organization-based isolation
 - ✅ Row-Level Security (RLS) for data isolation
 - ✅ Role-Based Access Control (RBAC) with fine-grained permissions
@@ -197,6 +207,7 @@ ai-voice-agent-platform/
 - ✅ OpenTelemetry observability (traces, metrics, logs)
 
 ### Voice Agent System
+
 - ✅ AI voice agents with LiveKit real-time communication
 - ✅ Dynamic tool loading from database
 - ✅ LiveKit tool wrapping for LLM compatibility
@@ -207,6 +218,7 @@ ai-voice-agent-platform/
 - ✅ Two-tier tool service (safe API, full worker)
 
 ### Developer Experience
+
 - ✅ Docker containerization (dev & prod)
 - ✅ Docker Compose orchestration
 - ✅ Automated setup script
@@ -216,6 +228,7 @@ ai-voice-agent-platform/
 - ✅ Pre-commit hooks (Black, isort, ESLint)
 
 ### Testing & Quality
+
 - ✅ Pytest for backend testing
 - ✅ Playwright for E2E testing
 - ✅ Code formatting (Black, Prettier)
@@ -223,6 +236,7 @@ ai-voice-agent-platform/
 - 🚧 Comprehensive test coverage
 
 ### Infrastructure
+
 - ✅ Supabase database (PostgreSQL)
 - ✅ LiveKit Cloud integration
 - ✅ Google Realtime API (Gemini)
@@ -236,15 +250,18 @@ ai-voice-agent-platform/
 ### Voice Agent System
 
 **Dynamic Tool Loading**: Tools are loaded from database at runtime, enabling:
+
 - Runtime tool configuration without code deployment
 - Per-organization tool customization
 - Easy addition of new tools
 
 **Two-Tier Tool Service**:
+
 - **API Layer**: Returns safe metadata (no OAuth tokens)
 - **Worker Layer**: Returns full tool instances with all secrets
 
 **LiveKit Tool Wrapping**: Innovative wrapper pattern solves:
+
 - Tool methods have `self` parameter (for state)
 - LiveKit requires functions without `self`
 - Solution: Dynamic wrapper creation with `exec()`
@@ -254,11 +271,13 @@ ai-voice-agent-platform/
 ### Multi-Tenancy
 
 **Shared Database + Shared Schema**:
+
 - `organization_id` column on all tenant tables
 - Row-Level Security (RLS) policies enforce isolation
 - Tenant context injected via middleware
 
 **RBAC System**:
+
 - Predefined roles: platform_admin, org_admin, member, billing
 - Platform admins can create custom roles
 - Fine-grained permissions: `resource.action` format
@@ -267,12 +286,14 @@ ai-voice-agent-platform/
 ### Billing & Credits
 
 **Stripe Integration**:
+
 - Plan-based subscriptions (monthly/annual)
 - Credit allocation on payment
 - Webhook-driven status updates
 - Idempotent event handling
 
 **Credit Management**:
+
 - Track usage, top-ups, and adjustments
 - Enforce restrictions on low balance
 - Low credit alerts via notifications
@@ -280,6 +301,7 @@ ai-voice-agent-platform/
 ### Observability
 
 **OpenTelemetry Stack**:
+
 - Manual instrumentation for precise control
 - Collector architecture for centralized processing
 - CORS-enabled for browser telemetry
@@ -288,24 +310,28 @@ ai-voice-agent-platform/
 ## 🔄 Development Priorities
 
 1. **Voice Agent Enhancements**:
+
    - Multi-LLM support (OpenAI, Claude, etc.)
    - Conversation state persistence
    - Advanced error handling and recovery
    - Agent analytics dashboard
 
 2. **Tool Expansion**:
+
    - More tool implementations (CRM, messaging, custom APIs)
    - Tool composition and chaining
    - Tool dependencies and versioning
    - Tool health monitoring
 
 3. **Testing**:
+
    - Comprehensive test coverage (>80%)
    - E2E test scenarios for voice agents
    - Performance testing (load, stress)
    - Integration tests for tool wrapping
 
 4. **Operations**:
+
    - CI/CD pipeline (GitHub Actions)
    - Kubernetes deployment manifests
    - Production runbooks
@@ -465,6 +491,7 @@ See [AGENTS.md](AGENTS.md) for detailed coding guidelines.
 ## 🛟 Support
 
 For questions and support:
+
 - Review the documentation in `docs/`
 - Check [Worker Documentation](worker/README.md) for voice agent details
 - Check [Shared Module Documentation](shared/README.md) for shared code

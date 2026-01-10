@@ -6,15 +6,18 @@ without parsing source files or using AST.
 
 This is the preferred approach over AST-based registry.
 """
+
 import importlib
 import inspect
-import pkgutil
 import logging
-from typing import Dict, Type, List, Optional, Any, Callable
+import pkgutil
+from typing import Any, Callable, Dict, List, Optional, Type
+
 from livekit.agents import RunContext
-from shared.voice_agents.tools.base.base_tool import BaseTool, ToolMetadata
+
 from shared.voice_agents.tool_models import PlatformToolCreate
 from shared.voice_agents.tool_service import ToolService
+from shared.voice_agents.tools.base.base_tool import BaseTool, ToolMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +41,16 @@ class LiveKitToolRegistry:
         """
         logger.info(f"LiveKit Registry: Registering tools from package: {package_path}")
         package = importlib.import_module(package_path)
-        for loader, module_name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+        for loader, module_name, is_pkg in pkgutil.walk_packages(
+            package.__path__, package.__name__ + "."
+        ):
             module = importlib.import_module(module_name)
             for name, obj in inspect.getmembers(module):
-                if inspect.isclass(obj) and issubclass(obj, BaseTool) and obj is not BaseTool:
+                if (
+                    inspect.isclass(obj)
+                    and issubclass(obj, BaseTool)
+                    and obj is not BaseTool
+                ):
                     # Create instance first to access metadata property
                     tool_instance = obj()
                     tool_name = tool_instance.metadata.name
@@ -52,7 +61,9 @@ class LiveKitToolRegistry:
                     function_methods = self._extract_function_methods(tool_instance)
                     self._functions[tool_name] = function_methods
 
-                    logger.info(f"LiveKit Registry: Registered tool class: {tool_name} with {len(function_methods)} functions")
+                    logger.info(
+                        f"LiveKit Registry: Registered tool class: {tool_name} with {len(function_methods)} functions"
+                    )
 
     def _extract_function_methods(self, tool_instance: BaseTool) -> List[Callable]:
         """
@@ -67,11 +78,11 @@ class LiveKitToolRegistry:
             if not inspect.ismethod(member) and not inspect.isfunction(member):
                 continue
 
-            if name.startswith('_'):
+            if name.startswith("_"):
                 continue
 
             # Skip property getters
-            if name == 'metadata':
+            if name == "metadata":
                 continue
 
             # Get the underlying function for methods
@@ -94,21 +105,20 @@ class LiveKitToolRegistry:
         LiveKit adds specific attributes to decorated functions.
         """
         # Debug: Log all attributes
-        attrs = [attr for attr in dir(func) if not attr.startswith('_')]
-        logger.debug(f"LiveKit Registry: Function {func.__name__} has attributes: {attrs[:10]}")
+        attrs = [attr for attr in dir(func) if not attr.startswith("_")]
+        logger.debug(
+            f"LiveKit Registry: Function {func.__name__} has attributes: {attrs[:10]}"
+        )
 
         # LiveKit's function_tool decorator sets these attributes
-        livekit_attributes = [
-            'function_tool',
-            'type',
-            'description',
-            'parameters'
-        ]
+        livekit_attributes = ["function_tool", "type", "description", "parameters"]
 
         # Check if any LiveKit-specific attribute is present
         for attr in livekit_attributes:
             if hasattr(func, attr):
-                logger.debug(f"LiveKit Registry: Function {func.__name__} has attribute {attr}")
+                logger.debug(
+                    f"LiveKit Registry: Function {func.__name__} has attribute {attr}"
+                )
                 return True
 
         # Fallback: Check if it's an async method (most tool functions are async)
@@ -121,7 +131,9 @@ class LiveKitToolRegistry:
                 for param in params:
                     if param.annotation != inspect.Parameter.empty:
                         if param.annotation is RunContext:
-                            logger.debug(f"LiveKit Registry: Function {func.__name__} looks like a tool function (has a parameter of type RunContext)")
+                            logger.debug(
+                                f"LiveKit Registry: Function {func.__name__} looks like a tool function (has a parameter of type RunContext)"
+                            )
                             return True
 
         return False
@@ -131,7 +143,9 @@ class LiveKitToolRegistry:
         Sync registered tools with the platform_tools table.
         Extracts schemas from LiveKit function_tool decorators.
         """
-        logger.info(f"LiveKit Registry: Starting sync of {len(self._tools)} registered tools to database")
+        logger.info(
+            f"LiveKit Registry: Starting sync of {len(self._tools)} registered tools to database"
+        )
 
         for name, tool_class in self._tools.items():
             tool_instance = tool_class()
@@ -147,7 +161,9 @@ class LiveKitToolRegistry:
                 schema = self._extract_schema_from_function(func)
                 if schema:
                     function_schemas.append(schema)
-                    logger.info(f"LiveKit Registry: Extracted schema for function: {schema['name']}")
+                    logger.info(
+                        f"LiveKit Registry: Extracted schema for function: {schema['name']}"
+                    )
 
             if function_schemas:
                 tool_data = PlatformToolCreate(
@@ -157,17 +173,23 @@ class LiveKitToolRegistry:
                     tool_functions_schema={"functions": function_schemas},
                     auth_type=metadata.auth_type,
                     auth_config=metadata.auth_config,
-                    is_active=True
+                    is_active=True,
                 )
 
                 # Upsert to database (create or update by name)
                 result, error = await tool_service.upsert_platform_tool(tool_data)
                 if error:
-                    logger.error(f"LiveKit Registry: Failed to upsert tool {name}: {error}")
+                    logger.error(
+                        f"LiveKit Registry: Failed to upsert tool {name}: {error}"
+                    )
                 else:
-                    logger.info(f"LiveKit Registry: Successfully upserted tool {name} with {len(function_schemas)} functions: {[s['name'] for s in function_schemas]}")
+                    logger.info(
+                        f"LiveKit Registry: Successfully upserted tool {name} with {len(function_schemas)} functions: {[s['name'] for s in function_schemas]}"
+                    )
             else:
-                logger.warning(f"LiveKit Registry: No function schemas found for tool {name}, skipping")
+                logger.warning(
+                    f"LiveKit Registry: No function schemas found for tool {name}, skipping"
+                )
 
     def _extract_schema_from_function(self, func: Callable) -> Optional[Dict[str, Any]]:
         """
@@ -176,15 +198,15 @@ class LiveKitToolRegistry:
         """
         try:
             # Try to get schema from LiveKit's attributes
-            if hasattr(func, 'description') and hasattr(func, 'parameters'):
+            if hasattr(func, "description") and hasattr(func, "parameters"):
                 schema = {
                     "type": "function",
                     "name": func.__name__,
-                    "description": getattr(func, 'description', ''),
+                    "description": getattr(func, "description", ""),
                 }
 
-                if hasattr(func, 'parameters'):
-                    schema['parameters'] = getattr(func, 'parameters')
+                if hasattr(func, "parameters"):
+                    schema["parameters"] = getattr(func, "parameters")
 
                 return schema
 
@@ -197,7 +219,7 @@ class LiveKitToolRegistry:
 
             for param_name, param in sig.parameters.items():
                 # Skip 'self' parameter and RunContext parameters
-                if param_name == 'self':
+                if param_name == "self":
                     continue
 
                 # Check if parameter is typed as RunContext
@@ -227,7 +249,7 @@ class LiveKitToolRegistry:
             schema = {
                 "type": "function",
                 "name": func.__name__,
-                "description": description
+                "description": description,
             }
 
             if parameters["properties"]:
@@ -236,7 +258,9 @@ class LiveKitToolRegistry:
             return schema
 
         except Exception as e:
-            logger.error(f"LiveKit Registry: Failed to extract schema from function {func.__name__}: {e}")
+            logger.error(
+                f"LiveKit Registry: Failed to extract schema from function {func.__name__}: {e}"
+            )
             return None
 
     def get_tool_class(self, name: str) -> Type[BaseTool] | None:

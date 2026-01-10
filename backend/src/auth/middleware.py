@@ -4,31 +4,30 @@ Authentication middleware for extracting user information from JWT tokens.
 
 from typing import Optional
 from uuid import UUID
+
 import jwt
-from fastapi import HTTPException, status, Header
-from shared.config import supabase_config
-
-
+from fastapi import Header, HTTPException, status
 from src.auth.models import UserProfile
 from src.auth.service import auth_service
 from src.rbac.user_roles.service import user_role_service
 
+from shared.config import supabase_config
+
 
 async def check_billing_permissions(
-    organization_id: UUID,
-    authorization: str = Header(None)
+    organization_id: UUID, authorization: str = Header(None)
 ) -> tuple[UUID, UserProfile]:
     """
     Check billing permissions for a specific organization.
     This is used as a FastAPI dependency for billing operations.
-    
+
     Args:
         organization_id: The organization ID to check permissions for
         authorization: The Authorization header value (Bearer token)
-        
+
     Returns:
         tuple[UUID, UserProfile]: (user_id, user_profile)
-        
+
     Raises:
         HTTPException: If authentication or authorization fails
     """
@@ -51,7 +50,7 @@ async def check_billing_permissions(
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions for billing operations in this organization"
+            detail="Insufficient permissions for billing operations in this organization",
         )
 
     except HTTPException:
@@ -59,64 +58,63 @@ async def check_billing_permissions(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authorization error: {str(e)}"
+            detail=f"Authorization error: {str(e)}",
         )
+
 
 async def get_current_user_id(authorization: str = Header(None)) -> UUID:
     """
     Extract the current user ID from the authorization header.
-    
+
     Args:
         authorization: The Authorization header value (Bearer token)
-        
+
     Returns:
         UUID: The current user's ID
-        
+
     Raises:
         HTTPException: If the token is invalid or missing
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header"
+            detail="Missing or invalid authorization header",
         )
-    
+
     token = authorization.replace("Bearer ", "")
-    
+
     try:
         # Decode the JWT token using Supabase's public key
         # In a real implementation, you would verify the token properly
         # For now, we'll extract the user ID directly from the token
         payload = jwt.decode(token, options={"verify_signature": False})
         user_id = payload.get("sub")
-        
+
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: user ID not found"
+                detail="Invalid token: user ID not found",
             )
-        
+
         return UUID(user_id)
-        
+
     except jwt.DecodeError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token"
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}"
+            detail=f"Authentication error: {str(e)}",
         )
 
 
 async def get_authenticated_user(
-    authorization: str = Header(None)
+    authorization: str = Header(None),
 ) -> tuple[UUID, UserProfile]:
     """
     Comprehensive authentication middleware that validates:
@@ -140,7 +138,7 @@ async def get_authenticated_user(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header"
+            detail="Missing or invalid authorization header",
         )
 
     token = authorization.replace("Bearer ", "")
@@ -153,7 +151,7 @@ async def get_authenticated_user(
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: user ID not found"
+                detail="Invalid token: user ID not found",
             )
 
         user_uuid = UUID(user_id)
@@ -164,13 +162,13 @@ async def get_authenticated_user(
         if error:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail="Invalid or expired token",
             )
 
         if not user_profile:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found or inactive"
+                detail="User not found or inactive",
             )
 
         # Step 3: Additional user status checks could be added here
@@ -180,44 +178,40 @@ async def get_authenticated_user(
 
     except jwt.DecodeError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token format"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format"
         )
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token"
         )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}"
+            detail=f"Authentication error: {str(e)}",
         )
-
-
 
 
 def verify_supabase_token(token: str) -> tuple[Optional[dict], Optional[str]]:
     """
     Verify a Supabase JWT token and return the payload.
-    
+
     Args:
         token: The JWT token to verify
-        
+
     Returns:
         tuple[Optional[dict], Optional[str]]: (payload, error_message)
     """
     try:
         if not supabase_config.is_configured():
             return None, "Supabase not configured"
-        
+
         # In a real implementation, you would verify the token using Supabase's public key
         # This is a simplified version for demonstration
         payload = jwt.decode(token, options={"verify_signature": False})
         return payload, None
-        
+
     except jwt.DecodeError:
         return None, "Invalid token"
     except Exception as e:
@@ -225,20 +219,19 @@ def verify_supabase_token(token: str) -> tuple[Optional[dict], Optional[str]]:
 
 
 async def check_organization_access(
-    organization_id: UUID,
-    authorization: str = Header(None)
+    organization_id: UUID, authorization: str = Header(None)
 ) -> tuple[UUID, UserProfile]:
     """
     Check if user has access to an organization (platform admin or org member).
     This is for organization data access without requiring billing permissions.
-    
+
     Args:
         organization_id: The organization ID to check access for
         authorization: The Authorization header value (Bearer token)
-        
+
     Returns:
         tuple[UUID, UserProfile]: (user_id, user_profile)
-        
+
     Raises:
         HTTPException: If authentication or authorization fails
     """
@@ -264,7 +257,7 @@ async def check_organization_access(
         if not has_org_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: You do not have access to this organization"
+                detail="Access denied: You do not have access to this organization",
             )
 
         return user_id, user_profile
@@ -274,5 +267,5 @@ async def check_organization_access(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authorization error: {str(e)}"
+            detail=f"Authorization error: {str(e)}",
         )

@@ -19,11 +19,7 @@ export function DataTableViewOptions<TData>({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto h-8 lg:flex"
-        >
+        <Button variant="outline" size="sm" className="ml-auto h-8 lg:flex">
           <MixerHorizontalIcon className="mr-2 h-4 w-4" />
           View
         </Button>
@@ -33,7 +29,7 @@ export function DataTableViewOptions<TData>({
           .getAllColumns()
           .filter(
             (column) =>
-              typeof column.accessorFn !== "undefined" && column.getCanHide()
+              typeof column.accessorFn !== "undefined" && column.getCanHide(),
           )
           .map((column) => {
             return (

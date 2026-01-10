@@ -50,6 +50,7 @@ graph TD
 #### Problem 1: Not Using LiveKit's Tool Framework
 
 **Current:**
+
 ```python
 # Worker manually creates functions
 @fnc_ctx.ai_callable(name="google_calendar", description="...")
@@ -58,6 +59,7 @@ async def call_tool(action: str, details: str):
 ```
 
 **Should be (LiveKit native):**
+
 ```python
 # Define tools once with @function_tool
 @function_tool()
@@ -93,31 +95,36 @@ async def create_event(
 
 **Currently conflated:**
 ```
+
 config_schema (for UI) + Tool function schema (for LLM) → One blob
+
 ```
 
 **Should be separated:**
 ```
+
 platform_tools table:
-  - name: "Google_calendar"
-  - display_name: "Google Calendar"
-  - description: "..."
-  - config_schema: {calendar_id: string, default_duration: int}  # For UI config
-  - auth_type: "oauth2"
-  - auth_config: {...}
-  - tool_functions_schema: [                              # For LLM function calling
-      {
-        name: "list_events",
-        description: "...",
-        parameters: {...}
-      },
-      {
-        name: "create_event",
-        description: "...",
-        parameters: {...}
-      }
-    ]
-```
+
+- name: "Google_calendar"
+- display_name: "Google Calendar"
+- description: "..."
+- config_schema: {calendar_id: string, default_duration: int} # For UI config
+- auth_type: "oauth2"
+- auth_config: {...}
+- tool_functions_schema: [ # For LLM function calling
+  {
+  name: "list_events",
+  description: "...",
+  parameters: {...}
+  },
+  {
+  name: "create_event",
+  description: "...",
+  parameters: {...}
+  }
+  ]
+
+````
 
 **Impact:**
 - UI can render configuration forms
@@ -152,9 +159,10 @@ def create_tool_from_schema(schema: dict):
 agent_tools = [
     create_tool_from_schema(tool_schema) for tool_schema in db_schemas
 ]
-```
+````
 
 **Impact:**
+
 - Can't define tools in database
 - Can't use MCP servers for external tools
 - Can't have tools defined by users/admins
@@ -162,6 +170,7 @@ agent_tools = [
 #### Problem 4: Worker Does All of Work, Should Be Declarative
 
 **Current:**
+
 ```python
 # Worker manually:
 # 1. Fetches agent tools from DB
@@ -172,6 +181,7 @@ agent_tools = [
 ```
 
 **Should be:**
+
 ```python
 # Worker just:
 # 1. Load agent's configured tools (schemas + implementations)
@@ -180,6 +190,7 @@ agent_tools = [
 ```
 
 **Impact:**
+
 - Worker logic is complex and error-prone
 - No separation between configuration and execution
 - Hard to test tool registration independently
@@ -215,26 +226,29 @@ graph TD
 ### Key Principles
 
 1. **Declarative Over Imperative**
-    - Define tools once with decorators
-    - Configure tools in database
-    - Worker just loads and uses
+
+   - Define tools once with decorators
+   - Configure tools in database
+   - Worker just loads and uses
 
 2. **Schema-Driven**
-    - Tool functions have JSON schemas (or inferred from type hints)
-    - Schemas stored in database
-    - LLM sees same schemas that are defined
+
+   - Tool functions have JSON schemas (or inferred from type hints)
+   - Schemas stored in database
+   - LLM sees same schemas that are defined
 
 3. **Dynamic Loading**
-    - Tools can be loaded from:
-      - Python files with `@function_tool`
-      - Database schemas (admin-defined tools)
-      - MCP servers (external tool providers)
+
+   - Tools can be loaded from:
+     - Python files with `@function_tool`
+     - Database schemas (admin-defined tools)
+     - MCP servers (external tool providers)
 
 4. **Separation of Concerns**
-    - **Tool Definition**: What tool does and its functions
-    - **Tool Configuration**: UI settings (API keys, defaults)
-    - **Agent Association**: Which tools are enabled for which agents
-    - **Execution**: Runtime behavior with access to context/config
+   - **Tool Definition**: What tool does and its functions
+   - **Tool Configuration**: UI settings (API keys, defaults)
+   - **Agent Association**: Which tools are enabled for which agents
+   - **Execution**: Runtime behavior with access to context/config
 
 ---
 
@@ -245,6 +259,7 @@ graph TD
 #### Approach: LiveKit Native `@function_tool`
 
 Define tools using LiveKit's decorator - this gives us:
+
 - Automatic name extraction
 - Automatic description from docstring
 - Type hint extraction for parameters
@@ -404,6 +419,7 @@ async def check_availability(
 ```
 
 **Key Change:**
+
 - Each action is a separate function with `@function_tool`
 - Type hints are real and respected
 - `context.userdata` contains config (injected by worker)
@@ -850,6 +866,7 @@ if __name__ == "__main__":
 ```
 
 **Key Changes:**
+
 1. **Load tools with schemas** - Use `get_agent_tools_with_functions()`
 2. **Build function list** - Map agent tools to registered functions
 3. **Inject config** - Wrap functions to add config to `context.userdata`
@@ -869,6 +886,7 @@ No changes needed - current session snapshot mechanism works fine with new archi
 ### Define Any Tool with Any Arguments
 
 **Code-defined tools:**
+
 ```python
 @function_tool()
 async def any_tool_you_want(
@@ -884,6 +902,7 @@ async def any_tool_you_want(
 ```
 
 **Database-defined tools:**
+
 ```python
 # Admin creates this in DB via UI
 {
@@ -907,6 +926,7 @@ async def any_tool_you_want(
 ```
 
 **MCP tools:**
+
 ```python
 # Just add MCP server URL to session
 session = AgentSession(
@@ -919,11 +939,13 @@ session = AgentSession(
 ### Register as Platform Tool
 
 **Code tools:**
+
 - Auto-registered when application starts
 - Stored in `platform_tools` table
 - Can be configured via UI
 
 **Dynamic tools:**
+
 - Admin defines schema in UI
 - Stored in `platform_tools` table
 - Worker loads and registers them
@@ -939,10 +961,13 @@ session = AgentSession(
 ## Implementation Roadmap
 
 ### Phase 1: Core Foundation (1-2 days)
+
 1. Update database schema
+
    - Add `tool_functions_schema` column to `platform_tools`
 
 2. Create dynamic loader
+
    - `shared/voice_agents/tools/dynamic_loader.py`
    - Support `create_function_from_schema()`
 
@@ -951,7 +976,9 @@ session = AgentSession(
    - Update `tool_models.py`
 
 ### Phase 2: Refactor Existing Tools (1 day)
+
 1. Refactor Google Calendar tool
+
    - Convert to `@function_tool` pattern
    - One function per action
    - Use `context.userdata` for config
@@ -962,18 +989,22 @@ session = AgentSession(
    - Verify functions work
 
 ### Phase 3: Update Tool Registry (1 day)
+
 1. Add schema tracking
    - `get_tool_schema()` method
    - `get_all_schemas()` method
    - Discover `@function_tool` decorated functions
 
 ### Phase 4: Refactor Tool Service (1 day)
+
 1. Add schema management
    - `upsert_platform_tool()` merges registry schemas
    - `get_agent_tools_with_functions()` returns complete data
 
 ### Phase 5: Refactor Worker (2 days)
+
 1. Remove manual function creation
+
    - Delete `create_tool_func()` approach
    - Load tools with schemas
    - Wrap functions to inject config
@@ -984,6 +1015,7 @@ session = AgentSession(
    - Test function calling
 
 ### Phase 6: Frontend Updates (Optional, 1 day)
+
 1. Tool management UI
    - Show available tools from `platform_tools`
    - Allow admin to add custom tools (define schemas)
@@ -1036,19 +1068,21 @@ async def send_email(
 ### Custom CRM Tool (Database-Defined)
 
 **1. Admin defines in UI:**
-   - Name: "CRM Lookup"
-   - Description: "Lookup customer in our CRM"
-   - Functions:
-     - `get_customer` (param: customer_id)
-     - `update_customer` (params: customer_id, updates)
+
+- Name: "CRM Lookup"
+- Description: "Lookup customer in our CRM"
+- Functions:
+  - `get_customer` (param: customer_id)
+  - `update_customer` (params: customer_id, updates)
 
 **2. Stored in DB:**
+
 ```json
 {
   "name": "CRM_Lookup",
   "description": "CRM integration",
   "config_schema": {
-    "api_url": {"type": "string", "default": "https://crm.example.com"}
+    "api_url": { "type": "string", "default": "https://crm.example.com" }
   },
   "tool_functions_schema": {
     "functions": [
@@ -1058,7 +1092,7 @@ async def send_email(
         "parameters": {
           "type": "object",
           "properties": {
-            "customer_id": {"type": "string"}
+            "customer_id": { "type": "string" }
           },
           "required": ["customer_id"]
         }
@@ -1069,22 +1103,25 @@ async def send_email(
 ```
 
 **3. Agent associates tool:**
-   - User goes to agent config
-   - Enables "CRM Lookup" tool
-   - Provides CRM API key as sensitive config
-   - Sets default URL in config
+
+- User goes to agent config
+- Enables "CRM Lookup" tool
+- Provides CRM API key as sensitive config
+- Sets default URL in config
 
 **4. Worker loads it:**
-   - Fetches from `agent_tools`
-   - Creates function from schema using `create_function_from_schema()`
-   - Wraps with config injection
-   - Passes to `RealtimeModel`
+
+- Fetches from `agent_tools`
+- Creates function from schema using `create_function_from_schema()`
+- Wraps with config injection
+- Passes to `RealtimeModel`
 
 **5. LLM can call it:**
-   - User asks "What's the status of order 12345?"
-   - LLM sees `get_customer(customer_id: "12345")`
-   - Calls function
-   - Returns customer data
+
+- User asks "What's the status of order 12345?"
+- LLM sees `get_customer(customer_id: "12345")`
+- Calls function
+- Returns customer data
 
 ---
 
@@ -1113,6 +1150,7 @@ async def entrypoint(ctx: JobContext):
 ```
 
 **Benefits:**
+
 - Tools defined externally (no code changes)
 - Hot-reload of tool definitions
 - Standard protocol (Model Context Protocol)
@@ -1122,18 +1160,19 @@ async def entrypoint(ctx: JobContext):
 
 ## Summary
 
-| Aspect | Current | Proposed |
-|---------|----------|-----------|
-| **Tool Definition** | BaseTool class with single execute() | `@function_tool` decorated functions |
-| **Parameter Types** | Generic `**kwargs` | Real Python type hints |
-| **Schema Management** | config_schema only (for UI) | tool_functions_schema (for LLM) |
-| **Dynamic Loading** | No | Yes (database + MCP) |
-| **Worker Logic** | Manual function creation | Declarative (load + pass to LLM) |
-| **LiveKit Integration** | Low-level @fnc_ctx.ai_callable | Native @function_tool |
-| **Config Injection** | AgentExecutor passes config | context.userdata injection |
-| **Flexibility** | Limited (code-defined only) | Unlimited (any tool, any schema) |
+| Aspect                  | Current                              | Proposed                             |
+| ----------------------- | ------------------------------------ | ------------------------------------ |
+| **Tool Definition**     | BaseTool class with single execute() | `@function_tool` decorated functions |
+| **Parameter Types**     | Generic `**kwargs`                   | Real Python type hints               |
+| **Schema Management**   | config_schema only (for UI)          | tool_functions_schema (for LLM)      |
+| **Dynamic Loading**     | No                                   | Yes (database + MCP)                 |
+| **Worker Logic**        | Manual function creation             | Declarative (load + pass to LLM)     |
+| **LiveKit Integration** | Low-level @fnc_ctx.ai_callable       | Native @function_tool                |
+| **Config Injection**    | AgentExecutor passes config          | context.userdata injection           |
+| **Flexibility**         | Limited (code-defined only)          | Unlimited (any tool, any schema)     |
 
 This architecture gives you:
+
 - **Maximum Flexibility**: Any tool, any parameters, any types
 - **Native LiveKit**: Using `@function_tool` as intended
 - **Dynamic Loading**: From code, database, or MCP servers

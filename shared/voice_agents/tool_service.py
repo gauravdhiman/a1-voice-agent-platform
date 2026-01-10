@@ -1,14 +1,26 @@
 """
 Tool service for managing platform tools and agent-specific tool configurations.
 """
+
 import logging
-from typing import Optional, List
-from uuid import UUID
 from datetime import datetime
+from typing import List, Optional
+from uuid import UUID
+
 from opentelemetry import trace
+
+from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
-from shared.common.security import encrypt_data, decrypt_data
-from .tool_models import PlatformTool, PlatformToolCreate, AgentToolCreate, AgentToolUpdate, AgentToolResponse, AgentTool, AuthStatus
+
+from .tool_models import (
+    AgentTool,
+    AgentToolCreate,
+    AgentToolResponse,
+    AgentToolUpdate,
+    AuthStatus,
+    PlatformTool,
+    PlatformToolCreate,
+)
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -51,38 +63,46 @@ def validate_token_status(sensitive_config: Optional[str]) -> AuthStatus:
 
 class ToolService:
     """Service for handling platform tools and agent tool configurations."""
-    
+
     def __init__(self):
         self.supabase_config = supabase_config
-    
+
     @property
     def supabase(self):
         """Get Supabase client."""
         return self.supabase_config.client
-    
+
     # Platform Tools
     @tracer.start_as_current_span("tool.upsert_platform_tool")
-    async def upsert_platform_tool(self, tool_data: PlatformToolCreate) -> tuple[Optional[PlatformTool], Optional[str]]:
+    async def upsert_platform_tool(
+        self, tool_data: PlatformToolCreate
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
         """Upsert a platform tool by name."""
         try:
             # Check if exists
-            existing = self.supabase.table("platform_tools")\
-                .select("*")\
-                .eq("name", tool_data.name)\
+            existing = (
+                self.supabase.table("platform_tools")
+                .select("*")
+                .eq("name", tool_data.name)
                 .execute()
+            )
 
             # Dump model and exclude fields not in DB (auth_type, auth_config)
-            data_dict = tool_data.model_dump(exclude_none=True, exclude={'auth_type', 'auth_config'})
+            data_dict = tool_data.model_dump(
+                exclude_none=True, exclude={"auth_type", "auth_config"}
+            )
 
             if existing.data:
-                response = self.supabase.table("platform_tools")\
-                    .update(data_dict)\
-                    .eq("id", existing.data[0]["id"])\
+                response = (
+                    self.supabase.table("platform_tools")
+                    .update(data_dict)
+                    .eq("id", existing.data[0]["id"])
                     .execute()
+                )
             else:
-                response = self.supabase.table("platform_tools")\
-                    .insert(data_dict)\
-                    .execute()
+                response = (
+                    self.supabase.table("platform_tools").insert(data_dict).execute()
+                )
 
             if not response.data:
                 return None, "Failed to upsert platform tool"
@@ -92,7 +112,9 @@ class ToolService:
             return None, str(e)
 
     @tracer.start_as_current_span("tool.get_platform_tools")
-    async def get_platform_tools(self, only_active: bool = True) -> tuple[List[PlatformTool], Optional[str]]:
+    async def get_platform_tools(
+        self, only_active: bool = True
+    ) -> tuple[List[PlatformTool], Optional[str]]:
         """Get all platform tools."""
         try:
             query = self.supabase.table("platform_tools").select("*")
@@ -107,7 +129,9 @@ class ToolService:
 
     # Agent Tools
     @tracer.start_as_current_span("tool.configure_agent_tool")
-    async def configure_agent_tool(self, agent_tool_data: AgentToolCreate) -> tuple[Optional[AgentToolResponse], Optional[str]]:
+    async def configure_agent_tool(
+        self, agent_tool_data: AgentToolCreate
+    ) -> tuple[Optional[AgentToolResponse], Optional[str]]:
         """Configure a tool for an agent (upsert)."""
         try:
             # Prepare data for Supabase
@@ -119,25 +143,33 @@ class ToolService:
 
             # Encrypt sensitive config if present
             if agent_tool_data.sensitive_config:
-                data["sensitive_config"] = encrypt_data(agent_tool_data.sensitive_config)
+                data["sensitive_config"] = encrypt_data(
+                    agent_tool_data.sensitive_config
+                )
 
             # Check if configuration already exists
-            existing = self.supabase.table("agent_tools")\
-                .select("*")\
-                .eq("agent_id", str(agent_tool_data.agent_id))\
-                .eq("tool_id", str(agent_tool_data.tool_id))\
+            existing = (
+                self.supabase.table("agent_tools")
+                .select("*")
+                .eq("agent_id", str(agent_tool_data.agent_id))
+                .eq("tool_id", str(agent_tool_data.tool_id))
                 .execute()
+            )
 
             if existing.data:
                 # Update
-                update_payload = agent_tool_data.model_dump(exclude={"agent_id", "tool_id"})
+                update_payload = agent_tool_data.model_dump(
+                    exclude={"agent_id", "tool_id"}
+                )
                 if agent_tool_data.sensitive_config:
                     update_payload["sensitive_config"] = data["sensitive_config"]
 
-                response = self.supabase.table("agent_tools")\
-                    .update(update_payload)\
-                    .eq("id", existing.data[0]["id"])\
+                response = (
+                    self.supabase.table("agent_tools")
+                    .update(update_payload)
+                    .eq("id", existing.data[0]["id"])
                     .execute()
+                )
             else:
                 # Insert
                 response = self.supabase.table("agent_tools").insert(data).execute()
@@ -154,9 +186,11 @@ class ToolService:
                 "config": result_data.get("config"),
                 "unselected_functions": result_data.get("unselected_functions"),
                 "is_enabled": result_data.get("is_enabled", True),
-                "auth_status": validate_token_status(result_data.get("sensitive_config")),
+                "auth_status": validate_token_status(
+                    result_data.get("sensitive_config")
+                ),
                 "created_at": result_data["created_at"],
-                "updated_at": result_data["updated_at"]
+                "updated_at": result_data["updated_at"],
             }
 
             return AgentToolResponse(**response_dict), None
@@ -165,14 +199,18 @@ class ToolService:
             return None, str(e)
 
     @tracer.start_as_current_span("tool.get_agent_tools")
-    async def get_agent_tools(self, agent_id: UUID) -> tuple[List[AgentToolResponse], Optional[str]]:
+    async def get_agent_tools(
+        self, agent_id: UUID
+    ) -> tuple[List[AgentToolResponse], Optional[str]]:
         """Get all tools configured for an agent, including platform tool details (excludes sensitive config)."""
         try:
             # Get agent tool configurations
-            response = self.supabase.table("agent_tools")\
-                .select("*, tool:platform_tools(*)")\
-                .eq("agent_id", str(agent_id))\
+            response = (
+                self.supabase.table("agent_tools")
+                .select("*, tool:platform_tools(*)")
+                .eq("agent_id", str(agent_id))
                 .execute()
+            )
 
             agent_tools = []
             for item in response.data:
@@ -199,7 +237,7 @@ class ToolService:
                     "auth_status": validate_token_status(item.get("sensitive_config")),
                     "token_expires_at": token_expires_at,
                     "created_at": item["created_at"],
-                    "updated_at": item["updated_at"]
+                    "updated_at": item["updated_at"],
                 }
 
                 agent_tool = AgentToolResponse(**response_dict)
@@ -213,14 +251,18 @@ class ToolService:
             return [], str(e)
 
     @tracer.start_as_current_span("tool.get_agent_tools_with_sensitive_config")
-    async def get_agent_tools_with_sensitive_config(self, agent_id: UUID) -> tuple[List[AgentTool], Optional[str]]:
+    async def get_agent_tools_with_sensitive_config(
+        self, agent_id: UUID
+    ) -> tuple[List[AgentTool], Optional[str]]:
         """Get all tools configured for an agent with full details including sensitive config (for worker)."""
         try:
             # Get agent tool configurations
-            response = self.supabase.table("agent_tools")\
-                .select("*, tool:platform_tools(*)")\
-                .eq("agent_id", str(agent_id))\
+            response = (
+                self.supabase.table("agent_tools")
+                .select("*, tool:platform_tools(*)")
+                .eq("agent_id", str(agent_id))
                 .execute()
+            )
 
             agent_tools = []
             for item in response.data:
@@ -247,7 +289,7 @@ class ToolService:
                     "unselected_functions": item.get("unselected_functions"),
                     "is_enabled": item.get("is_enabled", True),
                     "created_at": item["created_at"],
-                    "updated_at": item["updated_at"]
+                    "updated_at": item["updated_at"],
                 }
 
                 agent_tool = AgentTool(**agent_tool_dict)
@@ -257,11 +299,15 @@ class ToolService:
 
             return agent_tools, None
         except Exception as e:
-            logger.error(f"Error getting agent tools with sensitive config for agent {agent_id}: {e}")
+            logger.error(
+                f"Error getting agent tools with sensitive config for agent {agent_id}: {e}"
+            )
             return [], str(e)
 
     @tracer.start_as_current_span("tool.update_agent_tool")
-    async def update_agent_tool(self, agent_tool_id: UUID, update_data: AgentToolUpdate) -> tuple[Optional[AgentToolResponse], Optional[str]]:
+    async def update_agent_tool(
+        self, agent_tool_id: UUID, update_data: AgentToolUpdate
+    ) -> tuple[Optional[AgentToolResponse], Optional[str]]:
         """Update an agent tool configuration."""
         try:
             # Get model dump to extract values
@@ -275,10 +321,12 @@ class ToolService:
             if update_data.sensitive_config is not None:
                 data["sensitive_config"] = encrypt_data(update_data.sensitive_config)
 
-            response = self.supabase.table("agent_tools")\
-                .update(data)\
-                .eq("id", str(agent_tool_id))\
+            response = (
+                self.supabase.table("agent_tools")
+                .update(data)
+                .eq("id", str(agent_tool_id))
                 .execute()
+            )
 
             if not response.data:
                 return None, "Agent tool configuration not found"
@@ -292,9 +340,11 @@ class ToolService:
                 "config": result_data.get("config"),
                 "unselected_functions": result_data.get("unselected_functions"),
                 "is_enabled": result_data.get("is_enabled", True),
-                "auth_status": validate_token_status(result_data.get("sensitive_config")),
+                "auth_status": validate_token_status(
+                    result_data.get("sensitive_config")
+                ),
                 "created_at": result_data["created_at"],
-                "updated_at": result_data["updated_at"]
+                "updated_at": result_data["updated_at"],
             }
 
             return AgentToolResponse(**response_dict), None

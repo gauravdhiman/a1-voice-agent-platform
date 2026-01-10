@@ -1,35 +1,40 @@
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Eye, EyeOff, Loader2, Mail, Lock, User, Users } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/auth-context';
-import { useSearchParams } from 'next/navigation';
+import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Eye, EyeOff, Loader2, Mail, Lock, User, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-context";
+import { useSearchParams } from "next/navigation";
 
-const signUpSchema = z.object({
-  firstName: z.string().min(1, 'First name is required').max(50),
-  lastName: z.string().min(1, 'Last name is required').max(50),
-  email: z.string().email('Please enter a valid email address'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Must contain uppercase letter')
-    .regex(/[a-z]/, 'Must contain lowercase letter')
-    .regex(/\d/, 'Must contain a number')
-    .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Must contain special character'),
-  passwordConfirm: z.string().optional(), // Make it optional
-}).refine((data) => {
-  // Only validate password match if both password and passwordConfirm have values
-  if (!data.password || !data.passwordConfirm) return true;
-  return data.password === data.passwordConfirm;
-}, {
-  message: "Passwords don't match",
-  path: ['passwordConfirm'],
-});
+const signUpSchema = z
+  .object({
+    firstName: z.string().min(1, "First name is required").max(50),
+    lastName: z.string().min(1, "Last name is required").max(50),
+    email: z.string().email("Please enter a valid email address"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[A-Z]/, "Must contain uppercase letter")
+      .regex(/[a-z]/, "Must contain lowercase letter")
+      .regex(/\d/, "Must contain a number")
+      .regex(/[!@#$%^&*(),.?":{}|<>]/, "Must contain special character"),
+    passwordConfirm: z.string().optional(), // Make it optional
+  })
+  .refine(
+    (data) => {
+      // Only validate password match if both password and passwordConfirm have values
+      if (!data.password || !data.passwordConfirm) return true;
+      return data.password === data.passwordConfirm;
+    },
+    {
+      message: "Passwords don't match",
+      path: ["passwordConfirm"],
+    },
+  );
 
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
@@ -43,7 +48,7 @@ export function SignUpForm() {
 
   const { signUp, signInWithOAuth } = useAuth();
   const searchParams = useSearchParams();
-  const invitationToken = searchParams?.get('token');
+  const invitationToken = searchParams?.get("token");
 
   const {
     register,
@@ -54,16 +59,16 @@ export function SignUpForm() {
     reset,
   } = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
-    mode: 'onChange', // Validate on change
+    mode: "onChange", // Validate on change
   });
 
-  const password = watch('password');
-  const passwordConfirm = watch('passwordConfirm');
+  const password = watch("password");
+  const passwordConfirm = watch("passwordConfirm");
 
   // Trigger validation when passwordConfirm changes, but only if it has a value
   React.useEffect(() => {
     if (passwordConfirm && passwordConfirm.length > 0) {
-      trigger('passwordConfirm');
+      trigger("passwordConfirm");
     }
   }, [passwordConfirm, trigger]);
 
@@ -78,11 +83,17 @@ export function SignUpForm() {
   };
 
   const passwordStrength = password ? getPasswordStrength(password) : 0;
-  const strengthColors = ['bg-red-500', 'bg-red-400', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
-  const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+  const strengthColors = [
+    "bg-red-500",
+    "bg-red-400",
+    "bg-yellow-500",
+    "bg-blue-500",
+    "bg-green-500",
+  ];
+  const strengthLabels = ["Very Weak", "Weak", "Fair", "Good", "Strong"];
 
   const onSubmit = async (data: SignUpFormData) => {
-    setIsLoading('password');
+    setIsLoading("password");
     setError(null);
     setSuccess(null);
 
@@ -90,7 +101,7 @@ export function SignUpForm() {
       const { user, error } = await signUp({
         email: data.email,
         password: data.password,
-        passwordConfirm: data.passwordConfirm || '',
+        passwordConfirm: data.passwordConfirm || "",
         firstName: data.firstName,
         lastName: data.lastName,
         invitationToken: invitationToken || undefined,
@@ -104,54 +115,57 @@ export function SignUpForm() {
         setIsSignUpComplete(true);
 
         if (invitationToken) {
-          setSuccess('Account created! Please check your email for verification. You will be added to the organization after email confirmation.');
+          setSuccess(
+            "Account created! Please check your email for verification. You will be added to the organization after email confirmation.",
+          );
         } else {
-          setSuccess('Account created! Please check your email for verification.');
+          setSuccess(
+            "Account created! Please check your email for verification.",
+          );
         }
       } else {
-        setError('User details not returned after signup. Please try again.');
+        setError("User details not returned after signup. Please try again.");
       }
     } catch (error) {
-      console.error('Sign up error:', error);
-      setError('An unexpected error occurred. Please try again.');
+      console.error("Sign up error:", error);
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(null);
     }
   };
 
-
   const handleGoogleSignUp = async () => {
-    setIsLoading('google');
+    setIsLoading("google");
     setError(null);
     try {
-      const result = await signInWithOAuth('google');
+      const result = await signInWithOAuth("google");
       if (result?.error) {
-        setError(result.error.message || 'Failed to sign up with Google');
+        setError(result.error.message || "Failed to sign up with Google");
         setIsLoading(null);
       }
       // Note: If successful, OAuth will redirect the user away from this page
       // The organization creation will happen in the OAuth callback handler
     } catch (error) {
-      console.error('Google sign up error:', error);
-      setError('An unexpected error occurred. Please try again.');
+      console.error("Google sign up error:", error);
+      setError("An unexpected error occurred. Please try again.");
       setIsLoading(null);
     }
   };
 
   const handleLinkedInSignUp = async () => {
-    setIsLoading('linkedin_oidc');
+    setIsLoading("linkedin_oidc");
     setError(null);
     try {
-      const result = await signInWithOAuth('linkedin_oidc');
+      const result = await signInWithOAuth("linkedin_oidc");
       if (result?.error) {
-        setError(result.error.message || 'Failed to sign up with LinkedIn');
+        setError(result.error.message || "Failed to sign up with LinkedIn");
         setIsLoading(null);
       }
       // Note: If successful, OAuth will redirect the user away from this page
       // The organization creation will happen in the OAuth callback handler
     } catch (error) {
-      console.error('LinkedIn sign up error:', error);
-      setError('An unexpected error occurred. Please try again.');
+      console.error("LinkedIn sign up error:", error);
+      setError("An unexpected error occurred. Please try again.");
       setIsLoading(null);
     }
   };
@@ -163,7 +177,8 @@ export function SignUpForm() {
           <Alert className="border-primary/20 bg-primary/5">
             <Users className="h-4 w-4 text-primary" />
             <AlertDescription className="text-primary">
-              You&apos;ve been invited to join an organization! Create your account to get started.
+              You&apos;ve been invited to join an organization! Create your
+              account to get started.
             </AlertDescription>
           </Alert>
         )}
@@ -187,14 +202,16 @@ export function SignUpForm() {
               <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 id="firstName"
-                {...register('firstName')}
+                {...register("firstName")}
                 placeholder="John"
                 className="pl-10"
                 disabled={!!isLoading}
               />
             </div>
             {errors.firstName && (
-              <p className="text-sm text-destructive">{errors.firstName.message}</p>
+              <p className="text-sm text-destructive">
+                {errors.firstName.message}
+              </p>
             )}
           </div>
 
@@ -204,14 +221,16 @@ export function SignUpForm() {
               <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 id="lastName"
-                {...register('lastName')}
+                {...register("lastName")}
                 placeholder="Doe"
                 className="pl-10"
                 disabled={!!isLoading}
               />
             </div>
             {errors.lastName && (
-              <p className="text-sm text-destructive">{errors.lastName.message}</p>
+              <p className="text-sm text-destructive">
+                {errors.lastName.message}
+              </p>
             )}
           </div>
         </div>
@@ -223,7 +242,7 @@ export function SignUpForm() {
             <Input
               id="email"
               type="email"
-              {...register('email')}
+              {...register("email")}
               placeholder="john@example.com"
               className="pl-10"
               disabled={!!isLoading}
@@ -240,8 +259,8 @@ export function SignUpForm() {
             <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               id="password"
-              type={showPassword ? 'text' : 'password'}
-              {...register('password')}
+              type={showPassword ? "text" : "password"}
+              {...register("password")}
               placeholder="Create a strong password"
               className="pl-10 pr-10"
               disabled={!!isLoading}
@@ -262,19 +281,25 @@ export function SignUpForm() {
                 {[1, 2, 3, 4, 5].map((level) => (
                   <div
                     key={level}
-                    className={`h-1 flex-1 rounded ${passwordStrength >= level ? strengthColors[passwordStrength - 1] : 'bg-muted'
-                      }`}
+                    className={`h-1 flex-1 rounded ${
+                      passwordStrength >= level
+                        ? strengthColors[passwordStrength - 1]
+                        : "bg-muted"
+                    }`}
                   />
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Password strength: {strengthLabels[passwordStrength - 1] || 'Very Weak'}
+                Password strength:{" "}
+                {strengthLabels[passwordStrength - 1] || "Very Weak"}
               </p>
             </div>
           )}
 
           {errors.password && (
-            <p className="text-sm text-destructive">{errors.password.message}</p>
+            <p className="text-sm text-destructive">
+              {errors.password.message}
+            </p>
           )}
         </div>
 
@@ -284,12 +309,12 @@ export function SignUpForm() {
             <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               id="passwordConfirm"
-              type={showConfirmPassword ? 'text' : 'password'}
-              {...register('passwordConfirm')}
+              type={showConfirmPassword ? "text" : "password"}
+              {...register("passwordConfirm")}
               placeholder="Confirm your password"
               className="pl-10 pr-10"
               disabled={!!isLoading}
-              onBlur={() => passwordConfirm && trigger('passwordConfirm')}
+              onBlur={() => passwordConfirm && trigger("passwordConfirm")}
             />
             <button
               type="button"
@@ -301,7 +326,9 @@ export function SignUpForm() {
             </button>
           </div>
           {errors.passwordConfirm && (
-            <p className="text-sm text-destructive">{errors.passwordConfirm.message}</p>
+            <p className="text-sm text-destructive">
+              {errors.passwordConfirm.message}
+            </p>
           )}
         </div>
 
@@ -311,13 +338,13 @@ export function SignUpForm() {
           className="w-full cursor-pointer"
           disabled={!!isLoading}
         >
-          {isLoading === 'password' ? (
+          {isLoading === "password" ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Creating Account...
             </>
           ) : (
-            'Create Account'
+            "Create Account"
           )}
         </Button>
       </form>
@@ -327,7 +354,9 @@ export function SignUpForm() {
           <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
+          <span className="px-2 bg-card text-muted-foreground">
+            Or continue with
+          </span>
         </div>
       </div>
 
@@ -338,7 +367,7 @@ export function SignUpForm() {
           disabled={!!isLoading}
           className="w-full flex items-center justify-center cursor-pointer h-11"
         >
-          {isLoading === 'google' ? (
+          {isLoading === "google" ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Signing up with Google...
@@ -374,7 +403,7 @@ export function SignUpForm() {
           disabled={!!isLoading}
           className="w-full flex items-center justify-center cursor-pointer h-11"
         >
-          {isLoading === 'linkedin_oidc' ? (
+          {isLoading === "linkedin_oidc" ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Signing up with LinkedIn...

@@ -5,6 +5,7 @@ The `stripe_manager.py` script provides a unified command-line interface for man
 ## Overview
 
 The Stripe Manager Tool consolidates all Stripe-related functionality into a single, easy-to-use CLI tool for:
+
 - Creating credit products with proper metadata
 - Cleaning up outdated products
 - Diagnosing Stripe account configuration
@@ -18,14 +19,16 @@ The Stripe Manager Tool consolidates all Stripe-related functionality into a sin
 ## Features
 
 ### Diagnostic Capabilities
+
 - Inspect Stripe account and show recommendations
 - Display all active products and their metadata
 - Analyze product categorization
 - Provide setup guidance
 
 ### Product Management
+
 - **`diagnostic`** - Inspect Stripe account and show recommendations
-- **`cleanup`** - Deactivate old "All Credit Packages" products  
+- **`cleanup`** - Deactivate old "All Credit Packages" products
 - **`setup-credits`** - Create individual credit products with proper metadata
 - **`seed`** - Seed database with Stripe data using intelligent detection
 - **`show-metadata`** - Display metadata setup instructions
@@ -44,12 +47,14 @@ STRIPE_SECRET_KEY=sk_test_your_secret_key_here
 ### Required Metadata Fields
 
 For subscription plans, products must have:
+
 - `included_credits` (string): Number of credits included with this plan
 - `max_users` (string, optional): Maximum users allowed (omit for unlimited)
 - `features` (JSON string): Plan features as JSON object
 - `trial_period_days` (string, optional): Trial period in days
 
 For credit products, products must have:
+
 - `credit_amount` (string): Number of credits this product provides
 
 ## Usage
@@ -62,6 +67,7 @@ python scripts/stripe_manager.py diagnostic
 ```
 
 This shows:
+
 - All active products and their metadata
 - All active prices and their types
 - Analysis of which products can be categorized
@@ -78,6 +84,7 @@ python scripts/stripe_manager.py setup-credits
 ```
 
 This creates standardized credit products:
+
 - 100 Credits Pack ($15.00)
 - 1000 Credits Pack ($25.00)
 - 2500 Credits Pack ($50.00)
@@ -106,6 +113,7 @@ python scripts/stripe_manager.py seed
 ```
 
 The seed command:
+
 - Uses pagination to fetch all Stripe products
 - Intelligently detects subscription plans and credit products
 - Provides smart defaults when metadata is missing
@@ -122,11 +130,13 @@ This displays detailed instructions for manually adding metadata to your Stripe 
 ## Intelligent Detection
 
 ### For Subscription Plans
+
 - **Smart Defaults**: Plans without metadata get 1000 included credits by default
 - **Flexible Naming**: Automatically appends billing interval to plan names
 - **Metadata Parsing**: Safely parses JSON features with fallbacks
 
 ### For Credit Products
+
 - **Metadata Detection**: Prefers explicit `credit_amount` metadata
 - **Name-based Inference**: Extracts credit amounts from product names like "100 Credits Pack"
 - **Price-based Inference**: Infers credits from common pricing patterns:
@@ -147,17 +157,20 @@ This displays detailed instructions for manually adding metadata to your Stripe 
 ## Troubleshooting
 
 ### "No data found in Stripe" error
+
 - Check that `STRIPE_SECRET_KEY` is set correctly
 - Ensure products are marked as **Active** in Stripe
 - Verify metadata fields are set on products (not prices)
 - For credit products, ensure they have `credit_amount` metadata
 
 ### Missing fields in database
+
 - Check that product metadata follows exact field names above
 - Ensure JSON in `features` field is valid JSON
 - Verify numeric fields contain valid integers
 
 ### Products not being categorized
+
 - Use `diagnostic` command to inspect your Stripe setup
 - Add proper metadata to your Stripe products
 - Check that products are marked as **Active**
@@ -167,17 +180,18 @@ This displays detailed instructions for manually adding metadata to your Stripe 
 
 If you were using old individual scripts, here's the mapping:
 
-| Old Script | New Command |
-|------------|-------------|
-| `python scripts/stripe_diagnostic.py` | `python scripts/stripe_manager.py diagnostic` |
-| `python scripts/cleanup_old_stripe_products.py --dry-run` | `python scripts/stripe_manager.py cleanup --dry-run` |
-| `python scripts/setup_stripe_credit_products.py --setup-credits --dry-run` | `python scripts/stripe_manager.py setup-credits --dry-run` |
-| `python scripts/seed_billing_data.py --dry-run` | `python scripts/stripe_manager.py seed --dry-run` |
-| `python scripts/seed_billing_data_enhanced.py --dry-run` | `python scripts/stripe_manager.py seed --dry-run --verbose` |
+| Old Script                                                                 | New Command                                                 |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `python scripts/stripe_diagnostic.py`                                      | `python scripts/stripe_manager.py diagnostic`               |
+| `python scripts/cleanup_old_stripe_products.py --dry-run`                  | `python scripts/stripe_manager.py cleanup --dry-run`        |
+| `python scripts/setup_stripe_credit_products.py --setup-credits --dry-run` | `python scripts/stripe_manager.py setup-credits --dry-run`  |
+| `python scripts/seed_billing_data.py --dry-run`                            | `python scripts/stripe_manager.py seed --dry-run`           |
+| `python scripts/seed_billing_data_enhanced.py --dry-run`                   | `python scripts/stripe_manager.py seed --dry-run --verbose` |
 
 ## Example Product Metadata
 
 ### Subscription Plan (Monthly)
+
 ```json
 {
   "included_credits": "1000",
@@ -188,6 +202,7 @@ If you were using old individual scripts, here's the mapping:
 ```
 
 ### Credit Product
+
 ```json
 {
   "credit_amount": "1000"

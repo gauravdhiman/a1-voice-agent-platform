@@ -26,7 +26,7 @@ export interface Invitation {
   organization_id: string;
   invited_by: string;
   token: string;
-  status: 'pending' | 'accepted' | 'expired' | 'cancelled';
+  status: "pending" | "accepted" | "expired" | "cancelled";
   expires_at: string;
   created_at: string;
   accepted_at?: string;

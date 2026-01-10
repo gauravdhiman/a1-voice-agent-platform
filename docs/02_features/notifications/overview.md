@@ -63,33 +63,33 @@ graph TB
 
 ### Account Events
 
-| Event | Description | Recipients |
-|-------|-------------|-------------|
-| `email.verification` | Verify email address after signup | New user |
-| `password.reset_request` | Request to reset password | User |
-| `password.reset_success` | Password successfully reset | User |
-| `account.created` | New account created | User |
+| Event                    | Description                       | Recipients |
+| ------------------------ | --------------------------------- | ---------- |
+| `email.verification`     | Verify email address after signup | New user   |
+| `password.reset_request` | Request to reset password         | User       |
+| `password.reset_success` | Password successfully reset       | User       |
+| `account.created`        | New account created               | User       |
 
 ### Organization Events
 
-| Event | Description | Recipients |
-|-------|-------------|-------------|
-| `org.invite` | User invited to organization | Invitee |
-| `org.invite_accepted` | Invitation accepted | Inviter |
-| `org.member_removed` | Member removed from org | Removed user |
-| `org.role_changed` | Member role changed | Affected member |
+| Event                 | Description                  | Recipients      |
+| --------------------- | ---------------------------- | --------------- |
+| `org.invite`          | User invited to organization | Invitee         |
+| `org.invite_accepted` | Invitation accepted          | Inviter         |
+| `org.member_removed`  | Member removed from org      | Removed user    |
+| `org.role_changed`    | Member role changed          | Affected member |
 
 ### Billing Events
 
-| Event | Description | Recipients |
-|-------|-------------|-------------|
-| `subscription.created` | New subscription created | Org admins |
-| `subscription.updated` | Subscription plan changed | Org admins |
-| `subscription.canceled` | Subscription canceled | Org admins |
-| `invoice.payment_succeeded` | Payment successful | Org admins |
-| `invoice.payment_failed` | Payment failed | Org admins |
-| `credit.low` | Credits below threshold | Org admins |
-| `credit.topup` | Manual credit top-up | Org admins |
+| Event                       | Description               | Recipients |
+| --------------------------- | ------------------------- | ---------- |
+| `subscription.created`      | New subscription created  | Org admins |
+| `subscription.updated`      | Subscription plan changed | Org admins |
+| `subscription.canceled`     | Subscription canceled     | Org admins |
+| `invoice.payment_succeeded` | Payment successful        | Org admins |
+| `invoice.payment_failed`    | Payment failed            | Org admins |
+| `credit.low`                | Credits below threshold   | Org admins |
+| `credit.topup`              | Manual credit top-up      | Org admins |
 
 ## Notification Flow
 
@@ -168,53 +168,71 @@ async def send_org_invite(org_id: str, email: str, role_id: str):
 Templates use Jinja2 for dynamic content:
 
 **Subject Lines**:
+
 ```html
-{{ greeting }} {{ user_name }}!
-{% if event_type == 'email.verification' %}
-    Verify your email address
-{% elif event_type == 'password.reset_request' %}
-    Reset your password
-{% endif %}
+{{ greeting }} {{ user_name }}! {% if event_type == 'email.verification' %}
+Verify your email address {% elif event_type == 'password.reset_request' %}
+Reset your password {% endif %}
 ```
 
 **HTML Body**:
+
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
+  <head>
     <style>
-        body { font-family: Arial, sans-serif; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .button { background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; }
+      body {
+        font-family: Arial, sans-serif;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      .button {
+        background: #3b82f6;
+        color: white;
+        padding: 12px 24px;
+        text-decoration: none;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <h1>{{ greeting }} {{ user_name }}!</h1>
+      <h1>{{ greeting }} {{ user_name }}!</h1>
 
-        {% if event_type == 'email.verification' %}
-        <p>Thank you for signing up! Please verify your email address by clicking the button below:</p>
-        <a href="{{ verification_url }}" class="button">Verify Email</a>
-        <p>This link expires in {{ expires_in_hours }} hours.</p>
+      {% if event_type == 'email.verification' %}
+      <p>
+        Thank you for signing up! Please verify your email address by clicking
+        the button below:
+      </p>
+      <a href="{{ verification_url }}" class="button">Verify Email</a>
+      <p>This link expires in {{ expires_in_hours }} hours.</p>
 
-        {% elif event_type == 'password.reset_request' %}
-        <p>We received a request to reset your password. Click the button below:</p>
-        <a href="{{ reset_url }}" class="button">Reset Password</a>
-        <p>This link expires in {{ expires_in_hours }} hours.</p>
-        <p>If you didn't request this, please ignore this email.</p>
+      {% elif event_type == 'password.reset_request' %}
+      <p>
+        We received a request to reset your password. Click the button below:
+      </p>
+      <a href="{{ reset_url }}" class="button">Reset Password</a>
+      <p>This link expires in {{ expires_in_hours }} hours.</p>
+      <p>If you didn't request this, please ignore this email.</p>
 
-        {% elif event_type == 'org.invite' %}
-        <p>You've been invited to join <strong>{{ org_name }}</strong> as a <strong>{{ role_name }}</strong>.</p>
-        <a href="{{ accept_url }}" class="button">Accept Invitation</a>
-        {% endif %}
+      {% elif event_type == 'org.invite' %}
+      <p>
+        You've been invited to join <strong>{{ org_name }}</strong> as a
+        <strong>{{ role_name }}</strong>.
+      </p>
+      <a href="{{ accept_url }}" class="button">Accept Invitation</a>
+      {% endif %}
 
-        <p>Best regards,<br>{{ app_name }} Team</p>
+      <p>Best regards,<br />{{ app_name }} Team</p>
     </div>
-</body>
+  </body>
 </html>
 ```
 
 **Plain Text Version**:
+
 ```text
 {{ greeting }} {{ user_name }}!
 
@@ -368,36 +386,37 @@ APP_DOMAIN=yourapp.com
 ### Email Branding
 
 Customize email appearance:
+
 ```html
 <!-- Brand colors and fonts -->
 <style>
-    :root {
-        --primary-color: #3b82f6;
-        --secondary-color: #64748b;
-        --background-color: #ffffff;
-        --text-color: #0f172a;
-    }
+  :root {
+    --primary-color: #3b82f6;
+    --secondary-color: #64748b;
+    --background-color: #ffffff;
+    --text-color: #0f172a;
+  }
 
-    body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        color: var(--text-color);
-        background-color: var(--background-color);
-    }
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text-color);
+    background-color: var(--background-color);
+  }
 
-    .header {
-        background-color: var(--primary-color);
-        color: white;
-        padding: 20px;
-        text-align: center;
-    }
+  .header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 20px;
+    text-align: center;
+  }
 
-    .button {
-        background-color: var(--primary-color);
-        color: white;
-        padding: 12px 24px;
-        text-decoration: none;
-        border-radius: 4px;
-    }
+  .button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 12px 24px;
+    text-decoration: none;
+    border-radius: 4px;
+  }
 </style>
 ```
 
@@ -493,6 +512,7 @@ graph LR
 ### Emails Not Delivered
 
 **Check**:
+
 1. Resend API key is correct
 2. Email address is valid
 3. Domain SPF/DKIM records are configured
@@ -503,6 +523,7 @@ graph LR
 ### High Bounce Rate
 
 **Check**:
+
 1. Email list quality
 2. Domain reputation
 3. SPF/DKIM/DMARC records
@@ -512,6 +533,7 @@ graph LR
 ### Deliveries Delayed
 
 **Check**:
+
 1. Queue processing is running
 2. Resend API is responding
 3. Network connectivity is stable

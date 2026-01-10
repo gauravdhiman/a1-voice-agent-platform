@@ -45,53 +45,53 @@
 
 :root {
   --radius: 0.5rem;
-  
+
   /* Professional Enterprise Theme - Deep Navy & Sophisticated Blue */
   /* Light Mode */
   --background: oklch(0.99 0.005 264.695);
   /* Very subtle blue-tinted white */
   --foreground: oklch(0.08 0.041 263.667);
   /* Deep charcoal blue */
-  
+
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.08 0.041 263.667);
-  
+
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.08 0.041 263.667);
-  
+
   /* Sophisticated Blue - Primary */
   --primary: oklch(0.43 0.197 257.651);
   /* Refined blue-600 */
   --primary-foreground: oklch(0.98 0.01 264.695);
-  
+
   /* Warm Gray - Secondary */
   --secondary: oklch(0.94 0.019 264.695);
   /* Sophisticated light gray */
   --secondary-foreground: oklch(0.16 0.041 263.667);
-  
+
   /* Subtle Gray - Muted */
   --muted: oklch(0.96 0.013 264.695);
   /* Very subtle gray */
   --muted-foreground: oklch(0.47 0.042 264.364);
   /* Muted blue-gray */
-  
+
   /* Accent Gray */
   --accent: oklch(0.92 0.024 264.695);
   /* Light accent gray */
   --accent-foreground: oklch(0.13 0.041 263.667);
-  
+
   /* Professional Red - Destructive */
   --destructive: oklch(0.49 0.236 25.764);
   /* Refined red */
   --destructive-foreground: oklch(0.98 0.01 264.695);
-  
+
   /* Subtle Borders */
   --border: oklch(0.88 0.018 264.695);
   /* Very light gray border */
   --input: oklch(0.92 0.018 264.695);
   --ring: oklch(0.43 0.197 257.651);
   /* Primary blue for focus rings */
-  
+
   /* Sophisticated Chart Colors */
   --chart-1: oklch(0.43 0.197 257.651);
   /* Primary blue */
@@ -103,7 +103,7 @@
   /* Green */
   --chart-5: oklch(0.67 0.164 70.08);
   /* Yellow-green */
-  
+
   /* Sidebar Colors */
   --sidebar: oklch(0.98 0.008 264.695);
   /* Very subtle sidebar background */
@@ -123,41 +123,41 @@
   /* Sophisticated dark blue */
   --foreground: oklch(0.93 0.015 264.695);
   /* Very light gray with subtle blue tint */
-  
+
   /* Card Colors */
   --card: oklch(0.09 0.048 263.667);
   /* Slightly lighter than background for depth */
   --card-foreground: oklch(0.93 0.015 264.695);
-  
+
   --popover: oklch(0.09 0.048 263.667);
   --popover-foreground: oklch(0.93 0.015 264.695);
-  
+
   /* Primary - Consistent with light mode */
   --primary: oklch(0.43 0.197 257.651);
   /* Refined blue - same as light mode */
   --primary-foreground: oklch(0.98 0.01 264.695);
-  
+
   /* Dark Gray - Secondary */
   --secondary: oklch(0.16 0.041 263.667);
   /* Professional dark gray */
   --secondary-foreground: oklch(0.93 0.015 264.695);
-  
+
   /* Muted Dark */
   --muted: oklch(0.12 0.048 263.667);
   /* Darker gray for muted elements */
   --muted-foreground: oklch(0.6 0.042 264.364);
   /* Muted blue-gray text */
-  
+
   /* Accent Dark */
   --accent: oklch(0.16 0.041 263.667);
   /* Dark accent */
   --accent-foreground: oklch(0.93 0.015 264.695);
-  
+
   /* Professional Red - Destructive */
   --destructive: oklch(0.52 0.236 25.764);
   /* Slightly more vibrant in dark mode */
   --destructive-foreground: oklch(0.98 0.01 264.695);
-  
+
   /* Dark Borders */
   --border: oklch(0.16 0.041 263.667);
   /* Dark border color */
@@ -165,7 +165,7 @@
   /* Input field background */
   --ring: oklch(0.43 0.197 257.651);
   /* Primary blue for focus rings */
-  
+
   /* Sophisticated Chart Colors - Dark Mode */
   --chart-1: oklch(0.43 0.197 257.651);
   /* Primary blue */
@@ -177,7 +177,7 @@
   /* Purple */
   --chart-5: oklch(0.58 0.219 16.439);
   /* Orange */
-  
+
   /* Sidebar Colors - Dark Mode */
   --sidebar: oklch(0.08 0.041 263.667);
   /* Very dark sidebar background */
@@ -198,14 +198,30 @@
   body {
     @apply bg-background text-foreground;
     /* Add subtle background pattern for sophistication */
-    background-image: radial-gradient(circle at 25% 25%, oklch(0.99 0.005 264.695) 0%, transparent 50%), 
-                      radial-gradient(circle at 75% 75%, oklch(0.98 0.008 264.695) 0%, transparent 50%);
+    background-image: radial-gradient(
+        circle at 25% 25%,
+        oklch(0.99 0.005 264.695) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        circle at 75% 75%,
+        oklch(0.98 0.008 264.695) 0%,
+        transparent 50%
+      );
     background-attachment: fixed;
   }
 
   .dark body {
-    background-image: radial-gradient(circle at 25% 25%, oklch(0.08 0.041 263.667) 0%, transparent 50%), 
-                      radial-gradient(circle at 75% 75%, oklch(0.06 0.048 263.667) 0%, transparent 50%);
+    background-image: radial-gradient(
+        circle at 25% 25%,
+        oklch(0.08 0.041 263.667) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        circle at 75% 75%,
+        oklch(0.06 0.048 263.667) 0%,
+        transparent 50%
+      );
   }
 }
 
@@ -213,11 +229,15 @@
   /* Professional Card Enhancements */
   .card {
     @apply bg-card text-card-foreground border-border;
-    box-shadow: 0 1px 3px 0 oklch(0.08 0.041 263.667 / 0.1), 0 1px 2px -1px oklch(0.08 0.041 263.667 / 0.1);
+    box-shadow:
+      0 1px 3px 0 oklch(0.08 0.041 263.667 / 0.1),
+      0 1px 2px -1px oklch(0.08 0.041 263.667 / 0.1);
   }
 
   .dark .card {
-    box-shadow: 0 1px 3px 0 oklch(0.93 0.015 264.695 / 0.1), 0 1px 2px -1px oklch(0.93 0.015 264.695 / 0.1);
+    box-shadow:
+      0 1px 3px 0 oklch(0.93 0.015 264.695 / 0.1),
+      0 1px 2px -1px oklch(0.93 0.015 264.695 / 0.1);
   }
 
   /* Enhanced Button Styles */
@@ -312,19 +332,23 @@
   /* Professional Loading States */
   .loading-skeleton {
     @apply bg-muted animate-pulse;
-    background: linear-gradient(90deg, 
-      oklch(0.96 0.013 264.695) 25%, 
-      oklch(0.92 0.018 264.695) 50%, 
-      oklch(0.96 0.013 264.695) 75%);
+    background: linear-gradient(
+      90deg,
+      oklch(0.96 0.013 264.695) 25%,
+      oklch(0.92 0.018 264.695) 50%,
+      oklch(0.96 0.013 264.695) 75%
+    );
     background-size: 200% 100%;
     animation: loading 1.5s infinite;
   }
 
   .dark .loading-skeleton {
-    background: linear-gradient(90deg, 
-      oklch(0.12 0.048 263.667) 25%, 
-      oklch(0.16 0.041 263.667) 50%, 
-      oklch(0.12 0.048 263.667) 75%);
+    background: linear-gradient(
+      90deg,
+      oklch(0.12 0.048 263.667) 25%,
+      oklch(0.16 0.041 263.667) 50%,
+      oklch(0.12 0.048 263.667) 75%
+    );
     background-size: 200% 100%;
   }
 

@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { XCircle, ArrowLeft, HelpCircle } from 'lucide-react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import React from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { XCircle, ArrowLeft, HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 export default function BillingCancelPage() {
   const searchParams = useSearchParams();
-  const orgId = searchParams.get('org_id');
+  const orgId = searchParams.get("org_id");
 
   return (
     <div className="container mx-auto px-4 py-16">
@@ -21,11 +21,12 @@ export default function BillingCancelPage() {
             </div>
             <CardTitle className="text-red-600">Payment Cancelled</CardTitle>
           </CardHeader>
-          
+
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <p className="text-muted-foreground">
-                Your payment was cancelled. No charges have been made to your account.
+                Your payment was cancelled. No charges have been made to your
+                account.
               </p>
             </div>
 
@@ -33,8 +34,8 @@ export default function BillingCancelPage() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="font-semibold text-blue-800 mb-2">Need help?</h4>
                 <p className="text-sm text-blue-700">
-                  If you encountered any issues during checkout or have questions about our plans, 
-                  we&apos;re here to help.
+                  If you encountered any issues during checkout or have
+                  questions about our plans, we&apos;re here to help.
                 </p>
               </div>
             </div>
@@ -46,15 +47,16 @@ export default function BillingCancelPage() {
                   Back to Billing
                 </Link>
               </Button>
-              
+
               <Button variant="outline" asChild className="w-full">
-                <Link href="/dashboard">
-                  Go to Dashboard
-                </Link>
+                <Link href="/dashboard">Go to Dashboard</Link>
               </Button>
 
               <Button variant="ghost" asChild className="w-full">
-                <Link href="/support" className="flex items-center justify-center">
+                <Link
+                  href="/support"
+                  className="flex items-center justify-center"
+                >
                   <HelpCircle className="w-4 h-4 mr-2" />
                   Contact Support
                 </Link>
@@ -63,7 +65,8 @@ export default function BillingCancelPage() {
 
             <div className="text-xs text-muted-foreground">
               <p>
-                You can try again anytime or choose a different plan that better fits your needs.
+                You can try again anytime or choose a different plan that better
+                fits your needs.
               </p>
             </div>
           </CardContent>

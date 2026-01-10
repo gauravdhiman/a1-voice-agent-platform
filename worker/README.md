@@ -5,6 +5,7 @@ The worker service runs AI voice agents using LiveKit's real-time communication 
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Python 3.11+
 - Docker and Docker Compose
 - Supabase database
@@ -53,31 +54,31 @@ graph TB
         TW[Tool Wrapping Layer]
         DA[DynamicAgent]
     end
-    
+
     subgraph LiveKit["LiveKit SDK"]
         LK[Agent Server]
         LK[Realtime Model - Gemini]
         LK[Room I/O]
     end
-    
+
     subgraph Shared["Shared Code"]
         VS[Voice Agent Service]
         TS[Tool Service]
         LS[LiveKit Service]
     end
-    
+
     subgraph Tools["Tool Implementations"]
         GC[Google Calendar]
         GT[Generic Tools]
         FT[Future Tools]
     end
-    
+
     subgraph Database["Supabase"]
         VA[Voice Agents]
         AT[Agent Tools]
         PT[Platform Tools]
     end
-    
+
     WK --> TR
     WK --> TS
     TR --> GC
@@ -94,12 +95,14 @@ graph TB
 ### Key Components
 
 #### 1. Entry Point (`src/worker.py`)
+
 - Initializes LiveKit AgentServer
 - Registers all tool implementations from `shared/voice_agents/tools/implementations`
 - Creates dynamic agent instances based on database configuration
 - Handles agent lifecycle and tool registration
 
 #### 2. Tool Wrapping Layer
+
 The core innovation of this system - wraps tool methods for LLM compatibility:
 
 **Challenge**: Tool methods have `self` parameter (for accessing instance state), but LiveKit's `@function_tool` decorator cannot accept bound methods.
@@ -118,7 +121,9 @@ The core innovation of this system - wraps tool methods for LLM compatibility:
 **Key Implementation**: See `_create_tool_wrapper()` in `src/worker.py`
 
 #### 3. DynamicAgent Class
+
 Extends LiveKit's `Agent` class with:
+
 - Automatic greeting when agent enters room
 - Dynamic system prompt from database
 - Tool registration and management
@@ -136,7 +141,9 @@ class DynamicAgent(Agent):
 ```
 
 #### 4. Tool Registry
+
 Located in `shared/voice_agents/tools/base/registry_livekit.py`
+
 - Discovers and registers tool implementations
 - Maintains mapping of tool names to classes
 - Provides metadata for LLM integration
@@ -193,6 +200,7 @@ async def check_availability(
 ```
 
 **Benefits**:
+
 - ✅ Exact signature matches for Pydantic model creation
 - ✅ Type hints preserved for LLM schema generation
 - ✅ Delegates to bound method with all parameters
@@ -201,6 +209,7 @@ async def check_availability(
 ### Implementation Details
 
 **Critical Rules**:
+
 1. **Use explicit parameters, not `**kwargs`** - Pydantic creates wrong model with `kwargs` field
 2. **Optional parameters must use `type | None = None`** - Not `str = ""` which creates required field
 3. **Name wrapper correctly** - Use `{func_name}` not `{func_name}_wrapper`
@@ -213,18 +222,20 @@ async def check_availability(
 ### Creating a New Tool
 
 1. **Inherit from BaseTool**:
+
    ```python
    from shared.voice_agents.tools.base.base_tool import BaseTool
-   
+
    class MyTool(BaseTool):
        class Config(BaseConfig):
            my_param: str
-       
+
        class SensitiveConfig(BaseSensitiveConfig):
            api_key: str
    ```
 
 2. **Implement methods**:
+
    ```python
    async def my_action(
        self,
@@ -242,6 +253,7 @@ async def check_availability(
 ### Important: Optional Parameter Pattern
 
 **CORRECT** (truly optional):
+
 ```python
 async def create_event(
     ...,
@@ -251,6 +263,7 @@ async def create_event(
 ```
 
 **INCORRECT** (still required):
+
 ```python
 async def create_event(
     ...,
@@ -264,17 +277,20 @@ async def create_event(
 ## 🔗 Integration Points
 
 ### Database Connection
+
 - Fetches voice agent configuration from database
 - Loads associated tools and functions
 - Retrieves OAuth tokens for authenticated tools
 
 ### LiveKit Server
+
 - Receives inbound calls via webhooks
 - Creates rooms for voice sessions
 - Connects agents to rooms
 - Handles audio streaming
 
 ### Tool Services
+
 - **Tool Service** (`shared/voice_agents/tool_service.py`): Fetches tools from database
 - **LiveKit Service** (`shared/voice_agents/livekit_service.py`): Creates LiveKit rooms
 - **Voice Agent Service** (`shared/voice_agents/service.py`): Manages voice agents
@@ -282,7 +298,9 @@ async def create_event(
 ## 🧪 Testing
 
 ### Test File Structure
+
 `test_livekit_wrapping.py` contains 6 different wrapper approaches:
+
 - Test 1: `**kwargs` + annotations (❌ Failed)
 - Test 2: Only context param (❌ Failed)
 - Test 3: Explicit params matching (✅ Success)
@@ -337,19 +355,23 @@ async def entrypoint(
 ## 📊 Key Patterns
 
 ### No Session Manager
+
 Worker fetches tools directly from database each call, no in-memory session manager.
 
 ### Two-Tier Tool Service
+
 - **Frontend**: Gets safe tool metadata and config schemas
 - **Worker**: Gets full tool objects with OAuth tokens
 
 ### LiveKit Room Creation
+
 1. Backend validates agent and initiates call
 2. LiveKit dispatch creates room with agent_id + phone_number
 3. Worker extracts phone from room name
 4. Agent connects and greets user
 
 ### Agent Greeting
+
 - Automatic greeting when agent enters room
 - Eliminates awkward silence
 - Personalized with agent name from database
@@ -398,6 +420,7 @@ docker logs -f ai-voice-agent-platform-worker-dev-1
 ---
 
 For questions or issues:
+
 - Check [LiveKit Tool Wrapping](.docs/livekit_tool_wrapping_architecture.md)
 - Review [test_livekit_wrapping.py](test_livekit_wrapping.py)
 - Examine worker logs with debug enabled

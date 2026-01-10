@@ -1,14 +1,20 @@
-'use client';
+"use client";
 
-import React, { useMemo, useCallback, useEffect } from 'react';
-import { useOrganization } from '@/contexts/organization-context';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
+import React, { useMemo, useCallback, useEffect } from "react";
+import { useOrganization } from "@/contexts/organization-context";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +22,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Bot,
   Phone,
@@ -28,47 +34,61 @@ import {
   Settings,
   ChevronRight,
   Loader2,
-} from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { toast } from 'sonner';
-import { AnimatedTabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { useMyAgents, useCreateAgent, useDeleteAgent } from '@/hooks/use-agent-queries';
-import { AgentDeleteDialog } from '@/components/agents/agent-delete-dialog';
-import type { VoiceAgent } from '@/types/agent';
+} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import {
+  AnimatedTabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
+  useMyAgents,
+  useCreateAgent,
+  useDeleteAgent,
+} from "@/hooks/use-agent-queries";
+import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
+import type { VoiceAgent } from "@/types/agent";
 
 export default function AgentsPage() {
   const { organizations, currentOrganization } = useOrganization();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [selectedOrgId, setSelectedOrgId] = React.useState<string>('all');
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState('list');
+  const [selectedOrgId, setSelectedOrgId] = React.useState<string>("all");
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [activeTab, setActiveTab] = React.useState("list");
 
   // Agent creation state
   const [agentDialogOpen, setAgentDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
-  const [selectedAgent, setSelectedAgent] = React.useState<VoiceAgent | null>(null);
+  const [selectedAgent, setSelectedAgent] = React.useState<VoiceAgent | null>(
+    null,
+  );
   const [agentForm, setAgentForm] = React.useState({
-    name: '',
-    phone_number: '',
-    system_prompt: '',
+    name: "",
+    phone_number: "",
+    system_prompt: "",
     is_active: true,
-    organization_id: ''
+    organization_id: "",
   });
 
   // Sync tab state with URL
   useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'list' || tabParam === 'grid') {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "list" || tabParam === "grid") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
 
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-    router.push(`/agents?tab=${value}`, { scroll: false });
-  }, [router]);
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setActiveTab(value);
+      router.push(`/agents?tab=${value}`, { scroll: false });
+    },
+    [router],
+  );
 
   // Fetch agents with React Query
   const { data: agents = [], isLoading, error } = useMyAgents();
@@ -80,15 +100,18 @@ export default function AgentsPage() {
   const filteredAgents = useMemo(() => {
     let filtered = agents;
 
-    if (selectedOrgId !== 'all') {
-      filtered = filtered.filter(agent => agent.organization_id === selectedOrgId);
+    if (selectedOrgId !== "all") {
+      filtered = filtered.filter(
+        (agent) => agent.organization_id === selectedOrgId,
+      );
     }
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(agent =>
-        agent.name.toLowerCase().includes(query) ||
-        (agent.phone_number && agent.phone_number.includes(query))
+      filtered = filtered.filter(
+        (agent) =>
+          agent.name.toLowerCase().includes(query) ||
+          (agent.phone_number && agent.phone_number.includes(query)),
       );
     }
 
@@ -101,23 +124,23 @@ export default function AgentsPage() {
 
   const handleAddAgent = useCallback(() => {
     setAgentForm({
-      name: '',
-      phone_number: '',
-      system_prompt: '',
+      name: "",
+      phone_number: "",
+      system_prompt: "",
       is_active: true,
-      organization_id: currentOrganization?.id || ''
+      organization_id: currentOrganization?.id || "",
     });
     setAgentDialogOpen(true);
   }, [currentOrganization?.id]);
 
   const handleSaveAgent = useCallback(async () => {
     if (!agentForm.name) {
-      toast.error('Agent name is required');
+      toast.error("Agent name is required");
       return;
     }
 
     if (!agentForm.organization_id) {
-      toast.error('Please select an organization');
+      toast.error("Please select an organization");
       return;
     }
 
@@ -127,11 +150,11 @@ export default function AgentsPage() {
         phone_number: agentForm.phone_number,
         system_prompt: agentForm.system_prompt,
         is_active: agentForm.is_active,
-        organization_id: agentForm.organization_id
+        organization_id: agentForm.organization_id,
       });
       setAgentDialogOpen(false);
     } catch (error) {
-      console.error('Failed to create agent:', error);
+      console.error("Failed to create agent:", error);
     }
   }, [agentForm, createAgentMutation]);
 
@@ -140,25 +163,34 @@ export default function AgentsPage() {
     setDeleteDialogOpen(true);
   }, []);
 
-  const handleDeleteSuccess = useCallback(async (agentId: string) => {
-    try {
-      await deleteAgentMutation.mutateAsync(agentId);
-      setDeleteDialogOpen(false);
-      setSelectedAgent(null);
-    } catch (error) {
-      console.error('Failed to delete agent:', error);
-      throw error;
-    }
-  }, [deleteAgentMutation]);
+  const handleDeleteSuccess = useCallback(
+    async (agentId: string) => {
+      try {
+        await deleteAgentMutation.mutateAsync(agentId);
+        setDeleteDialogOpen(false);
+        setSelectedAgent(null);
+      } catch (error) {
+        console.error("Failed to delete agent:", error);
+        throw error;
+      }
+    },
+    [deleteAgentMutation],
+  );
 
-  const handleConfigureAgent = useCallback((agentId: string) => {
-    router.push(`/agents/${agentId}`);
-  }, [router]);
+  const handleConfigureAgent = useCallback(
+    (agentId: string) => {
+      router.push(`/agents/${agentId}`);
+    },
+    [router],
+  );
 
-  const getOrgName = useCallback((orgId: string) => {
-    const org = allOrganizations.find(o => o.id === orgId);
-    return org?.name || 'Unknown Organization';
-  }, [allOrganizations]);
+  const getOrgName = useCallback(
+    (orgId: string) => {
+      const org = allOrganizations.find((o) => o.id === orgId);
+      return org?.name || "Unknown Organization";
+    },
+    [allOrganizations],
+  );
 
   if (error) {
     return (
@@ -189,7 +221,11 @@ export default function AgentsPage() {
         </Button>
       </div>
 
-      <AnimatedTabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+      <AnimatedTabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="space-y-6"
+      >
         <TabsList className="w-full">
           <TabsTrigger value="list">List View</TabsTrigger>
           <TabsTrigger value="grid">Grid View</TabsTrigger>
@@ -238,7 +274,9 @@ export default function AgentsPage() {
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-3 text-muted-foreground">Loading agents...</span>
+              <span className="ml-3 text-muted-foreground">
+                Loading agents...
+              </span>
             </div>
           ) : filteredAgents.length === 0 ? (
             <Card>
@@ -246,9 +284,9 @@ export default function AgentsPage() {
                 <Bot className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
                 <h3 className="text-lg font-semibold mb-2">No agents found</h3>
                 <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                  {searchQuery || selectedOrgId !== 'all'
-                    ? 'No agents match your search or filter criteria.'
-                    : 'You haven\'t created any voice agents yet.'}
+                  {searchQuery || selectedOrgId !== "all"
+                    ? "No agents match your search or filter criteria."
+                    : "You haven't created any voice agents yet."}
                 </p>
                 <Button onClick={handleAddAgent}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -259,7 +297,10 @@ export default function AgentsPage() {
           ) : (
             <div className="space-y-3">
               {filteredAgents.map((agent) => (
-                <Card key={agent.id} className="hover:border-primary/50 transition-colors">
+                <Card
+                  key={agent.id}
+                  className="hover:border-primary/50 transition-colors"
+                >
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1">
@@ -268,15 +309,24 @@ export default function AgentsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-3 mb-2">
-                            <h4 className="font-semibold text-base truncate">{agent.name}</h4>
-                            <Badge variant={agent.is_active ? "default" : "secondary"} className="h-5 scale-90 origin-left">
-                              {agent.is_active ? 'Active' : 'Inactive'}
+                            <h4 className="font-semibold text-base truncate">
+                              {agent.name}
+                            </h4>
+                            <Badge
+                              variant={
+                                agent.is_active ? "default" : "secondary"
+                              }
+                              className="h-5 scale-90 origin-left"
+                            >
+                              {agent.is_active ? "Active" : "Inactive"}
                             </Badge>
                           </div>
                           <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                             <span className="flex items-center">
                               <Building2 className="h-3.5 w-3.5 mr-1.5" />
-                              <span className="truncate">{getOrgName(agent.organization_id)}</span>
+                              <span className="truncate">
+                                {getOrgName(agent.organization_id)}
+                              </span>
                             </span>
                             {agent.phone_number && (
                               <span className="flex items-center">
@@ -356,7 +406,9 @@ export default function AgentsPage() {
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-3 text-muted-foreground">Loading agents...</span>
+              <span className="ml-3 text-muted-foreground">
+                Loading agents...
+              </span>
             </div>
           ) : filteredAgents.length === 0 ? (
             <Card>
@@ -364,9 +416,9 @@ export default function AgentsPage() {
                 <Bot className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
                 <h3 className="text-lg font-semibold mb-2">No agents found</h3>
                 <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                  {searchQuery || selectedOrgId !== 'all'
-                    ? 'No agents match your search or filter criteria.'
-                    : 'You haven\'t created any voice agents yet.'}
+                  {searchQuery || selectedOrgId !== "all"
+                    ? "No agents match your search or filter criteria."
+                    : "You haven't created any voice agents yet."}
                 </p>
                 <Button onClick={handleAddAgent}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -377,14 +429,22 @@ export default function AgentsPage() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredAgents.map((agent) => (
-                <Card key={agent.id} className="overflow-hidden hover:border-primary/50 transition-colors">
+                <Card
+                  key={agent.id}
+                  className="overflow-hidden hover:border-primary/50 transition-colors"
+                >
                   <CardContent className="p-5">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-base truncate mb-2">{agent.name}</h4>
+                        <h4 className="font-semibold text-base truncate mb-2">
+                          {agent.name}
+                        </h4>
                         <div className="flex items-center space-x-2">
-                          <Badge variant={agent.is_active ? "default" : "secondary"} className="h-5 scale-90 origin-left">
-                            {agent.is_active ? 'Active' : 'Inactive'}
+                          <Badge
+                            variant={agent.is_active ? "default" : "secondary"}
+                            className="h-5 scale-90 origin-left"
+                          >
+                            {agent.is_active ? "Active" : "Inactive"}
                           </Badge>
                         </div>
                       </div>
@@ -403,7 +463,9 @@ export default function AgentsPage() {
                     <div className="space-y-2 mt-4">
                       <div className="flex items-center text-sm">
                         <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                        <span className="truncate">{getOrgName(agent.organization_id)}</span>
+                        <span className="truncate">
+                          {getOrgName(agent.organization_id)}
+                        </span>
                       </div>
                       {agent.phone_number && (
                         <div className="flex items-center text-sm">
@@ -414,7 +476,9 @@ export default function AgentsPage() {
                       <div className="flex items-center text-sm">
                         <MessageSquare className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
                         <span className="truncate text-xs italic text-muted-foreground">
-                          {agent.system_prompt ? 'Custom prompt configured' : 'Using default prompt'}
+                          {agent.system_prompt
+                            ? "Custom prompt configured"
+                            : "Using default prompt"}
                         </span>
                       </div>
                     </div>
@@ -451,7 +515,12 @@ export default function AgentsPage() {
               <select
                 id="agent-org"
                 value={agentForm.organization_id}
-                onChange={(e) => setAgentForm({ ...agentForm, organization_id: e.target.value })}
+                onChange={(e) =>
+                  setAgentForm({
+                    ...agentForm,
+                    organization_id: e.target.value,
+                  })
+                }
                 className="w-full px-3 py-2.5 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               >
                 <option value="">Select an organization</option>
@@ -467,7 +536,9 @@ export default function AgentsPage() {
               <Input
                 id="agent-name"
                 value={agentForm.name}
-                onChange={(e) => setAgentForm({ ...agentForm, name: e.target.value })}
+                onChange={(e) =>
+                  setAgentForm({ ...agentForm, name: e.target.value })
+                }
                 placeholder="Support Agent, Sales Bot, etc."
               />
             </div>
@@ -476,40 +547,59 @@ export default function AgentsPage() {
               <Input
                 id="agent-phone"
                 value={agentForm.phone_number}
-                onChange={(e) => setAgentForm({ ...agentForm, phone_number: e.target.value })}
+                onChange={(e) =>
+                  setAgentForm({ ...agentForm, phone_number: e.target.value })
+                }
                 placeholder="+1234567890"
               />
-              <p className="text-xs text-muted-foreground">Twilio phone number for this agent</p>
+              <p className="text-xs text-muted-foreground">
+                Twilio phone number for this agent
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="agent-prompt">System Prompt (Optional)</Label>
               <Textarea
                 id="agent-prompt"
                 value={agentForm.system_prompt}
-                onChange={(e) => setAgentForm({ ...agentForm, system_prompt: e.target.value })}
+                onChange={(e) =>
+                  setAgentForm({ ...agentForm, system_prompt: e.target.value })
+                }
                 placeholder="You are a helpful customer support agent..."
                 className="min-h-[150px]"
               />
-              <p className="text-xs text-muted-foreground">Instructions for the AI on how to behave</p>
+              <p className="text-xs text-muted-foreground">
+                Instructions for the AI on how to behave
+              </p>
             </div>
             <div className="flex items-center space-x-2 pt-2">
               <Checkbox
                 id="agent-active"
                 checked={agentForm.is_active}
-                onCheckedChange={(checked) => setAgentForm({ ...agentForm, is_active: checked === true })}
+                onCheckedChange={(checked) =>
+                  setAgentForm({ ...agentForm, is_active: checked === true })
+                }
               />
-              <Label htmlFor="agent-active" className="text-sm font-normal cursor-pointer">
+              <Label
+                htmlFor="agent-active"
+                className="text-sm font-normal cursor-pointer"
+              >
                 Agent is active and ready to handle calls
               </Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAgentDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setAgentDialogOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={handleSaveAgent}
-              disabled={createAgentMutation.isPending || !agentForm.name || !agentForm.organization_id}
+              disabled={
+                createAgentMutation.isPending ||
+                !agentForm.name ||
+                !agentForm.organization_id
+              }
             >
-              {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
+              {createAgentMutation.isPending ? "Creating..." : "Create Agent"}
             </Button>
           </DialogFooter>
         </DialogContent>

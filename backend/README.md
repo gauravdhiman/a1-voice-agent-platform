@@ -5,6 +5,7 @@ FastAPI backend for the multi-tenant SaaS platform with health endpoints and Doc
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Python 3.11+
 - pip
 
@@ -33,6 +34,7 @@ The API will be available at [http://localhost:8000](http://localhost:8000)
 ## 🏗️ Architecture
 
 ### Tech Stack
+
 - **Framework**: FastAPI 0.115.6
 - **Python**: 3.11+
 - **Settings**: Pydantic Settings for type-safe configuration
@@ -66,12 +68,12 @@ backend/
 
 ### Health Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Root API information |
-| `/health` | GET | Comprehensive health check |
-| `/health/ready` | GET | Readiness check (Kubernetes) |
-| `/health/live` | GET | Liveness check (Kubernetes) |
+| Endpoint        | Method | Description                  |
+| --------------- | ------ | ---------------------------- |
+| `/`             | GET    | Root API information         |
+| `/health`       | GET    | Comprehensive health check   |
+| `/health/ready` | GET    | Readiness check (Kubernetes) |
+| `/health/live`  | GET    | Liveness check (Kubernetes)  |
 
 ### Example Response
 
@@ -135,6 +137,7 @@ print(settings.cors_origins)
 ## 🐳 Docker
 
 ### Development
+
 ```bash
 # Build development image
 docker build -f Dockerfile.dev -t saas-backend-dev .
@@ -144,6 +147,7 @@ docker run -p 8000:8000 -v $(pwd):/app saas-backend-dev
 ```
 
 ### Production
+
 ```bash
 # Build production image
 docker build -t saas-backend .
@@ -201,6 +205,7 @@ black . && isort .
 ### Future Integrations
 
 The backend is prepared for:
+
 - **Supabase**: Database and authentication
 - **Redis**: Caching and session storage
 - **JWT**: Authentication tokens
@@ -212,19 +217,23 @@ The backend is prepared for:
 This project uses Alembic for database schema migrations while continuing to use Supabase client for runtime data operations.
 
 ### Setup
+
 1. Install development dependencies (includes Alembic and SQLAlchemy):
+
    ```bash
    pip install -r requirements-dev.txt
    ```
 
 2. Set the DATABASE_URL environment variable with your Supabase connection string:
+
    ```bash
    export DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres"
    ```
-   
+
    You can find this connection string in your Supabase dashboard under Settings → Database → Connection String.
-   
+
    **To get your database password**:
+
    1. Go to your Supabase project dashboard
    2. Navigate to "Settings" → "Database"
    3. Under "Connection Info", you'll see your database password (different from your Supabase project password)
@@ -232,6 +241,7 @@ This project uses Alembic for database schema migrations while continuing to use
 ### Running Migrations
 
 #### Using Local Environment
+
 ```bash
 # Apply all pending migrations
 alembic upgrade head
@@ -244,6 +254,7 @@ alembic revision -m "Description of the migration"
 ```
 
 #### Using Docker (Development Environment)
+
 ```bash
 # Apply all pending migrations
 docker compose -f docker-compose.dev.yml run --rm backend-dev alembic upgrade head

@@ -5,7 +5,8 @@ This document provides coding guidelines and commands for AI agents working in t
 ## Setup Commands
 
 # Install Python dependencies
-```bash
+
+````bash
 cd backend
 activate #this will activate the virtual environment
 uv pip install -r requirements-dev.txt # only run if installation of packages required, virtual env should have already existing packages.
@@ -29,7 +30,7 @@ pre-commit run --all-files                            # Run all pre-commit hooks
 uvicorn main:app --reload                            # Dev server
 alembic upgrade head                                 # Migrate database
 alembic revision --autogenerate -m "description"     # Create migration
-```
+````
 
 ### Frontend (Next.js/TypeScript)
 
@@ -43,7 +44,9 @@ npx tsc --noEmit    # Type check
 ```
 
 ### Docker
+
 Run these commands from the root directory of the project.
+
 ```bash
 ./start.sh build dev                               # Build dev container images
 ./start.sh build prod                              # Build prod container images
@@ -189,6 +192,7 @@ class TestExample:
 ## Pre-Commit Hooks
 
 The project uses pre-commit hooks for code quality:
+
 - Black (Python formatter)
 - isort (Python import sorter)
 - Flake8 (Python linter)
@@ -200,14 +204,16 @@ Run `pre-commit run --all-files` manually before pushing.
 ## Important Notes
 
 ### Documentation
+
 - Keep the project documentation always up-to-date in `docs` folder, organized properly in sub-folders for each module / functionality
-    - Always ensure the structure of documentation in `docs` folder is rational, intuitive to user and easy to follow.
-    - Always ensure cross references to other documents or files (docs and code) are accurate and not broken.
-    - For diagrams, use mermaid syntax - ensure it is valid.
+  - Always ensure the structure of documentation in `docs` folder is rational, intuitive to user and easy to follow.
+  - Always ensure cross references to other documents or files (docs and code) are accurate and not broken.
+  - For diagrams, use mermaid syntax - ensure it is valid.
 - For each key directories (`backend`, `frontend`, `worker`, `shared`), add a `README.md` file with the module documentation) and keep that always up to date.
 - For each key files, add a docstring with the file documentation
 
 ### Development
+
 - Use `async/await` for all async operations
 - Use `pydantic` for data validation
 - Use `FastAPI` for backend APIs
@@ -216,7 +222,6 @@ Run `pre-commit run --all-files` manually before pushing.
 - Use Docker for development and production. Even when start application on local machine for dev, use `./start.sh` script to manage docker containers.
 - Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
 - You can create alembic migrations scripts but never run them without user's permission. Always ask first.
-
 
 <skills_system priority="1">
 
@@ -227,15 +232,17 @@ Run `pre-commit run --all-files` manually before pushing.
 When users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.
 
 How to use skills:
+
 - Invoke: Bash("openskills read <skill-name>")
 - The skill content will load with detailed instructions on how to complete the task
 - Base directory provided in output for resolving bundled resources (references/, scripts/, assets/)
 
 Usage notes:
+
 - Only use skills listed in <available_skills> below
 - Do not invoke a skill that is already loaded in your context
 - Each skill invocation is stateless
-</usage>
+  </usage>
 
 <available_skills>
 
@@ -300,6 +307,7 @@ Usage notes:
 </skill>
 
 </available_skills>
+
 <!-- SKILLS_TABLE_END -->
 
 </skills_system>

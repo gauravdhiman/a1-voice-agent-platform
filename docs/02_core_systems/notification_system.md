@@ -13,7 +13,7 @@ The Email Notification System provides a comprehensive solution for sending tran
 ✅ **Notification Logging** - Track all sent notifications with delivery status  
 ✅ **Multiple Categories** - Organize notifications by category (auth, billing, organization, etc.)  
 ✅ **Resend Integration** - Reliable email delivery via Resend.com  
-✅ **Configurable Sender** - Configure sender email and name per template or globally  
+✅ **Configurable Sender** - Configure sender email and name per template or globally
 
 ## Architecture
 
@@ -106,6 +106,7 @@ python scripts/seed_notification_events.py
 ```
 
 This will create the following notification events:
+
 - `user.signup` - Welcome email
 - `user.password_reset` - Password reset email
 - `user.email_verification` - Email verification
@@ -121,6 +122,7 @@ This will create the following notification events:
 ### Specialized Notification Requests
 
 #### Request Email Verification
+
 ```http
 POST /api/notifications/request-verification-email
 Authorization: Bearer {token}
@@ -133,6 +135,7 @@ Authorization: Bearer {token}
 ```
 
 Response:
+
 ```json
 {
   "success": true,
@@ -147,6 +150,7 @@ This endpoint allows authenticated users to request an email verification notifi
 ### Admin Endpoints
 
 #### Create Notification Event
+
 ```http
 POST /api/notifications/admin/events
 Authorization: Bearer {token}
@@ -163,12 +167,14 @@ Authorization: Bearer {token}
 ```
 
 #### List Notification Events
+
 ```http
 GET /api/notifications/admin/events?category=auth&is_enabled=true
 Authorization: Bearer {token}
 ```
 
 #### Update Notification Event
+
 ```http
 PUT /api/notifications/admin/events/{event_id}
 Authorization: Bearer {token}
@@ -179,12 +185,14 @@ Authorization: Bearer {token}
 ```
 
 #### Delete Notification Event
+
 ```http
 DELETE /api/notifications/admin/events/{event_id}
 Authorization: Bearer {token}
 ```
 
 #### Create Notification Template
+
 ```http
 POST /api/notifications/admin/templates
 Authorization: Bearer {token}
@@ -203,12 +211,14 @@ Authorization: Bearer {token}
 ```
 
 #### List Notification Templates
+
 ```http
 GET /api/notifications/admin/templates?is_active=true
 Authorization: Bearer {token}
 ```
 
 #### Update Notification Template
+
 ```http
 PUT /api/notifications/admin/templates/{template_id}
 Authorization: Bearer {token}
@@ -220,6 +230,7 @@ Authorization: Bearer {token}
 ```
 
 #### Delete Notification Template
+
 ```http
 DELETE /api/notifications/admin/templates/{template_id}
 Authorization: Bearer {token}
@@ -227,20 +238,22 @@ Authorization: Bearer {token}
 
 ### Public Endpoints
 
-
 #### Get Notification Logs
+
 ```http
 GET /api/notifications/logs?organization_id={uuid}&status_filter=sent&limit=50
 Authorization: Bearer {token}
 ```
 
 #### Get Notification Stats
+
 ```http
 GET /api/notifications/stats?organization_id={uuid}
 Authorization: Bearer {token}
 ```
 
 Response:
+
 ```json
 {
   "total_sent": 150,
@@ -260,11 +273,13 @@ Response:
 ```
 
 #### Health Check
+
 ```http
 GET /api/notifications/health
 ```
 
 Response:
+
 ```json
 {
   "status": "healthy",
@@ -278,34 +293,42 @@ Response:
 The system includes 9 beautiful, pre-built email templates:
 
 ### 1. Welcome Email (`user.signup`)
+
 Sent when a new user creates an account.
 
 **Variables:**
+
 - `user_name` - User's name
 - `user_email` - User's email address
 - `created_at` - Account creation date
 - `dashboard_url` - Link to dashboard
 
 ### 2. Password Reset (`user.password_reset`)
+
 Sent when a user requests a password reset.
 
 **Variables:**
+
 - `user_name` - User's name
 - `reset_url` - Password reset link
 - `expiry_hours` - Link expiration time
 
 ### 3. Email Verification (`user.email_verification`)
+
 Sent to verify a user's email address.
 
 **Variables:**
+
 - `user_name` - User's name
 - `verification_url` - Verification link
 - `expiry_hours` - Link expiration time
 
 ### 4. Subscription Activated (`subscription.created`)
+
 Sent when a subscription is successfully created.
 
 **Variables:**
+
 - `user_name` - User's name
 - `plan_name` - Subscription plan name
 - `billing_interval` - monthly/annual
@@ -315,9 +338,11 @@ Sent when a subscription is successfully created.
 - `billing_dashboard_url` - Link to billing dashboard
 
 ### 5. Subscription Cancelled (`subscription.cancelled`)
+
 Sent when a subscription is cancelled.
 
 **Variables:**
+
 - `user_name` - User's name
 - `plan_name` - Plan name
 - `access_until` - Access end date
@@ -325,18 +350,22 @@ Sent when a subscription is cancelled.
 - `feedback_url` - Feedback form link
 
 ### 6. Low Credit Balance (`credits.low_balance`)
+
 Warning email when credits are running low.
 
 **Variables:**
+
 - `user_name` - User's name
 - `current_credits` - Current credit balance
 - `organization_name` - Organization name
 - `purchase_credits_url` - Link to purchase credits
 
 ### 7. Credits Purchased (`credits.purchased`)
+
 Confirmation when credits are purchased.
 
 **Variables:**
+
 - `user_name` - User's name
 - `credits_added` - Credits added
 - `amount_paid` - Payment amount
@@ -345,9 +374,11 @@ Confirmation when credits are purchased.
 - `receipt_url` - Receipt link
 
 ### 8. Organization Invitation (`organization.invitation`)
+
 Invite a user to join an organization.
 
 **Variables:**
+
 - `recipient_name` - Invitee's name
 - `inviter_name` - Inviter's name
 - `organization_name` - Organization name
@@ -356,9 +387,11 @@ Invite a user to join an organization.
 - `expiry_days` - Invitation expiration
 
 ### 9. Payment Failed (`billing.payment_failed`)
+
 Alert when a payment fails.
 
 **Variables:**
+
 - `user_name` - User's name
 - `amount` - Payment amount
 - `payment_method` - Payment method used
@@ -368,6 +401,7 @@ Alert when a payment fails.
 ## Template Design
 
 All templates feature:
+
 - **Responsive Design** - Mobile-friendly layout
 - **Modern Styling** - Gradient headers, clean typography
 - **Consistent Branding** - Unified color scheme (purple gradient)
@@ -467,7 +501,7 @@ from src.notifications.models import SendNotificationRequest
 
 async def signup(email: str, password: str, metadata: dict):
     # ... existing signup logic ...
-    
+
     # Send welcome email
     await notification_service.send_notification(
         SendNotificationRequest(
@@ -495,7 +529,7 @@ from src.notifications.models import SendNotificationRequest
 
 async def handle_subscription_created(event_data):
     # ... existing logic ...
-    
+
     # Send subscription confirmation email
     await notification_service.send_notification(
         SendNotificationRequest(
@@ -601,6 +635,7 @@ print(f"Total failed: {stats.total_failed}")
 ## Support
 
 For issues or questions:
+
 - Check logs: `/api/notifications/logs`
 - View stats: `/api/notifications/stats`
 - Health check: `/api/notifications/health`

@@ -2,35 +2,49 @@
 Pydantic models for Role management in RBAC.
 """
 
-from typing import Optional
-from pydantic import BaseModel, Field
-from uuid import UUID
 from datetime import datetime
+from typing import Optional
+from uuid import UUID
 
+from pydantic import BaseModel, Field
 from src.rbac.permissions.models import Permission
 
 
 class RoleBase(BaseModel):
     """Base model for Role."""
+
     name: str = Field(..., min_length=1, max_length=50, description="Role name")
-    description: Optional[str] = Field(None, max_length=500, description="Role description")
-    is_system_role: bool = Field(default=False, description="Whether this is a system role")
+    description: Optional[str] = Field(
+        None, max_length=500, description="Role description"
+    )
+    is_system_role: bool = Field(
+        default=False, description="Whether this is a system role"
+    )
 
 
 class RoleCreate(RoleBase):
     """Model for creating a new role."""
+
     pass
 
 
 class RoleUpdate(BaseModel):
     """Model for updating a role."""
-    name: Optional[str] = Field(None, min_length=1, max_length=50, description="Role name")
-    description: Optional[str] = Field(None, max_length=500, description="Role description")
-    is_system_role: Optional[bool] = Field(None, description="Whether this is a system role")
+
+    name: Optional[str] = Field(
+        None, min_length=1, max_length=50, description="Role name"
+    )
+    description: Optional[str] = Field(
+        None, max_length=500, description="Role description"
+    )
+    is_system_role: Optional[bool] = Field(
+        None, description="Whether this is a system role"
+    )
 
 
 class Role(RoleBase):
     """Model for a role with all attributes."""
+
     id: UUID = Field(..., description="Role ID")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
@@ -38,10 +52,17 @@ class Role(RoleBase):
 
 class RoleWithPermissions(Role):
     """Model for a role with its associated permissions."""
-    permissions: list[Permission] = Field(default=[], description="list of permissions assigned to this role")
+
+    permissions: list[Permission] = Field(
+        default=[], description="list of permissions assigned to this role"
+    )
+
 
 class UserRoleWithPermissions(BaseModel):
     """User role with organization context."""
+
     role: RoleWithPermissions = Field(..., description="Role with permissions")
-    organization_id: Optional[UUID] = Field(None, description="Organization ID (None for platform-wide roles)")
+    organization_id: Optional[UUID] = Field(
+        None, description="Organization ID (None for platform-wide roles)"
+    )
     user_role_id: UUID = Field(..., description="User role assignment ID")

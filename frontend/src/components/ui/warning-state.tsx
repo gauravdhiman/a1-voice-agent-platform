@@ -1,39 +1,36 @@
-import React from 'react';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import React from "react";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface WarningStateProps {
   title?: string;
   message?: string;
   onAction?: () => void;
   actionLabel?: string;
-  variant?: 'default' | 'minimal';
+  variant?: "default" | "minimal";
   className?: string;
 }
 
-export function WarningState({ 
-  title = 'Warning',
-  message = 'Please check the information and try again.',
+export function WarningState({
+  title = "Warning",
+  message = "Please check the information and try again.",
   onAction,
-  actionLabel = 'Go back',
-  variant = 'default',
-  className 
+  actionLabel = "Go back",
+  variant = "default",
+  className,
 }: WarningStateProps) {
-  if (variant === 'minimal') {
+  if (variant === "minimal") {
     return (
-      <div className={cn(
-        'flex items-center justify-center h-64',
-        className
-      )}>
+      <div className={cn("flex items-center justify-center h-64", className)}>
         <div className="flex flex-col items-center space-y-2 text-center">
           <AlertTriangle className="h-6 w-6 text-yellow-500" />
           <div className="text-yellow-700 text-sm">{message}</div>
           {onAction && (
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onAction}
               className="mt-2"
             >
@@ -47,7 +44,7 @@ export function WarningState({
   }
 
   return (
-    <div className={cn('p-6', className)}>
+    <div className={cn("p-6", className)}>
       <Card className="border-yellow-200">
         <CardContent className="p-6">
           <div className="flex flex-col items-center text-center space-y-4">

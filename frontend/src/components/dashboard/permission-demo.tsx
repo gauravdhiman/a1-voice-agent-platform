@@ -1,21 +1,27 @@
 // components/dashboard/permission-demo.tsx
-'use client';
+"use client";
 
-import React from 'react';
-import { useRBAC } from '@/hooks/use-rbac';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Shield, UserPlus, CreditCard, Settings } from 'lucide-react';
+import React from "react";
+import { useRBAC } from "@/hooks/use-rbac";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Shield, UserPlus, CreditCard, Settings } from "lucide-react";
 
 export function PermissionDemo() {
   const [, actions] = useRBAC();
 
   // Check various permissions
-  const canCreateUsers = actions.hasPermission('user:create');
-  const canReadBilling = actions.hasPermission('billing:read');
-  const canManageSettings = actions.hasPermission('platform:settings');
-  const isAdmin = actions.hasRole('platform_admin');
+  const canCreateUsers = actions.hasPermission("user:create");
+  const canReadBilling = actions.hasPermission("billing:read");
+  const canManageSettings = actions.hasPermission("platform:settings");
+  const isAdmin = actions.hasRole("platform_admin");
 
   return (
     <div className="space-y-6">
@@ -26,7 +32,8 @@ export function PermissionDemo() {
             Permission-Based UI Demo
           </CardTitle>
           <CardDescription>
-            This component demonstrates how UI elements can be shown or hidden based on user permissions
+            This component demonstrates how UI elements can be shown or hidden
+            based on user permissions
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -133,15 +140,19 @@ export function PermissionDemo() {
             )}
           </div>
 
-          {!canCreateUsers && !canReadBilling && !canManageSettings && !isAdmin && (
-            <Alert>
-              <AlertTitle>No Special Permissions</AlertTitle>
-              <AlertDescription>
-                You don{`'`}t have any special permissions beyond basic access. 
-                Contact your administrator if you need additional permissions.
-              </AlertDescription>
-            </Alert>
-          )}
+          {!canCreateUsers &&
+            !canReadBilling &&
+            !canManageSettings &&
+            !isAdmin && (
+              <Alert>
+                <AlertTitle>No Special Permissions</AlertTitle>
+                <AlertDescription>
+                  You don{`'`}t have any special permissions beyond basic
+                  access. Contact your administrator if you need additional
+                  permissions.
+                </AlertDescription>
+              </Alert>
+            )}
         </CardContent>
       </Card>
     </div>

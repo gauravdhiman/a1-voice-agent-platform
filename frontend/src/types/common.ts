@@ -2,7 +2,7 @@
  * Common/shared type definitions
  */
 
-import React from 'react';
+import React from "react";
 
 // Base component props
 export interface BaseProps {
@@ -31,7 +31,7 @@ export interface BaseEntity {
 }
 
 // Status types
-export type Status = 'active' | 'inactive' | 'pending' | 'suspended';
+export type Status = "active" | "inactive" | "pending" | "suspended";
 
 // Theme types
-export type Theme = 'light' | 'dark' | 'system';
+export type Theme = "light" | "dark" | "system";

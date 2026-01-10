@@ -7,6 +7,7 @@ The `credit_transactions` table uses a polymorphic foreign key pattern with `sou
 ## The Problem
 
 Originally, the polymorphic relationship had these issues:
+
 - Unclear mapping between `source` values and referenced tables
 - No validation to ensure `source_id` references the correct table
 - Potential for data integrity issues
@@ -21,10 +22,10 @@ We implemented a hybrid approach that combines semantic enum values with explici
 ```python
 class TransactionSource(str, Enum):
     """Credit transaction source enumeration.
-    
+
     Maps to the following tables via source_id:
     - SUBSCRIPTION -> organization_subscriptions
-    - PURCHASE -> credit_products  
+    - PURCHASE -> credit_products
     - EVENT_CONSUMPTION -> credit_events
     - EXPIRY -> None (no source_id needed)
     - REFUND -> billing_history
@@ -73,14 +74,14 @@ invalid_transaction = CreditTransactionCreate(
 
 ## Source-to-Table Mapping
 
-| Source | Table | source_id Required | Description |
-|--------|-------|-------------------|-------------|
-| `subscription` | `organization_subscriptions` | ✅ Yes | Credits from subscription plans |
-| `purchase` | `credit_products` | ✅ Yes | Credits purchased separately |
-| `event_consumption` | `credit_events` | ✅ Yes | Credits consumed by events |
-| `refund` | `billing_history` | ✅ Yes | Credits refunded from billing |
-| `expiry` | None | ❌ No | Credits expired naturally |
-| `admin_adjustment` | None | ❌ No | Manual admin adjustments |
+| Source              | Table                        | source_id Required | Description                     |
+| ------------------- | ---------------------------- | ------------------ | ------------------------------- |
+| `subscription`      | `organization_subscriptions` | ✅ Yes             | Credits from subscription plans |
+| `purchase`          | `credit_products`            | ✅ Yes             | Credits purchased separately    |
+| `event_consumption` | `credit_events`              | ✅ Yes             | Credits consumed by events      |
+| `refund`            | `billing_history`            | ✅ Yes             | Credits refunded from billing   |
+| `expiry`            | None                         | ❌ No              | Credits expired naturally       |
+| `admin_adjustment`  | None                         | ❌ No              | Manual admin adjustments        |
 
 ## Usage Examples
 
@@ -180,6 +181,7 @@ All transaction creation methods now use the validated models and provide clear 
 ## Migration Notes
 
 No database changes are required. This is purely an application-level enhancement that:
+
 - Maintains backward compatibility with existing data
 - Provides validation for new transactions
 - Adds debugging capabilities for existing data
@@ -194,6 +196,7 @@ python tmp_rovodev_test_polymorphic.py
 ```
 
 This demonstrates:
+
 - Source-to-table mapping
 - Validation of valid/invalid combinations
 - Transaction creation with automatic validation
@@ -202,6 +205,7 @@ This demonstrates:
 ## Future Enhancements
 
 Potential future improvements:
+
 - Database-level constraints using check constraints or triggers
 - Automated cleanup of orphaned references
 - Migration tools for fixing existing invalid data

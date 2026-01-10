@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { SignUpForm } from '@/components/auth/signup-form';
-import { ProtectedRoute } from '@/components/auth/protected-route';
-import Link from 'next/link';
-import { Rocket } from 'lucide-react';
+import React from "react";
+import { SignUpForm } from "@/components/auth/signup-form";
+import { ProtectedRoute } from "@/components/auth/protected-route";
+import Link from "next/link";
+import { Rocket } from "lucide-react";
 
 export default function SignUpPage() {
   return (
@@ -20,15 +20,20 @@ export default function SignUpPage() {
               <div className="bg-white/10 backdrop-blur-sm w-10 h-10 rounded-lg flex items-center justify-center border border-white/20">
                 <span className="text-white font-bold text-xl">AI</span>
               </div>
-              <span className="text-xl font-bold tracking-tight">NeuraSaaS</span>
+              <span className="text-xl font-bold tracking-tight">
+                NeuraSaaS
+              </span>
             </Link>
           </div>
 
           <div className="relative z-10 max-w-lg">
             <Rocket className="h-10 w-10 text-white/50 mb-6" />
-            <h2 className="text-3xl font-bold mb-4">Start building the future</h2>
+            <h2 className="text-3xl font-bold mb-4">
+              Start building the future
+            </h2>
             <p className="text-lg text-white/80 leading-relaxed">
-              Join thousands of developers and businesses who are already using NeuraSaaS to power their next-generation voice applications.
+              Join thousands of developers and businesses who are already using
+              NeuraSaaS to power their next-generation voice applications.
             </p>
             <div className="mt-8 flex gap-4">
               <div className="flex flex-col">
@@ -44,7 +49,8 @@ export default function SignUpPage() {
           </div>
 
           <div className="relative z-10 text-sm text-white/40">
-            &copy; {new Date().getFullYear()} NeuraSaaS Inc. All rights reserved.
+            &copy; {new Date().getFullYear()} NeuraSaaS Inc. All rights
+            reserved.
           </div>
         </div>
 
@@ -54,10 +60,14 @@ export default function SignUpPage() {
             <div className="text-center lg:text-left">
               <div className="lg:hidden flex justify-center mb-6">
                 <div className="bg-primary w-10 h-10 rounded-lg flex items-center justify-center shadow-md">
-                  <span className="text-primary-foreground font-bold text-xl">AI</span>
+                  <span className="text-primary-foreground font-bold text-xl">
+                    AI
+                  </span>
                 </div>
               </div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">Create an account</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                Create an account
+              </h1>
               <p className="text-muted-foreground mt-2">
                 Enter your details below to create your account
               </p>
@@ -66,7 +76,7 @@ export default function SignUpPage() {
             <SignUpForm />
 
             <div className="text-center text-sm text-muted-foreground">
-              Already have an account?{' '}
+              Already have an account?{" "}
               <Link
                 href="/auth/signin"
                 className="font-medium text-primary hover:text-primary/80 underline-offset-4 hover:underline transition-colors"

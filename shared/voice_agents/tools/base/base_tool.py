@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
+
 from pydantic import BaseModel
 
 
@@ -32,7 +33,7 @@ class BaseTool(ABC):
     def __init__(
         self,
         config: Optional[BaseConfig | dict[str, Any]] = None,
-        sensitive_config: Optional[BaseSensitiveConfig | dict[str, Any]] = None
+        sensitive_config: Optional[BaseSensitiveConfig | dict[str, Any]] = None,
     ):
         if config is None:
             self.config = self.Config()
@@ -50,7 +51,9 @@ class BaseTool(ABC):
         elif isinstance(sensitive_config, BaseModel):
             self.sensitive_config = sensitive_config
         else:
-            raise ValueError(f"sensitive_config must be dict or BaseModel, got {type(sensitive_config)}")
+            raise ValueError(
+                f"sensitive_config must be dict or BaseModel, got {type(sensitive_config)}"
+            )
 
     @property
     @abstractmethod

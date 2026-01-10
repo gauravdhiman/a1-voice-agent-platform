@@ -84,16 +84,38 @@ export interface RBACState {
 
 // RBAC hook actions
 export interface RBACActions {
-  createRole: (roleData: Omit<Role, 'id' | 'is_system_role' | 'created_at' | 'updated_at'>) => Promise<Role>;
-  updateRole: (roleId: string, roleData: Partial<Omit<Role, 'id' | 'is_system_role' | 'created_at' | 'updated_at'>>) => Promise<Role>;
+  createRole: (
+    roleData: Omit<Role, "id" | "is_system_role" | "created_at" | "updated_at">,
+  ) => Promise<Role>;
+  updateRole: (
+    roleId: string,
+    roleData: Partial<
+      Omit<Role, "id" | "is_system_role" | "created_at" | "updated_at">
+    >,
+  ) => Promise<Role>;
   deleteRole: (roleId: string) => Promise<void>;
-  createPermission: (permissionData: Omit<Permission, 'id' | 'created_at' | 'updated_at'>) => Promise<Permission>;
-  updatePermission: (permissionId: string, permissionData: Partial<Omit<Permission, 'id' | 'created_at' | 'updated_at'>>) => Promise<Permission>;
+  createPermission: (
+    permissionData: Omit<Permission, "id" | "created_at" | "updated_at">,
+  ) => Promise<Permission>;
+  updatePermission: (
+    permissionId: string,
+    permissionData: Partial<
+      Omit<Permission, "id" | "created_at" | "updated_at">
+    >,
+  ) => Promise<Permission>;
   deletePermission: (permissionId: string) => Promise<void>;
-  assignRoleToUser: (userRoleData: Omit<UserRole, 'id' | 'created_at' | 'updated_at'>) => Promise<UserRole>;
+  assignRoleToUser: (
+    userRoleData: Omit<UserRole, "id" | "created_at" | "updated_at">,
+  ) => Promise<UserRole>;
   removeRoleFromUser: (userRoleId: string) => Promise<void>;
-  assignPermissionToRole: (roleId: string, permissionId: string) => Promise<void>;
-  removePermissionFromRole: (roleId: string, permissionId: string) => Promise<void>;
+  assignPermissionToRole: (
+    roleId: string,
+    permissionId: string,
+  ) => Promise<void>;
+  removePermissionFromRole: (
+    roleId: string,
+    permissionId: string,
+  ) => Promise<void>;
   refreshUserRoles: () => Promise<void>;
   hasPermission: (permissionName: string) => boolean;
   hasRole: (roleName: string) => boolean;

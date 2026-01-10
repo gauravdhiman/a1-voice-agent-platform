@@ -29,12 +29,12 @@
  * </NavigationLink>
  */
 
-'use client';
+"use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 interface NavigationLinkProps extends React.ComponentProps<typeof Link> {
   children: React.ReactNode;
@@ -47,26 +47,26 @@ interface NavigationLinkProps extends React.ComponentProps<typeof Link> {
 export function NavigationLink({
   children,
   className,
-  activeClassName = 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm',
+  activeClassName = "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm",
   exact = false,
-  baseClassName = 'flex items-center space-x-3 px-3 py-2 rounded-md transition-all duration-200 group relative text-sm w-full',
-  inactiveClassName = 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+  baseClassName = "flex items-center space-x-3 px-3 py-2 rounded-md transition-all duration-200 group relative text-sm w-full",
+  inactiveClassName = "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
   href,
   ...props
 }: NavigationLinkProps) {
   const pathname = usePathname();
-  const isActive = exact 
-    ? pathname === href 
+  const isActive = exact
+    ? pathname === href
     : pathname === href || pathname.startsWith(String(href));
 
   return (
     <Link
       href={href}
       className={cn(
-        'cursor-pointer',
+        "cursor-pointer",
         baseClassName,
         isActive ? activeClassName : inactiveClassName,
-        className
+        className,
       )}
       {...props}
     >

@@ -1,58 +1,71 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { AlertTriangle, Mail, Loader2, CheckCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { resendVerificationEmail } from '@/lib/supabase';
+import React, { useState } from "react";
+import { AlertTriangle, Mail, Loader2, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { resendVerificationEmail } from "@/lib/supabase";
 
 interface EmailVerificationBannerProps {
   email: string;
   onClose?: () => void;
 }
 
-export function EmailVerificationBanner({ email, onClose }: EmailVerificationBannerProps) {
+export function EmailVerificationBanner({
+  email,
+  onClose,
+}: EmailVerificationBannerProps) {
   const [isResending, setIsResending] = useState(false);
-  const [resendStatus, setResendStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [resendStatus, setResendStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   const handleResendEmail = async () => {
     if (!email) {
-      setErrorMessage('Email address is required');
-      setResendStatus('error');
+      setErrorMessage("Email address is required");
+      setResendStatus("error");
       return;
     }
 
     setIsResending(true);
-    setResendStatus('idle');
-    setErrorMessage('');
+    setResendStatus("idle");
+    setErrorMessage("");
 
     try {
       await resendVerificationEmail(email);
-      setResendStatus('success');
+      setResendStatus("success");
     } catch (error) {
-      console.error('Error resending verification email:', error);
-      setResendStatus('error');
-      
+      console.error("Error resending verification email:", error);
+      setResendStatus("error");
+
       // Handle specific Supabase error cases
-      if (error && typeof error === 'object' && 'message' in error) {
+      if (error && typeof error === "object" && "message" in error) {
         const errorMsg = error.message as string;
-        if (errorMsg.toLowerCase().includes('email rate limit')) {
-          setErrorMessage('Please wait a few minutes before requesting another verification email.');
-        } else if (errorMsg.toLowerCase().includes('email not found')) {
-          setErrorMessage('We could not find an account with this email address.');
+        if (errorMsg.toLowerCase().includes("email rate limit")) {
+          setErrorMessage(
+            "Please wait a few minutes before requesting another verification email.",
+          );
+        } else if (errorMsg.toLowerCase().includes("email not found")) {
+          setErrorMessage(
+            "We could not find an account with this email address.",
+          );
         } else {
-          setErrorMessage('Failed to resend verification email. Please try again.');
+          setErrorMessage(
+            "Failed to resend verification email. Please try again.",
+          );
         }
       } else {
-        setErrorMessage('Failed to resend verification email. Please try again.');
+        setErrorMessage(
+          "Failed to resend verification email. Please try again.",
+        );
       }
     } finally {
       setIsResending(false);
     }
   };
 
-  if (resendStatus === 'success') {
+  if (resendStatus === "success") {
     return (
       <Alert className="mb-6 bg-green-50 border-green-200">
         <CheckCircle className="h-4 w-4 text-green-600" />
@@ -61,8 +74,9 @@ export function EmailVerificationBanner({ email, onClose }: EmailVerificationBan
             <div className="mb-3">
               <strong>Verification email sent!</strong>
               <p className="text-sm mt-1">
-                We&apos;ve sent a new verification email to <strong>{email}</strong>.
-                Please check your inbox and click the verification link.
+                We&apos;ve sent a new verification email to{" "}
+                <strong>{email}</strong>. Please check your inbox and click the
+                verification link.
               </p>
             </div>
             {onClose && (
@@ -89,8 +103,9 @@ export function EmailVerificationBanner({ email, onClose }: EmailVerificationBan
           <div className="mb-3">
             <strong>Email verification required</strong>
             <p className="text-sm mt-1">
-              Please verify your email address <strong>{email}</strong> to continue using the application.
-              Click the verification link sent to your email.
+              Please verify your email address <strong>{email}</strong> to
+              continue using the application. Click the verification link sent
+              to your email.
             </p>
 
             {errorMessage && (

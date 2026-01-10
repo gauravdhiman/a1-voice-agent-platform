@@ -3,8 +3,8 @@ Main RBAC router that combines all RBAC functionality.
 """
 
 from fastapi import APIRouter
-from src.rbac.roles.routes import role_router
 from src.rbac.permissions.routes import permission_router
+from src.rbac.roles.routes import role_router
 from src.rbac.user_roles.routes import user_role_router
 
 # Create main RBAC router

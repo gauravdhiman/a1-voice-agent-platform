@@ -1,22 +1,22 @@
 /**
  * Dialog component for deleting organizations
  */
-'use client';
+"use client";
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { organizationService } from '@/services/organization-service';
-import { Loader2, AlertTriangle } from 'lucide-react';
-import type { Organization } from '@/types/organization';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { organizationService } from "@/services/organization-service";
+import { Loader2, AlertTriangle } from "lucide-react";
+import type { Organization } from "@/types/organization";
 
 interface OrganizationDeleteDialogProps {
   open: boolean;
@@ -33,9 +33,9 @@ export function OrganizationDeleteDialog({
 }: OrganizationDeleteDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmationText, setConfirmationText] = useState('');
+  const [confirmationText, setConfirmationText] = useState("");
 
-  const expectedConfirmation = organization?.name || '';
+  const expectedConfirmation = organization?.name || "";
   const isConfirmationValid = confirmationText === expectedConfirmation;
 
   const handleDelete = async () => {
@@ -49,8 +49,8 @@ export function OrganizationDeleteDialog({
       onSuccess(organization.id);
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('Error deleting organization:', err);
-      setError(error.message || 'Failed to delete organization');
+      console.error("Error deleting organization:", err);
+      setError(error.message || "Failed to delete organization");
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,7 @@ export function OrganizationDeleteDialog({
     if (!loading) {
       onOpenChange(newOpen);
       if (!newOpen) {
-        setConfirmationText('');
+        setConfirmationText("");
         setError(null);
       }
     }
@@ -75,8 +75,8 @@ export function OrganizationDeleteDialog({
             Delete Organization
           </DialogTitle>
           <DialogDescription>
-            This action cannot be undone. This will permanently delete the organization
-            and remove all associated data.
+            This action cannot be undone. This will permanently delete the
+            organization and remove all associated data.
           </DialogDescription>
         </DialogHeader>
 
@@ -91,7 +91,9 @@ export function OrganizationDeleteDialog({
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-red-800">
-                <p className="font-medium mb-1">Warning: This action is irreversible</p>
+                <p className="font-medium mb-1">
+                  Warning: This action is irreversible
+                </p>
                 <ul className="space-y-1 text-red-700">
                   <li>• All organization data will be permanently deleted</li>
                   <li>• All user roles and permissions will be removed</li>
@@ -137,7 +139,7 @@ export function OrganizationDeleteDialog({
                   Deleting...
                 </>
               ) : (
-                'Delete Organization'
+                "Delete Organization"
               )}
             </Button>
           </div>

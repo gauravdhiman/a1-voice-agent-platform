@@ -1,6 +1,7 @@
 # Billing System Overview
 
 ## Overview
+
 This document provides a comprehensive overview of the billing system implemented for the multi-tenant SaaS platform, including Stripe integration, subscription management, and credit-based usage tracking.
 
 ## Architecture
@@ -10,69 +11,78 @@ This document provides a comprehensive overview of the billing system implemente
 The billing system uses the following database tables:
 
 #### Core Tables
--   **subscription_plans**: Available subscription tiers with pricing and features.
--   **organization_subscriptions**: Organization subscription status and details.
--   **credit_events**: Configurable events that consume credits.
--   **credit_transactions**: All credit movements (earned, consumed, purchased).
--   **credit_products**: Standalone credit packages for purchase.
--   **billing_history**: Payment history and invoices.
+
+- **subscription_plans**: Available subscription tiers with pricing and features.
+- **organization_subscriptions**: Organization subscription status and details.
+- **credit_events**: Configurable events that consume credits.
+- **credit_transactions**: All credit movements (earned, consumed, purchased).
+- **credit_products**: Standalone credit packages for purchase.
+- **billing_history**: Payment history and invoices.
 
 #### Key Features
--   Multi-tiered subscription plans (monthly/annual).
--   Credit-based usage system with configurable events.
--   Independent credit purchases with no expiry.
--   Subscription credits that expire per billing period.
--   Comprehensive audit trail for all transactions.
+
+- Multi-tiered subscription plans (monthly/annual).
+- Credit-based usage system with configurable events.
+- Independent credit purchases with no expiry.
+- Subscription credits that expire per billing period.
+- Comprehensive audit trail for all transactions.
 
 ### Backend Implementation
 
 #### Services
+
 1.  **Stripe Service** (`backend/src/billing/stripe_service.py`)
-    -   Stripe API integration.
-    -   Customer management.
-    -   Subscription lifecycle.
-    -   Payment processing.
-    -   Webhook verification.
+
+    - Stripe API integration.
+    - Customer management.
+    - Subscription lifecycle.
+    - Payment processing.
+    - Webhook verification.
 
 2.  **Billing Service** (`backend/src/billing/service.py`)
-    -   Core business logic.
-    -   Credit management.
-    -   Subscription handling.
-    -   Usage tracking.
-    -   Billing summaries.
+
+    - Core business logic.
+    - Credit management.
+    - Subscription handling.
+    - Usage tracking.
+    - Billing summaries.
 
 3.  **Webhook Handler** (`backend/src/billing/webhook_handler.py`)
-    -   Stripe webhook processing.
-    -   Event-driven subscription updates.
-    -   Automatic credit allocation.
-    -   Payment status synchronization.
+    - Stripe webhook processing.
+    - Event-driven subscription updates.
+    - Automatic credit allocation.
+    - Payment status synchronization.
 
 #### API Endpoints (`backend/src/billing/routes.py`)
--   Subscription plan management.
--   Organization subscription operations.
--   Credit balance and consumption.
--   Billing history retrieval.
--   Stripe checkout sessions.
--   Customer portal access.
+
+- Subscription plan management.
+- Organization subscription operations.
+- Credit balance and consumption.
+- Billing history retrieval.
+- Stripe checkout sessions.
+- Customer portal access.
 
 ### Frontend Implementation
 
 #### Components
+
 1.  **Billing Page** (`frontend/src/app/(dashboard)/billing/page.tsx`)
-    -   Comprehensive billing dashboard.
-    -   Subscription management interface.
-    -   Credit purchase and tracking.
-    -   Billing history display.
+
+    - Comprehensive billing dashboard.
+    - Subscription management interface.
+    - Credit purchase and tracking.
+    - Billing history display.
 
 2.  **Billing Service** (`frontend/src/services/billing-service.ts`)
-    -   API integration layer.
-    -   Stripe checkout handling.
-    -   Data formatting utilities.
+
+    - API integration layer.
+    - Stripe checkout handling.
+    - Data formatting utilities.
 
 3.  **Type Definitions** (`frontend/src/types/billing.ts`)
-    -   TypeScript interfaces.
-    -   Utility functions.
-    -   Status enumerations.
+    - TypeScript interfaces.
+    - Utility functions.
+    - Status enumerations.
 
 ## Configuration
 
@@ -118,16 +128,17 @@ stripe prices create \
 ### 2. Configure Webhooks
 
 Set up webhook endpoint in Stripe Dashboard:
--   URL: `https://yourapp.com/api/billing/webhook/stripe`
--   Events to listen for:
-    -   `checkout.session.completed`
-    -   `customer.subscription.created`
-    -   `customer.subscription.updated`
-    -   `customer.subscription.deleted`
-    -   `invoice.payment_succeeded`
-    -   `invoice.payment_failed`
-    -   `payment_intent.succeeded`
-    -   `payment_intent.payment_failed`
+
+- URL: `https://yourapp.com/api/billing/webhook/stripe`
+- Events to listen for:
+  - `checkout.session.completed`
+  - `customer.subscription.created`
+  - `customer.subscription.updated`
+  - `customer.subscription.deleted`
+  - `invoice.payment_succeeded`
+  - `invoice.payment_failed`
+  - `payment_intent.succeeded`
+  - `payment_intent.payment_failed`
 
 ### 3. Update Subscription Plans
 
@@ -138,6 +149,7 @@ Update the default plans in the migration file with your actual Stripe price IDs
 ### Backend Usage
 
 #### Create a Subscription
+
 ```python
 from src.billing.service import billing_service
 from src.billing.models import OrganizationSubscriptionCreate
@@ -151,6 +163,7 @@ subscription = await billing_service.create_organization_subscription(subscripti
 ```
 
 #### Consume Credits
+
 ```python
 from src.billing.models import CreditConsumptionRequest
 
@@ -166,14 +179,16 @@ result = await billing_service.consume_credits(consumption)
 ### Frontend Usage
 
 #### Initialize Subscription
+
 ```typescript
-import { billingService } from '@/services/billing-service';
+import { billingService } from "@/services/billing-service";
 
 // Redirect to Stripe checkout
 await billingService.initializeSubscription(organizationId, planId);
 ```
 
 #### Purchase Credits
+
 ```typescript
 // Redirect to Stripe checkout for credit purchase
 await billingService.purchaseCredits(organizationId, productId);
@@ -196,18 +211,20 @@ INSERT INTO credit_events (name, description, credit_cost, category) VALUES
 ### Credit Precedence
 
 Credits are consumed in the following order:
+
 1.  **Purchased Credits** (no expiry) - consumed first.
 2.  **Subscription Credits** (expire at period end) - consumed second.
 
 ### Credit Allocation
 
--   **Subscription Credits**: Allocated at the start of each billing period.
--   **Purchased Credits**: Added immediately upon successful payment.
--   **Expiry**: Only subscription credits expire at the end of billing period.
+- **Subscription Credits**: Allocated at the start of each billing period.
+- **Purchased Credits**: Added immediately upon successful payment.
+- **Expiry**: Only subscription credits expire at the end of billing period.
 
 ## Subscription Lifecycle
 
 ### Status Flow
+
 1.  **Trial** → **Active** (when trial ends and payment succeeds).
 2.  **Active** → **Past Due** (when payment fails).
 3.  **Past Due** → **Active** (when payment is retried successfully).
@@ -223,41 +240,44 @@ All subscription status changes are handled via Stripe webhooks to ensure data c
 ### Row Level Security (RLS)
 
 All billing tables have RLS enabled with appropriate policies:
--   Organizations can only access their own billing data.
--   Platform admins have full access.
--   Proper user role validation.
+
+- Organizations can only access their own billing data.
+- Platform admins have full access.
+- Proper user role validation.
 
 ### Webhook Security
 
--   Webhook signature verification using Stripe signature.
--   Idempotency handling for duplicate events.
--   Error handling and retry logic.
+- Webhook signature verification using Stripe signature.
+- Idempotency handling for duplicate events.
+- Error handling and retry logic.
 
 ## Monitoring and Alerts
 
 ### Key Metrics to Monitor
 
 1.  **Subscription Health**
-    -   Active subscriptions.
-    -   Churn rate.
-    -   Trial conversions.
+
+    - Active subscriptions.
+    - Churn rate.
+    - Trial conversions.
 
 2.  **Credit Usage**
-    -   Average credits per organization.
-    -   Credit consumption trends.
-    -   Low balance alerts.
+
+    - Average credits per organization.
+    - Credit consumption trends.
+    - Low balance alerts.
 
 3.  **Payment Processing**
-    -   Payment success rates.
-    -   Failed payment recovery.
-    -   Revenue tracking.
+    - Payment success rates.
+    - Failed payment recovery.
+    - Revenue tracking.
 
 ### Recommended Alerts
 
--   Credit balance below threshold (< 1000 credits).
--   Failed payments requiring attention.
--   Subscription cancellations.
--   Unusual credit consumption patterns.
+- Credit balance below threshold (< 1000 credits).
+- Failed payments requiring attention.
+- Subscription cancellations.
+- Unusual credit consumption patterns.
 
 ## Testing & Validation
 
@@ -290,50 +310,55 @@ POST /api/billing/credits/consume
 ### Common Issues
 
 1.  **Webhook Failures**
-    -   Verify webhook secret configuration.
-    -   Check webhook URL accessibility.
-    -   Review webhook event logs in Stripe Dashboard.
+
+    - Verify webhook secret configuration.
+    - Check webhook URL accessibility.
+    - Review webhook event logs in Stripe Dashboard.
 
 2.  **Credit Consumption Errors**
-    -   Ensure credit events are properly configured.
-    -   Verify organization has sufficient credit balance.
-    -   Check for inactive credit events.
+
+    - Ensure credit events are properly configured.
+    - Verify organization has sufficient credit balance.
+    - Check for inactive credit events.
 
 3.  **Subscription Sync Issues**
-    -   Manually trigger webhook replay from Stripe Dashboard.
-    -   Verify customer metadata includes organization_id.
-    -   Check subscription status mapping.
+    - Manually trigger webhook replay from Stripe Dashboard.
+    - Verify customer metadata includes organization_id.
+    - Check subscription status mapping.
 
 ### Debug Tools
 
--   Stripe Dashboard webhook logs.
--   Application logs for billing operations.
--   Database queries for credit transactions.
--   Customer portal for subscription management.
+- Stripe Dashboard webhook logs.
+- Application logs for billing operations.
+- Database queries for credit transactions.
+- Customer portal for subscription management.
 
 ## Future Enhancements
 
 ### Planned Features
 
 1.  **Usage Analytics**
-    -   Detailed usage reports.
-    -   Cost optimization recommendations.
-    -   Predictive analytics.
+
+    - Detailed usage reports.
+    - Cost optimization recommendations.
+    - Predictive analytics.
 
 2.  **Advanced Billing**
-    -   Usage-based billing.
-    -   Tiered pricing models.
-    -   Enterprise custom pricing.
+
+    - Usage-based billing.
+    - Tiered pricing models.
+    - Enterprise custom pricing.
 
 3.  **Credit Management**
-    -   Credit gifting/transfers.
-    -   Bulk credit operations.
-    -   Credit expiry notifications.
+
+    - Credit gifting/transfers.
+    - Bulk credit operations.
+    - Credit expiry notifications.
 
 4.  **Integration Enhancements**
-    -   Multiple payment methods.
-    -   International payment support.
-    -   Tax calculation integration.
+    - Multiple payment methods.
+    - International payment support.
+    - Tax calculation integration.
 
 ## Support
 
@@ -347,55 +372,62 @@ For issues related to the billing system:
 ## API Reference
 
 ### Subscription Management
--   `GET /api/billing/plans` - List subscription plans.
--   `POST /api/billing/subscription/checkout` - Create subscription checkout.
--   `GET /api/billing/subscription/{org_id}` - Get organization subscription.
--   `POST /api/billing/subscription/portal` - Access customer portal.
+
+- `GET /api/billing/plans` - List subscription plans.
+- `POST /api/billing/subscription/checkout` - Create subscription checkout.
+- `GET /api/billing/subscription/{org_id}` - Get organization subscription.
+- `POST /api/billing/subscription/portal` - Access customer portal.
 
 ### Credit Management
--   `GET /api/billing/credits/{org_id}` - Get credit balance.
--   `POST /api/billing/credits/consume` - Consume credits.
--   `GET /api/billing/credit-products` - List credit products.
--   `POST /api/billing/credit-products/checkout` - Purchase credits.
+
+- `GET /api/billing/credits/{org_id}` - Get credit balance.
+- `POST /api/billing/credits/consume` - Consume credits.
+- `GET /api/billing/credit-products` - List credit products.
+- `POST /api/billing/credit-products/checkout` - Purchase credits.
 
 ### Billing Information
--   `GET /api/billing/summary/{org_id}` - Get billing summary.
--   `GET /api/billing/history/{org_id}` - Get billing history.
--   `POST /api/billing/webhook/stripe` - Stripe webhook endpoint.
+
+- `GET /api/billing/summary/{org_id}` - Get billing summary.
+- `GET /api/billing/history/{org_id}` - Get billing history.
+- `POST /api/billing/webhook/stripe` - Stripe webhook endpoint.
 
 ## Deployment Notes
 
 ### 1. Stripe Account Setup
--   Create subscription products and prices.
--   Configure webhook endpoints.
--   Set up customer portal settings.
--   Test payment flows.
+
+- Create subscription products and prices.
+- Configure webhook endpoints.
+- Set up customer portal settings.
+- Test payment flows.
 
 ### 2. Database Migration
+
 ```bash
 cd backend
 alembic upgrade head
 ```
 
 ### 3. Environment Configuration
--   Set Stripe API keys.
--   Configure webhook secrets.
--   Update Supabase connection.
+
+- Set Stripe API keys.
+- Configure webhook secrets.
+- Update Supabase connection.
 
 ### 4. Production Considerations
--   Set up monitoring and alerting.
--   Configure payment method settings.
--   Implement tax calculation if needed.
--   Set up backup and recovery.
+
+- Set up monitoring and alerting.
+- Configure payment method settings.
+- Implement tax calculation if needed.
+- Set up backup and recovery.
 
 ## Benefits Delivered
 
--   **Complete Stripe Integration** - Production-ready payment processing.
--   **Flexible Credit System** - Configurable usage-based billing.
--   **Multi-Tenant Architecture** - Organization-scoped billing management.
--   **Real-time Synchronization** - Webhook-driven state management.
--   **Comprehensive UI** - User-friendly billing dashboard.
--   **Audit Trail** - Complete transaction history and compliance.
--   **Scalable Design** - Built for growth and feature expansion.
+- **Complete Stripe Integration** - Production-ready payment processing.
+- **Flexible Credit System** - Configurable usage-based billing.
+- **Multi-Tenant Architecture** - Organization-scoped billing management.
+- **Real-time Synchronization** - Webhook-driven state management.
+- **Comprehensive UI** - User-friendly billing dashboard.
+- **Audit Trail** - Complete transaction history and compliance.
+- **Scalable Design** - Built for growth and feature expansion.
 
 The billing system is now fully functional and ready for production deployment with proper Stripe configuration! 🚀

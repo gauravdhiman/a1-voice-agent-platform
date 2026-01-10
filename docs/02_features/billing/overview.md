@@ -61,14 +61,15 @@ graph TB
 
 Plans define pricing and included resources:
 
-| Plan | Price/Month | Included Credits | Features |
-|------|-------------|------------------|-----------|
-| **Trial** | Free | 100 | 1 agent, basic tools |
-| **Starter** | $49 | 2,000 | 3 agents, premium tools |
-| **Pro** | $149 | 10,000 | Unlimited agents, all tools |
-| **Enterprise** | Custom | Custom | Dedicated support, custom integrations |
+| Plan           | Price/Month | Included Credits | Features                               |
+| -------------- | ----------- | ---------------- | -------------------------------------- |
+| **Trial**      | Free        | 100              | 1 agent, basic tools                   |
+| **Starter**    | $49         | 2,000            | 3 agents, premium tools                |
+| **Pro**        | $149        | 10,000           | Unlimited agents, all tools            |
+| **Enterprise** | Custom      | Custom           | Dedicated support, custom integrations |
 
 **Plan Attributes**:
+
 - Price (monthly/annual)
 - Included credits
 - Agent limit
@@ -81,6 +82,7 @@ Plans define pricing and included resources:
 Subscription tracks organization's billing status:
 
 **Status Flow**:
+
 ```
 trialing → active → past_due → (cancel) → canceled
                      ↓
@@ -88,6 +90,7 @@ trialing → active → past_due → (cancel) → canceled
 ```
 
 **Status Descriptions**:
+
 - `trialing`: Free trial period
 - `active`: Subscription is active and payments are current
 - `past_due`: Payment failed, subscription past due date
@@ -99,17 +102,20 @@ trialing → active → past_due → (cancel) → canceled
 Credits are consumed for platform usage:
 
 **Credit Sources**:
+
 - Plan renewal (monthly allocation)
 - Top-up purchases
 - Adjustments (manual/admin actions)
 
 **Credit Consumption**:
+
 - Voice agent calls (per minute)
 - Tool execution (per call)
 - SMS notifications (per message)
 - Additional features
 
 **Credit Tracking**:
+
 ```sql
 organizations.credit_balance       -- Current balance
 credit_transactions              -- Transaction history
@@ -151,15 +157,16 @@ sequenceDiagram
 
 **Webhook Events**:
 
-| Event | Description | Backend Action |
-|-------|-------------|-----------------|
-| `checkout.session.completed` | Payment successful | Create subscription, add credits |
-| `invoice.payment_succeeded` | Recurring payment | Add credits, update status |
-| `invoice.payment_failed` | Payment failed | Update status to past_due, send alert |
-| `customer.subscription.updated` | Subscription changed | Update plan, prorate |
-| `customer.subscription.deleted` | Subscription canceled | Update status to canceled |
+| Event                           | Description           | Backend Action                        |
+| ------------------------------- | --------------------- | ------------------------------------- |
+| `checkout.session.completed`    | Payment successful    | Create subscription, add credits      |
+| `invoice.payment_succeeded`     | Recurring payment     | Add credits, update status            |
+| `invoice.payment_failed`        | Payment failed        | Update status to past_due, send alert |
+| `customer.subscription.updated` | Subscription changed  | Update plan, prorate                  |
+| `customer.subscription.deleted` | Subscription canceled | Update status to canceled             |
 
 **Idempotent Processing**:
+
 ```python
 async def handle_webhook(event: StripeEvent):
     # Store processed event IDs
@@ -175,6 +182,7 @@ async def handle_webhook(event: StripeEvent):
 ```
 
 **Retry Logic**:
+
 - If processing fails, return non-2xx
 - Stripe retries webhook delivery
 - Implement exponential backoff
@@ -210,12 +218,12 @@ sequenceDiagram
 
 ### Credit Pricing
 
-| Action | Credit Cost | Description |
-|---------|-------------|-------------|
-| Voice call (per minute) | 10 credits | Including agent and LLM processing |
-| Tool execution (per call) | 5 credits | Any tool function called by agent |
-| SMS notification | 2 credits | Outbound SMS message |
-| Additional features | Variable | Future features |
+| Action                    | Credit Cost | Description                        |
+| ------------------------- | ----------- | ---------------------------------- |
+| Voice call (per minute)   | 10 credits  | Including agent and LLM processing |
+| Tool execution (per call) | 5 credits   | Any tool function called by agent  |
+| SMS notification          | 2 credits   | Outbound SMS message               |
+| Additional features       | Variable    | Future features                    |
 
 ### Plan Comparison
 
@@ -303,6 +311,7 @@ GET    /api/v1/organizations/{org_id}/invoices/{id}/download  Download invoice P
 ### Key Tables
 
 **subscriptions**
+
 ```sql
 CREATE TABLE subscriptions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -320,6 +329,7 @@ CREATE TABLE subscriptions (
 ```
 
 **credit_transactions**
+
 ```sql
 CREATE TABLE credit_transactions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -333,6 +343,7 @@ CREATE TABLE credit_transactions (
 ```
 
 **stripe_event_logs**
+
 ```sql
 CREATE TABLE stripe_event_logs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -350,6 +361,7 @@ CREATE TABLE stripe_event_logs (
 ### Webhook Security
 
 1. **Signature Verification**:
+
    ```python
    import stripe
 
@@ -361,6 +373,7 @@ CREATE TABLE stripe_event_logs (
    ```
 
 2. **Idempotency**:
+
    - Store processed event IDs
    - Check before processing
    - Prevent duplicate credit additions
@@ -457,6 +470,7 @@ python scripts/stripe_manager.py
 ```
 
 **Features**:
+
 - List products and prices
 - Create/update products
 - Sync with database
@@ -493,6 +507,7 @@ async def manual_credit_adjustment(
 ### Payment Not Processing
 
 **Check**:
+
 1. Stripe API keys are correct (live vs test mode)
 2. Webhook endpoint is publicly accessible
 3. Webhook signature verification is working
@@ -502,6 +517,7 @@ async def manual_credit_adjustment(
 ### Credits Not Adding
 
 **Check**:
+
 1. Webhook event is being received
 2. Event is not already processed
 3. Database transaction is committing
@@ -511,6 +527,7 @@ async def manual_credit_adjustment(
 ### Webhook Failures
 
 **Check**:
+
 1. Stripe-Signature header is present
 2. Webhook secret matches environment
 3. Payload is valid JSON
@@ -520,6 +537,7 @@ async def manual_credit_adjustment(
 ### Incorrect Credit Balance
 
 **Check**:
+
 1. Credit transactions table is accurate
 2. No duplicate transactions
 3. Webhook idempotency is working

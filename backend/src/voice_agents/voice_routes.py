@@ -1,11 +1,14 @@
 import logging
+import os
+
 from fastapi import APIRouter, Request, Response
 from twilio.twiml.voice_response import VoiceResponse
+
 from shared.voice_agents.service import voice_agent_service
-import os
 
 logger = logging.getLogger(__name__)
 voice_router = APIRouter(prefix="/api/v1/voice", tags=["Voice Webhooks"])
+
 
 @voice_router.post("/twilio/incoming")
 async def handle_twilio_incoming(request: Request):
@@ -18,13 +21,15 @@ async def handle_twilio_incoming(request: Request):
     from_number = form_data.get("From")
     call_sid = form_data.get("CallSid")
 
-    logger.info(f"Incoming call from {from_number} to {to_number} (CallSid: {call_sid})")
+    logger.info(
+        f"Incoming call from {from_number} to {to_number} (CallSid: {call_sid})"
+    )
 
     # 1. Find the agent associated with this phone number
     # We'll need a way to look up agents by phone number
     # For now, let's add a method to voice_agent_service
     agent, error = await voice_agent_service.get_agent_by_phone(to_number)
-    
+
     if error or not agent:
         logger.warning(f"No agent found for phone number {to_number}")
         response = VoiceResponse()
@@ -45,7 +50,7 @@ async def handle_twilio_incoming(request: Request):
     clean_sip_domain = sip_domain.replace("sip:", "")
     sip_uri = f"sip:{to_number}@{clean_sip_domain}"
 
-    dial.sip(sip_uri, username='gaurav_dhiman', password='R0a5j#P1u9n')
+    dial.sip(sip_uri, username="gaurav_dhiman", password="R0a5j#P1u9n")
 
     logger.info(f"Bridging Twilio call {call_sid} to LiveKit SIP via URI: {sip_uri}")
     return Response(content=str(response), media_type="application/xml")

@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import React from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   BarChart3,
@@ -10,10 +10,9 @@ import {
   Shield,
   Zap,
   Globe,
-} from 'lucide-react';
+} from "lucide-react";
 
 export default function LandingPage() {
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
       {/* Header */}
@@ -21,18 +20,29 @@ export default function LandingPage() {
         <div className="container flex h-14 items-center justify-between max-w-6xl mx-auto px-4">
           <div className="flex items-center gap-2">
             <div className="bg-primary w-8 h-8 rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">AI</span>
+              <span className="text-primary-foreground font-bold text-lg">
+                AI
+              </span>
             </div>
             <span className="text-xl font-bold tracking-tight">NeuraSaaS</span>
           </div>
           <nav className="hidden md:flex gap-6">
-            <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <a
+              href="#features"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
               Features
             </a>
-            <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <a
+              href="#pricing"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
               Pricing
             </a>
-            <a href="#about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <a
+              href="#about"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
               About
             </a>
           </nav>
@@ -60,7 +70,8 @@ export default function LandingPage() {
                     The Complete SaaS Platform for Your Business
                   </h1>
                   <p className="max-w-[600px] text-muted-foreground md:text-xl">
-                    Streamline your workflow, manage your team, and scale your business with our all-in-one solution.
+                    Streamline your workflow, manage your team, and scale your
+                    business with our all-in-one solution.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 min-[400px]:flex-row">
@@ -94,7 +105,9 @@ export default function LandingPage() {
                       <div className="w-16 h-16 bg-primary/20 rounded-2xl mx-auto flex items-center justify-center mb-4">
                         <Zap className="h-8 w-8 text-primary" />
                       </div>
-                      <p className="text-sm font-medium text-muted-foreground">Powerful Dashboard Interface</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Powerful Dashboard Interface
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -115,7 +128,8 @@ export default function LandingPage() {
                   Everything you need to succeed
                 </h2>
                 <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-                  Our platform provides comprehensive tools to help you manage every aspect of your business.
+                  Our platform provides comprehensive tools to help you manage
+                  every aspect of your business.
                 </p>
               </div>
             </div>
@@ -123,41 +137,52 @@ export default function LandingPage() {
               {[
                 {
                   title: "Analytics",
-                  description: "Get detailed insights into your performance with our advanced analytics dashboard.",
+                  description:
+                    "Get detailed insights into your performance with our advanced analytics dashboard.",
                   icon: BarChart3,
                 },
                 {
                   title: "Team Management",
-                  description: "Easily manage your team, assign roles, and track productivity in one place.",
+                  description:
+                    "Easily manage your team, assign roles, and track productivity in one place.",
                   icon: Users,
                 },
                 {
                   title: "Security",
-                  description: "Enterprise-grade security to keep your data safe and compliant with regulations.",
+                  description:
+                    "Enterprise-grade security to keep your data safe and compliant with regulations.",
                   icon: Shield,
                 },
                 {
                   title: "Automation",
-                  description: "Automate repetitive tasks and workflows to save time and reduce errors.",
+                  description:
+                    "Automate repetitive tasks and workflows to save time and reduce errors.",
                   icon: Zap,
                 },
                 {
                   title: "Integrations",
-                  description: "Connect with your favorite tools and services seamlessly.",
+                  description:
+                    "Connect with your favorite tools and services seamlessly.",
                   icon: Globe,
                 },
                 {
                   title: "24/7 Support",
-                  description: "Our dedicated support team is available around the clock to assist you.",
+                  description:
+                    "Our dedicated support team is available around the clock to assist you.",
                   icon: CheckCircle2,
                 },
               ].map((feature, index) => (
-                <div key={index} className="flex flex-col items-start space-y-2 rounded-lg border border-border p-5 shadow-sm transition-all hover:shadow-md">
+                <div
+                  key={index}
+                  className="flex flex-col items-start space-y-2 rounded-lg border border-border p-5 shadow-sm transition-all hover:shadow-md"
+                >
                   <div className="p-2 bg-primary/10 rounded-lg">
                     <feature.icon className="h-5 w-5 text-primary" />
                   </div>
                   <h3 className="text-lg font-bold">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
                 </div>
               ))}
             </div>
@@ -176,7 +201,8 @@ export default function LandingPage() {
                   Simple, transparent pricing
                 </h2>
                 <p className="max-w-[600px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-                  Choose the plan that&apos; right for your business. No hidden fees.
+                  Choose the plan that&apos; right for your business. No hidden
+                  fees.
                 </p>
               </div>
             </div>
@@ -186,7 +212,12 @@ export default function LandingPage() {
                   name: "Starter",
                   price: "$29",
                   description: "Perfect for small teams just getting started.",
-                  features: ["Up to 5 users", "Basic analytics", "Email support", "1GB storage"],
+                  features: [
+                    "Up to 5 users",
+                    "Basic analytics",
+                    "Email support",
+                    "1GB storage",
+                  ],
                   cta: "Get Started",
                   popular: false,
                 },
@@ -194,7 +225,13 @@ export default function LandingPage() {
                   name: "Pro",
                   price: "$79",
                   description: "For growing businesses that need more power.",
-                  features: ["Up to 20 users", "Advanced analytics", "Priority support", "10GB storage", "API access"],
+                  features: [
+                    "Up to 20 users",
+                    "Advanced analytics",
+                    "Priority support",
+                    "10GB storage",
+                    "API access",
+                  ],
                   cta: "Start Free Trial",
                   popular: true,
                 },
@@ -202,17 +239,24 @@ export default function LandingPage() {
                   name: "Enterprise",
                   price: "Custom",
                   description: "Tailored solutions for large organizations.",
-                  features: ["Unlimited users", "Custom reporting", "24/7 dedicated support", "Unlimited storage", "SSO & Audit logs"],
+                  features: [
+                    "Unlimited users",
+                    "Custom reporting",
+                    "24/7 dedicated support",
+                    "Unlimited storage",
+                    "SSO & Audit logs",
+                  ],
                   cta: "Contact Sales",
                   popular: false,
                 },
               ].map((plan, index) => (
                 <div
                   key={index}
-                  className={`flex flex-col rounded-xl border ${plan.popular
-                      ? 'border-primary shadow-lg scale-105 bg-background z-10'
-                      : 'border-border bg-background/50 shadow-sm'
-                    } p-6`}
+                  className={`flex flex-col rounded-xl border ${
+                    plan.popular
+                      ? "border-primary shadow-lg scale-105 bg-background z-10"
+                      : "border-border bg-background/50 shadow-sm"
+                  } p-6`}
                 >
                   {plan.popular && (
                     <div className="mb-4 inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary w-fit">
@@ -222,9 +266,15 @@ export default function LandingPage() {
                   <h3 className="text-xl font-bold">{plan.name}</h3>
                   <div className="mt-4 flex items-baseline text-3xl font-bold">
                     {plan.price}
-                    {plan.price !== "Custom" && <span className="ml-1 text-sm font-medium text-muted-foreground">/mo</span>}
+                    {plan.price !== "Custom" && (
+                      <span className="ml-1 text-sm font-medium text-muted-foreground">
+                        /mo
+                      </span>
+                    )}
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {plan.description}
+                  </p>
                   <ul className="mt-6 space-y-3 flex-1">
                     {plan.features.map((feature, i) => (
                       <li key={i} className="flex items-center text-sm">
@@ -234,8 +284,10 @@ export default function LandingPage() {
                     ))}
                   </ul>
                   <Button
-                    className={`mt-8 w-full ${plan.popular ? '' : 'variant-outline'}`}
-                    variant={plan.popular ? 'default' : 'outline'}
+                    className={`mt-8 w-full ${
+                      plan.popular ? "" : "variant-outline"
+                    }`}
+                    variant={plan.popular ? "default" : "outline"}
                   >
                     {plan.cta}
                   </Button>
@@ -257,13 +309,22 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="flex gap-4">
-            <Link href="/terms" className="text-sm font-medium hover:underline underline-offset-4">
+            <Link
+              href="/terms"
+              className="text-sm font-medium hover:underline underline-offset-4"
+            >
               Terms
             </Link>
-            <Link href="/privacy" className="text-sm font-medium hover:underline underline-offset-4">
+            <Link
+              href="/privacy"
+              className="text-sm font-medium hover:underline underline-offset-4"
+            >
               Privacy
             </Link>
-            <Link href="/contact" className="text-sm font-medium hover:underline underline-offset-4">
+            <Link
+              href="/contact"
+              className="text-sm font-medium hover:underline underline-offset-4"
+            >
               Contact
             </Link>
           </div>

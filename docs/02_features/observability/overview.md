@@ -78,11 +78,13 @@ graph TB
 A trace represents the entire journey of a request through the system:
 
 **Example: Voice Agent Call**
+
 ```
 [Incoming Call] → [Backend Validation] → [LiveKit Room] → [Worker Processing] → [Tool Execution] → [Response]
 ```
 
 Each step is a **span** with:
+
 - Start and end timestamps
 - Parent/child relationships
 - Attributes (tags, metadata)
@@ -94,11 +96,13 @@ Each step is a **span** with:
 Metrics measure numeric values over time:
 
 **Types**:
+
 - **Counter**: Monotonically increasing value (e.g., requests_total)
 - **Gauge**: Arbitrary value that goes up/down (e.g., active_connections)
 - **Histogram**: Distribution of values (e.g., request_duration_ms)
 
 **Examples**:
+
 ```python
 # Counter
 request_counter.add(1, {"endpoint": "/api/v1/agents", "method": "GET"})
@@ -115,16 +119,17 @@ histogram.record(request_duration_ms, {"operation": "tool_execution"})
 Structured logs with correlation to traces:
 
 **Structured Log Example**:
+
 ```json
 {
-    "timestamp": "2026-01-06T18:30:00Z",
-    "level": "INFO",
-    "trace_id": "abc123",
-    "span_id": "def456",
-    "service": "backend",
-    "message": "Agent configuration loaded",
-    "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-    "duration_ms": 45
+  "timestamp": "2026-01-06T18:30:00Z",
+  "level": "INFO",
+  "trace_id": "abc123",
+  "span_id": "def456",
+  "service": "backend",
+  "message": "Agent configuration loaded",
+  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "duration_ms": 45
 }
 ```
 
@@ -133,62 +138,65 @@ Structured logs with correlation to traces:
 ### Frontend (Next.js)
 
 **Setup** (`src/lib/opentelemetry.ts`):
+
 ```typescript
-import { trace, context } from '@opentelemetry/api'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { WebTracerProvider } from '@opentelemetry/sdk-trace-web'
-import { Resource } from '@opentelemetry/resources'
+import { trace, context } from "@opentelemetry/api";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { WebTracerProvider } from "@opentelemetry/sdk-trace-web";
+import { Resource } from "@opentelemetry/resources";
 
 // Configure exporter
 const exporter = new OTLPTraceExporter({
-    url: process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
-})
+  url: process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+});
 
 // Configure provider
 const provider = new WebTracerProvider({
-    resource: new Resource({
-        'service.name': 'frontend',
-        'service.version': process.env.NEXT_PUBLIC_APP_VERSION,
-        'deployment.environment': process.env.NEXT_PUBLIC_ENVIRONMENT,
-    }),
-})
+  resource: new Resource({
+    "service.name": "frontend",
+    "service.version": process.env.NEXT_PUBLIC_APP_VERSION,
+    "deployment.environment": process.env.NEXT_PUBLIC_ENVIRONMENT,
+  }),
+});
 
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter))
-trace.setGlobalTracerProvider(provider)
+provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+trace.setGlobalTracerProvider(provider);
 
 // Create tracer
-export const tracer = trace.getTracer('frontend')
+export const tracer = trace.getTracer("frontend");
 ```
 
 **Manual Tracing**:
+
 ```typescript
-import { tracer } from '@/lib/opentelemetry'
+import { tracer } from "@/lib/opentelemetry";
 
 async function createAgent(data: AgentCreate) {
-    const span = tracer.startSpan('createAgent', {
-        attributes: {
-            'agent.name': data.name,
-            'org.id': data.organization_id,
-        },
-    })
+  const span = tracer.startSpan("createAgent", {
+    attributes: {
+      "agent.name": data.name,
+      "org.id": data.organization_id,
+    },
+  });
 
-    try {
-        const response = await apiClient.post('/api/v1/agents', data)
-        span.setStatus({ code: SpanStatusCode.OK })
-        return response
-    } catch (error) {
-        span.recordException(error as Error)
-        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message })
-        throw error
-    } finally {
-        span.end()
-    }
+  try {
+    const response = await apiClient.post("/api/v1/agents", data);
+    span.setStatus({ code: SpanStatusCode.OK });
+    return response;
+  } catch (error) {
+    span.recordException(error as Error);
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    throw error;
+  } finally {
+    span.end();
+  }
 }
 ```
 
 ### Backend (FastAPI)
 
 **Setup** (`backend/config/opentelemetry.py`):
+
 ```python
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -220,6 +228,7 @@ tracer = trace.get_tracer(__name__)
 ```
 
 **Manual Tracing**:
+
 ```python
 from opentelemetry import trace
 
@@ -241,6 +250,7 @@ async def create_agent(agent_data: AgentCreate):
 ```
 
 **Decorator Pattern**:
+
 ```python
 def trace_operation(operation_name: str):
     """Decorator to trace operations."""
@@ -268,6 +278,7 @@ async def create_agent(agent_data: AgentCreate):
 ### Worker (LiveKit)
 
 **Setup**:
+
 ```python
 # Worker uses LiveKit's built-in OTEL support
 # Configure via environment variables
@@ -280,6 +291,7 @@ os.environ['OTEL_EXPORTER_OTLP_PROTOCOL'] = 'grpc'
 ```
 
 **Manual Tracing**:
+
 ```python
 from opentelemetry import trace
 
@@ -358,8 +370,8 @@ services:
     volumes:
       - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yaml
     ports:
-      - "4317:4317"   # gRPC (traces, logs)
-      - "4318:4318"   # HTTP (metrics)
+      - "4317:4317" # gRPC (traces, logs)
+      - "4318:4318" # HTTP (metrics)
     environment:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
     depends_on:
@@ -372,41 +384,42 @@ services:
 
 ### Performance Metrics
 
-| Metric | Type | Description |
-|--------|-------|-------------|
-| `http.request.duration` | Histogram | HTTP request duration |
-| `http.request.count` | Counter | Total HTTP requests |
-| `http.request.errors` | Counter | HTTP request errors |
-| `db.query.duration` | Histogram | Database query duration |
-| `db.query.count` | Counter | Total database queries |
+| Metric                  | Type      | Description             |
+| ----------------------- | --------- | ----------------------- |
+| `http.request.duration` | Histogram | HTTP request duration   |
+| `http.request.count`    | Counter   | Total HTTP requests     |
+| `http.request.errors`   | Counter   | HTTP request errors     |
+| `db.query.duration`     | Histogram | Database query duration |
+| `db.query.count`        | Counter   | Total database queries  |
 
 ### Business Metrics
 
-| Metric | Type | Description |
-|--------|-------|-------------|
-| `voice_agent.calls.total` | Counter | Total voice agent calls |
-| `voice_agent.calls.duration` | Histogram | Call duration |
-| `voice_agent.calls.active` | Gauge | Currently active calls |
-| `tool.executions.total` | Counter | Total tool executions |
-| `tool.executions.errors` | Counter | Failed tool executions |
-| `credits.consumed` | Counter | Credits consumed |
-| `organizations.created` | Counter | New organizations |
-| `users.created` | Counter | New users |
+| Metric                       | Type      | Description             |
+| ---------------------------- | --------- | ----------------------- |
+| `voice_agent.calls.total`    | Counter   | Total voice agent calls |
+| `voice_agent.calls.duration` | Histogram | Call duration           |
+| `voice_agent.calls.active`   | Gauge     | Currently active calls  |
+| `tool.executions.total`      | Counter   | Total tool executions   |
+| `tool.executions.errors`     | Counter   | Failed tool executions  |
+| `credits.consumed`           | Counter   | Credits consumed        |
+| `organizations.created`      | Counter   | New organizations       |
+| `users.created`              | Counter   | New users               |
 
 ### System Metrics
 
-| Metric | Type | Description |
-|--------|-------|-------------|
-| `process.cpu.usage` | Gauge | CPU usage percentage |
-| `process.memory.usage` | Gauge | Memory usage in bytes |
-| `process.threads.count` | Gauge | Number of threads |
-| `disk.io.bytes` | Counter | Disk I/O bytes |
+| Metric                  | Type    | Description           |
+| ----------------------- | ------- | --------------------- |
+| `process.cpu.usage`     | Gauge   | CPU usage percentage  |
+| `process.memory.usage`  | Gauge   | Memory usage in bytes |
+| `process.threads.count` | Gauge   | Number of threads     |
+| `disk.io.bytes`         | Counter | Disk I/O bytes        |
 
 ## Tracing Best Practices
 
 ### Span Naming
 
 Use clear, descriptive names:
+
 ```
 ✅ GOOD: "create_voice_agent"
 ✅ GOOD: "execute_google_calendar_tool"
@@ -417,6 +430,7 @@ Use clear, descriptive names:
 ### Span Attributes
 
 Add meaningful context:
+
 ```python
 span.set_attribute("agent.id", str(agent.id))
 span.set_attribute("org.id", str(agent.organization_id))
@@ -428,6 +442,7 @@ span.set_attribute("http.status_code", "201")
 ### Span Events
 
 Add events within spans:
+
 ```python
 span.add_event("tool_loaded", {
     "tool.name": "GoogleCalendar",
@@ -442,6 +457,7 @@ span.add_event("tool_authenticated", {
 ### Error Handling
 
 Record exceptions properly:
+
 ```python
 try:
     result = await risky_operation()
@@ -460,6 +476,7 @@ except Exception as e:
 ### Alert Rules
 
 **High Error Rate**:
+
 ```
 IF error_rate > 5%
 FOR 5 minutes
@@ -467,6 +484,7 @@ THEN alert team
 ```
 
 **Slow API Response**:
+
 ```
 IF p95(request_duration_ms) > 1000ms
 FOR 5 minutes
@@ -474,6 +492,7 @@ THEN alert team
 ```
 
 **Payment Failure**:
+
 ```
 IF stripe_webhook_errors > 10
 FOR 1 minute
@@ -481,6 +500,7 @@ THEN alert team
 ```
 
 **Low Credits**:
+
 ```
 IF org.credit_balance < 500
 FOR ANY organization
@@ -566,6 +586,7 @@ graph TB
 ### Missing Traces
 
 **Check**:
+
 1. OTEL_ENABLED=true in environment
 2. Collector is running: `docker ps | grep otel-collector`
 3. Endpoint URLs are correct
@@ -575,6 +596,7 @@ graph TB
 ### Missing Metrics
 
 **Check**:
+
 1. Metrics exporter is configured
 2. Metrics are being emitted
 3. Collector has metrics receiver enabled
@@ -584,6 +606,7 @@ graph TB
 ### High Sampling Rate
 
 **Adjust**:
+
 ```bash
 # Reduce sampling in production
 OTEL_TRACES_SAMPLER=traceidratio
@@ -593,6 +616,7 @@ OTEL_TRACES_SAMPLER_ARG=0.1  # 10% sampling
 ### Slow Collector
 
 **Check**:
+
 1. Batch size is appropriate
 2. Timeout is not too long
 3. Exporter is responding

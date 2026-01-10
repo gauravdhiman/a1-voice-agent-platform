@@ -3,40 +3,46 @@ import logging
 import os
 from typing import Any
 
+from default_system_prompt import default_system_prompt
 from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
     JobContext,
     RunContext,
-    function_tool,
     cli,
+    function_tool,
 )
 from livekit.agents.voice import room_io
 from livekit.plugins.google.realtime import RealtimeModel
 
+from shared.voice_agents.livekit_service import livekit_service
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
-from shared.voice_agents.livekit_service import livekit_service
-from default_system_prompt import default_system_prompt
 
 logger = logging.getLogger("voice-worker")
 
-log_level = logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO
+log_level = (
+    logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO
+)
 logger.setLevel(log_level)
 
 server = AgentServer()
 
 # Register all tool implementations
-livekit_tool_registry.register_tools_from_package("shared.voice_agents.tools.implementations")
+livekit_tool_registry.register_tools_from_package(
+    "shared.voice_agents.tools.implementations"
+)
 logger.info(f"Registered tools: {list(livekit_tool_registry._tools.keys())}")
 
 
-def _create_tool_wrapper(bound_method: Any, func_name: str, param_names: list[str], type_hints: dict) -> Any:
+def _create_tool_wrapper(
+    bound_method: Any, func_name: str, param_names: list[str], type_hints: dict
+) -> Any:
     """
     Create a wrapper function for a tool method.
-    
+
     The wrapper has the same signature as the original method (excluding 'self').
     It accepts all parameters explicitly (no **kwargs), then delegates to the bound method.
     """
@@ -45,22 +51,22 @@ def _create_tool_wrapper(bound_method: Any, func_name: str, param_names: list[st
     for param_name in param_names[1:]:
         param_type = type_hints.get(param_name, Any)
         # Get string representation of type
-        if hasattr(param_type, '__name__'):
+        if hasattr(param_type, "__name__"):
             type_str = param_type.__name__
-        elif hasattr(param_type, '_name'):
+        elif hasattr(param_type, "_name"):
             type_str = param_type._name
-        elif hasattr(param_type, '__origin__'):
-            type_str = str(param_type).replace('typing.', '')
+        elif hasattr(param_type, "__origin__"):
+            type_str = str(param_type).replace("typing.", "")
         else:
-            type_str = 'Any'
+            type_str = "Any"
         params_def.append(f"{param_name}: {type_str}")
-    
+
     params_str = ", ".join(params_def)
-    
+
     # Get the parameter names for the loop
     other_param_names = param_names[1:]
     other_param_names_repr = repr(other_param_names)
-    
+
     # Create the wrapper function dynamically
     # Use exec() to create a function with the right signature
     # This is the only reliable way to create functions with dynamic signatures
@@ -73,27 +79,27 @@ async def {func_name}({params_str}) -> Any:
         kwargs[pname] = locals()[pname]
     return await bound_method(context=context, **kwargs)
 """
-    
+
     # Execute the code to create the wrapper function
     namespace = {
-        'Any': Any,
-        'RunContext': RunContext,
-        'bound_method': bound_method,
+        "Any": Any,
+        "RunContext": RunContext,
+        "bound_method": bound_method,
     }
     local_scope = {}
     exec(wrapper_code, namespace, local_scope)
-    wrapper = local_scope[f'{func_name}']
-    
+    wrapper = local_scope[f"{func_name}"]
+
     # Copy type hints from original function (excluding 'self')
     wrapper.__annotations__ = type_hints
-    
+
     return wrapper
 
 
 class DynamicAgent(Agent):
     def __init__(self, instructions: str):
         super().__init__(instructions=instructions)
-    
+
     async def on_enter(self):
         logger.info(f"Agent entered: {self.session.userdata.get('agent_name')}")
 
@@ -102,7 +108,9 @@ class DynamicAgent(Agent):
 async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room {ctx.room.name}")
     await ctx.connect()
-    logger.info(f"Connected to room, remote participants: {list(ctx.room.remote_participants.keys())}")
+    logger.info(
+        f"Connected to room, remote participants: {list(ctx.room.remote_participants.keys())}"
+    )
 
     agent_session = None
     voice_agent = None
@@ -120,7 +128,9 @@ async def entrypoint(ctx: JobContext):
             phone_number = parts[1]
             logger.info(f"Extracted phone number: {phone_number}")
         except (IndexError, AttributeError) as e:
-            logger.error(f"Failed to extract phone number from room name '{room_name}': {e}")
+            logger.error(
+                f"Failed to extract phone number from room name '{room_name}': {e}"
+            )
             return
 
         # 2. Fetch agent by phone number
@@ -136,7 +146,9 @@ async def entrypoint(ctx: JobContext):
 
         # 3. Prepare tools for this agent
         logger.info("Fetching current tools from database")
-        agent_tools, error = await tool_service.get_agent_tools_with_sensitive_config(voice_agent.id)
+        agent_tools, error = await tool_service.get_agent_tools_with_sensitive_config(
+            voice_agent.id
+        )
         if error:
             logger.error(f"Error fetching agent tools: {error}")
             agent_tools = []
@@ -160,9 +172,15 @@ async def entrypoint(ctx: JobContext):
 
             # Create tool instance with configuration
             logger.debug(f"Creating tool instance for {tool_name}")
-            logger.debug(f"Config keys: {list(tool_config.keys()) if tool_config else []}")
-            logger.debug(f"Sensitive config keys: {list(tool_sensitive_config.keys()) if tool_sensitive_config else []}")
-            tool_instance = tool_class(config=tool_config, sensitive_config=tool_sensitive_config)
+            logger.debug(
+                f"Config keys: {list(tool_config.keys()) if tool_config else []}"
+            )
+            logger.debug(
+                f"Sensitive config keys: {list(tool_sensitive_config.keys()) if tool_sensitive_config else []}"
+            )
+            tool_instance = tool_class(
+                config=tool_config, sensitive_config=tool_sensitive_config
+            )
 
             # Get all functions for this tool
             functions = livekit_tool_registry.get_tool_functions(tool_name)
@@ -182,43 +200,53 @@ async def entrypoint(ctx: JobContext):
             # Build tool wrapper functions for each enabled function
             for func in functions:
                 func_name = func.__name__
-                
+
                 if func_name in unselected_func_names:
-                    logger.debug(f"Function {func_name} is unselected for agent {agent_id}")
+                    logger.debug(
+                        f"Function {func_name} is unselected for agent {agent_id}"
+                    )
                     continue
-                
+
                 # Get the bound method
                 bound_method = getattr(tool_instance, func_name)
-                
+
                 # Get the original function from the class (not the bound method)
                 original_func = getattr(tool_class, func_name)
                 sig = inspect.signature(original_func)
-                
+
                 # Get parameters excluding 'self'
-                param_names = [name for name in sig.parameters.keys() if name != 'self']
+                param_names = [name for name in sig.parameters.keys() if name != "self"]
                 if not param_names:
-                    logger.error(f"Function {func_name} has no parameters (excluding self)")
+                    logger.error(
+                        f"Function {func_name} has no parameters (excluding self)"
+                    )
                     continue
-                
+
                 # Get type hints from original function
                 type_hints = {}
-                if hasattr(original_func, '__annotations__'):
-                    type_hints = {k: v for k, v in original_func.__annotations__.items() if k != 'self'}
-                
+                if hasattr(original_func, "__annotations__"):
+                    type_hints = {
+                        k: v
+                        for k, v in original_func.__annotations__.items()
+                        if k != "self"
+                    }
+
                 logger.debug(f"Creating wrapper for {func_name}")
                 logger.debug(f"  Parameters: {param_names}")
                 logger.debug(f"  Type hints: {type_hints}")
-                
+
                 # Create wrapper function
                 # The key insight: create a simple wrapper with explicit parameters
                 # that match the original function (excluding 'self')
-                wrapper = _create_tool_wrapper(bound_method, func_name, param_names, type_hints)
-                
+                wrapper = _create_tool_wrapper(
+                    bound_method, func_name, param_names, type_hints
+                )
+
                 # Set wrapper metadata
                 wrapper.__name__ = func_name
                 wrapper.__qualname__ = func_name
                 wrapper.__doc__ = func.__doc__ or ""
-                
+
                 # Pass to function_tool
                 tool = function_tool(
                     wrapper,
@@ -246,11 +274,7 @@ async def entrypoint(ctx: JobContext):
         # 5. Create LiveKit Agent
         # 6. Start Session
         agent_session = AgentSession(
-            llm=model,
-            userdata={
-                "agent_id": agent_id,
-                "agent_name": voice_agent.name
-            }
+            llm=model, userdata={"agent_id": agent_id, "agent_name": voice_agent.name}
         )
 
         await agent_session.start(
@@ -270,7 +294,9 @@ async def entrypoint(ctx: JobContext):
         # 7. Handle participant events
         @ctx.room.on("participant_connected")
         def on_participant_connected(participant):
-            logger.info(f"Participant connected: {participant.identity}, kind: {participant.kind}")
+            logger.info(
+                f"Participant connected: {participant.identity}, kind: {participant.kind}"
+            )
 
         @ctx.room.on("participant_disconnected")
         def on_participant_disconnected(participant):
@@ -285,7 +311,9 @@ async def entrypoint(ctx: JobContext):
                 logger.info("Shutting down agent session (error cleanup)")
                 agent_session.shutdown(drain=True)
             except Exception as cleanup_error:
-                logger.error(f"Error shutting down agent session: {cleanup_error}", exc_info=True)
+                logger.error(
+                    f"Error shutting down agent session: {cleanup_error}", exc_info=True
+                )
 
         # Cleanup only on error: Close LiveKit room if exists
         if room_name:
@@ -293,7 +321,10 @@ async def entrypoint(ctx: JobContext):
                 logger.info(f"Closing LiveKit room (error cleanup): {room_name}")
                 await livekit_service.delete_room(room_name)
             except Exception as cleanup_error:
-                logger.error(f"Error closing LiveKit room {room_name}: {cleanup_error}", exc_info=True)
+                logger.error(
+                    f"Error closing LiveKit room {room_name}: {cleanup_error}",
+                    exc_info=True,
+                )
 
 
 if __name__ == "__main__":

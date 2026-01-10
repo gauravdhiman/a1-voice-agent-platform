@@ -26,6 +26,7 @@ class GoogleCalendarTool(BaseTool):
 ```
 
 LiveKit's `@function_tool` decorator cannot accept bound methods because:
+
 1. It uses `inspect.signature()` to extract parameters
 2. Bound methods have `self` as first parameter
 3. LiveKit tries to call the function, but `self` is not available
@@ -39,18 +40,22 @@ Error: Cannot wrap bound method with @function_tool decorator
 ### Attempted Solutions
 
 **Attempt 1: Pass bound method directly**
+
 ```python
 bound_method = getattr(tool_instance, 'check_availability')
 tool = function_tool(bound_method)  # ❌ Failed
 ```
+
 **Result**: Error - cannot wrap bound method
 
 **Attempt 2: Use `inspect.unwrap()` to get original function**
+
 ```python
 import inspect
 original_func = inspect.unwrap(bound_method)
 tool = function_tool(original_func)  # ❌ Failed
 ```
+
 **Result**: Original function still has `self` parameter
 
 ### Solution: Dynamic Wrapper Creation
@@ -60,15 +65,15 @@ We create a standalone wrapper function with the same signature (excluding `self
 ```python
 def _create_tool_wrapper(bound_method: Any, func_name: str, param_names: list[str], type_hints: dict) -> Any:
     """Create wrapper function for a tool method."""
-    
+
     # Build parameter definitions
     params_def = ["context: RunContext"]
     for param_name in param_names[1:]:  # Skip 'self'
         param_type = type_hints.get(param_name, Any)
         params_def.append(f"{param_name}: {param_type}")
-    
+
     params_str = ", ".join(params_def)
-    
+
     # Create wrapper dynamically using exec()
     wrapper_code = f"""
 async def {func_name}({params_str}) -> Any:
@@ -78,23 +83,24 @@ async def {func_name}({params_str}) -> Any:
         kwargs[pname] = locals()[pname]
     return await bound_method(context=context, **kwargs)
 """
-    
+
     # Execute code to create function
     namespace = {'Any': Any, 'RunContext': RunContext, 'bound_method': bound_method}
     local_scope = {}
     exec(wrapper_code, namespace, local_scope)
     wrapper = local_scope[func_name]
-    
+
     # Set metadata
     wrapper.__annotations__ = type_hints
     wrapper.__name__ = func_name
     wrapper.__qualname__ = func_name
     wrapper.__doc__ = original_func.__doc__
-    
+
     return wrapper
 ```
 
 **Benefits**:
+
 - ✅ Exact signature matches (excluding `self`)
 - ✅ Type hints preserved
 - ✅ Delegates to bound method with all parameters
@@ -116,20 +122,21 @@ Root cause: Date string `"2026-01-06T17:00:00Z"` being treated as dictionary key
 
 We created a test file `worker/test_livekit_wrapping.py` with 6 different wrapper approaches:
 
-| Test | Approach | Result | Why |
-|-------|-----------|--------|-----|
-| TEST 1 | `**kwargs` + annotations | ❌ Failed | Pydantic creates `['kwargs']` instead of actual field names |
-| TEST 2 | Only context param | ❌ Failed | Missing other parameters |
-| TEST 3 | Explicit params matching | ✅ **SUCCESS** | Creates correct Pydantic model with actual field names |
-| TEST 4 | Dynamic wrapper using exec | ✅ **SUCCESS** | Creates correct Pydantic model |
-| TEST 5 | `inspect.unwrap()` on bound method | ❌ Failed | Can't set `__livekit_tool_info` on bound methods |
-| TEST 6 | Original method directly | ❌ Failed | Has `self` parameter that LiveKit rejects |
+| Test   | Approach                           | Result         | Why                                                         |
+| ------ | ---------------------------------- | -------------- | ----------------------------------------------------------- |
+| TEST 1 | `**kwargs` + annotations           | ❌ Failed      | Pydantic creates `['kwargs']` instead of actual field names |
+| TEST 2 | Only context param                 | ❌ Failed      | Missing other parameters                                    |
+| TEST 3 | Explicit params matching           | ✅ **SUCCESS** | Creates correct Pydantic model with actual field names      |
+| TEST 4 | Dynamic wrapper using exec         | ✅ **SUCCESS** | Creates correct Pydantic model                              |
+| TEST 5 | `inspect.unwrap()` on bound method | ❌ Failed      | Can't set `__livekit_tool_info` on bound methods            |
+| TEST 6 | Original method directly           | ❌ Failed      | Has `self` parameter that LiveKit rejects                   |
 
 ### Key Discovery
 
-**Must use explicit parameters, not `**kwargs`**:
+**Must use explicit parameters, not `**kwargs`\*\*:
 
 **INCORRECT** (creates wrong Pydantic model):
+
 ```python
 async def check_availability(context: RunContext, **kwargs) -> Any:
     """Wrapper for check_availability."""
@@ -137,6 +144,7 @@ async def check_availability(context: RunContext, **kwargs) -> Any:
 ```
 
 Pydantic creates:
+
 ```python
 class CheckAvailabilityArgs(BaseModel):
     context: RunContext
@@ -144,6 +152,7 @@ class CheckAvailabilityArgs(BaseModel):
 ```
 
 **CORRECT** (creates correct Pydantic model):
+
 ```python
 async def check_availability(
     context: RunContext,
@@ -155,6 +164,7 @@ async def check_availability(
 ```
 
 Pydantic creates:
+
 ```python
 class CheckAvailabilityArgs(BaseModel):
     context: RunContext
@@ -187,6 +197,7 @@ async def create_event(
 ```
 
 In Pydantic 2.x:
+
 - `str = ""` creates a **required** field with empty string default
 - LLM omits optional fields (doesn't send them at all)
 - Pydantic validation fails because field is required but not provided
@@ -206,6 +217,7 @@ async def create_event(
 ```
 
 In Pydantic 2.x:
+
 - `str | None = None` creates a truly **optional** field
 - LLM can omit the field entirely
 - Pydantic validates successfully when field is missing
@@ -213,6 +225,7 @@ In Pydantic 2.x:
 **Pydantic Models Created**:
 
 **INCORRECT** (`str = ""`):
+
 ```python
 class CreateEventArgs(BaseModel):
     title: str
@@ -220,6 +233,7 @@ class CreateEventArgs(BaseModel):
 ```
 
 **CORRECT** (`str | None = None`):
+
 ```python
 class CreateEventArgs(BaseModel):
     title: str
@@ -304,6 +318,7 @@ This is the only reliable way to create functions with dynamic signatures in Pyt
 ### 1. Pydantic Model Creation Matters
 
 LiveKit converts wrapper functions to Pydantic models. The model structure depends on wrapper signature:
+
 - **Explicit parameters**: Individual fields for each parameter
 - **`**kwargs`**: Single `kwargs` field (type: dict)
 - **Wrong optional definition**: Required field instead of optional
@@ -332,6 +347,7 @@ We used a comprehensive test file to validate approaches:
 ```
 
 **Key insights from testing**:
+
 - TEST 3 and TEST 4 work (explicit parameters)
 - TEST 4 (dynamic wrapper using exec) is our production implementation
 - Other approaches fail for various reasons
@@ -347,6 +363,7 @@ The final implementation in `worker/src/worker.py` uses:
 5. **Proper metadata** set on wrapper
 
 **Code flow**:
+
 ```python
 # 1. Get tool class from registry
 tool_class = livekit_tool_registry.get_tool_class(tool_name)
@@ -361,15 +378,15 @@ functions = [getattr(tool_instance, name) for name in dir(tool_instance) if call
 for func in functions:
     func_name = func.__name__
     bound_method = getattr(tool_instance, func_name)
-    
+
     # Extract parameters and type hints
     sig = inspect.signature(func)
     param_names = [name for name in sig.parameters.keys() if name != 'self']
     type_hints = {k: v for k, v in func.__annotations__.items() if k != 'self'}
-    
+
     # Create wrapper
     wrapper = _create_tool_wrapper(bound_method, func_name, param_names, type_hints)
-    
+
     # Register with LiveKit
     tool = function_tool(wrapper, name=func_name, description=func.__doc__)
     livekit_tools.append(tool)
@@ -393,6 +410,7 @@ We successfully solved all tool calling challenges by:
 5. ✅ Using `exec()` for dynamic function creation
 
 The tool calling system now works correctly with:
+
 - Any tool method signature
 - Proper Pydantic validation
 - Optional parameters that LLMs can omit

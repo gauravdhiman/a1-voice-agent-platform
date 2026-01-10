@@ -19,7 +19,7 @@ The worker fetches tool implementations from the database and wraps them for use
 ```python
 class GoogleCalendarTool(BaseTool):
     """Tool for managing Google Calendar."""
-    
+
     async def create_event(
         self,
         context: RunContext,        # Injected by LiveKit
@@ -34,6 +34,7 @@ class GoogleCalendarTool(BaseTool):
 ```
 
 **Key Points:**
+
 - `self`: Accesses instance config (`self.config`, `self.sensitive_config`)
 - `context`: LiveKit provides this automatically when calling the tool
 - Other parameters: Provided by LLM from user input
@@ -46,23 +47,23 @@ In the worker's `entrypoint()`, we process each tool method:
 ```python
 for func in functions:
     func_name = func.__name__
-    
+
     # Get bound method from instance
     bound_method = getattr(tool_instance, func_name)
-    
+
     # Get original function from class
     original_func = getattr(tool_class, func_name)
     sig = inspect.signature(original_func)
-    
+
     # Extract parameters (excluding 'self')
     param_names = [name for name in sig.parameters.keys() if name != 'self']
-    
+
     # Extract type hints (excluding 'self')
     type_hints = {
-        k: v for k, v in original_func.__annotations__.items() 
+        k: v for k, v in original_func.__annotations__.items()
         if k != 'self'
     }
-    
+
     # Create wrapper
     wrapper = _create_tool_wrapper(bound_method, func_name, param_names, type_hints)
 ```
@@ -75,7 +76,7 @@ This helper function creates a wrapper with the **exact same signature** as the 
 def _create_tool_wrapper(bound_method: Any, func_name: str, param_names: list[str], type_hints: dict) -> Any:
     """
     Create a wrapper function for a tool method.
-    
+
     The wrapper has the same signature as the original method (excluding 'self').
     It accepts all parameters explicitly (no **kwargs), then delegates to the bound method.
     """
@@ -89,9 +90,9 @@ def _create_tool_wrapper(bound_method: Any, func_name: str, param_names: list[st
         else:
             type_str = 'Any'
         params_def.append(f"{param_name}: {type_str}")
-    
+
     params_str = ", ".join(params_def)
-    
+
     # Create wrapper function dynamically using exec()
     # We name it correctly from the start (not {func_name}_wrapper)
     wrapper_code = f"""
@@ -103,7 +104,7 @@ async def {func_name}({params_str}) -> Any:
         kwargs[pname] = locals()[pname]
     return await bound_method(context=context, **kwargs)
 """
-    
+
     # Execute the code
     namespace = {
         'Any': Any,
@@ -113,14 +114,15 @@ async def {func_name}({params_str}) -> Any:
     local_scope = {}
     exec(wrapper_code, namespace, local_scope)
     wrapper = local_scope[func_name]
-    
+
     # Copy type hints from original function (excluding 'self')
     wrapper.__annotations__ = type_hints
-    
+
     return wrapper
 ```
 
 **What This Does:**
+
 1. Creates a function with **exact same signature** as original (excluding `self`)
 2. Names it correctly as `{func_name}` (not `{func_name}_wrapper`)
 3. Delegates to bound method with all parameters as kwargs
@@ -157,12 +159,14 @@ model = function_arguments_to_pydantic_model(wrapper)
 ```
 
 **What LiveKit Does:**
+
 1. **Inspects signature**: `inspect.signature(wrapper)` → `(context, title, start_time, ...)`
 2. **Gets type hints**: `wrapper.__annotations__` → `{context: RunContext, title: str, ...}`
 3. **Filters out RunContext**: Excludes from input schema (LLM doesn't see this)
 4. **Creates Pydantic model**: Dynamic class with fields for each parameter
 
 **Example Pydantic Model Created:**
+
 ```python
 class CreateEventArgs(BaseModel):
     title: str
@@ -253,11 +257,13 @@ Which calls the actual tool method with `self` already bound.
 ### Why `exec()` Is Necessary
 
 We use `exec()` to create functions with **dynamic signatures** because:
+
 1. Python doesn't have a built-in way to create functions with dynamic signatures
 2. Each tool method can have different parameters
 3. We need to match signatures **exactly** for LiveKit's Pydantic validation
 
 **Alternative approaches that DON'T work:**
+
 - ❌ Using `**kwargs`: Pydantic creates wrong model with `kwargs` field
 - ❌ Bound methods directly: Can't set `__livekit_tool_info` on bound methods
 - ❌ Original methods: Has `self` parameter that LiveKit rejects
@@ -265,18 +271,21 @@ We use `exec()` to create functions with **dynamic signatures** because:
 ### Optional Parameters Pattern
 
 **Correct:** `description: str | None = None`
+
 ```python
 async def create_event(..., description: str | None = None) -> ...:
     pass
 ```
 
 **Incorrect:** `description: str = ""`
+
 ```python
 async def create_event(..., description: str = "") -> ...:
     pass
 ```
 
 **Why:** In Pydantic 2.x:
+
 - `str = ""` creates a **required** field with empty string default
 - `str | None = None` creates a truly **optional** field
 - LLMs often omit optional fields entirely (don't send them at all)
@@ -284,11 +293,13 @@ async def create_event(..., description: str = "") -> ...:
 ## Why This Is Generic and Maintainable
 
 1. **Generic**: Works for any tool method with any signature
+
    - No hardcoded parameter names
    - No hardcoded parameter types
    - Handles any number of parameters
 
 2. **Maintainable**: Single `_create_tool_wrapper` function
+
    - Easy to debug (add logging here)
    - Easy to modify (change behavior here)
    - All tools use same wrapping logic
@@ -309,12 +320,12 @@ async def {func_name}({params_str}) -> Any:
     for pname in {param_names[1:]:!r}:
         value = locals()[pname]
         logger.debug(f"[TOOL ARG] {pname} = {value}")
-    
+
     # Build kwargs
     kwargs = {{}}
     for pname in {param_names[1:]:!r}:
         kwargs[pname] = locals()[pname]
-    
+
     result = await bound_method(context=context, **kwargs)
     logger.info(f"[TOOL CALL] {func_name} completed")
     return result
@@ -323,6 +334,7 @@ async def {func_name}({params_str}) -> Any:
 ## Summary
 
 The wrapper pattern enables:
+
 - ✅ Tool classes to use `self` for state management
 - ✅ LiveKit to injects `RunContext` automatically
 - ✅ LLMs to see clean tool schemas (no `self`, no `context`)

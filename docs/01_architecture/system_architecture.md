@@ -82,6 +82,7 @@ sequenceDiagram
 **Endpoint**: `POST /api/v1/voice/twilio/incoming`
 
 **Process**:
+
 1. Twilio sends POST request when someone calls your Twilio phone number
 2. Backend looks up agent by phone number via `voice_agent_service.get_agent_by_phone()`
 3. Backend returns TwiML (Twilio Markup Language) response with `<Dial><Sip>` element
@@ -90,11 +91,13 @@ sequenceDiagram
 6. Worker joins room with AI agent and handles the call
 
 **Key Configuration**:
+
 - `LIVEKIT_SIP_DOMAIN`: LiveKit SIP domain for bridging
 - `voice_agents.phone_number`: Phone number associated with agent
 - `voice_routes.py`: Handles Twilio webhook and returns TwiML
 
 **Example TwiML Response**:
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -105,6 +108,7 @@ sequenceDiagram
 ```
 
 This design separates telephony (Twilio) from AI processing (LiveKit), allowing the platform to:
+
 - Use Twilio for phone numbers and incoming call routing
 - Use LiveKit for real-time AI voice interaction
 - Bridge calls via SIP protocol
@@ -116,12 +120,14 @@ This design separates telephony (Twilio) from AI processing (LiveKit), allowing 
 **Purpose:** User interface for managing organizations, agents, tools, and billing
 
 **Key Technologies:**
+
 - Next.js 15 with App Router
 - React 18+ with TypeScript
 - Tailwind CSS for styling
 - OpenTelemetry instrumentation
 
 **Architecture:**
+
 ```
 frontend/
 ├── src/
@@ -148,6 +154,7 @@ frontend/
 ```
 
 **Key Features:**
+
 - Multi-tenant organization management
 - Voice agent creation and configuration
 - Tool configuration with function-level enable/disable
@@ -162,12 +169,14 @@ frontend/
 **Purpose:** REST API for frontend, tool management, OAuth callbacks, and worker orchestration
 
 **Key Technologies:**
+
 - FastAPI with Python 3.11
 - Supabase (PostgreSQL) as database
 - OpenTelemetry for observability
 - Alembic for database migrations
 
 **Architecture:**
+
 ```
 backend/
 ├── src/
@@ -207,6 +216,7 @@ backend/
 ```
 
 **Key Features:**
+
 - RESTful API with OpenAPI documentation
 - Tool registration and synchronization
 - OAuth flow for Google Calendar
@@ -222,11 +232,13 @@ backend/
 **Purpose:** LiveKit worker for handling real-time voice agent calls and tool execution
 
 **Key Technologies:**
+
 - LiveKit Agents Python SDK
 - Google Gemini Realtime Model
 - OpenTelemetry instrumentation
 
 **Architecture:**
+
 ```
 worker/
 ├── src/
@@ -236,6 +248,7 @@ worker/
 ```
 
 **Worker Flow:**
+
 ```mermaid
 sequenceDiagram
     participant Room as LiveKit Room
@@ -256,6 +269,7 @@ sequenceDiagram
 ```
 
 **Key Features:**
+
 - Dynamic tool discovery from database
 - Per-agent tool configuration
 - Config injection via `context.userdata`
@@ -274,6 +288,7 @@ sequenceDiagram
 #### Key Tables
 
 **platform_tools**
+
 ```sql
 CREATE TABLE platform_tools (
     id UUID PRIMARY KEY,
@@ -290,6 +305,7 @@ CREATE TABLE platform_tools (
 ```
 
 **agent_tools**
+
 ```sql
 CREATE TABLE agent_tools (
     id UUID PRIMARY KEY,
@@ -305,6 +321,7 @@ CREATE TABLE agent_tools (
 ```
 
 **voice_agents**
+
 ```sql
 CREATE TABLE voice_agents (
     id UUID PRIMARY KEY,
@@ -319,6 +336,7 @@ CREATE TABLE voice_agents (
 ```
 
 **organizations**
+
 ```sql
 CREATE TABLE organizations (
     id UUID PRIMARY KEY,
@@ -421,6 +439,7 @@ class ExampleTool(BaseTool):
 **Approach:** Extract function schemas using `inspect` instead of AST parsing.
 
 **Key Methods:**
+
 - `register_tools_from_package()` - Discover tool classes dynamically
 - `_extract_function_methods()` - Find `@function_tool` decorated methods
 - `_extract_schema_from_function()` - Build function schemas from signature
@@ -429,6 +448,7 @@ class ExampleTool(BaseTool):
 - `get_tool_functions()` - Get function objects for worker
 
 **Advantages over AST approach:**
+
 - No source file parsing
 - Uses Python's built-in introspection
 - More robust and follows LiveKit design
@@ -469,12 +489,14 @@ graph LR
 ```
 
 **Authentication Flow:**
+
 1. User authenticates via Supabase OAuth or credentials
 2. Supabase JWT returned
 3. Middleware validates JWT on protected routes
 4. User context includes profile and roles
 
 **RBAC Implementation:**
+
 - **Permissions:** Fine-grained permissions (e.g., `org:manage`, `agent:create`)
 - **Roles:** Hierarchical (platform_admin > org_admin > regular_user)
 - **Assignment:** Users can have multiple roles across organizations
@@ -487,6 +509,7 @@ graph LR
 **Frontend Component:** `frontend/src/app/(dashboard)/organization/page.tsx`
 
 **Function Display Logic:**
+
 ```typescript
 const renderToolConfig = (tool: PlatformTool, agentTool?: AgentTool) => {
     const functions = tool.tool_functions_schema?.functions || [];
@@ -517,25 +540,26 @@ const renderToolConfig = (tool: PlatformTool, agentTool?: AgentTool) => {
 ```
 
 **Toggle Function Logic:**
+
 ```typescript
 const handleToggleFunction = async (
-    toolId: string,
-    functionName: string,
-    isEnabled: boolean
+  toolId: string,
+  functionName: string,
+  isEnabled: boolean,
 ) => {
-    // If enabling (checkbox checked), add to unselected list
-    if (isEnabled) {
-        newUnselected = [...currentUnselected, functionName];
-    }
-    // If disabling (checkbox unchecked), remove from unselected list
-    else {
-        newUnselected = currentUnselected.filter(fn => fn !== functionName);
-    }
+  // If enabling (checkbox checked), add to unselected list
+  if (isEnabled) {
+    newUnselected = [...currentUnselected, functionName];
+  }
+  // If disabling (checkbox unchecked), remove from unselected list
+  else {
+    newUnselected = currentUnselected.filter((fn) => fn !== functionName);
+  }
 
-    // Update database
-    await agentService.updateAgentTool(agentToolId, {
-        unselected_functions: newUnselected
-    });
+  // Update database
+  await agentService.updateAgentTool(agentToolId, {
+    unselected_functions: newUnselected,
+  });
 };
 ```
 
@@ -580,6 +604,7 @@ graph TB
 ```
 
 **Configuration:**
+
 - **File:** `otel-collector-config.yml`
 - **Collector:** OpenTelemetry Collector Contrib
 - **Receivers:** `otlp` (gRPC), `http` (HTTP)
@@ -587,6 +612,7 @@ graph TB
 - **Exporters:** `otlp/newrelic` - exports to New Relic
 
 **Environment Variables:**
+
 ```bash
 # Traces
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces
@@ -603,6 +629,7 @@ OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http://protobuf
 ```
 
 **Instrumentation:**
+
 - Frontend: Manual instrumentation in `src/lib/opentelemetry.ts`
 - Backend: Auto-instrumentation in `config/opentelemetry.py`
 - Worker: Uses LiveKit's built-in OTEL support
@@ -634,6 +661,7 @@ sequenceDiagram
 ```
 
 **Tool Configuration in Database:**
+
 ```json
 {
   "config": {
@@ -658,8 +686,8 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     ports:
-      - "4317:4317"   # gRPC (traces, logs)
-      - "4318:4318"   # HTTP (metrics)
+      - "4317:4317" # gRPC (traces, logs)
+      - "4318:4318" # HTTP (metrics)
     volumes:
       - ./otel-collector-config.yml:/etc/otelcol-contrib
 
@@ -698,20 +726,20 @@ services:
 
 ### 11. Technology Stack Summary
 
-| Component | Technology | Version | Purpose |
-|-----------|-----------|---------|---------|
-| Frontend | Next.js | 15.5 | UI framework |
-| Backend | FastAPI | Latest | API framework |
-| Backend Runtime | Python | 3.11 | Server runtime |
-| Database | Supabase (PostgreSQL) | - | Data storage |
-| ORM | Supabase Client | - | Database client |
-| Authentication | Supabase Auth | - | User auth |
-| Voice SDK | LiveKit Agents | >=1.3.10 | Voice/video |
-| LLM | Google Gemini | - | AI model |
-| Observability | OpenTelemetry | Latest | Tracing & metrics |
-| Metrics Exporter | New Relic OTLP | - | External metrics |
-| Containerization | Docker Compose | - | Local dev |
-| API Protocol | REST + gRPC | - | Frontend uses REST, worker uses gRPC |
+| Component        | Technology            | Version  | Purpose                              |
+| ---------------- | --------------------- | -------- | ------------------------------------ |
+| Frontend         | Next.js               | 15.5     | UI framework                         |
+| Backend          | FastAPI               | Latest   | API framework                        |
+| Backend Runtime  | Python                | 3.11     | Server runtime                       |
+| Database         | Supabase (PostgreSQL) | -        | Data storage                         |
+| ORM              | Supabase Client       | -        | Database client                      |
+| Authentication   | Supabase Auth         | -        | User auth                            |
+| Voice SDK        | LiveKit Agents        | >=1.3.10 | Voice/video                          |
+| LLM              | Google Gemini         | -        | AI model                             |
+| Observability    | OpenTelemetry         | Latest   | Tracing & metrics                    |
+| Metrics Exporter | New Relic OTLP        | -        | External metrics                     |
+| Containerization | Docker Compose        | -        | Local dev                            |
+| API Protocol     | REST + gRPC           | -        | Frontend uses REST, worker uses gRPC |
 
 ---
 
@@ -745,39 +773,49 @@ ai-voice-agent-platform/
 ## Key Design Decisions
 
 ### 1. LiveKit Integration
+
 **Decision:** Use LiveKit's native `@function_tool()` decorator instead of custom tool abstractions
 **Rationale:**
+
 - LiveKit provides automatic schema extraction from decorated functions
 - Worker can pass decorated functions directly to LLM models
 - No need to manually convert between internal and external formats
 
 ### 2. Tool Schema Storage
+
 **Decision:** Store function schemas in `platform_tools.tool_functions_schema` (JSONB)
 **Rationale:**
+
 - Single source of truth for function definitions
 - Enables frontend to display available functions
 - Allows per-function enable/disable via `agent_tools.unselected_functions`
 - Supports future tool discovery without code changes
 
 ### 3. Registry Approach
+
 **Decision:** Use LiveKit native registry instead of AST parsing
 **Rationale:**
+
 - More robust - uses Python's built-in introspection
 - Follows LiveKit's intended design patterns
 - No fragile source file parsing or AST manipulation
 - Cleaner, more maintainable code
 
 ### 4. Multi-Tenancy
+
 **Decision:** Organization-based isolation via foreign key relationships
 **Rationale:**
+
 - Clear data ownership
 - Users belong to organizations
 - Agents and tools scoped to organizations
 - RBAC checks organization membership
 
 ### 5. OAuth State Management
+
 **Decision:** Store OAuth tokens in `agent_tools.sensitive_config` (encrypted)
 **Rationale:**
+
 - Tokens are sensitive (access_token, refresh_token)
 - Per-agent configuration allows multiple agents with different tokens
 - Encryption via Supabase's encryption capabilities
@@ -788,6 +826,7 @@ ai-voice-agent-platform/
 ## API Endpoints Summary
 
 ### Tool Management
+
 - `POST /api/v1/tools/platform` - Create platform tool (admin)
 - `GET /api/v1/tools/platform?only_active=true` - List active tools
 - `POST /api/v1/tools/agent` - Configure tool for agent
@@ -797,6 +836,7 @@ ai-voice-agent-platform/
 - `GET /api/v1/tools/callback` - Handle OAuth callback
 
 ### Agent Management
+
 - `POST /api/v1/agents` - Create agent
 - `GET /api/v1/agents/organization/{org_id}` - List org agents
 - `GET /api/v1/agents/{agent_id}` - Get agent details
@@ -804,6 +844,7 @@ ai-voice-agent-platform/
 - `DELETE /api/v1/agents/{agent_id}` - Delete agent
 
 ### Authentication
+
 - `POST /api/v1/auth/signup` - User registration
 - `POST /api/v1/auth/signin` - User login
 - `POST /api/v1/auth/oauth` - Supabase OAuth
@@ -814,16 +855,19 @@ ai-voice-agent-platform/
 ## Security Considerations
 
 ### 1. Authentication Flow
+
 - Supabase handles password hashing and JWT tokens
 - OAuth flow with state parameter (agent_id, tool_name) to prevent CSRF
 - Sensitive config (OAuth tokens) encrypted at rest
 
 ### 2. Authorization
+
 - RBAC middleware checks permissions before route handlers
 - Organization ownership verification for resource access
 - Platform admin role for tool creation
 
 ### 3. Data Encryption
+
 - `agent_tools.sensitive_config` column encryption for OAuth tokens
 - Encryption/decryption via shared security utilities
 
@@ -832,16 +876,19 @@ ai-voice-agent-platform/
 ## Performance & Scalability
 
 ### 1. Database Optimization
+
 - Connection pooling via Supabase client
 - Indexed queries (id, name, organization_id)
 - Batch operations in tool registry sync
 
 ### 2. Worker Scaling
+
 - Stateless worker instances can be horizontally scaled
 - Session management prevents duplicate tool executions
 - Config caching reduces database lookups
 
 ### 3. Frontend Optimization
+
 - Next.js static generation and caching
 - API client with request/response interceptors
 - React context providers prevent unnecessary re-renders
@@ -851,17 +898,20 @@ ai-voice-agent-platform/
 ## Development Workflow
 
 ### 1. Making Changes
+
 1. Modify code in appropriate service (backend, frontend, worker, shared)
 2. Update types in `shared` if schema changes
 3. Test locally with Docker Compose
 4. Run linting/type checking if configured
 
 ### 2. Database Migrations
+
 1. Create migration file: `backend/alembic/versions/YYYYMMDDHHMMSS_description.py`
 2. Apply migration: `docker-compose exec backend alembic upgrade head`
 3. Verify changes in database
 
 ### 3. Testing
+
 - Unit tests for business logic
 - Integration tests for API endpoints
 - Manual testing via UI
@@ -872,6 +922,7 @@ ai-voice-agent-platform/
 ## Future Enhancements
 
 ### Potential Improvements
+
 1. **Dynamic Tool Discovery**: Auto-discover new tools without code changes
 2. **Tool Marketplace**: Third-party tools can register themselves
 3. **Advanced RBAC**: Team-level permissions, resource-based access

@@ -1,33 +1,48 @@
 // components/dashboard/rbac-dashboard.tsx
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useRBAC } from '@/hooks/use-rbac';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
-import { Loader2, Plus, Edit, Users, Shield, Trash2 } from 'lucide-react';
+import React, { useState } from "react";
+import { useRBAC } from "@/hooks/use-rbac";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
+import { Loader2, Plus, Edit, Users, Shield, Trash2 } from "lucide-react";
 
 export function RBACDashboard() {
   const [state, actions] = useRBAC();
   const { roles, permissions, userRoles, loading, error } = state;
-  
-  const [activeTab, setActiveTab] = useState('roles');
+
+  const [activeTab, setActiveTab] = useState("roles");
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [isCreatingPermission, setIsCreatingPermission] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteItem, setDeleteItem] = useState<{ id: string; name: string; type: string } | null>(null);
+  const [deleteItem, setDeleteItem] = useState<{
+    id: string;
+    name: string;
+    type: string;
+  } | null>(null);
 
   // Form states
-  const [newRole, setNewRole] = useState({ name: '', description: '' });
-  const [newPermission, setNewPermission] = useState({ name: '', description: '', resource: '', action: '' });
-  
+  const [newRole, setNewRole] = useState({ name: "", description: "" });
+  const [newPermission, setNewPermission] = useState({
+    name: "",
+    description: "",
+    resource: "",
+    action: "",
+  });
+
   // Check if user has admin privileges
-  const isPlatformAdmin = actions.hasRole('platform_admin');
-  
+  const isPlatformAdmin = actions.hasRole("platform_admin");
+
   // Only platform admins can manage roles and permissions
   if (!isPlatformAdmin) {
     return (
@@ -38,42 +53,51 @@ export function RBACDashboard() {
           </CardHeader>
           <CardContent>
             <p>You don{`'`}t have permission to access the RBAC dashboard.</p>
-            <p>Only platform administrators can manage roles and permissions.</p>
+            <p>
+              Only platform administrators can manage roles and permissions.
+            </p>
           </CardContent>
         </Card>
       </div>
     );
   }
-  
+
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await actions.createRole(newRole);
-      setNewRole({ name: '', description: '' });
+      setNewRole({ name: "", description: "" });
       setIsCreatingRole(false);
     } catch (error) {
-      console.error('Failed to create role:', error);
+      console.error("Failed to create role:", error);
     }
   };
-  
+
   const handleCreatePermission = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await actions.createPermission(newPermission);
-      setNewPermission({ name: '', description: '', resource: '', action: '' });
+      setNewPermission({ name: "", description: "", resource: "", action: "" });
       setIsCreatingPermission(false);
     } catch (error) {
-      console.error('Failed to create permission:', error);
+      console.error("Failed to create permission:", error);
     }
   };
-  
+
   const handleDeleteRole = (roleId: string, roleName: string) => {
-    setDeleteItem({ id: roleId, name: roleName, type: 'role' });
+    setDeleteItem({ id: roleId, name: roleName, type: "role" });
     setDeleteDialogOpen(true);
   };
 
-  const handleDeletePermission = (permissionId: string, permissionName: string) => {
-    setDeleteItem({ id: permissionId, name: permissionName, type: 'permission' });
+  const handleDeletePermission = (
+    permissionId: string,
+    permissionName: string,
+  ) => {
+    setDeleteItem({
+      id: permissionId,
+      name: permissionName,
+      type: "permission",
+    });
     setDeleteDialogOpen(true);
   };
 
@@ -81,9 +105,9 @@ export function RBACDashboard() {
     if (!deleteItem) return;
 
     try {
-      if (deleteItem.type === 'role') {
+      if (deleteItem.type === "role") {
         await actions.deleteRole(deleteItem.id);
-      } else if (deleteItem.type === 'permission') {
+      } else if (deleteItem.type === "permission") {
         await actions.deletePermission(deleteItem.id);
       }
       setDeleteDialogOpen(false);
@@ -93,7 +117,7 @@ export function RBACDashboard() {
       throw error;
     }
   };
-  
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -108,40 +132,52 @@ export function RBACDashboard() {
           Platform Admin
         </div>
       </div>
-      
+
       {error && (
         <div className="mb-6 p-4 bg-destructive/10 text-destructive rounded-lg">
           Error: {error}
         </div>
       )}
-      
+
       <div className="space-y-6">
         <div className="flex space-x-4 border-b">
           <button
-            className={`py-2 px-4 font-medium ${activeTab === 'roles' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setActiveTab('roles')}
+            className={`py-2 px-4 font-medium ${
+              activeTab === "roles"
+                ? "border-b-2 border-blue-500 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+            onClick={() => setActiveTab("roles")}
           >
             <Users className="w-4 h-4 inline mr-2" />
             Roles
           </button>
           <button
-            className={`py-2 px-4 font-medium ${activeTab === 'permissions' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setActiveTab('permissions')}
+            className={`py-2 px-4 font-medium ${
+              activeTab === "permissions"
+                ? "border-b-2 border-blue-500 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+            onClick={() => setActiveTab("permissions")}
           >
             <Shield className="w-4 h-4 inline mr-2" />
             Permissions
           </button>
           <button
-            className={`py-2 px-4 font-medium ${activeTab === 'assignments' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setActiveTab('assignments')}
+            className={`py-2 px-4 font-medium ${
+              activeTab === "assignments"
+                ? "border-b-2 border-blue-500 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+            onClick={() => setActiveTab("assignments")}
           >
             <Users className="w-4 h-4 inline mr-2" />
             Assignments
           </button>
         </div>
-        
+
         {/* Roles Tab */}
-        {activeTab === 'roles' && (
+        {activeTab === "roles" && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -151,7 +187,10 @@ export function RBACDashboard() {
                     Manage system roles and their permissions
                   </CardDescription>
                 </div>
-                <Button onClick={() => setIsCreatingRole(true)} className="flex items-center gap-2">
+                <Button
+                  onClick={() => setIsCreatingRole(true)}
+                  className="flex items-center gap-2"
+                >
                   <Plus className="w-4 h-4" />
                   Create Role
                 </Button>
@@ -168,7 +207,9 @@ export function RBACDashboard() {
                         <Input
                           id="role-name"
                           value={newRole.name}
-                          onChange={(e) => setNewRole({...newRole, name: e.target.value})}
+                          onChange={(e) =>
+                            setNewRole({ ...newRole, name: e.target.value })
+                          }
                           placeholder="e.g., editor, viewer"
                           required
                         />
@@ -178,24 +219,35 @@ export function RBACDashboard() {
                         <Input
                           id="role-description"
                           value={newRole.description}
-                          onChange={(e) => setNewRole({...newRole, description: e.target.value})}
+                          onChange={(e) =>
+                            setNewRole({
+                              ...newRole,
+                              description: e.target.value,
+                            })
+                          }
                           placeholder="Role description"
                         />
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsCreatingRole(false)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsCreatingRole(false)}
+                      >
                         Cancel
                       </Button>
                       <Button type="submit" disabled={loading}>
-                        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        {loading && (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        )}
                         Create Role
                       </Button>
                     </div>
                   </form>
                 </div>
               )}
-              
+
               {loading ? (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -203,17 +255,24 @@ export function RBACDashboard() {
               ) : (
                 <div className="space-y-4">
                   {roles.map((role) => (
-                    <div key={role.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div
+                      key={role.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
                       <div>
                         <h3 className="font-medium">{role.name}</h3>
-                        <p className="text-sm text-muted-foreground">{role.description || '-'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {role.description || "-"}
+                        </p>
                         <div className="mt-2">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            role.is_system_role 
-                              ? 'bg-primary text-primary-foreground' 
-                              : 'bg-secondary text-secondary-foreground'
-                          }`}>
-                            {role.is_system_role ? 'System' : 'Custom'}
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              role.is_system_role
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-secondary text-secondary-foreground"
+                            }`}
+                          >
+                            {role.is_system_role ? "System" : "Custom"}
                           </span>
                         </div>
                       </div>
@@ -237,19 +296,20 @@ export function RBACDashboard() {
             </CardContent>
           </Card>
         )}
-        
+
         {/* Permissions Tab */}
-        {activeTab === 'permissions' && (
+        {activeTab === "permissions" && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Permissions</CardTitle>
-                  <CardDescription>
-                    Manage system permissions
-                  </CardDescription>
+                  <CardDescription>Manage system permissions</CardDescription>
                 </div>
-                <Button onClick={() => setIsCreatingPermission(true)} className="flex items-center gap-2">
+                <Button
+                  onClick={() => setIsCreatingPermission(true)}
+                  className="flex items-center gap-2"
+                >
                   <Plus className="w-4 h-4" />
                   Create Permission
                 </Button>
@@ -258,7 +318,9 @@ export function RBACDashboard() {
             <CardContent>
               {isCreatingPermission && (
                 <div className="mb-6 p-4 border rounded-lg">
-                  <h3 className="text-lg font-medium mb-4">Create New Permission</h3>
+                  <h3 className="text-lg font-medium mb-4">
+                    Create New Permission
+                  </h3>
                   <form onSubmit={handleCreatePermission} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -266,17 +328,29 @@ export function RBACDashboard() {
                         <Input
                           id="permission-name"
                           value={newPermission.name}
-                          onChange={(e) => setNewPermission({...newPermission, name: e.target.value})}
+                          onChange={(e) =>
+                            setNewPermission({
+                              ...newPermission,
+                              name: e.target.value,
+                            })
+                          }
                           placeholder="e.g., user:create, post:delete"
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="permission-description">Description</Label>
+                        <Label htmlFor="permission-description">
+                          Description
+                        </Label>
                         <Input
                           id="permission-description"
                           value={newPermission.description}
-                          onChange={(e) => setNewPermission({...newPermission, description: e.target.value})}
+                          onChange={(e) =>
+                            setNewPermission({
+                              ...newPermission,
+                              description: e.target.value,
+                            })
+                          }
                           placeholder="Permission description"
                         />
                       </div>
@@ -285,7 +359,12 @@ export function RBACDashboard() {
                         <Input
                           id="permission-resource"
                           value={newPermission.resource}
-                          onChange={(e) => setNewPermission({...newPermission, resource: e.target.value})}
+                          onChange={(e) =>
+                            setNewPermission({
+                              ...newPermission,
+                              resource: e.target.value,
+                            })
+                          }
                           placeholder="e.g., user, post, organization"
                           required
                         />
@@ -295,25 +374,36 @@ export function RBACDashboard() {
                         <Input
                           id="permission-action"
                           value={newPermission.action}
-                          onChange={(e) => setNewPermission({...newPermission, action: e.target.value})}
+                          onChange={(e) =>
+                            setNewPermission({
+                              ...newPermission,
+                              action: e.target.value,
+                            })
+                          }
                           placeholder="e.g., create, read, update, delete"
                           required
                         />
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsCreatingPermission(false)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsCreatingPermission(false)}
+                      >
                         Cancel
                       </Button>
                       <Button type="submit" disabled={loading}>
-                        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        {loading && (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        )}
                         Create Permission
                       </Button>
                     </div>
                   </form>
                 </div>
               )}
-              
+
               {loading ? (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -321,10 +411,15 @@ export function RBACDashboard() {
               ) : (
                 <div className="space-y-4">
                   {permissions.map((permission) => (
-                    <div key={permission.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div
+                      key={permission.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
                       <div>
                         <h3 className="font-medium">{permission.name}</h3>
-                        <p className="text-sm text-muted-foreground">{permission.description || '-'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {permission.description || "-"}
+                        </p>
                         <div className="mt-2 flex gap-2">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
                             {permission.resource}
@@ -341,7 +436,12 @@ export function RBACDashboard() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeletePermission(permission.id, permission.name)}
+                          onClick={() =>
+                            handleDeletePermission(
+                              permission.id,
+                              permission.name,
+                            )
+                          }
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -353,9 +453,9 @@ export function RBACDashboard() {
             </CardContent>
           </Card>
         )}
-        
+
         {/* Assignments Tab */}
-        {activeTab === 'assignments' && (
+        {activeTab === "assignments" && (
           <Card>
             <CardHeader>
               <CardTitle>User Role Assignments</CardTitle>
@@ -369,17 +469,22 @@ export function RBACDashboard() {
                   <h3 className="text-lg font-medium mb-4">Your Roles</h3>
                   <div className="flex flex-wrap gap-2">
                     {userRoles.map((role) => (
-                      <div key={role.id} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground">
+                      <div
+                        key={role.id}
+                        className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground"
+                      >
                         {role.name}
                       </div>
                     ))}
                   </div>
                 </div>
-                
+
                 <Separator />
-                
+
                 <div>
-                  <h3 className="text-lg font-medium mb-4">Assign Role to User</h3>
+                  <h3 className="text-lg font-medium mb-4">
+                    Assign Role to User
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="user-id">User ID</Label>
@@ -387,8 +492,8 @@ export function RBACDashboard() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="role-select">Role</Label>
-                      <select 
-                        id="role-select" 
+                      <select
+                        id="role-select"
                         className="w-full p-2 border rounded-md"
                         disabled={loading}
                       >
@@ -403,7 +508,9 @@ export function RBACDashboard() {
                   </div>
                   <div className="mt-4">
                     <Button disabled={loading}>
-                      {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      {loading && (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      )}
                       Assign Role
                     </Button>
                   </div>
@@ -418,11 +525,13 @@ export function RBACDashboard() {
             open={deleteDialogOpen}
             onOpenChange={setDeleteDialogOpen}
             itemName={deleteItem.name}
-            itemType={deleteItem.type === 'role' ? 'Role' : 'Permission'}
+            itemType={deleteItem.type === "role" ? "Role" : "Permission"}
             warnings={[
-              `${deleteItem.type === 'role' ? 'Role' : 'Permission'} data will be permanently deleted`,
-              'All associated permissions will be removed',
-              'Users assigned to this role may need reassignment',
+              `${
+                deleteItem.type === "role" ? "Role" : "Permission"
+              } data will be permanently deleted`,
+              "All associated permissions will be removed",
+              "Users assigned to this role may need reassignment",
             ]}
             onDelete={handleDeleteConfirm}
           />

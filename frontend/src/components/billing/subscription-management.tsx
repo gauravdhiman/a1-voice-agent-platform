@@ -1,10 +1,16 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import React, { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Calendar,
   CreditCard,
@@ -14,13 +20,13 @@ import {
   CheckCircle,
   ExternalLink,
   Settings,
-  Loader2
-} from 'lucide-react';
-import { billingService } from '@/services/billing-service';
-import { CancelSubscriptionDialog } from '@/components/billing/cancel-subscription-dialog';
-import { OrganizationSubscriptionWithPlan } from '@/types/billing';
-import { toast } from 'sonner';
-import { format } from 'date-fns';
+  Loader2,
+} from "lucide-react";
+import { billingService } from "@/services/billing-service";
+import { CancelSubscriptionDialog } from "@/components/billing/cancel-subscription-dialog";
+import { OrganizationSubscriptionWithPlan } from "@/types/billing";
+import { toast } from "sonner";
+import { format } from "date-fns";
 
 interface SubscriptionManagementProps {
   organizationId: string;
@@ -28,13 +34,14 @@ interface SubscriptionManagementProps {
   onSubscriptionUpdated?: () => void;
 }
 
-export function SubscriptionManagement({ 
-  organizationId, 
-  subscription, 
-  onSubscriptionUpdated 
+export function SubscriptionManagement({
+  organizationId,
+  subscription,
+  onSubscriptionUpdated,
 }: SubscriptionManagementProps) {
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
-  const [reactivatingSubscription, setReactivatingSubscription] = useState(false);
+  const [reactivatingSubscription, setReactivatingSubscription] =
+    useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
@@ -46,12 +53,14 @@ export function SubscriptionManagement({
     try {
       setCancelingSubscription(true);
       await billingService.cancelSubscription(organizationId);
-      toast.success('Subscription will be cancelled at end of your billing period');
+      toast.success(
+        "Subscription will be cancelled at end of your billing period",
+      );
       setCancelDialogOpen(false);
       onSubscriptionUpdated?.();
     } catch (error) {
-      console.error('Failed to cancel subscription:', error);
-      toast.error('Failed to cancel subscription');
+      console.error("Failed to cancel subscription:", error);
+      toast.error("Failed to cancel subscription");
       throw error;
     } finally {
       setCancelingSubscription(false);
@@ -63,11 +72,11 @@ export function SubscriptionManagement({
 
     try {
       await billingService.reactivateSubscription(organizationId);
-      toast.success('Subscription reactivated successfully');
+      toast.success("Subscription reactivated successfully");
       onSubscriptionUpdated?.();
     } catch (error) {
-      console.error('Failed to reactivate subscription:', error);
-      toast.error('Failed to reactivate subscription');
+      console.error("Failed to reactivate subscription:", error);
+      toast.error("Failed to reactivate subscription");
     } finally {
       setReactivatingSubscription(false);
     }
@@ -77,11 +86,14 @@ export function SubscriptionManagement({
     setOpeningPortal(true);
 
     try {
-      const { portal_url } = await billingService.createCustomerPortal(organizationId, window.location.href);
-      window.open(portal_url, '_blank');
+      const { portal_url } = await billingService.createCustomerPortal(
+        organizationId,
+        window.location.href,
+      );
+      window.open(portal_url, "_blank");
     } catch (error) {
-      console.error('Failed to open customer portal:', error);
-      toast.error('Failed to open billing portal');
+      console.error("Failed to open customer portal:", error);
+      toast.error("Failed to open billing portal");
     } finally {
       setOpeningPortal(false);
     }
@@ -89,29 +101,29 @@ export function SubscriptionManagement({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'trial':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'past_due':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'cancelled':
-      case 'expired':
-        return 'bg-red-100 text-red-800 border-red-200';
+      case "active":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "trial":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      case "past_due":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "cancelled":
+      case "expired":
+        return "bg-red-100 text-red-800 border-red-200";
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'active':
+      case "active":
         return <CheckCircle className="w-4 h-4" />;
-      case 'trial':
+      case "trial":
         return <Zap className="w-4 h-4" />;
-      case 'past_due':
-      case 'cancelled':
-      case 'expired':
+      case "past_due":
+      case "cancelled":
+      case "expired":
         return <AlertTriangle className="w-4 h-4" />;
       default:
         return null;
@@ -119,13 +131,18 @@ export function SubscriptionManagement({
   };
 
   const formatDate = (date: Date | string | null) => {
-    if (!date) return 'N/A';
-    return format(new Date(date), 'MMM dd, yyyy');
+    if (!date) return "N/A";
+    return format(new Date(date), "MMM dd, yyyy");
   };
 
-  const isTrialActive = subscription.status === 'trial' && subscription.trial_end && new Date(subscription.trial_end) > new Date();
+  const isTrialActive =
+    subscription.status === "trial" &&
+    subscription.trial_end &&
+    new Date(subscription.trial_end) > new Date();
   const isSubscriptionCancelled = subscription.cancel_at_period_end;
-  const isSubscriptionActive = ['active', 'trial'].includes(subscription.status);
+  const isSubscriptionActive = ["active", "trial"].includes(
+    subscription.status,
+  );
 
   return (
     <div className="space-y-6">
@@ -135,9 +152,14 @@ export function SubscriptionManagement({
             <div>
               <CardTitle className="flex items-center gap-2">
                 Current Subscription
-                <Badge className={`${getStatusColor(subscription.status)} flex items-center gap-1`}>
+                <Badge
+                  className={`${getStatusColor(
+                    subscription.status,
+                  )} flex items-center gap-1`}
+                >
                   {getStatusIcon(subscription.status)}
-                  {subscription.status.charAt(0).toUpperCase() + subscription.status.slice(1)}
+                  {subscription.status.charAt(0).toUpperCase() +
+                    subscription.status.slice(1)}
                 </Badge>
               </CardTitle>
               <CardDescription>
@@ -168,14 +190,15 @@ export function SubscriptionManagement({
                 <div className="text-sm text-muted-foreground">Plan</div>
                 <div className="font-semibold">{subscription.plan.name}</div>
               </div>
-              
+
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">Price</div>
                 <div className="font-semibold">
-                  ${(subscription.plan.price_amount / 100).toFixed(2)}/{subscription.plan.interval}
+                  ${(subscription.plan.price_amount / 100).toFixed(2)}/
+                  {subscription.plan.interval}
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground flex items-center gap-1">
                   <Zap className="w-4 h-4" />
@@ -185,14 +208,16 @@ export function SubscriptionManagement({
                   {subscription.plan.included_credits.toLocaleString()}
                 </div>
               </div>
-              
+
               {subscription.plan.max_users && (
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground flex items-center gap-1">
                     <Users className="w-4 h-4" />
                     Max Users
                   </div>
-                  <div className="font-semibold">{subscription.plan.max_users}</div>
+                  <div className="font-semibold">
+                    {subscription.plan.max_users}
+                  </div>
                 </div>
               )}
             </div>
@@ -211,12 +236,14 @@ export function SubscriptionManagement({
                 </div>
               </div>
             )}
-            
+
             {subscription.current_period_end && (
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
-                  {isSubscriptionCancelled ? 'Cancellation Date' : 'Next Billing Date'}
+                  {isSubscriptionCancelled
+                    ? "Cancellation Date"
+                    : "Next Billing Date"}
                 </div>
                 <div className="font-semibold">
                   {formatDate(subscription.current_period_end)}
@@ -230,8 +257,9 @@ export function SubscriptionManagement({
             <Alert>
               <Zap className="h-4 w-4" />
               <AlertDescription>
-                You&apos;re currently in your free trial period. 
-                Your trial ends on {formatDate(subscription.trial_end)} and you&apos;ll be charged for your subscription.
+                You&apos;re currently in your free trial period. Your trial ends
+                on {formatDate(subscription.trial_end)} and you&apos;ll be
+                charged for your subscription.
               </AlertDescription>
             </Alert>
           )}
@@ -241,8 +269,9 @@ export function SubscriptionManagement({
             <Alert className="border-yellow-200 bg-yellow-50">
               <AlertTriangle className="h-4 w-4 text-yellow-600" />
               <AlertDescription className="text-yellow-800">
-                Your subscription is scheduled to be cancelled on {formatDate(subscription.current_period_end)}.
-                You can reactivate it anytime before then.
+                Your subscription is scheduled to be cancelled on{" "}
+                {formatDate(subscription.current_period_end)}. You can
+                reactivate it anytime before then.
               </AlertDescription>
             </Alert>
           )}
@@ -304,7 +333,7 @@ export function SubscriptionManagement({
               <li>• Change subscription plan</li>
             </ul>
           </div>
-          </CardContent>
+        </CardContent>
       </Card>
 
       <CancelSubscriptionDialog

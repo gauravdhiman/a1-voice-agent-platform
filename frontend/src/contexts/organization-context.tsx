@@ -1,9 +1,15 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Organization } from '@/types/organization';
-import { useAuth } from '@/contexts/auth-context';
-import { useUserOrganizations } from '@/hooks/use-user-organizations';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { Organization } from "@/types/organization";
+import { useAuth } from "@/contexts/auth-context";
+import { useUserOrganizations } from "@/hooks/use-user-organizations";
 
 interface OrganizationContextType {
   organizations: Organization[];
@@ -18,22 +24,29 @@ interface OrganizationProviderProps {
   children: ReactNode;
 }
 
-const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
+const OrganizationContext = createContext<OrganizationContextType | undefined>(
+  undefined,
+);
 
 export function OrganizationProvider({ children }: OrganizationProviderProps) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [currentOrganization, setCurrentOrganizationState] = useState<Organization | null>(null);
-  
+  const [currentOrganization, setCurrentOrganizationState] =
+    useState<Organization | null>(null);
+
   // Use React Query for organizations data
-  const { 
-    data: organizations = [], 
-    isLoading: loading, 
+  const {
+    data: organizations = [],
+    isLoading: loading,
     error: queryError,
-    refetch 
+    refetch,
   } = useUserOrganizations();
 
   // Convert React Query error to string for consistency with existing interface
-  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load organizations') : null;
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : "Failed to load organizations"
+    : null;
 
   // Auto-select the first organization if user has organizations but no current selection
   useEffect(() => {
@@ -52,7 +65,7 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
   const setCurrentOrganization = (org: Organization) => {
     setCurrentOrganizationState(org);
     // Optionally persist to localStorage for session persistence
-    localStorage.setItem('currentOrganizationId', org.id);
+    localStorage.setItem("currentOrganizationId", org.id);
   };
 
   const refreshOrganizations = async () => {
@@ -62,9 +75,9 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
   // Restore current organization from localStorage on mount
   useEffect(() => {
     if (organizations.length > 0) {
-      const savedOrgId = localStorage.getItem('currentOrganizationId');
+      const savedOrgId = localStorage.getItem("currentOrganizationId");
       if (savedOrgId) {
-        const savedOrg = organizations.find(org => org.id === savedOrgId);
+        const savedOrg = organizations.find((org) => org.id === savedOrgId);
         if (savedOrg) {
           setCurrentOrganizationState(savedOrg);
         }
@@ -91,7 +104,9 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
 export function useOrganization() {
   const context = useContext(OrganizationContext);
   if (context === undefined) {
-    throw new Error('useOrganization must be used within an OrganizationProvider');
+    throw new Error(
+      "useOrganization must be used within an OrganizationProvider",
+    );
   }
   return context;
 }

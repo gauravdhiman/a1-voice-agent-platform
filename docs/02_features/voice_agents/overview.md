@@ -90,6 +90,7 @@ sequenceDiagram
 ```
 
 **Agent Configuration**:
+
 - Name and description
 - Organization assignment
 - System prompt (personality, behavior)
@@ -123,6 +124,7 @@ sequenceDiagram
 ```
 
 **Key Steps**:
+
 1. Caller dials Twilio phone number
 2. Twilio webhook hits backend
 3. Backend validates agent and creates LiveKit room
@@ -204,11 +206,13 @@ graph TB
 ### Tool Levels
 
 1. **Platform Tool**: Tool definition available to all organizations
+
    - Name, description, configuration schema
    - Function definitions with parameters
    - OAuth requirements (if any)
 
 2. **Agent Tool**: Instance of tool for specific agent
+
    - Per-agent configuration (e.g., calendar_id = "primary")
    - OAuth tokens (encrypted)
    - Function enable/disable flags
@@ -224,6 +228,7 @@ graph TB
 Different data for different security needs:
 
 **API Layer (Frontend/Backend)**:
+
 ```python
 # Returns safe metadata - NO secrets
 tools = await tool_service.get_tools_by_organization(org_id, safe=True)
@@ -232,6 +237,7 @@ tools = await tool_service.get_tools_by_organization(org_id, safe=True)
 ```
 
 **Worker Layer (Execution)**:
+
 ```python
 # Returns full tool instance WITH secrets
 tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
@@ -244,6 +250,7 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 ### Creating a New Tool
 
 1. **Define Tool Class**:
+
    ```python
    from shared.voice_agents.tools.base.base_tool import BaseTool
    from livekit.agents import function_tool, RunContext
@@ -283,6 +290,7 @@ See [Tool System Documentation](tool_system.md) for detailed guide.
 ### The Challenge
 
 Tool methods have `self` parameter for instance state:
+
 ```python
 async def check_availability(
     self,  # ❌ Can't pass to LiveKit
@@ -297,6 +305,7 @@ LiveKit's `@function_tool` decorator cannot accept methods with `self`.
 ### The Solution
 
 Create dynamic wrapper functions with exact same signature (excluding `self`):
+
 ```python
 async def check_availability(
     context: RunContext,
@@ -361,11 +370,13 @@ graph LR
 ### Implementation
 
 Database stores `unselected_functions` array:
+
 ```sql
 agent_tools.unselected_functions = ['delete_event']
 ```
 
 Worker filters functions:
+
 ```python
 if func_name in unselected_functions:
     continue  # Skip this function
@@ -403,6 +414,7 @@ class DynamicAgent(Agent):
 ### Agent Configuration
 
 **Fields**:
+
 - `name`: Agent display name
 - `organization_id`: Owner organization
 - `system_prompt`: Personality and behavior instructions
@@ -410,6 +422,7 @@ class DynamicAgent(Agent):
 - `is_active`: Enable/disable agent
 
 **Example System Prompt**:
+
 ```
 You are a helpful customer support assistant for Acme Corp.
 Be polite, professional, and empathetic.
@@ -425,12 +438,14 @@ Always speak clearly and at a moderate pace.
 ### Tool Configuration
 
 **Per-Agent Configuration**:
+
 - Calendar ID (e.g., "primary", "work", "sales")
 - API endpoints
 - Authentication settings
 - Function enable/disable flags
 
 **OAuth Integration**:
+
 - Admin clicks "Connect [Service Name]"
 - Redirect to OAuth provider
 - User authorizes access
@@ -472,6 +487,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Customer Support Agent
 
 **Tools**:
+
 - CRM integration (look up customer data)
 - Order management API
 - Knowledge base search
@@ -484,6 +500,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Appointment Scheduler
 
 **Tools**:
+
 - Google Calendar
 - CRM integration (customer lookup)
 - Email service (confirmation)
@@ -495,6 +512,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Lead Qualification Agent
 
 **Tools**:
+
 - CRM integration (create lead, update lead)
 - Calendar integration (schedule demos)
 - Sales routing
@@ -508,6 +526,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Agent Not Responding
 
 **Check**:
+
 1. Worker is running: `./start.sh logs worker-dev`
 2. LiveKit connection is healthy
 3. Agent is marked `is_active: true`
@@ -516,6 +535,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Tools Not Working
 
 **Check**:
+
 1. Tool is enabled for agent
 2. Required functions are enabled
 3. OAuth tokens are valid (not expired)
@@ -524,6 +544,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Greeting Not Playing
 
 **Check**:
+
 1. Agent has a name set
 2. Worker is correctly loading greeting from database
 3. LiveKit room is created successfully
@@ -531,6 +552,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 ### Tool Calls Failing
 
 **Check**:
+
 1. Tool function signature is correct
 2. Optional parameters use `type | None = None` pattern
 3. External service is accessible from worker

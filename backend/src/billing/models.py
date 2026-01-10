@@ -2,15 +2,17 @@
 Pydantic models for billing functionality.
 """
 
-from typing import Optional, Any
-from pydantic import BaseModel, Field
-from uuid import UUID
 from datetime import datetime
 from enum import Enum
+from typing import Any, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class SubscriptionStatus(str, Enum):
     """Subscription status enumeration."""
+
     TRIAL = "trial"
     ACTIVE = "active"
     PAST_DUE = "past_due"
@@ -22,6 +24,7 @@ class SubscriptionStatus(str, Enum):
 
 class TransactionType(str, Enum):
     """Credit transaction type enumeration."""
+
     EARNED = "earned"
     PURCHASED = "purchased"
     CONSUMED = "consumed"
@@ -31,15 +34,16 @@ class TransactionType(str, Enum):
 
 class TransactionSource(str, Enum):
     """Credit transaction source enumeration.
-    
+
     Maps to the following tables via source_id:
     - SUBSCRIPTION -> organization_subscriptions
-    - PURCHASE -> credit_products  
+    - PURCHASE -> credit_products
     - EVENT_CONSUMPTION -> credit_events
     - EXPIRY -> None (no source_id needed)
     - REFUND -> billing_history
     - ADMIN_ADJUSTMENT -> None (no source_id needed)
     """
+
     SUBSCRIPTION = "subscription"
     PURCHASE = "purchase"
     EVENT_CONSUMPTION = "event_consumption"
@@ -50,6 +54,7 @@ class TransactionSource(str, Enum):
 
 class BillingStatus(str, Enum):
     """Billing history status enumeration."""
+
     PENDING = "pending"
     PAID = "paid"
     FAILED = "failed"
@@ -59,6 +64,7 @@ class BillingStatus(str, Enum):
 
 class PlanInterval(str, Enum):
     """Subscription plan interval enumeration."""
+
     MONTHLY = "monthly"
     ANNUAL = "annual"
 
@@ -66,6 +72,7 @@ class PlanInterval(str, Enum):
 # Subscription Plan Models
 class SubscriptionPlanBase(BaseModel):
     """Base model for subscription plans."""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     stripe_price_id: str = Field(..., min_length=1, max_length=255)
@@ -83,11 +90,13 @@ class SubscriptionPlanBase(BaseModel):
 
 class SubscriptionPlanCreate(SubscriptionPlanBase):
     """Model for creating subscription plans."""
+
     pass
 
 
 class SubscriptionPlanUpdate(BaseModel):
     """Model for updating subscription plans."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     price_amount: Optional[int] = Field(None, ge=0)
@@ -100,6 +109,7 @@ class SubscriptionPlanUpdate(BaseModel):
 
 class SubscriptionPlan(SubscriptionPlanBase):
     """Complete subscription plan model."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -108,6 +118,7 @@ class SubscriptionPlan(SubscriptionPlanBase):
 # Organization Subscription Models
 class OrganizationSubscriptionBase(BaseModel):
     """Base model for organization subscriptions."""
+
     organization_id: UUID
     subscription_plan_id: Optional[UUID] = None
     stripe_subscription_id: Optional[str] = Field(None, max_length=255)
@@ -124,6 +135,7 @@ class OrganizationSubscriptionBase(BaseModel):
 
 class OrganizationSubscriptionCreate(BaseModel):
     """Model for creating organization subscriptions."""
+
     organization_id: UUID
     subscription_plan_id: UUID
     stripe_customer_id: Optional[str] = None
@@ -131,6 +143,7 @@ class OrganizationSubscriptionCreate(BaseModel):
 
 class OrganizationSubscriptionUpdate(BaseModel):
     """Model for updating organization subscriptions."""
+
     subscription_plan_id: Optional[UUID] = None
     status: Optional[SubscriptionStatus] = None
     current_period_start: Optional[datetime] = None
@@ -144,6 +157,7 @@ class OrganizationSubscriptionUpdate(BaseModel):
 
 class OrganizationSubscription(OrganizationSubscriptionBase):
     """Complete organization subscription model."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -151,12 +165,14 @@ class OrganizationSubscription(OrganizationSubscriptionBase):
 
 class OrganizationSubscriptionWithPlan(OrganizationSubscription):
     """Organization subscription with plan details."""
+
     plan: Optional[SubscriptionPlan] = None
 
 
 # Credit Event Models
 class CreditEventBase(BaseModel):
     """Base model for credit events."""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     credit_cost: int = Field(..., ge=0)
@@ -167,11 +183,13 @@ class CreditEventBase(BaseModel):
 
 class CreditEventCreate(CreditEventBase):
     """Model for creating credit events."""
+
     pass
 
 
 class CreditEventUpdate(BaseModel):
     """Model for updating credit events."""
+
     description: Optional[str] = Field(None, max_length=500)
     credit_cost: Optional[int] = Field(None, ge=0)
     category: Optional[str] = Field(None, min_length=1, max_length=50)
@@ -181,6 +199,7 @@ class CreditEventUpdate(BaseModel):
 
 class CreditEvent(CreditEventBase):
     """Complete credit event model."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -189,9 +208,12 @@ class CreditEvent(CreditEventBase):
 # Credit Transaction Models
 class CreditTransactionBase(BaseModel):
     """Base model for credit transactions."""
+
     organization_id: UUID
     transaction_type: TransactionType
-    amount: int = Field(..., description="Positive for credits added, negative for consumed")
+    amount: int = Field(
+        ..., description="Positive for credits added, negative for consumed"
+    )
     balance_after: int = Field(..., ge=0)
     source: TransactionSource
     source_id: Optional[UUID] = None
@@ -204,6 +226,7 @@ class CreditTransactionBase(BaseModel):
 
 class CreditTransactionCreate(BaseModel):
     """Model for creating credit transactions."""
+
     organization_id: UUID
     transaction_type: TransactionType
     amount: int
@@ -214,29 +237,34 @@ class CreditTransactionCreate(BaseModel):
     stripe_payment_intent_id: Optional[str] = None
     description: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
-    
+
     def model_post_init(self, __context: Any) -> None:
         """Validate source and source_id relationship after model creation."""
         # Import here to avoid circular imports
-        validation_error = TransactionSourceMapping.get_validation_error(self.source, self.source_id)
+        validation_error = TransactionSourceMapping.get_validation_error(
+            self.source, self.source_id
+        )
         if validation_error:
             raise ValueError(validation_error)
 
 
 class CreditTransaction(CreditTransactionBase):
     """Complete credit transaction model."""
+
     id: UUID
     created_at: datetime
 
 
 class CreditTransactionWithEvent(CreditTransaction):
     """Credit transaction with event details."""
+
     credit_event: Optional[CreditEvent] = None
 
 
 # Credit Product Models
 class CreditProductBase(BaseModel):
     """Base model for credit products."""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     stripe_price_id: str = Field(..., min_length=1, max_length=255)
@@ -249,11 +277,13 @@ class CreditProductBase(BaseModel):
 
 class CreditProductCreate(CreditProductBase):
     """Model for creating credit products."""
+
     pass
 
 
 class CreditProductUpdate(BaseModel):
     """Model for updating credit products."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     credit_amount: Optional[int] = Field(None, gt=0)
@@ -263,6 +293,7 @@ class CreditProductUpdate(BaseModel):
 
 class CreditProduct(CreditProductBase):
     """Complete credit product model."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -271,6 +302,7 @@ class CreditProduct(CreditProductBase):
 # Billing History Models
 class BillingHistoryBase(BaseModel):
     """Base model for billing history."""
+
     organization_id: UUID
     stripe_invoice_id: Optional[str] = Field(None, max_length=255)
     stripe_payment_intent_id: Optional[str] = Field(None, max_length=255)
@@ -287,6 +319,7 @@ class BillingHistoryBase(BaseModel):
 
 class BillingHistoryCreate(BaseModel):
     """Model for creating billing history entries."""
+
     organization_id: UUID
     stripe_invoice_id: Optional[str] = None
     stripe_payment_intent_id: Optional[str] = None
@@ -303,6 +336,7 @@ class BillingHistoryCreate(BaseModel):
 
 class BillingHistory(BillingHistoryBase):
     """Complete billing history model."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -311,18 +345,21 @@ class BillingHistory(BillingHistoryBase):
 # API Response Models
 class SubscriptionCheckoutResponse(BaseModel):
     """Response model for subscription checkout."""
+
     checkout_url: str
     session_id: str
 
 
 class CreditPurchaseResponse(BaseModel):
     """Response model for credit purchase."""
+
     checkout_url: str
     session_id: str
 
 
 class OrganizationBillingSummary(BaseModel):
     """Summary of organization billing information."""
+
     organization_id: UUID
     subscription: Optional[OrganizationSubscriptionWithPlan] = None
     credit_balance: int
@@ -333,6 +370,7 @@ class OrganizationBillingSummary(BaseModel):
 
 class CreditBalance(BaseModel):
     """Credit balance breakdown."""
+
     total_credits: int
     subscription_credits: int
     purchased_credits: int
@@ -342,6 +380,7 @@ class CreditBalance(BaseModel):
 
 class UsageStats(BaseModel):
     """Usage statistics for the current period."""
+
     period_start: datetime
     period_end: datetime
     total_events: int
@@ -353,6 +392,7 @@ class UsageStats(BaseModel):
 # Webhook Models
 class StripeWebhookEvent(BaseModel):
     """Stripe webhook event model."""
+
     id: str
     type: str
     data: dict[str, Any]
@@ -362,6 +402,7 @@ class StripeWebhookEvent(BaseModel):
 # Credit Consumption Models
 class CreditConsumptionRequest(BaseModel):
     """Request model for credit consumption."""
+
     organization_id: UUID
     event_name: str
     quantity: int = Field(default=1, ge=1)
@@ -370,6 +411,7 @@ class CreditConsumptionRequest(BaseModel):
 
 class CreditConsumptionResponse(BaseModel):
     """Response model for credit consumption."""
+
     success: bool
     credits_consumed: int
     balance_after: int
@@ -379,7 +421,7 @@ class CreditConsumptionResponse(BaseModel):
 # Polymorphic Relationship Utilities
 class TransactionSourceMapping:
     """Utility class for managing polymorphic relationships in credit transactions."""
-    
+
     # Maps transaction sources to their corresponding database tables
     SOURCE_TABLE_MAPPING = {
         TransactionSource.SUBSCRIPTION: "organization_subscriptions",
@@ -389,7 +431,7 @@ class TransactionSourceMapping:
         TransactionSource.EXPIRY: None,  # No source_id needed
         TransactionSource.ADMIN_ADJUSTMENT: None,  # No source_id needed
     }
-    
+
     # Sources that require a source_id
     SOURCES_REQUIRING_ID = {
         TransactionSource.SUBSCRIPTION,
@@ -397,39 +439,43 @@ class TransactionSourceMapping:
         TransactionSource.EVENT_CONSUMPTION,
         TransactionSource.REFUND,
     }
-    
+
     # Sources that should not have a source_id
     SOURCES_WITHOUT_ID = {
         TransactionSource.EXPIRY,
         TransactionSource.ADMIN_ADJUSTMENT,
     }
-    
+
     @classmethod
     def get_source_table(cls, source: TransactionSource) -> Optional[str]:
         """Get the table name that source_id should reference for a given source."""
         return cls.SOURCE_TABLE_MAPPING.get(source)
-    
+
     @classmethod
     def requires_source_id(cls, source: TransactionSource) -> bool:
         """Check if a transaction source requires a source_id."""
         return source in cls.SOURCES_REQUIRING_ID
-    
+
     @classmethod
     def should_have_source_id(cls, source: TransactionSource) -> bool:
         """Check if a transaction source should have a source_id (inverse of requires for validation)."""
         return source not in cls.SOURCES_WITHOUT_ID
-    
+
     @classmethod
-    def validate_source_relationship(cls, source: TransactionSource, source_id: Optional[UUID]) -> bool:
+    def validate_source_relationship(
+        cls, source: TransactionSource, source_id: Optional[UUID]
+    ) -> bool:
         """Validate that source and source_id relationship is correct."""
         if cls.requires_source_id(source):
             return source_id is not None
         elif source in cls.SOURCES_WITHOUT_ID:
             return source_id is None
         return True  # For flexibility with other sources
-    
+
     @classmethod
-    def get_validation_error(cls, source: TransactionSource, source_id: Optional[UUID]) -> Optional[str]:
+    def get_validation_error(
+        cls, source: TransactionSource, source_id: Optional[UUID]
+    ) -> Optional[str]:
         """Get validation error message if source/source_id relationship is invalid."""
         if cls.requires_source_id(source) and source_id is None:
             table = cls.get_source_table(source)

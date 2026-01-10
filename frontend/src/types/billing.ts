@@ -3,38 +3,38 @@
  */
 
 // Enums
-export type SubscriptionStatus = 
-  | 'trial'
-  | 'active'
-  | 'past_due'
-  | 'cancelled'
-  | 'expired'
-  | 'incomplete'
-  | 'incomplete_expired';
+export type SubscriptionStatus =
+  | "trial"
+  | "active"
+  | "past_due"
+  | "cancelled"
+  | "expired"
+  | "incomplete"
+  | "incomplete_expired";
 
-export type TransactionType = 
-  | 'earned'
-  | 'purchased'
-  | 'consumed'
-  | 'expired'
-  | 'refunded';
+export type TransactionType =
+  | "earned"
+  | "purchased"
+  | "consumed"
+  | "expired"
+  | "refunded";
 
-export type TransactionSource = 
-  | 'subscription'
-  | 'purchase'
-  | 'event_consumption'
-  | 'expiry'
-  | 'refund'
-  | 'admin_adjustment';
+export type TransactionSource =
+  | "subscription"
+  | "purchase"
+  | "event_consumption"
+  | "expiry"
+  | "refund"
+  | "admin_adjustment";
 
-export type BillingStatus = 
-  | 'pending'
-  | 'paid'
-  | 'failed'
-  | 'refunded'
-  | 'cancelled';
+export type BillingStatus =
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "cancelled";
 
-export type PlanInterval = 'monthly' | 'annual';
+export type PlanInterval = "monthly" | "annual";
 
 // Subscription Plan interfaces
 export interface SubscriptionPlan {
@@ -102,7 +102,8 @@ export interface OrganizationSubscription {
   updated_at: string;
 }
 
-export interface OrganizationSubscriptionWithPlan extends OrganizationSubscription {
+export interface OrganizationSubscriptionWithPlan
+  extends OrganizationSubscription {
   plan: SubscriptionPlan | null;
 }
 
@@ -282,7 +283,7 @@ export interface PlanComparison {
 }
 
 export interface BillingAlert {
-  type: 'info' | 'warning' | 'error' | 'success';
+  type: "info" | "warning" | "error" | "success";
   title: string;
   message: string;
   action?: {
@@ -292,84 +293,91 @@ export interface BillingAlert {
 }
 
 // Utility functions for billing
-export const formatPrice = (amount: number, currency: string = 'USD'): string => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
+export const formatPrice = (
+  amount: number,
+  currency: string = "USD",
+): string => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
     currency: currency.toUpperCase(),
   }).format(amount / 100);
 };
 
 export const formatCredits = (credits: number): string => {
-  return new Intl.NumberFormat('en-US').format(credits);
+  return new Intl.NumberFormat("en-US").format(credits);
 };
 
-export const getSubscriptionStatusColor = (status: SubscriptionStatus): string => {
+export const getSubscriptionStatusColor = (
+  status: SubscriptionStatus,
+): string => {
   switch (status) {
-    case 'active':
-      return 'green';
-    case 'trial':
-      return 'blue';
-    case 'past_due':
-      return 'yellow';
-    case 'cancelled':
-    case 'expired':
-      return 'red';
+    case "active":
+      return "green";
+    case "trial":
+      return "blue";
+    case "past_due":
+      return "yellow";
+    case "cancelled":
+    case "expired":
+      return "red";
     default:
-      return 'gray';
+      return "gray";
   }
 };
 
-export const getSubscriptionStatusLabel = (status: SubscriptionStatus): string => {
+export const getSubscriptionStatusLabel = (
+  status: SubscriptionStatus,
+): string => {
   switch (status) {
-    case 'trial':
-      return 'Trial';
-    case 'active':
-      return 'Active';
-    case 'past_due':
-      return 'Past Due';
-    case 'cancelled':
-      return 'Cancelled';
-    case 'expired':
-      return 'Expired';
-    case 'incomplete':
-      return 'Incomplete';
-    case 'incomplete_expired':
-      return 'Incomplete Expired';
+    case "trial":
+      return "Trial";
+    case "active":
+      return "Active";
+    case "past_due":
+      return "Past Due";
+    case "cancelled":
+      return "Cancelled";
+    case "expired":
+      return "Expired";
+    case "incomplete":
+      return "Incomplete";
+    case "incomplete_expired":
+      return "Incomplete Expired";
     default:
-      return 'Unknown';
+      return "Unknown";
   }
 };
 
 export const getBillingStatusColor = (status: BillingStatus): string => {
   switch (status) {
-    case 'paid':
-      return 'green';
-    case 'pending':
-      return 'yellow';
-    case 'failed':
-      return 'red';
-    case 'refunded':
-      return 'blue';
-    case 'cancelled':
-      return 'gray';
+    case "paid":
+      return "green";
+    case "pending":
+      return "yellow";
+    case "failed":
+      return "red";
+    case "refunded":
+      return "blue";
+    case "cancelled":
+      return "gray";
     default:
-      return 'gray';
+      return "gray";
   }
 };
 
 export const getBillingStatusLabel = (status: BillingStatus): string => {
   switch (status) {
-    case 'pending':
-      return 'Pending';
-    case 'paid':
-      return 'Paid';
-    case 'failed':
-      return 'Failed';
-    case 'refunded':
-      return 'Refunded';
-    case 'cancelled':
-      return 'Cancelled';
+    case "pending":
+      return "Pending";
+    case "paid":
+      return "Paid";
+    case "failed":
+      return "Failed";
+    case "refunded":
+      return "Refunded";
+    case "cancelled":
+      return "Cancelled";
     default:
-      return 'Unknown';
+      return "Unknown";
   }
 };

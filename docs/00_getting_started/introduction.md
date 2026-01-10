@@ -7,6 +7,7 @@ The AI Voice Agent Platform is a production-grade, multi-tenant SaaS platform th
 ## What It Does
 
 At its core, this platform allows users to:
+
 1. **Create Voice Agents**: Configure AI agents with custom system prompts
 2. **Integrate Tools**: Connect agents to external services (Google Calendar, CRM, APIs)
 3. **Handle Voice Calls**: Real-time voice communication via LiveKit
@@ -17,6 +18,7 @@ At its core, this platform allows users to:
 ## Key Features
 
 ### Voice Agent System
+
 - **AI-Powered Voice**: Real-time voice conversations using LLMs (Gemini Realtime)
 - **Dynamic Tools**: Runtime tool loading from database
 - **Tool Wrapping**: Innovative pattern to make tools work with LLMs
@@ -24,18 +26,21 @@ At its core, this platform allows users to:
 - **Function-Level Control**: Enable/disable individual tool functions
 
 ### Multi-Tenancy
+
 - **Organization-Based Isolation**: Each organization has separate data
 - **Row-Level Security**: Database-level access control (RLS)
 - **Tenant Context**: Automatic tenant injection via middleware
 - **Flexible Organization Management**: Create, update, manage organizations
 
 ### Authentication & Authorization
+
 - **Password-Based Auth**: Strong password policies
 - **Google OAuth**: Social login with Google
 - **JWT Tokens**: Secure token-based authentication
 - **RBAC System**: Role-based access control with fine-grained permissions
 
 ### Billing & Payments
+
 - **Stripe Integration**: Subscription-based billing
 - **Credit Management**: Track usage and credits
 - **Plan-Based Tiers**: Multiple pricing tiers
@@ -43,12 +48,14 @@ At its core, this platform allows users to:
 - **Idempotent Processing**: Safe webhook handling
 
 ### Observability
+
 - **OpenTelemetry**: Comprehensive tracing, metrics, and logging
 - **Manual Instrumentation**: Precise control over telemetry
 - **Collector Architecture**: Centralized processing
 - **New Relic Integration**: Visualization and alerting
 
 ### Developer Experience
+
 - **Type-Safe**: Pydantic (Python) and TypeScript (Frontend)
 - **Docker Support**: Easy development and deployment
 - **Pre-Commit Hooks**: Code quality automation
@@ -98,6 +105,7 @@ At its core, this platform allows users to:
 ## Technology Stack
 
 ### Frontend
+
 - **Framework**: Next.js 15 with App Router
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS + Shadcn/ui
@@ -105,6 +113,7 @@ At its core, this platform allows users to:
 - **Testing**: Playwright (E2E)
 
 ### Backend
+
 - **Framework**: FastAPI
 - **Language**: Python 3.11+
 - **Database**: Supabase (PostgreSQL)
@@ -113,6 +122,7 @@ At its core, this platform allows users to:
 - **Testing**: Pytest
 
 ### Worker
+
 - **Framework**: LiveKit Agents SDK
 - **LLM**: Gemini Realtime API
 - **Tools**: Dynamic loading from database
@@ -120,6 +130,7 @@ At its core, this platform allows users to:
 - **Testing**: Custom test framework
 
 ### Infrastructure
+
 - **Containers**: Docker + Docker Compose
 - **Orchestration**: Docker Compose (dev), Kubernetes (prod planned)
 - **Observability**: OpenTelemetry Collector
@@ -131,11 +142,13 @@ At its core, this platform allows users to:
 ## Who Is This For?
 
 ### Target Users
+
 - **Business Owners**: Want voice agents for customer support, scheduling, etc.
 - **Developers**: Want to build custom tools for voice agents
 - **Organizations**: Need multi-tenant platform with RBAC
 
 ### Use Cases
+
 1. **Customer Support**: AI agents answer common questions
 2. **Appointment Scheduling**: Agents schedule meetings via calendar tools
 3. **Information Retrieval**: Agents fetch data from CRM or APIs
@@ -147,6 +160,7 @@ At its core, this platform allows users to:
 ### 1. LiveKit Tool Wrapping
 
 Our platform solves the challenge of making tool methods work with LLMs by creating dynamic wrapper functions that:
+
 - Remove `self` parameter (for instance state)
 - Preserve exact parameter signatures
 - Delegate to bound methods with all parameters
@@ -157,6 +171,7 @@ This allows any tool with any signature to work seamlessly with LLMs.
 ### 2. Two-Tier Tool Service
 
 We provide different tool data for different security needs:
+
 - **API Layer**: Safe metadata (no OAuth tokens, API keys)
 - **Worker Layer**: Full tool instances with all secrets
 
@@ -165,6 +180,7 @@ This keeps sensitive data secure while enabling powerful tool functionality.
 ### 3. Dynamic Tool Loading
 
 Tools are loaded from database at runtime, enabling:
+
 - Runtime configuration without code deployment
 - Per-organization customization
 - Easy addition of new tools
@@ -173,6 +189,7 @@ Tools are loaded from database at runtime, enabling:
 ### 4. Multi-Tenant with RLS
 
 Strong data isolation using:
+
 - `organization_id` on all tenant tables
 - Row-Level Security policies in database
 - Tenant context injection via middleware
@@ -181,6 +198,7 @@ Strong data isolation using:
 ### 5. Agent Greeting
 
 Automatic greeting when agent enters room:
+
 - Eliminates awkward silence
 - Personalized with agent name
 - Sets clear user expectation
@@ -197,6 +215,7 @@ Automatic greeting when agent enters room:
 ## Roadmap
 
 ### Completed ✅
+
 - Multi-tenant architecture
 - RBAC system
 - Stripe billing
@@ -207,11 +226,13 @@ Automatic greeting when agent enters room:
 - OpenTelemetry observability
 
 ### In Progress 🚧
+
 - Additional tool implementations
 - Comprehensive testing
 - Agent analytics dashboard
 
 ### Planned 📋
+
 - Multi-LLM support (OpenAI, Claude, etc.)
 - Conversation history and playback
 - Tool composition and chaining

@@ -83,7 +83,7 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
       return (
         <div className="max-w-xs">
           <span className="text-muted-foreground truncate">
-            {description || 'No description provided'}
+            {description || "No description provided"}
           </span>
         </div>
       );
@@ -96,11 +96,11 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
       const isActive = row.original.is_active;
       return (
         <Badge variant={isActive ? "default" : "secondary"}>
-          {isActive ? 'Active' : 'Inactive'}
+          {isActive ? "Active" : "Inactive"}
         </Badge>
       );
     },
-    accessorFn: (row) => row.is_active ? "Active" : "Inactive",
+    accessorFn: (row) => (row.is_active ? "Active" : "Inactive"),
     filterFn: (row, id, value) => {
       const isActive = row.original.is_active;
       const status = isActive ? "Active" : "Inactive";
@@ -117,11 +117,7 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
     minSize: 100,
     cell: ({ row }) => {
       const slug = row.getValue("slug") as string;
-      return (
-        <code className="text-xs bg-muted px-2 py-1 rounded">
-          {slug}
-        </code>
-      );
+      return <code className="text-xs bg-muted px-2 py-1 rounded">{slug}</code>;
     },
   },
   {
@@ -155,25 +151,32 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href={`/organization?org_id=${org.id}`} className="flex items-center">
+              <Link
+                href={`/organization?org_id=${org.id}`}
+                className="flex items-center"
+              >
                 <Eye className="h-4 w-4 mr-2" />
                 <span>View</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`/organization/members?org_id=${org.id}`} className="flex items-center">
+              <Link
+                href={`/organization/members?org_id=${org.id}`}
+                className="flex items-center"
+              >
                 <Users className="h-4 w-4 mr-2" />
                 <span>Members</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`/organization/billing?org_id=${org.id}`} className="flex items-center">
+              <Link
+                href={`/organization/billing?org_id=${org.id}`}
+                className="flex items-center"
+              >
                 <CreditCard className="h-4 w-4 mr-2" />
                 <span>Billing</span>
               </Link>
             </DropdownMenuItem>
-
-
           </DropdownMenuContent>
         </DropdownMenu>
       );

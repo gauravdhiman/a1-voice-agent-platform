@@ -9,22 +9,26 @@ This guide helps you quickly understand the platform and get up and running. Whe
 ### By Role
 
 **New Developer**:
+
 1. Read this guide
 2. Follow [Quick Start](../00_getting_started/quick_start.md)
 3. Review [Project Overview](../00_getting_started/project_overview.md)
 4. Explore [Development Guides](../03_development/)
 
 **Product Manager**:
+
 1. Read [Project Overview](../00_getting_started/project_overview.md)
 2. Review [Business Requirements](../05_business/prd.md)
 3. Explore [Feature Documentation](../02_features/)
 
 **DevOps Engineer**:
+
 1. Review [System Architecture](../01_architecture/system_architecture.md)
 2. Check [Deployment](../05_operations/)
 3. Configure [OpenTelemetry](../02_features/observability/overview.md)
 
 **Business User**:
+
 1. Read [Project Overview](../00_getting_started/project_overview.md)
 2. Understand [Key Features](#key-features-below)
 3. Review [Platform Capabilities](#platform-capabilities-below)
@@ -34,6 +38,7 @@ This guide helps you quickly understand the platform and get up and running. Whe
 ### What It Does
 
 The AI Voice Agent Platform enables organizations to:
+
 - **Create AI Voice Agents**: Configure intelligent agents for customer support, scheduling, and more
 - **Integrate Tools**: Connect agents to business systems (Google Calendar, CRM, APIs)
 - **Handle Voice Calls**: Real-time voice conversations via LiveKit
@@ -43,17 +48,17 @@ The AI Voice Agent Platform enables organizations to:
 
 ### Technology Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Frontend | Next.js 15, TypeScript, Tailwind CSS |
-| Backend | FastAPI, Python 3.11+ |
-| Database | Supabase (PostgreSQL) |
-| Real-time Voice | LiveKit Cloud |
-| AI/LLM | Google Gemini Realtime API |
-| Payments | Stripe |
-| Email | Resend.com |
-| Observability | OpenTelemetry + New Relic |
-| Containerization | Docker & Docker Compose |
+| Component        | Technology                           |
+| ---------------- | ------------------------------------ |
+| Frontend         | Next.js 15, TypeScript, Tailwind CSS |
+| Backend          | FastAPI, Python 3.11+                |
+| Database         | Supabase (PostgreSQL)                |
+| Real-time Voice  | LiveKit Cloud                        |
+| AI/LLM           | Google Gemini Realtime API           |
+| Payments         | Stripe                               |
+| Email            | Resend.com                           |
+| Observability    | OpenTelemetry + New Relic            |
+| Containerization | Docker & Docker Compose              |
 
 ### Architecture Summary
 
@@ -75,12 +80,14 @@ Backend (FastAPI)
 **What**: AI-powered voice agents that handle real-time conversations
 
 **Why It Matters**:
+
 - Automate customer support 24/7
 - Reduce wait times
 - Scale support without adding staff
 - Consistent quality and experience
 
 **How It Works**:
+
 1. Admin creates agent with system prompt and phone number
 2. Caller dials agent phone number
 3. LiveKit connects to backend, which creates room
@@ -95,12 +102,14 @@ Backend (FastAPI)
 **What**: Connect agents to external APIs and services
 
 **Why It Matters**:
+
 - Agents can perform real actions (schedule meetings, look up orders)
 - Easy to add new tools without code deployment
 - Per-agent tool customization
 - Secure token management
 
 **Example Tools**:
+
 - Google Calendar: Check availability, create events
 - CRM: Look up customer data, update records
 - E-commerce: Check order status, process returns
@@ -112,12 +121,14 @@ Backend (FastAPI)
 **What**: Multiple organizations on single platform with strict data isolation
 
 **Why It Matters**:
+
 - SaaS platform for serving multiple customers
 - Strong security with Row-Level Security (RLS)
 - Organization-based resource scoping
 - Users can belong to multiple organizations
 
 **How It Works**:
+
 - Every resource (agents, tools, etc.) has `organization_id`
 - Row-Level Security policies in database prevent cross-tenant access
 - Users can only see resources from their organizations
@@ -129,16 +140,19 @@ Backend (FastAPI)
 **What**: Secure authentication with fine-grained permissions
 
 **Why It Matters**:
+
 - Secure access to platform
 - Role-based access control (RBAC)
 - Team collaboration with appropriate permissions
 - Audit trail of all actions
 
 **Authentication Methods**:
+
 - Password-based login
 - Google OAuth (social login)
 
 **Predefined Roles**:
+
 - `platform_admin`: Platform-wide control
 - `org_admin`: Full control within organization
 - `member`: Standard access
@@ -151,12 +165,14 @@ Backend (FastAPI)
 **What**: Credit-based billing with Stripe integration
 
 **Why It Matters**:
+
 - Transparent pricing based on usage
 - Automatic billing and invoicing
 - Predictable costs for organizations
 - Easy to scale with more credits
 
 **How It Works**:
+
 - Organizations subscribe to plans (trial, starter, pro, enterprise)
 - Plans include monthly credit allocation
 - Credits consumed for platform usage (calls, tool execution)
@@ -169,12 +185,14 @@ Backend (FastAPI)
 **What**: Comprehensive monitoring with OpenTelemetry and New Relic
 
 **Why It Matters**:
+
 - Understand system performance
 - Identify bottlenecks and issues
 - Track business metrics (calls, usage)
 - Proactive alerting
 
 **What's Tracked**:
+
 - API latency and errors
 - Voice agent call duration and success rate
 - Tool execution metrics
@@ -199,16 +217,16 @@ ai-voice-agent-platform/
 
 ### Key Directories
 
-| Directory | Purpose | Key Files |
-|-----------|---------|------------|
-| `frontend/src/app/` | Next.js pages and routes | page.tsx, layout.tsx |
-| `frontend/src/components/` | React components | Button, Card, Input |
-| `frontend/src/services/` | API client and business logic | auth-service.ts, agent-service.ts |
-| `backend/src/` | API endpoints and business logic | auth/, voice_agents/, billing/ |
-| `backend/src/shared/` | Shared utilities | middleware/, exceptions/ |
-| `worker/src/` | Worker entry point and agent logic | worker.py |
-| `shared/voice_agents/` | Voice agent models and services | service.py, tool_service.py |
-| `shared/config/` | Configuration management | settings.py, supabase.py |
+| Directory                  | Purpose                            | Key Files                         |
+| -------------------------- | ---------------------------------- | --------------------------------- |
+| `frontend/src/app/`        | Next.js pages and routes           | page.tsx, layout.tsx              |
+| `frontend/src/components/` | React components                   | Button, Card, Input               |
+| `frontend/src/services/`   | API client and business logic      | auth-service.ts, agent-service.ts |
+| `backend/src/`             | API endpoints and business logic   | auth/, voice_agents/, billing/    |
+| `backend/src/shared/`      | Shared utilities                   | middleware/, exceptions/          |
+| `worker/src/`              | Worker entry point and agent logic | worker.py                         |
+| `shared/voice_agents/`     | Voice agent models and services    | service.py, tool_service.py       |
+| `shared/config/`           | Configuration management           | settings.py, supabase.py          |
 
 ## Quick Start Options
 
@@ -232,6 +250,7 @@ cp .env.example .env
 ```
 
 **What This Does**:
+
 - Starts Frontend (Next.js) on http://localhost:3000
 - Starts Backend (FastAPI) on http://localhost:8000
 - Starts Worker (LiveKit) for voice agent calls
@@ -239,6 +258,7 @@ cp .env.example .env
 - Connects all services to Supabase database
 
 **Access Points**:
+
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
@@ -276,6 +296,7 @@ python -m livekit.agents.cli --dev
 ```
 
 **When to Use**:
+
 - Working on specific service changes
 - Need to attach debugger
 - Running tests for one service
@@ -298,6 +319,7 @@ python -m livekit.agents.cli --dev
 ### Adding a New Tool
 
 1. **Create Tool Implementation**:
+
    ```python
    # shared/voice_agents/tools/implementations/my_tool.py
    from shared.voice_agents.tools.base.base_tool import BaseTool
@@ -323,6 +345,7 @@ python -m livekit.agents.cli --dev
 ### Adding a New API Endpoint
 
 1. **Define Pydantic Models**:
+
    ```python
    # backend/src/voice_agents/models.py
    class AgentCreate(BaseModel):
@@ -332,6 +355,7 @@ python -m livekit.agents.cli --dev
    ```
 
 2. **Create Route Handler**:
+
    ```python
    # backend/src/voice_agents/routes.py
    @router.post("/agents")
@@ -341,6 +365,7 @@ python -m livekit.agents.cli --dev
    ```
 
 3. **Add to Router**:
+
    ```python
    # backend/src/voice_agents/routes.py
    app.include_router(router, prefix="/api/v1")
@@ -369,6 +394,7 @@ npm run test
 ### New to the Platform?
 
 Start here:
+
 1. **[Project Overview](project_overview.md)** - What is this platform?
 2. **[Quick Start](quick_start.md)** - Get running in minutes
 3. **[Setup Guide](setup_guide.md)** - Detailed configuration
@@ -376,6 +402,7 @@ Start here:
 ### Want to Understand Architecture?
 
 Check out:
+
 1. **[System Architecture](../01_architecture/system_architecture.md)** - Overall design
 2. **[Frontend Architecture](../01_architecture/frontend_architecture.md)** - Next.js structure
 3. **[Backend Architecture](../01_architecture/backend_architecture.md)** - FastAPI structure
@@ -384,6 +411,7 @@ Check out:
 ### Working on Specific Features?
 
 Dive into feature documentation:
+
 1. **[Voice Agents](../02_features/voice_agents/)** - AI voice agents
 2. **[Authentication & RBAC](../02_features/authentication_rbac/)** - Security and access control
 3. **[Multi-Tenancy](../02_features/multi_tenancy/)** - Organization management
@@ -394,6 +422,7 @@ Dive into feature documentation:
 ### Developing the Platform?
 
 See development guides:
+
 1. **[Getting Started Dev](../03_development/getting_started.md)** - Local dev setup
 2. **[Frontend Development](../03_development/frontend/)** - Next.js guide
 3. **[Backend Development](../03_development/backend/)** - FastAPI guide
@@ -403,6 +432,7 @@ See development guides:
 ### Operating the Platform?
 
 Check operations documentation:
+
 1. **[Docker Deployment](../05_operations/docker_deployment.md)** - Container deployment
 2. **[Environment Configuration](../05_operations/environment_configuration.md)** - Settings guide
 3. **[Stripe Management](../05_operations/stripe_management.md)** - Billing operations
@@ -412,12 +442,14 @@ Check operations documentation:
 ### Beginner (0-2 Weeks)
 
 **Week 1: Understanding**
+
 - Read all getting started guides
 - Explore the UI (create account, organization, agent)
 - Review architecture documentation
 - Understand core features (voice agents, tools, billing)
 
 **Week 2: Hands-On**
+
 - Create your first voice agent
 - Add a tool (Google Calendar)
 - Make a test call
@@ -427,6 +459,7 @@ Check operations documentation:
 ### Intermediate (1-2 Months)
 
 **Month 1: Development**
+
 - Set up local development environment
 - Explore the codebase
 - Make small changes (modify agent greeting, add logging)
@@ -434,6 +467,7 @@ Check operations documentation:
 - Create a custom tool
 
 **Month 2: Features**
+
 - Add new feature (e.g., new API endpoint)
 - Implement in backend + frontend
 - Write tests for your changes

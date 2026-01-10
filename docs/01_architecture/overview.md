@@ -58,6 +58,7 @@ graph TB
 **Purpose**: User interface for managing organizations, agents, tools, and billing
 
 **Key Technologies**:
+
 - Next.js 15 with App Router
 - React 18+ with TypeScript
 - Tailwind CSS for styling
@@ -65,6 +66,7 @@ graph TB
 - OpenTelemetry instrumentation
 
 **Directory Structure**:
+
 ```
 frontend/src/
 ├── app/                      # Next.js App Router
@@ -99,6 +101,7 @@ frontend/src/
 ```
 
 **Key Features**:
+
 - Multi-tenant organization management
 - Voice agent creation and configuration
 - Tool configuration with function-level enable/disable
@@ -111,12 +114,14 @@ frontend/src/
 **Purpose**: REST API for frontend, tool management, OAuth callbacks, and worker orchestration
 
 **Key Technologies**:
+
 - FastAPI with Python 3.11+
 - Supabase (PostgreSQL) as database
 - OpenTelemetry for observability
 - Alembic for database migrations
 
 **Directory Structure**:
+
 ```
 backend/src/
 ├── auth/                   # Authentication endpoints
@@ -138,6 +143,7 @@ backend/src/
 ```
 
 **Key Features**:
+
 - RESTful API with OpenAPI documentation
 - Tool registration and synchronization
 - OAuth flow for Google Calendar
@@ -151,17 +157,20 @@ backend/src/
 **Purpose**: LiveKit worker for handling real-time voice agent calls and tool execution
 
 **Key Technologies**:
+
 - LiveKit Agents Python SDK
 - Google Gemini Realtime Model
 - OpenTelemetry instrumentation
 
 **Directory Structure**:
+
 ```
 worker/src/
 └── worker.py              # Main worker entry point
 ```
 
 **Worker Flow**:
+
 ```mermaid
 sequenceDiagram
     participant Room as LiveKit Room
@@ -182,6 +191,7 @@ sequenceDiagram
 ```
 
 **Key Features**:
+
 - Dynamic tool discovery from database
 - Per-agent tool configuration
 - Config injection via `context.userdata`
@@ -198,6 +208,7 @@ sequenceDiagram
 #### Core Tables
 
 **organizations**
+
 ```sql
 id UUID PRIMARY KEY
 name TEXT NOT NULL UNIQUE
@@ -210,6 +221,7 @@ updated_at TIMESTAMP DEFAULT NOW()
 ```
 
 **voice_agents**
+
 ```sql
 id UUID PRIMARY KEY
 organization_id UUID REFERENCES organizations(id)
@@ -222,6 +234,7 @@ updated_at TIMESTAMP DEFAULT NOW()
 ```
 
 **platform_tools**
+
 ```sql
 id UUID PRIMARY KEY
 name TEXT UNIQUE NOT NULL
@@ -235,6 +248,7 @@ updated_at TIMESTAMP DEFAULT NOW()
 ```
 
 **agent_tools**
+
 ```sql
 id UUID PRIMARY KEY
 agent_id UUID REFERENCES voice_agents(id)
@@ -332,12 +346,14 @@ graph LR
 ```
 
 **Authentication Flow**:
+
 1. User authenticates via Supabase OAuth or credentials
 2. Supabase JWT returned
 3. Middleware validates JWT on protected routes
 4. User context includes profile and roles
 
 **RBAC Implementation**:
+
 - **Permissions**: Fine-grained permissions (e.g., `org:manage`, `agent:create`)
 - **Roles**: Hierarchical (platform_admin > org_admin > regular_user)
 - **Assignment**: Users can have multiple roles across organizations
@@ -375,6 +391,7 @@ graph TB
 ```
 
 **Configuration**:
+
 - **File**: `otel-collector-config.yml`
 - **Collector**: OpenTelemetry Collector Contrib
 - **Receivers**: `otlp` (gRPC), `http` (HTTP)
@@ -395,48 +412,56 @@ graph TB
 
 ## Technology Stack
 
-| Component | Technology | Version | Purpose |
-|-----------|-----------|---------|---------|
-| Frontend | Next.js | 15 | UI framework |
-| Backend | FastAPI | Latest | API framework |
-| Backend Runtime | Python | 3.11+ | Server runtime |
-| Database | Supabase (PostgreSQL) | - | Data storage |
-| ORM | Supabase Client | - | Database client |
-| Authentication | Supabase Auth | - | User auth |
-| Voice SDK | LiveKit Agents | >=1.3.10 | Voice/video |
-| LLM | Google Gemini | - | AI model |
-| Observability | OpenTelemetry | Latest | Tracing & metrics |
-| Metrics Exporter | New Relic OTLP | - | External metrics |
-| Containerization | Docker Compose | - | Local dev |
+| Component        | Technology            | Version  | Purpose           |
+| ---------------- | --------------------- | -------- | ----------------- |
+| Frontend         | Next.js               | 15       | UI framework      |
+| Backend          | FastAPI               | Latest   | API framework     |
+| Backend Runtime  | Python                | 3.11+    | Server runtime    |
+| Database         | Supabase (PostgreSQL) | -        | Data storage      |
+| ORM              | Supabase Client       | -        | Database client   |
+| Authentication   | Supabase Auth         | -        | User auth         |
+| Voice SDK        | LiveKit Agents        | >=1.3.10 | Voice/video       |
+| LLM              | Google Gemini         | -        | AI model          |
+| Observability    | OpenTelemetry         | Latest   | Tracing & metrics |
+| Metrics Exporter | New Relic OTLP        | -        | External metrics  |
+| Containerization | Docker Compose        | -        | Local dev         |
 
 ## Key Design Decisions
 
 ### 1. LiveKit Integration
+
 **Decision**: Use LiveKit's native `@function_tool()` decorator
 **Rationale**:
+
 - LiveKit provides automatic schema extraction from decorated functions
 - Worker can pass decorated functions directly to LLM models
 - No need to manually convert between internal and external formats
 
 ### 2. Tool Schema Storage
+
 **Decision**: Store function schemas in `platform_tools.tool_functions_schema` (JSONB)
 **Rationale**:
+
 - Single source of truth for function definitions
 - Enables frontend to display available functions
 - Allows per-function enable/disable via `agent_tools.unselected_functions`
 - Supports future tool discovery without code changes
 
 ### 3. Multi-Tenancy
+
 **Decision**: Organization-based isolation via foreign key relationships
 **Rationale**:
+
 - Clear data ownership
 - Users belong to organizations
 - Agents and tools scoped to organizations
 - RBAC checks organization membership
 
 ### 4. OAuth State Management
+
 **Decision**: Store OAuth tokens in `agent_tools.sensitive_config` (encrypted)
 **Rationale**:
+
 - Tokens are sensitive (access_token, refresh_token)
 - Per-agent configuration allows multiple agents with different tokens
 - Encryption via Supabase's encryption capabilities
@@ -445,6 +470,7 @@ graph TB
 ## API Endpoints Summary
 
 ### Tool Management
+
 - `POST /api/v1/tools/platform` - Create platform tool (admin)
 - `GET /api/v1/tools/platform?only_active=true` - List active tools
 - `POST /api/v1/tools/agent` - Configure tool for agent
@@ -454,6 +480,7 @@ graph TB
 - `GET /api/v1/tools/callback` - Handle OAuth callback
 
 ### Agent Management
+
 - `POST /api/v1/agents` - Create agent
 - `GET /api/v1/agents/organization/{org_id}` - List org agents
 - `GET /api/v1/agents/{agent_id}` - Get agent details
@@ -461,12 +488,14 @@ graph TB
 - `DELETE /api/v1/agents/{agent_id}` - Delete agent
 
 ### Authentication
+
 - `POST /api/v1/auth/signup` - User registration
 - `POST /api/v1/auth/signin` - User login
 - `POST /api/v1/auth/oauth` - Supabase OAuth
 - `GET /api/v1/auth/user` - Get current user
 
 ### Billing
+
 - `GET /api/v1/billing/plans` - List subscription plans
 - `POST /api/v1/billing/checkout` - Create checkout session
 - `POST /api/v1/billing/portal` - Create customer portal
@@ -476,16 +505,19 @@ graph TB
 ## Security Considerations
 
 ### Authentication Flow
+
 - Supabase handles password hashing and JWT tokens
 - OAuth flow with state parameter (agent_id, tool_name) to prevent CSRF
 - Sensitive config (OAuth tokens) encrypted at rest
 
 ### Authorization
+
 - RBAC middleware checks permissions before route handlers
 - Organization ownership verification for resource access
 - Platform admin role for tool creation
 
 ### Data Encryption
+
 - `agent_tools.sensitive_config` column encryption for OAuth tokens
 - Encryption/decryption via shared security utilities
 

@@ -5,7 +5,7 @@
 export enum AuthStatus {
   NOT_AUTHENTICATED = "not_authenticated", // No tokens exist
   AUTHENTICATED = "authenticated", // Valid tokens exist
-  EXPIRED = "expired" // Tokens exist but have expired
+  EXPIRED = "expired", // Tokens exist but have expired
 }
 
 export interface VoiceAgent {
@@ -40,11 +40,14 @@ export interface PlatformToolFunction {
   description: string;
   parameters?: {
     type: string;
-    properties?: Record<string, {
-      type: string;
-      description?: string;
-      default?: unknown;
-    }>;
+    properties?: Record<
+      string,
+      {
+        type: string;
+        description?: string;
+        default?: unknown;
+      }
+    >;
     required?: string[];
   };
 }

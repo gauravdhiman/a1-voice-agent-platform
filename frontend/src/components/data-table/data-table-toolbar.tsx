@@ -26,7 +26,9 @@ export function DataTableToolbar<TData>({
         {filterColumn && table.getColumn(filterColumn) && (
           <Input
             placeholder={filterPlaceholder || `Filter ${filterColumn}...`}
-            value={(table.getColumn(filterColumn)?.getFilterValue() as string) ?? ""}
+            value={
+              (table.getColumn(filterColumn)?.getFilterValue() as string) ?? ""
+            }
             onChange={(event) =>
               table.getColumn(filterColumn)?.setFilterValue(event.target.value)
             }

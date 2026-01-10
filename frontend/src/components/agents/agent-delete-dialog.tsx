@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Loader2, AlertTriangle } from 'lucide-react';
-import type { VoiceAgent } from '@/types/agent';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, AlertTriangle } from "lucide-react";
+import type { VoiceAgent } from "@/types/agent";
 
 interface AgentDeleteDialogProps {
   open: boolean;
@@ -29,9 +29,9 @@ export function AgentDeleteDialog({
 }: AgentDeleteDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmationText, setConfirmationText] = useState('');
+  const [confirmationText, setConfirmationText] = useState("");
 
-  const expectedConfirmation = 'Delete this agent';
+  const expectedConfirmation = "Delete this agent";
   const isConfirmationValid = confirmationText === expectedConfirmation;
 
   const handleDelete = async () => {
@@ -43,8 +43,8 @@ export function AgentDeleteDialog({
       await onSuccess(agent.id);
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('Error deleting agent:', err);
-      setError(error.message || 'Failed to delete agent');
+      console.error("Error deleting agent:", err);
+      setError(error.message || "Failed to delete agent");
     } finally {
       setLoading(false);
     }
@@ -54,7 +54,7 @@ export function AgentDeleteDialog({
     if (!loading) {
       onOpenChange(newOpen);
       if (!newOpen) {
-        setConfirmationText('');
+        setConfirmationText("");
         setError(null);
       }
     }
@@ -69,8 +69,8 @@ export function AgentDeleteDialog({
             Delete Voice Agent
           </DialogTitle>
           <DialogDescription>
-            This action cannot be undone. This will permanently delete the voice agent
-            and remove all associated data.
+            This action cannot be undone. This will permanently delete the voice
+            agent and remove all associated data.
           </DialogDescription>
         </DialogHeader>
 
@@ -85,7 +85,9 @@ export function AgentDeleteDialog({
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-red-800">
-                <p className="font-medium mb-1">Warning: This action is irreversible</p>
+                <p className="font-medium mb-1">
+                  Warning: This action is irreversible
+                </p>
                 <ul className="space-y-1 text-red-700">
                   <li>• All agent data will be permanently deleted</li>
                   <li>• All tool configurations will be removed</li>
@@ -97,13 +99,14 @@ export function AgentDeleteDialog({
 
           <div className="space-y-2">
             <Label htmlFor="confirmation">
-              Type <strong>&quot;{expectedConfirmation}&quot;</strong> to confirm deletion:
+              Type <strong>&quot;{expectedConfirmation}&quot;</strong> to
+              confirm deletion:
             </Label>
             <Input
               id="confirmation"
               value={confirmationText}
               onChange={(e) => setConfirmationText(e.target.value)}
-              placeholder='Delete this agent'
+              placeholder="Delete this agent"
               disabled={loading}
               className="font-mono"
             />
@@ -131,7 +134,7 @@ export function AgentDeleteDialog({
                   Deleting...
                 </>
               ) : (
-                'Delete Agent'
+                "Delete Agent"
               )}
             </Button>
           </div>

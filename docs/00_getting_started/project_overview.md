@@ -7,6 +7,7 @@ The AI Voice Agent Platform is a production-grade, multi-tenant SaaS platform th
 ## Core Value Proposition
 
 Organizations can:
+
 - **Create AI Voice Agents**: Configure intelligent agents with custom system prompts
 - **Integrate External Tools**: Connect agents to business systems (Google Calendar, CRM, APIs)
 - **Handle Voice Calls**: Real-time voice communication powered by LiveKit
@@ -17,24 +18,28 @@ Organizations can:
 ## Key Use Cases
 
 ### 1. Customer Support
+
 - AI agents handle common customer inquiries
 - Integrate with ticketing systems (Zendesk, Freshdesk)
 - Schedule callbacks and appointments
 - Transfer to human agents when needed
 
 ### 2. Appointment Scheduling
+
 - Google Calendar integration
 - Automated booking and reminders
 - Rescheduling and cancellations
 - Calendar availability checks
 
 ### 3. Order Processing
+
 - E-commerce platform integration
 - Order status inquiries
 - Returns and exchanges
 - Inventory checks
 
 ### 4. Lead Qualification
+
 - Capture lead information
 - Qualify based on criteria
 - Schedule sales demos
@@ -90,6 +95,7 @@ graph TB
 ## High-Level Components
 
 ### Frontend (Next.js)
+
 - **Purpose**: User interface for managing organizations, agents, tools, and billing
 - **Technologies**: Next.js 15, TypeScript, Tailwind CSS, Shadcn/ui
 - **Key Features**:
@@ -100,6 +106,7 @@ graph TB
   - Role-based access control UI
 
 ### Backend (FastAPI)
+
 - **Purpose**: REST API server handling authentication, billing, and orchestration
 - **Technologies**: Python 3.11+, FastAPI, Supabase
 - **Key Features**:
@@ -111,6 +118,7 @@ graph TB
   - Multi-tenancy enforcement
 
 ### Worker (LiveKit)
+
 - **Purpose**: Runs AI voice agents in real-time conversations
 - **Technologies**: LiveKit Agents SDK, Google Gemini Realtime API
 - **Key Features**:
@@ -121,6 +129,7 @@ graph TB
   - Error handling and recovery
 
 ### Shared Module
+
 - **Purpose**: Code shared between backend and worker
 - **Contains**:
   - Voice agent models and services
@@ -129,6 +138,7 @@ graph TB
   - Configuration management
 
 ### Infrastructure
+
 - **Database**: Supabase (PostgreSQL with Row-Level Security)
 - **Real-time**: LiveKit Cloud for voice/video
 - **Payments**: Stripe for billing and subscriptions
@@ -139,7 +149,9 @@ graph TB
 ## Key Innovations
 
 ### 1. LiveKit Tool Wrapping
+
 Our innovative wrapper pattern solves the challenge of making tool methods work with LLMs by creating dynamic wrapper functions that:
+
 - Remove `self` parameter (for instance state)
 - Preserve exact parameter signatures
 - Delegate to bound methods with all parameters
@@ -148,28 +160,36 @@ Our innovative wrapper pattern solves the challenge of making tool methods work 
 This allows **any** tool with **any** signature to work seamlessly with LLMs.
 
 ### 2. Two-Tier Tool Service
+
 Different tool data for different security needs:
+
 - **API Layer**: Returns safe metadata (no OAuth tokens, API keys)
 - **Worker Layer**: Returns full tool instances with all secrets
 
 This keeps sensitive data secure while enabling powerful tool functionality.
 
 ### 3. Dynamic Tool Loading
+
 Tools are loaded from database at runtime, enabling:
+
 - Runtime configuration without code deployment
 - Per-organization tool customization
 - Easy addition of new tools
 - Tool versioning and updates
 
 ### 4. Multi-Tenant with RLS
+
 Strong data isolation using:
+
 - `organization_id` column on all tenant tables
 - Row-Level Security policies in database
 - Tenant context injection via middleware
 - No cross-tenant data leakage possible
 
 ### 5. Agent Greeting
+
 Automatic greeting when agent enters room:
+
 - Eliminates awkward silence
 - Personalized with agent name
 - Sets clear user expectation
@@ -177,43 +197,46 @@ Automatic greeting when agent enters room:
 
 ## Technology Stack
 
-| Layer | Technology | Purpose |
-|--------|------------|---------|
-| **Frontend** | Next.js 15 | React framework with App Router |
-| **Frontend** | TypeScript | Type-safe JavaScript |
-| **Frontend** | Tailwind CSS | Utility-first CSS |
-| **Frontend** | Shadcn/ui | Reusable UI components |
-| **Backend** | FastAPI | Async web framework |
-| **Backend** | Python 3.11+ | Backend runtime |
-| **Backend** | Supabase Client | Database client |
-| **Database** | PostgreSQL (via Supabase) | Persistent storage |
-| **Worker** | LiveKit Agents SDK | Real-time voice/video |
-| **Worker** | Google Gemini Realtime | AI LLM |
-| **Authentication** | Supabase Auth | User authentication |
-| **Payments** | Stripe | Billing & subscriptions |
-| **Email** | Resend.com | Transactional emails |
-| **Observability** | OpenTelemetry | Tracing, metrics, logs |
-| **Containers** | Docker & Docker Compose | Containerization |
-| **Real-time** | LiveKit Cloud | Voice/video infrastructure |
-| **Phone** | Twilio | Telephony provider |
+| Layer              | Technology                | Purpose                         |
+| ------------------ | ------------------------- | ------------------------------- |
+| **Frontend**       | Next.js 15                | React framework with App Router |
+| **Frontend**       | TypeScript                | Type-safe JavaScript            |
+| **Frontend**       | Tailwind CSS              | Utility-first CSS               |
+| **Frontend**       | Shadcn/ui                 | Reusable UI components          |
+| **Backend**        | FastAPI                   | Async web framework             |
+| **Backend**        | Python 3.11+              | Backend runtime                 |
+| **Backend**        | Supabase Client           | Database client                 |
+| **Database**       | PostgreSQL (via Supabase) | Persistent storage              |
+| **Worker**         | LiveKit Agents SDK        | Real-time voice/video           |
+| **Worker**         | Google Gemini Realtime    | AI LLM                          |
+| **Authentication** | Supabase Auth             | User authentication             |
+| **Payments**       | Stripe                    | Billing & subscriptions         |
+| **Email**          | Resend.com                | Transactional emails            |
+| **Observability**  | OpenTelemetry             | Tracing, metrics, logs          |
+| **Containers**     | Docker & Docker Compose   | Containerization                |
+| **Real-time**      | LiveKit Cloud             | Voice/video infrastructure      |
+| **Phone**          | Twilio                    | Telephony provider              |
 
 ## Who Is This For?
 
 ### Target Users
 
 **Business Owners**
+
 - Want voice agents for customer support
 - Need appointment scheduling automation
 - Require information retrieval from business systems
 - Need scalable, multi-tenant solution
 
 **Developers**
+
 - Want to build custom tools for voice agents
 - Need flexible API for integrations
 - Require multi-tenant architecture
 - Want production-ready codebase
 
 **Organizations**
+
 - Need multi-tenant platform with RBAC
 - Require strong data isolation
 - Want credit-based billing
@@ -222,6 +245,7 @@ Automatic greeting when agent enters room:
 ### Use Case Examples
 
 **Customer Support Agent**
+
 - Answer common questions
 - Look up customer information
 - Schedule follow-up calls
@@ -229,6 +253,7 @@ Automatic greeting when agent enters room:
 - Track interactions in CRM
 
 **Appointment Setter**
+
 - Check calendar availability
 - Book appointments
 - Send confirmation emails
@@ -236,6 +261,7 @@ Automatic greeting when agent enters room:
 - Handle cancellations
 
 **Order Processing Agent**
+
 - Check order status
 - Process returns
 - Update shipping information
@@ -243,6 +269,7 @@ Automatic greeting when agent enters room:
 - Handle billing inquiries
 
 **Lead Qualification Agent**
+
 - Capture lead information
 - Ask qualifying questions
 - Schedule demos
@@ -252,6 +279,7 @@ Automatic greeting when agent enters room:
 ## Platform Capabilities
 
 ### Voice Agent System ✅
+
 - AI-powered voice conversations
 - Dynamic tool loading from database
 - Tool wrapping for LLM compatibility
@@ -261,6 +289,7 @@ Automatic greeting when agent enters room:
 - Two-tier tool service
 
 ### Multi-Tenancy ✅
+
 - Organization-based isolation
 - Row-Level Security (RLS)
 - Tenant context injection
@@ -268,6 +297,7 @@ Automatic greeting when agent enters room:
 - Multi-organization support per user
 
 ### Authentication & Authorization ✅
+
 - Password-based authentication
 - Google OAuth integration
 - JWT tokens
@@ -276,6 +306,7 @@ Automatic greeting when agent enters room:
 - Custom role creation (platform admin only)
 
 ### Billing & Payments ✅
+
 - Stripe integration
 - Credit-based subscriptions
 - Plan-based pricing tiers
@@ -284,6 +315,7 @@ Automatic greeting when agent enters room:
 - Usage tracking
 
 ### Notifications ✅
+
 - Email notifications (Resend.com)
 - User invites
 - Password reset
@@ -293,6 +325,7 @@ Automatic greeting when agent enters room:
 - Billing failure notifications
 
 ### Observability ✅
+
 - OpenTelemetry tracing
 - Metrics collection
 - Log aggregation
@@ -301,6 +334,7 @@ Automatic greeting when agent enters room:
 - Performance monitoring
 
 ### Developer Experience ✅
+
 - Type-safe APIs (Pydantic, TypeScript)
 - Docker containerization
 - Pre-commit hooks
@@ -311,6 +345,7 @@ Automatic greeting when agent enters room:
 ## Platform Roadmap
 
 ### Completed ✅
+
 - Multi-tenant architecture
 - RBAC system
 - Stripe billing
@@ -322,11 +357,13 @@ Automatic greeting when agent enters room:
 - Docker deployment
 
 ### In Progress 🚧
+
 - Additional tool implementations
 - Comprehensive testing
 - Agent analytics dashboard
 
 ### Planned 📋
+
 - Multi-LLM support (OpenAI, Claude, etc.)
 - Conversation history and playback
 - Tool composition and chaining

@@ -1,19 +1,19 @@
 /**
  * Dialog component for editing existing organizations
  */
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import React, { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -22,35 +22,42 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { organizationService } from '@/services/organization-service';
-import { Loader2, Edit3 } from 'lucide-react';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { organizationService } from "@/services/organization-service";
+import { Loader2, Edit3 } from "lucide-react";
 
 const organizationSchema = z.object({
-  name: z.string()
-    .min(2, 'Organization name must be at least 2 characters')
-    .max(100, 'Organization name must be less than 100 characters'),
-  description: z.string()
-    .max(500, 'Description must be less than 500 characters')
+  name: z
+    .string()
+    .min(2, "Organization name must be at least 2 characters")
+    .max(100, "Organization name must be less than 100 characters"),
+  description: z
+    .string()
+    .max(500, "Description must be less than 500 characters")
     .optional(),
-  slug: z.string()
-    .min(2, 'Slug must be at least 2 characters')
-    .max(50, 'Slug must be less than 50 characters')
-    .regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens'),
-  website: z.string()
-    .url('Please enter a valid URL')
+  slug: z
+    .string()
+    .min(2, "Slug must be at least 2 characters")
+    .max(50, "Slug must be less than 50 characters")
+    .regex(
+      /^[a-z0-9-]+$/,
+      "Slug can only contain lowercase letters, numbers, and hyphens",
+    ),
+  website: z
+    .string()
+    .url("Please enter a valid URL")
     .optional()
-    .or(z.literal('')),
+    .or(z.literal("")),
   is_active: z.boolean(),
 });
 
 type OrganizationFormData = z.infer<typeof organizationSchema>;
 
-import type { Organization } from '@/types/organization';
+import type { Organization } from "@/types/organization";
 
 interface OrganizationEditDialogProps {
   open: boolean;
@@ -71,9 +78,9 @@ export function OrganizationEditDialog({
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
     defaultValues: {
-      name: '',
-      description: '',
-      slug: '',
+      name: "",
+      description: "",
+      slug: "",
       is_active: true,
     },
   });
@@ -83,9 +90,9 @@ export function OrganizationEditDialog({
     if (organization) {
       form.reset({
         name: organization.name,
-        description: organization.description || '',
+        description: organization.description || "",
         slug: organization.slug,
-        website: organization.website || '',
+        website: organization.website || "",
         is_active: organization.is_active,
       });
     }
@@ -96,19 +103,22 @@ export function OrganizationEditDialog({
       setLoading(true);
       setError(null);
 
-      const updatedOrganization = await organizationService.updateOrganization(organization.id, {
-        name: data.name,
-        description: data.description || '',
-        slug: data.slug,
-        website: data.website || '',
-        is_active: data.is_active,
-      });
+      const updatedOrganization = await organizationService.updateOrganization(
+        organization.id,
+        {
+          name: data.name,
+          description: data.description || "",
+          slug: data.slug,
+          website: data.website || "",
+          is_active: data.is_active,
+        },
+      );
 
       onSuccess(updatedOrganization);
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('Error updating organization:', err);
-      setError(error.message || 'Failed to update organization');
+      console.error("Error updating organization:", err);
+      setError(error.message || "Failed to update organization");
     } finally {
       setLoading(false);
     }
@@ -262,18 +272,14 @@ export function OrganizationEditDialog({
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="flex-1"
-              >
+              <Button type="submit" disabled={loading} className="flex-1">
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Updating...
                   </>
                 ) : (
-                  'Update Organization'
+                  "Update Organization"
                 )}
               </Button>
             </div>

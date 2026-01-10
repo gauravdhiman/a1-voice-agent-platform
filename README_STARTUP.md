@@ -18,11 +18,13 @@ chmod +x start.sh
 ### Starting Containers
 
 **Development Mode:**
+
 ```bash
 ./start.sh start dev
 ```
 
 **Production Mode:**
+
 ```bash
 ./start.sh start prod
 ```
@@ -30,11 +32,13 @@ chmod +x start.sh
 ### Stopping Containers
 
 **Development Mode:**
+
 ```bash
 ./start.sh stop dev
 ```
 
 **Production Mode:**
+
 ```bash
 ./start.sh stop prod
 ```
@@ -42,11 +46,13 @@ chmod +x start.sh
 ### Restarting Containers
 
 **Development Mode:**
+
 ```bash
 ./start.sh restart dev
 ```
 
 **Production Mode:**
+
 ```bash
 ./start.sh restart prod
 ```
@@ -54,11 +60,13 @@ chmod +x start.sh
 ### Building Images
 
 **Development Mode:**
+
 ```bash
 ./start.sh build dev
 ```
 
 **Production Mode:**
+
 ```bash
 ./start.sh build prod
 ```
@@ -66,11 +74,13 @@ chmod +x start.sh
 ### Viewing Logs
 
 **Development Mode:**
+
 ```bash
 ./start.sh logs dev
 ```
 
 **Production Mode:**
+
 ```bash
 ./start.sh logs prod
 ```
@@ -90,12 +100,14 @@ chmod +x start.sh
 ## What Gets Started
 
 ### Development Mode
+
 - Frontend development server with hot reloading on port 3000
 - Backend development server with hot reloading on port 8000
 - Volumes mounted for live code updates
 - Development-specific environment variables
 
 ### Production Mode
+
 - Frontend production build served by Next.js standalone server on port 3000
 - Backend production server on port 8000
 - Optimized builds for performance
@@ -114,6 +126,7 @@ After starting the containers, you can access:
 Make sure your `.env` file is properly configured before starting the containers. The script will validate that required environment variables are set.
 
 Required variables:
+
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`

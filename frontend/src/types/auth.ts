@@ -2,8 +2,8 @@
  * Authentication-related type definitions
  */
 
-import { Organization } from './organization';
-import { UserRoleAssignment } from './rbac';
+import { Organization } from "./organization";
+import { UserRoleAssignment } from "./rbac";
 
 // User profile type for backend API responses
 export interface UserProfile {

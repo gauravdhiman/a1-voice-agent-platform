@@ -1,22 +1,28 @@
 // services/auth-service.ts
-import { apiClient } from '@/lib/api/client';
-import type { UserProfile } from '@/types/auth';
+import { apiClient } from "@/lib/api/client";
+import type { UserProfile } from "@/types/auth";
 
 // Auth Service class
 class AuthService {
-  private baseUrl = '/api/v1/auth';
+  private baseUrl = "/api/v1/auth";
 
   // Process invitation to add user to organization
-  async processInvitation(token: string, userId: string): Promise<{
+  async processInvitation(
+    token: string,
+    userId: string,
+  ): Promise<{
     success: boolean;
     error?: string;
     data?: unknown;
   }> {
     try {
-      const response = await apiClient.post(`${this.baseUrl}/process-invitation`, {
-        token,
-        user_id: userId,
-      });
+      const response = await apiClient.post(
+        `${this.baseUrl}/process-invitation`,
+        {
+          token,
+          user_id: userId,
+        },
+      );
 
       return {
         success: true,

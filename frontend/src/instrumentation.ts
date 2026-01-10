@@ -4,10 +4,10 @@
 
 export async function register() {
   // Only run instrumentation in Node.js environment, not in edge runtime
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
     // We're using our custom OpenTelemetry setup in lib/opentelemetry.ts
     // which is imported in src/app/layout.tsx
     // This file is kept minimal to avoid conflicts
-    console.log('Next.js instrumentation registered');
+    console.log("Next.js instrumentation registered");
   }
 }

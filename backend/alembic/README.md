@@ -5,15 +5,17 @@ This directory contains database migration files for the multi-tenant SaaS platf
 ## Setup
 
 1. Make sure you have installed the development dependencies:
+
    ```bash
    pip install -r requirements-dev.txt
    ```
 
 2. Set the DATABASE_URL environment variable with your Supabase connection string:
+
    ```bash
    export DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres"
    ```
-   
+
    You can also add this to your `.env` file (see below).
 
 ## Getting Your Supabase Database URL
@@ -31,6 +33,7 @@ Note: For migration purposes, you'll need to use the `postgres` user with the da
 ## Running Migrations
 
 ### Apply all pending migrations
+
 ```bash
 # Using environment variable
 export DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
@@ -44,6 +47,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic upgrade he
 ```
 
 ### Apply the initial RBAC migration specifically
+
 ```bash
 # Using local environment
 alembic upgrade 91759229c32b
@@ -53,6 +57,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic upgrade 91
 ```
 
 ### Rollback the last migration
+
 ```bash
 alembic downgrade -1
 
@@ -61,6 +66,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic downgrade 
 ```
 
 ### Rollback to a specific revision
+
 ```bash
 alembic downgrade <revision_id>
 
@@ -69,6 +75,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic downgrade 
 ```
 
 ### Create a new migration
+
 ```bash
 alembic revision -m "Description of the migration"
 
@@ -77,6 +84,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic revision -
 ```
 
 ### Create a new migration with auto-generation (if using SQLAlchemy models)
+
 ```bash
 alembic revision --autogenerate -m "Description of the migration"
 

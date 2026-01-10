@@ -108,8 +108,8 @@ BASE_TEMPLATE = """
         <div class="email-footer">
             <p>© 2025 {app_name}. All rights reserved.</p>
             <p>
-                <a href="{app_url}">Visit Dashboard</a> | 
-                <a href="{support_url}">Support</a> | 
+                <a href="{app_url}">Visit Dashboard</a> |
+                <a href="{support_url}">Support</a> |
                 <a href="{unsubscribe_url}">Unsubscribe</a>
             </p>
         </div>
@@ -320,89 +320,136 @@ TEMPLATE_REGISTRY = {
         "name": "Welcome Email",
         "subject": "Welcome to {app_name}!",
         "html_content": WELCOME_TEMPLATE,
-        "variables": ["user_name", "user_email", "created_at", "dashboard_url", "app_name"]
+        "variables": [
+            "user_name",
+            "user_email",
+            "created_at",
+            "dashboard_url",
+            "app_name",
+        ],
     },
     "user.password_reset": {
         "name": "Password Reset",
         "subject": "Reset Your Password - {app_name}",
         "html_content": PASSWORD_RESET_TEMPLATE,
-        "variables": ["user_name", "reset_url", "expiry_hours", "app_name"]
+        "variables": ["user_name", "reset_url", "expiry_hours", "app_name"],
     },
     "user.email_verification": {
         "name": "Email Verification",
         "subject": "Verify Your Email - {app_name}",
         "html_content": EMAIL_VERIFICATION_TEMPLATE,
-        "variables": ["user_name", "verification_url", "expiry_hours", "app_name"]
+        "variables": ["user_name", "verification_url", "expiry_hours", "app_name"],
     },
     "subscription.created": {
         "name": "Subscription Activated",
         "subject": "Your Subscription is Active - {app_name}",
         "html_content": SUBSCRIPTION_CREATED_TEMPLATE,
-        "variables": ["user_name", "plan_name", "billing_interval", "amount", "next_billing_date", "included_credits", "billing_dashboard_url", "app_name"]
+        "variables": [
+            "user_name",
+            "plan_name",
+            "billing_interval",
+            "amount",
+            "next_billing_date",
+            "included_credits",
+            "billing_dashboard_url",
+            "app_name",
+        ],
     },
     "subscription.cancelled": {
         "name": "Subscription Cancelled",
         "subject": "Subscription Cancelled - {app_name}",
         "html_content": SUBSCRIPTION_CANCELLED_TEMPLATE,
-        "variables": ["user_name", "plan_name", "access_until", "reactivate_url", "feedback_url", "app_name"]
+        "variables": [
+            "user_name",
+            "plan_name",
+            "access_until",
+            "reactivate_url",
+            "feedback_url",
+            "app_name",
+        ],
     },
     "credits.low_balance": {
         "name": "Low Credit Balance",
         "subject": "Low Credit Balance Warning - {app_name}",
         "html_content": LOW_CREDITS_TEMPLATE,
-        "variables": ["user_name", "current_credits", "organization_name", "purchase_credits_url", "app_name"]
+        "variables": [
+            "user_name",
+            "current_credits",
+            "organization_name",
+            "purchase_credits_url",
+            "app_name",
+        ],
     },
     "credits.purchased": {
         "name": "Credits Purchased",
         "subject": "Credits Purchase Confirmation - {app_name}",
         "html_content": CREDITS_PURCHASED_TEMPLATE,
-        "variables": ["user_name", "credits_added", "amount_paid", "new_balance", "transaction_id", "receipt_url", "app_name"]
+        "variables": [
+            "user_name",
+            "credits_added",
+            "amount_paid",
+            "new_balance",
+            "transaction_id",
+            "receipt_url",
+            "app_name",
+        ],
     },
     "organization.invitation": {
         "name": "Organization Invitation",
         "subject": "You're Invited to Join {organization_name} - {app_name}",
         "html_content": ORGANIZATION_INVITATION_TEMPLATE,
-        "variables": ["recipient_name", "inviter_name", "organization_name", "role_name", "invitation_url", "expiry_days", "app_name"]
+        "variables": [
+            "recipient_name",
+            "inviter_name",
+            "organization_name",
+            "role_name",
+            "invitation_url",
+            "expiry_days",
+            "app_name",
+        ],
     },
     "billing.payment_failed": {
         "name": "Payment Failed",
         "subject": "Payment Failed - Action Required - {app_name}",
         "html_content": PAYMENT_FAILED_TEMPLATE,
-        "variables": ["user_name", "amount", "payment_method", "failure_reason", "update_payment_url", "app_name"]
-    }
+        "variables": [
+            "user_name",
+            "amount",
+            "payment_method",
+            "failure_reason",
+            "update_payment_url",
+            "app_name",
+        ],
+    },
 }
 
 
 def get_template_html(event_key: str, variables: dict) -> str:
     """
     Get rendered HTML for a template.
-    
+
     Args:
         event_key: The event key for the template
         variables: Variables to inject into the template (should already include defaults)
-        
+
     Returns:
         Rendered HTML string
     """
     template_data = TEMPLATE_REGISTRY.get(event_key)
     if not template_data:
         raise ValueError(f"Template not found for event_key: {event_key}")
-        
+
     # Render content
     content = template_data["html_content"].format(**variables)
-    
+
     # Prepare subject with variables
     subject = template_data["subject"].format(**variables)
-    
+
     # Prepare variables for base template, ensuring required variables are present
     # These should already be included via validate_template_variables in the service
-    base_template_vars = {
-        "subject": subject,
-        "content": content,
-        **variables
-    }
-    
+    base_template_vars = {"subject": subject, "content": content, **variables}
+
     # Wrap in base template
     html = BASE_TEMPLATE.format(**base_template_vars)
-    
+
     return html

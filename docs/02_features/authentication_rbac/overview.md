@@ -64,6 +64,7 @@ graph TB
 ### 1. Password-Based Authentication
 
 **Flow**:
+
 ```mermaid
 sequenceDiagram
     participant User as User
@@ -80,12 +81,14 @@ sequenceDiagram
 ```
 
 **Implementation**:
+
 - Passwords hashed using secure algorithm (bcrypt/Argon2)
 - Supabase handles password validation
 - Returns JWT access token (short-lived) + refresh token
 - Tokens stored securely (httpOnly cookies recommended)
 
 **Endpoints**:
+
 ```
 POST /api/v1/auth/signup     User registration
 POST /api/v1/auth/login      User login
@@ -98,6 +101,7 @@ POST /api/v1/auth/reset-password    Password reset
 ### 2. Google OAuth
 
 **Flow**:
+
 ```mermaid
 sequenceDiagram
     participant User as User
@@ -121,12 +125,14 @@ sequenceDiagram
 ```
 
 **Benefits**:
+
 - No password to remember
 - Verified email address
 - Single Sign-On (SSO) support
 - Faster onboarding
 
 **Endpoints**:
+
 ```
 GET  /api/v1/auth/oauth/google     Initiate Google OAuth
 GET  /api/v1/auth/callback/google   Handle Google OAuth callback
@@ -136,12 +142,13 @@ GET  /api/v1/auth/callback/google   Handle Google OAuth callback
 
 **Token Types**:
 
-| Token Type | Purpose | Lifetime | Storage |
-|------------|---------|-----------|---------|
-| **Access Token** | API authentication | 15-60 minutes | Memory/Session |
-| **Refresh Token** | Get new access token | 7-30 days | Secure storage (httpOnly cookie) |
+| Token Type        | Purpose              | Lifetime      | Storage                          |
+| ----------------- | -------------------- | ------------- | -------------------------------- |
+| **Access Token**  | API authentication   | 15-60 minutes | Memory/Session                   |
+| **Refresh Token** | Get new access token | 7-30 days     | Secure storage (httpOnly cookie) |
 
 **Refresh Flow**:
+
 ```mermaid
 sequenceDiagram
     participant Client as Client App
@@ -168,6 +175,7 @@ sequenceDiagram
 ### Predefined Roles
 
 #### platform_admin
+
 - **Scope**: Platform-wide
 - **Access**: Can manage platform configuration
 - **Permissions**:
@@ -177,6 +185,7 @@ sequenceDiagram
   - Platform-level operations
 
 #### org_admin
+
 - **Scope**: Single organization
 - **Access**: Full control within organization
 - **Permissions**:
@@ -188,6 +197,7 @@ sequenceDiagram
   - All `member` permissions
 
 #### member
+
 - **Scope**: Single organization
 - **Access**: Standard team member
 - **Permissions**:
@@ -197,6 +207,7 @@ sequenceDiagram
   - View billing summary
 
 #### billing
+
 - **Scope**: Single organization
 - **Access**: Billing management only
 - **Permissions**:
@@ -234,6 +245,7 @@ graph TB
 Permissions follow pattern: `resource.action`
 
 **Examples**:
+
 - `agents.create` - Create voice agents
 - `agents.update` - Update agent configuration
 - `agents.delete` - Delete agents
@@ -320,6 +332,7 @@ sequenceDiagram
 ### Permission Check Implementation
 
 **Backend**:
+
 ```python
 from shared.rbac.decorators import require_permission
 
@@ -332,6 +345,7 @@ async def get_agents(org_id: str):
 ```
 
 **Database (RLS)**:
+
 ```sql
 -- Row-Level Security Policy
 CREATE POLICY "org_select_for_members" ON organizations
@@ -393,17 +407,18 @@ graph LR
 ```
 
 **User Perspective**:
+
 - John is `org_admin` at Acme Corp (full control)
 - John is `member` at Tech Startup (view only)
 - John is `billing` at Consulting Firm (billing access only)
 
 ### Organization Membership Status
 
-| Status | Description | Actions Allowed |
-|--------|-------------|-----------------|
-| `invited` | User invited but not yet joined | Can accept invitation |
-| `active` | User is active member | Full permissions per role |
-| `suspended` | User temporarily suspended | No access to org |
+| Status      | Description                     | Actions Allowed           |
+| ----------- | ------------------------------- | ------------------------- |
+| `invited`   | User invited but not yet joined | Can accept invitation     |
+| `active`    | User is active member           | Full permissions per role |
+| `suspended` | User temporarily suspended      | No access to org          |
 
 ### Invitation Flow
 
@@ -504,6 +519,7 @@ POST   /api/v1/permissions             Create permission (platform admin)
 ### Audit Logging
 
 Track critical operations:
+
 - User login/logout
 - Role changes
 - Permission changes
@@ -515,6 +531,7 @@ Track critical operations:
 ### Authentication Settings
 
 Environment variables:
+
 ```bash
 # Supabase Auth
 SUPABASE_URL=https://your-project.supabase.co
@@ -542,6 +559,7 @@ REQUIRE_SPECIAL_CHAR=true
 ### RBAC Configuration
 
 Database seeds predefined roles:
+
 - platform_admin
 - org_admin
 - member
@@ -554,6 +572,7 @@ Custom roles created by platform admins via UI.
 ### Login Fails
 
 **Check**:
+
 1. Email/password correct
 2. Account is verified (check email)
 3. Account is not suspended
@@ -562,6 +581,7 @@ Custom roles created by platform admins via UI.
 ### OAuth Callback Fails
 
 **Check**:
+
 1. OAuth redirect URI matches registered value
 2. OAuth client ID/secret correct
 3. User authorized access
@@ -570,6 +590,7 @@ Custom roles created by platform admins via UI.
 ### Permission Denied
 
 **Check**:
+
 1. User has active membership in organization
 2. User's role includes required permission
 3. JWT token is valid (not expired)
@@ -578,6 +599,7 @@ Custom roles created by platform admins via UI.
 ### Invitation Not Received
 
 **Check**:
+
 1. Email address is correct
 2. Email not in spam folder
 3. Email service (Resend) is configured

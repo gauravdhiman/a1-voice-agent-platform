@@ -1,9 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
-import { billingService } from '@/services/billing-service';
+import { useQuery } from "@tanstack/react-query";
+import { billingService } from "@/services/billing-service";
 
 export function useBillingInfo(organizationId: string) {
   return useQuery({
-    queryKey: ['billingInfo', organizationId],
+    queryKey: ["billingInfo", organizationId],
     queryFn: async () => {
       const [subscription, creditBalance] = await Promise.all([
         billingService.getOrganizationSubscription(organizationId),

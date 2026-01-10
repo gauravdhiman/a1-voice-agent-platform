@@ -13,7 +13,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserCheck, UserX, MoreHorizontal, User, Mail, Calendar } from "lucide-react";
+import {
+  UserCheck,
+  UserX,
+  MoreHorizontal,
+  User,
+  Mail,
+  Calendar,
+} from "lucide-react";
 import { format } from "date-fns";
 
 export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
@@ -52,7 +59,8 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
       return (
         <div className="flex items-center space-x-3">
           <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
-            {member.first_name?.[0]?.toUpperCase()}{member.last_name?.[0]?.toUpperCase()}
+            {member.first_name?.[0]?.toUpperCase()}
+            {member.last_name?.[0]?.toUpperCase()}
           </div>
           <div>
             <div className="font-medium text-foreground">
@@ -68,9 +76,13 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
     },
     accessorFn: (row) => `${row.first_name} ${row.last_name} ${row.email}`,
     filterFn: (row, id, value) => {
-      const fullName = `${row.original.first_name} ${row.original.last_name}`.toLowerCase();
+      const fullName =
+        `${row.original.first_name} ${row.original.last_name}`.toLowerCase();
       const email = row.original.email.toLowerCase();
-      return fullName.includes(value.toLowerCase()) || email.includes(value.toLowerCase());
+      return (
+        fullName.includes(value.toLowerCase()) ||
+        email.includes(value.toLowerCase())
+      );
     },
   },
   {
@@ -79,7 +91,11 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
     size: 150,
     minSize: 100,
     cell: ({ row }) => {
-      const roles = row.getValue("roles") as Array<{ id: string, name: string, description: string }>;
+      const roles = row.getValue("roles") as Array<{
+        id: string;
+        name: string;
+        description: string;
+      }>;
       return (
         <div className="space-y-1">
           {roles.map((role) => (
@@ -114,7 +130,7 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
         </div>
       );
     },
-    accessorFn: (row) => row.is_verified ? "Active" : "Pending",
+    accessorFn: (row) => (row.is_verified ? "Active" : "Pending"),
     filterFn: (row, id, value) => {
       const member = row.original;
       const status = member.is_verified ? "Active" : "Pending";
@@ -134,7 +150,7 @@ export const organizationMembersColumns: ColumnDef<Member, unknown>[] = [
       return (
         <div className="flex items-center text-muted-foreground">
           <Calendar className="h-4 w-4 mr-1" />
-          {format(date, 'MMM dd, yyyy')}
+          {format(date, "MMM dd, yyyy")}
         </div>
       );
     },

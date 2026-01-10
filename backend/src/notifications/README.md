@@ -49,6 +49,7 @@ await notification_service.send_notification(
 ## ✅ Best Practices for Using Notifications
 
 ### 1. Required Variables Validation
+
 The system validates that all required template variables are provided:
 
 ```python
@@ -71,6 +72,7 @@ except ValueError as e:
 ```
 
 ### 2. XSS Protection
+
 All template variables are automatically sanitized to prevent XSS attacks:
 
 ```python
@@ -91,13 +93,14 @@ await notification_service.send_notification(
 ```
 
 ### 3. Internal Service Integration
+
 Use notifications within your services to trigger on business events:
 
 ```python
 # In auth service after successful signup
 async def signup_user(email: str, name: str):
     # ... user creation logic ...
-    
+
     # Send welcome email
     await notification_service.send_notification(
         SendNotificationRequest(
@@ -129,12 +132,14 @@ async def signup_user(email: str, name: str):
 ## 🔧 Admin API Examples
 
 ### List Events
+
 ```bash
 curl http://localhost:8000/api/notifications/admin/events \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### Disable Event
+
 ```bash
 curl -X PUT http://localhost:8000/api/notifications/admin/events/{event_id} \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -143,6 +148,7 @@ curl -X PUT http://localhost:8000/api/notifications/admin/events/{event_id} \
 ```
 
 ### Create Custom Template
+
 ```bash
 curl -X POST http://localhost:8000/api/notifications/admin/templates \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -168,6 +174,7 @@ See [NOTIFICATION_SYSTEM.md](../../../docs/NOTIFICATION_SYSTEM.md) for complete 
 ## 🎨 Email Templates
 
 All templates feature:
+
 - ✅ Responsive design
 - ✅ Modern gradient styling
 - ✅ Clear call-to-action buttons
@@ -194,12 +201,14 @@ logs = await notification_service.get_notification_logs(limit=10)
 ## 🛠️ Troubleshooting
 
 **Email not sending?**
+
 1. Check API key configuration
 2. Verify event is enabled
 3. Check logs: `GET /api/notifications/logs`
 4. Verify sender email in Resend dashboard
 
 **Need help?**
+
 - Health check: `/api/notifications/health`
 - View stats: `/api/notifications/stats`
 - Check logs: `/api/notifications/logs`

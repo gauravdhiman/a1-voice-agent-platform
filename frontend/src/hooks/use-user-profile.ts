@@ -1,15 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
-import { authService } from '@/services/auth-service';
-import type { UserRoleAssignment } from '@/types/rbac';
+import { useQuery } from "@tanstack/react-query";
+import { authService } from "@/services/auth-service";
+import type { UserRoleAssignment } from "@/types/rbac";
 
 export function useUserProfile(userId?: string) {
   return useQuery({
-    queryKey: ['user-profile', userId],
+    queryKey: ["user-profile", userId],
     queryFn: async (): Promise<UserRoleAssignment[]> => {
       const result = await authService.getCurrentUser();
 
       if (!result.success || !result.user) {
-        throw new Error(result.error || 'Failed to fetch user profile');
+        throw new Error(result.error || "Failed to fetch user profile");
       }
 
       // Return just the roles from the full user profile

@@ -1,24 +1,36 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Coins, Star } from 'lucide-react';
-import { CreditProduct } from '@/types/billing';
-import { useAuth } from '@/contexts/auth-context';
-import { toast } from 'sonner';
-import { getStripe } from '@/lib/stripe';
-import { useCreditProducts } from '@/hooks/use-credit-products';
-import { billingService } from '@/services/billing-service';
+import React, { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Coins, Star } from "lucide-react";
+import { CreditProduct } from "@/types/billing";
+import { useAuth } from "@/contexts/auth-context";
+import { toast } from "sonner";
+import { getStripe } from "@/lib/stripe";
+import { useCreditProducts } from "@/hooks/use-credit-products";
+import { billingService } from "@/services/billing-service";
 
 interface CreditPurchaseProps {
   organizationId: string;
   onCreditsPurchased?: (product: CreditProduct) => void;
 }
 
-export function CreditPurchase({ organizationId, onCreditsPurchased }: CreditPurchaseProps) {
-  const [purchasingProduct, setPurchasingProduct] = useState<string | null>(null);
+export function CreditPurchase({
+  organizationId,
+  onCreditsPurchased,
+}: CreditPurchaseProps) {
+  const [purchasingProduct, setPurchasingProduct] = useState<string | null>(
+    null,
+  );
   const { user } = useAuth();
   const { data: products, isLoading: loading, error } = useCreditProducts();
 
@@ -28,7 +40,7 @@ export function CreditPurchase({ organizationId, onCreditsPurchased }: CreditPur
 
   const handlePurchase = async (product: CreditProduct) => {
     if (!user) {
-      toast.error('Please sign in to purchase credits');
+      toast.error("Please sign in to purchase credits");
       return;
     }
 
@@ -36,28 +48,31 @@ export function CreditPurchase({ organizationId, onCreditsPurchased }: CreditPur
 
     try {
       // Create Stripe checkout session
-      const { session_id } = await billingService.createCreditsCheckout(product.id, organizationId);
-      
+      const { session_id } = await billingService.createCreditsCheckout(
+        product.id,
+        organizationId,
+      );
+
       // Get Stripe instance
       const stripe = await getStripe();
-      
+
       if (!stripe) {
-        throw new Error('Failed to load Stripe');
+        throw new Error("Failed to load Stripe");
       }
-      
+
       // Redirect to Stripe Checkout using Stripe.js
       const { error } = await stripe.redirectToCheckout({
         sessionId: session_id,
       });
-      
+
       if (error) {
         throw new Error(error.message);
       }
-      
+
       onCreditsPurchased?.(product);
     } catch (error) {
-      console.error('Failed to create checkout session:', error);
-      toast.error('Failed to start checkout process');
+      console.error("Failed to create checkout session:", error);
+      toast.error("Failed to start checkout process");
       setPurchasingProduct(null);
     }
   };
@@ -67,17 +82,24 @@ export function CreditPurchase({ organizationId, onCreditsPurchased }: CreditPur
     return `${currency}${price}`;
   };
 
-  const calculateValuePerCredit = (creditAmount: number, priceAmount: number) => {
+  const calculateValuePerCredit = (
+    creditAmount: number,
+    priceAmount: number,
+  ) => {
     return (priceAmount / 100 / creditAmount).toFixed(4);
   };
 
   const getBestValueProduct = () => {
     if (!products || products.length === 0) return null;
-    
+
     // Find product with lowest cost per credit
     return products.reduce((best, current) => {
-      const bestValue = parseFloat(calculateValuePerCredit(best.credit_amount, best.price_amount));
-      const currentValue = parseFloat(calculateValuePerCredit(current.credit_amount, current.price_amount));
+      const bestValue = parseFloat(
+        calculateValuePerCredit(best.credit_amount, best.price_amount),
+      );
+      const currentValue = parseFloat(
+        calculateValuePerCredit(current.credit_amount, current.price_amount),
+      );
       return currentValue < bestValue ? current : best;
     });
   };
@@ -113,9 +135,13 @@ export function CreditPurchase({ organizationId, onCreditsPurchased }: CreditPur
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {products.map((product) => (
-          <Card 
+          <Card
             key={product.id}
-            className={`relative ${bestValueProduct?.id === product.id ? 'border-primary shadow-lg' : ''}`}
+            className={`relative ${
+              bestValueProduct?.id === product.id
+                ? "border-primary shadow-lg"
+                : ""
+            }`}
           >
             {bestValueProduct?.id === product.id && (
               <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -149,15 +175,23 @@ export function CreditPurchase({ organizationId, onCreditsPurchased }: CreditPur
                   {formatPrice(product.price_amount, product.currency)}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  ${calculateValuePerCredit(product.credit_amount, product.price_amount)} per credit
+                  $
+                  {calculateValuePerCredit(
+                    product.credit_amount,
+                    product.price_amount,
+                  )}{" "}
+                  per credit
                 </div>
               </div>
 
               {/* Show savings for larger packages */}
               {product.credit_amount >= 5000 && (
                 <Badge variant="secondary" className="text-xs">
-                  {product.credit_amount >= 25000 ? 'Save 20%' : 
-                   product.credit_amount >= 10000 ? 'Save 15%' : 'Save 10%'}
+                  {product.credit_amount >= 25000
+                    ? "Save 20%"
+                    : product.credit_amount >= 10000
+                      ? "Save 15%"
+                      : "Save 10%"}
                 </Badge>
               )}
             </CardContent>

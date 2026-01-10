@@ -5,6 +5,7 @@ Next.js frontend for the multi-tenant SaaS platform.
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - npm
 
@@ -29,6 +30,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## 🏗️ Architecture
 
 ### Tech Stack
+
 - **Framework**: Next.js 15 with App Router
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
@@ -61,6 +63,7 @@ src/
 Built with [Shadcn/ui](https://ui.shadcn.com/) for consistent, accessible components:
 
 ### Available Components
+
 - Button
 - Card
 - Input
@@ -92,6 +95,7 @@ NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
 ### Next.js Configuration
 
 Key configurations in `next.config.ts`:
+
 - `output: 'standalone'` - Optimized for Docker deployment
 - `optimizePackageImports` - Improved build performance
 
@@ -100,7 +104,7 @@ Key configurations in `next.config.ts`:
 ```bash
 # Development
 npm run dev          # Start development server
-npm run build        # Build for production  
+npm run build        # Build for production
 npm run start        # Start production server
 
 # Code Quality
@@ -111,6 +115,7 @@ npm run type-check   # TypeScript type checking
 ## 🐳 Docker
 
 ### Development
+
 ```bash
 # Build development image
 docker build -f Dockerfile.dev -t saas-frontend-dev .
@@ -120,6 +125,7 @@ docker run -p 3000:3000 -v $(pwd):/app saas-frontend-dev
 ```
 
 ### Production
+
 ```bash
 # Build production image
 docker build -t saas-frontend .
@@ -131,6 +137,7 @@ docker run -p 3000:3000 saas-frontend
 ## 🔗 API Integration
 
 The frontend includes a type-safe API client (`src/lib/api/client.ts`) that:
+
 - Handles authentication tokens
 - Provides typed request/response interfaces
 - Includes error handling
@@ -139,14 +146,14 @@ The frontend includes a type-safe API client (`src/lib/api/client.ts`) that:
 ### Usage Example
 
 ```typescript
-import { apiClient } from '@/lib/api/client';
+import { apiClient } from "@/lib/api/client";
 
 // Set auth token
-apiClient.setAuthToken('your-jwt-token');
+apiClient.setAuthToken("your-jwt-token");
 
 // Make API calls
-const users = await apiClient.get<User[]>('/users');
-const user = await apiClient.post<User>('/users', { name: 'John' });
+const users = await apiClient.get<User[]>("/users");
+const user = await apiClient.post<User>("/users", { name: "John" });
 ```
 
 ## 🎯 Type Safety
@@ -166,7 +173,7 @@ interface Organization {
   id: string;
   name: string;
   slug: string;
-  plan: 'free' | 'pro' | 'enterprise';
+  plan: "free" | "pro" | "enterprise";
   // ...
 }
 
@@ -180,12 +187,14 @@ interface ApiResponse<T> {
 ## 🚧 Development Guidelines
 
 ### Code Style
+
 - Use TypeScript for all new files
 - Follow ESLint configuration
 - Use Tailwind CSS for styling
 - Prefer function components with hooks
 
 ### Component Structure
+
 ```typescript
 interface ComponentProps {
   // Define props
@@ -202,6 +211,7 @@ export function Component({ ...props }: ComponentProps) {
 ```
 
 ### File Naming
+
 - Components: `PascalCase.tsx`
 - Utilities: `kebab-case.ts`
 - Types: `index.ts` (in dedicated folders)
@@ -220,16 +230,19 @@ export function Component({ ...props }: ComponentProps) {
 ### Common Issues
 
 **Build Errors**
+
 - Check TypeScript types are correctly defined
 - Ensure all imports are valid
 - Verify environment variables are set
 
 **Docker Issues**
+
 - Make sure Docker is running
 - Check file permissions on volumes
 - Verify port availability
 
 **Hot Reload Not Working**
+
 - Restart development server
 - Check file watchers aren't at limit
 - Verify volume mounting in Docker

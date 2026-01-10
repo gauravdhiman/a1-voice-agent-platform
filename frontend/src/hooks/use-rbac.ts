@@ -1,8 +1,14 @@
 // hooks/use-rbac.ts
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/auth-context';
-import { rbacService } from '@/services/rbac-service';
-import type { Role, Permission, UserRole, RBACState, RBACActions } from '@/types/rbac';
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/auth-context";
+import { rbacService } from "@/services/rbac-service";
+import type {
+  Role,
+  Permission,
+  UserRole,
+  RBACState,
+  RBACActions,
+} from "@/types/rbac";
 
 export const useRBAC = (): [RBACState, RBACActions] => {
   const { user, refreshUserProfile } = useAuth();
@@ -17,65 +23,82 @@ export const useRBAC = (): [RBACState, RBACActions] => {
   // Load user roles and permissions on user change
   useEffect(() => {
     if (!user?.id) {
-      setState(prev => ({ ...prev, userRoles: [], loading: false, error: null }));
+      setState((prev) => ({
+        ...prev,
+        userRoles: [],
+        loading: false,
+        error: null,
+      }));
       return;
     }
 
     // User roles are now available from auth context
-    const userRoles = (user.roles || []).map(userRole => userRole.role);
-    setState(prev => ({ ...prev, userRoles, loading: false, error: null }));
+    const userRoles = (user.roles || []).map((userRole) => userRole.role);
+    setState((prev) => ({ ...prev, userRoles, loading: false, error: null }));
   }, [user?.id, user?.roles]);
 
   // Load all roles and permissions (for admin users)
   const loadRolesAndPermissions = async () => {
     if (!user?.id) return;
-    
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+
     try {
       const [roles, permissions] = await Promise.all([
         rbacService.getAllRoles(),
-        rbacService.getAllPermissions()
+        rbacService.getAllPermissions(),
       ]);
-      
-      setState(prev => ({ ...prev, roles, permissions, loading: false }));
+
+      setState((prev) => ({ ...prev, roles, permissions, loading: false }));
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        loading: false, 
-        error: error instanceof Error ? error.message : 'Failed to load roles and permissions' 
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load roles and permissions",
       }));
     }
   };
 
   // Create a new role
-  const createRole = async (roleData: Omit<Role, 'id' | 'is_system_role' | 'created_at' | 'updated_at'>) => {
+  const createRole = async (
+    roleData: Omit<Role, "id" | "is_system_role" | "created_at" | "updated_at">,
+  ) => {
     try {
       const newRole = await rbacService.createRole(roleData);
-      setState(prev => ({ ...prev, roles: [...prev.roles, newRole] }));
+      setState((prev) => ({ ...prev, roles: [...prev.roles, newRole] }));
       return newRole;
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to create role' 
+      setState((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : "Failed to create role",
       }));
       throw error;
     }
   };
 
   // Update a role
-  const updateRole = async (roleId: string, roleData: Partial<Omit<Role, 'id' | 'is_system_role' | 'created_at' | 'updated_at'>>) => {
+  const updateRole = async (
+    roleId: string,
+    roleData: Partial<
+      Omit<Role, "id" | "is_system_role" | "created_at" | "updated_at">
+    >,
+  ) => {
     try {
       const updatedRole = await rbacService.updateRole(roleId, roleData);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        roles: prev.roles.map(role => role.id === roleId ? updatedRole : role)
+        roles: prev.roles.map((role) =>
+          role.id === roleId ? updatedRole : role,
+        ),
       }));
       return updatedRole;
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to update role' 
+      setState((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : "Failed to update role",
       }));
       throw error;
     }
@@ -85,49 +108,68 @@ export const useRBAC = (): [RBACState, RBACActions] => {
   const deleteRole = async (roleId: string) => {
     try {
       await rbacService.deleteRole(roleId);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        roles: prev.roles.filter(role => role.id !== roleId)
+        roles: prev.roles.filter((role) => role.id !== roleId),
       }));
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to delete role' 
+      setState((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : "Failed to delete role",
       }));
       throw error;
     }
   };
 
   // Create a new permission
-  const createPermission = async (permissionData: Omit<Permission, 'id' | 'created_at' | 'updated_at'>) => {
+  const createPermission = async (
+    permissionData: Omit<Permission, "id" | "created_at" | "updated_at">,
+  ) => {
     try {
       const newPermission = await rbacService.createPermission(permissionData);
-      setState(prev => ({ ...prev, permissions: [...prev.permissions, newPermission] }));
+      setState((prev) => ({
+        ...prev,
+        permissions: [...prev.permissions, newPermission],
+      }));
       return newPermission;
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to create permission' 
+      setState((prev) => ({
+        ...prev,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to create permission",
       }));
       throw error;
     }
   };
 
   // Update a permission
-  const updatePermission = async (permissionId: string, permissionData: Partial<Omit<Permission, 'id' | 'created_at' | 'updated_at'>>) => {
+  const updatePermission = async (
+    permissionId: string,
+    permissionData: Partial<
+      Omit<Permission, "id" | "created_at" | "updated_at">
+    >,
+  ) => {
     try {
-      const updatedPermission = await rbacService.updatePermission(permissionId, permissionData);
-      setState(prev => ({
+      const updatedPermission = await rbacService.updatePermission(
+        permissionId,
+        permissionData,
+      );
+      setState((prev) => ({
         ...prev,
-        permissions: prev.permissions.map(permission => 
-          permission.id === permissionId ? updatedPermission : permission
-        )
+        permissions: prev.permissions.map((permission) =>
+          permission.id === permissionId ? updatedPermission : permission,
+        ),
       }));
       return updatedPermission;
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to update permission' 
+      setState((prev) => ({
+        ...prev,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update permission",
       }));
       throw error;
     }
@@ -137,30 +179,40 @@ export const useRBAC = (): [RBACState, RBACActions] => {
   const deletePermission = async (permissionId: string) => {
     try {
       await rbacService.deletePermission(permissionId);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        permissions: prev.permissions.filter(permission => permission.id !== permissionId)
+        permissions: prev.permissions.filter(
+          (permission) => permission.id !== permissionId,
+        ),
       }));
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to delete permission' 
+      setState((prev) => ({
+        ...prev,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete permission",
       }));
       throw error;
     }
   };
 
   // Assign a role to a user
-  const assignRoleToUser = async (userRoleData: Omit<UserRole, 'id' | 'created_at' | 'updated_at'>) => {
+  const assignRoleToUser = async (
+    userRoleData: Omit<UserRole, "id" | "created_at" | "updated_at">,
+  ) => {
     try {
       const newUserRole = await rbacService.assignRoleToUser(userRoleData);
       // Refresh user profile to get the updated roles
       await refreshUserProfile();
       return newUserRole;
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to assign role to user'
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to assign role to user",
       }));
       throw error;
     }
@@ -173,39 +225,54 @@ export const useRBAC = (): [RBACState, RBACActions] => {
       // Refresh user profile to get the updated roles
       await refreshUserProfile();
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to remove role from user'
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to remove role from user",
       }));
       throw error;
     }
   };
 
   // Assign a permission to a role
-  const assignPermissionToRole = async (roleId: string, permissionId: string) => {
+  const assignPermissionToRole = async (
+    roleId: string,
+    permissionId: string,
+  ) => {
     try {
       await rbacService.assignPermissionToRole(roleId, permissionId);
       // Refresh roles and permissions
       await loadRolesAndPermissions();
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to assign permission to role' 
+      setState((prev) => ({
+        ...prev,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to assign permission to role",
       }));
       throw error;
     }
   };
 
   // Remove a permission from a role
-  const removePermissionFromRole = async (roleId: string, permissionId: string) => {
+  const removePermissionFromRole = async (
+    roleId: string,
+    permissionId: string,
+  ) => {
     try {
       await rbacService.removePermissionFromRole(roleId, permissionId);
       // Refresh roles and permissions
       await loadRolesAndPermissions();
     } catch (error) {
-      setState(prev => ({ 
-        ...prev, 
-        error: error instanceof Error ? error.message : 'Failed to remove permission from role' 
+      setState((prev) => ({
+        ...prev,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to remove permission from role",
       }));
       throw error;
     }
@@ -219,9 +286,12 @@ export const useRBAC = (): [RBACState, RBACActions] => {
       await refreshUserProfile();
       // The user roles will be updated automatically via the useEffect
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to refresh user roles'
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to refresh user roles",
       }));
     }
   };

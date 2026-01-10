@@ -30,6 +30,7 @@ Backend App (gRPC) → OpenTelemetry Collector (gRPC) → New Relic
 ### Required Variables
 
 All environments require a New Relic license key:
+
 ```bash
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
 ```
@@ -104,16 +105,18 @@ The `setup_opentelemetry()` function configures all three telemetry signals:
 ### Usage in Application
 
 1. Import and call the setup function in `main.py`:
+
    ```python
    from config.opentelemetry import setup_manual_opentelemetry
    setup_manual_opentelemetry()
    ```
 
 2. Use the tracer for manual tracing:
+
    ```python
    from opentelemetry import trace
    tracer = trace.get_tracer(__name__)
-   
+
    @app.get("/example")
    @tracer.start_as_current_span("example.operation")
    async def example_endpoint():
@@ -122,6 +125,7 @@ The `setup_opentelemetry()` function configures all three telemetry signals:
    ```
 
 3. Use standard Python logging for logs:
+
    ```python
    import logging
    logging.info("This log will be exported via OpenTelemetry")
@@ -161,14 +165,16 @@ The setup process configures:
 ### Usage in Application
 
 1. Import the tracer in your components:
+
    ```typescript
-   import { trace } from '@opentelemetry/api';
-   const tracer = trace.getTracer('frontend');
+   import { trace } from "@opentelemetry/api";
+   const tracer = trace.getTracer("frontend");
    ```
 
 2. Create spans manually:
+
    ```typescript
-   tracer.startActiveSpan('user.action', async (span) => {
+   tracer.startActiveSpan("user.action", async (span) => {
      try {
        // Your operation logic here
        span.end();
@@ -190,17 +196,22 @@ The setup process configures:
 The collector is configured in `otel-collector-config.yml` with:
 
 ### Receivers
+
 - **OTLP gRPC**: Listens on port 4317 for backend telemetry
 - **OTLP HTTP**: Listens on port 4318 for frontend telemetry with CORS support
 
 ### Exporters
+
 - **OTLP/New Relic**: Forwards data to New Relic using the license key
 
 ### Processors
+
 - **Batch**: For efficient data handling
 
 ### CORS Configuration
+
 The HTTP receiver is configured with CORS to allow requests from frontend origins:
+
 ```yaml
 cors:
   allowed_origins:
@@ -219,6 +230,7 @@ cors:
 ### Backend
 
 Test the backend OpenTelemetry implementation by accessing the test endpoint:
+
 ```bash
 curl http://localhost:8000/test-otel
 ```
@@ -228,6 +240,7 @@ This endpoint generates traces, formatted logs, and metrics that appear in New R
 ### Frontend
 
 Test the frontend OpenTelemetry implementation by:
+
 1. Running the frontend application
 2. Performing actions that generate telemetry
 3. Checking New Relic for the telemetry data
@@ -235,33 +248,39 @@ Test the frontend OpenTelemetry implementation by:
 ## Troubleshooting
 
 ### No Telemetry Data
+
 1. **Check Environment Variables**: Ensure all required variables are set correctly
 2. **Verify Collector Status**: Check that the OpenTelemetry Collector is running
 3. **Check Network Connectivity**: Ensure applications can reach the collector
 4. **Verify New Relic License Key**: Ensure the license key is valid
 
 ### Log Formatting Issues
+
 1. **Check Logging Handler**: Ensure the OpenTelemetry logging handler is properly configured
 2. **Verify Formatter**: Check that the formatter is set correctly on the logging handler
 
 ### CORS Errors
+
 1. **Check Collector CORS Configuration**: Ensure the collector allows requests from your frontend origins
 2. **Verify Endpoint URLs**: Ensure frontend is using the correct endpoint URLs
 
 ## Best Practices
 
 ### Backend
+
 1. **Use Decorators**: Use `@tracer.start_as_current_span` for cleaner code
 2. **Add Attributes**: Include meaningful attributes on spans for better filtering
 3. **Handle Exceptions**: Record exceptions on spans for error tracking
 4. **Use Standard Logging**: Use Python's standard logging module for logs
 
 ### Frontend
+
 1. **Selective Instrumentation**: Only instrument operations that provide value
 2. **Resource Attributes**: Include meaningful resource attributes
 3. **Error Handling**: Handle errors gracefully in tracing code
 
 ### General
+
 1. **Consistent Naming**: Use consistent naming conventions for services and operations
 2. **Attribute Consistency**: Use consistent attribute names across services
 3. **Service Correlation**: Use the same service names across traces, logs, and metrics

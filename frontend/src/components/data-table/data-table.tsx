@@ -39,7 +39,7 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
+    [],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -63,12 +63,16 @@ export function DataTable<TData, TValue>({
       rowSelection,
     },
     enableColumnResizing: true,
-    columnResizeMode: 'onChange',
+    columnResizeMode: "onChange",
   });
 
   return (
     <div className="w-full">
-      <DataTableToolbar table={table} filterColumn={filterColumn} filterPlaceholder={filterPlaceholder} />
+      <DataTableToolbar
+        table={table}
+        filterColumn={filterColumn}
+        filterPlaceholder={filterPlaceholder}
+      />
       <div className="rounded-md border mt-4">
         <Table>
           <TableHeader>
@@ -76,82 +80,82 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead 
+                    <TableHead
                       key={header.id}
                       style={{
                         width: header.getSize(),
                       }}
                       className="relative"
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : header.column.getCanSort() ? (
-                          <div
-                            className="cursor-pointer select-none flex items-center"
-                            onClick={header.column.getToggleSortingHandler()}
-                          >
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                            {{
-                              asc: (
-                                <span className="ml-1">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <path d="M5 15l7-7 7 7" />
-                                  </svg>
-                                </span>
-                              ),
-                              desc: (
-                                <span className="ml-1">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <path d="M5 9l7 7 7-7" />
-                                  </svg>
-                                </span>
-                              ),
-                              false: (
-                                <span className="ml-1">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4 opacity-50"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <path d="M7 17l9.2-9.2M7 7v10h10" />
-                                  </svg>
-                                </span>
-                              ),
-                            }[header.column.getIsSorted() as string] ?? null}
-                          </div>
-                        ) : (
-                          <div>
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                          </div>
-                        )}
+                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                        <div
+                          className="cursor-pointer select-none flex items-center"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                          {{
+                            asc: (
+                              <span className="ml-1">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M5 15l7-7 7 7" />
+                                </svg>
+                              </span>
+                            ),
+                            desc: (
+                              <span className="ml-1">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M5 9l7 7 7-7" />
+                                </svg>
+                              </span>
+                            ),
+                            false: (
+                              <span className="ml-1">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4 opacity-50"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M7 17l9.2-9.2M7 7v10h10" />
+                                </svg>
+                              </span>
+                            ),
+                          }[header.column.getIsSorted() as string] ?? null}
+                        </div>
+                      ) : (
+                        <div>
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                        </div>
+                      )}
                       <div
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
                         className={`absolute right-0 top-0 h-full w-0.5 bg-border cursor-col-resize select-none touch-none ${
-                          header.column.getCanResize() ? 'opacity-100' : 'opacity-0'
+                          header.column.getCanResize()
+                            ? "opacity-100"
+                            : "opacity-0"
                         }`}
                       />
                     </TableHead>
@@ -168,7 +172,7 @@ export function DataTable<TData, TValue>({
                   data-state={row.getIsSelected() && "selected"}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell 
+                    <TableCell
                       key={cell.id}
                       style={{
                         width: cell.column.getSize(),
@@ -176,7 +180,7 @@ export function DataTable<TData, TValue>({
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}

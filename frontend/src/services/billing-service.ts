@@ -2,7 +2,7 @@
  * Service for billing API operations
  */
 
-import { apiClient } from '@/lib/api/client';
+import { apiClient } from "@/lib/api/client";
 import type {
   SubscriptionPlan,
   SubscriptionPlanCreate,
@@ -15,94 +15,123 @@ import type {
   CreditBalance,
   CreditConsumptionRequest,
   CreditConsumptionResponse,
-  CreditPurchaseResponse
-} from '@/types/billing';
+  CreditPurchaseResponse,
+} from "@/types/billing";
 
 class BillingService {
-  private baseUrl = '/api/v1/billing';
+  private baseUrl = "/api/v1/billing";
 
   // Subscription Plans
-  async getSubscriptionPlans(activeOnly: boolean = true): Promise<SubscriptionPlan[]> {
+  async getSubscriptionPlans(
+    activeOnly: boolean = true,
+  ): Promise<SubscriptionPlan[]> {
     const params = new URLSearchParams();
-    if (activeOnly) params.append('active_only', 'true');
-    
-    const response = await apiClient.get<SubscriptionPlan[]>(`${this.baseUrl}/plans?${params}`);
+    if (activeOnly) params.append("active_only", "true");
+
+    const response = await apiClient.get<SubscriptionPlan[]>(
+      `${this.baseUrl}/plans?${params}`,
+    );
     return response.data;
   }
 
-  async createSubscriptionPlan(planData: SubscriptionPlanCreate): Promise<SubscriptionPlan> {
-    const response = await apiClient.post<SubscriptionPlan>(`${this.baseUrl}/plans`, planData);
+  async createSubscriptionPlan(
+    planData: SubscriptionPlanCreate,
+  ): Promise<SubscriptionPlan> {
+    const response = await apiClient.post<SubscriptionPlan>(
+      `${this.baseUrl}/plans`,
+      planData,
+    );
     return response.data;
   }
 
   async getSubscriptionPlan(planId: string): Promise<SubscriptionPlan> {
-    const response = await apiClient.get<SubscriptionPlan>(`${this.baseUrl}/plans/${planId}`);
+    const response = await apiClient.get<SubscriptionPlan>(
+      `${this.baseUrl}/plans/${planId}`,
+    );
     return response.data;
   }
 
   async updateSubscriptionPlan(
-    planId: string, 
-    planData: SubscriptionPlanUpdate
+    planId: string,
+    planData: SubscriptionPlanUpdate,
   ): Promise<SubscriptionPlan> {
-    const response = await apiClient.put<SubscriptionPlan>(`${this.baseUrl}/plans/${planId}`, planData);
+    const response = await apiClient.put<SubscriptionPlan>(
+      `${this.baseUrl}/plans/${planId}`,
+      planData,
+    );
     return response.data;
   }
 
   // Organization Subscriptions
   async getOrganizationSubscription(
-    organizationId: string
+    organizationId: string,
   ): Promise<OrganizationSubscriptionWithPlan> {
-    const response = await apiClient.get<OrganizationSubscriptionWithPlan>(`${this.baseUrl}/subscription/${organizationId}`);
+    const response = await apiClient.get<OrganizationSubscriptionWithPlan>(
+      `${this.baseUrl}/subscription/${organizationId}`,
+    );
     return response.data;
   }
 
-
   async createCustomerPortal(
     organizationId: string,
-    returnUrl: string
+    returnUrl: string,
   ): Promise<{ portal_url: string }> {
-    console.log('Creating customer portal for organization:', organizationId);
-    console.log('Return URL:', returnUrl);
+    console.log("Creating customer portal for organization:", organizationId);
+    console.log("Return URL:", returnUrl);
 
     try {
-      const response = await apiClient.post<{ portal_url: string }>(`${this.baseUrl}/subscription/portal`, {
-        organization_id: organizationId,
-        return_url: returnUrl
-      });
-      console.log('Customer portal response:', response);
+      const response = await apiClient.post<{ portal_url: string }>(
+        `${this.baseUrl}/subscription/portal`,
+        {
+          organization_id: organizationId,
+          return_url: returnUrl,
+        },
+      );
+      console.log("Customer portal response:", response);
       return response.data;
     } catch (error) {
-      console.error('Customer portal creation failed:', error);
+      console.error("Customer portal creation failed:", error);
       throw error;
     }
   }
 
   // Credits
   async getCreditBalance(organizationId: string): Promise<CreditBalance> {
-    const response = await apiClient.get<CreditBalance>(`${this.baseUrl}/credits/${organizationId}`);
+    const response = await apiClient.get<CreditBalance>(
+      `${this.baseUrl}/credits/${organizationId}`,
+    );
     return response.data;
   }
 
   async consumeCredits(
-    consumptionRequest: CreditConsumptionRequest
+    consumptionRequest: CreditConsumptionRequest,
   ): Promise<CreditConsumptionResponse> {
-    const response = await apiClient.post<CreditConsumptionResponse>(`${this.baseUrl}/credits/consume`, consumptionRequest);
+    const response = await apiClient.post<CreditConsumptionResponse>(
+      `${this.baseUrl}/credits/consume`,
+      consumptionRequest,
+    );
     return response.data;
   }
 
   async getCreditEvents(activeOnly: boolean = true): Promise<CreditEvent[]> {
     const params = new URLSearchParams();
-    if (activeOnly) params.append('active_only', 'true');
-    
-    const response = await apiClient.get<CreditEvent[]>(`${this.baseUrl}/credit-events?${params}`);
+    if (activeOnly) params.append("active_only", "true");
+
+    const response = await apiClient.get<CreditEvent[]>(
+      `${this.baseUrl}/credit-events?${params}`,
+    );
     return response.data;
   }
 
-  async getCreditProducts(activeOnly: boolean = true): Promise<CreditProduct[]> {
+  async getCreditProducts(
+    activeOnly: boolean = true,
+  ): Promise<CreditProduct[]> {
     const params = new URLSearchParams();
-    if (activeOnly) params.append('active_only', 'true');
-    
-    const response = await apiClient.get<CreditProduct[]>(`${this.baseUrl}/credit-products?${params}`);
+    if (activeOnly) params.append("active_only", "true");
+
+    const response = await apiClient.get<CreditProduct[]>(
+      `${this.baseUrl}/credit-products?${params}`,
+    );
     return response.data;
   }
 
@@ -110,43 +139,53 @@ class BillingService {
     organizationId: string,
     productId: string,
     successUrl: string,
-    cancelUrl: string
+    cancelUrl: string,
   ): Promise<CreditPurchaseResponse> {
-    const response = await apiClient.post<CreditPurchaseResponse>(`${this.baseUrl}/credit-products/checkout`, {
-      organization_id: organizationId,
-      product_id: productId,
-      success_url: successUrl,
-      cancel_url: cancelUrl
-    });
+    const response = await apiClient.post<CreditPurchaseResponse>(
+      `${this.baseUrl}/credit-products/checkout`,
+      {
+        organization_id: organizationId,
+        product_id: productId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      },
+    );
     return response.data;
   }
 
   // Billing History
   async getBillingHistory(
     organizationId: string,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<BillingHistory[]> {
     const params = new URLSearchParams();
-    params.append('limit', limit.toString());
-    
+    params.append("limit", limit.toString());
+
     const response = await apiClient.get<BillingHistory[]>(
-      `${this.baseUrl}/history/${organizationId}?${params}`
+      `${this.baseUrl}/history/${organizationId}?${params}`,
     );
     return response.data;
   }
 
   // Billing Summary
-  async getBillingSummary(organizationId: string): Promise<OrganizationBillingSummary> {
-    const response = await apiClient.get<OrganizationBillingSummary>(`${this.baseUrl}/summary/${organizationId}`);
+  async getBillingSummary(
+    organizationId: string,
+  ): Promise<OrganizationBillingSummary> {
+    const response = await apiClient.get<OrganizationBillingSummary>(
+      `${this.baseUrl}/summary/${organizationId}`,
+    );
     return response.data;
   }
 
   // Helper methods for frontend use
   async initializeSubscription(
     organizationId: string,
-    planId: string
+    planId: string,
   ): Promise<string> {
-    const checkoutResponse = await this.createSubscriptionCheckout(planId, organizationId);
+    const checkoutResponse = await this.createSubscriptionCheckout(
+      planId,
+      organizationId,
+    );
 
     // Redirect to Stripe checkout
     window.location.href = checkoutResponse.session_url;
@@ -155,7 +194,7 @@ class BillingService {
 
   async purchaseCredits(
     organizationId: string,
-    productId: string
+    productId: string,
   ): Promise<string> {
     const currentUrl = window.location.origin;
     const successUrl = `${currentUrl}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -165,7 +204,7 @@ class BillingService {
       organizationId,
       productId,
       successUrl,
-      cancelUrl
+      cancelUrl,
     );
 
     // Redirect to Stripe checkout
@@ -175,40 +214,43 @@ class BillingService {
 
   async openCustomerPortal(organizationId: string): Promise<void> {
     const returnUrl = `${window.location.origin}/dashboard/billing`;
-    
-    const portalResponse = await this.createCustomerPortal(organizationId, returnUrl);
-    
+
+    const portalResponse = await this.createCustomerPortal(
+      organizationId,
+      returnUrl,
+    );
+
     // Redirect to Stripe customer portal
     window.location.href = portalResponse.portal_url;
   }
 
   // Utility methods
-  formatCurrency(amount: number, currency: string = 'USD'): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
+  formatCurrency(amount: number, currency: string = "USD"): string {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
       currency: currency.toUpperCase(),
     }).format(amount / 100);
   }
 
   formatCredits(credits: number): string {
-    return new Intl.NumberFormat('en-US').format(credits);
+    return new Intl.NumberFormat("en-US").format(credits);
   }
 
   formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   }
 
   formatDateTime(dateString: string): string {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(dateString).toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   }
 
@@ -217,7 +259,10 @@ class BillingService {
     return monthlyTotal - annualPrice;
   }
 
-  calculateSavingsPercentage(monthlyPrice: number, annualPrice: number): number {
+  calculateSavingsPercentage(
+    monthlyPrice: number,
+    annualPrice: number,
+  ): number {
     const monthlyTotal = monthlyPrice * 12;
     const savings = monthlyTotal - annualPrice;
     return Math.round((savings / monthlyTotal) * 100);
@@ -236,8 +281,12 @@ class BillingService {
     return daysUntilExpiry <= days && daysUntilExpiry > 0;
   }
 
-  isSubscriptionActive(subscription: OrganizationSubscriptionWithPlan | null): boolean {
-    return subscription?.status === 'active' || subscription?.status === 'trial';
+  isSubscriptionActive(
+    subscription: OrganizationSubscriptionWithPlan | null,
+  ): boolean {
+    return (
+      subscription?.status === "active" || subscription?.status === "trial"
+    );
   }
 
   getUsagePercentage(used: number, limit: number): number {
@@ -245,39 +294,65 @@ class BillingService {
     return Math.min((used / limit) * 100, 100);
   }
 
-  isUsageNearLimit(used: number, limit: number, threshold: number = 80): boolean {
+  isUsageNearLimit(
+    used: number,
+    limit: number,
+    threshold: number = 80,
+  ): boolean {
     const percentage = this.getUsagePercentage(used, limit);
     return percentage >= threshold;
   }
 
   // Checkout and payment methods
-  async createSubscriptionCheckout(planId: string, organizationId: string): Promise<{ session_url: string; session_id: string }> {
-    const response = await apiClient.post<{ session_url: string; session_id: string }>(`${this.baseUrl}/checkout/subscription`, {
+  async createSubscriptionCheckout(
+    planId: string,
+    organizationId: string,
+  ): Promise<{ session_url: string; session_id: string }> {
+    const response = await apiClient.post<{
+      session_url: string;
+      session_id: string;
+    }>(`${this.baseUrl}/checkout/subscription`, {
       plan_id: planId,
-      organization_id: organizationId
+      organization_id: organizationId,
     });
     return response.data;
   }
 
-  async createCreditsCheckout(productId: string, organizationId: string): Promise<{ session_url: string; session_id: string }> {
-    const response = await apiClient.post<{ session_url: string; session_id: string }>(`${this.baseUrl}/checkout/credits`, {
+  async createCreditsCheckout(
+    productId: string,
+    organizationId: string,
+  ): Promise<{ session_url: string; session_id: string }> {
+    const response = await apiClient.post<{
+      session_url: string;
+      session_id: string;
+    }>(`${this.baseUrl}/checkout/credits`, {
       product_id: productId,
-      organization_id: organizationId
+      organization_id: organizationId,
     });
     return response.data;
   }
 
-  async cancelSubscription(organizationId: string): Promise<{ message: string }> {
-    const response = await apiClient.post<{ message: string }>(`${this.baseUrl}/subscription/cancel`, {
-      organization_id: organizationId
-    });
+  async cancelSubscription(
+    organizationId: string,
+  ): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>(
+      `${this.baseUrl}/subscription/cancel`,
+      {
+        organization_id: organizationId,
+      },
+    );
     return response.data;
   }
 
-  async reactivateSubscription(organizationId: string): Promise<{ message: string }> {
-    const response = await apiClient.post<{ message: string }>(`${this.baseUrl}/subscription/reactivate`, {
-      organization_id: organizationId
-    });
+  async reactivateSubscription(
+    organizationId: string,
+  ): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>(
+      `${this.baseUrl}/subscription/reactivate`,
+      {
+        organization_id: organizationId,
+      },
+    );
     return response.data;
   }
 }

@@ -7,10 +7,12 @@ This document outlines the testing strategy and best practices for ensuring the 
 ## Types of Tests
 
 - **Unit Tests**: Focus on individual components or functions in isolation.
+
   - **Frameworks**: `pytest` (Python), `Jest` (JavaScript/TypeScript)
   - **Best Practices**: Test small, isolated units; mock external dependencies.
 
 - **Integration Tests**: Verify the interaction between different components or services.
+
   - **Frameworks**: `pytest` (Python), `React Testing Library` (JavaScript/TypeScript)
   - **Best Practices**: Test common workflows; use real dependencies where appropriate.
 
@@ -49,13 +51,13 @@ def test_subtraction():
 
 ```javascript
 // frontend/src/components/__tests__/Button.test.js
-import { render, screen } from '@testing-library/react';
-import Button from '../Button';
+import { render, screen } from "@testing-library/react";
+import Button from "../Button";
 
-describe('Button', () => {
-  it('renders with correct text', () => {
+describe("Button", () => {
+  it("renders with correct text", () => {
     render(<Button>Click Me</Button>);
-    expect(screen.getByText('Click Me')).toBeInTheDocument();
+    expect(screen.getByText("Click Me")).toBeInTheDocument();
   });
 });
 ```

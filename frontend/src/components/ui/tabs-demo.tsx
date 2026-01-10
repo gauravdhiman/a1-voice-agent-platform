@@ -1,59 +1,68 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const tabs = [
   {
-    name: 'Overview',
-    value: 'overview',
+    name: "Overview",
+    value: "overview",
     content: (
       <div className="p-4">
         <p className="text-muted-foreground">
-          Discover <span className="text-foreground font-semibold">fresh insights</span>, trending topics, and hidden gems
-          curated just for you. Start exploring and let your curiosity lead the way!
+          Discover{" "}
+          <span className="text-foreground font-semibold">fresh insights</span>,
+          trending topics, and hidden gems curated just for you. Start exploring
+          and let your curiosity lead the way!
         </p>
       </div>
-    )
+    ),
   },
   {
-    name: 'Analytics',
-    value: 'analytics',
+    name: "Analytics",
+    value: "analytics",
     content: (
       <div className="p-4">
         <p className="text-muted-foreground">
-          All your <span className="text-foreground font-semibold">analytics</span> are tracked here. Revisit performance metrics,
-          growth insights, and data-driven moments that help you understand your progress.
+          All your{" "}
+          <span className="text-foreground font-semibold">analytics</span> are
+          tracked here. Revisit performance metrics, growth insights, and
+          data-driven moments that help you understand your progress.
         </p>
       </div>
-    )
+    ),
   },
   {
-    name: 'Reports',
-    value: 'reports',
+    name: "Reports",
+    value: "reports",
     content: (
       <div className="p-4">
         <p className="text-muted-foreground">
-          <span className="text-foreground font-semibold">Detailed reports</span> await! Generate comprehensive insights, 
-          export data, and create actionable recommendations for your business growth.
+          <span className="text-foreground font-semibold">
+            Detailed reports
+          </span>{" "}
+          await! Generate comprehensive insights, export data, and create
+          actionable recommendations for your business growth.
         </p>
       </div>
-    )
-  }
-]
+    ),
+  },
+];
 
 export const TabsDemo = () => {
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState("overview");
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Modern Animated Tabs</h2>
+        <h2 className="text-2xl font-bold text-foreground mb-2">
+          Modern Animated Tabs
+        </h2>
         <p className="text-muted-foreground">
           Experience our sleek, modern tabs with smooth animated underlines.
         </p>
       </div>
-      
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="w-full">
           {tabs.map((tab) => (
@@ -72,7 +81,7 @@ export const TabsDemo = () => {
         ))}
       </Tabs>
     </div>
-  )
-}
+  );
+};
 
-export default TabsDemo
+export default TabsDemo;

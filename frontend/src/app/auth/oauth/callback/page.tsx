@@ -182,7 +182,9 @@ function OAuthCallbackContent() {
             <p className="text-muted-foreground mb-4">
               Your account has been created successfully!
             </p>
-            <p className="text-destructive mb-6 font-medium">{invitationError}</p>
+            <p className="text-destructive mb-6 font-medium">
+              {invitationError}
+            </p>
             <p className="text-muted-foreground text-sm mb-6">
               You can still access the platform. Contact your organization admin
               if you believe there was an error.
@@ -207,7 +209,9 @@ function OAuthCallbackContent() {
             <div className="mx-auto bg-green-100 dark:bg-green-900/30 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
               <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-500" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Welcome!</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-2">
+              Welcome!
+            </h1>
             <p className="text-muted-foreground mb-4">
               Your account has been created successfully!
             </p>

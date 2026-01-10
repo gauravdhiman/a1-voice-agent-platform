@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React, { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -11,11 +11,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
-import { Loader2, Mail } from 'lucide-react';
-import { organizationService } from '@/services/organization-service';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { Loader2, Mail } from "lucide-react";
+import { organizationService } from "@/services/organization-service";
 
 interface InviteMemberDialogProps {
   open: boolean;
@@ -23,17 +23,21 @@ interface InviteMemberDialogProps {
   onSuccess?: () => void;
 }
 
-export function InviteMemberDialog({ open, onOpenChange, onSuccess }: InviteMemberDialogProps) {
-  const [email, setEmail] = useState('');
+export function InviteMemberDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: InviteMemberDialogProps) {
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
-  const orgId = searchParams.get('org_id');
+  const orgId = searchParams.get("org_id");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email || !orgId) {
-      toast.error('Please provide a valid email address.');
+      toast.error("Please provide a valid email address.");
       return;
     }
 
@@ -44,7 +48,7 @@ export function InviteMemberDialog({ open, onOpenChange, onSuccess }: InviteMemb
 
       if (invitation) {
         // Show different messages based on invitation type
-        if (invitation.status === 'accepted') {
+        if (invitation.status === "accepted") {
           // User was added directly to the organization
           toast.success(`${email} has been added to the organization!`);
         } else {
@@ -52,27 +56,31 @@ export function InviteMemberDialog({ open, onOpenChange, onSuccess }: InviteMemb
           toast.success(`Invitation sent to ${email}`);
         }
 
-        setEmail('');
+        setEmail("");
         onOpenChange(false);
         onSuccess?.();
       }
-
     } catch (error) {
-      console.log('Invitation error:', error);
+      console.log("Invitation error:", error);
 
       // Parse error response to get error code
-      let errorCode = '';
-      let errorMessage = '';
+      let errorCode = "";
+      let errorMessage = "";
 
-      if (error instanceof Error && 'message' in error) {
+      if (error instanceof Error && "message" in error) {
         try {
           // Try to parse as JSON if it's a string
-          const parsed = typeof error.message === 'string'
-            ? JSON.parse(error.message)
-            : error.message;
+          const parsed =
+            typeof error.message === "string"
+              ? JSON.parse(error.message)
+              : error.message;
 
-          errorCode = (parsed as { error_code?: string; message?: string }).error_code || '';
-          errorMessage = (parsed as { error_code?: string; message?: string }).message || error.message;
+          errorCode =
+            (parsed as { error_code?: string; message?: string }).error_code ||
+            "";
+          errorMessage =
+            (parsed as { error_code?: string; message?: string }).message ||
+            error.message;
         } catch {
           errorMessage = error.message;
         }
@@ -80,17 +88,21 @@ export function InviteMemberDialog({ open, onOpenChange, onSuccess }: InviteMemb
 
       // Show specific message based on error code
       switch (errorCode) {
-        case 'USER_ALREADY_MEMBER':
-          toast.error(`User with email '${email}' is already a member of this organization.`);
+        case "USER_ALREADY_MEMBER":
+          toast.error(
+            `User with email '${email}' is already a member of this organization.`,
+          );
           break;
-        case 'INSUFFICIENT_PERMISSIONS':
-          toast.error('You do not have permission to invite members to this organization.');
+        case "INSUFFICIENT_PERMISSIONS":
+          toast.error(
+            "You do not have permission to invite members to this organization.",
+          );
           break;
-        case 'VALIDATION_ERROR':
-          toast.error(errorMessage || 'Invalid input provided.');
+        case "VALIDATION_ERROR":
+          toast.error(errorMessage || "Invalid input provided.");
           break;
         default:
-          toast.error(errorMessage || 'Failed to send invitation');
+          toast.error(errorMessage || "Failed to send invitation");
       }
     } finally {
       setLoading(false);
@@ -106,7 +118,8 @@ export function InviteMemberDialog({ open, onOpenChange, onSuccess }: InviteMemb
             <span>Invite Member</span>
           </DialogTitle>
           <DialogDescription>
-            Send an invitation email to add a new member to your organization. They will receive a link to join after signing up.
+            Send an invitation email to add a new member to your organization.
+            They will receive a link to join after signing up.
           </DialogDescription>
         </DialogHeader>
 
@@ -145,7 +158,7 @@ export function InviteMemberDialog({ open, onOpenChange, onSuccess }: InviteMemb
                   Sending...
                 </>
               ) : (
-                'Send Invitation'
+                "Send Invitation"
               )}
             </Button>
           </DialogFooter>

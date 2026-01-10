@@ -2,7 +2,6 @@
  * User-related type definitions
  */
 
-
 // Core user interface
 export interface User {
   id: string;

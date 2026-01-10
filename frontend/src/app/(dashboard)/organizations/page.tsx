@@ -1,29 +1,34 @@
 /**
  * Organizations management page - List and manage organizations
  */
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { Plus, Building2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useOrganization } from '@/contexts/organization-context';
-import { useUserPermissions } from '@/hooks/use-user-permissions';
-import { OrganizationCreateDialog } from '@/components/organizations/organization-create-dialog';
-import { OrganizationEditDialog } from '@/components/organizations/organization-edit-dialog';
-import { OrganizationDeleteDialog } from '@/components/organizations/organization-delete-dialog';
-import { DataTable } from '@/components/data-table/data-table';
-import { organizationsColumns } from '@/components/organizations/organizations-data-table-columns';
-import type { Organization } from '@/types/organization';
+import React, { useState } from "react";
+import { Plus, Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useOrganization } from "@/contexts/organization-context";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { OrganizationCreateDialog } from "@/components/organizations/organization-create-dialog";
+import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
+import { OrganizationDeleteDialog } from "@/components/organizations/organization-delete-dialog";
+import { DataTable } from "@/components/data-table/data-table";
+import { organizationsColumns } from "@/components/organizations/organizations-data-table-columns";
+import type { Organization } from "@/types/organization";
 
 export default function OrganizationsPage() {
-  const { organizations, loading: orgLoading, error: orgError } = useOrganization();
+  const {
+    organizations,
+    loading: orgLoading,
+    error: orgError,
+  } = useOrganization();
   const { isPlatformAdmin } = useUserPermissions();
 
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
+  const [selectedOrganization, setSelectedOrganization] =
+    useState<Organization | null>(null);
 
   const { refreshOrganizations } = useOrganization();
 
@@ -79,7 +84,10 @@ export default function OrganizationsPage() {
             </p>
           </div>
           {isPlatformAdmin && (
-            <Button onClick={() => setCreateDialogOpen(true)} className="flex items-center gap-2">
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              className="flex items-center gap-2"
+            >
               <Plus className="h-4 w-4" />
               Create Organization
             </Button>
@@ -90,7 +98,9 @@ export default function OrganizationsPage() {
           <div className="border rounded-lg shadow-sm">
             <div className="p-8 text-center">
               <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No Organizations Found</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                No Organizations Found
+              </h3>
               <p className="text-gray-600 mb-6">
                 You don&apos;t have access to any organizations yet.
               </p>
@@ -102,9 +112,9 @@ export default function OrganizationsPage() {
             </div>
           </div>
         ) : (
-          <DataTable 
-            columns={organizationsColumns} 
-            data={organizations} 
+          <DataTable
+            columns={organizationsColumns}
+            data={organizations}
             filterColumn="name"
             filterPlaceholder="Filter organizations..."
           />

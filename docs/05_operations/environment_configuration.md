@@ -7,6 +7,7 @@ This document explains how to configure environment variables for different deve
 The project uses different environment files depending on your development approach:
 
 1. **Local Development (Non-containerized)**:
+
    - Backend: `backend/.env` (copy from `backend/.env.example`)
    - Frontend: `frontend/.env.local` (copy from `frontend/.env.local.example`)
 
@@ -23,8 +24,8 @@ The Supabase configuration requires different environment variables for frontend
 
 1. **SUPABASE_SERVICE_KEY**: Used only by the backend for administrative operations (service role key)
 2. **SUPABASE_ANON_KEY**: Used by the backend for certain operations (anon key)
-3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT_PUBLIC_ to be accessible in browser)
-4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT_PUBLIC_ to be accessible in browser)
+3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
+4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
 
 ### Getting Your Supabase Database Password
 
@@ -47,6 +48,7 @@ To configure the DATABASE_URL environment variable for Alembic migrations, you'l
 To enable OAuth providers like Google, you need to:
 
 1. Configure the OAuth provider in your Supabase project dashboard:
+
    - Go to Authentication → Providers
    - Enable the desired provider (e.g., Google)
    - Configure the provider settings with your OAuth credentials
@@ -66,6 +68,7 @@ The project uses OpenTelemetry for observability with New Relic as the backend. 
 ### New Relic License Key
 
 All environments require a New Relic license key:
+
 ```
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
 ```

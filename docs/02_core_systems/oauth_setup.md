@@ -56,6 +56,7 @@ This guide explains how to configure OAuth providers like Google for your SaaS a
 ## Other OAuth Providers
 
 The same pattern applies to other OAuth providers supported by Supabase:
+
 - GitHub
 - Facebook
 - Twitter
@@ -64,6 +65,7 @@ The same pattern applies to other OAuth providers supported by Supabase:
 - Bitbucket
 
 Each provider will have its own specific setup process, but the general steps are similar:
+
 1. Create an application in the provider's developer console
 2. Obtain client credentials
 3. Configure the redirect URIs to use the Supabase callback URL
