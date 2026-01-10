@@ -33,6 +33,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { AnimatedTabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useMyAgents, useCreateAgent, useDeleteAgent } from '@/hooks/use-agent-queries';
+import { AgentDeleteDialog } from '@/components/agents/agent-delete-dialog';
+import type { VoiceAgent } from '@/types/agent';
 
 export default function AgentsPage() {
   const { organizations, currentOrganization } = useOrganization();
@@ -43,6 +45,8 @@ export default function AgentsPage() {
   
   // Agent creation state
   const [agentDialogOpen, setAgentDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [selectedAgent, setSelectedAgent] = React.useState<VoiceAgent | null>(null);
   const [agentForm, setAgentForm] = React.useState({
     name: '',
     phone_number: '',
@@ -116,13 +120,19 @@ export default function AgentsPage() {
     }
   }, [agentForm, createAgentMutation]);
 
-  const handleDeleteAgent = useCallback(async (agentId: string, agentName: string) => {
-    if (!confirm(`Are you sure you want to delete "${agentName}"? This action cannot be undone.`)) return;
-    
+  const handleDeleteAgent = useCallback((agent: VoiceAgent) => {
+    setSelectedAgent(agent);
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const handleDeleteSuccess = useCallback(async (agentId: string) => {
     try {
       await deleteAgentMutation.mutateAsync(agentId);
+      setDeleteDialogOpen(false);
+      setSelectedAgent(null);
     } catch (error) {
       console.error('Failed to delete agent:', error);
+      throw error;
     }
   }, [deleteAgentMutation]);
 
@@ -275,7 +285,7 @@ export default function AgentsPage() {
                           size="icon"
                           variant="ghost"
                           className="h-9 w-9 text-destructive"
-                          onClick={() => handleDeleteAgent(agent.id, agent.name)}
+                          onClick={() => handleDeleteAgent(agent)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -368,7 +378,7 @@ export default function AgentsPage() {
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 text-destructive"
-                          onClick={() => handleDeleteAgent(agent.id, agent.name)}
+                          onClick={() => handleDeleteAgent(agent)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -480,8 +490,8 @@ export default function AgentsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAgentDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleSaveAgent} 
+            <Button
+              onClick={handleSaveAgent}
               disabled={createAgentMutation.isPending || !agentForm.name || !agentForm.organization_id}
             >
               {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
@@ -489,6 +499,15 @@ export default function AgentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedAgent && (
+        <AgentDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          agent={selectedAgent}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </div>
   );
 }
