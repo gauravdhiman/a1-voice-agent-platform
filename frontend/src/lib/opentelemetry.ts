@@ -80,6 +80,14 @@ export function initOpenTelemetry() {
     return;
   }
 
+  // Skip initialization during Next.js build (runs in Node.js, not browser)
+  // Browser-based OpenTelemetry should only run in browser environment
+  if (typeof window === 'undefined') {
+    console.log('Skipping OpenTelemetry initialization during Next.js build (Node.js environment)');
+    isInitialized = true;
+    return;
+  }
+
   console.log('Initializing OpenTelemetry...');
   
   try {
@@ -94,8 +102,10 @@ export function initOpenTelemetry() {
     tracerProvider = new WebTracerProvider({ resource });
     
     // Set up trace exporter to send to OTel Collector
-    // For browser-based frontend, we need to use localhost instead of docker internal hostname
-    const traceEndpoint = process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.replace('otel-collector', 'localhost') || 'http://localhost:4318/v1/traces';
+    // For browser-based telemetry, use localhost:4318 instead of 127.0.0.1 (which fails in Docker)
+    // Browser can reach port-mapped localhost, not container's loopback
+    let traceEndpoint = process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || 'http://localhost:4318/v1/traces';
+    traceEndpoint = traceEndpoint.replace('127.0.0.1:4318', 'localhost:4318');
     console.log('Trace endpoint:', traceEndpoint);
     
     const traceExporter = new OTLPTraceExporter({
@@ -171,8 +181,9 @@ export function initOpenTelemetry() {
     loggerProvider = new LoggerProvider({ resource });
     
     // Set up log exporter to send to OTel Collector
-    // For browser-based frontend, we need to use localhost instead of docker internal hostname
-    const logEndpoint = process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.replace('otel-collector', 'localhost') || 'http://localhost:4318/v1/logs';
+    // For browser-based telemetry, use localhost:4318 instead of 127.0.0.1 (which fails in Docker)
+    let logEndpoint = process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs';
+    logEndpoint = logEndpoint.replace('127.0.0.1:4318', 'localhost:4318');
     console.log('Log endpoint:', logEndpoint);
     const logExporter = new OTLPLogExporter({
       url: logEndpoint,
@@ -201,8 +212,9 @@ export function initOpenTelemetry() {
     meterProvider = new MeterProvider({ resource });
     
     // Set up metric exporter to send to OTel Collector
-    // For browser-based frontend, we need to use localhost instead of docker internal hostname
-    const metricEndpoint = process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT?.replace('otel-collector', 'localhost') || 'http://localhost:4318/v1/metrics';
+    // For browser-based telemetry, use localhost:4318 instead of 127.0.0.1 (which fails in Docker)
+    let metricEndpoint = process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || 'http://localhost:4318/v1/metrics';
+    metricEndpoint = metricEndpoint.replace('127.0.0.1:4318', 'localhost:4318');
     console.log('Metric endpoint:', metricEndpoint);
     const metricExporter = new OTLPMetricExporter({
       url: metricEndpoint,
