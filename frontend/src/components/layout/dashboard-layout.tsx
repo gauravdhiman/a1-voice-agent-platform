@@ -21,11 +21,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuItemLink,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { NavigationLink } from '@/components/ui/navigation-link';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -76,10 +78,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
     return true; // Show all other items
   });
-
-  const handleNavigation = (href: string) => {
-    router.push(href);
-  };
 
   const getInitials = (name: string) => {
     return name
@@ -178,21 +176,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               (item.href === '/organizations' && pathname.startsWith('/organizations'));
 
             return (
-              <button
+              <NavigationLink
                 key={item.name}
-                onClick={() => handleNavigation(item.href)}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md transition-all duration-200 group relative text-sm ${isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                  } ${sidebarCollapsed ? 'justify-center' : ''}`}
+                href={item.href}
                 title={sidebarCollapsed ? item.name : undefined}
+                exact={item.href !== '/organizations'}
+                className={sidebarCollapsed ? 'justify-center' : ''}
               >
                 <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-sidebar-primary' : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground'}`} />
                 {!sidebarCollapsed && <span>{item.name}</span>}
                 {sidebarCollapsed && isActive && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full" />
                 )}
-              </button>
+              </NavigationLink>
             );
           })}
         </div>
@@ -244,12 +240,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground mx-1" />
                     )}
                     {breadcrumb.href ? (
-                      <button
-                        onClick={() => router.push(breadcrumb.href!)}
-                        className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      <NavigationLink
+                        href={breadcrumb.href!}
+                        className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-0 py-0 space-x-0 w-auto"
+                        baseClassName=""
+                        activeClassName=""
+                        exact
                       >
                         {breadcrumb.name}
-                      </button>
+                      </NavigationLink>
                     ) : (
                       <span className="text-sm font-semibold text-foreground">
                         {breadcrumb.name}
@@ -297,35 +296,35 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/settings')} className="cursor-pointer">
+                <DropdownMenuItemLink href="/settings">
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
-                </DropdownMenuItem>
+                </DropdownMenuItemLink>
                 {currentOrganization && user && (user.hasRole('platform_admin') || user.hasRole('org_admin', currentOrganization.id)) && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel>Organization</DropdownMenuLabel>
                     {organizations.length > 1 && (
-                      <DropdownMenuItem onClick={() => router.push('/organizations')} className="cursor-pointer">
+                      <DropdownMenuItemLink href="/organizations">
                         <Building2 className="mr-2 h-4 w-4" />
                         <span>Switch Org</span>
-                      </DropdownMenuItem>
+                      </DropdownMenuItemLink>
                     )}
                     {organizations.length === 1 && currentOrganization && (
                       <>
-                        <DropdownMenuItem onClick={() => router.push(`/organization?org_id=${currentOrganization.id}`)} className="cursor-pointer">
+                        <DropdownMenuItemLink href={`/organization?org_id=${currentOrganization.id}`}>
                           <Building2 className="mr-2 h-4 w-4" />
                           <span>Overview</span>
-                        </DropdownMenuItem>
+                        </DropdownMenuItemLink>
 
-                        <DropdownMenuItem onClick={() => router.push(`/organization/members?org_id=${currentOrganization.id}`)} className="cursor-pointer">
+                        <DropdownMenuItemLink href={`/organization/members?org_id=${currentOrganization.id}`}>
                           <Users className="mr-2 h-4 w-4" />
                           <span>Members</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/organization/billing?org_id=${currentOrganization.id}`)} className="cursor-pointer">
+                        </DropdownMenuItemLink>
+                        <DropdownMenuItemLink href={`/organization/billing?org_id=${currentOrganization.id}`}>
                           <CreditCard className="mr-2 h-4 w-4" />
                           <span>Billing</span>
-                        </DropdownMenuItem>
+                        </DropdownMenuItemLink>
                       </>
                     )}
                     <DropdownMenuSeparator />
