@@ -118,18 +118,18 @@
 
 .dark {
   /* Professional Enterprise Theme - Dark Mode */
-  /* Deep Navy Background */
-  --background: oklch(0.07 0.048 263.667);
-  /* Sophisticated dark blue */
+  /* Lighter Gray Background for Better Contrast */
+  --background: oklch(0.18 0.028 264.695);
+  /* Lighter dark gray for visibility */
   --foreground: oklch(0.93 0.015 264.695);
   /* Very light gray with subtle blue tint */
 
   /* Card Colors */
-  --card: oklch(0.09 0.048 263.667);
-  /* Slightly lighter than background for depth */
+  --card: oklch(0.22 0.032 264.695);
+  /* Lighter card for better differentiation */
   --card-foreground: oklch(0.93 0.015 264.695);
 
-  --popover: oklch(0.09 0.048 263.667);
+  --popover: oklch(0.22 0.032 264.695);
   --popover-foreground: oklch(0.93 0.015 264.695);
 
   /* Primary - Consistent with light mode */
@@ -137,31 +137,31 @@
   /* Refined blue - same as light mode */
   --primary-foreground: oklch(0.98 0.01 264.695);
 
-  /* Dark Gray - Secondary */
-  --secondary: oklch(0.16 0.041 263.667);
-  /* Professional dark gray */
+  /* Lighter Gray - Secondary */
+  --secondary: oklch(0.28 0.032 264.695);
+  /* Lighter gray for contrast */
   --secondary-foreground: oklch(0.93 0.015 264.695);
 
   /* Muted Dark */
-  --muted: oklch(0.12 0.048 263.667);
-  /* Darker gray for muted elements */
-  --muted-foreground: oklch(0.6 0.042 264.364);
+  --muted: oklch(0.24 0.028 264.695);
+  /* Lighter muted for visibility */
+  --muted-foreground: oklch(0.65 0.032 264.364);
   /* Muted blue-gray text */
 
   /* Accent Dark */
-  --accent: oklch(0.16 0.041 263.667);
-  /* Dark accent */
+  --accent: oklch(0.28 0.032 264.695);
+  /* Lighter accent */
   --accent-foreground: oklch(0.93 0.015 264.695);
 
   /* Professional Red - Destructive */
-  --destructive: oklch(0.52 0.236 25.764);
-  /* Slightly more vibrant in dark mode */
+  --destructive: oklch(0.60 0.25 25.764);
+  /* More vibrant for dark mode visibility */
   --destructive-foreground: oklch(0.98 0.01 264.695);
 
-  /* Dark Borders */
-  --border: oklch(0.16 0.041 263.667);
-  /* Dark border color */
-  --input: oklch(0.14 0.048 263.667);
+  /* Lighter Borders for Contrast */
+  --border: oklch(0.32 0.028 264.695);
+  /* Lighter border color for visibility */
+  --input: oklch(0.26 0.028 264.695);
   /* Input field background */
   --ring: oklch(0.43 0.197 257.651);
   /* Primary blue for focus rings */
@@ -179,14 +179,14 @@
   /* Orange */
 
   /* Sidebar Colors - Dark Mode */
-  --sidebar: oklch(0.08 0.041 263.667);
-  /* Very dark sidebar background */
+  --sidebar: oklch(0.15 0.028 264.695);
+  /* Lighter sidebar background */
   --sidebar-foreground: oklch(0.93 0.015 264.695);
   --sidebar-primary: oklch(0.43 0.197 257.651);
   --sidebar-primary-foreground: oklch(0.98 0.01 264.695);
-  --sidebar-accent: oklch(0.16 0.041 263.667);
+  --sidebar-accent: oklch(0.28 0.032 264.695);
   --sidebar-accent-foreground: oklch(0.93 0.015 264.695);
-  --sidebar-border: oklch(0.16 0.041 263.667);
+  --sidebar-border: oklch(0.32 0.028 264.695);
   --sidebar-ring: oklch(0.43 0.197 257.651);
 }
 
@@ -214,12 +214,12 @@
   .dark body {
     background-image: radial-gradient(
         circle at 25% 25%,
-        oklch(0.08 0.041 263.667) 0%,
+        oklch(0.20 0.028 264.695) 0%,
         transparent 50%
       ),
       radial-gradient(
         circle at 75% 75%,
-        oklch(0.06 0.048 263.667) 0%,
+        oklch(0.16 0.028 264.695) 0%,
         transparent 50%
       );
   }

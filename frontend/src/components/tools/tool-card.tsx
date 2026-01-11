@@ -81,7 +81,9 @@ export function ToolCard({
     <Card
       className={cn(
         "group overflow-hidden border transition-all hover:shadow-md",
-        isEnabled ? "border-primary/20 bg-primary/5" : "border-muted/50",
+        isEnabled
+          ? "border-primary/30 bg-primary/10 dark:bg-primary/15"
+          : "border-border bg-card",
         disabled && "opacity-50 cursor-not-allowed",
         className,
       )}
@@ -91,7 +93,7 @@ export function ToolCard({
           <div
             className={cn(
               "p-2.5 rounded-lg",
-              isEnabled ? "bg-primary" : "bg-muted",
+              isEnabled ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
             )}
           >
             <Wrench className="h-4 w-4" />
