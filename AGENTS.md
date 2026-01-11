@@ -219,6 +219,7 @@ Run `pre-commit run --all-files` manually before pushing.
 - Use `FastAPI` for backend APIs
 - Use `Next.js` for frontend
 - After making changes in files, always run `pre-commit run --all-files` to ensure code quality
+- Never stage code changes in git. Always let user review and stage them manually.
 - Use Docker for development and production. Even when start application on local machine for dev, use `./start.sh` script to manage docker containers.
 - Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
 - You can create alembic migrations scripts but never run them without user's permission. Always ask first.

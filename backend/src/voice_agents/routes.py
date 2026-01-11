@@ -164,7 +164,7 @@ async def update_agent(
     return updated_agent
 
 
-@agent_router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+@agent_router.delete("/{agent_id}")
 @tracer.start_as_current_span("voice_agent.routes.delete_agent")
 async def delete_agent(
     agent_id: UUID,
@@ -185,9 +185,9 @@ async def delete_agent(
                 detail="Insufficient permissions to delete this agent",
             )
 
-    success, error = await voice_agent_service.delete_agent(agent_id)
+    response, error = await voice_agent_service.delete_agent(agent_id)
     if error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
         )
-    return None
+    return response

@@ -10,7 +10,7 @@ from opentelemetry import metrics, trace
 
 from shared.config import supabase_config
 
-from .models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
+from .models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate, DeleteResponse
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -201,7 +201,9 @@ class VoiceAgentService:
             return None, str(e)
 
     @tracer.start_as_current_span("voice_agent.delete_agent")
-    async def delete_agent(self, agent_id: UUID) -> tuple[bool, Optional[str]]:
+    async def delete_agent(
+        self, agent_id: UUID
+    ) -> tuple[Optional[DeleteResponse], Optional[str]]:
         """Delete a voice agent."""
         try:
             response = (
@@ -211,11 +213,11 @@ class VoiceAgentService:
                 .execute()
             )
             if not response.data:
-                return False, "Agent not found or delete failed"
-            return True, None
+                return None, "Agent not found or delete failed"
+            return DeleteResponse(id=agent_id, success=True), None
         except Exception as e:
             logger.error(f"Error deleting agent {agent_id}: {e}")
-            return False, str(e)
+            return None, str(e)
 
 
 voice_agent_service = VoiceAgentService()
