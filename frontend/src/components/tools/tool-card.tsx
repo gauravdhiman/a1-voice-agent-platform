@@ -93,7 +93,9 @@ export function ToolCard({
           <div
             className={cn(
               "p-2.5 rounded-lg",
-              isEnabled ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+              isEnabled
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
             )}
           >
             <Wrench className="h-4 w-4" />

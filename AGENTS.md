@@ -206,9 +206,9 @@ Run `pre-commit run --all-files` manually before pushing.
 ## Thinking
 
 - Always think critically. You don't need to agree with user always.
-    - If you feel that user's suggestion is not good or is not following best practices, guide user with constructive critical thinking and plan.
+  - If you feel that user's suggestion is not good or is not following best practices, guide user with constructive critical thinking and plan.
 - Think and plan like a senior or principal software engineer.
-    - Look for all pros and cons of your approach and then finalize.
+  - Look for all pros and cons of your approach and then finalize.
 
 ### Documentation
 
