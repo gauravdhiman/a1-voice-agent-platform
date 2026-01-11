@@ -17,7 +17,7 @@ from livekit.agents import RunContext
 
 from shared.voice_agents.tool_models import PlatformToolCreate
 from shared.voice_agents.tool_service import ToolService
-from shared.voice_agents.tools.base.base_tool import BaseTool, ToolMetadata
+from shared.voice_agents.tools.base.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class LiveKitToolRegistry:
                     self._functions[tool_name] = function_methods
 
                     logger.info(
-                        f"LiveKit Registry: Registered tool class: {tool_name} with {len(function_methods)} functions"
+                        f"LiveKit Registry: Registered tool class: {tool_name} with {len(function_methods)} functions"  # noqa: E501
                     )
 
     def _extract_function_methods(self, tool_instance: BaseTool) -> List[Callable]:
@@ -132,7 +132,7 @@ class LiveKitToolRegistry:
                     if param.annotation != inspect.Parameter.empty:
                         if param.annotation is RunContext:
                             logger.debug(
-                                f"LiveKit Registry: Function {func.__name__} looks like a tool function (has a parameter of type RunContext)"
+                                f"LiveKit Registry: Function {func.__name__} looks like a tool function (has a parameter of type RunContext)"  # noqa: E501
                             )
                             return True
 
@@ -144,7 +144,7 @@ class LiveKitToolRegistry:
         Extracts schemas from LiveKit function_tool decorators.
         """
         logger.info(
-            f"LiveKit Registry: Starting sync of {len(self._tools)} registered tools to database"
+            f"LiveKit Registry: Starting sync of {len(self._tools)} registered tools to database"  # noqa: E501
         )
 
         for name, tool_class in self._tools.items():
@@ -162,7 +162,7 @@ class LiveKitToolRegistry:
                 if schema:
                     function_schemas.append(schema)
                     logger.info(
-                        f"LiveKit Registry: Extracted schema for function: {schema['name']}"
+                        f"LiveKit Registry: Extracted schema for function: {schema['name']}"  # noqa: E501
                     )
 
             if function_schemas:
@@ -171,6 +171,7 @@ class LiveKitToolRegistry:
                     description=metadata.description,
                     config_schema=metadata.config_schema,
                     tool_functions_schema={"functions": function_schemas},
+                    requires_auth=metadata.requires_auth,
                     auth_type=metadata.auth_type,
                     auth_config=metadata.auth_config,
                     is_active=True,
@@ -184,11 +185,11 @@ class LiveKitToolRegistry:
                     )
                 else:
                     logger.info(
-                        f"LiveKit Registry: Successfully upserted tool {name} with {len(function_schemas)} functions: {[s['name'] for s in function_schemas]}"
+                        f"LiveKit Registry: Successfully upserted tool {name} with {len(function_schemas)} functions: {[s['name'] for s in function_schemas]}"  # noqa: E501
                     )
             else:
                 logger.warning(
-                    f"LiveKit Registry: No function schemas found for tool {name}, skipping"
+                    f"LiveKit Registry: No function schemas found for tool {name}, skipping"  # noqa: E501
                 )
 
     def _extract_schema_from_function(self, func: Callable) -> Optional[Dict[str, Any]]:
@@ -259,7 +260,7 @@ class LiveKitToolRegistry:
 
         except Exception as e:
             logger.error(
-                f"LiveKit Registry: Failed to extract schema from function {func.__name__}: {e}"
+                f"LiveKit Registry: Failed to extract schema from function {func.__name__}: {e}"  # noqa: E501
             )
             return None
 

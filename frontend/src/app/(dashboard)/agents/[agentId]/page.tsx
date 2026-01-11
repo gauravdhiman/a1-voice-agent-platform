@@ -514,6 +514,7 @@ export default function AgentDetailPage() {
                             }
                             isEnabled={agentTool?.is_enabled ?? false}
                             tokenExpiresAt={agentTool?.token_expires_at ?? null}
+                            isConfigured={!!agentTool}
                             onClick={() => handleToolCardClick(tool)}
                             disabled={!canEdit}
                           />

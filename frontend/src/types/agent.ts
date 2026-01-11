@@ -63,6 +63,9 @@ export interface PlatformTool {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  auth_type: string | null;
+  requires_auth: boolean;
+  auth_config: Record<string, unknown> | null;
 }
 
 export interface AgentTool {

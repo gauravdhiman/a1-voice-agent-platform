@@ -86,7 +86,7 @@ export function ToolConfigDrawer({
   const toolUnselectedFunctions = agentTool?.unselected_functions || [];
   const isToolEnabled = agentTool?.is_enabled ?? false;
 
-  const isOAuth = schema?.requires_auth || tool.name.includes("calendar");
+  const isOAuth = tool.requires_auth || schema?.requires_auth;
   const hasFunctions = functions.length > 0;
 
   const getTimeUntilExpiry = (expiresAt: number | null) => {

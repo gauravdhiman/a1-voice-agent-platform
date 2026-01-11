@@ -15,6 +15,7 @@ export interface ToolCardProps {
   authStatus: AuthStatus;
   isEnabled: boolean;
   tokenExpiresAt: number | null;
+  isConfigured: boolean;
   onClick: () => void;
   disabled?: boolean;
   className?: string;
@@ -25,6 +26,7 @@ export function ToolCard({
   authStatus,
   isEnabled,
   tokenExpiresAt,
+  isConfigured,
   onClick,
   disabled = false,
   className,
@@ -41,6 +43,8 @@ export function ToolCard({
   };
 
   const getStatusConfig = () => {
+    const actionText = isConfigured ? "Edit Configuration" : "Configure";
+
     switch (authStatus) {
       case AuthStatus.AUTHENTICATED:
         return {
@@ -49,7 +53,7 @@ export function ToolCard({
           iconColor: "text-green-500",
           badgeVariant: "default" as const,
           bgColor: "bg-green-500",
-          actionText: "Configure",
+          actionText,
         };
       case AuthStatus.EXPIRED:
         return {
@@ -58,7 +62,7 @@ export function ToolCard({
           iconColor: "text-orange-500",
           badgeVariant: "secondary" as const,
           bgColor: "bg-orange-500",
-          actionText: "Connect",
+          actionText,
         };
       case AuthStatus.NOT_AUTHENTICATED:
       default:
@@ -68,7 +72,7 @@ export function ToolCard({
           iconColor: "text-muted-foreground",
           badgeVariant: "secondary" as const,
           bgColor: "bg-muted",
-          actionText: "Connect",
+          actionText,
         };
     }
   };

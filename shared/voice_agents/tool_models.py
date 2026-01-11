@@ -26,8 +26,17 @@ class PlatformToolBase(BaseModel):
     config_schema: Optional[Dict[str, Any]] = Field(
         None, description="JSON schema for tool configuration"
     )
+    auth_type: Optional[str] = Field(
+        None, description="Authentication type (e.g., 'oauth2', 'api_key')"
+    )
+    requires_auth: bool = Field(
+        default=False, description="Whether tool requires authentication"
+    )
+    auth_config: Optional[Dict[str, Any]] = Field(
+        None, description="Authentication config (OAuth URLs, scopes, provider)"
+    )
     is_active: bool = Field(
-        default=True, description="Whether the tool is available for use"
+        default=True, description="Whether is tool available for use"
     )
 
 
@@ -36,12 +45,6 @@ class PlatformToolCreate(PlatformToolBase):
 
     tool_functions_schema: Optional[Dict[str, Any]] = Field(
         None, description="Function schemas for LLM debugging and inspection"
-    )
-    auth_type: Optional[str] = Field(
-        None, description="Authentication type (e.g., 'oauth2', 'api_key')"
-    )
-    auth_config: Optional[Dict[str, Any]] = Field(
-        None, description="Authentication configuration"
     )
 
 
@@ -66,14 +69,17 @@ class AgentToolBase(BaseModel):
     )
     sensitive_config: Optional[Dict[str, Any]] = Field(
         None,
-        description="Sensitive tool configuration (will be encrypted), example auth token, refresh token etc.",
+        description=(
+            "Sensitive tool config (will be encrypted), "
+            "e.g., auth token, refresh token."
+        ),
     )
     unselected_functions: Optional[List[str]] = Field(
         None,
-        description="Array of function names to disable (all others enabled by default)",
+        description="Function names to disable (all others enabled by default)",
     )
     is_enabled: bool = Field(
-        default=True, description="Whether the tool is enabled for this agent"
+        default=True, description="Whether is tool enabled for this agent"
     )
 
 
@@ -94,10 +100,10 @@ class AgentToolUpdate(BaseModel):
     )
     unselected_functions: Optional[List[str]] = Field(
         None,
-        description="Array of function names to disable (all others enabled by default)",
+        description="Function names to disable (all others enabled by default)",
     )
     is_enabled: Optional[bool] = Field(
-        None, description="Whether the tool is enabled for this agent"
+        None, description="Whether is tool enabled for this agent"
     )
 
 
@@ -121,10 +127,10 @@ class AgentToolResponse(BaseModel):
     )
     unselected_functions: Optional[List[str]] = Field(
         None,
-        description="Array of function names to disable (all others enabled by default)",
+        description="Function names to disable (all others enabled by default)",
     )
     is_enabled: bool = Field(
-        default=True, description="Whether the tool is enabled for this agent"
+        default=True, description="Whether is tool enabled for this agent"
     )
     auth_status: AuthStatus = Field(
         default=AuthStatus.NOT_AUTHENTICATED,

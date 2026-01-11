@@ -87,10 +87,8 @@ class ToolService:
                 .execute()
             )
 
-            # Dump model and exclude fields not in DB (auth_type, auth_config)
-            data_dict = tool_data.model_dump(
-                exclude_none=True, exclude={"auth_type", "auth_config"}
-            )
+            # Dump model and exclude fields not in DB (none - we save all fields)
+            data_dict = tool_data.model_dump(exclude_none=True)
 
             if existing.data:
                 response = (
@@ -202,7 +200,7 @@ class ToolService:
     async def get_agent_tools(
         self, agent_id: UUID
     ) -> tuple[List[AgentToolResponse], Optional[str]]:
-        """Get all tools configured for an agent, including platform tool details (excludes sensitive config)."""
+        """Get all tools configured for an agent, including platform tool details (excludes sensitive config)."""  # noqa: E501
         try:
             # Get agent tool configurations
             response = (
@@ -254,7 +252,7 @@ class ToolService:
     async def get_agent_tools_with_sensitive_config(
         self, agent_id: UUID
     ) -> tuple[List[AgentTool], Optional[str]]:
-        """Get all tools configured for an agent with full details including sensitive config (for worker)."""
+        """Get all tools configured for an agent with full details including sensitive config (for worker)."""  # noqa: E501
         try:
             # Get agent tool configurations
             response = (
@@ -300,7 +298,7 @@ class ToolService:
             return agent_tools, None
         except Exception as e:
             logger.error(
-                f"Error getting agent tools with sensitive config for agent {agent_id}: {e}"
+                f"Error getting agent tools with sensitive config for agent {agent_id}: {e}"  # noqa: E501
             )
             return [], str(e)
 
