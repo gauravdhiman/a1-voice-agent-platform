@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Search, Filter } from "lucide-react";
 
-export type ToolFilterType = "all" | "connected" | "not_configured";
+export type ToolFilterType = "all" | "configured" | "not_configured";
 
 export interface ToolFiltersProps {
   searchQuery: string;
@@ -26,7 +26,7 @@ export function ToolFilters({
 }: ToolFiltersProps) {
   const filterOptions: { value: ToolFilterType; label: string }[] = [
     { value: "all", label: "All" },
-    { value: "connected", label: "Connected" },
+    { value: "configured", label: "Configured" },
     { value: "not_configured", label: "Not configured" },
   ];
 

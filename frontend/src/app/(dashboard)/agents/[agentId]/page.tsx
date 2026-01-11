@@ -271,18 +271,14 @@ export default function AgentDetailPage() {
       );
     }
 
-    if (toolFilterType === "connected") {
+    if (toolFilterType === "configured") {
       filtered = filtered.filter(
         (tool) =>
-          localAgentTools.find((at) => at.tool_id === tool.id)?.auth_status ===
-          AuthStatus.AUTHENTICATED,
+          localAgentTools.find((at) => at.tool_id === tool.id) !== undefined,
       );
     } else if (toolFilterType === "not_configured") {
       filtered = filtered.filter(
-        (tool) =>
-          !localAgentTools.find((at) => at.tool_id === tool.id) ||
-          localAgentTools.find((at) => at.tool_id === tool.id)?.auth_status ===
-            AuthStatus.NOT_AUTHENTICATED,
+        (tool) => !localAgentTools.find((at) => at.tool_id === tool.id),
       );
     }
 
