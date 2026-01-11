@@ -203,6 +203,13 @@ Run `pre-commit run --all-files` manually before pushing.
 
 ## Important Notes
 
+## Thinking
+
+- Always think critically. You don't need to agree with user always.
+    - If you feel that user's suggestion is not good or is not following best practices, guide user with constructive critical thinking and plan.
+- Think and plan like a senior or principal software engineer.
+    - Look for all pros and cons of your approach and then finalize.
+
 ### Documentation
 
 - Keep the project documentation always up-to-date in `docs` folder, organized properly in sub-folders for each module / functionality

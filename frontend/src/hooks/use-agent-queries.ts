@@ -310,14 +310,15 @@ export function useToggleFunction() {
   return useMutation({
     mutationFn: ({
       agentToolId,
-      functionName,
-      isEnabled,
+      unselectedFunctions,
     }: {
       agentToolId: string;
-      functionName: string;
-      isEnabled: boolean;
-    }) => agentService.toggleFunction(agentToolId, functionName, isEnabled),
-    onMutate: async ({ agentToolId, functionName, isEnabled }) => {
+      unselectedFunctions: string[];
+    }) =>
+      agentService.updateAgentTool(agentToolId, {
+        unselected_functions: unselectedFunctions,
+      }),
+    onMutate: ({ agentToolId, unselectedFunctions }) => {
       // Find all agent tools queries
       const queries = queryClient.getQueryCache().findAll({
         predicate: (query) => {
@@ -338,31 +339,19 @@ export function useToggleFunction() {
         queryClient.setQueryData<AgentTool[]>(
           query.queryKey,
           (old) =>
-            old?.map((tool) => {
-              if (tool.id !== agentToolId) return tool;
-
-              const currentUnselected = tool.unselected_functions || [];
-              let newUnselected: string[];
-
-              if (isEnabled) {
-                newUnselected = currentUnselected.filter(
-                  (fn) => fn !== functionName,
-                );
-              } else {
-                newUnselected = currentUnselected.includes(functionName)
-                  ? currentUnselected
-                  : [...currentUnselected, functionName];
-              }
-
-              return { ...tool, unselected_functions: newUnselected };
-            }),
+            old?.map((tool) =>
+              tool.id === agentToolId
+                ? { ...tool, unselected_functions: unselectedFunctions }
+                : tool,
+            ),
         );
       });
 
       return { previousData };
     },
-    onSuccess: (_, { isEnabled }) => {
-      toast.success(isEnabled ? "Function enabled" : "Function disabled");
+    onSuccess: (_, { unselectedFunctions }) => {
+      const isEnabling = unselectedFunctions.length === 0;
+      toast.success(isEnabling ? "Function enabled" : "Function disabled");
     },
     onError: (_, __, context) => {
       // Rollback on error

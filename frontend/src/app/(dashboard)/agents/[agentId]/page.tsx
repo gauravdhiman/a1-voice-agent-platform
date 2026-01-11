@@ -15,7 +15,6 @@ import {
   useDeleteAgent,
 } from "@/hooks/use-agent-queries";
 import { organizationService } from "@/services/organization-service";
-import { agentService } from "@/services/agent-service";
 import type { PlatformTool, AgentTool } from "@/types/agent";
 import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
@@ -28,10 +27,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  ToolCard,
+  ToolFilters,
+  ToolConfigDrawer,
+  ToolFilterType,
+} from "@/components/tools";
 import {
   AnimatedTabs,
   TabsList,
@@ -43,17 +47,12 @@ import {
   Bot,
   Trash2,
   Settings,
-  ShieldCheck,
-  RefreshCw,
-  LogOut,
-  Clock,
   Save,
   ArrowLeft,
   Loader2,
   Wrench,
 } from "lucide-react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { formatToolName } from "@/lib/utils";
 
 export default function AgentDetailPage() {
   const { user } = useAuth();
@@ -70,6 +69,14 @@ export default function AgentDetailPage() {
   const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("properties");
+
+  const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
+  const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
+    null,
+  );
+  const [toolSearchQuery, setToolSearchQuery] = React.useState("");
+  const [toolFilterType, setToolFilterType] =
+    React.useState<ToolFilterType>("all");
 
   // Agent form state
   const [agentForm, setAgentForm] = React.useState({
@@ -179,51 +186,28 @@ export default function AgentDetailPage() {
     [deleteAgentMutation, router],
   );
 
-  const handleToggleTool = useCallback(
-    async (toolId: string, isEnabled: boolean) => {
-      try {
-        const existingAgentTool = localAgentTools.find(
-          (at) => at.tool_id === toolId,
-        );
-
-        if (existingAgentTool) {
-          await updateAgentToolMutation.mutateAsync({
-            agentToolId: existingAgentTool.id,
-            data: { is_enabled: isEnabled },
-          });
-        } else {
-          await agentService.configureAgentTool({
-            agent_id: agentId,
-            tool_id: toolId,
-            is_enabled: isEnabled,
-            config: {},
-            unselected_functions: [],
-          });
-          await refetchAgentTools();
-        }
-      } catch (error) {
-        console.error("Failed to toggle tool:", error);
-      }
-    },
-    [localAgentTools, agentId, updateAgentToolMutation, refetchAgentTools],
-  );
-
   const handleToggleFunction = useCallback(
-    async (toolId: string, functionName: string, isEnabled: boolean) => {
-      try {
-        const existingAgentTool = localAgentTools.find(
-          (at) => at.tool_id === toolId,
-        );
-        if (!existingAgentTool) return;
+    async (toolId: string, functionName: string, isChecked: boolean) => {
+      const existingAgentTool = localAgentTools.find(
+        (at) => at.tool_id === toolId,
+      );
+      if (!existingAgentTool) return;
 
-        await toggleFunctionMutation.mutateAsync({
-          agentToolId: existingAgentTool.id,
-          functionName,
-          isEnabled,
-        });
-      } catch (error) {
-        console.error("Failed to toggle function:", error);
+      const currentUnselected = existingAgentTool.unselected_functions || [];
+      let newUnselected: string[];
+
+      if (isChecked) {
+        newUnselected = currentUnselected.filter((fn) => fn !== functionName);
+      } else {
+        newUnselected = currentUnselected.includes(functionName)
+          ? currentUnselected
+          : [...currentUnselected, functionName];
       }
+
+      await toggleFunctionMutation.mutateAsync({
+        agentToolId: existingAgentTool.id,
+        unselectedFunctions: newUnselected,
+      });
     },
     [localAgentTools, toggleFunctionMutation],
   );
@@ -264,260 +248,48 @@ export default function AgentDetailPage() {
     [logoutAgentToolMutation],
   );
 
-  const renderToolConfig = useCallback(
-    (tool: PlatformTool, agentTool?: AgentTool) => {
-      if (!agentTool) return null;
+  const handleToolCardClick = useCallback((tool: PlatformTool) => {
+    setSelectedTool(tool);
+    setToolDrawerOpen(true);
+  }, []);
 
-      const schema = tool.config_schema as {
-        requires_auth?: boolean;
-        properties?: Record<
-          string,
-          {
-            title?: string;
-            description?: string;
-            default?: unknown;
-          }
-        >;
-      } | null;
+  const handleCloseToolDrawer = useCallback(() => {
+    setToolDrawerOpen(false);
+    setSelectedTool(null);
+    refetchAgentTools();
+  }, [refetchAgentTools]);
 
-      const config = (agentTool.config || {}) as Record<string, unknown>;
-      const isOAuth = schema?.requires_auth || tool.name.includes("calendar");
+  const getFilteredTools = useCallback(() => {
+    let filtered = platformTools;
 
-      const functions = tool.tool_functions_schema?.functions || [];
-      const toolUnselectedFunctions = agentTool.unselected_functions || [];
-      const isToolEnabled = agentTool.is_enabled;
-
-      const handleConfigChange = (key: string, value: string) => {
-        const newConfig = { ...config, [key]: value };
-        setLocalAgentTools((prev) =>
-          prev.map((at) =>
-            at.id === agentTool.id ? { ...at, config: newConfig } : at,
-          ),
-        );
-      };
-
-      const getTimeUntilExpiry = (expiresAt: number | null) => {
-        if (!expiresAt) return null;
-        const secondsLeft = Math.floor((expiresAt * 1000 - Date.now()) / 1000);
-        const minutesLeft = Math.floor(secondsLeft / 60);
-
-        if (minutesLeft < 1) return "< 1 minute";
-        if (minutesLeft < 60) return `${minutesLeft} minutes`;
-        if (minutesLeft < 1440) return `${Math.floor(minutesLeft / 60)} hours`;
-        return `${Math.floor(minutesLeft / 1440)} days`;
-      };
-
-      const getAuthStatusConfig = () => {
-        switch (agentTool.auth_status) {
-          case AuthStatus.AUTHENTICATED:
-            const timeLeft = getTimeUntilExpiry(agentTool.token_expires_at);
-            return {
-              message: "Authenticated",
-              iconColor: "text-green-500",
-              showButton: true,
-              buttonText: "Refresh now",
-              showExpiry: !!timeLeft,
-              expiryText: timeLeft,
-            };
-          case AuthStatus.EXPIRED:
-            return {
-              message: "Authentication expired",
-              iconColor: "text-red-500",
-              showButton: true,
-              buttonText: "Authenticate",
-              showExpiry: false,
-            };
-          case AuthStatus.NOT_AUTHENTICATED:
-          default:
-            return {
-              message: "Authentication required",
-              iconColor: "text-muted",
-              showButton: true,
-              buttonText: "Authenticate",
-              showExpiry: false,
-            };
-        }
-      };
-
-      const authConfig = getAuthStatusConfig();
-
-      return (
-        <div className="space-y-4">
-          {isOAuth && (
-            <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/10">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className={`h-4 w-4 ${authConfig.iconColor}`} />
-                  <div>
-                    <span className="text-xs font-medium">
-                      {authConfig.message}
-                    </span>
-                    {agentTool.auth_status === AuthStatus.AUTHENTICATED && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-2 h-5 text-[10px]"
-                      >
-                        Active
-                      </Badge>
-                    )}
-                  </div>
-                  {authConfig.showExpiry && authConfig.expiryText && (
-                    <div className="text-xs text-muted-foreground flex items-center">
-                      <Clock className="h-3 w-3 mr-1" />
-                      {authConfig.expiryText}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  {authConfig.showButton && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs"
-                      onClick={() => handleOAuth(tool.name)}
-                    >
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                      {authConfig.buttonText}
-                    </Button>
-                  )}
-                  {agentTool.auth_status === AuthStatus.AUTHENTICATED && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-xs text-muted-foreground"
-                      onClick={() => handleLogout(agentTool.id)}
-                    >
-                      <LogOut className="h-3.5 w-3.5 mr-1" />
-                      Log out
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {schema?.properties && (
-            <div className="grid gap-3">
-              {Object.entries(schema.properties).map(([key, prop]) => (
-                <div key={key} className="space-y-1">
-                  <Label
-                    htmlFor={`${tool.id}-${key}`}
-                    className="text-[10px] uppercase text-muted-foreground"
-                  >
-                    {prop.title || key}
-                  </Label>
-                  <Input
-                    id={`${tool.id}-${key}`}
-                    placeholder={prop.description || ""}
-                    value={
-                      (config[key] as string) || (prop.default as string) || ""
-                    }
-                    onChange={(e) => handleConfigChange(key, e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              ))}
-              <Button
-                size="sm"
-                className="w-full h-8 text-xs mt-2"
-                onClick={() => handleSaveToolConfig(agentTool.id, config)}
-              >
-                Save Configuration
-              </Button>
-            </div>
-          )}
-
-          {functions.length > 0 && (
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex items-center space-x-2 text-xs font-medium text-muted-foreground mb-3">
-                <Settings className="h-3.5 w-3.5" />
-                <span>Available Functions</span>
-                <span className="text-[10px] text-muted-foreground">
-                  ({functions.length} total,{" "}
-                  {functions.length - toolUnselectedFunctions.length} enabled)
-                </span>
-                {!isToolEnabled && (
-                  <Badge variant="secondary" className="ml-2 h-5 text-[10px]">
-                    Enable tool to use functions
-                  </Badge>
-                )}
-              </div>
-              <div className="space-y-2">
-                {functions.map((func) => {
-                  const isUnselected = toolUnselectedFunctions.includes(
-                    func.name,
-                  );
-                  const isEnabled = !isUnselected;
-
-                  return (
-                    <div
-                      key={func.name}
-                      className={`flex items-start justify-between p-3 rounded-lg border transition-colors ${
-                        isEnabled
-                          ? "border-primary/20 bg-primary/5"
-                          : "border-muted/60 bg-muted/20"
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <div
-                            className={`p-1.5 rounded ${
-                              isEnabled ? "bg-primary" : "bg-muted"
-                            }`}
-                          >
-                            <span
-                              className={`${
-                                isEnabled
-                                  ? "text-white"
-                                  : "text-muted-foreground"
-                              } text-xs font-medium`}
-                            >
-                              {func.name}
-                            </span>
-                          </div>
-                          {!isEnabled && (
-                            <Badge
-                              variant="secondary"
-                              className="h-5 text-[10px]"
-                            >
-                              Disabled
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {func.description}
-                        </p>
-                        {func.parameters?.properties && (
-                          <div className="mt-2 text-[10px] text-muted-foreground">
-                            <span className="font-medium">Parameters:</span>{" "}
-                            {Object.keys(func.parameters.properties).join(", ")}
-                          </div>
-                        )}
-                      </div>
-                      <Checkbox
-                        id={`func-${func.name}`}
-                        checked={isEnabled}
-                        onCheckedChange={(checked) =>
-                          handleToggleFunction(
-                            tool.id,
-                            func.name,
-                            checked === true,
-                          )
-                        }
-                        disabled={!isToolEnabled}
-                        className="mt-1"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+    if (toolSearchQuery) {
+      const query = toolSearchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (tool) =>
+          tool.name.toLowerCase().includes(query) ||
+          tool.description?.toLowerCase().includes(query),
       );
-    },
-    [handleOAuth, handleLogout, handleSaveToolConfig, handleToggleFunction],
-  );
+    }
+
+    if (toolFilterType === "connected") {
+      filtered = filtered.filter(
+        (tool) =>
+          localAgentTools.find((at) => at.tool_id === tool.id)?.auth_status ===
+          AuthStatus.AUTHENTICATED,
+      );
+    } else if (toolFilterType === "not_configured") {
+      filtered = filtered.filter(
+        (tool) =>
+          !localAgentTools.find((at) => at.tool_id === tool.id) ||
+          localAgentTools.find((at) => at.tool_id === tool.id)?.auth_status ===
+            AuthStatus.NOT_AUTHENTICATED,
+      );
+    }
+
+    return filtered;
+  }, [platformTools, toolSearchQuery, toolFilterType, localAgentTools]);
+
+  const filteredTools = getFilteredTools();
 
   if (agentError) {
     return (
@@ -546,7 +318,8 @@ export default function AgentDetailPage() {
 
   const canEdit =
     isPlatformAdmin ||
-    (agent && user?.hasRole("org_admin", agent.organization_id));
+    (agent && user?.hasRole("org_admin", agent.organization_id)) ||
+    false;
 
   return (
     <div className="space-y-6">
@@ -692,7 +465,7 @@ export default function AgentDetailPage() {
                 <span>Tool Configuration</span>
               </CardTitle>
               <CardDescription>
-                Enable and configure platform tools for {agent.name}
+                Configure platform tools for {agent.name}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-5 pt-0">
@@ -711,72 +484,47 @@ export default function AgentDetailPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  {platformTools.map((tool) => {
-                    const agentTool = localAgentTools.find(
-                      (at) => at.tool_id === tool.id,
-                    );
-                    const isEnabled = agentTool?.is_enabled || false;
+                <div className="space-y-6">
+                  <ToolFilters
+                    searchQuery={toolSearchQuery}
+                    onSearchChange={setToolSearchQuery}
+                    filterType={toolFilterType}
+                    onFilterChange={setToolFilterType}
+                    totalCount={platformTools.length}
+                    filteredCount={filteredTools.length}
+                  />
 
-                    return (
-                      <Card
-                        key={tool.id}
-                        className={`overflow-hidden border-2 transition-colors ${
-                          isEnabled
-                            ? "border-primary/20 bg-primary/5"
-                            : "border-muted/50"
-                        }`}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center space-x-3">
-                              <div
-                                className={`p-2 rounded-lg ${
-                                  isEnabled ? "bg-primary" : "bg-muted"
-                                }`}
-                              >
-                                <Wrench className="h-4 w-4" />
-                              </div>
-                              <div>
-                                <h4 className="font-semibold text-sm">
-                                  {formatToolName(tool.name)}
-                                </h4>
-                                <p className="text-xs text-muted-foreground line-clamp-2">
-                                  {tool.description}
-                                </p>
-                              </div>
-                            </div>
-                            <Checkbox
-                              id={`tool-${tool.id}`}
-                              checked={isEnabled}
-                              onCheckedChange={(checked) =>
-                                handleToggleTool(tool.id, checked === true)
-                              }
-                              disabled={!canEdit}
-                            />
-                          </div>
+                  {filteredTools.length === 0 ? (
+                    <div className="text-center py-12 bg-muted/20 rounded-lg">
+                      <Wrench className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                      <p className="text-muted-foreground">
+                        No tools match your search
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {filteredTools.map((tool) => {
+                        const agentTool = localAgentTools.find(
+                          (at) => at.tool_id === tool.id,
+                        );
 
-                          {isEnabled && (
-                            <div className="mt-4 pt-4 border-t border-primary/10 space-y-4">
-                              <div className="flex items-center text-xs font-medium text-primary">
-                                <Settings className="h-3.5 w-3.5 mr-1" />
-                                Configuration
-                              </div>
-
-                              {renderToolConfig(tool, agentTool)}
-
-                              <div className="flex items-center space-x-2 text-[10px] text-muted-foreground">
-                                <ShieldCheck className="h-3 w-3 text-green-500" />
-                                <span>
-                                  This tool is active for {agent.name}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                        return (
+                          <ToolCard
+                            key={tool.id}
+                            tool={tool}
+                            authStatus={
+                              agentTool?.auth_status ||
+                              AuthStatus.NOT_AUTHENTICATED
+                            }
+                            isEnabled={agentTool?.is_enabled ?? false}
+                            tokenExpiresAt={agentTool?.token_expires_at ?? null}
+                            onClick={() => handleToolCardClick(tool)}
+                            disabled={!canEdit}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -790,6 +538,23 @@ export default function AgentDetailPage() {
           onOpenChange={setDeleteDialogOpen}
           agent={agent}
           onSuccess={handleDeleteSuccess}
+        />
+      )}
+
+      {selectedTool && (
+        <ToolConfigDrawer
+          open={toolDrawerOpen}
+          onOpenChange={handleCloseToolDrawer}
+          tool={selectedTool}
+          agentTool={
+            localAgentTools.find((at) => at.tool_id === selectedTool.id) || null
+          }
+          onSaveConfig={handleSaveToolConfig}
+          onToggleFunction={handleToggleFunction}
+          onOAuth={handleOAuth}
+          onLogout={handleLogout}
+          canEdit={canEdit}
+          isSaving={updateAgentToolMutation.isPending}
         />
       )}
     </div>

@@ -93,20 +93,6 @@ class AgentService {
     return response.data;
   }
 
-  async toggleFunction(
-    agentToolId: string,
-    functionName: string,
-    isEnabled: boolean,
-  ): Promise<AgentTool> {
-    const response = await apiClient.put<AgentTool>(
-      `${this.toolBaseUrl}/agent/${agentToolId}`,
-      {
-        unselected_functions: isEnabled ? [functionName] : [],
-      },
-    );
-    return response.data;
-  }
-
   async startOAuth(
     toolName: string,
     agentId: string,
