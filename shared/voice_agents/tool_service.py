@@ -18,6 +18,7 @@ from .tool_models import (
     AgentToolResponse,
     AgentToolUpdate,
     AuthStatus,
+    ConnectionStatus,
     PlatformTool,
     PlatformToolCreate,
 )
@@ -59,6 +60,28 @@ def validate_token_status(sensitive_config: Optional[str]) -> AuthStatus:
     except Exception as e:
         logger.error(f"Error validating token status: {e}")
         return AuthStatus.NOT_AUTHENTICATED
+
+
+def get_connection_status(
+    requires_auth: bool, auth_status: AuthStatus
+) -> ConnectionStatus:
+    """
+    Calculate connection status based on auth requirements and status.
+
+    Args:
+        requires_auth: Whether the tool requires authentication
+        auth_status: Current authentication status of the tool
+
+    Returns:
+        ConnectionStatus enum indicating the connection state
+    """
+    if not requires_auth:
+        return ConnectionStatus.CONNECTED_NO_AUTH
+
+    if auth_status == AuthStatus.AUTHENTICATED:
+        return ConnectionStatus.CONNECTED_AUTH_VALID
+
+    return ConnectionStatus.CONNECTED_AUTH_INVALID
 
 
 class ToolService:
@@ -175,8 +198,20 @@ class ToolService:
             if not response.data:
                 return None, "Failed to configure agent tool"
 
+            # Fetch platform tool to get requires_auth for connection status
+            platform_tools, _ = await self.get_platform_tools(only_active=False)
+            platform_tool = next(
+                (t for t in platform_tools if t.id == agent_tool_data.tool_id), None
+            )
+
             # Build response model without sensitive config
             result_data = response.data[0]
+            auth_status_val = validate_token_status(
+                result_data.get("sensitive_config")
+            )
+            requires_auth = platform_tool.requires_auth if platform_tool else False
+            connection_status_val = get_connection_status(requires_auth, auth_status_val)
+
             response_dict = {
                 "id": result_data["id"],
                 "agent_id": result_data["agent_id"],
@@ -184,9 +219,8 @@ class ToolService:
                 "config": result_data.get("config"),
                 "unselected_functions": result_data.get("unselected_functions"),
                 "is_enabled": result_data.get("is_enabled", True),
-                "auth_status": validate_token_status(
-                    result_data.get("sensitive_config")
-                ),
+                "auth_status": auth_status_val,
+                "connection_status": connection_status_val,
                 "created_at": result_data["created_at"],
                 "updated_at": result_data["updated_at"],
             }
@@ -225,6 +259,10 @@ class ToolService:
                     pass
 
                 # Build response without sensitive config
+                auth_status_val = validate_token_status(item.get("sensitive_config"))
+                requires_auth = tool_data.get("requires_auth", False) if tool_data else False
+                connection_status_val = get_connection_status(requires_auth, auth_status_val)
+
                 response_dict = {
                     "id": item["id"],
                     "agent_id": item["agent_id"],
@@ -232,7 +270,8 @@ class ToolService:
                     "config": item.get("config"),
                     "unselected_functions": item.get("unselected_functions"),
                     "is_enabled": item.get("is_enabled", True),
-                    "auth_status": validate_token_status(item.get("sensitive_config")),
+                    "auth_status": auth_status_val,
+                    "connection_status": connection_status_val,
                     "token_expires_at": token_expires_at,
                     "created_at": item["created_at"],
                     "updated_at": item["updated_at"],

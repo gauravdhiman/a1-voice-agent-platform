@@ -575,7 +575,7 @@ export default function AgentDetailPage() {
                               agentTool?.auth_status ||
                               AuthStatus.NOT_AUTHENTICATED
                             }
-                            isEnabled={agentTool?.is_enabled ?? false}
+                            connectionStatus={agentTool?.connection_status}
                             tokenExpiresAt={agentTool?.token_expires_at ?? null}
                             isConfigured={!!agentTool}
                             isConnecting={connectingToolId === tool.id}

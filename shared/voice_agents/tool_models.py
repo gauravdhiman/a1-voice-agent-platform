@@ -18,6 +18,17 @@ class AuthStatus(str, Enum):
     EXPIRED = "expired"  # Tokens exist but have expired
 
 
+class ConnectionStatus(str, Enum):
+    """Connection status for a tool."""
+
+    NOT_CONNECTED = "not_connected"  # No agent_tools record
+    CONNECTED_NO_AUTH = "connected_no_auth"  # Connected, tool doesn't require auth
+    CONNECTED_AUTH_VALID = "connected_auth_valid"  # Connected, requires auth, valid tokens
+    CONNECTED_AUTH_INVALID = (
+        "connected_auth_invalid"
+    )  # Connected, requires auth, invalid/missing tokens
+
+
 class PlatformToolBase(BaseModel):
     """Base model for Platform Tool."""
 
@@ -138,6 +149,10 @@ class AgentToolResponse(BaseModel):
     )
     token_expires_at: Optional[float] = Field(
         None, description="Timestamp when access token expires (Unix timestamp)"
+    )
+    connection_status: ConnectionStatus = Field(
+        default=ConnectionStatus.NOT_CONNECTED,
+        description="Connection status of the tool",
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")

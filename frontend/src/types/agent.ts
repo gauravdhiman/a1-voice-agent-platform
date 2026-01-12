@@ -8,6 +8,13 @@ export enum AuthStatus {
   EXPIRED = "expired", // Tokens exist but have expired
 }
 
+export enum ConnectionStatus {
+  NOT_CONNECTED = "not_connected", // No agent_tools record
+  CONNECTED_NO_AUTH = "connected_no_auth", // Connected, tool doesn't require auth
+  CONNECTED_AUTH_VALID = "connected_auth_valid", // Connected, requires auth, valid tokens
+  CONNECTED_AUTH_INVALID = "connected_auth_invalid", // Connected, requires auth, invalid/missing tokens
+}
+
 export interface VoiceAgent {
   id: string;
   organization_id: string;
@@ -78,6 +85,7 @@ export interface AgentTool {
   is_enabled: boolean;
   auth_status: AuthStatus;
   token_expires_at: number | null;
+  connection_status: ConnectionStatus;
   created_at: string;
   updated_at: string;
   tool?: PlatformTool;

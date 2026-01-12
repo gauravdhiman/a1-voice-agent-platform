@@ -3,8 +3,14 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Wrench, ShieldCheck, AlertCircle, Clock, Loader2 } from "lucide-react";
-import { AuthStatus } from "@/types/agent";
+import {
+  Wrench,
+  ShieldCheck,
+  Clock,
+  Loader2,
+  XCircle,
+} from "lucide-react";
+import { AuthStatus, ConnectionStatus } from "@/types/agent";
 
 export interface ToolCardProps {
   tool: {
@@ -13,9 +19,9 @@ export interface ToolCardProps {
     description: string | null;
   };
   authStatus: AuthStatus;
-  isEnabled: boolean;
   tokenExpiresAt: number | null;
-  isConfigured: boolean;
+  connectionStatus?: ConnectionStatus;
+  isConfigured?: boolean;
   isConnecting?: boolean;
   onClick: () => void;
   disabled?: boolean;
@@ -25,8 +31,8 @@ export interface ToolCardProps {
 export function ToolCard({
   tool,
   authStatus,
-  isEnabled,
   tokenExpiresAt,
+  connectionStatus,
   isConfigured,
   isConnecting = false,
   onClick,
@@ -45,35 +51,64 @@ export function ToolCard({
   };
 
   const getStatusConfig = () => {
-    const actionText = isConfigured ? "Edit Configuration" : "Connect";
+    const isToolConfigured =
+      connectionStatus !== undefined
+        ? connectionStatus !== ConnectionStatus.NOT_CONNECTED
+        : isConfigured;
+    const actionText = isToolConfigured ? "Edit Configuration" : "Connect";
 
-    switch (authStatus) {
-      case AuthStatus.AUTHENTICATED:
+    switch (connectionStatus) {
+      case ConnectionStatus.CONNECTED_NO_AUTH:
         return {
           label: "Connected",
           icon: ShieldCheck,
-          iconColor: "text-green-500",
+          iconColor: "text-green-600 dark:text-green-400",
           badgeVariant: "default" as const,
-          bgColor: "bg-green-500",
+          bgColor: "bg-green-50 dark:bg-green-950/20",
+          borderColor: "border-green-200 dark:border-green-800",
+          badgeBg: "bg-green-100/80 dark:bg-green-900/30",
+          badgeText: "text-green-800 dark:text-green-300",
+          iconBoxBg: "bg-green-100 dark:bg-green-900/30",
           actionText,
         };
-      case AuthStatus.EXPIRED:
+      case ConnectionStatus.CONNECTED_AUTH_VALID:
         return {
-          label: "Expired",
-          icon: AlertCircle,
-          iconColor: "text-orange-500",
-          badgeVariant: "secondary" as const,
-          bgColor: "bg-orange-500",
+          label: "Authenticated",
+          icon: ShieldCheck,
+          iconColor: "text-green-600 dark:text-green-400",
+          badgeVariant: "default" as const,
+          bgColor: "bg-green-50 dark:bg-green-950/20",
+          borderColor: "border-green-200 dark:border-green-800",
+          badgeBg: "bg-green-100/80 dark:bg-green-900/30",
+          badgeText: "text-green-800 dark:text-green-300",
+          iconBoxBg: "bg-green-100 dark:bg-green-900/30",
           actionText,
         };
-      case AuthStatus.NOT_AUTHENTICATED:
+      case ConnectionStatus.CONNECTED_AUTH_INVALID:
+        return {
+          label: "Authentication required",
+          icon: XCircle,
+          iconColor: "text-red-600 dark:text-red-400",
+          badgeVariant: "secondary" as const,
+          bgColor: "bg-red-50 dark:bg-red-950/20",
+          borderColor: "border-red-200 dark:border-red-800",
+          badgeBg: "bg-red-100/80 dark:bg-red-900/30",
+          badgeText: "text-red-800 dark:text-red-300",
+          iconBoxBg: "bg-red-100 dark:bg-red-900/30",
+          actionText,
+        };
+      case ConnectionStatus.NOT_CONNECTED:
       default:
         return {
-          label: "Not configured",
+          label: "Not connected",
           icon: Wrench,
           iconColor: "text-muted-foreground",
           badgeVariant: "secondary" as const,
-          bgColor: "bg-muted",
+          bgColor: "",
+          borderColor: "border-border",
+          badgeBg: "bg-muted",
+          badgeText: "text-muted-foreground",
+          iconBoxBg: "bg-muted",
           actionText,
         };
     }
@@ -87,23 +122,15 @@ export function ToolCard({
     <Card
       className={cn(
         "group overflow-hidden border transition-all hover:shadow-md",
-        isEnabled
-          ? "border-primary/30 bg-primary/10 dark:bg-primary/15"
-          : "border-border bg-card",
+        statusConfig.bgColor,
+        statusConfig.borderColor,
         disabled && "opacity-50 cursor-not-allowed",
         className,
       )}
     >
       <div className="p-4">
         <div className="flex items-start gap-3 mb-3">
-          <div
-            className={cn(
-              "p-2.5 rounded-lg",
-              isEnabled
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
+          <div className={cn("p-2.5 rounded-lg", statusConfig.iconBoxBg)}>
             <Wrench className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
@@ -121,10 +148,8 @@ export function ToolCard({
             variant={statusConfig.badgeVariant}
             className={cn(
               "flex items-center gap-1.5",
-              authStatus === AuthStatus.AUTHENTICATED &&
-                "bg-green-500/10 text-green-700 dark:text-green-400",
-              authStatus === AuthStatus.EXPIRED &&
-                "bg-orange-500/10 text-orange-700 dark:text-orange-400",
+              statusConfig.badgeBg,
+              statusConfig.badgeText,
             )}
           >
             <StatusIcon className={cn("h-3 w-3", statusConfig.iconColor)} />
@@ -133,7 +158,7 @@ export function ToolCard({
 
           <Button
             size="sm"
-            variant={isEnabled ? "outline" : "default"}
+            variant={isConfigured ? "outline" : "default"}
             onClick={onClick}
             disabled={disabled || isConnecting}
             className="shrink-0"
