@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Wrench, ShieldCheck, AlertCircle, Clock } from "lucide-react";
+import { Wrench, ShieldCheck, AlertCircle, Clock, Loader2 } from "lucide-react";
 import { AuthStatus } from "@/types/agent";
 
 export interface ToolCardProps {
@@ -16,6 +16,7 @@ export interface ToolCardProps {
   isEnabled: boolean;
   tokenExpiresAt: number | null;
   isConfigured: boolean;
+  isConnecting?: boolean;
   onClick: () => void;
   disabled?: boolean;
   className?: string;
@@ -27,6 +28,7 @@ export function ToolCard({
   isEnabled,
   tokenExpiresAt,
   isConfigured,
+  isConnecting = false,
   onClick,
   disabled = false,
   className,
@@ -43,7 +45,7 @@ export function ToolCard({
   };
 
   const getStatusConfig = () => {
-    const actionText = isConfigured ? "Edit Configuration" : "Configure";
+    const actionText = isConfigured ? "Edit Configuration" : "Connect";
 
     switch (authStatus) {
       case AuthStatus.AUTHENTICATED:
@@ -133,10 +135,14 @@ export function ToolCard({
             size="sm"
             variant={isEnabled ? "outline" : "default"}
             onClick={onClick}
-            disabled={disabled}
+            disabled={disabled || isConnecting}
             className="shrink-0"
           >
-            {statusConfig.actionText}
+            {isConnecting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              statusConfig.actionText
+            )}
           </Button>
         </div>
 

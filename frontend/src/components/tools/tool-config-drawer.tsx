@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   ShieldCheck,
-  RefreshCw,
+  Lock,
   LogOut,
   Clock,
   Settings,
@@ -24,6 +24,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { AuthStatus, PlatformTool, AgentTool } from "@/types/agent";
+import { DeleteButton } from "@/components/ui/delete-button";
 
 export interface ToolConfigDrawerProps {
   open: boolean;
@@ -41,6 +42,7 @@ export interface ToolConfigDrawerProps {
   ) => Promise<void>;
   onOAuth: (toolName: string) => Promise<void>;
   onLogout: (agentToolId: string) => Promise<void>;
+  onDisconnect: () => void;
   canEdit: boolean;
   isSaving?: boolean;
 }
@@ -54,6 +56,7 @@ export function ToolConfigDrawer({
   onToggleFunction,
   onOAuth,
   onLogout,
+  onDisconnect,
   canEdit,
   isSaving = false,
 }: ToolConfigDrawerProps) {
@@ -133,7 +136,7 @@ export function ToolConfigDrawer({
         icon: AlertCircle,
         iconColor: "text-muted-foreground",
         showButton: true,
-        buttonText: "Connect",
+        buttonText: "Authenticate",
         showExpiry: false,
       };
     }
@@ -156,7 +159,7 @@ export function ToolConfigDrawer({
           icon: AlertCircle,
           iconColor: "text-orange-500",
           showButton: true,
-          buttonText: "Connect",
+          buttonText: "Authenticate",
           showExpiry: false,
         };
       case AuthStatus.NOT_AUTHENTICATED:
@@ -166,7 +169,7 @@ export function ToolConfigDrawer({
           icon: AlertCircle,
           iconColor: "text-muted-foreground",
           showButton: true,
-          buttonText: "Connect",
+          buttonText: "Authenticate",
           showExpiry: false,
         };
     }
@@ -228,9 +231,9 @@ export function ToolConfigDrawer({
                     {isConnecting ? (
                       <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                     ) : (
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                      <Lock className="h-3.5 w-3.5 mr-1" />
                     )}
-                    {isConnecting ? "Connecting..." : authConfig.buttonText}
+                    {isConnecting ? "Authenticating..." : authConfig.buttonText}
                   </Button>
                 )}
                 {authenticated && (
@@ -395,7 +398,12 @@ export function ToolConfigDrawer({
           )}
         </div>
 
-        <SheetFooter className="px-6 pb-6">
+        <SheetFooter className="px-6 pb-6 space-y-3">
+          {agentTool && (
+            <DeleteButton onClick={onDisconnect} disabled={!canEdit} className="w-full">
+              Disconnect Tool
+            </DeleteButton>
+          )}
           {!isToolEnabled && (
             <div className="w-full text-center py-2 bg-muted/20 rounded-lg border border-dashed">
               <p className="text-sm text-muted-foreground">

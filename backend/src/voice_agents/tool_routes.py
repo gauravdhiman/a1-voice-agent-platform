@@ -342,3 +342,22 @@ async def logout_agent_tool(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return updated_tool
+
+
+@tool_router.delete("/agent/{agent_tool_id}")
+@tracer.start_as_current_span("tool.routes.delete_agent_tool")
+async def delete_agent_tool(
+    agent_tool_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Delete an agent tool configuration permanently."""
+    current_user_id, user_profile = user_data
+
+    deleted, error = await tool_service.delete_agent_tool(agent_tool_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent tool not found"
+        )
+    return {"id": str(agent_tool_id), "deleted": True}

@@ -350,5 +350,23 @@ class ToolService:
             logger.error(f"Error updating agent tool {agent_tool_id}: {e}")
             return None, str(e)
 
+    @tracer.start_as_current_span("tool.delete_agent_tool")
+    async def delete_agent_tool(
+        self, agent_tool_id: UUID
+    ) -> tuple[Optional[bool], Optional[str]]:
+        """Permanently delete an agent tool configuration."""
+        try:
+            (
+                self.supabase.table("agent_tools")
+                .delete()
+                .eq("id", str(agent_tool_id))
+                .execute()
+            )
+
+            return True, None
+        except Exception as e:
+            logger.error(f"Error deleting agent tool {agent_tool_id}: {e}")
+            return None, str(e)
+
 
 tool_service = ToolService()

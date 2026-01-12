@@ -239,13 +239,13 @@ export function useConfigureAgentTool() {
     mutationFn: (data: AgentToolCreate) =>
       agentService.configureAgentTool(data),
     onSuccess: (_, variables) => {
-      toast.success("Tool configured successfully");
+      toast.success("Tool connected successfully");
       queryClient.invalidateQueries({
         queryKey: agentQueryKeys.agentTools(variables.agent_id),
       });
     },
     onError: () => {
-      toast.error("Failed to configure tool");
+      toast.error("Failed to connect tool");
     },
   });
 }
@@ -404,7 +404,7 @@ export function useLogoutAgentTool() {
     onSuccess: () => {
       toast.success("Logged out successfully");
 
-      // Find and invalidate the agent tools query
+      // Find and invalidate agent tools query
       const queries = queryClient.getQueryCache().findAll({
         queryKey: agentQueryKeys.agentTools(""),
       });
@@ -415,3 +415,26 @@ export function useLogoutAgentTool() {
     },
   });
 }
+
+// Mutation: Delete agent tool
+export function useDeleteAgentTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (agentToolId: string) =>
+      agentService.deleteAgentTool(agentToolId),
+    onSuccess: () => {
+      toast.success("Tool disconnected successfully");
+
+      // Find and invalidate agent tools query
+      const queries = queryClient.getQueryCache().findAll({
+        queryKey: agentQueryKeys.agentTools(""),
+      });
+      queries.forEach((query) => query.invalidate());
+    },
+    onError: () => {
+      toast.error("Failed to disconnect tool");
+    },
+  });
+}
+

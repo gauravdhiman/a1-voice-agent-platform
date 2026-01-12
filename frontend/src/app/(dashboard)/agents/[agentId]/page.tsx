@@ -13,12 +13,16 @@ import {
   useStartOAuth,
   useLogoutAgentTool,
   useDeleteAgent,
+  useDeleteAgentTool,
+  useConfigureAgentTool,
 } from "@/hooks/use-agent-queries";
 import { organizationService } from "@/services/organization-service";
 import type { PlatformTool, AgentTool } from "@/types/agent";
 import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
+import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
+import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -45,7 +49,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Bot,
-  Trash2,
   Settings,
   Save,
   ArrowLeft,
@@ -68,7 +71,11 @@ export default function AgentDetailPage() {
   const [saving, setSaving] = React.useState(false);
   const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = React.useState(false);
+  const [disconnectingToolId, setDisconnectingToolId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState("properties");
+  const [pendingToolToOpen, setPendingToolToOpen] = React.useState<PlatformTool | null>(null);
+  const [connectingToolId, setConnectingToolId] = React.useState<string | null>(null);
 
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
@@ -104,6 +111,8 @@ export default function AgentDetailPage() {
   const updateAgentToolMutation = useUpdateAgentTool();
   const startOAuthMutation = useStartOAuth();
   const logoutAgentToolMutation = useLogoutAgentTool();
+  const deleteAgentToolMutation = useDeleteAgentTool();
+  const configureAgentToolMutation = useConfigureAgentTool();
 
   // Load organization when agent data is available
   React.useEffect(() => {
@@ -135,6 +144,21 @@ export default function AgentDetailPage() {
       setLocalAgentTools(agentTools);
     }
   }, [agentTools]);
+
+  // Open drawer when a pending tool has been connected
+  React.useEffect(() => {
+    if (pendingToolToOpen && localAgentTools.length > 0) {
+      const newAgentTool = localAgentTools.find(
+        (at) => at.tool_id === pendingToolToOpen.id,
+      );
+      if (newAgentTool) {
+        setSelectedTool(pendingToolToOpen);
+        setToolDrawerOpen(true);
+        setPendingToolToOpen(null);
+        setConnectingToolId(null);
+      }
+    }
+  }, [pendingToolToOpen, localAgentTools]);
 
   // Sync tab state with URL
   useEffect(() => {
@@ -248,10 +272,54 @@ export default function AgentDetailPage() {
     [logoutAgentToolMutation],
   );
 
-  const handleToolCardClick = useCallback((tool: PlatformTool) => {
-    setSelectedTool(tool);
-    setToolDrawerOpen(true);
+  const handleDisconnect = useCallback(
+    async (agentToolId: string) => {
+      try {
+        await deleteAgentToolMutation.mutateAsync(agentToolId);
+        setLocalAgentTools((prev) =>
+          prev.filter((tool) => tool.id !== agentToolId),
+        );
+      } catch (error) {
+        console.error("Failed to disconnect:", error);
+        throw error;
+      }
+    },
+    [deleteAgentToolMutation],
+  );
+
+  const handleCloseDisconnectDialog = useCallback(() => {
+    setDisconnectDialogOpen(false);
+    setDisconnectingToolId(null);
+    setToolDrawerOpen(false);
   }, []);
+
+  const handleToolCardClick = useCallback(
+    async (tool: PlatformTool) => {
+      const existingAgentTool = localAgentTools.find(
+        (at) => at.tool_id === tool.id,
+      );
+
+      if (!existingAgentTool) {
+        try {
+          setConnectingToolId(tool.id);
+          setPendingToolToOpen(tool);
+          await configureAgentToolMutation.mutateAsync({
+            agent_id: agentId,
+            tool_id: tool.id,
+            is_enabled: true,
+          });
+        } catch (error) {
+          console.error("Failed to configure tool:", error);
+          setPendingToolToOpen(null);
+          setConnectingToolId(null);
+        }
+      } else {
+        setSelectedTool(tool);
+        setToolDrawerOpen(true);
+      }
+    },
+    [agentId, localAgentTools, configureAgentToolMutation],
+  );
 
   const handleCloseToolDrawer = useCallback(() => {
     setToolDrawerOpen(false);
@@ -336,14 +404,9 @@ export default function AgentDetailPage() {
           </div>
         </div>
         {canEdit && (
-          <Button
-            variant="outline"
-            className="text-destructive"
-            onClick={handleDeleteAgent}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
+          <DeleteButton onClick={handleDeleteAgent}>
             Delete Agent
-          </Button>
+          </DeleteButton>
         )}
       </div>
 
@@ -515,6 +578,7 @@ export default function AgentDetailPage() {
                             isEnabled={agentTool?.is_enabled ?? false}
                             tokenExpiresAt={agentTool?.token_expires_at ?? null}
                             isConfigured={!!agentTool}
+                            isConnecting={connectingToolId === tool.id}
                             onClick={() => handleToolCardClick(tool)}
                             disabled={!canEdit}
                           />
@@ -550,8 +614,26 @@ export default function AgentDetailPage() {
           onToggleFunction={handleToggleFunction}
           onOAuth={handleOAuth}
           onLogout={handleLogout}
+          onDisconnect={() => {
+            const agentTool = localAgentTools.find(
+              (at) => at.tool_id === selectedTool.id,
+            );
+            if (agentTool) {
+              setDisconnectingToolId(agentTool.id);
+              setDisconnectDialogOpen(true);
+            }
+          }}
           canEdit={canEdit}
           isSaving={updateAgentToolMutation.isPending}
+        />
+      )}
+
+      {selectedTool && (
+        <ToolDisconnectDialog
+          open={disconnectDialogOpen}
+          onOpenChange={handleCloseDisconnectDialog}
+          onConfirm={() => handleDisconnect(disconnectingToolId || "")}
+          toolName={selectedTool.name.replace(/_/g, " ")}
         />
       )}
     </div>

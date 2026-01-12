@@ -6,3 +6,6 @@ export type { ToolFiltersProps, ToolFilterType } from "./tool-filters";
 
 export { ToolConfigDrawer } from "./tool-config-drawer";
 export type { ToolConfigDrawerProps } from "./tool-config-drawer";
+
+export { ToolDisconnectDialog } from "./tool-disconnect-dialog";
+

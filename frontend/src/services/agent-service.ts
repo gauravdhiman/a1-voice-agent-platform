@@ -109,6 +109,10 @@ class AgentService {
     );
     return response.data;
   }
+
+  async deleteAgentTool(agentToolId: string): Promise<void> {
+    await apiClient.delete(`${this.toolBaseUrl}/agent/${agentToolId}`);
+  }
 }
 
 export const agentService = new AgentService();
