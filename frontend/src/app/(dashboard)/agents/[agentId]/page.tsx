@@ -339,12 +339,12 @@ export default function AgentDetailPage() {
       );
     }
 
-    if (toolFilterType === "configured") {
+    if (toolFilterType === "connected") {
       filtered = filtered.filter(
         (tool) =>
           localAgentTools.find((at) => at.tool_id === tool.id) !== undefined,
       );
-    } else if (toolFilterType === "not_configured") {
+    } else if (toolFilterType === "not_connected") {
       filtered = filtered.filter(
         (tool) => !localAgentTools.find((at) => at.tool_id === tool.id),
       );
