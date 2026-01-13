@@ -1,7 +1,7 @@
 import inspect
 import logging
 import os
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from default_system_prompt import default_system_prompt
 from livekit.agents import (
@@ -38,7 +38,7 @@ logger.info(f"Registered tools: {list(livekit_tool_registry._tools.keys())}")
 
 
 def _create_tool_wrapper(
-    bound_method: Any, func_name: str, param_names: list[str], type_hints: dict
+    bound_method: Any, func_name: str, sig: inspect.Signature, type_hints: dict
 ) -> Any:
     """
     Create a wrapper function for a tool method.
@@ -46,9 +46,14 @@ def _create_tool_wrapper(
     The wrapper has the same signature as the original method (excluding 'self').
     It accepts all parameters explicitly (no **kwargs), then delegates to the bound method.
     """
-    # Get parameter definitions for the wrapper function
-    params_def = ["context: RunContext"]
-    for param_name in param_names[1:]:
+    # Get parameter definitions for the wrapper function, preserving default values
+    params_def = []
+    other_param_names = []
+
+    for param_name, param in sig.parameters.items():
+        if param_name == "self":
+            continue
+
         param_type = type_hints.get(param_name, Any)
         # Get string representation of type
         if hasattr(param_type, "__name__"):
@@ -59,12 +64,18 @@ def _create_tool_wrapper(
             type_str = str(param_type).replace("typing.", "")
         else:
             type_str = "Any"
-        params_def.append(f"{param_name}: {type_str}")
+
+        # Build parameter definition with default value if present
+        param_def = f"{param_name}: {type_str}"
+        if param.default != inspect.Parameter.empty:
+            # Use repr to handle strings, None, and other types correctly
+            param_def += f" = {repr(param.default)}"
+
+        params_def.append(param_def)
+        if param_name != "context":
+            other_param_names.append(param_name)
 
     params_str = ", ".join(params_def)
-
-    # Get the parameter names for the loop
-    other_param_names = param_names[1:]
     other_param_names_repr = repr(other_param_names)
 
     # Create the wrapper function dynamically
@@ -77,14 +88,26 @@ async def {func_name}({params_str}) -> Any:
     kwargs = {{}}
     for pname in {other_param_names_repr}:
         kwargs[pname] = locals()[pname]
-    return await bound_method(context=context, **kwargs)
+    result = await bound_method(context=context, **kwargs)
+    import json
+    try:
+        result_str = json.dumps(result, default=str)
+        logger.debug(f"Tool {func_name} result size: {{len(result_str)}} chars")
+    except Exception as e:
+        logger.error(f"Failed to serialize tool {func_name} result: {{e}}")
+    return result
 """
 
     # Execute the code to create the wrapper function
     namespace = {
         "Any": Any,
+        "Dict": Dict,
+        "List": List,
+        "Optional": Optional,
+        "Union": Union,
         "RunContext": RunContext,
         "bound_method": bound_method,
+        "logger": logger,
     }
     local_scope = {}
     exec(wrapper_code, namespace, local_scope)
@@ -239,7 +262,7 @@ async def entrypoint(ctx: JobContext):
                 # The key insight: create a simple wrapper with explicit parameters
                 # that match the original function (excluding 'self')
                 wrapper = _create_tool_wrapper(
-                    bound_method, func_name, param_names, type_hints
+                    bound_method, func_name, sig, type_hints
                 )
 
                 # Set wrapper metadata

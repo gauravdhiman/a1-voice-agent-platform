@@ -69,18 +69,19 @@ class GmailTool(BaseTool):
     async def get_latest_emails(
         self,
         context: RunContext,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Get the latest emails from the user's inbox.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            count: Number of latest emails to retrieve (default: 10)
+            count: Number of latest emails to retrieve (default: 5, max: 10)
 
         Returns:
             Dict containing list of emails with details
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -111,7 +112,7 @@ class GmailTool(BaseTool):
         self,
         context: RunContext,
         user: str,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Get emails from a specific user (name or email).
@@ -119,11 +120,12 @@ class GmailTool(BaseTool):
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
             user: Name or email address of the sender
-            count: Maximum number of emails to retrieve (default: 10)
+            count: Maximum number of emails to retrieve (default: 5, max: 10)
 
         Returns:
             Dict containing list of emails from the specified user
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -156,18 +158,19 @@ class GmailTool(BaseTool):
     async def get_unread_emails(
         self,
         context: RunContext,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
-        Get the latest unread emails from the user's inbox.
+        Get unread emails from the user's inbox.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            count: Maximum number of unread emails to retrieve (default: 10)
+            count: Maximum number of unread emails to retrieve (default: 5, max: 10)
 
         Returns:
             Dict containing list of unread emails
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -198,18 +201,19 @@ class GmailTool(BaseTool):
     async def get_starred_emails(
         self,
         context: RunContext,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Get starred emails from the user's inbox.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            count: Maximum number of starred emails to retrieve (default: 10)
+            count: Maximum number of starred emails to retrieve (default: 5, max: 10)
 
         Returns:
             Dict containing list of starred emails
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -241,19 +245,20 @@ class GmailTool(BaseTool):
         self,
         context: RunContext,
         query: str,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Get emails matching a specific context or search term.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            query: Search term or context to match in emails
-            count: Maximum number of emails to retrieve (default: 10)
+            query: Search query for filtering emails
+            count: Maximum number of emails to retrieve (default: 5, max: 10)
 
         Returns:
-            Dict containing list of matching emails
+            Dict containing list of emails matching the context
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -376,7 +381,7 @@ class GmailTool(BaseTool):
         self,
         context: RunContext,
         query: str,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Search emails based on a given query.
@@ -385,11 +390,12 @@ class GmailTool(BaseTool):
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
             query: Natural language query to search for
-            count: Number of emails to retrieve (default: 10)
+            count: Number of emails to retrieve (default: 5, max: 10)
 
         Returns:
             Dict containing list of matching emails
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -659,20 +665,21 @@ class GmailTool(BaseTool):
         context: RunContext,
         query: str,
         label_name: str,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Find emails matching a query and apply a label, creating it if necessary.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            query: Gmail search query (e.g., 'is:unread category:promotions')
+            query: Gmail search query to find emails
             label_name: Name of the label to apply
-            count: Maximum number of emails to process (default: 10)
+            count: Number of emails to process (default: 5, max: 10)
 
         Returns:
-            Dict with summary of labeled emails
+            Dict containing the number of emails processed
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -684,7 +691,10 @@ class GmailTool(BaseTool):
             response = await client.get(
                 f"https://www.googleapis.com/gmail/v1/users/{self.config.user_id}/messages",  # noqa: E501
                 headers=headers,
-                params={"q": query, "maxResults": count},
+                params={
+                    "q": query,
+                    "maxResults": count,
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -736,20 +746,21 @@ class GmailTool(BaseTool):
         context: RunContext,
         query: str,
         label_name: str,
-        count: int = 10,
+        count: int = 5,
     ) -> dict[str, Any]:
         """
         Remove a label from emails matching a query.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            query: Gmail search query (e.g., 'is:unread category:promotions')
+            query: Gmail search query to find emails
             label_name: Name of the label to remove
-            count: Maximum number of emails to process (default: 10)
+            count: Number of emails to process (default: 5, max: 10)
 
         Returns:
-            Dict with summary of emails with label removed
+            Dict containing the number of emails processed
         """
+        count = min(count, 10)
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
@@ -759,8 +770,12 @@ class GmailTool(BaseTool):
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"https://www.googleapis.com/gmail/v1/users/{self.config.user_id}/labels",  # noqa: E501
+                f"https://www.googleapis.com/gmail/v1/users/{self.config.user_id}/messages",  # noqa: E501
                 headers=headers,
+                params={
+                    "q": query,
+                    "maxResults": count,
+                },
             )
             response.raise_for_status()
             labels = response.json().get("labels", [])
@@ -1009,5 +1024,8 @@ class GmailTool(BaseTool):
                 ).decode()
         except Exception:
             return "Unable to decode message body"
+
+        if len(body) > 500:
+            body = body[:500] + "..."
 
         return body
