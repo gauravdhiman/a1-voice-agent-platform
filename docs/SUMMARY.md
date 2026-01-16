@@ -30,94 +30,11 @@ Comprehensive documentation organized by feature.
 
 #### Voice Agents
 
-- **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system, lifecycle, tool integration, and architecture
-- **[Tool System](03_implementation/tool_system.md)** - Tool architecture and implementation patterns
-- **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - How tools work with LLMs
-- **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Tool implementation details
-
-#### Authentication & RBAC
-
-- **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)** - Authentication methods, roles, permissions, and authorization
-- **[OAuth Setup](02_core_systems/oauth_setup.md)** - Google OAuth integration
-- **[RBAC System](02_core_systems/rbac_system.md)** - Role-based access control implementation
-
-#### Multi-Tenancy
-
-- **[Multi-Tenancy Overview](02_features/multi_tenancy/overview.md)** - Organization management and data isolation
-
-#### Billing
-
-- **[Billing Overview](02_features/billing/overview.md)** - Stripe integration, subscriptions, and credit management
-- **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
-- **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
-- **[Stripe Management](05_operations/stripe_management.md)** - CLI tool for managing Stripe products
-
-#### Notifications
-
-- **[Notifications Overview](02_features/notifications/overview.md)** - Email notification system with Resend integration
-
-#### Observability
-
-- **[Observability Overview](02_features/observability/overview.md)** - OpenTelemetry implementation, tracing, metrics, and logging
-
-### 03_implementation/ - Implementation Details
-
-How specific features are implemented (technical deep dives).
-
-- **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Dynamic tool loading design
-- **[Tool Calling Challenges](03_implementation/tool_calling_challenges.md)** - Problems faced and solutions
-- **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - How tools work with LLMs (detailed)
-- **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Tool implementation details
-- **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
-- **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
-- **[Polymorphic Relationships](03_implementation/polymorphic_relationships.md)** - Database relationship patterns
-
-### 04_development_guides - Development Guides
-
-How to develop and contribute.
-
-- **[Development Setup](04_development_guides/development_setup.md)** - Local development environment setup
-- **[API Guidelines](04_development_guides/api_guidelines.md)** - API development standards
-- **[Database Migrations](04_development_guides/database_migrations.md)** - Database migration best practices
-- **[Testing](04_development_guides/testing.md)** - Testing strategies and tools
-
-### 03_development - Development Workflows (NEW)
-
-Step-by-step guides for working with the platform.
-
-- **[Getting Started Dev](03_development/getting_started.md)** - Quick start for new developers
-- **[Frontend Development](03_development/frontend/)** - Next.js development guide (coming soon)
-- **[Backend Development](03_development/backend/)** - FastAPI development guide (coming soon)
-- **[Worker Development](03_development/worker/)** - LiveKit worker development guide (coming soon)
-- **[Shared Module](03_development/shared_module/)** - Shared code architecture (coming soon)
-
-### 05_operations/ - Operations & Deployment
-
-Running and operating platform.
-
-- **[Environment Configuration](05_operations/environment_configuration.md)** - Environment variables setup
-- **[Stripe Management](05_operations/stripe_management.md)** - Stripe product management tool
-- **[Docker Deployment](05_operations/docker_deployment.md)** - Container orchestration (coming soon)
-
-### 05_business/ - Business Requirements
-
-Product requirements and features.
-
-- **[Product Requirements Document](05_business/prd.md)** - Complete product requirements
-- **[Business Summary](05_business/SUMMARY.md)** - Business feature summary
-
-### Legacy Documentation
-
-Older documentation preserved for reference.
-
-## 🔑 Key Documentation by Topic
-
-### Voice Agents
-
 1. **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system and lifecycle
-2. **[Worker README](../worker/README.md)** - Worker service architecture and setup
-3. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
-4. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
+2. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
+3. **[Worker README](../worker/README.md)** - Worker service architecture and setup
+4. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
+5. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
 
 ### Multi-Tenancy & RBAC
 
@@ -144,9 +61,10 @@ Older documentation preserved for reference.
 
 ### Tools System
 
-1. **[Tool System](03_implementation/tool_system.md)** - Tool architecture and implementation
-2. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Tool wrapping patterns
+1. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
+2. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Tool wrapping patterns and type hints handling
 3. **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Dynamic tool loading design
+4. **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Tool implementation details including Gmail tool
 
 ### Notifications
 

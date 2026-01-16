@@ -64,6 +64,7 @@ Built with [Shadcn/ui](https://ui.shadcn.com/) for consistent, accessible compon
 
 ### Available Components
 
+**UI Components**:
 - Button
 - Card
 - Input
@@ -72,6 +73,15 @@ Built with [Shadcn/ui](https://ui.shadcn.com/) for consistent, accessible compon
 - Select
 - Avatar
 - Dropdown Menu
+
+**Business Components**:
+- **AgentCard** - Unified agent card with Edit/Tools/Delete buttons
+- **AgentCreateWidget** - Multi-step agent creation wizard (Basic → Phone → Tools → Review)
+- **ToolCard** - Tool cards with connection status visual feedback
+- **ToolConfigDrawer** - Slide-in drawer for tool configuration
+- **ToolDisconnectDialog** - Confirmation dialog for disconnecting tools
+- **DeleteConfirmationDialog** - Generic delete confirmation modal
+- **DeleteButton** - Reusable button with confirmation flow
 - Navigation Menu
 
 ### Adding New Components

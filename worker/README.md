@@ -214,8 +214,61 @@ async def check_availability(
 2. **Optional parameters must use `type | None = None`** - Not `str = ""` which creates required field
 3. **Name wrapper correctly** - Use `{func_name}` not `{func_name}_wrapper`
 4. **Set all metadata** - `__name__`, `__qualname__`, `__doc__`, `__annotations__`
+5. **Include typing constructs in namespace** - Add `Dict, List, Optional, Union` to namespace
+6. **Preserve default values** - Extract from `param.default` and include in wrapper signature
+7. **Add logger to namespace** - For response size logging and debugging
 
 **For complete details**, see `worker/.docs/livekit_tool_wrapping_architecture.md`
+
+### Type Hints in Wrapper
+
+When tool methods use complex type hints like `Optional[str]`, `list[str] | None`, these must be available in the `exec()` namespace:
+
+```python
+# Import typing constructs
+from typing import Any, Dict, List, Optional, Union
+
+# Add to namespace
+namespace = {
+    "Any": Any,
+    "Dict": Dict,
+    "List": List,
+    "Optional": Optional,      # For Optional[str]
+    "Union": Union,          # For list[str] | None
+    "RunContext": RunContext,
+    "bound_method": bound_method,
+    "logger": logger,
+}
+```
+
+### Default Values
+
+The wrapper must preserve default values from the original method:
+
+```python
+# Get Parameter objects with defaults
+for param_name, param in sig.parameters.items():
+    param_def = f"{param_name}: {type_str}"
+    if param.default != inspect.Parameter.empty:
+        param_def += f" = {repr(param.default)}"  # Include default
+    params_def.append(param_def)
+```
+
+### Response Size Logging
+
+Large tool responses can exceed API limits. The wrapper logs response sizes:
+
+```python
+result = await bound_method(context=context, **kwargs)
+import json
+try:
+    result_str = json.dumps(result, default=str)
+    logger.debug(f"Tool {func_name} result size: {len(result_str)} chars")
+except Exception as e:
+    logger.error(f"Failed to serialize tool {func_name} result: {e}")
+```
+
+**Example**: Gmail tool truncates email bodies to 500 characters to prevent oversized responses.
 
 ## 🔌 Tool Implementation Pattern
 
@@ -404,10 +457,11 @@ docker logs -f ai-voice-agent-platform-worker-dev-1
 
 ## 📚 Related Documentation
 
-- [LiveKit Tool Wrapping Architecture](.docs/livekit_tool_wrapping_architecture.md)
-- [Voice Agents Implementation](../shared/voice_agents/README.md)
-- [Platform Architecture](../docs/01_architecture/voice_agents.md)
-- [Development Guidelines](../AGENTS.md)
+- [LiveKit Tool Wrapping](../docs/03_implementation/livekit_tool_wrapping.md)
+- [Tool Connection States](../docs/02_features/voice_agents/tool_connection_states.md)
+- [Voice Agents Overview](../docs/02_features/voice_agents/overview.md)
+- [OAuth Setup](../docs/02_core_systems/oauth_setup.md)
+- [Shared Module](../shared/README.md)
 
 ## 🚧 Future Enhancements
 

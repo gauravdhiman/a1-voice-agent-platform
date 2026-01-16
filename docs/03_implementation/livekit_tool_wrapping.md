@@ -70,28 +70,52 @@ for func in functions:
 
 ### Step 3: `_create_tool_wrapper` Function
 
-This helper function creates a wrapper with the **exact same signature** as the original method:
+This helper function creates a wrapper with **exact same signature** as the original method:
 
 ```python
-def _create_tool_wrapper(bound_method: Any, func_name: str, param_names: list[str], type_hints: dict) -> Any:
+def _create_tool_wrapper(
+    bound_method: Any,
+    func_name: str,
+    sig: inspect.Signature,
+    type_hints: dict
+) -> Any:
     """
     Create a wrapper function for a tool method.
 
-    The wrapper has the same signature as the original method (excluding 'self').
-    It accepts all parameters explicitly (no **kwargs), then delegates to the bound method.
+    The wrapper has same signature as original method (excluding 'self').
+    It accepts all parameters explicitly (no **kwargs), then delegates to bound method.
     """
-    # Build parameter definitions
-    params_def = ["context: RunContext"]
-    for param_name in param_names[1:]:
+    # Build parameter definitions, preserving default values
+    params_def = []
+    other_param_names = []
+
+    for param_name, param in sig.parameters.items():
+        if param_name == "self":
+            continue
+
         param_type = type_hints.get(param_name, Any)
-        # Convert type to string representation for use in f-string
-        if hasattr(param_type, '__name__'):
+        # Get string representation of type
+        if hasattr(param_type, "__name__"):
             type_str = param_type.__name__
+        elif hasattr(param_type, "_name"):
+            type_str = param_type._name
+        elif hasattr(param_type, "__origin__"):
+            type_str = str(param_type).replace("typing.", "")
         else:
-            type_str = 'Any'
-        params_def.append(f"{param_name}: {type_str}")
+            type_str = "Any"
+
+        # Build parameter definition with default value if present
+        param_def = f"{param_name}: {type_str}"
+        if param.default != inspect.Parameter.empty:
+            # Use repr to handle strings, None, and other types correctly
+            param_def += f" = {repr(param.default)}"
+
+        params_def.append(param_def)
+        if param_name != "context":
+            other_param_names.append(param_name)
 
     params_str = ", ".join(params_def)
+    other_param_names_repr = repr(other_param_names)
 
     # Create wrapper function dynamically using exec()
     # We name it correctly from the start (not {func_name}_wrapper)
@@ -100,16 +124,28 @@ async def {func_name}({params_str}) -> Any:
     '''Wrapper for {func_name}.'''
     # Build kwargs dict for all parameters except context
     kwargs = {{}}
-    for pname in {param_names[1:]:!r}:
+    for pname in {other_param_names_repr}:
         kwargs[pname] = locals()[pname]
-    return await bound_method(context=context, **kwargs)
+    result = await bound_method(context=context, **kwargs)
+    import json
+    try:
+        result_str = json.dumps(result, default=str)
+        logger.debug(f"Tool {func_name} result size: {{len(result_str)}} chars")
+    except Exception as e:
+        logger.error(f"Failed to serialize tool {func_name} result: {{e}}")
+    return result
 """
 
-    # Execute the code
+    # Execute the code to create the wrapper function
     namespace = {
-        'Any': Any,
-        'RunContext': RunContext,
-        'bound_method': bound_method,
+        "Any": Any,
+        "Dict": Dict,
+        "List": List,
+        "Optional": Optional,
+        "Union": Union,
+        "RunContext": RunContext,
+        "bound_method": bound_method,
+        "logger": logger,
     }
     local_scope = {}
     exec(wrapper_code, namespace, local_scope)
@@ -120,6 +156,15 @@ async def {func_name}({params_str}) -> Any:
 
     return wrapper
 ```
+
+**Key Changes**:
+1. **Accepts `sig` instead of `param_names`** - To access `Parameter` objects with default values
+2. **Preserves default values** - Extracts `param.default` and includes in wrapper signature
+3. **Imports typing constructs** - `Dict, List, Optional, Union` available in namespace
+4. **Includes logger** - Added to namespace for debugging tool responses
+5. **Logs result size** - Tracks response size to detect large responses that could fail
+
+### Step 4: Set Metadata
 
 **What This Does:**
 
@@ -254,6 +299,73 @@ Which calls the actual tool method with `self` already bound.
 
 ## Important Implementation Details
 
+### Type Hints and Default Values
+
+**Challenge**: Tool methods may use complex type hints (e.g., `Optional[str]`, `list[str] | None`) and default values.
+
+**Solution**:
+1. Import typing constructs: `Dict, List, Optional, Union` from `typing`
+2. Add to `namespace` so `exec()` can access them
+3. Use `sig.parameters.items()` to access `Parameter` objects
+4. Extract default values with `param.default != inspect.Parameter.empty`
+5. Include defaults in wrapper signature using `repr(param.default)`
+
+**Example**:
+```python
+# Original method with defaults
+async def get_latest_emails(
+    context: RunContext,
+    count: int = 10,  # Default value
+) -> dict[str, Any]:
+    pass
+
+# Wrapper preserves default
+async def get_latest_emails(
+    context: RunContext,
+    count: int = 10,  # ✅ Default preserved
+) -> Any:
+    kwargs = {'count': count}
+    return await bound_method(context=context, **kwargs)
+```
+
+**Common Type Hints**:
+```python
+Optional[str]          # Becomes "Optional[str]" in wrapper
+list[str] | None      # Becomes "Union[list[str], None]"
+dict[str, Any]         # Becomes "Dict[str, Any]"
+```
+
+**Why This Matters**:
+- Without default values, Pydantic makes all parameters required
+- LLMs rely on defaults for optional parameters
+- Type hints must match exactly for LiveKit schema generation
+
+### Response Size Logging
+
+**Challenge**: Large tool responses (e.g., emails with long bodies) can exceed API limits.
+
+**Solution**: Log result size in wrapper to detect oversized responses:
+```python
+result = await bound_method(context=context, **kwargs)
+import json
+try:
+    result_str = json.dumps(result, default=str)
+    logger.debug(f"Tool {func_name} result size: {len(result_str)} chars")
+except Exception as e:
+    logger.error(f"Failed to serialize tool {func_name} result: {e}")
+```
+
+**Example from Gmail tool**:
+```python
+# Truncate email bodies to 500 chars
+body = body[:500] + "..." if len(body) > 500 else body
+```
+
+**Why This Matters**:
+- Large responses cause "invalid frame payload data" errors from Gemini
+- Helps identify which tools need response size limits
+- Enables monitoring and optimization of tool outputs
+
 ### Why `exec()` Is Necessary
 
 We use `exec()` to create functions with **dynamic signatures** because:
@@ -341,3 +453,7 @@ The wrapper pattern enables:
 - ✅ Generic for any tool method
 - ✅ Maintainable and debuggable
 - ✅ Supports optional parameters correctly
+- ✅ Preserves default values for parameters
+- ✅ Supports complex type hints (Optional, Union, Dict, List)
+- ✅ Logs response sizes for monitoring
+- ✅ Handles typing constructs correctly in `exec()` namespace

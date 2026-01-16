@@ -160,7 +160,8 @@ sequenceDiagram
 
 Tools are modular components that enable agents to perform actions:
 
-- **Google Calendar**: Check availability, create events, reschedule
+- **Google Calendar**: Check availability, create events, update events, delete events
+- **Gmail**: Read latest emails, get unread emails, get starred emails, search emails, manage labels, draft emails
 - **CRM Integration**: Look up customer data, update records
 - **E-commerce**: Check order status, process returns
 - **Custom APIs**: Any HTTP endpoint you define
@@ -451,6 +452,63 @@ Always speak clearly and at a moderate pace.
 - User authorizes access
 - OAuth tokens stored encrypted in database
 - Worker uses tokens for tool execution
+
+## Available Tool Sets
+
+### Google Calendar
+
+**Functions**:
+- `check_availability`: Check if time slots are free
+- `create_event`: Create new calendar event
+- `update_event`: Update existing event
+- `delete_event`: Delete an event
+
+**Authentication**: OAuth2
+
+**Configuration**:
+- `user_id`: Gmail address or "primary" (default)
+
+**Use Cases**:
+- Appointment scheduling
+- Meeting coordination
+- Availability checking
+
+### Gmail
+
+**Functions**:
+- `get_latest_emails`: Get the latest emails from inbox
+- `get_emails_from_user`: Get emails from a specific sender
+- `get_unread_emails`: Get unread emails
+- `get_starred_emails`: Get starred emails
+- `get_emails_by_context`: Get emails matching search query
+- `create_draft_email`: Create a new email draft
+- `get_emails_by_label`: Get emails with a specific label
+- `get_labels`: List all Gmail labels
+- `apply_label`: Apply label to emails matching a query
+- `remove_label`: Remove label from emails matching a query
+
+**Authentication**: OAuth2
+
+**Configuration**:
+- `user_id`: Gmail address (used for API calls)
+
+**Response Size Limits**:
+- Default: 5 emails per operation
+- Maximum: 10 emails per operation
+- Email body truncated to 500 characters
+
+**Use Cases**:
+- Email management
+- Customer inquiry handling
+- Email search and filtering
+
+### Future Tool Sets
+
+Potential integrations:
+- **CRM Systems**: Salesforce, HubSpot, Zendesk
+- **E-commerce**: Shopify, WooCommerce, Magento
+- **Communication**: Slack, Microsoft Teams, Discord
+- **Custom APIs**: Any REST endpoint
 
 ## API Endpoints
 

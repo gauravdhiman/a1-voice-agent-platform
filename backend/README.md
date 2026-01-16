@@ -42,6 +42,41 @@ The API will be available at [http://localhost:8000](http://localhost:8000)
 - **Code Quality**: Black, isort
 - **Testing**: pytest with async support
 
+### Tool Metadata Synchronization
+
+**Feature**: Sync tool authentication metadata from code to database
+
+**Implementation**:
+- Backend startup reads tool metadata from code via `tool_registry.sync_with_db()`
+- Syncs `required_auth`, `auth_type`, `auth_config` to `platform_tools` table
+- Frontend uses this metadata to:
+  - Show "Authenticate" button for OAuth tools
+  - Configure OAuth provider settings
+  - Display connection status correctly
+
+**File**: `shared/voice_agents/tool_service.py`
+
+```python
+async def sync_with_db(self) -> None:
+    """
+    Sync all tool metadata from code to database.
+    Creates or updates platform_tools with authentication requirements.
+    """
+    for tool_name, tool_class in livekit_tool_registry._tools.items():
+        tool_instance = tool_class()
+        metadata = tool_instance.metadata
+
+        # Upsert to database
+        await self.supabase.table("platform_tools").upsert({
+            "name": metadata.name,
+            "description": metadata.description,
+            "config_schema": metadata.config_schema,
+            "requires_auth": metadata.requires_auth,  # Synced
+            "auth_type": metadata.auth_type,           # Synced
+            "auth_config": metadata.auth_config          # Synced
+        })
+```
+
 ### Project Structure
 
 ```

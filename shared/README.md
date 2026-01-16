@@ -75,7 +75,8 @@ shared/
 │   │   │   ├── registry_livekit.py    # Tool registry for worker
 │   │   │   └── __init__.py
 │   │   └── implementations/            # Concrete tool implementations
-│   │       └── google_calendar.py      # Google Calendar tool
+│   │       ├── google_calendar.py      # Google Calendar tool
+│   │       └── gmail.py                # Gmail tool
 │   └── __init__.py
 ├── config/
 │   ├── opentelemetry.py   # OpenTelemetry setup
@@ -482,9 +483,10 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 ## 📚 Related Documentation
 
 - [Worker Documentation](../worker/README.md)
-- [Voice Agents Architecture](../docs/01_architecture/voice_agents.md)
-- [LiveKit Tool Wrapping](../docs/02_implementation/livekit_tool_wrapping.md)
-- [Platform Architecture](../docs/ARCHITECTURE.md)
+- [Voice Agents Overview](../docs/02_features/voice_agents/overview.md)
+- [Tool Connection States](../docs/02_features/voice_agents/tool_connection_states.md)
+- [LiveKit Tool Wrapping](../docs/03_implementation/livekit_tool_wrapping.md)
+- [OAuth Setup](../docs/02_core_systems/oauth_setup.md)
 
 ## 🚧 Future Enhancements
 

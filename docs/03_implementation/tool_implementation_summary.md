@@ -1,6 +1,184 @@
 # Tool Architecture Implementation Summary
 
-This document summarizes all changes implemented based on `TOOL_ARCHITECTURE_DECISION.md`.
+This document summarizes all changes implemented based on tool system architecture decisions and recent improvements.
+
+## Recent Updates (January 2026)
+
+### Gmail Tool Set Implementation
+
+**File**: `shared/voice_agents/tools/implementations/gmail.py`
+
+**New Tool Functions**:
+
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `get_latest_emails` | Get latest emails from inbox | `count: int = 5` (max 10) |
+| `get_emails_from_user` | Get emails from specific sender | `user: str`, `count: int = 5` |
+| `get_unread_emails` | Get unread emails | `count: int = 5` |
+| `get_starred_emails` | Get starred emails | `count: int = 5` |
+| `get_emails_by_context` | Get emails matching search query | `query: str`, `count: int = 5` |
+| `create_draft_email` | Create new email draft | `to: str`, `subject: str`, `body: str`, `cc: Optional[str]` |
+| `get_emails_by_label` | Get emails with specific label | `label_name: str`, `count: int = 5` |
+| `get_labels` | List all Gmail labels | None |
+| `apply_label` | Apply label to emails matching query | `query: str`, `label_name: str`, `count: int = 5` |
+| `remove_label` | Remove label from emails matching query | `query: str`, `label_name: str`, `count: int = 5` |
+
+**Response Size Limits**:
+- Default: 5 emails per operation
+- Maximum: 10 emails per operation
+- Email body truncated to 500 characters to prevent API errors
+
+**Authentication**: OAuth2 (Google)
+
+### Tool Wrapper Fixes (Type Hints)
+
+**File**: `worker/src/worker.py`
+
+**Problem**: `Optional`, `Dict`, `List`, `Union` type hints not available in `exec()` namespace
+
+**Solution**:
+```python
+# Import typing constructs
+from typing import Any, Dict, List, Optional, Union
+
+# Add to namespace
+namespace = {
+    "Any": Any,
+    "Dict": Dict,
+    "List": List,
+    "Optional": Optional,  # For Optional[str]
+    "Union": Union,          # For list[str] | None
+    "RunContext": RunContext,
+    "bound_method": bound_method,
+    "logger": logger,
+}
+```
+
+**Added logging**:
+```python
+result = await bound_method(context=context, **kwargs)
+import json
+try:
+    result_str = json.dumps(result, default=str)
+    logger.debug(f"Tool {func_name} result size: {len(result_str)} chars")
+except Exception as e:
+    logger.error(f"Failed to serialize tool {func_name} result: {e}")
+```
+
+### Default Value Preservation
+
+**File**: `worker/src/worker.py`
+
+**Problem**: Default parameter values not preserved in wrapper function
+
+**Solution**:
+```python
+# Accept sig instead of param_names
+def _create_tool_wrapper(
+    bound_method: Any,
+    func_name: str,
+    sig: inspect.Signature,  # NEW: Pass signature
+    type_hints: dict
+) -> Any:
+    # Extract Parameter objects with defaults
+    for param_name, param in sig.parameters.items():
+        if param.default != inspect.Parameter.empty:
+            param_def += f" = {repr(param.default)}"  # Include default
+```
+
+### Tool Connection States
+
+**File**: `shared/voice_agents/tool_models.py`
+
+**New Enum**: `ConnectionStatus`
+
+```python
+class ConnectionStatus(str, Enum):
+    NOT_CONNECTED = "not_connected"
+    CONNECTED_NO_AUTH = "connected_no_auth"
+    CONNECTED_AUTH_VALID = "connected_auth_valid"
+    CONNECTED_AUTH_INVALID = "connected_auth_invalid"
+```
+
+**Helper Function**: `get_connection_status()`
+
+```python
+def get_connection_status(
+    requires_auth: bool,
+    auth_status: AuthStatus
+) -> ConnectionStatus:
+    """Derive connection status from tool requirements and auth state."""
+    if not requires_auth:
+        return ConnectionStatus.CONNECTED_NO_AUTH
+    if auth_status == AuthStatus.AUTHENTICATED:
+        return ConnectionStatus.CONNECTED_AUTH_VALID
+    return ConnectionStatus.CONNECTED_AUTH_INVALID
+```
+
+### UI Updates - Tool Cards
+
+**File**: `frontend/src/components/tools/tool-card.tsx`
+
+**Visual States**:
+
+| Connection Status | Card Color | Badge | Badge Text | Icon |
+|------------------|-------------|-------|-------------|-------|
+| NOT_CONNECTED | White | Gray | "Not connected" | Wrench |
+| CONNECTED_NO_AUTH | Light green | Light green | "Connected" | ShieldCheck |
+| CONNECTED_AUTH_VALID | Light green | Light green | "Authenticated" | ShieldCheck |
+| CONNECTED_AUTH_INVALID | Light red | Light red | "Authentication required" | XCircle |
+
+**Dark mode support**: All colors include dark variants
+
+### UI Updates - Tool Filters
+
+**File**: `frontend/src/components/tools/tool-filters.tsx`
+
+**Filter Labels**:
+- Changed from: "All", "Configured", "Not configured"
+- Changed to: "All", "Connected", "Not Connected"
+
+**Filter Logic**:
+```typescript
+if (toolFilterType === "connected") {
+  filtered = filtered.filter(
+    (tool) => localAgentTools.find((at) => at.tool_id === tool.id) !== undefined,
+  );
+} else if (toolFilterType === "not_connected") {
+  filtered = filtered.filter(
+    (tool) => !localAgentTools.find((at) => at.tool_id === tool.id),
+  );
+}
+```
+
+### Tool Connect/Disconnect Flow
+
+**Files**:
+- `frontend/src/components/tools/tool-disconnect-dialog.tsx` (new)
+- `frontend/src/components/tools/tool-config-drawer.tsx` (updated)
+- `frontend/src/components/ui/delete-button.tsx` (new)
+- `frontend/src/components/ui/delete-confirmation-dialog.tsx` (new)
+
+**Flow**:
+1. User clicks "Connect" on tool card → Creates `agent_tools` record
+2. Tool card updates to `CONNECTED_NO_AUTH` or `CONNECTED_AUTH_INVALID`
+3. User clicks "Tools" → Opens drawer
+4. Drawer has "Disconnect" button → Shows confirmation dialog
+5. On confirm → Deletes `agent_tools` record → Tool returns to `NOT_CONNECTED`
+
+**Removal**: No enable/disable switch for toolsets, only function-level control
+
+### Google Calendar Enhancements
+
+**File**: `shared/voice_agents/tools/implementations/google_calendar.py`
+
+**New Functions**:
+- `update_event`: Update existing calendar event
+- `delete_event`: Delete calendar event
+
+---
+
+## Changes Implemented
 
 ## Changes Implemented
 
