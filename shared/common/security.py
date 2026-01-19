@@ -4,12 +4,15 @@ Security utilities for encryption and sensitive data handling.
 
 import base64
 import json
+import logging
 import os
 from typing import Any, Dict
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+logger = logging.getLogger(__name__)
 
 # In a real production app, this should be a 32-byte base64 encoded string
 # from a secure environment variable.
@@ -47,13 +50,21 @@ def encrypt_data(data: Dict[str, Any]) -> str:
 def decrypt_data(encrypted_str: str) -> Dict[str, Any]:
     """Decrypt an encrypted string back into a dictionary."""
     if not encrypted_str:
+        logger.warning("decrypt_data called with empty string")
         return {}
 
     try:
         f = get_fernet()
         decrypted_data = f.decrypt(encrypted_str.encode())
-        return json.loads(decrypted_data.decode())
+        result = json.loads(decrypted_data.decode())
+        logger.info(f"Successfully decrypted data, keys: {list(result.keys())}")
+        return result
     except Exception as e:
         # If decryption fails (e.g. wrong key), return empty dict
         # In production, we might want to log this error
+        preview = encrypted_str[:100] if encrypted_str and len(encrypted_str) > 100 else encrypted_str
+        logger.error(
+            f"Decryption failed: {type(e).__name__}: {str(e)}. "
+            f"Encrypted data preview: {preview}"
+        )
         return {}

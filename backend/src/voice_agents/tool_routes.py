@@ -4,6 +4,7 @@ Tool API routes for the platform.
 
 import base64
 import json
+import logging
 import os
 from datetime import datetime
 from typing import List
@@ -27,6 +28,7 @@ from shared.voice_agents.tool_models import (
 )
 from shared.voice_agents.tool_service import tool_service
 
+logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 tool_router = APIRouter(prefix="/api/v1/tools", tags=["Tools"])
 
@@ -276,6 +278,11 @@ async def oauth_callback(code: str, state: str):
     # Only add refresh_token if it was returned (requires access_type=offline)
     if refresh_token:
         sensitive_config["refresh_token"] = refresh_token
+    else:
+        logger.warning(
+            f"OAuth callback did NOT receive refresh_token for tool {tool_name}. "
+            "Token will not be auto-refreshable. User will need to re-authenticate when token expires."
+        )
 
     # Calculate expiration time
     if expires_in:

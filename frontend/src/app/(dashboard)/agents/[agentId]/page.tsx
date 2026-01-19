@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
-import {
-  useAgent,
+import { useRealtime } from "@/hooks/use-realtime";
+import { useAgent,
   usePlatformTools,
   useAgentTools,
   useUpdateAgent,
@@ -76,8 +76,13 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = React.useState("properties");
   const [pendingToolToOpen, setPendingToolToOpen] = React.useState<PlatformTool | null>(null);
   const [connectingToolId, setConnectingToolId] = React.useState<string | null>(null);
-
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
+
+  // Enable real-time updates for this agent's tools
+  useRealtime(agentId, {
+    tables: ['agent_tools', 'agents'],
+  });
+
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
     null,
   );

@@ -79,19 +79,27 @@ cd ..
    python -m livekit.agents.cli --dev
    ```
 
-5. **Using Docker for Development (Containerized)**
+5. **Supabase Realtime Setup (Required for auto-refresh tokens)**
 
-   ```bash
-   # Copy and configure environment file
-   cp .env.example .env
-   # Edit .env with your configuration
+    ```bash
+    # Run SQL script in Supabase Dashboard → SQL Editor
+    # The script is located at: scripts/setup-supabase-realtime.sql
+    # This enables real-time updates on agent_tools and agents tables
+    ```
 
-   # Run all services with development settings (hot reloading)
-   ./start.sh start dev
+6. **Using Docker for Development (Containerized)**
 
-   # Run all services with production settings
-   ./start.sh start prod
-   ```
+    ```bash
+    # Copy and configure environment file
+    cp .env.example .env
+    # Edit .env with your configuration
+
+    # Run all services with development settings (hot reloading)
+    ./start.sh start dev
+
+    # Run all services with production settings
+    ./start.sh start prod
+    ```
 
 ## 🏗️ Architecture
 
@@ -216,6 +224,8 @@ ai-voice-agent-platform/
 - ✅ Agent greeting on room entry
 - ✅ OAuth token management for tools
 - ✅ Two-tier tool service (safe API, full worker)
+- ✅ Real-time UI synchronization (Supabase Realtime)
+- ✅ Auto-refresh of OAuth tokens before expiry
 
 ### Developer Experience
 
@@ -441,6 +451,14 @@ alembic revision -m "message"   # Create new migration
 alembic downgrade -1             # Rollback one migration
 ```
 
+### Supabase Realtime Setup (One-time)
+
+```bash
+# Run SQL script in Supabase Dashboard → SQL Editor
+# File location: scripts/setup-supabase-realtime.sql
+# This enables real-time updates for tool status and token auto-refresh
+```
+
 ### Testing
 
 ```bash
@@ -471,6 +489,147 @@ cd frontend
 npm run lint                # Run ESLint
 npx tsc --noEmit         # Type check
 ```
+
+## 🚀 Deployment Checklist
+
+### Pre-Deployment
+
+- [ ] **Environment Configuration**
+  - [ ] Copy `.env.example` to `.env`
+  - [ ] Configure Supabase credentials (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+  - [ ] Configure OAuth provider credentials (Google, Microsoft, etc.)
+  - [ ] Set `ENCRYPTION_KEY` for production
+  - [ ] Configure token refresh timing (default: 5 min check, 15 min window)
+  - [ ] Review and adjust for environment (dev/staging/prod)
+
+ - [ ] **Database Setup**
+  - [ ] Run database migrations: `alembic upgrade head`
+     - This creates/updates tables including `agent_tools` and `agents`
+  - [ ] Run Supabase Realtime setup: `scripts/setup-supabase-realtime.sql`
+     - Run in Supabase SQL Editor (ONE-TIME setup after tables exist)
+     - Verify output shows `agent_tools` and `agents` tables in publication
+  - [ ] Verify `last_refreshed_at` column exists in `agent_tools` table
+
+- [ ] **Docker Configuration**
+  - [ ] Verify Docker Compose files have token refresh environment variables
+  - [ ] Build images: `./start.sh build dev` (or `prod`)
+  - [ ] Test containers start: `./start.sh start dev`
+
+- [ ] **Local Testing**
+  - [ ] Start backend: `cd backend && python main.py`
+  - [ ] Start frontend: `cd frontend && npm run dev`
+  - [ ] Test token refresh service starts successfully
+    - Check logs: "Token refresh service started"
+    - Check logs: "Checking X tools for token refresh"
+  - [ ] Test real-time subscriptions
+    - Navigate to agent detail page
+    - Make database change (enable/disable tool)
+    - Verify UI updates automatically without page refresh
+    - Check browser console for change notifications
+
+### Production Deployment
+
+- [ ] **Environment Variables**
+  - [ ] Set production values in environment variables or secrets manager
+  - [ ] Token refresh timing: 10 min check, 20 min window (recommended)
+  - [ ] OAuth credentials from production accounts
+  - [ ] Supabase production project
+  - [ ] `ENCRYPTION_KEY` from secure secret management (not hardcoded)
+
+- [ ] **Infrastructure**
+  - [ ] Configure DNS records
+  - [ ] Set up SSL/TLS certificates
+  - [ ] Configure load balancer (if multiple instances)
+  - [ ] Set up monitoring (Prometheus, Datadog, etc.)
+  - [ ] Set up alerting (Sentry, PagerDuty, etc.)
+
+- [ ] **Security**
+  - [ ] Verify Supabase RLS policies meet production requirements
+  - [ ] Ensure `.env` files are not committed to version control
+  - [ ] Rotate secrets regularly (OAuth credentials, encryption keys)
+  - [ ] Enable audit logging for sensitive operations
+
+- [ ] **Performance**
+  - [ ] Configure appropriate refresh intervals based on OAuth provider token lifetimes
+  - [ ] Monitor API rate limits to OAuth providers
+  - [ ] Set up database connection pooling
+  - [ ] Enable CDN for static assets
+  - [ ] Configure caching strategy
+
+### Post-Deployment Verification
+
+- [ ] **Functionality**
+  - [ ] Verify backend health endpoint returns 200: `curl http://your-domain/health`
+  - [ ] Verify frontend loads: Navigate to production URL
+  - [ ] Test user authentication flow
+  - [ ] Test OAuth authentication with a tool (e.g., Gmail)
+  - [ ] Verify tool configuration persists in database
+  - [ ] Verify token refresh service is running
+  - [ ] Verify real-time UI updates work without page refresh
+
+- [ ] **Token Refresh Service**
+  - [ ] Check logs: "Token refresh service started"
+  - [ ] Authenticate a tool (e.g., Gmail)
+  - [ ] Wait for token expiry (or simulate by adjusting `expires_at` in database)
+  - [ ] Verify backend logs: "Token refreshed successfully for tool [name]"
+  - [ ] Verify `last_refreshed_at` timestamp is updated in database
+  - [ ] Verify frontend UI shows "authenticated" status automatically
+
+- [ ] **Real-Time Subscriptions**
+  - [ ] Open browser DevTools Console
+  - [ ] Navigate to agent detail page
+  - [ ] Make a database change (enable/disable tool or wait for token refresh)
+  - [ ] Verify console log: "Tool updated in database: { eventType: 'UPDATE', ... }"
+  - [ ] Verify UI updates automatically (no page refresh needed)
+  - [ ] Check tool status badge changes immediately
+
+- [ ] **Monitoring & Observability**
+  - [ ] Monitor backend logs for token refresh activity
+  - [ ] Check for token refresh errors (watch logs for 24-48 hours)
+  - [ ] Monitor memory usage (long-running background task)
+  - [ ] Verify graceful shutdown works (restart container)
+  - [ ] Check database performance during refresh operations
+  - [ ] Verify no memory leaks in frontend (real-time subscriptions)
+
+- [ ] **Error Handling**
+  - [ ] Test with expired tokens (should refresh automatically)
+  - [ ] Test with invalid `refresh_token` (should log warning, not crash)
+  - [ ] Test network failures (should retry or log error, not crash)
+  - [ ] Test with multiple OAuth providers (Google, Microsoft, etc.)
+  - [ ] Test concurrent tool refreshes
+
+### Rollback Plan
+
+If deployment fails:
+
+- [ ] Stop new deployment: `./start.sh stop prod`
+- [ ] Switch back to previous version (if using blue-green deployment)
+- [ ] Restore database backup (if schema changes were applied)
+- [ ] Revert environment variables
+- [ ] Clear Redis cache (if using)
+- [ ] Verify application starts successfully
+
+### Ongoing Operations
+
+- [ ] **Daily**
+  - [ ] Monitor token refresh success rate (should be near 100%)
+  - [ ] Check for refresh failures in logs
+  - [ ] Verify `last_refreshed_at` timestamps are recent
+  - [ ] Monitor OAuth API usage rate limits
+
+- [ ] **Weekly**
+  - [ ] Review logs for patterns or anomalies
+  - [ ] Check database growth
+  - [ ] Verify real-time subscriptions remain stable
+  - [ ] Review security alerts
+
+- [ ] **Monthly**
+  - [ ] Review OAuth token lifetime and adjust refresh windows
+  - [ ] Check for deprecated OAuth provider versions
+  - [ ] Review and rotate secrets (encryption keys, OAuth credentials)
+  - [ ] Update dependencies (backend/frontend)
+
+---
 
 ## 🤝 Contributing
 

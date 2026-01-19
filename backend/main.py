@@ -1,9 +1,10 @@
 """
-FastAPI application entry point for the multi-tenant SaaS platform.
+FastAPI application entry point for multi-tenant SaaS platform.
 Includes authentication, health endpoints and CORS configuration.
 """
 
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
@@ -50,7 +51,18 @@ emit_metric("backend.app.start", 1, {"service": "saas-platform-backend"})
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
+    """Create and configure FastAPI application.
+
+    Returns:
+        FastAPI: Configured application instance with all routes, middleware,
+            and lifecycle management
+
+    Notes:
+        - Uses lifespan context manager for startup/shutdown
+        - Includes all routers (auth, RBAC, organization, billing, notifications, voice agents)
+        - Configures CORS for cross-origin requests
+        - Instruments with OpenTelemetry for observability
+    """
 
     app = FastAPI(
         title=settings.app_name,
@@ -59,6 +71,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
+        lifespan=lifespan,
     )
 
     # Configure CORS
@@ -107,37 +120,73 @@ def create_app() -> FastAPI:
     app.include_router(tool_router)
     app.include_router(voice_router)
 
-    @app.on_event("startup")
-    async def startup_event():
-        from shared.voice_agents.tool_service import ToolService
-        from shared.voice_agents.tools.base.registry_livekit import (
-            livekit_tool_registry,
-        )
-
-        # Register tools using LiveKit native registry
-        livekit_tool_registry.register_tools_from_package(
-            "shared.voice_agents.tools.implementations"
-        )
-
-        # Sync with database
-        tool_service = ToolService()
-
-        # Sync LiveKit-based registry
-        logging.info("Syncing tools to database using LiveKit native registry...")
-        await livekit_tool_registry.sync_with_db(tool_service)
-        logging.info("Tools synchronized with database")
-
     return app
 
 
-# Create the FastAPI app instance
-app = create_app()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application.
 
-# Emit a test log and metric when the app starts
-# These should be captured by the OpenTelemetry auto-instrumentation
-logging.info("Backend application started")
-emit_log("Backend application started", "INFO", {"service": "saas-platform-backend"})
-emit_metric("backend.app.start", 1, {"service": "saas-platform-backend"})
+    Manages startup and shutdown events for background services.
+    Ensures proper cleanup of resources when application stops.
+
+    Args:
+        app: FastAPI application instance
+
+    Yields:
+        None
+
+    Example:
+        ```python
+        app = FastAPI(lifespan=lifespan)
+        # Application starts
+        # ... app runs ...
+        # Application stops
+        ```
+
+    Notes:
+        - Starts token refresh service on startup
+        - Stops token refresh service on shutdown
+        - Ensures graceful shutdown of background tasks
+    """
+    # Startup
+    from shared.voice_agents.tool_service import ToolService
+    from shared.voice_agents.tools.base.registry_livekit import (
+        livekit_tool_registry,
+    )
+    from src.services.token_refresh_service import (
+        start_token_refresh_service,
+        stop_token_refresh_service,
+    )
+
+    # Register tools using LiveKit native registry
+    livekit_tool_registry.register_tools_from_package(
+        "shared.voice_agents.tools.implementations"
+    )
+
+    # Sync with database
+    tool_service = ToolService()
+
+    # Sync LiveKit-based registry
+    logging.info("Syncing tools to database using LiveKit native registry...")
+    await livekit_tool_registry.sync_with_db(tool_service)
+    logging.info("Tools synchronized with database")
+
+    # Start token refresh service
+    logging.info("Starting token refresh service...")
+    await start_token_refresh_service(tool_service)
+    logging.info("Token refresh service started")
+
+    yield
+
+    # Shutdown
+    logging.info("Shutting down token refresh service...")
+    await stop_token_refresh_service()
+    logging.info("Token refresh service stopped")
+
+
+# Create FastAPI app instance
+app = create_app()
 
 
 @app.get("/")

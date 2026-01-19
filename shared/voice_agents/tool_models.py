@@ -116,6 +116,9 @@ class AgentToolUpdate(BaseModel):
     is_enabled: Optional[bool] = Field(
         None, description="Whether is tool enabled for this agent"
     )
+    last_refreshed_at: Optional[datetime] = Field(
+        None, description="Timestamp when OAuth tokens were last auto-refreshed"
+    )
 
 
 class AgentTool(AgentToolBase):
@@ -124,6 +127,9 @@ class AgentTool(AgentToolBase):
     id: UUID = Field(..., description="Agent tool configuration ID")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    last_refreshed_at: Optional[datetime] = Field(
+        None, description="Timestamp when OAuth tokens were last auto-refreshed"
+    )
     tool: Optional[PlatformTool] = Field(None, description="Tool details")
 
 

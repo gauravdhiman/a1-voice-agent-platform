@@ -358,6 +358,10 @@ class ToolService:
             if update_data.sensitive_config is not None:
                 data["sensitive_config"] = encrypt_data(update_data.sensitive_config)
 
+            # Handle last_refreshed_at - convert datetime to ISO string if present
+            if update_data.last_refreshed_at is not None:
+                data["last_refreshed_at"] = update_data.last_refreshed_at.isoformat()
+
             response = (
                 self.supabase.table("agent_tools")
                 .update(data)
@@ -406,6 +410,71 @@ class ToolService:
         except Exception as e:
             logger.error(f"Error deleting agent tool {agent_tool_id}: {e}")
             return None, str(e)
+
+    @tracer.start_as_current_span("tool.get_all_agent_tools_with_auth")
+    async def get_all_agent_tools_with_auth(
+        self,
+    ) -> tuple[List[AgentTool], Optional[str]]:
+        """Get all agent tools that require authentication (for token refresh).
+
+        Returns:
+            List of AgentTool objects with sensitive config for tools requiring auth
+        """
+        try:
+            # Get all agent_tools that require auth (requires filter)
+            # Join with platform_tools to filter by requires_auth
+            response = (
+                self.supabase.table("agent_tools")
+                .select("*, tool:platform_tools(*)")
+                .execute()
+            )
+
+            agent_tools = []
+            for item in response.data:
+                # Extract tool details from joined query
+                tool_data = item.get("tool")
+
+                # Filter to only tools requiring auth
+                if not tool_data or not tool_data.get("requires_auth", False):
+                    continue
+
+                # Only process if there's sensitive_config (tokens exist)
+                if not item.get("sensitive_config"):
+                    continue
+
+                # Decrypt sensitive config
+                sensitive_config = None
+                try:
+                    decrypted_config = decrypt_data(item.get("sensitive_config"))
+                    if decrypted_config and isinstance(decrypted_config, dict):
+                        sensitive_config = decrypted_config
+                except Exception as e:
+                    logger.error(f"Error decrypting sensitive config: {e}")
+                    continue
+
+                # Build full AgentTool with sensitive config
+                agent_tool_dict = {
+                    "id": item["id"],
+                    "agent_id": item["agent_id"],
+                    "tool_id": item["tool_id"],
+                    "config": item.get("config"),
+                    "sensitive_config": sensitive_config,
+                    "unselected_functions": item.get("unselected_functions"),
+                    "is_enabled": item.get("is_enabled", True),
+                    "created_at": item["created_at"],
+                    "updated_at": item["updated_at"],
+                    "last_refreshed_at": item.get("last_refreshed_at"),
+                }
+
+                agent_tool = AgentTool(**agent_tool_dict)
+                if tool_data:
+                    agent_tool.tool = PlatformTool(**tool_data)
+                agent_tools.append(agent_tool)
+
+            return agent_tools, None
+        except Exception as e:
+            logger.error(f"Error getting all agent tools with auth: {e}")
+            return [], str(e)
 
 
 tool_service = ToolService()

@@ -132,6 +132,20 @@ class Settings(BaseSettings):
         default=False, description="OTLP logs insecure mode"
     )
 
+    # Token Refresh Service Settings
+    token_refresh_check_interval_minutes: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="Interval in minutes to check for tokens needing refresh (default: 5)",
+    )
+    token_refresh_expiry_window_minutes: int = Field(
+        default=15,
+        ge=1,
+        le=60,
+        description="Window in minutes before expiry to refresh tokens (default: 15)",
+    )
+
     @validator("cors_origins", pre=True)
     def parse_cors_origins(cls, v):
         """Parse CORS origins from environment variable string."""
