@@ -8,8 +8,8 @@ import httpx
 from livekit.agents import RunContext
 from pydantic import Field
 
+from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
 from shared.voice_agents.tools.base.base_tool import (
-    BaseAuthConfig,
     BaseConfig,
     BaseSensitiveConfig,
     BaseTool,
@@ -25,8 +25,7 @@ def validate_email(email: str) -> bool:
 
 
 class GmailTool(BaseTool):
-    class AuthConfig(BaseAuthConfig):
-        provider: str = "google"
+    class AuthConfig(GoogleAuthConfig):
         scopes: list[str] = [
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.modify",
@@ -34,8 +33,6 @@ class GmailTool(BaseTool):
         ]
         auth_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
         token_url: str = "https://oauth2.googleapis.com/token"
-        access_type: str = "offline"
-        prompt: str = "consent"
 
     class Config(BaseConfig):
         user_id: str = Field(

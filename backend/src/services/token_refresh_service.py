@@ -14,13 +14,17 @@ Current approach works for single-instance deployments.
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
+from uuid import UUID
 
 import httpx
 
 from shared.voice_agents.tool_service import ToolService
+from shared.voice_agents.tool_models import AgentTool
+from shared.voice_agents.tools.base.oauth_provider_utils import (
+    get_oauth_manager,
+)
 from shared.config import settings
 
 logger = logging.getLogger(__name__)
@@ -76,7 +80,7 @@ class TokenRefreshService:
         - Flexible for different OAuth providers and deployment scenarios
     """
 
-    def __init__(self, tool_service: ToolService):
+    def __init__(self, tool_service: ToolService) -> None:
         """Initialize token refresh service with tool service dependency.
 
         Args:
@@ -86,7 +90,7 @@ class TokenRefreshService:
         self.running = False
         self.task: Optional[asyncio.Task] = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the background token refresh task."""
         if self.running:
             logger.warning("Token refresh service is already running")
@@ -96,7 +100,7 @@ class TokenRefreshService:
         self.task = asyncio.create_task(self._refresh_loop())
         logger.info("Token refresh service started")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the background token refresh task."""
         if not self.running:
             return
@@ -110,7 +114,7 @@ class TokenRefreshService:
                 pass
         logger.info("Token refresh service stopped")
 
-    async def _refresh_loop(self):
+    async def _refresh_loop(self) -> None:
         """Main loop that checks and refreshes tokens periodically.
 
         Check interval and expiry window are configurable via environment variables:
@@ -138,15 +142,12 @@ class TokenRefreshService:
                 # Wait 1 minute before retrying on error
                 await asyncio.sleep(60)
 
-    async def _refresh_expired_tokens(self):
+    async def _refresh_expired_tokens(self) -> None:
         """Find and refresh tokens that are about to expire.
 
         This queries all agent_tools that require OAuth and have tokens
         expiring within the next 15 minutes, then refreshes them.
         """
-        # Find tokens expiring in the next 15 minutes
-        expiry_threshold = datetime.now(timezone.utc) + timedelta(minutes=15)
-
         # Get all agent tools with auth
         # TODO: Create a method in tool_service to get tools requiring auth
         # For now, we'll implement the query here
@@ -173,7 +174,7 @@ class TokenRefreshService:
         if refresh_count > 0:
             logger.info(f"Successfully refreshed {refresh_count} token(s)")
 
-    async def _get_tools_requiring_auth(self) -> List:
+    async def _get_tools_requiring_auth(self) -> List[AgentTool]:
         """Get all agent tools that require OAuth authentication.
 
         Returns:
@@ -185,7 +186,7 @@ class TokenRefreshService:
             return []
         return tools
 
-    async def _check_and_refresh_token(self, agent_tool) -> bool:
+    async def _check_and_refresh_token(self, agent_tool: AgentTool) -> bool:
         """Check if a token needs refresh and refresh it.
 
         Args:
@@ -249,7 +250,7 @@ class TokenRefreshService:
                 )
                 return False
 
-            # Get OAuth config (provider-agnostic, works with any OAuth 2.0 provider)
+            # Get OAuth config using centralized utility
             tool = agent_tool.tool
             auth_config = tool.auth_config
 
@@ -257,28 +258,33 @@ class TokenRefreshService:
                 logger.error(f"No auth_config for tool {tool.name}")
                 return False
 
-            # Note: This implementation is provider-agnostic. It reads OAuth configuration
-            # (token_url, client_id, client_secret) dynamically from the database.
-            # This works with any OAuth 2.0 provider (Google, Microsoft, GitHub, etc.)
-            # as long as the tool's AuthConfig class defines these fields.
-            #
-            # TODO: Improve auth_config handling
-            # - Currently auth_config is a dict (not Pydantic object) because it's
-            #   stored in database as JSON and loaded into PlatformTool model
-            # - We should check auth_type from auth_config to determine the OAuth provider
-            #   and use provider-specific defaults for client_id/client_secret
-            # - Not assume it's always Google OAuth
-            token_url = auth_config.get("token_url")
+            # Get OAuth provider manager singleton
+            oauth_manager = get_oauth_manager()
+
+            # Extract provider and token_url using singleton manager
+            provider, token_url = oauth_manager.extract_oauth_config(auth_config)
 
             if not token_url:
                 logger.error(f"No token_url in auth_config for tool {tool.name}")
                 return False
 
+            # Get OAuth credentials using singleton manager
+            try:
+                credentials = oauth_manager.get_credentials(provider)
+            except ValueError as e:
+                logger.error(f"Error getting OAuth credentials: {e}")
+                return False
+
+            # Get OAuth data for refresh using singleton manager
+            oauth_data = oauth_manager.get_auth_data(
+                provider=provider,
+                flow="refresh",
+                refresh_token=refresh_token,
+            )
+
             new_tokens = await self._refresh_oauth_token(
                 token_url=token_url,
-                refresh_token=refresh_token,
-                client_id=os.getenv("GOOGLE_OAUTH_TOOL_CLIENT_ID"),
-                client_secret=os.getenv("GOOGLE_OAUTH_TOOL_CLIENT_SECRET"),
+                oauth_data=oauth_data,
             )
 
             if not new_tokens:
@@ -317,10 +323,8 @@ class TokenRefreshService:
     async def _refresh_oauth_token(
         self,
         token_url: str,
-        refresh_token: str,
-        client_id: str,
-        client_secret: Optional[str] = None,
-    ) -> Optional[Dict]:
+        oauth_data: Dict[str, str],
+    ) -> Optional[Dict[str, str]]:
         """Refresh OAuth token using refresh_token (provider-agnostic).
 
         This method implements standard OAuth 2.0 token refresh flow and works
@@ -329,10 +333,7 @@ class TokenRefreshService:
 
         Args:
             token_url: OAuth provider's token endpoint (from tool's AuthConfig)
-            refresh_token: The refresh token from initial OAuth flow
-            client_id: OAuth client ID (from tool's AuthConfig)
-            client_secret: OAuth client secret (optional, from tool's AuthConfig)
-                Some providers don't require client_secret (PKCE flow)
+            oauth_data: OAuth data dictionary for token refresh (created by centralized utility)
 
         Returns:
             Dictionary with new tokens if successful, None otherwise.
@@ -341,18 +342,10 @@ class TokenRefreshService:
         Notes:
             - Uses standard OAuth 2.0 grant_type="refresh_token"
             - Works with any provider implementing OAuth 2.0 refresh flow
-            - Provider-specific differences handled via AuthConfig fields
+            - Provider-specific differences handled via centralized OAuth utilities
         """
         async with httpx.AsyncClient() as client:
-            data = {
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-                "client_id": client_id,
-            }
-            if client_secret:
-                data["client_secret"] = client_secret
-
-            response = await client.post(token_url, data=data)
+            response = await client.post(token_url, data=oauth_data)
 
             if response.status_code != 200:
                 logger.error(
@@ -364,8 +357,8 @@ class TokenRefreshService:
             return response.json()
 
     async def _update_agent_tool(
-        self, agent_tool_id, sensitive_config: dict, tool_name: str
-    ):
+        self, agent_tool_id: UUID, sensitive_config: dict[str, str | float], tool_name: str
+    ) -> None:
         """Update agent tool with new tokens.
 
         Args:
@@ -394,7 +387,7 @@ class TokenRefreshService:
 token_refresh_service: Optional[TokenRefreshService] = None
 
 
-async def start_token_refresh_service(tool_service: ToolService):
+async def start_token_refresh_service(tool_service: ToolService) -> None:
     """Start the global token refresh service.
 
     Args:
@@ -405,7 +398,7 @@ async def start_token_refresh_service(tool_service: ToolService):
     await token_refresh_service.start()
 
 
-async def stop_token_refresh_service():
+async def stop_token_refresh_service() -> None:
     """Stop the global token refresh service."""
     global token_refresh_service
     if token_refresh_service:

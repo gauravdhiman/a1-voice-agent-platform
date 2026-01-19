@@ -3,11 +3,14 @@ Voice Agent service for managing agents in a multi-tenant SaaS platform.
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
+from supabase import Client
 
+from shared.common.security import encrypt_data
 from shared.config import supabase_config
 
 from .models import DeleteResponse, VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
@@ -28,11 +31,11 @@ agent_errors_counter = meter.create_counter(
 class VoiceAgentService:
     """Service for handling voice agent operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.supabase_config = supabase_config
 
     @property
-    def supabase(self):
+    def supabase(self) -> Optional[Client]:
         """Get Supabase client."""
         return self.supabase_config.client
 

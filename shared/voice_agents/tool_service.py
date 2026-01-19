@@ -8,6 +8,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from opentelemetry import trace
+from supabase import Client
 
 from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
@@ -87,11 +88,11 @@ def get_connection_status(
 class ToolService:
     """Service for handling platform tools and agent tool configurations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.supabase_config = supabase_config
 
     @property
-    def supabase(self):
+    def supabase(self) -> Optional[Client]:
         """Get Supabase client."""
         return self.supabase_config.client
 

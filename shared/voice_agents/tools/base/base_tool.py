@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel
 
+from .auth_config import BaseAuthConfig
+
 
 class BaseConfig(BaseModel):
-    pass
-
-
-class BaseAuthConfig(BaseModel):
     pass
 
 
@@ -34,7 +32,7 @@ class BaseTool(ABC):
         self,
         config: Optional[BaseConfig | dict[str, Any]] = None,
         sensitive_config: Optional[BaseSensitiveConfig | dict[str, Any]] = None,
-    ):
+    ) -> None:
         if config is None:
             self.config = self.Config()
         elif isinstance(config, dict):

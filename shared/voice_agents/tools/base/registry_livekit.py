@@ -30,11 +30,11 @@ class LiveKitToolRegistry:
     No AST parsing or source file reading needed.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._tools: Dict[str, Type[BaseTool]] = {}
         self._functions: Dict[str, List[Callable]] = {}
 
-    def register_tools_from_package(self, package_path: str):
+    def register_tools_from_package(self, package_path: str) -> None:
         """
         Dynamically discover and register all BaseTool subclasses in a package.
         Extracts @function_tool decorated methods by inspecting function objects.
@@ -138,7 +138,7 @@ class LiveKitToolRegistry:
 
         return False
 
-    async def sync_with_db(self, tool_service: ToolService):
+    async def sync_with_db(self, tool_service: ToolService) -> None:
         """
         Sync registered tools with the platform_tools table.
         Extracts schemas from LiveKit function_tool decorators.

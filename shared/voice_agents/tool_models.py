@@ -4,10 +4,12 @@ Pydantic models for Platform Tool functionality.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from shared.voice_agents.tools.base.auth_config import BaseAuthConfig
 
 
 class AuthStatus(str, Enum):
@@ -43,7 +45,7 @@ class PlatformToolBase(BaseModel):
     requires_auth: bool = Field(
         default=False, description="Whether tool requires authentication"
     )
-    auth_config: Optional[Dict[str, Any]] = Field(
+    auth_config: Optional[Union[Dict[str, Any], BaseAuthConfig]] = Field(
         None, description="Authentication config (OAuth URLs, scopes, provider)"
     )
     is_active: bool = Field(

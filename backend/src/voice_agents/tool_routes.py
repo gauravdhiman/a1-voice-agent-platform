@@ -18,15 +18,16 @@ from src.auth.models import UserProfile
 
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_models import (
-    AgentTool,
     AgentToolCreate,
-    AgentToolResponse,
     AgentToolUpdate,
-    AuthStatus,
+    AgentToolResponse,
     PlatformTool,
     PlatformToolCreate,
 )
 from shared.voice_agents.tool_service import tool_service
+from shared.voice_agents.tools.base.oauth_provider_utils import (
+    get_oauth_manager,
+)
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -200,7 +201,6 @@ async def oauth_callback(code: str, state: str):
         decoded_state = json.loads(base64.urlsafe_b64decode(state).decode())
         agent_id = UUID(decoded_state["agent_id"])
         tool_name = decoded_state["tool_name"]
-        state_timestamp = decoded_state.get("timestamp")
 
         # Optional: Add timestamp validation to prevent replay attacks
         # if state_timestamp:
@@ -218,35 +218,51 @@ async def oauth_callback(code: str, state: str):
         raise HTTPException(status_code=404, detail="Tool not found")
 
     metadata = tool_class().metadata
-    token_url = metadata.auth_config.get("token_url")
+    
+    # Get OAuth provider manager singleton
+    oauth_manager = get_oauth_manager()
+
+    # Extract provider and token_url using singleton manager
+    provider, token_url = oauth_manager.extract_oauth_config(metadata.auth_config)
+    
     if not token_url:
         raise HTTPException(
             status_code=500, detail="Tool does not have token_url configured"
         )
 
-    # 3. Get OAuth credentials from environment
-    client_id = os.getenv("GOOGLE_OAUTH_TOOL_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_OAUTH_TOOL_CLIENT_SECRET")
-    redirect_uri = os.getenv("GOOGLE_OAUTH_TOOL_REDIRECT_URI")
-
-    if not client_id or not client_secret or not redirect_uri:
+    # Validate provider using singleton manager
+    is_valid, required_env_vars = oauth_manager.validate_provider(provider)
+    if not is_valid:
         raise HTTPException(
-            status_code=500,
-            detail="Google OAuth credentials not configured. Please set GOOGLE_OAUTH_TOOL_CLIENT_ID, GOOGLE_OAUTH_TOOL_CLIENT_SECRET, and GOOGLE_OAUTH_TOOL_REDIRECT_URI environment variables.",
+            status_code=400, detail=f"Unsupported OAuth provider: {provider}"
         )
 
     # 4. Exchange authorization code for tokens
+    # Build OAuth data using singleton manager (includes client_id and client_secret)
+    try:
+        credentials = oauth_manager.get_credentials(provider)
+        if not credentials.client_id or not credentials.client_secret or not credentials.redirect_uri:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{provider.title()} OAuth credentials not configured. Please set {', '.join(required_env_vars)} environment variables.",
+            )
+
+        oauth_data = oauth_manager.get_auth_data(
+            provider=provider,
+            flow="auth",
+            code=code,
+            redirect_uri=credentials.redirect_uri,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=500, detail=str(e)
+        )
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 token_url,
-                data={
-                    "code": code,
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "redirect_uri": redirect_uri,
-                    "grant_type": "authorization_code",
-                },
+                data=oauth_data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response.raise_for_status()

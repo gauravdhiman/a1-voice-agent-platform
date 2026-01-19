@@ -5,8 +5,8 @@ import httpx
 from livekit.agents import RunContext
 from pydantic import Field
 
+from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
 from shared.voice_agents.tools.base.base_tool import (
-    BaseAuthConfig,
     BaseConfig,
     BaseSensitiveConfig,
     BaseTool,
@@ -15,16 +15,13 @@ from shared.voice_agents.tools.base.base_tool import (
 
 
 class GoogleCalendarTool(BaseTool):
-    class AuthConfig(BaseAuthConfig):
-        provider: str = "google"
+    class AuthConfig(GoogleAuthConfig):
         scopes: list[str] = [
             "https://www.googleapis.com/auth/calendar.events",
             "https://www.googleapis.com/auth/calendar.readonly",
         ]
         auth_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
         token_url: str = "https://oauth2.googleapis.com/token"
-        access_type: str = "offline"  # Required to get refresh_token
-        prompt: str = "consent"  # Required to get refresh_token
 
     class Config(BaseConfig):
         calendar_id: str = Field(

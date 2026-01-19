@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class LiveKitService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key: str | None = os.getenv("LIVEKIT_API_KEY")
         self.api_secret: str | None = os.getenv("LIVEKIT_API_SECRET")
         self.url: str | None = os.getenv("LIVEKIT_URL")
@@ -30,7 +30,7 @@ class LiveKitService:
         finally:
             await lkapi.aclose()
 
-    async def delete_room(self, room_name: str):
+    async def delete_room(self, room_name: str) -> None:
         """Delete a LiveKit room."""
         lkapi = self.get_api_client()
         try:
