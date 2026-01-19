@@ -46,7 +46,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Bot,
   Settings,
@@ -487,7 +487,7 @@ export default function AgentDetailPage() {
               </div>
 
               <div className="flex items-center space-x-2 pt-2">
-                <Checkbox
+                <Switch
                   id="active"
                   checked={agentForm.is_active}
                   onCheckedChange={(checked) =>
