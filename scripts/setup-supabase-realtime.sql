@@ -21,7 +21,7 @@
 -- This allows Supabase to push database changes to connected frontend clients
 
 ALTER PUBLICATION supabase_realtime ADD TABLE agent_tools;
-ALTER PUBLICATION supabase_realtime ADD TABLE agents;
+ALTER PUBLICATION supabase_realtime ADD TABLE voice_agents;
 
 -- Create RLS policy to allow authenticated users to subscribe to realtime changes
 -- Note: This only grants SELECT permission for listening to changes
@@ -33,14 +33,14 @@ FOR SELECT
 TO authenticated
 USING (true);
 
-CREATE POLICY "Allow authenticated users to subscribe to agents changes"
-ON agents
+CREATE POLICY "Allow authenticated users to subscribe to voice_agents changes"
+ON voice_agents
 FOR SELECT
 TO authenticated
 USING (true);
 
 -- Verification query (run this to confirm setup)
--- Expected output: agent_tools and agents should be listed
+-- Expected output: agent_tools and voice_agents should be listed
 
 SELECT *
 FROM pg_publication_tables

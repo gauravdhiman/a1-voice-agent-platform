@@ -16,7 +16,7 @@
  *
  *   // Subscribe to real-time updates for this agent
  *   const realtime = useRealtime(agentId, {
- *     tables: ['agent_tools', 'agents'],
+ *     tables: ['agent_tools', 'voice_agents'],
  *     onToolInsert: (payload) => console.log('Tool added:', payload),
  *     onToolUpdate: (payload) => console.log('Tool updated:', payload),
  *   onAgentUpdate: (payload) => console.log('Agent updated:', payload),
@@ -36,7 +36,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { DatabaseChangePayload } from '@/lib/realtime'
 
 interface UseRealtimeOptions {
-  /** Tables to monitor for changes (default: ['agent_tools', 'agents']) */
+  /** Tables to monitor for changes (default: ['agent_tools', 'voice_agents']) */
   tables?: string[]
 
   /** Filter updates to specific records (e.g., agent_id) */
@@ -75,7 +75,7 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
 
   // Extract options with defaults
   const {
-    tables = ['agent_tools', 'agents'],
+    tables = ['agent_tools', 'voice_agents'],  // Database table is voice_agents, not agents
     filter,
     onChange,
   } = options
@@ -91,7 +91,7 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
       onInsert: (payload) => {
         if (payload.table === 'agent_tools') {
           console.log('Tool added:', payload)
-        } else if (payload.table === 'agents') {
+        } else if (payload.table === 'voice_agents') {
           console.log('Agent added:', payload)
         }
         onChange?.(payload)
@@ -99,7 +99,7 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
       onUpdate: (payload) => {
         if (payload.table === 'agent_tools') {
           console.log('Tool updated in database:', payload.record)
-        } else if (payload.table === 'agents') {
+        } else if (payload.table === 'voice_agents') {
           console.log('Agent updated in database:', payload.record)
         }
         onChange?.(payload)
@@ -107,7 +107,7 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
       onDelete: (payload) => {
         if (payload.table === 'agent_tools') {
           console.log('Tool removed:', payload.record)
-        } else if (payload.table === 'agents') {
+        } else if (payload.table === 'voice_agents') {
           console.log('Agent removed:', payload.record)
         }
         onChange?.(payload)

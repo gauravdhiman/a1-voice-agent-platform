@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,12 @@ export function AgentCard({
 
   if (view === "list") {
     return (
-      <Card className="hover:border-primary/50 transition-colors">
+      <Card className={cn(
+        "hover:border-primary/50 transition-colors",
+        agent.is_active
+          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+          : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75" // Red background for inactive agents
+      )}>
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4 flex-1">
@@ -120,7 +126,12 @@ export function AgentCard({
   }
 
   return (
-    <Card className="overflow-hidden border-muted/60 hover:border-primary/50 transition-colors">
+    <Card className={cn(
+      "overflow-hidden border-muted/60 hover:border-primary/50 transition-colors",
+      agent.is_active
+        ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+        : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75" // Red background for inactive agents
+    )}>
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div className="flex-1 min-w-0">

@@ -161,6 +161,7 @@ class TokenRefreshService:
 
         refresh_count = 0
         for agent_tool in agent_tools:
+            logger.info(f"Processing tool: {agent_tool.tool.name}, enabled: {agent_tool.is_enabled}")
             try:
                 refreshed = await self._check_and_refresh_token(agent_tool)
                 if refreshed:
@@ -231,9 +232,10 @@ class TokenRefreshService:
             # Calculate time until expiry
             minutes_until_expiry = (expires_datetime - now).total_seconds() / 60
 
-            # Refresh if expiring within configured window
+            # Refresh if expiring within configured window (expires before or at threshold)
             if expires_datetime > expiry_threshold:
-                # Token is still valid for more than the expiry window, so no refresh needed
+                # Token is still valid for more than expiry window, so no refresh needed
+                logger.debug(f"Tool {agent_tool.tool.name} token valid for {minutes_until_expiry:.1f} minutes (expires at {expires_datetime.strftime('%H:%M:%S')}), skipping refresh")
                 return False
 
             logger.info(

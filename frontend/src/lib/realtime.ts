@@ -21,7 +21,7 @@
  *
  *   // Subscribe to real-time updates for this agent
  *   useRealtime(agentId, {
- *     tables: ['agent_tools', 'agents'],
+ *     tables: ['agent_tools', 'voice_agents'],
  *   })
  *
  *   const { data: tools } = useAgentTools(agentId)
@@ -103,6 +103,13 @@ class RealtimeService {
   private readonly queryClient: ReturnType<typeof useQueryClient>
   private readonly channels: Map<string, ReturnType<typeof supabase.channel>>
 
+  // Mapping of database table names to query key prefixes for invalidation
+  private readonly tableToQueryKeyMap: Record<string, string[]> = {
+    agent_tools: ['tools'],
+    voice_agents: ['agents'],  // Database table is voice_agents, query keys use 'agents'
+    platform_tools: ['tools'],
+  }
+
   constructor(queryClient: ReturnType<typeof useQueryClient>) {
     this.queryClient = queryClient
     this.channels = new Map()
@@ -114,17 +121,17 @@ class RealtimeService {
    * @param options - Subscription configuration
    * @returns Supabase channel for this subscription
    *
-   * @example
-   * ```typescript
-   * const realtime = new RealtimeService(queryClient)
-   *
-   * const channel = realtime.subscribe({
-   *   subscriptionId: 'agent-123',
-   *   tables: ['agent_tools', 'agents'],
-   *   filter: { column: 'agent_id', value: '123' },
-   *   onUpdate: (payload) => console.log('Update:', payload),
-   * })
-   * ```
+ * @example
+ * ```typescript
+ * const realtime = new RealtimeService(queryClient)
+ *
+ * const channel = realtime.subscribe({
+ *   subscriptionId: 'agent-123',
+ *   tables: ['agent_tools', 'voice_agents'],
+ *   filter: { column: 'agent_id', value: '123' },
+ *   onUpdate: (payload) => console.log('Update:', payload),
+ * })
+ * ```
    *
    * @notes
    * - Creates channel if doesn't exist
@@ -290,26 +297,28 @@ class RealtimeService {
    *
    * @notes
    * - Uses React Query's invalidateQueries method
-   * - Can invalidate all queries for a table
-   * - Can invalidate queries with specific keys
+   * - Maps database table names to frontend query key patterns
    * - Automatically triggers refetch for affected components
    */
   private invalidateQuery(table: string): void {
-    // Invalidate all queries for this table
+    // Get the query key patterns for this table
+    const queryKeyPatterns = this.tableToQueryKeyMap[table] || [table]
+
+    // Invalidate queries that match the patterns
     this.queryClient.invalidateQueries({
       predicate: (query) => {
         const queryKey = query.queryKey
         if (typeof queryKey === 'string') {
-          return (queryKey as string).includes(table)
+          return queryKeyPatterns.some(pattern => (queryKey as string).includes(pattern))
         }
-        if (Array.isArray(queryKey) && queryKey.some((key: unknown) => key === table)) {
-          return true
+        if (Array.isArray(queryKey)) {
+          return queryKeyPatterns.some(pattern => queryKey.some((key: unknown) => key === pattern))
         }
         return false
       },
     })
 
-    console.log(`Invalidated queries for table: ${table}`)
+    console.log(`Invalidated queries for table: ${table} (patterns: ${queryKeyPatterns.join(', ')})`)
   }
 
   /**

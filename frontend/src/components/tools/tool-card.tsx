@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { AuthStatus, ConnectionStatus } from "@/types/agent";
+import { useLiveTime, formatTimeUntilExpiry } from "@/hooks/use-live-time";
 
 export interface ToolCardProps {
   tool: {
@@ -39,16 +40,7 @@ export function ToolCard({
   disabled = false,
   className,
 }: ToolCardProps) {
-  const getTimeUntilExpiry = (expiresAt: number | null) => {
-    if (!expiresAt) return null;
-    const secondsLeft = Math.floor((expiresAt * 1000 - Date.now()) / 1000);
-    const minutesLeft = Math.floor(secondsLeft / 60);
-
-    if (minutesLeft < 1) return "< 1 minute";
-    if (minutesLeft < 60) return `${minutesLeft} minutes`;
-    if (minutesLeft < 1440) return `${Math.floor(minutesLeft / 60)} hours`;
-    return `${Math.floor(minutesLeft / 1440)} days`;
-  };
+  const currentTime = useLiveTime();
 
   const getStatusConfig = () => {
     const isToolConfigured =
@@ -57,44 +49,62 @@ export function ToolCard({
         : isConfigured;
     const actionText = isToolConfigured ? "Edit Configuration" : "Connect";
 
+    // Check if token is locally expired
+    const isTokenExpired = tokenExpiresAt && (tokenExpiresAt * 1000) < currentTime;
+
     switch (connectionStatus) {
       case ConnectionStatus.CONNECTED_NO_AUTH:
         return {
           label: "Connected",
           icon: ShieldCheck,
-          iconColor: "text-green-600 dark:text-green-400",
+          iconColor: "text-green-700 dark:text-green-300",
           badgeVariant: "default" as const,
           bgColor: "bg-green-50 dark:bg-green-950/20",
           borderColor: "border-green-200 dark:border-green-800",
-          badgeBg: "bg-green-100/80 dark:bg-green-900/30",
-          badgeText: "text-green-800 dark:text-green-300",
-          iconBoxBg: "bg-green-100 dark:bg-green-900/30",
+          badgeBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
+          badgeText: "text-green-700 dark:text-green-300",
+          iconBoxBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
           actionText,
         };
       case ConnectionStatus.CONNECTED_AUTH_VALID:
+        // If token is expired, show as expired instead of authenticated
+        if (isTokenExpired) {
+          return {
+            label: "Authentication expired",
+            icon: XCircle,
+            iconColor: "text-red-700 dark:text-red-300",
+            badgeVariant: "secondary" as const,
+            bgColor: "bg-red-50 dark:bg-red-950/20",
+            borderColor: "border-red-200 dark:border-red-800",
+            badgeBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+            badgeText: "text-red-700 dark:text-red-300",
+            iconBoxBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+            actionText,
+          };
+        }
         return {
           label: "Authenticated",
           icon: ShieldCheck,
-          iconColor: "text-green-600 dark:text-green-400",
+          iconColor: "text-green-700 dark:text-green-300",
           badgeVariant: "default" as const,
           bgColor: "bg-green-50 dark:bg-green-950/20",
           borderColor: "border-green-200 dark:border-green-800",
-          badgeBg: "bg-green-100/80 dark:bg-green-900/30",
-          badgeText: "text-green-800 dark:text-green-300",
-          iconBoxBg: "bg-green-100 dark:bg-green-900/30",
+          badgeBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
+          badgeText: "text-green-700 dark:text-green-300",
+          iconBoxBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
           actionText,
         };
       case ConnectionStatus.CONNECTED_AUTH_INVALID:
         return {
           label: "Authentication required",
           icon: XCircle,
-          iconColor: "text-red-600 dark:text-red-400",
+          iconColor: "text-red-700 dark:text-red-300",
           badgeVariant: "secondary" as const,
           bgColor: "bg-red-50 dark:bg-red-950/20",
           borderColor: "border-red-200 dark:border-red-800",
-          badgeBg: "bg-red-100/80 dark:bg-red-900/30",
-          badgeText: "text-red-800 dark:text-red-300",
-          iconBoxBg: "bg-red-100 dark:bg-red-900/30",
+          badgeBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+          badgeText: "text-red-700 dark:text-red-300",
+          iconBoxBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
           actionText,
         };
       case ConnectionStatus.NOT_CONNECTED:
@@ -106,9 +116,9 @@ export function ToolCard({
           badgeVariant: "secondary" as const,
           bgColor: "",
           borderColor: "border-border",
-          badgeBg: "bg-muted",
+          badgeBg: "bg-white dark:bg-gray-800 border border-muted-foreground/20",
           badgeText: "text-muted-foreground",
-          iconBoxBg: "bg-muted",
+          iconBoxBg: "bg-white dark:bg-gray-800 border border-muted-foreground/20",
           actionText,
         };
     }
@@ -116,7 +126,7 @@ export function ToolCard({
 
   const statusConfig = getStatusConfig();
   const StatusIcon = statusConfig.icon;
-  const timeLeft = getTimeUntilExpiry(tokenExpiresAt);
+  const timeLeft = formatTimeUntilExpiry(tokenExpiresAt, currentTime);
 
   return (
     <Card
@@ -174,7 +184,9 @@ export function ToolCard({
         {authStatus === AuthStatus.AUTHENTICATED && timeLeft && (
           <div className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
-            <span>Expires in {timeLeft}</span>
+            <span>
+              {timeLeft === "Expired" ? "Expired" : `Expires in ${timeLeft}`}
+            </span>
           </div>
         )}
       </div>

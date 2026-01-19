@@ -80,7 +80,7 @@ export default function AgentDetailPage() {
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
-    tables: ['agent_tools', 'agents'],
+    tables: ['agent_tools', 'voice_agents'],  // Database table is voice_agents, not agents
   });
 
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(

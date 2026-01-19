@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useLiveTime, formatTimeUntilExpiry } from "@/hooks/use-live-time";
 import {
   Sheet,
   SheetContent,
@@ -16,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   ShieldCheck,
   Lock,
+  RefreshCw,
   LogOut,
   Clock,
   Settings,
@@ -65,6 +67,7 @@ export function ToolConfigDrawer({
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const [isConnecting, setIsConnecting] = React.useState(false);
+  const currentTime = useLiveTime();
 
   React.useEffect(() => {
     if (agentTool?.config) {
@@ -91,17 +94,6 @@ export function ToolConfigDrawer({
 
   const isOAuth = tool.requires_auth || schema?.requires_auth;
   const hasFunctions = functions.length > 0;
-
-  const getTimeUntilExpiry = (expiresAt: number | null) => {
-    if (!expiresAt) return null;
-    const secondsLeft = Math.floor((expiresAt * 1000 - Date.now()) / 1000);
-    const minutesLeft = Math.floor(secondsLeft / 60);
-
-    if (minutesLeft < 1) return "< 1 minute";
-    if (minutesLeft < 60) return `${minutesLeft} minutes`;
-    if (minutesLeft < 1440) return `${Math.floor(minutesLeft / 60)} hours`;
-    return `${Math.floor(minutesLeft / 1440)} days`;
-  };
 
   const handleConfigChange = (key: string, value: string) => {
     const newConfig = { ...localConfig, [key]: value };
@@ -138,45 +130,65 @@ export function ToolConfigDrawer({
         showButton: true,
         buttonText: "Authenticate",
         showExpiry: false,
+        bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
       };
     }
 
     switch (agentTool.auth_status) {
       case AuthStatus.AUTHENTICATED:
-        const timeLeft = getTimeUntilExpiry(agentTool.token_expires_at);
+        // If token is locally expired, treat as expired regardless of backend status
+        if (isTokenExpired) {
+          return {
+            message: "Authentication expired",
+            icon: AlertCircle,
+            iconColor: "text-red-600 dark:text-red-400",
+            showButton: true,
+            buttonText: "Authenticate",
+            showExpiry: false,
+            bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+          };
+        }
+
+        const timeLeft = formatTimeUntilExpiry(agentTool.token_expires_at, currentTime);
         return {
           message: "Connected",
           icon: CheckCircle2,
-          iconColor: "text-green-500",
+          iconColor: "text-green-600 dark:text-green-400",
           showButton: true,
           buttonText: "Refresh",
-          showExpiry: !!timeLeft,
+          showExpiry: !!timeLeft && timeLeft !== "Expired",
           expiryText: timeLeft,
+          bgColor: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
         };
       case AuthStatus.EXPIRED:
         return {
           message: "Authentication expired",
           icon: AlertCircle,
-          iconColor: "text-orange-500",
+          iconColor: "text-red-600 dark:text-red-400",
           showButton: true,
           buttonText: "Authenticate",
           showExpiry: false,
+          bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
         };
       case AuthStatus.NOT_AUTHENTICATED:
       default:
         return {
           message: "Authentication required",
           icon: AlertCircle,
-          iconColor: "text-muted-foreground",
+          iconColor: "text-red-600 dark:text-red-400",
           showButton: true,
           buttonText: "Authenticate",
           showExpiry: false,
+          bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
         };
     }
   };
 
+  // Check if token is locally expired (client-side detection)
+  const isTokenExpired = agentTool?.token_expires_at && (agentTool.token_expires_at * 1000) < currentTime;
+
   const authConfig = getAuthStatusConfig();
-  const authenticated = agentTool?.auth_status === AuthStatus.AUTHENTICATED;
+  const authenticated = agentTool?.auth_status === AuthStatus.AUTHENTICATED && !isTokenExpired;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -199,7 +211,10 @@ export function ToolConfigDrawer({
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
           {isOAuth && (
-            <div className="flex items-center justify-between gap-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
+            <div className={cn(
+              "flex items-center justify-between gap-4 p-4 rounded-lg border",
+              authConfig.bgColor
+            )}>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className={`h-4 w-4 ${authConfig.iconColor}`} />
@@ -215,7 +230,7 @@ export function ToolConfigDrawer({
                 {authConfig.showExpiry && authConfig.expiryText && (
                   <div className="text-xs text-muted-foreground flex items-center">
                     <Clock className="h-3 w-3 mr-1" />
-                    {authConfig.expiryText}
+                    Expires in {authConfig.expiryText}
                   </div>
                 )}
               </div>
@@ -230,6 +245,8 @@ export function ToolConfigDrawer({
                   >
                     {isConnecting ? (
                       <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : authConfig.buttonText === "Refresh" ? (
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
                     ) : (
                       <Lock className="h-3.5 w-3.5 mr-1" />
                     )}

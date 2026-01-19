@@ -21,8 +21,11 @@ Understanding how the system works.
 - **[System Architecture Details](01_architecture/system_architecture.md)** - Complete system architecture with Twilio call flow
 - **[Frontend Architecture](01_architecture/frontend_architecture.md)** - Frontend structure and design
 - **[Backend Architecture](01_architecture/backend_architecture.md)** - Backend structure and design
-- **[Database Schema](01_architecture/database_schema.md)** - Complete database schema documentation
 - **[Twilio Call Flow](01_architecture/twilio_call_flow.md)** - Incoming call handling architecture
+
+### Database
+
+- **[Database Schema](DATABASE_SCHEMA.md)** - Complete database schema documentation with ER diagram
 
 ### 02_features/ - Platform Features (NEW)
 
