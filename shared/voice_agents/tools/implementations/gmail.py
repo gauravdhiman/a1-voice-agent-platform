@@ -1,10 +1,13 @@
 import base64
+from math import log
 import re
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import Any, Optional
+from venv import logger
 
 import httpx
+from bs4 import BeautifulSoup
 from livekit.agents import RunContext
 from pydantic import Field
 
@@ -998,8 +1001,9 @@ class GmailTool(BaseTool):
             }
 
     def _get_message_body(self, msg_data: dict[str, Any]) -> str:
-        """Extract message body from message data."""
+        """Extract message body from message data, stripping HTML tags to return plain text."""
         body = ""
+        content_type = ""
         try:
             if "parts" in msg_data["payload"]:
                 for part in msg_data["payload"]["parts"]:
@@ -1008,21 +1012,38 @@ class GmailTool(BaseTool):
                             body = base64.urlsafe_b64decode(
                                 part["body"]["data"]
                             ).decode()
-                    elif part["mimeType"] == "text/html":
+                            content_type = "text/plain"
+                            break  # Prefer plain text over HTML
+                    elif part["mimeType"] == "text/html" and not body:
                         if "data" in part["body"]:
                             body = base64.urlsafe_b64decode(
                                 part["body"]["data"]
                             ).decode()
+                            content_type = "text/html"
             elif (
                 "body" in msg_data["payload"] and "data" in msg_data["payload"]["body"]
             ):
                 body = base64.urlsafe_b64decode(
                     msg_data["payload"]["body"]["data"]
                 ).decode()
+                # Check if the payload has a mimeType
+                content_type = msg_data["payload"].get("mimeType", "text/plain")
         except Exception:
             return "Unable to decode message body"
 
-        if len(body) > 500:
-            body = body[:500] + "..."
+        # Strip HTML tags if content is HTML
+        if content_type == "text/html" and body:
+            try:
+                soup = BeautifulSoup(body, "html.parser")
+                body = soup.get_text(separator=" ")
+                # Clean up extra whitespace
+                body = " ".join(body.split())
+            except Exception:
+                # If HTML parsing fails, return the original body
+                pass
 
+        if len(body) > 2000:
+            body = body[:2000] + "..."
+
+        logger.info(f"Extracted message body: {body}")
         return body
