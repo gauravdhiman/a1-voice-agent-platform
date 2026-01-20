@@ -125,7 +125,8 @@ class AuthService:
                 first_name=first_name,
                 last_name=last_name,
                 is_verified=user.email_confirmed_at is not None,
-                created_at=user.created_at,
+                created_at=user.created_at.isoformat() if user.created_at else "",
+                updated_at=user.updated_at.isoformat() if user.updated_at else "",
             )
 
             # Create auth response
@@ -133,6 +134,8 @@ class AuthService:
                 user=profile,
                 access_token=session.access_token if session else None,
                 refresh_token=session.refresh_token if session else None,
+                token_type="bearer",
+                expires_in=3600,  # Default 1 hour
             )
 
             # Assign default org_admin role to new user
@@ -271,7 +274,8 @@ class AuthService:
                 first_name=first_name,
                 last_name=last_name,
                 is_verified=user.email_confirmed_at is not None,
-                created_at=user.created_at,
+                created_at=user.created_at.isoformat() if user.created_at else "",
+                updated_at=user.updated_at.isoformat() if user.updated_at else "",
             )
 
             # Create auth response
@@ -279,6 +283,8 @@ class AuthService:
                 user=profile,
                 access_token=session.access_token if session else None,
                 refresh_token=session.refresh_token if session else None,
+                token_type="bearer",
+                expires_in=3600,  # Default 1 hour
             )
 
             current_span.set_status(trace.Status(trace.StatusCode.OK))
@@ -391,7 +397,8 @@ class AuthService:
                 first_name=first_name,
                 last_name=last_name,
                 is_verified=user.email_confirmed_at is not None,
-                created_at=user.created_at,
+                created_at=user.created_at.isoformat() if user.created_at else "",
+                updated_at=user.updated_at.isoformat() if user.updated_at else "",
             )
 
             # Create auth response
@@ -399,6 +406,8 @@ class AuthService:
                 user=profile,
                 access_token=session.access_token if session else None,
                 refresh_token=session.refresh_token if session else None,
+                token_type="bearer",
+                expires_in=3600,  # Default 1 hour
             )
 
             current_span.set_status(trace.Status(trace.StatusCode.OK))

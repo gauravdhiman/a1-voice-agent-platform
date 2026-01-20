@@ -270,9 +270,18 @@ class LiveKitToolRegistry:
     def get_tool_functions(self, tool_name: str) -> List[Callable]:
         """
         Get list of function objects for a specific tool.
-        Returns the actual decorated function objects.
+        Returns actual decorated function objects.
         """
         return self._functions.get(tool_name, [])
+
+    def get_tool_names(self) -> List[str]:
+        """
+        Get list of all registered tool names.
+
+        Returns:
+            List of tool names registered in this registry.
+        """
+        return list(self._tools.keys())
 
 
 # Create global instance

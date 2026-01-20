@@ -135,6 +135,7 @@ Comprehensive documentation organized by feature.
 - API guidelines
 - Database migrations
 - Testing strategies
+- **Comprehensive Testing Plan** (95% coverage roadmap)
 
 ### In Progress 🚧
 
@@ -180,7 +181,7 @@ Comprehensive documentation organized by feature.
 - **Setup**: See **[Getting Started Dev](03_development/getting_started.md)**
 - **Deployment**: See **[Docker Deployment](05_operations/docker_deployment.md)** (coming soon)
 - **Development**: See **[Development Guides](04_development_guides/)**
-- **Testing**: See **[Testing Guide](04_development_guides/testing.md)**
+- **Testing**: See **[Testing Guide](04_development_guides/testing.md)** and **[Comprehensive Testing Plan](04_development_guides/TESTING_PLAN.md)**
 - **Troubleshooting**: See relevant feature documentation
 
 ## 📝 Contributing to Documentation

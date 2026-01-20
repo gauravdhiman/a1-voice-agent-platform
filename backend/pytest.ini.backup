@@ -1,0 +1,14 @@
+[pytest]
+testpaths = tests
+pythonpath = src
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+asyncio_mode = auto
+addopts = -v --tb=short --strict-markers
+markers =
+    unit: Unit tests (fast, mocked dependencies)
+    integration: Integration tests (slower, may use real services)
+    slow: Slow running tests
+filterwarnings =
+    ignore::DeprecationWarning

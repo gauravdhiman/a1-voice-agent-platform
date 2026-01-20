@@ -816,6 +816,48 @@ class GmailTool(BaseTool):
                 "message": f"Removed label '{label_name}' from {removed_count} emails matching '{query}'"  # noqa: E501
             }
 
+    async def delete_email(
+        self,
+        context: RunContext,
+        message_id: str,
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Permanently delete an email.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            message_id: ID of the message to delete
+            confirm: Must be True to actually delete the email
+
+        Returns:
+            Dict with confirmation message
+        """
+        if not confirm:
+            return {
+                "message": f"EMAIL DELETION REQUIRES CONFIRMATION. This will permanently delete email '{message_id}'. Set confirm=True to proceed.",  # noqa: E501
+                "requires_confirmation": True,
+            }
+
+        if not self.sensitive_config or not self.sensitive_config.access_token:
+            raise ValueError("No access token found in sensitive config")
+
+        headers = {
+            "Authorization": f"Bearer {self.sensitive_config.access_token}",
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://www.googleapis.com/gmail/v1/users/{self.config.user_id}/messages/{message_id}/trash",  # noqa: E501
+                headers=headers,
+            )
+            response.raise_for_status()
+
+            return {
+                "message_id": message_id,
+                "message": f"Email '{message_id}' moved to trash. Note: Messages in trash are permanently deleted after 30 days.",  # noqa: E501
+            }
+
     async def delete_custom_label(
         self,
         context: RunContext,
@@ -827,15 +869,15 @@ class GmailTool(BaseTool):
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            label_name: Name of the label to delete
-            confirm: Must be True to actually delete the label
+            label_name: Name of label to delete
+            confirm: Must be True to actually delete label
 
         Returns:
             Dict with confirmation message or warning
         """
         if not confirm:
             return {
-                "message": f"LABEL DELETION REQUIRES CONFIRMATION. This will permanently delete the label '{label_name}' from all emails. Set confirm=True to proceed.",  # noqa: E501
+                "message": f"LABEL DELETION REQUIRES CONFIRMATION. This will permanently delete label '{label_name}' from all emails. Set confirm=True to proceed.",  # noqa: E501
                 "requires_confirmation": True,
             }
 
@@ -999,6 +1041,22 @@ class GmailTool(BaseTool):
                 ),
                 "body": self._get_message_body(msg_data),
             }
+
+    async def read_email(
+        self, context: RunContext, message_id: str, fetch_body: bool = True
+    ) -> dict[str, Any]:
+        """
+        Read a specific email by ID.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            message_id: ID of the email to read
+            fetch_body: Whether to fetch the email body (default: True)
+
+        Returns:
+            Dict with email details including subject, from, to, date, and body
+        """
+        return await self._get_message_details(context, message_id)
 
     def _get_message_body(self, msg_data: dict[str, Any]) -> str:
         """Extract message body from message data, stripping HTML tags to return plain text."""

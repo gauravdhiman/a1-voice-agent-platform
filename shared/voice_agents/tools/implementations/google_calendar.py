@@ -259,6 +259,39 @@ class GoogleCalendarTool(BaseTool):
             response.raise_for_status()
             return {"success": True, "message": "Event deleted successfully"}
 
+    async def get_event(
+        self, context: RunContext, event_id: str
+    ) -> dict[str, Any]:
+        """
+        Retrieve a specific calendar event by ID.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            event_id: ID of the event to retrieve
+
+        Returns:
+            Dict with event details
+        """
+        if not self.sensitive_config or not self.sensitive_config.access_token:
+            raise ValueError("No access token found in sensitive config")
+
+        headers = {
+            "Authorization": f"Bearer {self.sensitive_config.access_token}",
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://www.googleapis.com/calendar/v3/calendars/{self.config.calendar_id}/events/{event_id}",  # noqa: E501
+                headers=headers,
+            )
+            response.raise_for_status()
+            event_data = response.json()
+
+            return {
+                "event_id": event_id,
+                "event": event_data,
+            }
+
     async def check_availability(
         self, context: RunContext, date: str, duration_minutes: int = 30
     ) -> dict[str, Any]:

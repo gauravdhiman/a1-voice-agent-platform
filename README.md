@@ -462,9 +462,21 @@ alembic downgrade -1             # Rollback one migration
 ### Testing
 
 ```bash
-# Backend tests
-cd backend
-pytest tests/
+# Set up test environment (run once per session)
+source ./test-env.sh
+
+# Run all backend tests
+pytest backend/tests/
+
+# Run specific module tests
+pytest backend/tests/organization/
+pytest backend/tests/notifications/
+
+# Run with coverage
+pytest --cov
+
+# Run specific test
+pytest backend/tests/organization/test_service.py::TestOrganizationService::test_create_organization_success -v
 
 # Frontend tests
 cd frontend
@@ -474,6 +486,8 @@ npm test
 cd e2e
 npm run test
 ```
+
+**Note**: Always source `./test-env.sh` before running tests. This sets up the Python paths for all modules (backend/src, shared). Run tests from project root directory for best results.
 
 ### Code Quality
 
