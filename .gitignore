@@ -58,6 +58,7 @@ logs/
 .coverage
 .pytest_cache/
 htmlcov/
+coverage/
 
 # Node modules (anywhere in the project)
 node_modules/

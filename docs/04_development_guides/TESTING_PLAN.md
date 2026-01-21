@@ -823,30 +823,693 @@ After Phase 1 achieves 80%+ coverage:
 
 ---
 
-## Phase 3: Frontend Tests (Future)
+## Phase 3: Frontend Tests
+
+### Current State
+
+| Component | Source Files | Existing Tests | Current Coverage |
+|-----------|--------------|----------------|------------------|
+| **Frontend** | ~100+ TypeScript/TSX files | 0 | None |
+
+### Testing Strategy
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Test Runner** | Vitest | Faster than Jest, better Next.js support |
+| **Component Testing** | React Testing Library | User-centric testing approach |
+| **API Mocking** | MSW (Mock Service Worker) | Real network interception |
+| **Rendering** | @testing-library/react | Standard React testing utilities |
+| **User Interaction** | @testing-library/user-event | More realistic user actions |
+| **Query Mocking** | Vitest + TanStack Query mocks | Test data fetching logic |
+| **Supabase Mocking** | Mock Supabase client | Isolate auth/realtime logic |
+| **Priority** | Services > Hooks > Components | Test business logic first, then UI |
 
 ### Technology Stack
 
-- **Test Runner:** Jest
-- **Component Testing:** React Testing Library
-- **Mocking:** MSW (Mock Service Worker)
+```bash
+# Core Testing
+vitest: ^2.1.0                # Test runner
+@testing-library/react: ^16.0.0  # React component testing
+@testing-library/jest-dom: ^6.6.0  # Custom matchers
+@testing-library/user-event: ^14.5.0  # User interaction simulation
+jsdom: ^25.0.0                # DOM environment
 
-### Priority Components
+# API Mocking
+msw: ^2.6.0                   # Mock Service Worker for API mocking
 
-1. **Services** (highest priority)
-   - `auth-service.ts`
-   - `agent-service.ts`
-   - `billing-service.ts`
+# Query Mocking
+@tanstack/react-query-devtools: ^5.0.0  # Already in deps
 
-2. **Hooks**
-   - `use-realtime.ts`
-   - `use-agent-queries.ts`
-   - `use-billing-info.ts`
+# Utilities
+@vitest/ui: ^2.1.0            # Vitest UI for interactive testing
+```
 
-3. **Components**
-   - `ToolCard`
-   - `AgentCard`
-   - `SubscriptionManagement`
+---
+
+### Directory Structure
+
+```
+frontend/
+├── tests/
+│   ├── setup.ts                   # Vitest setup file
+│   ├── mocks/                     # Mock implementations
+│   │   ├── handlers.ts            # MSW request handlers
+│   │   ├── server.ts              # MSW server setup
+│   │   ├── supabase.mock.ts       # Supabase client mock
+│   │   └── query-client.mock.ts   # React Query mock
+│   │
+│   ├── utils/                     # Test utilities
+│   │   ├── test-utils.tsx         # Custom render functions
+│   │   ├── matchers.ts            # Custom matchers
+│   │   └── data-factories.ts      # Sample data generators
+│   │
+│   ├── services/                  # Service layer tests
+│   │   ├── test-auth-service.test.ts
+│   │   ├── test-agent-service.test.ts
+│   │   ├── test-billing-service.test.ts
+│   │   ├── test-organization-service.test.ts
+│   │   └── test-rbac-service.test.ts
+│   │
+│   ├── hooks/                     # Custom hook tests
+│   │   ├── test-use-agent-queries.test.ts
+│   │   ├── test-use-realtime.test.ts
+│   │   ├── test-use-billing-info.test.ts
+│   │   ├── test-use-user-profile.test.ts
+│   │   ├── test-use-organizations.test.ts
+│   │   └── test-use-rbac.test.ts
+│   │
+│   ├── components/                # Component tests
+│   │   ├── auth/
+│   │   │   ├── test-signin-form.test.tsx
+│   │   │   ├── test-signup-form.test.tsx
+│   │   │   ├── test-protected-route.test.tsx
+│   │   │   └── test-forgot-password-dialog.test.tsx
+│   │   │
+│   │   ├── agents/
+│   │   │   ├── test-agent-card.test.tsx
+│   │   │   ├── test-agent-create-widget.test.tsx
+│   │   │   └── test-agent-delete-dialog.test.tsx
+│   │   │
+│   │   ├── tools/
+│   │   │   ├── test-tool-card.test.tsx
+│   │   │   ├── test-tool-config-drawer.test.tsx
+│   │   │   ├── test-tool-filters.test.tsx
+│   │   │   └── test-tool-disconnect-dialog.test.tsx
+│   │   │
+│   │   ├── organizations/
+│   │   │   ├── test-organization-selector.test.tsx
+│   │   │   ├── test-organization-create-dialog.test.tsx
+│   │   │   ├── test-organization-edit-dialog.test.tsx
+│   │   │   └── test-organization-delete-dialog.test.tsx
+│   │   │
+│   │   ├── organization-members/
+│   │   │   └── test-invite-member-dialog.test.tsx
+│   │   │
+│   │   ├── billing/
+│   │   │   ├── test-plan-selection.test.tsx
+│   │   │   ├── test-credit-purchase.test.tsx
+│   │   │   ├── test-subscription-management.test.tsx
+│   │   │   └── test-cancel-subscription-dialog.test.tsx
+│   │   │
+│   │   └── data-table/
+│   │       ├── test-data-table.test.tsx
+│   │       ├── test-data-table-toolbar.test.tsx
+│   │       └── test-data-table-pagination.test.tsx
+│   │
+│   ├── lib/                       # Utility function tests
+│   │   ├── test-utils.test.ts     # cn(), formatToolName(), etc.
+│   │   ├── test-api-client.test.ts
+│   │   ├── test-user-utils.test.ts
+│   │   └── test-organization-utils.test.ts
+│   │
+│   └── integration/               # Integration tests (future)
+│       └── test-user-journey.test.tsx
+│
+├── vitest.config.ts              # Vitest configuration
+└── vitest.workspace.ts           # Workspace configuration
+```
+
+---
+
+### Test Infrastructure Setup
+
+#### `frontend/vitest.config.ts`
+
+```typescript
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+    css: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      exclude: [
+        'node_modules/',
+        'tests/',
+        '**/*.config.{js,ts}',
+        '**/*.d.ts',
+      ],
+    },
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'tests/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['node_modules/', 'dist/'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+})
+```
+
+#### `frontend/tests/setup.ts`
+
+```typescript
+import { cleanup } from '@testing-library/react'
+import '@testing-library/jest-dom'
+import { afterEach, vi } from 'vitest'
+import { QueryClient } from '@tanstack/react-query'
+
+// Cleanup after each test
+afterEach(() => {
+  cleanup()
+})
+
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+})
+
+// Mock Supabase
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(),
+      refreshSession: vi.fn(),
+      signInWithPassword: vi.fn(),
+      signOut: vi.fn(),
+    },
+    from: vi.fn(),
+  },
+}))
+
+// Mock Next.js router
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+  }),
+  useSearchParams: () => ({
+    get: vi.fn(),
+  }),
+  useParams: () => ({}),
+}))
+```
+
+---
+
+## Module-by-Module Test Specifications
+
+### 1. Service Layer Tests (Highest Priority)
+
+Service tests verify API interactions, error handling, and data transformations. These are the most critical tests as they isolate business logic from UI.
+
+#### 1.1 AuthService (`frontend/src/services/auth-service.ts`)
+
+| Test Case | Method | Description | Priority |
+|-----------|--------|-------------|----------|
+| `test_getCurrentUser_success` | `getCurrentUser()` | Returns user profile on success | HIGH |
+| `test_getCurrentUser_unauthorized` | `getCurrentUser()` | Returns error when 401 | HIGH |
+| `test_getCurrentUser_network_error` | `getCurrentUser()` | Returns error on network failure | MEDIUM |
+| `test_processInvitation_success` | `processInvitation()` | Processes invitation token | HIGH |
+| `test_processInvitation_invalid_token` | `processInvitation()` | Returns error for invalid token | HIGH |
+| `test_processInvitation_expired` | `processInvitation()` | Returns error for expired token | MEDIUM |
+| `test_signIn_success` | `signIn()` | Returns tokens on success | HIGH |
+| `test_signIn_invalid_credentials` | `signIn()` | Returns error for bad credentials | HIGH |
+| `test_signOut_success` | `signOut()` | Signs out successfully | MEDIUM |
+
+**Estimated Tests:** ~9 tests
+
+**Mock Requirements:**
+- `apiClient.get()`, `apiClient.post()`
+- MSW handlers for `/api/v1/auth/*` endpoints
+
+---
+
+#### 1.2 AgentService (`frontend/src/services/agent-service.ts`)
+
+| Test Case | Method | Description | Priority |
+|-----------|--------|-------------|----------|
+| `test_getMyAgents_success` | `getMyAgents()` | Returns array of user's agents | HIGH |
+| `test_getMyAgents_empty` | `getMyAgents()` | Returns empty array when none | HIGH |
+| `test_getAgentById_success` | `getAgentById()` | Returns single agent | HIGH |
+| `test_getAgentById_not_found` | `getAgentById()` | Returns error for 404 | HIGH |
+| `test_createAgent_success` | `createAgent()` | Creates agent and returns ID | HIGH |
+| `test_createAgent_validation_error` | `createAgent()` | Returns error for invalid data | HIGH |
+| `test_updateAgent_success` | `updateAgent()` | Updates agent fields | HIGH |
+| `test_deleteAgent_success` | `deleteAgent()` | Deletes agent | MEDIUM |
+| `test_getAgentTools_success` | `getAgentTools()` | Returns tools for agent | HIGH |
+| `test_configureAgentTool_success` | `configureAgentTool()` | Configures tool | HIGH |
+| `test_disconnectTool_success` | `disconnectTool()` | Disconnects tool | HIGH |
+
+**Estimated Tests:** ~11 tests
+
+---
+
+#### 1.3 BillingService (`frontend/src/services/billing-service.ts`)
+
+| Test Case | Method | Description | Priority |
+|-----------|--------|-------------|----------|
+| `test_getBillingInfo_success` | `getBillingInfo()` | Returns billing info | HIGH |
+| `test_getBillingInfo_no_subscription` | `getBillingInfo()` | Handles no subscription | HIGH |
+| `test_getSubscriptionPlans_success` | `getSubscriptionPlans()` | Returns all plans | HIGH |
+| `test_getSubscriptionPlans_active_only` | `getSubscriptionPlans()` | Filters to active | HIGH |
+| `test_createSubscription_success` | `createSubscription()` | Creates subscription | HIGH |
+| `test_createSubscription_stripe_error` | `createSubscription()` | Handles Stripe error | MEDIUM |
+| `test_cancelSubscription_success` | `cancelSubscription()` | Cancels subscription | HIGH |
+| `test_getCreditBalance_success` | `getCreditBalance()` | Returns balance | HIGH |
+| `test_purchaseCredits_success` | `purchaseCredits()` | Purchases credits | HIGH |
+| `test_getBillingSummary_success` | `getBillingSummary()` | Returns summary | HIGH |
+
+**Estimated Tests:** ~10 tests
+
+---
+
+#### 1.4 OrganizationService & RBACService
+
+Similar patterns for organization and RBAC services.
+
+**Estimated Tests:** ~8 tests (Organization) + ~6 tests (RBAC) = ~14 tests
+
+---
+
+### 2. Custom Hook Tests (High Priority)
+
+Hook tests verify React Query integration, caching logic, and side effects.
+
+#### 2.1 useAgentQueries (`frontend/src/hooks/use-agent-queries.ts`)
+
+| Test Case | Hook | Description | Priority |
+|-----------|------|-------------|----------|
+| `test_useMyAgents_success` | `useMyAgents()` | Fetches and returns agents | HIGH |
+| `test_useMyAgents_loading` | `useMyAgents()` | Shows loading state | HIGH |
+| `test_useMyAgents_error` | `useMyAgents()` | Handles error state | HIGH |
+| `test_useAgent_success` | `useAgent()` | Fetches single agent | HIGH |
+| `test_useAgent_invalid_id` | `useAgent()` | Handles invalid ID | MEDIUM |
+| `test_useOrgAgents_success` | `useOrgAgents()` | Fetches org agents | HIGH |
+| `test_useOrgAgents_empty` | `useOrgAgents()` | Handles empty list | MEDIUM |
+| `test_usePlatformTools_success` | `usePlatformTools()` | Fetches available tools | HIGH |
+| `test_useAgentTools_success` | `useAgentTools()` | Fetches agent tools | HIGH |
+| `test_createAgentMutation_success` | `useCreateAgent()` | Creates and invalidates cache | HIGH |
+| `test_createAgentMutation_error` | `useCreateAgent()` | Handles error | MEDIUM |
+| `test_deleteAgentMutation_success` | `useDeleteAgent()` | Deletes and invalidates cache | HIGH |
+| `test_configureToolMutation_success` | `useConfigureTool()` | Configures and updates cache | HIGH |
+
+**Estimated Tests:** ~13 tests
+
+---
+
+#### 2.2 useRealtime (`frontend/src/hooks/use-realtime.ts`)
+
+| Test Case | Hook | Description | Priority |
+|-----------|------|-------------|----------|
+| `test_useRealtime_subscribes_on_mount` | `useRealtime()` | Creates subscription on mount | HIGH |
+| `test_useRealtime_unsubscribes_on_unmount` | `useRealtime()` | Cleans up on unmount | HIGH |
+| `test_useRealtime_invalidates_on_update` | `useRealtime()` | Invalidates queries on DB update | HIGH |
+| `test_useRealtime_handles_error` | `useRealtime()` | Handles subscription error | MEDIUM |
+| `test_useRealtime_multiple_tables` | `useRealtime()` | Subscribes to multiple tables | MEDIUM |
+
+**Estimated Tests:** ~5 tests
+
+---
+
+#### 2.3 useBillingInfo, useUserProfile, useOrganizations, useRBAC
+
+Similar patterns for other data-fetching hooks.
+
+**Estimated Tests:** ~20 tests total
+
+---
+
+### 3. Component Tests (Medium Priority)
+
+Component tests verify user interactions, rendering logic, and integration with hooks.
+
+#### 3.1 Auth Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_signin_form_renders` | `SignInForm` | Renders all fields | HIGH |
+| `test_signin_form_validation` | `SignInForm` | Shows errors for invalid input | HIGH |
+| `test_signin_form_submit` | `SignInForm` | Calls signIn on submit | HIGH |
+| `test_signup_form_renders` | `SignUpForm` | Renders all fields | HIGH |
+| `test_signup_form_submit` | `SignUpForm` | Calls signUp on submit | HIGH |
+| `test_protected_route_unauthenticated` | `ProtectedRoute` | Redirects when not authenticated | HIGH |
+| `test_protected_route_authenticated` | `ProtectedRoute` | Renders children when authenticated | HIGH |
+| `test_forgot_password_dialog_renders` | `ForgotPasswordDialog` | Renders correctly | MEDIUM |
+| `test_forgot_password_dialog_submit` | `ForgotPasswordDialog` | Sends reset email | MEDIUM |
+
+**Estimated Tests:** ~9 tests
+
+---
+
+#### 3.2 Agent Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_agent_card_renders` | `AgentCard` | Displays agent info | HIGH |
+| `test_agent_card_click` | `AgentCard` | Calls onClick handler | HIGH |
+| `test_agent_card_status_badge` | `AgentCard` | Shows correct status | MEDIUM |
+| `test_agent_create_widget_renders` | `AgentCreateWidget` | Renders create form | HIGH |
+| `test_agent_create_widget_submit` | `AgentCreateWidget` | Creates agent | HIGH |
+| `test_agent_delete_dialog_renders` | `AgentDeleteDialog` | Shows warning message | MEDIUM |
+| `test_agent_delete_dialog_confirm` | `AgentDeleteDialog` | Deletes on confirm | MEDIUM |
+
+**Estimated Tests:** ~7 tests
+
+---
+
+#### 3.3 Tool Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_tool_card_renders_tool_info` | `ToolCard` | Displays tool name, description | HIGH |
+| `test_tool_card_status_badge` | `ToolCard` | Shows correct connection status | HIGH |
+| `test_tool_card_expired_token` | `ToolCard` | Shows expired badge | HIGH |
+| `test_tool_card_click_connect` | `ToolCard` | Opens config drawer | HIGH |
+| `test_tool_card_click_edit` | `ToolCard` | Opens config drawer for configured tool | HIGH |
+| `test_tool_config_drawer_renders` | `ToolConfigDrawer` | Shows OAuth flow | HIGH |
+| `test_tool_config_drawer_submit` | `ToolConfigDrawer` | Configures tool | HIGH |
+| `test_tool_disconnect_dialog_renders` | `ToolDisconnectDialog` | Shows warning | MEDIUM |
+| `test_tool_disconnect_dialog_confirm` | `ToolDisconnectDialog` | Disconnects on confirm | MEDIUM |
+| `test_tool_filters_renders` | `ToolFilters` | Shows filter options | MEDIUM |
+| `test_tool_filters_filters_list` | `ToolFilters` | Filters tools by status | MEDIUM |
+
+**Estimated Tests:** ~11 tests
+
+---
+
+#### 3.4 Organization Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_organization_selector_renders` | `OrganizationSelector` | Shows organizations | HIGH |
+| `test_organization_selector_select` | `OrganizationSelector` | Changes current organization | HIGH |
+| `test_organization_create_dialog_renders` | `OrganizationCreateDialog` | Shows form | HIGH |
+| `test_organization_create_dialog_submit` | `OrganizationCreateDialog` | Creates organization | HIGH |
+| `test_organization_edit_dialog_renders` | `OrganizationEditDialog` | Pre-fills data | MEDIUM |
+| `test_organization_edit_dialog_submit` | `OrganizationEditDialog` | Updates organization | MEDIUM |
+| `test_organization_delete_dialog_renders` | `OrganizationDeleteDialog` | Shows warning | MEDIUM |
+| `test_organization_delete_dialog_confirm` | `OrganizationDeleteDialog` | Deletes on confirm | MEDIUM |
+
+**Estimated Tests:** ~8 tests
+
+---
+
+#### 3.5 Organization Members Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_invite_member_dialog_renders` | `InviteMemberDialog` | Shows form | HIGH |
+| `test_invite_member_dialog_submit` | `InviteMemberDialog` | Sends invitation | HIGH |
+| `test_invite_member_dialog_validation` | `InviteMemberDialog` | Shows errors for invalid email | MEDIUM |
+
+**Estimated Tests:** ~3 tests
+
+---
+
+#### 3.6 Billing Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_plan_selection_renders` | `PlanSelection` | Shows available plans | HIGH |
+| `test_plan_selection_select` | `PlanSelection` | Selects plan | HIGH |
+| `test_plan_selection_checkout` | `PlanSelection` | Calls Stripe checkout | HIGH |
+| `test_credit_purchase_renders` | `CreditPurchase` | Shows credit products | HIGH |
+| `test_credit_purchase_buy` | `CreditPurchase` | Purchases credits | HIGH |
+| `test_subscription_management_renders` | `SubscriptionManagement` | Shows subscription info | HIGH |
+| `test_subscription_management_cancel` | `SubscriptionManagement` | Opens cancel dialog | MEDIUM |
+| `test_cancel_subscription_dialog_confirm` | `CancelSubscriptionDialog` | Cancels subscription | MEDIUM |
+
+**Estimated Tests:** ~8 tests
+
+---
+
+#### 3.7 DataTable Components
+
+| Test Case | Component | Description | Priority |
+|-----------|-----------|-------------|----------|
+| `test_data_table_renders_rows` | `DataTable` | Shows data rows | MEDIUM |
+| `test_data_table_pagination` | `DataTable` | Handles pagination | MEDIUM |
+| `test_data_table_sorting` | `DataTable` | Sorts by column | MEDIUM |
+| `test_data_table_toolbar_renders` | `DataTableToolbar` | Shows filters | LOW |
+| `test_data_table_filters_data` | `DataTableToolbar` | Filters table data | LOW |
+
+**Estimated Tests:** ~5 tests
+
+---
+
+### 4. Utility Function Tests (Medium Priority)
+
+| Test Case | Function | Description | Priority |
+|-----------|----------|-------------|----------|
+| `test_cn_merges_classes` | `cn()` | Merges and dedupes classes | HIGH |
+| `test_formatToolName_snake_case` | `formatToolName()` | Formats snake_case to Title Case | HIGH |
+| `test_formatToolName_multiple_words` | `formatToolName()` | Handles multiple words | MEDIUM |
+| `test_api_client_sets_auth_token` | `setAuthToken()` | Sets Authorization header | HIGH |
+| `test_api_client_clears_auth_token` | `clearAuthToken()` | Removes Authorization header | HIGH |
+| `test_api_client_refreshes_on_401` | `request()` | Retries with refreshed token | HIGH |
+
+**Estimated Tests:** ~6 tests
+
+---
+
+### 5. Integration Tests (Low Priority - Future)
+
+Full user flow tests using MSW for API mocking.
+
+| Test Flow | Description | Priority |
+|-----------|-------------|----------|
+| User Signup Flow | Sign up form → create org → dashboard | MEDIUM |
+| Agent Creation Flow | Create agent → configure tools | MEDIUM |
+| Tool Connection Flow | Select tool → OAuth flow → verify connected | MEDIUM |
+| Subscription Flow | Select plan → checkout → verify billing info | LOW |
+| Invitation Flow | Invite user → signup → join org | LOW |
+
+**Estimated Tests:** ~5 tests
+
+---
+
+## Test Implementation Order
+
+| Phase | Module | Estimated Tests | Priority | Complexity |
+|-------|--------|-----------------|----------|------------|
+| 3.1 | Test Infrastructure (setup, mocks) | - | HIGH | MEDIUM |
+| 3.2 | Service Layer (Auth, Agent, Billing) | ~30 | HIGH | LOW |
+| 3.3 | Custom Hooks (useAgentQueries, useRealtime, etc.) | ~38 | HIGH | MEDIUM |
+| 3.4 | Utility Functions | ~6 | MEDIUM | LOW |
+| 3.5 | Auth Components | ~9 | MEDIUM | LOW |
+| 3.6 | Agent Components | ~7 | MEDIUM | MEDIUM |
+| 3.7 | Tool Components | ~11 | MEDIUM | MEDIUM |
+| 3.8 | Organization Components | ~8 | MEDIUM | MEDIUM |
+| 3.9 | Organization Members Components | ~3 | MEDIUM | LOW |
+| 3.10 | Billing Components | ~8 | MEDIUM | MEDIUM |
+| 3.11 | DataTable Components | ~5 | LOW | LOW |
+| 3.12 | Integration Tests (Future) | ~5 | LOW | HIGH |
+
+**Total Phase 3 Estimated Tests:** ~130 tests
+
+---
+
+## Running Frontend Tests
+
+### Commands
+
+```bash
+# Run all tests
+cd frontend
+npm test
+
+# Run with coverage
+npm test -- --coverage
+
+# Run in watch mode
+npm test -- --watch
+
+# Run specific test file
+npm test tests/services/test-auth-service.test.ts
+
+# Run specific test
+npm test tests/services/test-auth-service.test.ts -t "test_getCurrentUser_success"
+
+# Run with UI
+npm test -- --ui
+
+# Run tests matching pattern
+npm test -- --run --grep "auth"
+```
+
+### Coverage Goals
+
+| Phase | Target Coverage | Timeline |
+|-------|-----------------|----------|
+| Week 1 | ~20% | Test infrastructure + Services |
+| Week 2 | ~40% | Hooks + Utilities |
+| Week 3 | ~60% | Auth + Agent components |
+| Week 4 | ~75% | Tool + Organization components |
+| Week 5 | ~85% | Billing + Remaining components |
+| Week 6 | ~90%+ | Integration tests + refinement |
+
+---
+
+## Key Testing Patterns
+
+### Service Test Pattern
+
+```typescript
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { authAPI } from '@/services/auth-service'
+import { server } from '../mocks/server'
+import { rest } from 'msw'
+
+describe('AuthService', () => {
+  beforeEach(() => {
+    server.listen()
+  })
+
+  afterEach(() => {
+    server.resetHandlers()
+  })
+
+  it('getCurrentUser returns user profile', async () => {
+    // Arrange
+    const mockUser = { id: '1', email: 'test@example.com' }
+    server.use(
+      rest.get('/api/v1/auth/me', (req, res, ctx) => {
+        return res(ctx.status(200), ctx.json({ data: mockUser }))
+      })
+    )
+
+    // Act
+    const result = await authAPI.getCurrentUser()
+
+    // Assert
+    expect(result.success).toBe(true)
+    expect(result.user).toEqual(mockUser)
+  })
+})
+```
+
+### Hook Test Pattern
+
+```typescript
+import { describe, it, expect, vi } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useMyAgents } from '@/hooks/use-agent-queries'
+
+describe('useAgentQueries', () => {
+  it('fetches and returns agents', async () => {
+    // Arrange
+    const queryClient = new QueryClient()
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    )
+
+    // Act
+    const { result } = renderHook(() => useMyAgents(), { wrapper })
+
+    // Assert
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toBeDefined()
+  })
+})
+```
+
+### Component Test Pattern
+
+```typescript
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { SignInForm } from '@/components/auth/signin-form'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+describe('SignInForm', () => {
+  it('calls signIn on form submit', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    const queryClient = new QueryClient()
+    const mockSignIn = vi.fn().mockResolvedValue({ success: true })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SignInForm />
+      </QueryClientProvider>
+    )
+
+    // Act
+    const emailInput = screen.getByLabelText(/email/i)
+    const passwordInput = screen.getByLabelText(/password/i)
+    const submitButton = screen.getByRole('button', { name: /sign in/i })
+
+    await user.type(emailInput, 'test@example.com')
+    await user.type(passwordInput, 'password123')
+    await user.click(submitButton)
+
+    // Assert
+    await waitFor(() => {
+      expect(mockSignIn).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'password123',
+      })
+    })
+  })
+})
+```
+
+---
+
+## Appendix C: Frontend Testing Dependencies
+
+```bash
+# Install dependencies
+cd frontend
+npm install -D vitest @vitest/ui @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom msw
+
+# Or add to package.json
+{
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "@vitest/ui": "^2.1.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/user-event": "^14.5.0",
+    "jsdom": "^25.0.0",
+    "msw": "^2.6.0"
+  }
+}
+```
 
 ---
 
