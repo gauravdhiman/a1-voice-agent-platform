@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS auth.users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Insert the fixed E2E test user so foreign keys work in the real DB
+INSERT INTO auth.users (id, email) 
+VALUES ('00000000-0000-0000-0000-000000000000', 'test@gmail.com')
+ON CONFLICT (id) DO NOTHING;
+
 -- Mock the auth.uid() function used in RLS policies
 CREATE OR REPLACE FUNCTION auth.uid() 
 RETURNS UUID AS $$ 

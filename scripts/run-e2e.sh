@@ -60,7 +60,15 @@ cat scripts/init-test-db.sql | $DOCKER_COMPOSE exec -T db_e2e psql -U postgres -
 echo "🔄 Running Database Migrations..."
 $DOCKER_COMPOSE exec -T backend_e2e alembic upgrade head
 
-# 5. Run Playwright Tests
+# 5. Seed Test Data
+echo "🌱 Seeding Platform Tools..."
+# Seed ONLY system-level platform tools (required for the app to function)
+$DOCKER_COMPOSE exec -T db_e2e psql -U postgres -d test_db -c "INSERT INTO platform_tools (id, name, description, is_active, requires_auth, auth_type, tool_functions_schema) VALUES ('00000000-0000-0000-0000-000000000001', 'Gmail', 'Send and read emails', true, true, 'oauth2', '{\"functions\": [{\"name\": \"send_email\", \"description\": \"Send an email\", \"parameters\": {\"type\": \"object\", \"properties\": {}}}]}') ON CONFLICT (name) DO NOTHING;"
+
+# Note: We NO LONGER seed organizations or agents here globally.
+# This ensures onboarding tests start from a truly empty state.
+
+# 6. Run Playwright Tests
 echo "🎭 Running Playwright E2E Tests..."
 # Set environment variables for the test runner
 export E2E_BASE_URL=http://localhost:3001
