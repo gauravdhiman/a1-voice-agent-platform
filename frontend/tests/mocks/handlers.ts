@@ -53,19 +53,18 @@ export const handlers = [
   }),
 
   http.post(`${API_BASE_URL}/api/v1/agents`, async ({ request }) => {
-    const body = await request.json() as { name: string; system_prompt: string; voice_settings?: any }
+    const body = await request.json() as { name: string; system_prompt: string }
     return HttpResponse.json({
       success: true,
       data: createMockAgent({
         name: body.name,
         system_prompt: body.system_prompt || 'You are a helpful assistant',
-        voice_settings: body.voice_settings,
       }),
     })
   }),
 
   http.put(`${API_BASE_URL}/api/v1/agents/:id`, async ({ params, request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       data: createMockAgent({ id: params.id as string, ...body }),
@@ -159,7 +158,7 @@ export const handlers = [
   }),
 
   http.put(`${API_BASE_URL}/api/v1/organizations/:id`, async ({ params, request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       data: createMockOrganization({ id: params.id as string, ...body }),
@@ -439,7 +438,7 @@ export const handlers = [
   }),
 
   http.put(`${API_BASE_URL}/api/v1/billing/plans/:planId`, async ({ params, request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       data: createMockSubscriptionPlan({ id: params.planId as string, ...body }),
@@ -470,7 +469,7 @@ export const handlers = [
   }),
 
   http.put(`${API_BASE_URL}/api/v1/rbac/roles/:roleId`, async ({ params, request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       data: createMockRole({ id: params.roleId as string, ...body }),
@@ -507,7 +506,7 @@ export const handlers = [
   }),
 
   http.put(`${API_BASE_URL}/api/v1/rbac/permissions/:permissionId`, async ({ params, request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       data: createMockPermission({ id: params.permissionId as string, ...body }),
@@ -556,7 +555,7 @@ export const handlers = [
   }),
 
   http.put(`${API_BASE_URL}/api/v1/rbac/user-roles/:userRoleId`, async ({ params, request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
       data: {

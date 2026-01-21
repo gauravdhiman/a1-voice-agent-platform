@@ -70,31 +70,32 @@ frontend/
 ### Basic Commands
 
 ```bash
+cd <project-root>/frontend
 # Run all tests
-npm test
+npm run test
 
 # Run with coverage
-npm test:coverage
+npm run test:coverage
 
 # Run in watch mode
-npm test -- --watch
+npm run test -- --watch
 
 # Run with UI
-npm test:ui
+npm run test:ui
 
 # Run specific test file
-npm test -- tests/lib/test-utils.test.ts
+npm run test -- tests/lib/test-utils.test.ts
 
 # Run specific test
-npm test -- tests/lib/test-utils.test.ts -t "cn utility"
+npm run test -- tests/lib/test-utils.test.ts -t "cn utility"
 
 # Run tests in a directory
-npm test -- tests/lib/
-npm test -- tests/services/
-npm test -- tests/hooks/
+npm run test -- tests/lib/
+npm run test -- tests/services/
+npm run test -- tests/hooks/
 
 # Run tests without watching (CI mode)
-npm test:run
+npm run test:run
 ```
 
 ### Coverage Commands

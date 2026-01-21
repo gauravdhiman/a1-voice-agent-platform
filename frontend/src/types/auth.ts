@@ -11,7 +11,7 @@ export interface UserProfile {
   email: string;
   first_name: string;
   last_name: string;
-  email_confirmed_at: boolean;
+  email_confirmed_at: string | null;
   created_at: string;
   updated_at: string;
   has_organizations?: boolean;

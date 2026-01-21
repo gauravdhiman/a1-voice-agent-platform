@@ -7,7 +7,7 @@ import { type VoiceAgent, type AgentTool, type PlatformTool } from '@/types/agen
 import { type Organization } from '@/types/organization'
 import { type SubscriptionPlan } from '@/types/billing'
 import { type CreditBalance } from '@/types/billing'
-import { type Role, type Permission } from '@/types/rbac'
+import { type Role, type Permission, type RoleWithPermissions } from '@/types/rbac'
 
 export const createMockUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   id: 'user-1',
@@ -17,6 +17,7 @@ export const createMockUser = (overrides: Partial<UserProfile> = {}): UserProfil
   email_confirmed_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  roles: [],
   ...overrides,
 })
 
@@ -29,6 +30,8 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
     provider: 'openai',
     voice: 'alloy',
   },
+  is_active: true,
+  phone_number: null,
   organization_id: 'org-1',
   created_by: 'user-1',
   created_at: new Date().toISOString(),
@@ -39,12 +42,13 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
 export const createMockPlatformTool = (overrides: Partial<PlatformTool> = {}): PlatformTool => ({
   id: 'tool-1',
   name: 'test_tool',
-  display_name: 'Test Tool',
   description: 'A test tool',
   requires_auth: true,
   auth_type: 'oauth2',
   is_active: true,
   config_schema: {},
+  tool_functions_schema: null,
+  auth_config: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   ...overrides,
@@ -53,11 +57,14 @@ export const createMockPlatformTool = (overrides: Partial<PlatformTool> = {}): P
 export const createMockAgentTool = (overrides: Partial<AgentTool> = {}): AgentTool => ({
   id: 'agent-tool-1',
   agent_id: 'agent-1',
-  platform_tool_id: 'tool-1',
+  tool_id: 'tool-1',
   config: {},
-  connection_status: 'connected',
-  auth_status: 'authenticated',
-  selected_functions: ['function1'],
+  sensitive_config: null,
+  unselected_functions: null,
+  is_enabled: true,
+  connection_status: 'connected' as any,
+  auth_status: 'authenticated' as any,
+  token_expires_at: null,
   tool: createMockPlatformTool(),
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
@@ -71,7 +78,6 @@ export const createMockOrganization = (overrides: Partial<Organization> = {}): O
   slug: 'test-org',
   website: 'https://example.com',
   is_active: true,
-  business_details: { industry: 'Technology' },
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   ...overrides,
@@ -82,12 +88,16 @@ export const createMockSubscriptionPlan = (overrides: Partial<SubscriptionPlan> 
   name: 'Pro Plan',
   description: 'Professional tier',
   price_amount: 4900,
-  price_currency: 'usd',
-  billing_period: 'monthly',
+  currency: 'usd',
+  interval: 'monthly',
+  interval_count: 1,
+  stripe_price_id: 'price_test123',
+  stripe_product_id: 'prod_test123',
   included_credits: 1000,
+  max_users: 5,
+  features: {},
   trial_period_days: 14,
   is_active: true,
-  stripe_price_id: 'price_test123',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   ...overrides,
@@ -98,13 +108,15 @@ export const createMockCreditBalance = (overrides: Partial<CreditBalance> = {}):
   subscription_credits: 800,
   purchased_credits: 200,
   expiring_soon: 50,
+  expires_at: null,
   ...overrides,
 })
 
-export const createMockRole = (overrides: Partial<Role> = {}): Role => ({
+export const createMockRole = (overrides: Partial<RoleWithPermissions> = {}): RoleWithPermissions => ({
   id: 'role-1',
   name: 'org_admin',
   description: 'Organization administrator',
+  is_system_role: false,
   permissions: [],
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),

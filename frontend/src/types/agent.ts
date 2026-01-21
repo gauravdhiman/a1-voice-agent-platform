@@ -19,9 +19,12 @@ export interface VoiceAgent {
   id: string;
   organization_id: string;
   name: string;
+  description: string | null;
   phone_number: string | null;
   system_prompt: string | null;
+  voice_settings: Record<string, unknown> | null;
   is_active: boolean;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }

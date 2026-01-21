@@ -61,6 +61,27 @@ Run these commands from the root directory of the project.
 ./start.sh --help                                  # Help - print all commands
 ```
 
+### End-to-End (E2E) Testing
+
+End-to-end tests use a "Grey Box" approach with an isolated Docker stack to ensure zero side effects on production/development data.
+
+```bash
+# Run the full E2E lifecycle (Build -> Start -> Init -> Migrate -> Test -> Teardown)
+./scripts/run-e2e.sh
+
+# Run E2E and record all browser videos (useful for debugging successful flows)
+./scripts/run-e2e.sh --video-on
+
+# View E2E reports locally
+open e2e/reports/report.html
+```
+
+**E2E Architecture Details**:
+- **Isolated Stack**: Runs on ports 3001 (FE) and 8001 (BE) using `docker-compose.e2e.yml`.
+- **Transient DB**: Uses a dedicated Postgres container initialized with Supabase schemas (`auth`) and roles.
+- **Mocks**: External services (Supabase Auth, Stripe, LiveKit) are mocked at the network/dependency layer.
+- **Reports**: HTML reports and failure artifacts (videos/traces) are saved to `e2e/reports/` (Git ignored).
+
 ## Code Style Guidelines
 
 ### Python Backend

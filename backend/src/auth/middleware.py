@@ -83,6 +83,11 @@ async def get_current_user_id(authorization: str = Header(None)) -> UUID:
 
     token = authorization.replace("Bearer ", "")
 
+    # E2E Mocking Bypass
+    from shared.config import settings
+    if settings.environment in ["test", "development"] and token == "mock-jwt-token":
+        return UUID("00000000-0000-0000-0000-000000000000") # Use a fixed test UUID
+
     try:
         # Decode the JWT token using Supabase's public key
         # In a real implementation, you would verify the token properly
@@ -142,6 +147,21 @@ async def get_authenticated_user(
         )
 
     token = authorization.replace("Bearer ", "")
+
+    # E2E Mocking Bypass
+    from shared.config import settings
+    if settings.environment in ["test", "development"] and token == "mock-jwt-token":
+        test_uuid = UUID("00000000-0000-0000-0000-000000000000")
+        mock_user = UserProfile(
+            id=test_uuid,
+            email="test@gmail.com",
+            first_name="Test",
+            last_name="User",
+            created_at="2026-01-21T00:00:00Z",
+            updated_at="2026-01-21T00:00:00Z",
+            roles=[]
+        )
+        return test_uuid, mock_user
 
     try:
         # Decode JWT to get user ID

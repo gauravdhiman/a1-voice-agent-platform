@@ -1513,24 +1513,39 @@ npm install -D vitest @vitest/ui @testing-library/react @testing-library/jest-do
 
 ---
 
-## Phase 4: E2E Tests (Future)
+## Phase 4: End-to-End (E2E) Tests (Current Focus)
 
-### Technology Stack
+### Strategy
+E2E tests will use **Playwright** (Python-based) to verify critical user journeys across the entire stack (Frontend, Backend, and Database). Tests will run against a live development environment (Docker).
 
-- **Framework:** Playwright
-- **Scope:** Critical user journeys only
+### Critical User Journeys
+1.  **Authentication & Onboarding**
+    *   New user signup -> Email confirmation (mocked) -> Sign in.
+    *   Initial organization creation during onboarding.
+2.  **Organization & Member Management**
+    *   Create/Edit/Delete organizations.
+    *   Invite new members -> Accept invitation -> Verify role-based access.
+3.  **Voice Agent Lifecycle**
+    *   Create voice agent -> Configure basic settings.
+    *   Assign tools to agent -> Configure tool parameters.
+    *   Verify agent configuration is correctly persisted.
+4.  **Tool Integration & OAuth**
+    *   Initiate OAuth flow for a platform tool (e.g., Google Calendar).
+    *   Verify successful connection and token storage.
+5.  **Billing & Credits**
+    *   Subscribe to a plan (Stripe Test Mode).
+    *   Purchase credit products.
+    *   Verify credit balance updates after actions.
 
-### Key Flows to Test
-
-1. User authentication (signup, login, logout)
-2. Organization management
-3. Agent creation and configuration
-4. Tool connection (OAuth flow)
-5. Billing checkout
+### Implementation Plan
+1.  **Framework Setup**: Consolidate E2E tests into a unified structure using `pytest-playwright`.
+2.  **Environment Configuration**: Ensure tests can run against Docker containers with consistent seed data.
+3.  **Authentication Helpers**: Create reusable fixtures for logging in as different roles (Super Admin, Org Admin, Member).
+4.  **Test Suite Development**: Implement tests for the journeys above, starting with Auth and Organization management.
 
 ---
 
-## Appendix A: Dependencies to Install
+## Running Tests
 
 ```bash
 # Add to requirements-dev.txt

@@ -461,7 +461,10 @@ alembic downgrade -1             # Rollback one migration
 
 ### Testing
 
+#### Backend Tests (Pytest)
 ```bash
+cd <project-root>
+
 # Set up test environment (run once per session)
 source ./test-env.sh
 
@@ -472,19 +475,58 @@ pytest backend/tests/
 pytest backend/tests/organization/
 pytest backend/tests/notifications/
 
-# Run with coverage
-pytest --cov
+#Run specific test file
+pytest backend/tests/organization/test_service.py
 
 # Run specific test
 pytest backend/tests/organization/test_service.py::TestOrganizationService::test_create_organization_success -v
 
-# Frontend tests
-cd frontend
-npm test
+# Run with coverage
+pytest --cov
 
-# E2E tests
-cd e2e
+```
+
+#### Frontend Unit Tests (Vitest)
+```bash
+cd <project-root>/frontend
+# Run all tests
 npm run test
+
+# Run with coverage
+npm run test:coverage
+
+# Run in watch mode
+npm run test -- --watch
+
+# Run with UI
+npm run test:ui
+
+# Run specific test file
+npm run test -- tests/lib/test-utils.test.ts
+
+# Run specific test
+npm run test -- tests/lib/test-utils.test.ts -t "cn utility"
+
+# Run tests in a directory
+npm run test -- tests/lib/
+npm run test -- tests/services/
+npm run test -- tests/hooks/
+
+# Run tests without watching (CI mode)
+npm run test:run
+```
+
+#### End-to-End Tests (Playwright + Isolated Stack)
+```bash
+cd <project-root>
+
+# This script handles building an isolated stack, initializing the DB, and running Playwright tests.
+./scripts/run-e2e.sh
+
+# Optional: Record all videos for E2E tests
+./scripts/run-e2e.sh --video-on
+
+# E2E test results are saved to: e2e/reports/report.html
 ```
 
 **Note**: Always source `./test-env.sh` before running tests. This sets up the Python paths for all modules (backend/src, shared). Run tests from project root directory for best results.
