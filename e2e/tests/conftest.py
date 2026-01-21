@@ -9,25 +9,28 @@ def base_url():
 
 @pytest.fixture
 def step(page: Page, request):
-    """Fixture to log steps to the report and console."""
+    """Fixture to log steps to the report and console with enhanced formatting."""
     if not hasattr(request.node, "steps"):
         request.node.steps = []
         
     def _step(description: str):
-        # Store step for report injection
-        request.node.steps.append(description)
-        # Print for console output
-        print(f"\n[STEP] {description}")
-        # Add to browser console
+        import time
+        
+        step_time = time.strftime("%H:%M:%S")
+        # Store step for report injection with timestamp
+        request.node.steps.append({"description": description, "time": step_time})
+        # Print for console output with timestamp
+        print(f"\n[STEP {step_time}] {description}")
+        # Add to browser console with timestamp
         try:
-            page.evaluate(f"console.log('E2E_STEP: {description}')")
+            page.evaluate(f"console.log('[E2E {step_time}] {description}')")
         except:
             pass
     return _step
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Hooks into report generation to inject custom steps."""
+    """Hooks into report generation to inject custom steps with enhanced formatting."""
     outcome = yield
     report = outcome.get_result()
     
@@ -36,21 +39,30 @@ def pytest_runtest_makereport(item, call):
         # Get the steps from the test item
         steps = getattr(item, "steps", [])
         if steps:
-            # Format steps as a bulleted list for the HTML report
+            # Format steps as a bulleted list for the HTML report with timestamps
             html_steps = "<div style='margin-top: 10px; font-family: sans-serif;'>"
             html_steps += "<strong>User Journey Path:</strong>"
-            html_steps += "<ul style='list-style: none; padding-left: 5px;'>"
+            html_steps += "<ul style='list-style: none; padding-left: 5px; background: #f9fafb; border-radius: 6px; padding: 10px;'>"
             
-            for i, s in enumerate(steps):
+            for i, step_data in enumerate(steps):
+                # Handle both old format (string) and new format (dict)
+                if isinstance(step_data, str):
+                    step_desc = step_data
+                    step_time = ""
+                else:
+                    step_desc = step_data.get("description", "")
+                    step_time = step_data.get("time", "")
+                
                 is_last = (i == len(steps) - 1)
                 if report.failed and is_last:
                     symbol = "<span style='color: #ef4444; font-weight: bold;'>✕</span>"
-                    style = "color: #ef4444; font-weight: bold; background: #fee2e2; padding: 2px 5px; border-radius: 3px;"
+                    style = "color: #ef4444; font-weight: bold; background: #fee2e2; padding: 4px 8px; border-radius: 4px; margin-bottom: 4px;"
                 else:
                     symbol = "<span style='color: #22c55e;'>✓</span>"
-                    style = "color: #374151;"
+                    style = "color: #374151; margin-bottom: 4px;"
                 
-                html_steps += f"<li style='margin-bottom: 5px; {style}'>{symbol} {s}</li>"
+                time_badge = f"<span style='color: #6b7280; font-size: 11px; margin-left: 8px;'>[{step_time}]</span>" if step_time else ""
+                html_steps += f"<li style='{style}'><span style='display: inline-block; min-width: 20px;'>{i + 1}.</span> {symbol} {step_desc}{time_badge}</li>"
             
             html_steps += "</ul></div>"
             
@@ -95,18 +107,21 @@ def setup_boundary_mocks(page: Page):
         )
     page.route("**/auth/v1/token**", handle_token)
 
-    page.route("**/auth/v1/user**", lambda route: route.fulfill(
-        status=200,
-        content_type="application/json",
-        body=f'''{{
-            "id": "{test_user_id}",
-            "email": "test@gmail.com",
-            "aud": "authenticated",
-            "role": "authenticated",
-            "app_metadata": {{"provider": "email"}},
-            "user_metadata": {{"first_name": "Test", "last_name": "User"}}
-        }}'''
-    ))
+    def handle_user_request(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=f'''{{
+                "id": "{test_user_id}",
+                "email": "test@gmail.com",
+                "aud": "authenticated",
+                "role": "authenticated",
+                "app_metadata": {{"provider": "email"}},
+                "user_metadata": {{"first_name": "Test", "last_name": "User"}}
+            }}'''
+        )
+
+    page.route("**/auth/v1/user**", handle_user_request)
 
     # 2. Mock /api/v1/auth/me (Bridges external user to backend)
     # We mock this because it's the very first call and ensures the user exists for the FE
