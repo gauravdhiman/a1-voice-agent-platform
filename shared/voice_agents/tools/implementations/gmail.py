@@ -72,7 +72,12 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Get the latest emails from the user's inbox.
+        Description:
+            Retrieve the most recent emails from the user's Gmail inbox.
+
+        Instructions:
+            Always limit results to 5-10 emails unless user specifically requests more.
+            This is for browsing recent emails, not for bulk operations.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -115,7 +120,12 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Get emails from a specific user (name or email).
+        Description:
+            Retrieve emails sent by a specific sender or matching a user name.
+
+        Instructions:
+            Use exact email address when available for better accuracy.
+            For names, use partial matching (e.g., "John" matches "john@example.com").
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -161,7 +171,12 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Get unread emails from the user's inbox.
+        Description:
+            Retrieve all unread emails from the Gmail inbox.
+
+        Instructions:
+            This helps users identify urgent emails they need to address.
+            Suggest user mark as read if they've reviewed them.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -204,7 +219,12 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Get starred emails from the user's inbox.
+        Description:
+            Retrieve emails that have been starred by the user.
+
+        Instructions:
+            Starred emails are typically important or reference emails.
+            Limit to 5-10 unless user needs more for review.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -248,7 +268,12 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Get emails matching a specific context or search term.
+        Description:
+            Search and retrieve emails matching Gmail search query syntax.
+
+        Instructions:
+            Use Gmail's advanced search operators (from:, to:, subject:, etc.) for precision.
+            Avoid overly broad queries that return hundreds of results.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -294,7 +319,12 @@ class GmailTool(BaseTool):
         num_emails: int = 10,
     ) -> dict[str, Any]:
         """
-        Get emails based on date range. start_date is a unix timestamp.
+        Description:
+            Retrieve emails within a specified date range.
+
+        Instructions:
+            Always confirm timestamp with user (is it local time or UTC?).
+            Use reasonable range (7-15 days) to avoid overwhelming results.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -345,7 +375,12 @@ class GmailTool(BaseTool):
         thread_id: str,
     ) -> dict[str, Any]:
         """
-        Retrieve all emails from a specific thread.
+        Description:
+            Get entire conversation history from an email thread.
+
+        Instructions:
+            May include multiple emails (original + replies).
+            Useful for understanding full conversation context before responding.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -381,16 +416,21 @@ class GmailTool(BaseTool):
         self,
         context: RunContext,
         query: str,
-        count: int = 5,
+        count: int = 1,
     ) -> dict[str, Any]:
         """
-        Search emails based on a given query.
-        Searches in to, from, cc, subject and email body contents.
+        Description:
+            Search Gmail inbox using natural language query or Gmail search operators.
+
+        Instructions:
+            Default to 1 result to save context window.
+            Ask user for more results if needed.
+            Use Gmail search syntax (from:, subject:, etc.) for precision.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
             query: Natural language query to search for
-            count: Number of emails to retrieve (default: 5, max: 10)
+            count: Number of emails to retrieve (default: 1, max: 10)
 
         Returns:
             Dict containing list of matching emails
@@ -432,7 +472,12 @@ class GmailTool(BaseTool):
         cc: Optional[str] = None,
     ) -> dict[str, Any]:
         """
-        Create and save a draft email. to and cc are comma separated string of email ids.  # noqa: E501
+        Description:
+            Create a draft email in Gmail for later editing or sending.
+
+        Instructions:
+            Useful when user wants to prepare email but send later.
+            Drafts can be edited via Gmail interface before sending.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -475,7 +520,13 @@ class GmailTool(BaseTool):
         cc: Optional[str] = None,
     ) -> dict[str, Any]:
         """
-        Send an email immediately. to and cc are comma separated string of email ids.
+        Description:
+            Compose and send an email to specified recipients immediately.
+
+        Instructions:
+            Always confirm email addresses with user before sending.
+            Ensure subject line accurately reflects email content.
+            Format body as plain text, not HTML (system handles conversion).
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -521,7 +572,12 @@ class GmailTool(BaseTool):
         cc: Optional[str] = None,
     ) -> dict[str, Any]:
         """
-        Respond to an existing email thread.
+        Description:
+            Send a reply to continue an email conversation thread.
+
+        Instructions:
+            Use get_emails_by_thread first to see conversation history.
+            Automatically handles "Re:" prefix in subject line.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -572,7 +628,12 @@ class GmailTool(BaseTool):
         message_id: str,
     ) -> dict[str, Any]:
         """
-        Mark a specific email as read by removing the 'UNREAD' label.
+        Description:
+            Mark an email as read in Gmail inbox.
+
+        Instructions:
+            Use after user has reviewed or processed an email.
+            Helps keep inbox organized by tracking read status.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -603,7 +664,12 @@ class GmailTool(BaseTool):
         message_id: str,
     ) -> dict[str, Any]:
         """
-        Mark a specific email as unread by adding the 'UNREAD' label.
+        Description:
+            Mark an email as unread in Gmail inbox.
+
+        Instructions:
+            Use when user wants to return to an email later.
+            Useful for flagging emails for follow-up.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -633,7 +699,15 @@ class GmailTool(BaseTool):
         context: RunContext,
     ) -> dict[str, Any]:
         """
-        List only user-created custom labels (filters out system labels).
+        Description:
+            Retrieve all custom labels created by the user.
+
+        Instructions:
+            Excludes Gmail's system labels (Inbox, Sent, Drafts, etc.).
+            Useful for understanding user's labeling system.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
 
         Returns:
             Dict containing list of custom labels
@@ -668,7 +742,13 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Find emails matching a query and apply a label, creating it if necessary.
+        Description:
+            Search for emails and apply a custom label to them.
+
+        Instructions:
+            Automatically creates label if it doesn't exist.
+            Limit to 5-10 emails unless user specifies more.
+            Use specific search queries for precision.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -749,7 +829,12 @@ class GmailTool(BaseTool):
         count: int = 5,
     ) -> dict[str, Any]:
         """
-        Remove a label from emails matching a query.
+        Description:
+            Search for emails and remove a custom label from them.
+
+        Instructions:
+            Only removes label from matching emails, doesn't delete the label itself.
+            Confirm with user before removing labels from many emails.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -823,7 +908,13 @@ class GmailTool(BaseTool):
         confirm: bool = False,
     ) -> dict[str, Any]:
         """
-        Permanently delete an email.
+        Description:
+            Move an email to trash (permanently deleted after 30 days).
+
+        Instructions:
+            Requires explicit confirmation (confirm=True) to delete.
+            Warn user that this action cannot be undone easily.
+            Emails in trash are permanently deleted after 30 days.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -865,7 +956,13 @@ class GmailTool(BaseTool):
         confirm: bool = False,
     ) -> dict[str, Any]:
         """
-        Delete a custom label (with safety confirmation).
+        DDescription:
+            Permanently delete a custom Gmail label.
+
+        Instructions:
+            Requires explicit confirmation (confirm=True) to delete.
+            Cannot delete system labels (Inbox, Sent, etc.).
+            Warning: Removing label doesn't delete the emails tagged with it.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -1046,7 +1143,12 @@ class GmailTool(BaseTool):
         self, context: RunContext, message_id: str, fetch_body: bool = True
     ) -> dict[str, Any]:
         """
-        Read a specific email by ID.
+        Description:
+            Retrieve full details and content of a specific email.
+
+        Instructions:
+            Use when user needs to read full email content.
+            Optionally skip body if user only wants metadata (headers).
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config

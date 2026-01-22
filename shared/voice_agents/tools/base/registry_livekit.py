@@ -200,10 +200,12 @@ class LiveKitToolRegistry:
         try:
             # Try to get schema from LiveKit's attributes
             if hasattr(func, "description") and hasattr(func, "parameters"):
+                raw_description = getattr(func, "description", "")
+                description = self._extract_description_section(raw_description)
                 schema = {
                     "type": "function",
-                    "name": func.__name__,
-                    "description": getattr(func, "description", ""),
+                    "name": self._format_function_name(func.__name__),
+                    "description": description,
                 }
 
                 if hasattr(func, "parameters"):
@@ -213,7 +215,10 @@ class LiveKitToolRegistry:
 
             # Fallback: Extract from docstring and signature
             docstring = inspect.getdoc(func)
-            description = docstring if docstring else ""
+            if docstring:
+                description = self._extract_description_section(docstring)
+            else:
+                description = ""
 
             sig = inspect.signature(func)
             parameters = {"type": "object", "properties": {}, "required": []}
@@ -249,7 +254,7 @@ class LiveKitToolRegistry:
 
             schema = {
                 "type": "function",
-                "name": func.__name__,
+                "name": self._format_function_name(func.__name__),
                 "description": description,
             }
 
@@ -282,6 +287,126 @@ class LiveKitToolRegistry:
             List of tool names registered in this registry.
         """
         return list(self._tools.keys())
+
+    def _extract_description_section(self, docstring: str) -> str:
+        """
+        Extract only the Description: section from docstring for UI display.
+
+        This method extracts the concise Description: section (1-3 lines) for
+        display in the UI. The full docstring (including Instructions, Args, Returns)
+        is preserved for AI agent use.
+
+        Args:
+            docstring: Full docstring from function
+
+        Returns:
+            Description text (1-3 lines) for UI display
+        """
+        if not docstring:
+            return ""
+
+        lines = docstring.split("\n")
+        description_lines = []
+        in_description_section = False
+        found_description = False
+
+        for line in lines:
+            stripped_line = line.strip()
+
+            # Check if we've reached the Description section
+            if stripped_line.lower().startswith("description:"):
+                in_description_section = True
+                found_description = True
+                continue
+
+            # If we're in the description section and hit another section, stop
+            if in_description_section and stripped_line.lower().startswith(
+                ("instructions:", "args:", "returns:", "raises:", "note:", "example:")
+            ):
+                break
+
+            # Collect lines while in description section
+            if in_description_section and line:
+                description_lines.append(line)
+
+        # If no Description section found, fall back to extracting text before Args
+        if not found_description:
+            return self._extract_before_first_section(docstring)
+
+        # Join lines and clean up
+        description = "\n".join(description_lines).strip()
+        return description
+
+    def _extract_before_first_section(self, docstring: str) -> str:
+        """
+        Extract text before the first section header (Description, Instructions, Args, etc.).
+
+        This is a fallback method for backward compatibility with old docstrings that
+        don't have explicit Description: section.
+
+        Args:
+            docstring: Full docstring from function
+
+        Returns:
+            Text before first section header
+        """
+        if not docstring:
+            return ""
+
+        lines = docstring.split("\n")
+        description_lines = []
+
+        for line in lines:
+            stripped_line = line.strip()
+
+            # Check for any section header
+            if stripped_line.lower().startswith(
+                (
+                    "description:",
+                    "instructions:",
+                    "args:",
+                    "returns:",
+                    "raises:",
+                    "note:",
+                    "example:",
+                )
+            ):
+                break
+
+            description_lines.append(line)
+
+        # Join lines and strip
+        return "\n".join(description_lines).strip()
+
+    def _format_function_name(self, name: str) -> str:
+        """
+        Convert snake_case function name to readable Title Case.
+
+        Replaces underscores (including multiple consecutive ones) with a single space,
+        then capitalizes the first letter of each word.
+
+        Args:
+            name: Function name in snake_case (e.g., "get_latest_emails")
+
+        Returns:
+            Formatted name with spaces and title case (e.g., "Get Latest Emails")
+
+        Example:
+            >>> _format_function_name("get_latest_emails")
+            "Get Latest Emails"
+            >>> _format_function_name("send_email_reply")
+            "Send Email Reply"
+            >>> _format_function_name("apply_label")
+            "Apply Label"
+        """
+        # Replace multiple consecutive underscores with a single space
+        # Then replace single underscores with space
+        words = name.replace("__", " ").replace("_", " ").split()
+
+        # Capitalize first letter of each word
+        formatted_words = [word.capitalize() for word in words]
+
+        return " ".join(formatted_words)
 
 
 # Create global instance

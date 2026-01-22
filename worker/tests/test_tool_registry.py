@@ -1,6 +1,8 @@
 """Tests for LiveKit tool registry."""
-import pytest
+
 from unittest.mock import Mock, patch
+
+import pytest
 
 
 class TestLiveKitToolRegistry:
@@ -9,9 +11,8 @@ class TestLiveKitToolRegistry:
     @pytest.fixture
     def registry(self):
         """Get the LiveKit tool registry instance."""
-        from shared.voice_agents.tools.base.registry_livekit import (
-            livekit_tool_registry,
-        )
+        from shared.voice_agents.tools.base.registry_livekit import \
+            livekit_tool_registry
 
         return livekit_tool_registry
 
@@ -201,9 +202,7 @@ class TestLiveKitToolRegistry:
             "access_token": "test-token",
             "refresh_token": "test-refresh",
         }
-        tool_instance = calendar_class(
-            config=config, sensitive_config=sensitive_config
-        )
+        tool_instance = calendar_class(config=config, sensitive_config=sensitive_config)
 
         assert tool_instance is not None
         assert tool_instance.sensitive_config.access_token == "test-token"
@@ -238,7 +237,9 @@ class TestLiveKitToolRegistry:
             import inspect
 
             sig = inspect.signature(func)
-            assert "context" in sig.parameters, f"Function {func.__name__} missing context param"
+            assert (
+                "context" in sig.parameters
+            ), f"Function {func.__name__} missing context param"
 
     def test_tool_functions_have_docstrings(self, registry):
         """Test all tool functions have docstrings."""
@@ -251,5 +252,166 @@ class TestLiveKitToolRegistry:
         functions = registry.get_tool_functions("Google_calendar")
 
         for func in functions:
-            assert func.__doc__ is not None, f"Function {func.__name__} missing docstring"
-            assert len(func.__doc__) > 0, f"Function {func.__name__} has empty docstring"
+            assert (
+                func.__doc__ is not None
+            ), f"Function {func.__name__} missing docstring"
+            assert (
+                len(func.__doc__) > 0
+            ), f"Function {func.__name__} has empty docstring"
+
+    def test_format_function_name(self, registry):
+        """Test _format_function_name converts snake_case to Title Case."""
+        # Test basic snake_case
+        assert (
+            registry._format_function_name("get_latest_emails") == "Get Latest Emails"
+        )
+        assert registry._format_function_name("send_email") == "Send Email"
+        assert registry._format_function_name("read_email") == "Read Email"
+
+        # Test with multiple underscores
+        assert registry._format_function_name("search__emails") == "Search Emails"
+        assert registry._format_function_name("get___latest") == "Get Latest"
+
+        # Test single word
+        assert registry._format_function_name("delete") == "Delete"
+
+        # Test already has capitals
+        assert registry._format_function_name("get_user_id") == "Get User Id"
+
+    def test_schema_extraction_uses_formated_name_and_description(self, registry):
+        """Test that _extract_schema_from_function uses formatted names and descriptions."""
+        # Register tools first
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        # Get Gmail functions
+        functions = registry.get_tool_functions("Gmail")
+
+        # Find a specific function (send_email)
+        send_email_func = next(
+            (f for f in functions if f.__name__ == "send_email"), None
+        )
+        assert send_email_func is not None
+
+        # Extract schema
+        schema = registry._extract_schema_from_function(send_email_func)
+
+        # Verify name is formatted (Send Email, not send_email)
+        assert schema is not None
+        assert schema["name"] == "Send Email"
+
+        # Verify description is from Description: section (1-3 lines only)
+        assert "Args:" not in schema["description"]
+        assert "Instructions:" not in schema["description"]
+        assert "context:" not in schema["description"]
+        assert "LiveKit RunContext" not in schema["description"]
+
+    def test_extract_description_section(self, registry):
+        """Test _extract_description_section extracts only Description: section."""
+        docstring = """
+        Get the latest emails from the user's inbox.
+
+        Description:
+            Retrieve the most recent emails from the user's Gmail inbox.
+
+        Instructions:
+            Always limit results to 5-10 emails unless user specifically requests more.
+            This is for browsing recent emails, not for bulk operations.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            count: Number of latest emails to retrieve (default: 5, max: 10)
+
+        Returns:
+            Dict containing list of emails with details
+        """
+        expected = "Retrieve the most recent emails from the user's Gmail inbox."
+        result = registry._extract_description_section(docstring)
+        assert result == expected
+
+    def test_extract_description_section_multiline(self, registry):
+        """Test _extract_description_section with 2-3 line description."""
+        docstring = """
+        Send an email immediately. to and cc are comma separated string of email ids.
+
+        Description:
+            Compose and send an email to specified recipients immediately.
+            Ensure subject line accurately reflects email content.
+
+        Instructions:
+            Always confirm email addresses with user before sending.
+            Format body as plain text, not HTML.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            to: Comma separated string of recipient email addresses
+
+        Returns:
+            Dict containing sent email details including id
+        """
+        expected = """Compose and send an email to specified recipients immediately.
+            Ensure subject line accurately reflects email content."""
+        result = registry._extract_description_section(docstring)
+        assert result == expected
+
+    def test_extract_description_section_fallback(self, registry):
+        """Test _extract_description_section falls back for old docstrings."""
+        docstring = """
+        Get the latest emails from the user's inbox.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            count: Number of latest emails to retrieve (default: 5, max: 10)
+
+        Returns:
+            Dict containing list of emails with details
+        """
+        expected = "Get the latest emails from the user's inbox."
+        result = registry._extract_description_section(docstring)
+        assert result == expected
+
+    def test_extract_description_section_stops_at_instructions(self, registry):
+        """Test _extract_description_section stops at Instructions section."""
+        docstring = """
+        Search emails based on a given query.
+
+        Description:
+            Search emails in inbox using natural language query.
+
+        Instructions:
+            Use specific keywords and filters for better results.
+            Avoid overly broad queries that return too many results.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            query: Natural language query to search for
+
+        Returns:
+            Dict containing list of matching emails
+        """
+        expected = "Search emails in inbox using natural language query."
+        result = registry._extract_description_section(docstring)
+        assert result == expected
+        assert "Instructions:" not in result
+
+    def test_extract_before_first_section(self, registry):
+        """Test _extract_before_first_section for backward compatibility."""
+        docstring = """
+        Create a draft email.
+
+        This creates a draft in Gmail for later editing or sending.
+
+        Args:
+            context: LiveKit RunContext with tool_config and sensitive_config
+            to: Comma separated string of recipient email addresses
+
+        Returns:
+            Draft ID
+        """
+        expected = """Create a draft email.
+
+        This creates a draft in Gmail for later editing or sending."""
+        result = registry._extract_before_first_section(docstring)
+        assert result == expected
+        assert "Args:" not in result

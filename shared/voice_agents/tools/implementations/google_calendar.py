@@ -61,16 +61,18 @@ class GoogleCalendarTool(BaseTool):
         max_results: int = 10,
     ) -> dict[str, Any]:
         """
-        List calendar events within a time range.
-        Important points to consider:
-        1. For time related parameters always pass the time in ISO format
-        with timezone (e.g., 2025-12-30T09:00:00Z). If you do not have
-        timezone or cannot infer it, always ask user to provide it.
+        Description:
+            Retrieve all calendar events within a specified time range.
+
+        Instructions:
+            Always include timezone in ISO format timestamps.
+            Ask user for timezone if not provided or inferable.
+            Default to 10 events, ask for more if needed.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            time_min: Start of time range in ISO format (e.g., 2025-12-30T09:00:00Z)
-            time_max: End of time range in ISO format (optional)
+            time_min: Start of time range in ISO format (e.g., 2025-12-30T09:00:00Z), with timezone
+            time_max: End of time range in ISO format (optional), with timezone
             max_results: Maximum number of events to return (default: 10)
         """
         if not self.sensitive_config or not self.sensitive_config.access_token:
@@ -107,18 +109,18 @@ class GoogleCalendarTool(BaseTool):
         description: str | None = None,
     ) -> dict[str, Any]:
         """
-        Create a new calendar event.
-        Important points to consider:
-        1. In case user provides attendees email ids, always confirm
-        each one of them by spelling them letter by letter like for
-        test.email-1@example.com, the spelling is
-        T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM.
-        2. Once user confirm all the details, then only create the event.
-        3. For time parameters always pass the time in ISO format
-        with timezone (e.g., 2025-12-30T09:00:00Z). If you do not
-        have timezone or cannot infer it, always ask user to provide it.
-        4. Before creating the event, always check the availability of
-        that timeslot on calendar using check_availability tool (if available).
+        Description:
+            Schedule a new event on the user's Google Calendar.
+
+        Instructions:
+            1. Always spell out attendee emails for verification.
+            For instance test.email-1@example.com, the spelling is T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM
+            2. Check availability before booking if check_availability tool is available.
+            3. Always pass the time in ISO format
+            with timezone (e.g., 2025-12-30T09:00:00Z). If you do not
+            have timezone or cannot infer it, always ask user to provide it.
+            4. Confirm all details with user before creating the event.
+            DO NOT CREATE EVENT WITHOUT USER EXPLICIT CONFIRMATION.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -172,19 +174,18 @@ class GoogleCalendarTool(BaseTool):
         description: str | None = None,
     ) -> dict[str, Any]:
         """
-        Update an existing calendar event.
-        Important points to consider:
-        1. Before updating an event, always use the list_events tool to
-        check availability and identify the correct event to update. This
-        ensures you're updating the right appointment.
-        2. In case user provides attendees email ids, always confirm
-        each one of them by spelling them letter by letter like for
-        test.email-1@example.com, the spelling is
-        T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM.
-        3. Once user confirm all the details, then only update the event.
-        4. For time parameters always pass the time in ISO format
-        with timezone (e.g., 2025-12-30T09:00:00Z). If you do not
-        have timezone or cannot infer it, always ask user to provide it.
+        Description:
+            Modify details of an existing calendar event.
+
+        Instructions:
+            - Use list_events to find the correct event first.
+            - Always spell out attendee emails for verification.
+            For instance test.email-1@example.com, the spelling is T-E-S-T-DOT-E-M-A-I-L-DASH-1@-EXAMPLE-DOT-COM
+            - Always pass the time in ISO format
+            with timezone (e.g., 2025-12-30T09:00:00Z). If you do not
+            have timezone or cannot infer it, always ask user to provide it.
+            - Confirm all details with user before creating the event.
+            DO NOT CREATE EVENT WITHOUT USER EXPLICIT CONFIRMATION.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -231,11 +232,13 @@ class GoogleCalendarTool(BaseTool):
 
     async def delete_event(self, context: RunContext, event_id: str) -> dict[str, Any]:
         """
-        Delete a calendar event.
-        Important points to consider:
-        1. Before deleting an event, always use the list_events tool
-        to identify the correct event to delete. This ensures you're
-        deleting the right appointment.
+        Description:
+            Remove / Delete an event from the user's Google Calendar.
+
+        Instructions:
+            - Use list_events to verify the correct event before deletion.
+            - Confirm with user that they want to delete this specific event.
+            as this action cannot be undone.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
@@ -259,17 +262,20 @@ class GoogleCalendarTool(BaseTool):
             response.raise_for_status()
             return {"success": True, "message": "Event deleted successfully"}
 
-    async def get_event(
-        self, context: RunContext, event_id: str
-    ) -> dict[str, Any]:
+    async def get_event(self, context: RunContext, event_id: str) -> dict[str, Any]:
         """
-        Retrieve a specific calendar event by ID.
+        Description:
+            Get detailed information about a specific calendar event.
+
+        Instructions:
+            Use when user needs to see full event details.
+            Helpful for verifying event information before updates.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
-            event_id: ID of the event to retrieve
+            event_id: ID of event to retrieve
 
-        Returns:
+            Returns:
             Dict with event details
         """
         if not self.sensitive_config or not self.sensitive_config.access_token:
@@ -296,11 +302,13 @@ class GoogleCalendarTool(BaseTool):
         self, context: RunContext, date: str, duration_minutes: int = 30
     ) -> dict[str, Any]:
         """
-        Check if time slots are free.
-        Important points to consider:
-        2. For date and time related parameters always pass the time in ISO
-        format with timezone (e.g., 2025-12-30T09:00:00Z). If you do
-        not have timezone, always ask user to provide it.
+        Description:
+            Check if a time slot is available on the calendar.
+
+        Instructions:
+            - Always include timezone in ISO format timestamps.
+            - Ask user for timezone if not provided or inferable.
+            - Use before creating or updating events to avoid double-booking.
 
         Args:
             context: LiveKit RunContext with tool_config and sensitive_config
