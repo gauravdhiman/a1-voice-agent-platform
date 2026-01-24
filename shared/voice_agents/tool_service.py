@@ -28,12 +28,15 @@ logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
 
-def validate_token_status(sensitive_config: Optional[str]) -> AuthStatus:
+def validate_token_status(
+    sensitive_config: Optional[str], auth_type: Optional[str] = "oauth2"
+) -> AuthStatus:
     """
     Validate authentication token status from encrypted sensitive config.
 
     Args:
-        sensitive_config: Encrypted JSON string containing OAuth tokens
+        sensitive_config: Encrypted JSON string containing auth credentials
+        auth_type: Authentication type ("oauth2", "api_key", etc.)
 
     Returns:
         AuthStatus enum indicating the authentication state
@@ -46,18 +49,32 @@ def validate_token_status(sensitive_config: Optional[str]) -> AuthStatus:
         if not decrypted_data or not isinstance(decrypted_data, dict):
             return AuthStatus.NOT_AUTHENTICATED
 
-        access_token = decrypted_data.get("access_token")
-        expires_at = decrypted_data.get("expires_at")
+        # OAuth token validation
+        if auth_type == "oauth2":
+            access_token = decrypted_data.get("access_token")
+            expires_at = decrypted_data.get("expires_at")
 
-        if not access_token or not expires_at:
+            if not access_token or not expires_at:
+                return AuthStatus.NOT_AUTHENTICATED
+
+            # Check if token is still valid (with 5 min buffer)
+            current_time = datetime.now().timestamp()
+            if current_time >= (expires_at - 300):  # 5 minutes buffer
+                return AuthStatus.EXPIRED
+
+            return AuthStatus.AUTHENTICATED
+
+        # API key validation (simple presence check)
+        elif auth_type == "api_key":
+            api_key = decrypted_data.get("api_key")
+            return AuthStatus.AUTHENTICATED if api_key else AuthStatus.NOT_AUTHENTICATED
+
+        else:
+            # Unknown auth type - check if any credential exists
+            if any(decrypted_data.values()):
+                return AuthStatus.AUTHENTICATED
             return AuthStatus.NOT_AUTHENTICATED
 
-        # Check if token is still valid (with 5 min buffer)
-        current_time = datetime.now().timestamp()
-        if current_time >= (expires_at - 300):  # 5 minutes buffer
-            return AuthStatus.EXPIRED
-
-        return AuthStatus.AUTHENTICATED
     except Exception as e:
         logger.error(f"Error validating token status: {e}")
         return AuthStatus.NOT_AUTHENTICATED
@@ -207,8 +224,10 @@ class ToolService:
 
             # Build response model without sensitive config
             result_data = response.data[0]
+            auth_type = platform_tool.auth_type if platform_tool else None
             auth_status_val = validate_token_status(
-                result_data.get("sensitive_config")
+                result_data.get("sensitive_config"),
+                auth_type=auth_type or "oauth2"
             )
             requires_auth = platform_tool.requires_auth if platform_tool else False
             connection_status_val = get_connection_status(requires_auth, auth_status_val)
@@ -260,7 +279,11 @@ class ToolService:
                     pass
 
                 # Build response without sensitive config
-                auth_status_val = validate_token_status(item.get("sensitive_config"))
+                auth_type = tool_data.get("auth_type") if tool_data else None
+                auth_status_val = validate_token_status(
+                    item.get("sensitive_config"),
+                    auth_type=auth_type or "oauth2"
+                )
                 requires_auth = tool_data.get("requires_auth", False) if tool_data else False
                 connection_status_val = get_connection_status(requires_auth, auth_status_val)
 
@@ -373,8 +396,15 @@ class ToolService:
             if not response.data:
                 return None, "Agent tool configuration not found"
 
-            # Build response model without sensitive config
+            # Fetch platform tool to get auth_type for auth status validation
             result_data = response.data[0]
+            platform_tools, _ = await self.get_platform_tools(only_active=False)
+            platform_tool = next(
+                (t for t in platform_tools if t.id == result_data["tool_id"]), None
+            )
+
+            # Build response model without sensitive config
+            auth_type = platform_tool.auth_type if platform_tool else None
             response_dict = {
                 "id": result_data["id"],
                 "agent_id": result_data["agent_id"],
@@ -383,7 +413,8 @@ class ToolService:
                 "unselected_functions": result_data.get("unselected_functions"),
                 "is_enabled": result_data.get("is_enabled", True),
                 "auth_status": validate_token_status(
-                    result_data.get("sensitive_config")
+                    result_data.get("sensitive_config"),
+                    auth_type=auth_type or "oauth2"
                 ),
                 "created_at": result_data["created_at"],
                 "updated_at": result_data["updated_at"],

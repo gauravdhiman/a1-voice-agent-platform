@@ -11,7 +11,7 @@ from typing import List
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from opentelemetry import trace
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -361,6 +361,31 @@ async def logout_agent_tool(
 
     updated_tool, error = await tool_service.update_agent_tool(
         agent_tool_id, AgentToolUpdate(sensitive_config=None)
+    )
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return updated_tool
+
+
+@tool_router.put("/agent/{agent_tool_id}/api-key", response_model=AgentToolResponse)
+@tracer.start_as_current_span("tool.routes.set_api_key")
+async def set_api_key(
+    agent_tool_id: UUID,
+    api_key: str = Body(..., embed=True, description="API key to store in sensitive_config"),
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Save or update API key in sensitive_config for a tool."""
+    current_user_id, user_profile = user_data
+
+    if not api_key or not api_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key cannot be empty"
+        )
+
+    # Update sensitive config with API key
+    updated_tool, error = await tool_service.update_agent_tool(
+        agent_tool_id, AgentToolUpdate(sensitive_config={"api_key": api_key.strip()})
     )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)

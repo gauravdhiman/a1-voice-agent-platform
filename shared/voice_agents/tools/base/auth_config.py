@@ -49,11 +49,20 @@ class GitHubAuthConfig(BaseAuthConfig):
     # GitHub-specific fields can be added here as needed
 
 
+class ApiKeyAuthConfig(BaseModel):
+    """API Key authentication configuration.
+
+    For tools that require simple API key authentication instead of OAuth.
+    """
+    provider: str = "api_key"
+
+
 # Registry of auth config classes for provider lookup
 AUTH_CONFIG_REGISTRY = {
     "google": GoogleAuthConfig,
     "microsoft": MicrosoftAuthConfig,
     "github": GitHubAuthConfig,
+    "api_key": ApiKeyAuthConfig,
 }
 
 

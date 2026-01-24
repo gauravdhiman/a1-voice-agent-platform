@@ -110,6 +110,14 @@ class AgentService {
     return response.data;
   }
 
+  async setApiKey(agentToolId: string, apiKey: string): Promise<AgentTool> {
+    const response = await apiClient.put<AgentTool>(
+      `${this.toolBaseUrl}/agent/${agentToolId}/api-key`,
+      { api_key: apiKey },
+    );
+    return response.data;
+  }
+
   async deleteAgentTool(agentToolId: string): Promise<void> {
     await apiClient.delete(`${this.toolBaseUrl}/agent/${agentToolId}`);
   }

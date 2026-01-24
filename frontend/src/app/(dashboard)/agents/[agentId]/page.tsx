@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect } from "react";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -17,6 +18,7 @@ import { useAgent,
   useConfigureAgentTool,
 } from "@/hooks/use-agent-queries";
 import { organizationService } from "@/services/organization-service";
+import { agentService } from "@/services/agent-service";
 import type { PlatformTool, AgentTool } from "@/types/agent";
 import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
@@ -275,6 +277,23 @@ export default function AgentDetailPage() {
       }
     },
     [logoutAgentToolMutation],
+  );
+
+  const handleSetApiKey = useCallback(
+    async (agentToolId: string, apiKey: string) => {
+      try {
+        await agentService.setApiKey(agentToolId, apiKey);
+        toast.success("API Key Saved", {
+          description: "Your API key has been configured successfully.",
+        });
+      } catch (error) {
+        console.error("Failed to set API key:", error);
+        toast.error("Error", {
+          description: "Failed to save API key. Please try again.",
+        });
+      }
+    },
+    [],
   );
 
   const handleDisconnect = useCallback(
@@ -619,6 +638,7 @@ export default function AgentDetailPage() {
           onToggleFunction={handleToggleFunction}
           onOAuth={handleOAuth}
           onLogout={handleLogout}
+          onSetApiKey={handleSetApiKey}
           onDisconnect={() => {
             const agentTool = localAgentTools.find(
               (at) => at.tool_id === selectedTool.id,

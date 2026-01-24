@@ -2,19 +2,17 @@
 Tests for shared Tool Service.
 """
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from shared.voice_agents.tool_service import ToolService, validate_token_status, get_connection_status
+from shared.voice_agents.tool_service import ToolService, validate_token_status
 from shared.voice_agents.tool_models import (
-    AgentTool,
     PlatformTool,
     AgentToolCreate,
     AgentToolUpdate,
     AuthStatus
 )
-from shared.common.security import encrypt_data
 
 
 @pytest.fixture
@@ -91,6 +89,38 @@ class TestToolService:
         """Test token status validation for missing token."""
         encrypted_config = None
         status = validate_token_status(encrypted_config)
+
+        assert status == AuthStatus.NOT_AUTHENTICATED
+
+    async def test_validate_token_status_api_key_authenticated(self, tool_service):
+        """Test token status validation for API key auth."""
+        from shared.common.security import decrypt_data
+        from unittest.mock import patch
+
+        sensitive_config = {
+            "api_key": "test_api_key_12345"
+        }
+
+        # Patch decrypt_data to return to sensitive_config
+        with patch('shared.voice_agents.tool_service.decrypt_data', return_value=sensitive_config):
+            encrypted_config = "encrypted_config"
+            status = validate_token_status(encrypted_config, auth_type="api_key")
+
+        assert status == AuthStatus.AUTHENTICATED
+
+    async def test_validate_token_status_api_key_not_authenticated(self, tool_service):
+        """Test token status validation for missing API key."""
+        from shared.common.security import decrypt_data
+        from unittest.mock import patch
+
+        sensitive_config = {
+            "other_field": "value"
+        }
+
+        # Patch decrypt_data to return to sensitive_config
+        with patch('shared.voice_agents.tool_service.decrypt_data', return_value=sensitive_config):
+            encrypted_config = "encrypted_config"
+            status = validate_token_status(encrypted_config, auth_type="api_key")
 
         assert status == AuthStatus.NOT_AUTHENTICATED
 

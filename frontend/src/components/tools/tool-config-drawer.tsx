@@ -44,6 +44,7 @@ export interface ToolConfigDrawerProps {
   ) => Promise<void>;
   onOAuth: (toolName: string) => Promise<void>;
   onLogout: (agentToolId: string) => Promise<void>;
+  onSetApiKey: (agentToolId: string, apiKey: string) => Promise<void>;
   onDisconnect: () => void;
   canEdit: boolean;
   isSaving?: boolean;
@@ -58,6 +59,7 @@ export function ToolConfigDrawer({
   onToggleFunction,
   onOAuth,
   onLogout,
+  onSetApiKey,
   onDisconnect,
   canEdit,
   isSaving = false,
@@ -67,6 +69,9 @@ export function ToolConfigDrawer({
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const [isConnecting, setIsConnecting] = React.useState(false);
+  const [showApiKeyInput, setShowApiKeyInput] = React.useState(false);
+  const [apiKey, setApiKey] = React.useState("");
+  const [isSavingApiKey, setIsSavingApiKey] = React.useState(false);
   const currentTime = useLiveTime();
 
   React.useEffect(() => {
@@ -91,9 +96,10 @@ export function ToolConfigDrawer({
   const functions = tool.tool_functions_schema?.functions || [];
   const toolUnselectedFunctions = agentTool?.unselected_functions || [];
   const isToolEnabled = agentTool?.is_enabled ?? false;
-
-  const isOAuth = tool.requires_auth || schema?.requires_auth;
   const hasFunctions = functions.length > 0;
+
+  const isOAuth = tool.auth_type === "oauth2";
+  const isApiKey = tool.auth_type === "api_key";
 
   const handleConfigChange = (key: string, value: string) => {
     const newConfig = { ...localConfig, [key]: value };
@@ -120,6 +126,27 @@ export function ToolConfigDrawer({
     if (!agentTool) return;
     await onLogout(agentTool.id);
   };
+
+  const handleSaveApiKey = async () => {
+    if (!agentTool || !apiKey.trim()) return;
+    setIsSavingApiKey(true);
+    try {
+      await onSetApiKey(agentTool.id, apiKey.trim());
+      setApiKey("");
+      setShowApiKeyInput(false);
+    } finally {
+      setIsSavingApiKey(false);
+    }
+  };
+
+  const handleClearApiKey = async () => {
+    if (!agentTool) return;
+    await onLogout(agentTool.id);
+  };
+
+  // Check if token is locally expired (client-side detection)
+  const isTokenExpired = !!(agentTool?.token_expires_at && (agentTool.token_expires_at * 1000) < currentTime);
+  const authenticated = agentTool?.auth_status === AuthStatus.AUTHENTICATED && !isTokenExpired;
 
   const getAuthStatusConfig = () => {
     if (!agentTool) {
@@ -184,11 +211,7 @@ export function ToolConfigDrawer({
     }
   };
 
-  // Check if token is locally expired (client-side detection)
-  const isTokenExpired = agentTool?.token_expires_at && (agentTool.token_expires_at * 1000) < currentTime;
-
   const authConfig = getAuthStatusConfig();
-  const authenticated = agentTool?.auth_status === AuthStatus.AUTHENTICATED && !isTokenExpired;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -266,6 +289,89 @@ export function ToolConfigDrawer({
                   </Button>
                 )}
               </div>
+            </div>
+          )}
+
+          {isApiKey && (
+            <div className={cn(
+              "space-y-3 p-4 rounded-lg border",
+              authenticated ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+            )}>
+              {!authenticated && !showApiKeyInput && (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    <span className="text-sm font-medium">API Key Required</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => setShowApiKeyInput(true)}
+                    disabled={!canEdit}
+                  >
+                    <Lock className="h-3.5 w-3.5 mr-1" />
+                    Configure API Key
+                  </Button>
+                </div>
+              )}
+
+              {authenticated && (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="text-sm font-medium">API Key Configured</span>
+                    <Badge variant="secondary" className="h-5 text-[10px]">Active</Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={handleClearApiKey}
+                    disabled={!canEdit}
+                  >
+                    <LogOut className="h-3.5 w-3.5 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+              )}
+
+              {showApiKeyInput && (
+                <div className="space-y-2 bg-background rounded-lg border p-4">
+                  <Label htmlFor={`api-key-${tool.id}`}>API Key</Label>
+                  <Input
+                    id={`api-key-${tool.id}`}
+                    type="password"
+                    placeholder="Enter your API key"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    disabled={!canEdit}
+                    className="h-9 text-sm"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveApiKey}
+                      disabled={!apiKey.trim() || isSavingApiKey || !canEdit}
+                    >
+                      {isSavingApiKey ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : null}
+                      Save API Key
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setShowApiKeyInput(false);
+                        setApiKey("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
