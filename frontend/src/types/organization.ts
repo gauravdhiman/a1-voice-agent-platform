@@ -10,6 +10,8 @@ export interface Organization {
   slug: string;
   website: string | null;
   is_active: boolean;
+  industry?: string | null;
+  location?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +50,8 @@ export interface OrganizationUpdate {
   slug?: string;
   website?: string | null;
   is_active?: boolean;
+  industry?: string | null;
+  location?: string | null;
   business_details?: string | null;
 }
 

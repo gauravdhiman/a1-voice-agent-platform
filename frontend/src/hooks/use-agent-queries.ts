@@ -17,6 +17,8 @@ export const agentQueryKeys = {
   organization: (orgId: string) =>
     [...agentQueryKeys.all, "organization", orgId] as const,
   detail: (id: string) => [...agentQueryKeys.all, id] as const,
+  systemPrompt: (id: string) =>
+    [...agentQueryKeys.all, id, "system-prompt"] as const,
   platformTools: () => ["tools", "platform"] as const,
   agentTools: (agentId: string) => ["tools", "agent", agentId] as const,
 };
@@ -46,6 +48,16 @@ export function useAgent(agentId: string) {
     queryKey: agentQueryKeys.detail(agentId),
     queryFn: () => agentService.getAgentById(agentId),
     staleTime: 30 * 1000,
+    enabled: !!agentId,
+  });
+}
+
+// Get the generated system prompt for an agent
+export function useAgentSystemPrompt(agentId: string) {
+  return useQuery({
+    queryKey: agentQueryKeys.systemPrompt(agentId),
+    queryFn: () => agentService.getAgentSystemPrompt(agentId),
+    staleTime: 5 * 1000, // Short stale time since it depends on agent/org data
     enabled: !!agentId,
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
@@ -12,6 +12,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -38,6 +39,7 @@ import {
   Bot,
   Edit3,
   Phone,
+  Info,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -88,6 +90,8 @@ export default function OrganizationPage() {
     website: string;
     slug: string;
     is_active: boolean;
+    industry: string;
+    location: string;
     business_details: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -111,6 +115,8 @@ export default function OrganizationPage() {
         website: org.website || "",
         slug: org.slug,
         is_active: org.is_active,
+        industry: org.industry || "",
+        location: org.location || "",
         business_details: org.business_details || "",
       });
 
@@ -158,12 +164,18 @@ export default function OrganizationPage() {
   } = useOrganizationById(orgId);
 
   // Set the current organization based on the validated orgId parameter if provided
-  if (
-    validatedOrg &&
-    (!currentOrganization || currentOrganization.id !== validatedOrg.id)
-  ) {
-    setCurrentOrganization(validatedOrg);
-  }
+  // Use useEffect to avoid setting state during render
+  const hasSetOrgRef = useRef(false);
+  useEffect(() => {
+    if (
+      validatedOrg &&
+      (!currentOrganization || currentOrganization.id !== validatedOrg.id) &&
+      !hasSetOrgRef.current
+    ) {
+      setCurrentOrganization(validatedOrg);
+      hasSetOrgRef.current = true;
+    }
+  }, [validatedOrg, currentOrganization, setCurrentOrganization]);
 
   const handleEdit = () => {
     if (organizationData) {
@@ -177,33 +189,64 @@ export default function OrganizationPage() {
   };
 
   const handleSave = async () => {
-    if (!orgId || !editedOrg) return;
+    if (!orgId || !editedOrg || !organizationData) return;
+
+    // Store original data for rollback if needed
+    const originalData = { ...organizationData };
+
+    // 1. Optimistic Update: Update UI immediately
+    const updatedOrg = {
+      ...organizationData.organization,
+      ...editedOrg,
+    } as OrganizationEnhanced;
+
+    setOrganizationData({ organization: updatedOrg });
+    setIsEditing(false);
 
     setSaving(true);
     try {
-      await organizationService.updateOrganization(orgId, {
+      const response = await organizationService.updateOrganization(orgId, {
         name: editedOrg.name,
         description: editedOrg.description,
         website: editedOrg.website,
         slug: editedOrg.slug,
         is_active: editedOrg.is_active,
+        industry: editedOrg.industry,
+        location: editedOrg.location,
         business_details: editedOrg.business_details,
       });
 
+      // 2. Final Sync: Update with actual server response
+      setOrganizationData({ organization: response as OrganizationEnhanced });
       toast.success("Organization updated successfully");
-      setIsEditing(false);
-      loadOrganizationData();
     } catch (error) {
       console.error("Failed to update organization:", error);
       toast.error("Failed to update organization");
+      // Rollback on failure
+      setOrganizationData(originalData);
     } finally {
       setSaving(false);
     }
   };
 
   const handleCancel = () => {
+    // 1. Simply revert UI state
     setIsEditing(false);
-    loadOrganizationData(); // Reload to reset changes
+
+    // 2. Reset draft state from existing data (No refetch!)
+    if (organizationData) {
+      const org = organizationData.organization;
+      setEditedOrg({
+        name: org.name,
+        description: org.description || "",
+        website: org.website || "",
+        slug: org.slug,
+        is_active: org.is_active,
+        industry: org.industry || "",
+        location: org.location || "",
+        business_details: org.business_details || "",
+      });
+    }
   };
 
   const handleAddAgent = () => {
@@ -321,74 +364,39 @@ export default function OrganizationPage() {
 
           {canUpdateOrganization && (
             <div className="flex items-center space-x-2">
-              {isEditing ? (
-                <>
-                  <Button
-                    onClick={handleSave}
-                    disabled={saving}
-                    size="sm"
-                    className="flex items-center space-x-2"
-                  >
-                    <Save className="h-4 w-4" />
-                    <span>{saving ? "Saving..." : "Save Changes"}</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="flex items-center space-x-2">
+                    <Activity className="h-4 w-4" />
+                    <span>Actions</span>
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancel}
-                    className="flex items-center space-x-2"
-                  >
-                    <X className="h-4 w-4" />
-                    <span>Cancel</span>
-                  </Button>
-                </>
-              ) : (
-                <div className="relative">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" className="flex items-center space-x-2">
-                        <Activity className="h-4 w-4" />
-                        <span>Actions</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuItem
-                        className="flex items-center space-x-2 cursor-pointer"
-                        onClick={handleEdit}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                        <span>Edit Organization</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {canViewMembers && (
+                    <Link
+                      href={`/organization/members?org_id=${validatedOrg.id}`}
+                    >
+                      <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
+                        <Users className="h-4 w-4" />
+                        <span>Manage Members</span>
                       </DropdownMenuItem>
-                      {canViewMembers && (
-                        <Link
-                          href={`/organization/members?org_id=${validatedOrg.id}`}
-                        >
-                          <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
-                            <Users className="h-4 w-4" />
-                            <span>Manage Members</span>
-                          </DropdownMenuItem>
-                        </Link>
-                      )}
-                      <Link
-                        href={`/organization/billing?org_id=${validatedOrg.id}`}
-                      >
-                        <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
-                          <CreditCard className="h-4 w-4" />
-                          <span>Billing & Subscriptions</span>
-                        </DropdownMenuItem>
-                      </Link>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
+                    </Link>
+                  )}
+                  <Link
+                    href={`/organization/billing?org_id=${validatedOrg.id}`}
+                  >
+                    <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
+                      <CreditCard className="h-4 w-4" />
+                      <span>Billing & Subscriptions</span>
+                    </DropdownMenuItem>
+                  </Link>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>
 
         <div className="flex items-center space-x-4">
-          <Badge variant={displayOrg.is_active ? "default" : "secondary"}>
-            {displayOrg.is_active ? "Active" : "Inactive"}
-          </Badge>
           <span className="text-sm text-muted-foreground flex items-center">
             <Calendar className="h-4 w-4 mr-1" />
             Created {new Date(validatedOrg.created_at).toLocaleDateString()}
@@ -418,19 +426,36 @@ export default function OrganizationPage() {
         <TabsContent value="overview">
           <Card>
             <CardHeader className="p-5 pb-3">
-              <CardTitle className="flex items-center space-x-2 text-lg">
-                <Building2 className="h-5 w-5" />
-                <span>Organization Information</span>
-              </CardTitle>
-              <CardDescription>
-                {isEditing
-                  ? "Edit your organization details"
-                  : "Your organization details and settings"}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1">
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <Building2 className="h-5 w-5" />
+                    <span>Organization Information</span>
+                  </CardTitle>
+                  <CardDescription>
+                    {isEditing
+                      ? "Edit your organization details"
+                      : "Your organization details and settings"}
+                  </CardDescription>
+                </div>
+                {canUpdateOrganization && !isEditing && (
+                  <Button variant="outline" size="sm" onClick={handleEdit}>
+                    <Edit3 className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-5 pt-0 space-y-4">
               {isEditing ? (
                 <>
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-blue-800">
+                      The information you provide here helps AI agents represent your business accurately when speaking with callers.
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="name">Name</Label>
                     <Input
@@ -459,6 +484,39 @@ export default function OrganizationPage() {
                       placeholder="Tell us about your organization, like little background, about team etc. This will be used by AI agent for context."
                       className="min-h-[100px]"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="industry">Industry</Label>
+                      <Input
+                        id="industry"
+                        value={editedOrg?.industry || ""}
+                        onChange={(e) =>
+                          editedOrg &&
+                          setEditedOrg({
+                            ...editedOrg,
+                            industry: e.target.value,
+                          })
+                        }
+                        placeholder="e.g., Real Estate, Healthcare"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="location">Location / Address</Label>
+                      <Input
+                        id="location"
+                        value={editedOrg?.location || ""}
+                        onChange={(e) =>
+                          editedOrg &&
+                          setEditedOrg({
+                            ...editedOrg,
+                            location: e.target.value,
+                          })
+                        }
+                        placeholder="123 Business St, City, State"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -492,25 +550,37 @@ export default function OrganizationPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Status</Label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="isActive"
-                        checked={editedOrg?.is_active ?? true}
-                        onChange={(e) =>
-                          editedOrg &&
-                          setEditedOrg({
-                            ...editedOrg,
-                            is_active: e.target.checked,
-                          })
-                        }
-                        className="rounded"
-                      />
-                      <label htmlFor="isActive" className="text-sm">
-                        Organization is active
-                      </label>
-                    </div>
+                    <Label htmlFor="business_details">
+                      Business Context
+                    </Label>
+                    <Textarea
+                      id="business_details"
+                      value={editedOrg?.business_details || ""}
+                      onChange={(e) =>
+                        editedOrg &&
+                        setEditedOrg({
+                          ...editedOrg,
+                          business_details: e.target.value,
+                        })
+                      }
+                      placeholder={`Describe your business context that you want your AI agents to be aware of. Include the most common things like:
+
+• Short description of products and services you offer
+• Business hours (weekdays, weekends, holidays, seasonal variations)
+• Location and service areas
+• Short decription of company policies and procedures
+• Unique selling points and differentiators
+• Common customer questions and how to handle them
+• Emergency or after-hours protocols
+• Any other relevant common information
+
+Example:
+We are a family-owned plumbing business serving the greater Phoenix area. Our regular hours are Monday-Friday 8am-6pm and Saturday 9am-2pm. 
+We offer 24/7 emergency services with premium rates after hours. We specialize in residential repairs, water heater installations, and drain cleaning. 
+All our technicians are licensed and background-checked. We offer a 90-day warranty on all repairs and free estimates for new installations. 
+During monsoon season (July-September), we have extended hours for flood-related emergencies..."`}
+                      className="min-h-[200px]"
+                    />
                   </div>
                 </>
               ) : (
@@ -529,22 +599,42 @@ export default function OrganizationPage() {
                       {displayOrg.description || "No description"}
                     </p>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Industry
+                      </label>
+                      <p className="text-foreground">
+                        {displayOrg.industry || "Not set"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Location
+                      </label>
+                      <p className="text-foreground">
+                        {displayOrg.location || "Not set"}
+                      </p>
+                    </div>
+                  </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
                       Website
                     </label>
-                    {displayOrg.website ? (
-                      <a
-                        href={displayOrg.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:text-primary/80 underline"
-                      >
-                        {displayOrg.website}
-                      </a>
-                    ) : (
-                      <p className="text-muted-foreground">No website</p>
-                    )}
+                    <p className="text-foreground">
+                      {displayOrg.website ? (
+                        <a
+                          href={displayOrg.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary/80 underline"
+                        >
+                          {displayOrg.website}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">No website</span>
+                      )}
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
@@ -556,77 +646,45 @@ export default function OrganizationPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
-                      Status
+                      Business Context
                     </label>
-                    <div className="flex items-center space-x-2">
-                      <Badge
-                        variant={displayOrg.is_active ? "default" : "secondary"}
-                      >
-                        {displayOrg.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </div>
+                    <p className="text-foreground whitespace-pre-wrap">
+                      {displayOrg.business_details ||
+                        "No business context provided"}
+                    </p>
                   </div>
                 </>
               )}
             </CardContent>
+            {isEditing && (
+              <CardFooter className="flex justify-end space-x-2 p-5 border-t bg-muted/20">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="flex items-center space-x-2"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Cancel</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center space-x-2"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{saving ? "Saving..." : "Save Changes"}</span>
+                </Button>
+              </CardFooter>
+            )}
           </Card>
         </TabsContent>
 
         {/* AI Voice Agent Tab */}
         <TabsContent value="ai-agent">
           <div className="space-y-6">
-            <Card>
-              <CardHeader className="p-5 pb-3">
-                <CardTitle className="flex items-center space-x-2 text-lg">
-                  <Bot className="h-5 w-5" />
-                  <span>AI Voice Agent Configuration</span>
-                </CardTitle>
-                <CardDescription>
-                  Configure your AI voice agent with business information
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-5 pt-0 space-y-4">
-                {isEditing ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="business_details">
-                        Business Details for AI Agent
-                      </Label>
-                      <Textarea
-                        id="business_details"
-                        value={editedOrg?.business_details || ""}
-                        onChange={(e) =>
-                          editedOrg &&
-                          setEditedOrg({
-                            ...editedOrg,
-                            business_details: e.target.value,
-                          })
-                        }
-                        placeholder="Enter details about your business, products, services, hours, and other information for the AI agent to know..."
-                        className="min-h-[200px]"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        This information will be used by the AI voice agent to
-                        answer customer questions
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">
-                        Business Details
-                      </label>
-                      <p className="text-foreground whitespace-pre-wrap">
-                        {organizationData?.organization.business_details ||
-                          "No business details provided"}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
             <Card>
               <CardHeader className="p-5 pb-3">
                 <div className="flex items-center justify-between">

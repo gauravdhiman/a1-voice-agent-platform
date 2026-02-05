@@ -20,7 +20,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Bot, Phone, ChevronRight, ChevronLeft, Check } from "lucide-react";
+import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
 import { toast } from "sonner";
 import type { VoiceAgentCreate } from "@/types/agent";
@@ -36,10 +36,10 @@ const formSchema = z.object({
       /^\+[1-9]\d{7,14}$/,
       "Phone number must be in E.164 format with at least 8 digits (e.g., +14155551234 or +441632960000)",
     ),
-  system_prompt: z
-    .string()
-    .min(1, "System prompt is required")
-    .min(10, "System prompt must be at least 10 characters"),
+  persona: z.string().min(1, "Persona is required"),
+  tone: z.string().min(1, "Tone is required"),
+  mission: z.string().min(1, "Mission is required"),
+  custom_instructions: z.string().optional(),
   is_active: z.boolean(),
 });
 
@@ -130,7 +130,10 @@ export function AgentCreateWidget() {
       organization_id: currentOrganization?.id || "",
       name: "",
       phone_number: "",
-      system_prompt: "",
+      persona: "",
+      tone: "Professional",
+      mission: "",
+      custom_instructions: "",
       is_active: true,
     },
   });
@@ -152,7 +155,7 @@ export function AgentCreateWidget() {
 
   const validateCurrentStage = async (): Promise<boolean> => {
     const fieldsToValidate: Record<Stage, (keyof FormData)[]> = {
-      basic: ["organization_id", "name", "system_prompt"],
+      basic: ["organization_id", "name", "persona", "tone", "mission"],
       phone: ["phone_number"],
       tools: [],
       review: [],
@@ -216,6 +219,13 @@ export function AgentCreateWidget() {
 
   const renderBasicStage = () => (
     <div className="space-y-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
+        <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-800">
+          The information you provide here helps the AI agent represent your business accurately when speaking with callers.
+        </p>
+      </div>
+
       <div>
         <h3 className="text-lg font-semibold mb-2">Basic Information</h3>
         <p className="text-sm text-muted-foreground">
@@ -261,23 +271,87 @@ export function AgentCreateWidget() {
         )}
       />
 
+      <div className="grid grid-cols-2 gap-4">
+        <FormField
+          control={form.control}
+          name="persona"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Agent Persona / Role *</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="Front Desk Coordinator" />
+              </FormControl>
+              <FormDescription>The character or job title</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="tone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Communication Tone *</FormLabel>
+              <FormControl>
+                <select
+                  {...field}
+                  className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="Professional">Professional</option>
+                  <option value="Friendly">Friendly</option>
+                  <option value="Enthusiastic">Enthusiastic</option>
+                  <option value="Minimalist">Minimalist / Formal</option>
+                </select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
       <FormField
         control={form.control}
-        name="system_prompt"
+        name="mission"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>System Prompt *</FormLabel>
+            <FormLabel>Key Mission *</FormLabel>
             <FormControl>
               <Textarea
                 {...field}
-                placeholder="You are a helpful customer support agent..."
+                placeholder="e.g., Your main goal is to book appointments and answer pricing questions."
+                className="min-h-[80px]"
+              />
+            </FormControl>
+            <FormDescription>What should the agent accomplish?</FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="custom_instructions"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Additional Instructions</FormLabel>
+            <FormControl>
+              <Textarea
+                {...field}
+                placeholder={`Add context specific to this agent's role. Include:
+
+• Company policies and procedures (for support agents)
+• Unique selling points and differentiators (for sales agents)
+• Common customer questions and how to handle them
+• Emergency or after-hours protocols
+• Specific workflows or escalation procedures
+• Any other context that helps this agent handle calls effectively
+
+Example: "Always mention our 30-day guarantee. For pricing questions, emphasize competitive rates. For enterprise inquiries, gather company size before scheduling a demo."`}
                 className="min-h-[150px]"
               />
             </FormControl>
-            <FormDescription>
-              Instructions for the AI on how to behave and respond (minimum 10
-              characters)
-            </FormDescription>
+            <FormDescription>Role-specific context and instructions</FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -373,8 +447,9 @@ export function AgentCreateWidget() {
   const renderReviewStage = () => {
     const values = form.watch();
 
-    const orgName = organizations?.find((o) => o.id === values.organization_id)
-      ?.name;
+    const orgName = organizations?.find(
+      (o) => o.id === values.organization_id,
+    )?.name;
 
     return (
       <div className="space-y-6">
@@ -410,10 +485,24 @@ export function AgentCreateWidget() {
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                  System Prompt
+                  Persona
                 </span>
-                <p className="text-sm mt-1 text-muted-foreground line-clamp-3">
-                  {values.system_prompt || "Using default prompt"}
+                <p className="font-medium mt-1">
+                  {values.persona || "Not set"}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Tone
+                </span>
+                <p className="font-medium mt-1">{values.tone}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Mission
+                </span>
+                <p className="text-sm mt-1 text-muted-foreground line-clamp-2">
+                  {values.mission || "Not set"}
                 </p>
               </div>
               <div>

@@ -53,8 +53,11 @@ class VoiceAgentService:
                         "organization_id": str(agent_data.organization_id),
                         "name": agent_data.name,
                         "phone_number": agent_data.phone_number,
-                        "system_prompt": agent_data.system_prompt,
                         "is_active": agent_data.is_active,
+                        "persona": agent_data.persona,
+                        "tone": agent_data.tone,
+                        "mission": agent_data.mission,
+                        "custom_instructions": agent_data.custom_instructions,
                     }
                 )
                 .execute()

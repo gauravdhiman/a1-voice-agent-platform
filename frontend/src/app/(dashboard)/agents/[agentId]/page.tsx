@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useRealtime } from "@/hooks/use-realtime";
-import { useAgent,
+import {
+  useAgent,
   usePlatformTools,
   useAgentTools,
   useUpdateAgent,
@@ -16,6 +17,7 @@ import { useAgent,
   useDeleteAgent,
   useDeleteAgentTool,
   useConfigureAgentTool,
+  useAgentSystemPrompt,
 } from "@/hooks/use-agent-queries";
 import { organizationService } from "@/services/organization-service";
 import { agentService } from "@/services/agent-service";
@@ -49,14 +51,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import {
-  Bot,
-  Settings,
-  Save,
-  ArrowLeft,
-  Loader2,
-  Wrench,
-} from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff } from "lucide-react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 
 export default function AgentDetailPage() {
@@ -74,15 +69,21 @@ export default function AgentDetailPage() {
   const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [disconnectDialogOpen, setDisconnectDialogOpen] = React.useState(false);
-  const [disconnectingToolId, setDisconnectingToolId] = React.useState<string | null>(null);
+  const [disconnectingToolId, setDisconnectingToolId] = React.useState<
+    string | null
+  >(null);
   const [activeTab, setActiveTab] = React.useState("properties");
-  const [pendingToolToOpen, setPendingToolToOpen] = React.useState<PlatformTool | null>(null);
-  const [connectingToolId, setConnectingToolId] = React.useState<string | null>(null);
+  const [pendingToolToOpen, setPendingToolToOpen] =
+    React.useState<PlatformTool | null>(null);
+  const [connectingToolId, setConnectingToolId] = React.useState<string | null>(
+    null,
+  );
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
-    tables: ['agent_tools', 'voice_agents'],  // Database table is voice_agents, not agents
+    tables: ["agent_tools", "voice_agents"], // Database table is voice_agents, not agents
   });
 
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
@@ -96,7 +97,10 @@ export default function AgentDetailPage() {
   const [agentForm, setAgentForm] = React.useState({
     name: "",
     phone_number: "",
-    system_prompt: "",
+    persona: "",
+    tone: "",
+    mission: "",
+    custom_instructions: "",
     is_active: true,
   });
 
@@ -110,6 +114,12 @@ export default function AgentDetailPage() {
     usePlatformTools();
   const { data: agentTools = [], refetch: refetchAgentTools } =
     useAgentTools(agentId);
+
+  // Fetch system prompt preview
+  const {
+    data: systemPromptPreview,
+    isLoading: systemPromptLoading,
+  } = useAgentSystemPrompt(agentId);
 
   // Mutations
   const updateAgentMutation = useUpdateAgent();
@@ -139,7 +149,10 @@ export default function AgentDetailPage() {
       setAgentForm({
         name: agent.name,
         phone_number: agent.phone_number || "",
-        system_prompt: agent.system_prompt || "",
+        persona: agent.persona || "",
+        tone: agent.tone || "",
+        mission: agent.mission || "",
+        custom_instructions: agent.custom_instructions || "",
         is_active: agent.is_active,
       });
     }
@@ -428,9 +441,7 @@ export default function AgentDetailPage() {
           </div>
         </div>
         {canEdit && (
-          <DeleteButton onClick={handleDeleteAgent}>
-            Delete Agent
-          </DeleteButton>
+          <DeleteButton onClick={handleDeleteAgent}>Delete Agent</DeleteButton>
         )}
       </div>
 
@@ -457,6 +468,13 @@ export default function AgentDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-5 pt-0 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-blue-800">
+                  The information you provide here helps the AI agent represent your business accurately when speaking with callers.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
@@ -485,24 +503,128 @@ export default function AgentDetailPage() {
                 </p>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="persona">Agent Persona / Role</Label>
+                  <Input
+                    id="persona"
+                    value={agentForm.persona}
+                    onChange={(e) =>
+                      setAgentForm({ ...agentForm, persona: e.target.value })
+                    }
+                    placeholder="e.g., Front Desk Coordinator"
+                    disabled={!canEdit}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tone">Communication Tone</Label>
+                  <select
+                    id="tone"
+                    value={agentForm.tone}
+                    onChange={(e) =>
+                      setAgentForm({ ...agentForm, tone: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                    disabled={!canEdit}
+                  >
+                    <option value="Professional">Professional</option>
+                    <option value="Friendly">Friendly</option>
+                    <option value="Enthusiastic">Enthusiastic</option>
+                    <option value="Minimalist">Minimalist / Formal</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="prompt">System Prompt</Label>
+                <Label htmlFor="mission">Key Mission</Label>
                 <Textarea
-                  id="prompt"
-                  value={agentForm.system_prompt}
+                  id="mission"
+                  value={agentForm.mission}
+                  onChange={(e) =>
+                    setAgentForm({ ...agentForm, mission: e.target.value })
+                  }
+                  placeholder="What should this agent accomplish?"
+                  className="min-h-[80px]"
+                  disabled={!canEdit}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="custom_instructions">
+                  Additional Instructions
+                </Label>
+                <Textarea
+                  id="custom_instructions"
+                  value={agentForm.custom_instructions}
                   onChange={(e) =>
                     setAgentForm({
                       ...agentForm,
-                      system_prompt: e.target.value,
+                      custom_instructions: e.target.value,
                     })
                   }
-                  placeholder="You are a helpful customer support agent..."
+                  placeholder={`Add context specific to this agent's role. Include:
+
+• Company policies and procedures (for support agents)
+• Unique selling points and differentiators (for sales agents)
+• Common customer questions and how to handle them
+• Emergency or after-hours protocols
+• Specific workflows or escalation procedures
+• Any other context that helps this agent handle calls effectively
+
+Example for Sales Agent:
+"Always mention our 30-day money-back guarantee. If a customer asks about pricing, emphasize our competitive rates and bundle discounts. For enterprise inquiries, gather company size and current provider before scheduling a demo."
+
+Example for Support Agent:
+"For billing issues, verify account details first. If the issue requires escalation, collect callback number and best time to reach them. For technical problems, try basic troubleshooting steps before creating a ticket."`}
                   className="min-h-[200px]"
                   disabled={!canEdit}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Instructions for the AI on how to behave
-                </p>
+              </div>
+
+              {/* System Prompt Preview Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    {showSystemPrompt ? (
+                      <EyeOff className="h-4 w-4 text-slate-600" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-slate-600" />
+                    )}
+                    <span className="font-medium text-sm">Preview Generated System Prompt</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {showSystemPrompt ? "Click to hide" : "Click to view"}
+                  </span>
+                </button>
+
+                {showSystemPrompt && (
+                  <div className="p-4 bg-slate-50 border-t">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      This is the system prompt the AI receives based on your organization and agent configuration. It combines your business details, agent persona, and instructions into a comprehensive prompt.
+                    </p>
+                    {systemPromptLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Generating preview...</span>
+                      </div>
+                    ) : systemPromptPreview ? (
+                      <div className="bg-white border rounded-md p-4 overflow-x-auto">
+                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                          {systemPromptPreview}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        Unable to generate preview. Please ensure organization and agent data is saved.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center space-x-2 pt-2">

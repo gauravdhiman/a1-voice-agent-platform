@@ -14,7 +14,7 @@ from src.organization.models import Organization, OrganizationCreate, Organizati
 @pytest.fixture
 def organization_service(mock_supabase_client):
     """Create OrganizationService instance."""
-    with patch('src.organization.service.supabase_config') as mock_config:
+    with patch('shared.organization.service.supabase_config') as mock_config:
         mock_config.client = mock_supabase_client
         from src.organization.service import OrganizationService
         return OrganizationService()
@@ -37,6 +37,8 @@ def sample_organization(sample_org_id):
         "slug": "test-org",
         "website": "https://test.org",
         "is_active": True,
+        "industry": "Tech",
+        "location": "Global",
         "business_details": None,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
@@ -76,6 +78,8 @@ class TestOrganizationService:
             "slug": sample_organization_create.slug,
             "website": str(sample_organization_create.website),
             "is_active": True,
+            "industry": None,
+            "location": None,
             "business_details": None,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -111,6 +115,8 @@ class TestOrganizationService:
             "slug": org_data.slug,
             "website": None,
             "is_active": True,
+            "industry": None,
+            "location": None,
             "business_details": None,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -195,6 +201,8 @@ class TestOrganizationService:
             "slug": "updated-org",
             "website": "https://updated.org",
             "is_active": True,
+            "industry": None,
+            "location": None,
             "business_details": None,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),

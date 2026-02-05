@@ -43,17 +43,20 @@ The database is designed as a multi-tenant SaaS platform with the following key 
 
 Stores tenant organization information. Each organization represents a separate customer/tenant.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique organization identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Organization display name |
-| description | TEXT | NULLABLE | Organization description |
-| slug | VARCHAR(100) | NOT NULL, UNIQUE | URL-friendly identifier |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Organization active status |
-| credit_balance | INTEGER | NOT NULL, DEFAULT 0 | Available credit balance |
-| website | VARCHAR(255) | NULLABLE | Organization website URL |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column           | Type         | Constraints             | Description                                                                 |
+| ---------------- | ------------ | ----------------------- | --------------------------------------------------------------------------- |
+| id               | UUID         | PRIMARY KEY             | Unique organization identifier                                              |
+| name             | VARCHAR(100) | NOT NULL, UNIQUE        | Organization display name                                                   |
+| description      | TEXT         | NULLABLE                | Organization description                                                    |
+| slug             | VARCHAR(100) | NOT NULL, UNIQUE        | URL-friendly identifier                                                     |
+| is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Organization active status                                                  |
+| credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available credit balance                                                    |
+| website          | VARCHAR(255) | NULLABLE                | Organization website URL                                                    |
+| industry         | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                    |
+| location         | VARCHAR(255) | NULLABLE                | Physical address or location                                                |
+| business_details | TEXT         | NULLABLE                | Comprehensive business context for AI agents (hours, services, policies...) |
+| created_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                                          |
+| updated_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                                                       |
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -65,19 +68,20 @@ Stores tenant organization information. Each organization represents a separate 
 
 Defines available roles in the system for RBAC.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique role identifier |
-| name | VARCHAR(50) | NOT NULL, UNIQUE | Role name (e.g., platform_admin, org_admin) |
-| description | TEXT | NULLABLE | Role description |
-| is_system_role | BOOLEAN | NOT NULL, DEFAULT FALSE | System roles cannot be deleted |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column         | Type        | Constraints             | Description                                 |
+| -------------- | ----------- | ----------------------- | ------------------------------------------- |
+| id             | UUID        | PRIMARY KEY             | Unique role identifier                      |
+| name           | VARCHAR(50) | NOT NULL, UNIQUE        | Role name (e.g., platform_admin, org_admin) |
+| description    | TEXT        | NULLABLE                | Role description                            |
+| is_system_role | BOOLEAN     | NOT NULL, DEFAULT FALSE | System roles cannot be deleted              |
+| created_at     | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp                          |
+| updated_at     | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp                       |
 
 **Foreign Keys**: None
 **RLS**: Enabled
 
 **Predefined System Roles**:
+
 - `platform_admin`: Full control over the entire platform
 - `org_admin`: Administrator for a specific organization
 - `regular_user`: Standard user with limited permissions
@@ -88,15 +92,15 @@ Defines available roles in the system for RBAC.
 
 Defines individual permissions that can be assigned to roles.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique permission identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Permission name (e.g., user:create) |
-| description | TEXT | NULLABLE | Permission description |
-| resource | VARCHAR(50) | NOT NULL | Resource type (e.g., user, organization) |
-| action | VARCHAR(50) | NOT NULL | Action type (e.g., create, read, update, delete) |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column      | Type         | Constraints             | Description                                      |
+| ----------- | ------------ | ----------------------- | ------------------------------------------------ |
+| id          | UUID         | PRIMARY KEY             | Unique permission identifier                     |
+| name        | VARCHAR(100) | NOT NULL, UNIQUE        | Permission name (e.g., user:create)              |
+| description | TEXT         | NULLABLE                | Permission description                           |
+| resource    | VARCHAR(50)  | NOT NULL                | Resource type (e.g., user, organization)         |
+| action      | VARCHAR(50)  | NOT NULL                | Action type (e.g., create, read, update, delete) |
+| created_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                               |
+| updated_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                            |
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -107,14 +111,15 @@ Defines individual permissions that can be assigned to roles.
 
 Junction table mapping roles to their permissions.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique junction record identifier |
-| role_id | UUID | NOT NULL, FK → roles.id | Role identifier |
-| permission_id | UUID | NOT NULL, FK → permissions.id | Permission identifier |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| Column        | Type        | Constraints                   | Description                       |
+| ------------- | ----------- | ----------------------------- | --------------------------------- |
+| id            | UUID        | PRIMARY KEY                   | Unique junction record identifier |
+| role_id       | UUID        | NOT NULL, FK → roles.id       | Role identifier                   |
+| permission_id | UUID        | NOT NULL, FK → permissions.id | Permission identifier             |
+| created_at    | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()       | Creation timestamp                |
 
 **Foreign Keys**:
+
 - `role_id` → `roles.id` (CASCADE)
 - `permission_id` → `permissions.id` (CASCADE)
 
@@ -127,16 +132,17 @@ Junction table mapping roles to their permissions.
 
 Junction table mapping users to roles within organizations.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique junction record identifier |
-| user_id | UUID | NOT NULL, FK → auth.users.id | User identifier (Supabase Auth) |
-| role_id | UUID | NOT NULL, FK → roles.id | Role identifier |
-| organization_id | UUID | NULLABLE, FK → organizations.id | Organization identifier |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column          | Type        | Constraints                     | Description                       |
+| --------------- | ----------- | ------------------------------- | --------------------------------- |
+| id              | UUID        | PRIMARY KEY                     | Unique junction record identifier |
+| user_id         | UUID        | NOT NULL, FK → auth.users.id    | User identifier (Supabase Auth)   |
+| role_id         | UUID        | NOT NULL, FK → roles.id         | Role identifier                   |
+| organization_id | UUID        | NULLABLE, FK → organizations.id | Organization identifier           |
+| created_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()         | Creation timestamp                |
+| updated_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()         | Last update timestamp             |
 
 **Foreign Keys**:
+
 - `user_id` → `auth.users.id` (CASCADE)
 - `role_id` → `roles.id` (CASCADE)
 - `organization_id` → `organizations.id` (CASCADE)
@@ -150,19 +156,20 @@ Junction table mapping users to roles within organizations.
 
 Stores organization membership invitations sent to users.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique invitation identifier |
-| email | TEXT | NOT NULL | Email address of invited user |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Organization identifier |
-| invited_by | UUID | NOT NULL, FK → auth.users.id | User ID who sent invitation |
-| token | VARCHAR(255) | NOT NULL, UNIQUE | Unique invitation token |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'pending' | Status: pending, accepted, expired, cancelled |
-| expires_at | TIMESTAMPTZ | NOT NULL | Invitation expiration time |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| accepted_at | TIMESTAMPTZ | NULLABLE | Acceptance timestamp |
+| Column          | Type         | Constraints                     | Description                                   |
+| --------------- | ------------ | ------------------------------- | --------------------------------------------- |
+| id              | UUID         | PRIMARY KEY                     | Unique invitation identifier                  |
+| email           | TEXT         | NOT NULL                        | Email address of invited user                 |
+| organization_id | UUID         | NOT NULL, FK → organizations.id | Organization identifier                       |
+| invited_by      | UUID         | NOT NULL, FK → auth.users.id    | User ID who sent invitation                   |
+| token           | VARCHAR(255) | NOT NULL, UNIQUE                | Unique invitation token                       |
+| status          | VARCHAR(20)  | NOT NULL, DEFAULT 'pending'     | Status: pending, accepted, expired, cancelled |
+| expires_at      | TIMESTAMPTZ  | NOT NULL                        | Invitation expiration time                    |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                            |
+| accepted_at     | TIMESTAMPTZ  | NULLABLE                        | Acceptance timestamp                          |
 
 **Foreign Keys**:
+
 - `organization_id` → `organizations.id` (CASCADE)
 - `invited_by` → `auth.users.id` (CASCADE)
 
@@ -170,6 +177,7 @@ Stores organization membership invitations sent to users.
 **Check Constraint**: `status IN ('pending', 'accepted', 'expired', 'cancelled')`
 
 **Indexes**:
+
 - `idx_invitations_email`
 - `idx_invitations_token`
 - `idx_invitations_organization_id`
@@ -184,16 +192,19 @@ Stores organization membership invitations sent to users.
 
 Stores voice agent configurations for each organization.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique voice agent identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Organization identifier |
-| name | VARCHAR(100) | NOT NULL | Voice agent display name |
-| phone_number | VARCHAR(20) | NULLABLE | Associated phone number |
-| system_prompt | TEXT | NULLABLE | AI system prompt configuration |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Agent active status |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column              | Type         | Constraints                     | Description                             |
+| ------------------- | ------------ | ------------------------------- | --------------------------------------- |
+| id                  | UUID         | PRIMARY KEY                     | Unique voice agent identifier           |
+| organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
+| name                | VARCHAR(100) | NOT NULL                        | Voice agent display name                |
+| phone_number        | VARCHAR(20)  | NULLABLE                        | Associated phone number                 |
+| persona             | TEXT         | NULLABLE                        | Agent role/character definition         |
+| tone                | VARCHAR(100) | NULLABLE                        | Communication style (Professional, etc) |
+| mission             | TEXT         | NULLABLE                        | Primary goals for this agent            |
+| custom_instructions | TEXT         | NULLABLE                        | Agent-specific context (policies, USPs, FAQs, protocols) |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
 
 **Foreign Keys**: `organization_id` → `organizations.id` (CASCADE)
 **RLS**: Enabled
@@ -205,21 +216,22 @@ Stores voice agent configurations for each organization.
 
 System-wide tools available for integration with voice agents.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique platform tool identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Tool name (e.g., gmail, google_calendar) |
-| description | TEXT | NULLABLE | Tool description |
-| config_schema | JSONB | NULLABLE | JSON schema for tool configuration |
-| tool_functions_schema | JSONB | NULLABLE | JSON schema for available functions |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Tool active status |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column                | Type         | Constraints             | Description                              |
+| --------------------- | ------------ | ----------------------- | ---------------------------------------- |
+| id                    | UUID         | PRIMARY KEY             | Unique platform tool identifier          |
+| name                  | VARCHAR(100) | NOT NULL, UNIQUE        | Tool name (e.g., gmail, google_calendar) |
+| description           | TEXT         | NULLABLE                | Tool description                         |
+| config_schema         | JSONB        | NULLABLE                | JSON schema for tool configuration       |
+| tool_functions_schema | JSONB        | NULLABLE                | JSON schema for available functions      |
+| is_active             | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Tool active status                       |
+| created_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                       |
+| updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                    |
 
 **Foreign Keys**: None
 **RLS**: Not enabled (system-wide tools)
 
 **OAuth Configuration in `config_schema`**:
+
 ```json
 {
   "type": "object",
@@ -238,20 +250,21 @@ System-wide tools available for integration with voice agents.
 
 Junction table mapping voice agents to platform tools with configuration.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique agent tool identifier |
-| agent_id | UUID | NOT NULL, FK → voice_agents.id | Voice agent identifier |
-| tool_id | UUID | NOT NULL, FK → platform_tools.id | Platform tool identifier |
-| config | JSONB | NULLABLE | Non-sensitive tool configuration |
-| sensitive_config | TEXT | NULLABLE | Encrypted OAuth tokens and API keys |
-| unselected_functions | ARRAY(VARCHAR) | NULLABLE | Functions excluded from tool |
-| is_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Tool enabled for this agent |
-| last_refreshed_at | TIMESTAMPTZ | NULLABLE | Last OAuth token refresh time |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column               | Type           | Constraints                      | Description                         |
+| -------------------- | -------------- | -------------------------------- | ----------------------------------- |
+| id                   | UUID           | PRIMARY KEY                      | Unique agent tool identifier        |
+| agent_id             | UUID           | NOT NULL, FK → voice_agents.id   | Voice agent identifier              |
+| tool_id              | UUID           | NOT NULL, FK → platform_tools.id | Platform tool identifier            |
+| config               | JSONB          | NULLABLE                         | Non-sensitive tool configuration    |
+| sensitive_config     | TEXT           | NULLABLE                         | Encrypted OAuth tokens and API keys |
+| unselected_functions | ARRAY(VARCHAR) | NULLABLE                         | Functions excluded from tool        |
+| is_enabled           | BOOLEAN        | NOT NULL, DEFAULT TRUE           | Tool enabled for this agent         |
+| last_refreshed_at    | TIMESTAMPTZ    | NULLABLE                         | Last OAuth token refresh time       |
+| created_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Creation timestamp                  |
+| updated_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Last update timestamp               |
 
 **Foreign Keys**:
+
 - `agent_id` → `voice_agents.id` (CASCADE)
 - `tool_id` → `platform_tools.id` (CASCADE)
 
@@ -260,6 +273,7 @@ Junction table mapping voice agents to platform tools with configuration.
 **Real-time**: Enabled
 
 **OAuth Token Storage in `sensitive_config`**:
+
 ```json
 {
   "access_token": "encrypted_access_token",
@@ -278,24 +292,24 @@ Junction table mapping voice agents to platform tools with configuration.
 
 Defines available subscription tiers.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique plan identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Plan name (e.g., Basic, Pro, Enterprise) |
-| description | TEXT | NULLABLE | Plan description |
-| stripe_price_id | VARCHAR(255) | NOT NULL, UNIQUE | Stripe price identifier |
-| stripe_product_id | VARCHAR(255) | NOT NULL, UNIQUE | Stripe product identifier |
-| price_amount | INTEGER | NOT NULL | Price in cents |
-| currency | VARCHAR(3) | NOT NULL, DEFAULT 'USD' | Currency code |
-| interval | VARCHAR(20) | NOT NULL | Billing interval: monthly, annual |
-| interval_count | INTEGER | NOT NULL, DEFAULT 1 | Number of intervals per billing cycle |
-| included_credits | INTEGER | NOT NULL, DEFAULT 0 | Credits included per period |
-| max_users | INTEGER | NULLABLE | Maximum users allowed |
-| features | JSONB | NULLABLE | Plan features object |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Plan active status |
-| trial_period_days | INTEGER | NULLABLE | Trial duration in days |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column            | Type         | Constraints             | Description                              |
+| ----------------- | ------------ | ----------------------- | ---------------------------------------- |
+| id                | UUID         | PRIMARY KEY             | Unique plan identifier                   |
+| name              | VARCHAR(100) | NOT NULL, UNIQUE        | Plan name (e.g., Basic, Pro, Enterprise) |
+| description       | TEXT         | NULLABLE                | Plan description                         |
+| stripe_price_id   | VARCHAR(255) | NOT NULL, UNIQUE        | Stripe price identifier                  |
+| stripe_product_id | VARCHAR(255) | NOT NULL, UNIQUE        | Stripe product identifier                |
+| price_amount      | INTEGER      | NOT NULL                | Price in cents                           |
+| currency          | VARCHAR(3)   | NOT NULL, DEFAULT 'USD' | Currency code                            |
+| interval          | VARCHAR(20)  | NOT NULL                | Billing interval: monthly, annual        |
+| interval_count    | INTEGER      | NOT NULL, DEFAULT 1     | Number of intervals per billing cycle    |
+| included_credits  | INTEGER      | NOT NULL, DEFAULT 0     | Credits included per period              |
+| max_users         | INTEGER      | NULLABLE                | Maximum users allowed                    |
+| features          | JSONB        | NULLABLE                | Plan features object                     |
+| is_active         | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Plan active status                       |
+| trial_period_days | INTEGER      | NULLABLE                | Trial duration in days                   |
+| created_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                       |
+| updated_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                    |
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -306,25 +320,26 @@ Defines available subscription tiers.
 
 Tracks organization subscription status.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique subscription identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Organization identifier |
-| subscription_plan_id | UUID | NULLABLE, FK → subscription_plans.id | Plan identifier |
-| stripe_subscription_id | VARCHAR(255) | NULLABLE, UNIQUE | Stripe subscription identifier |
-| stripe_customer_id | VARCHAR(255) | NOT NULL | Stripe customer identifier |
-| status | VARCHAR(50) | NOT NULL | Status: trial, active, past_due, cancelled, expired |
-| current_period_start | TIMESTAMPTZ | NULLABLE | Current billing period start |
-| current_period_end | TIMESTAMPTZ | NULLABLE | Current billing period end |
-| trial_start | TIMESTAMPTZ | NULLABLE | Trial start time |
-| trial_end | TIMESTAMPTZ | NULLABLE | Trial end time |
-| cancel_at_period_end | BOOLEAN | NOT NULL, DEFAULT FALSE | Auto-renewal flag |
-| cancelled_at | TIMESTAMPTZ | NULLABLE | Cancellation timestamp |
-| metadata | JSONB | NULLABLE | Additional metadata |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column                 | Type         | Constraints                          | Description                                         |
+| ---------------------- | ------------ | ------------------------------------ | --------------------------------------------------- |
+| id                     | UUID         | PRIMARY KEY                          | Unique subscription identifier                      |
+| organization_id        | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                             |
+| subscription_plan_id   | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                     |
+| stripe_subscription_id | VARCHAR(255) | NULLABLE, UNIQUE                     | Stripe subscription identifier                      |
+| stripe_customer_id     | VARCHAR(255) | NOT NULL                             | Stripe customer identifier                          |
+| status                 | VARCHAR(50)  | NOT NULL                             | Status: trial, active, past_due, cancelled, expired |
+| current_period_start   | TIMESTAMPTZ  | NULLABLE                             | Current billing period start                        |
+| current_period_end     | TIMESTAMPTZ  | NULLABLE                             | Current billing period end                          |
+| trial_start            | TIMESTAMPTZ  | NULLABLE                             | Trial start time                                    |
+| trial_end              | TIMESTAMPTZ  | NULLABLE                             | Trial end time                                      |
+| cancel_at_period_end   | BOOLEAN      | NOT NULL, DEFAULT FALSE              | Auto-renewal flag                                   |
+| cancelled_at           | TIMESTAMPTZ  | NULLABLE                             | Cancellation timestamp                              |
+| metadata               | JSONB        | NULLABLE                             | Additional metadata                                 |
+| created_at             | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Creation timestamp                                  |
+| updated_at             | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Last update timestamp                               |
 
 **Foreign Keys**:
+
 - `organization_id` → `organizations.id` (CASCADE)
 - `subscription_plan_id` → `subscription_plans.id` (SET NULL)
 
@@ -332,6 +347,7 @@ Tracks organization subscription status.
 **Unique Constraints**: `(organization_id)`, `(stripe_subscription_id)`
 
 **Indexes**:
+
 - `idx_org_subscriptions_org_id`
 - `idx_org_subscriptions_stripe_sub_id`
 
@@ -341,17 +357,17 @@ Tracks organization subscription status.
 
 Defines events and their credit costs.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique event identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Event name |
-| description | TEXT | NULLABLE | Event description |
-| credit_cost | INTEGER | NOT NULL | Credit cost per event |
-| category | VARCHAR(50) | NOT NULL | Category: api_call, storage, compute, etc. |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Event active status |
-| metadata | JSONB | NULLABLE | Additional metadata |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column      | Type         | Constraints             | Description                                |
+| ----------- | ------------ | ----------------------- | ------------------------------------------ |
+| id          | UUID         | PRIMARY KEY             | Unique event identifier                    |
+| name        | VARCHAR(100) | NOT NULL, UNIQUE        | Event name                                 |
+| description | TEXT         | NULLABLE                | Event description                          |
+| credit_cost | INTEGER      | NOT NULL                | Credit cost per event                      |
+| category    | VARCHAR(50)  | NOT NULL                | Category: api_call, storage, compute, etc. |
+| is_active   | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Event active status                        |
+| metadata    | JSONB        | NULLABLE                | Additional metadata                        |
+| created_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                         |
+| updated_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                      |
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -362,29 +378,31 @@ Defines events and their credit costs.
 
 Tracks all credit movements.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique transaction identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Organization identifier |
-| transaction_type | VARCHAR(50) | NOT NULL | Type: earned, purchased, consumed, expired |
-| amount | INTEGER | NOT NULL | Positive for credits added, negative for consumed |
-| balance_after | INTEGER | NOT NULL | Balance after transaction |
-| source | VARCHAR(50) | NOT NULL | Source: subscription, purchase, event_consumption, expiry |
-| source_id | UUID | NULLABLE | Reference to source record |
-| credit_event_id | UUID | NULLABLE, FK → credit_events.id | Event identifier (for consumption) |
-| expires_at | TIMESTAMPTZ | NULLABLE | Expiration timestamp for subscription credits |
-| stripe_payment_intent_id | VARCHAR(255) | NULLABLE | Stripe payment intent identifier |
-| description | TEXT | NULLABLE | Transaction description |
-| metadata | JSONB | NULLABLE | Additional metadata |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| Column                   | Type         | Constraints                     | Description                                               |
+| ------------------------ | ------------ | ------------------------------- | --------------------------------------------------------- |
+| id                       | UUID         | PRIMARY KEY                     | Unique transaction identifier                             |
+| organization_id          | UUID         | NOT NULL, FK → organizations.id | Organization identifier                                   |
+| transaction_type         | VARCHAR(50)  | NOT NULL                        | Type: earned, purchased, consumed, expired                |
+| amount                   | INTEGER      | NOT NULL                        | Positive for credits added, negative for consumed         |
+| balance_after            | INTEGER      | NOT NULL                        | Balance after transaction                                 |
+| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry |
+| source_id                | UUID         | NULLABLE                        | Reference to source record                                |
+| credit_event_id          | UUID         | NULLABLE, FK → credit_events.id | Event identifier (for consumption)                        |
+| expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for subscription credits             |
+| stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                          |
+| description              | TEXT         | NULLABLE                        | Transaction description                                   |
+| metadata                 | JSONB        | NULLABLE                        | Additional metadata                                       |
+| created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                                        |
 
 **Foreign Keys**:
+
 - `organization_id` → `organizations.id` (CASCADE)
 - `credit_event_id` → `credit_events.id` (SET NULL)
 
 **RLS**: Enabled
 
 **Indexes**:
+
 - `idx_credit_transactions_org_id`
 - `idx_credit_transactions_created_at`
 
@@ -394,19 +412,19 @@ Tracks all credit movements.
 
 Defines standalone credit purchase products.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique product identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Product name |
-| description | TEXT | NULLABLE | Product description |
-| stripe_price_id | VARCHAR(255) | NOT NULL, UNIQUE | Stripe price identifier |
-| stripe_product_id | VARCHAR(255) | NOT NULL, UNIQUE | Stripe product identifier |
-| credit_amount | INTEGER | NOT NULL | Credits included |
-| price_amount | INTEGER | NOT NULL | Price in cents |
-| currency | VARCHAR(3) | NOT NULL, DEFAULT 'USD' | Currency code |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Product active status |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column            | Type         | Constraints             | Description               |
+| ----------------- | ------------ | ----------------------- | ------------------------- |
+| id                | UUID         | PRIMARY KEY             | Unique product identifier |
+| name              | VARCHAR(100) | NOT NULL, UNIQUE        | Product name              |
+| description       | TEXT         | NULLABLE                | Product description       |
+| stripe_price_id   | VARCHAR(255) | NOT NULL, UNIQUE        | Stripe price identifier   |
+| stripe_product_id | VARCHAR(255) | NOT NULL, UNIQUE        | Stripe product identifier |
+| credit_amount     | INTEGER      | NOT NULL                | Credits included          |
+| price_amount      | INTEGER      | NOT NULL                | Price in cents            |
+| currency          | VARCHAR(3)   | NOT NULL, DEFAULT 'USD' | Currency code             |
+| is_active         | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Product active status     |
+| created_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp        |
+| updated_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp     |
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -417,28 +435,29 @@ Defines standalone credit purchase products.
 
 Tracks payment history and invoices.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique billing record identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Organization identifier |
-| stripe_invoice_id | VARCHAR(255) | NULLABLE, UNIQUE | Stripe invoice identifier |
-| stripe_payment_intent_id | VARCHAR(255) | NULLABLE | Stripe payment intent identifier |
-| amount | INTEGER | NOT NULL | Amount in cents |
-| currency | VARCHAR(3) | NOT NULL, DEFAULT 'USD' | Currency code |
-| status | VARCHAR(50) | NOT NULL | Status: pending, paid, failed, refunded |
-| description | TEXT | NULLABLE | Transaction description |
-| invoice_url | TEXT | NULLABLE | Stripe invoice URL |
-| receipt_url | TEXT | NULLABLE | Stripe receipt URL |
-| billing_reason | VARCHAR(50) | NULLABLE | Reason: subscription_create, subscription_cycle, manual |
-| metadata | JSONB | NULLABLE | Additional metadata |
-| paid_at | TIMESTAMPTZ | NULLABLE | Payment timestamp |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column                   | Type         | Constraints                     | Description                                             |
+| ------------------------ | ------------ | ------------------------------- | ------------------------------------------------------- |
+| id                       | UUID         | PRIMARY KEY                     | Unique billing record identifier                        |
+| organization_id          | UUID         | NOT NULL, FK → organizations.id | Organization identifier                                 |
+| stripe_invoice_id        | VARCHAR(255) | NULLABLE, UNIQUE                | Stripe invoice identifier                               |
+| stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                        |
+| amount                   | INTEGER      | NOT NULL                        | Amount in cents                                         |
+| currency                 | VARCHAR(3)   | NOT NULL, DEFAULT 'USD'         | Currency code                                           |
+| status                   | VARCHAR(50)  | NOT NULL                        | Status: pending, paid, failed, refunded                 |
+| description              | TEXT         | NULLABLE                        | Transaction description                                 |
+| invoice_url              | TEXT         | NULLABLE                        | Stripe invoice URL                                      |
+| receipt_url              | TEXT         | NULLABLE                        | Stripe receipt URL                                      |
+| billing_reason           | VARCHAR(50)  | NULLABLE                        | Reason: subscription_create, subscription_cycle, manual |
+| metadata                 | JSONB        | NULLABLE                        | Additional metadata                                     |
+| paid_at                  | TIMESTAMPTZ  | NULLABLE                        | Payment timestamp                                       |
+| created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                                      |
+| updated_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                                   |
 
 **Foreign Keys**: `organization_id` → `organizations.id` (CASCADE)
 **RLS**: Enabled
 
 **Indexes**:
+
 - `idx_billing_history_org_id`
 - `idx_billing_history_stripe_invoice_id`
 
@@ -450,23 +469,24 @@ Tracks payment history and invoices.
 
 Defines events that can trigger notifications.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique event identifier |
-| name | VARCHAR(100) | NOT NULL | Event display name |
-| description | TEXT | NULLABLE | Event description |
-| event_key | VARCHAR(100) | NOT NULL, UNIQUE | Unique event key (e.g., user.signup, subscription.created) |
-| category | VARCHAR(50) | NOT NULL | Category: auth, billing, organization |
-| is_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Event enabled status |
-| default_template_id | UUID | NULLABLE, FK → notification_templates.id | Default template |
-| metadata | JSONB | NULLABLE | Additional configuration |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column              | Type         | Constraints                              | Description                                                |
+| ------------------- | ------------ | ---------------------------------------- | ---------------------------------------------------------- |
+| id                  | UUID         | PRIMARY KEY                              | Unique event identifier                                    |
+| name                | VARCHAR(100) | NOT NULL                                 | Event display name                                         |
+| description         | TEXT         | NULLABLE                                 | Event description                                          |
+| event_key           | VARCHAR(100) | NOT NULL, UNIQUE                         | Unique event key (e.g., user.signup, subscription.created) |
+| category            | VARCHAR(50)  | NOT NULL                                 | Category: auth, billing, organization                      |
+| is_enabled          | BOOLEAN      | NOT NULL, DEFAULT TRUE                   | Event enabled status                                       |
+| default_template_id | UUID         | NULLABLE, FK → notification_templates.id | Default template                                           |
+| metadata            | JSONB        | NULLABLE                                 | Additional configuration                                   |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp                                         |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp                                      |
 
 **Foreign Keys**: `default_template_id` → `notification_templates.id` (SET NULL)
 **RLS**: Enabled
 
 **Indexes**:
+
 - `idx_notification_events_event_key`
 - `idx_notification_events_category`
 - `idx_notification_events_is_enabled`
@@ -477,25 +497,26 @@ Defines events that can trigger notifications.
 
 Stores email templates.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique template identifier |
-| name | VARCHAR(100) | NOT NULL, UNIQUE | Template name |
-| description | TEXT | NULLABLE | Template description |
-| subject | VARCHAR(255) | NOT NULL | Email subject |
-| html_content | TEXT | NOT NULL | HTML email template with placeholders |
-| text_content | TEXT | NULLABLE | Plain text fallback |
-| from_email | VARCHAR(255) | NULLABLE | Override sender email |
-| from_name | VARCHAR(100) | NULLABLE | Override sender name |
-| template_variables | JSONB | NULLABLE | Available template variables |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Template active status |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| Column             | Type         | Constraints             | Description                           |
+| ------------------ | ------------ | ----------------------- | ------------------------------------- |
+| id                 | UUID         | PRIMARY KEY             | Unique template identifier            |
+| name               | VARCHAR(100) | NOT NULL, UNIQUE        | Template name                         |
+| description        | TEXT         | NULLABLE                | Template description                  |
+| subject            | VARCHAR(255) | NOT NULL                | Email subject                         |
+| html_content       | TEXT         | NOT NULL                | HTML email template with placeholders |
+| text_content       | TEXT         | NULLABLE                | Plain text fallback                   |
+| from_email         | VARCHAR(255) | NULLABLE                | Override sender email                 |
+| from_name          | VARCHAR(100) | NULLABLE                | Override sender name                  |
+| template_variables | JSONB        | NULLABLE                | Available template variables          |
+| is_active          | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Template active status                |
+| created_at         | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                    |
+| updated_at         | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                 |
 
 **Foreign Keys**: None
 **RLS**: Enabled
 
 **Indexes**:
+
 - `idx_notification_templates_is_active`
 
 ---
@@ -504,25 +525,26 @@ Stores email templates.
 
 Tracks all sent notifications.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique log identifier |
-| notification_event_id | UUID | NOT NULL, FK → notification_events.id | Event identifier |
-| notification_template_id | UUID | NULLABLE, FK → notification_templates.id | Template identifier |
-| organization_id | UUID | NULLABLE, FK → organizations.id | Organization context |
-| user_id | UUID | NULLABLE, FK → auth.users.id | User identifier |
-| recipient_email | VARCHAR(255) | NOT NULL | Recipient email |
-| recipient_name | VARCHAR(100) | NULLABLE | Recipient name |
-| subject | VARCHAR(255) | NOT NULL | Email subject |
-| status | VARCHAR(50) | NOT NULL | Status: pending, sent, failed, bounced |
-| provider | VARCHAR(50) | NOT NULL, DEFAULT 'resend' | Email provider |
-| provider_message_id | VARCHAR(255) | NULLABLE | Provider-specific message ID |
-| error_message | TEXT | NULLABLE | Error details |
-| sent_at | TIMESTAMPTZ | NULLABLE | Sent timestamp |
-| metadata | JSONB | NULLABLE | Additional data |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| Column                   | Type         | Constraints                              | Description                            |
+| ------------------------ | ------------ | ---------------------------------------- | -------------------------------------- |
+| id                       | UUID         | PRIMARY KEY                              | Unique log identifier                  |
+| notification_event_id    | UUID         | NOT NULL, FK → notification_events.id    | Event identifier                       |
+| notification_template_id | UUID         | NULLABLE, FK → notification_templates.id | Template identifier                    |
+| organization_id          | UUID         | NULLABLE, FK → organizations.id          | Organization context                   |
+| user_id                  | UUID         | NULLABLE, FK → auth.users.id             | User identifier                        |
+| recipient_email          | VARCHAR(255) | NOT NULL                                 | Recipient email                        |
+| recipient_name           | VARCHAR(100) | NULLABLE                                 | Recipient name                         |
+| subject                  | VARCHAR(255) | NOT NULL                                 | Email subject                          |
+| status                   | VARCHAR(50)  | NOT NULL                                 | Status: pending, sent, failed, bounced |
+| provider                 | VARCHAR(50)  | NOT NULL, DEFAULT 'resend'               | Email provider                         |
+| provider_message_id      | VARCHAR(255) | NULLABLE                                 | Provider-specific message ID           |
+| error_message            | TEXT         | NULLABLE                                 | Error details                          |
+| sent_at                  | TIMESTAMPTZ  | NULLABLE                                 | Sent timestamp                         |
+| metadata                 | JSONB        | NULLABLE                                 | Additional data                        |
+| created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp                     |
 
 **Foreign Keys**:
+
 - `notification_event_id` → `notification_events.id` (CASCADE)
 - `notification_template_id` → `notification_templates.id` (SET NULL)
 - `organization_id` → `organizations.id` (CASCADE)
@@ -531,6 +553,7 @@ Tracks all sent notifications.
 **RLS**: Enabled
 
 **Indexes**:
+
 - `idx_notification_logs_event_id`
 - `idx_notification_logs_organization_id`
 - `idx_notification_logs_user_id`
@@ -546,20 +569,20 @@ Supabase provides the following authentication tables managed by Supabase Auth:
 
 ### auth.users
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Unique user identifier (used as FK in other tables) |
-| email | TEXT | User email address |
-| email_confirmed_at | TIMESTAMPTZ | Email confirmation timestamp |
-| encrypted_password | TEXT | Encrypted password |
-| invited_at | TIMESTAMPTZ | Invitation timestamp |
-| recovery_sent_at | TIMESTAMPTZ | Password recovery sent timestamp |
-| last_sign_in_at | TIMESTAMPTZ | Last login timestamp |
-| raw_app_meta_data | JSONB | Application metadata |
-| raw_user_meta_data | JSONB | User metadata |
-| is_super_admin | BOOLEAN | Super admin flag |
-| created_at | TIMESTAMPTZ | Creation timestamp |
-| updated_at | TIMESTAMPTZ | Last update timestamp |
+| Column             | Type        | Description                                         |
+| ------------------ | ----------- | --------------------------------------------------- |
+| id                 | UUID        | Unique user identifier (used as FK in other tables) |
+| email              | TEXT        | User email address                                  |
+| email_confirmed_at | TIMESTAMPTZ | Email confirmation timestamp                        |
+| encrypted_password | TEXT        | Encrypted password                                  |
+| invited_at         | TIMESTAMPTZ | Invitation timestamp                                |
+| recovery_sent_at   | TIMESTAMPTZ | Password recovery sent timestamp                    |
+| last_sign_in_at    | TIMESTAMPTZ | Last login timestamp                                |
+| raw_app_meta_data  | JSONB       | Application metadata                                |
+| raw_user_meta_data | JSONB       | User metadata                                       |
+| is_super_admin     | BOOLEAN     | Super admin flag                                    |
+| created_at         | TIMESTAMPTZ | Creation timestamp                                  |
+| updated_at         | TIMESTAMPTZ | Last update timestamp                               |
 
 **Note**: This table is managed by Supabase Auth and should not be modified directly.
 
@@ -615,6 +638,9 @@ erDiagram
         boolean is_active
         integer credit_balance
         varchar website
+        varchar industry
+        varchar location
+        text business_details
         timestamptz created_at
         timestamptz updated_at
     }
@@ -624,7 +650,10 @@ erDiagram
         uuid organization_id
         varchar name
         varchar phone_number
-        text system_prompt
+        text persona
+        varchar tone
+        text mission
+        text custom_instructions
         boolean is_active
         timestamptz created_at
         timestamptz updated_at
@@ -902,6 +931,7 @@ erDiagram
 10. `20251230000002` - Add tool functions schema and unselected functions
 11. `20260111000001` - Add auth columns to platform tools
 12. `20260118000001` - Add last_refreshed_at to agent_tools
+13. `20260127000001` - Enhance organization and agent models (add: industry, location, business_details, persona, tone, mission, custom_instructions; remove: system_prompt - now auto-generated via PromptBuilder)
 
 ---
 
@@ -1010,4 +1040,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2025-01-19
+**Last Updated**: 2026-01-27

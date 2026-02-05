@@ -22,6 +22,10 @@ export interface VoiceAgent {
   description: string | null;
   phone_number: string | null;
   system_prompt: string | null;
+  persona: string | null;
+  tone: string | null;
+  mission: string | null;
+  custom_instructions: string | null;
   voice_settings: Record<string, unknown> | null;
   is_active: boolean;
   created_by: string;
@@ -34,6 +38,10 @@ export interface VoiceAgentCreate {
   name: string;
   phone_number?: string | null;
   system_prompt?: string | null;
+  persona?: string | null;
+  tone?: string | null;
+  mission?: string | null;
+  custom_instructions?: string | null;
   is_active?: boolean;
 }
 
@@ -41,6 +49,10 @@ export interface VoiceAgentUpdate {
   name?: string;
   phone_number?: string | null;
   system_prompt?: string | null;
+  persona?: string | null;
+  tone?: string | null;
+  mission?: string | null;
+  custom_instructions?: string | null;
   is_active?: boolean;
 }
 

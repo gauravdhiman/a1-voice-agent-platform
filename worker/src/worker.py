@@ -20,8 +20,12 @@ from shared.voice_agents.livekit_service import livekit_service
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+from shared.voice_agents.prompt_builder import PromptBuilder
+from shared.organization.service import BaseOrganizationService
 
 logger = logging.getLogger("voice-worker")
+
+organization_service = BaseOrganizationService()
 
 log_level = (
     logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO
@@ -279,8 +283,24 @@ async def entrypoint(ctx: JobContext):
                 livekit_tools.append(tool)
                 logger.info(f"Built function_tool for: {func_name}")
 
+        # 3b. Build enhanced system prompt
+        logger.info(f"Building enhanced system prompt for agent {agent_id}")
+        org, org_error = await organization_service.get_organization_by_id(voice_agent.organization_id)
+        if org_error or not org:
+            logger.warning(f"Could not fetch organization details: {org_error}. Using default prompt.")
+            # Fallback to default prompt if org data unavailable
+            instructions = default_system_prompt
+        else:
+            instructions = PromptBuilder.build_system_prompt(
+                org=org,
+                agent=voice_agent,
+                default_rules=default_system_prompt
+            )
+        
+        logger.debug(f"Enhanced instructions built (length: {len(instructions)})")
+
         livekit_agent = DynamicAgent(
-            instructions=voice_agent.system_prompt or default_system_prompt,
+            instructions=instructions,
         )
 
         await livekit_agent.update_tools(livekit_tools)

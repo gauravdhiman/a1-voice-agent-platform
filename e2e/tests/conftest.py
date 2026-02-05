@@ -156,6 +156,27 @@ def setup_boundary_mocks(page: Page):
         }}'''
     ))
 
+    # 3. Mock /api/v1/organizations (Required for OrganizationCheck component)
+    # This is needed for the dashboard to load properly after sign-in
+    test_org_id = "00000000-0000-0000-0000-000000000001"
+    page.route("**/api/v1/organizations", lambda route: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=f'''[{{
+            "id": "{test_org_id}",
+            "name": "Test Organization",
+            "slug": "test-org",
+            "is_active": true
+        }}]'''
+    ))
+
+    # 4. Mock /api/v1/agents/my-agents (Required for dashboard agents list)
+    page.route("**/api/v1/agents/my-agents", lambda route: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body='''[]'''
+    ))
+
 @pytest.fixture(autouse=True)
 def apply_mocks(page: Page):
     """Automatically apply boundary mocks to every page."""

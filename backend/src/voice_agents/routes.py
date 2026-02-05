@@ -12,7 +12,9 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
+from shared.voice_agents.prompt_builder import PromptBuilder
 from shared.voice_agents.service import voice_agent_service
+from src.organization.service import OrganizationService
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -134,6 +136,64 @@ async def get_agent(
             )
 
     return agent
+
+
+@agent_router.get("/{agent_id}/system-prompt", response_model=str)
+@tracer.start_as_current_span("voice_agent.routes.get_system_prompt")
+async def get_agent_system_prompt(
+    agent_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Get the generated system prompt for an agent.
+    
+    This endpoint generates the system prompt on-demand by combining
+    organization context and agent configuration. The prompt is not stored
+    but derived from the current state of the agent and organization.
+    """
+    current_user_id, user_profile = user_data
+
+    # Get the agent
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    # Permission check - user must have access to this organization
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role(
+            "org_admin", str(agent.organization_id)
+        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to view this agent",
+            )
+
+    # Get organization data
+    org_service = OrganizationService()
+    org, org_error = await org_service.get_organization_by_id(agent.organization_id)
+    
+    if org_error or not org:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not fetch organization data: {org_error}",
+        )
+
+    # Generate the system prompt using PromptBuilder
+    # Use a default rules template (similar to worker)
+    default_rules = """# OUTPUT RULES & GUARDRAILS
+- Keep responses concise and conversational for voice
+- Be helpful, accurate, and professional
+- Ask clarifying questions if needed
+- Use tools when appropriate to complete tasks
+- Never share sensitive information
+"""
+    
+    system_prompt = PromptBuilder.build_system_prompt(
+        org=org,
+        agent=agent,
+        default_rules=default_rules
+    )
+
+    return system_prompt
 
 
 @agent_router.put("/{agent_id}", response_model=VoiceAgent)

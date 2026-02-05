@@ -103,6 +103,74 @@ cd ..
 
 ## 🏗️ Architecture
 
+```mermaid
+flowchart TD
+    subgraph Client ["Client Layer"]
+        User(["User / Caller"])
+        Browser["Web Dashboard (Next.js)"]
+    end
+
+    subgraph Infrastructure ["Infrastructure & Real-time"]
+        LK["LiveKit Cloud (WebRTC/SIP)"]
+        Twilio["Twilio (Telephony)"]
+        OTEL["OTEL Collector"]
+    end
+
+    subgraph Backend_Worker ["Core Platform (Docker)"]
+        BE["FastAPI Backend (REST)"]
+        WK["LiveKit Agent Worker (AI)"]
+        Shared["Shared Tools & Logic"]
+    end
+
+    subgraph Persistence ["Data & Identity"]
+        DB[(Supabase PostgreSQL)]
+        Auth[(Supabase Auth)]
+    end
+
+    subgraph External ["External Services"]
+        Gemini["Google Gemini (LLM)"]
+        Stripe["Stripe (Payments)"]
+        Resend["Resend (Email)"]
+        Google["Google / LinkedIn (OAuth)"]
+        ExtTools["External Tools (G-Cal, etc)"]
+    end
+
+    %% Flow: User Dashboard Interaction
+    User <--> Browser
+    Browser <--> Auth
+    Browser <--> BE
+    
+    %% Flow: Voice Call Interaction
+    User <--> Twilio
+    Twilio -- SIP --> LK
+    LK <--> WK
+    
+    %% Flow: Backend Orchestration
+    BE <--> DB
+    BE <--> Auth
+    BE <--> Stripe
+    BE --> Resend
+    BE <--> Google
+    
+    %% Flow: Worker AI Execution
+    WK <--> Shared
+    WK <--> DB
+    WK <--> Gemini
+    WK <--> ExtTools
+
+    %% Flow: Observability
+    BE & WK & Browser --> OTEL
+    OTEL --> NR[New Relic]
+
+    %% Styling
+    style BE fill:#f9f,stroke:#333,stroke-width:2px
+    style WK fill:#f9f,stroke:#333,stroke-width:2px
+    style DB fill:#dfd,stroke:#333,stroke-width:2px
+    style Auth fill:#dfd,stroke:#333,stroke-width:2px
+    style LK fill:#ddf,stroke:#333,stroke-width:1px
+    style Gemini fill:#ddf,stroke:#333,stroke-width:1px
+```
+
 ### Frontend (Next.js)
 
 - **Framework**: Next.js 15 with App Router
@@ -217,6 +285,8 @@ ai-voice-agent-platform/
 ### Voice Agent System
 
 - ✅ AI voice agents with LiveKit real-time communication
+- ✅ **Dynamic system prompt generation from organization and agent context**
+- ✅ **System prompt preview in agent configuration UI**
 - ✅ Dynamic tool loading from database
 - ✅ LiveKit tool wrapping for LLM compatibility
 - ✅ Tool function-level enable/disable

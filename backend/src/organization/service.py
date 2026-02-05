@@ -22,7 +22,7 @@ from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
 
 from shared.common.errors import ErrorCode
-from shared.config import supabase_config
+from shared.organization.service import BaseOrganizationService
 
 logger = logging.getLogger(__name__)
 
@@ -42,23 +42,8 @@ organization_errors_counter = meter.create_counter(
 )
 
 
-class OrganizationService:
+class OrganizationService(BaseOrganizationService):
     """Service for handling organization operations."""
-
-    def __init__(self):
-        self.supabase_config = supabase_config
-
-    @property
-    def supabase(self):
-        """Get Supabase client, raise error if not configured."""
-        if not self.supabase_config.is_configured():
-            logger.error(
-                "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY."
-            )
-            raise ValueError(
-                "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY."
-            )
-        return self.supabase_config.client
 
     @tracer.start_as_current_span("organization.create_organization")
     async def create_organization(
@@ -80,6 +65,8 @@ class OrganizationService:
                         "slug": org_data.slug,
                         "website": str(org_data.website) if org_data.website else None,
                         "is_active": org_data.is_active,
+                        "industry": org_data.industry,
+                        "location": org_data.location,
                         "business_details": org_data.business_details,
                     }
                 )
@@ -106,6 +93,8 @@ class OrganizationService:
                 slug=org_dict["slug"],
                 website=org_dict.get("website"),
                 is_active=org_dict["is_active"],
+                industry=org_dict.get("industry"),
+                location=org_dict.get("location"),
                 business_details=org_dict.get("business_details"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
@@ -161,6 +150,8 @@ class OrganizationService:
                 slug=org_dict["slug"],
                 website=org_dict.get("website"),
                 is_active=org_dict["is_active"],
+                industry=org_dict.get("industry"),
+                location=org_dict.get("location"),
                 business_details=org_dict.get("business_details"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
@@ -214,7 +205,11 @@ class OrganizationService:
                 name=org_dict["name"],
                 description=org_dict["description"],
                 slug=org_dict["slug"],
+                website=org_dict.get("website"),
                 is_active=org_dict["is_active"],
+                industry=org_dict.get("industry"),
+                location=org_dict.get("location"),
+                business_details=org_dict.get("business_details"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
             )
@@ -250,6 +245,8 @@ class OrganizationService:
                         slug=org_dict["slug"],
                         website=org_dict.get("website"),
                         is_active=org_dict["is_active"],
+                        industry=org_dict.get("industry"),
+                        location=org_dict.get("location"),
                         business_details=org_dict.get("business_details"),
                         created_at=org_dict["created_at"],
                         updated_at=org_dict["updated_at"],
@@ -286,13 +283,14 @@ class OrganizationService:
                 update_data["description"] = org_data.description
             if org_data.slug is not None:
                 update_data["slug"] = org_data.slug
-                current_span.set_attribute("organization.slug.updated", True)
-            if org_data.is_active is not None:
-                update_data["is_active"] = org_data.is_active
             if org_data.website is not None:
-                update_data["website"] = (
-                    str(org_data.website) if org_data.website else None
-                )
+                update_data["website"] = org_data.website
+            # is_active is intentionally excluded from frontend updates for safety
+            # it should only be changed through administrative actions or specific backend logic
+            if org_data.industry is not None:
+                update_data["industry"] = org_data.industry
+            if org_data.location is not None:
+                update_data["location"] = org_data.location
             if org_data.business_details is not None:
                 update_data["business_details"] = org_data.business_details
 
@@ -329,7 +327,11 @@ class OrganizationService:
                 name=org_dict["name"],
                 description=org_dict["description"],
                 slug=org_dict["slug"],
+                website=org_dict.get("website"),
                 is_active=org_dict["is_active"],
+                industry=org_dict.get("industry"),
+                location=org_dict.get("location"),
+                business_details=org_dict.get("business_details"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
             )

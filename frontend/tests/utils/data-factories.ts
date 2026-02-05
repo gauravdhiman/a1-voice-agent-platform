@@ -36,6 +36,10 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
   created_by: 'user-1',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  persona: null,
+  tone: null,
+  mission: null,
+  custom_instructions: null,
   ...overrides,
 })
 

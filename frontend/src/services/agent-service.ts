@@ -44,6 +44,13 @@ class AgentService {
     return response.data;
   }
 
+  async getAgentSystemPrompt(agentId: string): Promise<string> {
+    const response = await apiClient.get<string>(
+      `${this.agentBaseUrl}/${agentId}/system-prompt`,
+    );
+    return response.data;
+  }
+
   async updateAgent(
     agentId: string,
     agentData: VoiceAgentUpdate,
