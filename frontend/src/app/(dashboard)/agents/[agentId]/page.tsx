@@ -690,6 +690,18 @@ Example for Support Agent:
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {/* Tool Selection Guidance */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-3 flex items-start gap-2">
+                    <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-amber-800 space-y-1">
+                      <p className="font-medium">Best Practice: Keep Tool Selection Focused</p>
+                      <p>
+                        Only enable the tools your agent truly needs. Too many tools can confuse the AI and reduce response quality.
+                        For each tool set you connect, selectively enable only the specific functions required for your use case.
+                      </p>
+                    </div>
+                  </div>
+
                   <ToolFilters
                     searchQuery={toolSearchQuery}
                     onSearchChange={setToolSearchQuery}

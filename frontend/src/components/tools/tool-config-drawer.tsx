@@ -430,6 +430,18 @@ export function ToolConfigDrawer({
 
           {hasFunctions && (
             <div className="space-y-3">
+              {/* Function Selection Guidance */}
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-amber-800 space-y-1">
+                  <p className="font-medium">Select Only Required Functions</p>
+                  <p>
+                    Enabling all functions can confuse the agent. Disable functions that are not needed for the specific role of this agent.
+                    For example, a scheduling agent only needs calendar functions, not email management.
+                  </p>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-sm font-medium">
                   <Settings className="h-4 w-4" />
