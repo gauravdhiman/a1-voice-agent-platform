@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "WebSearch",
+      "Bash(python -m pytest worker/tests/test_base_tool.py worker/tests/test_google_sheets_validation.py -v --tb=short)",
+      "Bash(python -m pytest:*)",
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(python -c:*)",
+      "Bash(./start.sh build dev:*)"
+    ]
+  }
+}

@@ -3,6 +3,7 @@ Tool service for managing platform tools and agent-specific tool configurations.
 """
 
 import logging
+import time
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
@@ -26,6 +27,51 @@ from .tool_models import (
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
+
+
+def _is_ssl_error(error: Exception) -> bool:
+    """Check if error is an SSL connection error."""
+    error_str = str(error).lower()
+    ssl_indicators = [
+        "ssl",
+        "unexpected_eof",
+        "eof occurred",
+        "tls",
+        "handshake",
+        "connection reset",
+        "broken pipe",
+    ]
+    return any(indicator in error_str for indicator in ssl_indicators)
+
+
+def _with_retry(max_retries: int = 3, delay: float = 0.5):
+    """Decorator to add retry logic for SSL/connection errors.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        delay: Delay between retries in seconds
+    """
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    if _is_ssl_error(e) and attempt < max_retries - 1:
+                        logger.warning(
+                            f"SSL connection error in {func.__name__}, "
+                            f"retrying ({attempt + 1}/{max_retries})..."
+                        )
+                        # Reset Supabase client to get fresh connection
+                        supabase_config.reset_client()
+                        time.sleep(delay * (attempt + 1))  # Exponential backoff
+                        continue
+                    raise
+            raise last_error
+        return wrapper
+    return decorator
 
 
 def validate_token_status(
@@ -115,6 +161,7 @@ class ToolService:
 
     # Platform Tools
     @tracer.start_as_current_span("tool.upsert_platform_tool")
+    @_with_retry(max_retries=3)
     async def upsert_platform_tool(
         self, tool_data: PlatformToolCreate
     ) -> tuple[Optional[PlatformTool], Optional[str]]:
@@ -444,6 +491,7 @@ class ToolService:
             return None, str(e)
 
     @tracer.start_as_current_span("tool.get_all_agent_tools_with_auth")
+    @_with_retry(max_retries=3)
     async def get_all_agent_tools_with_auth(
         self,
     ) -> tuple[List[AgentTool], Optional[str]]:

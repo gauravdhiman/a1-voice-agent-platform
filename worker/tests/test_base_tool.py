@@ -245,3 +245,144 @@ class TestGmailTool:
         """Test send_email method exists and is async."""
         assert hasattr(gmail_tool, "send_email")
         assert callable(gmail_tool.send_email)
+
+
+class TestGoogleSheetsTool:
+    """Test cases for GoogleSheetsTool."""
+
+    @pytest.fixture
+    def sheets_tool(self):
+        """Create a Google Sheets tool instance."""
+        from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
+
+        return GoogleSheetsTool(config={}, sensitive_config={})
+
+    def test_sheets_tool_initialization(self, sheets_tool):
+        """Test Google Sheets tool initialization."""
+        assert sheets_tool is not None
+        assert sheets_tool.config.spreadsheet_id == ""
+        assert sheets_tool.config.default_range == "Sheet1!A1:Z1000"
+
+    def test_sheets_tool_metadata(self, sheets_tool):
+        """Test Google Sheets tool metadata."""
+        metadata = sheets_tool.metadata
+        assert metadata is not None
+        assert metadata.name == "Google_Sheets"
+        assert "Google Sheets" in metadata.description
+        assert metadata.requires_auth is True
+        assert metadata.auth_type == "oauth2"
+
+    def test_sheets_tool_has_all_functions(self, sheets_tool):
+        """Test Google Sheets tool has all required functions."""
+        required_functions = [
+            "get_sheet_values",
+            "append_row",
+            "update_cell",
+            "search_in_sheet",
+            "create_spreadsheet",
+            "get_spreadsheet_info",
+            "list_spreadsheet_sheets",
+            "find_sheet_by_title",
+            "get_sheet_metadata",
+            "list_user_spreadsheets",
+            "search_spreadsheets_by_title",
+            "get_spreadsheet_details",
+            "clear_range",
+            "batch_update_values",
+        ]
+
+        for func_name in required_functions:
+            assert hasattr(
+                sheets_tool, func_name
+            ), f"Missing function: {func_name}"
+
+    def test_sheets_tool_config(self, sheets_tool):
+        """Test Google Sheets tool config."""
+        assert hasattr(sheets_tool.config, "spreadsheet_id")
+        assert hasattr(sheets_tool.config, "default_range")
+        assert sheets_tool.config.spreadsheet_id == ""
+        assert sheets_tool.config.default_range == "Sheet1!A1:Z1000"
+
+    @pytest.mark.asyncio
+    async def test_get_sheet_values_exists(self, sheets_tool, mock_run_context):
+        """Test get_sheet_values method exists and is async."""
+        assert hasattr(sheets_tool, "get_sheet_values")
+        assert callable(sheets_tool.get_sheet_values)
+
+    @pytest.mark.asyncio
+    async def test_append_row_exists(self, sheets_tool, mock_run_context):
+        """Test append_row method exists and is async."""
+        assert hasattr(sheets_tool, "append_row")
+        assert callable(sheets_tool.append_row)
+
+    @pytest.mark.asyncio
+    async def test_update_cell_exists(self, sheets_tool, mock_run_context):
+        """Test update_cell method exists and is async."""
+        assert hasattr(sheets_tool, "update_cell")
+        assert callable(sheets_tool.update_cell)
+
+    @pytest.mark.asyncio
+    async def test_search_in_sheet_exists(self, sheets_tool, mock_run_context):
+        """Test search_in_sheet method exists and is async."""
+        assert hasattr(sheets_tool, "search_in_sheet")
+        assert callable(sheets_tool.search_in_sheet)
+
+    @pytest.mark.asyncio
+    async def test_create_spreadsheet_exists(self, sheets_tool, mock_run_context):
+        """Test create_spreadsheet method exists and is async."""
+        assert hasattr(sheets_tool, "create_spreadsheet")
+        assert callable(sheets_tool.create_spreadsheet)
+
+    @pytest.mark.asyncio
+    async def test_get_spreadsheet_info_exists(self, sheets_tool, mock_run_context):
+        """Test get_spreadsheet_info method exists and is async."""
+        assert hasattr(sheets_tool, "get_spreadsheet_info")
+        assert callable(sheets_tool.get_spreadsheet_info)
+
+    @pytest.mark.asyncio
+    async def test_clear_range_exists(self, sheets_tool, mock_run_context):
+        """Test clear_range method exists and is async."""
+        assert hasattr(sheets_tool, "clear_range")
+        assert callable(sheets_tool.clear_range)
+
+    @pytest.mark.asyncio
+    async def test_batch_update_values_exists(self, sheets_tool, mock_run_context):
+        """Test batch_update_values method exists and is async."""
+        assert hasattr(sheets_tool, "batch_update_values")
+        assert callable(sheets_tool.batch_update_values)
+
+    @pytest.mark.asyncio
+    async def test_list_spreadsheet_sheets_exists(self, sheets_tool, mock_run_context):
+        """Test list_spreadsheet_sheets method exists and is async."""
+        assert hasattr(sheets_tool, "list_spreadsheet_sheets")
+        assert callable(sheets_tool.list_spreadsheet_sheets)
+
+    @pytest.mark.asyncio
+    async def test_find_sheet_by_title_exists(self, sheets_tool, mock_run_context):
+        """Test find_sheet_by_title method exists and is async."""
+        assert hasattr(sheets_tool, "find_sheet_by_title")
+        assert callable(sheets_tool.find_sheet_by_title)
+
+    @pytest.mark.asyncio
+    async def test_get_sheet_metadata_exists(self, sheets_tool, mock_run_context):
+        """Test get_sheet_metadata method exists and is async."""
+        assert hasattr(sheets_tool, "get_sheet_metadata")
+        assert callable(sheets_tool.get_sheet_metadata)
+
+    @pytest.mark.asyncio
+    async def test_list_user_spreadsheets_exists(self, sheets_tool, mock_run_context):
+        """Test list_user_spreadsheets method exists and is async."""
+        assert hasattr(sheets_tool, "list_user_spreadsheets")
+        assert callable(sheets_tool.list_user_spreadsheets)
+
+    @pytest.mark.asyncio
+    async def test_search_spreadsheets_by_title_exists(self, sheets_tool, mock_run_context):
+        """Test search_spreadsheets_by_title method exists and is async."""
+        assert hasattr(sheets_tool, "search_spreadsheets_by_title")
+        assert callable(sheets_tool.search_spreadsheets_by_title)
+
+    @pytest.mark.asyncio
+    async def test_get_spreadsheet_details_exists(self, sheets_tool, mock_run_context):
+        """Test get_spreadsheet_details method exists and is async."""
+        assert hasattr(sheets_tool, "get_spreadsheet_details")
+        assert callable(sheets_tool.get_spreadsheet_details)

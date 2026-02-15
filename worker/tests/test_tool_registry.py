@@ -415,3 +415,88 @@ class TestLiveKitToolRegistry:
         result = registry._extract_before_first_section(docstring)
         assert result == expected
         assert "Args:" not in result
+
+    def test_google_sheets_tool_registration(self, registry):
+        """Test Google Sheets tool is properly registered."""
+        # Register tools first
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        # Check if Google Sheets tool is registered
+        tool_class = registry.get_tool_class("Google_Sheets")
+        assert tool_class is not None
+        assert tool_class.__name__ == "GoogleSheetsTool"
+
+        # Check tool names includes Google Sheets
+        tool_names = registry.get_tool_names()
+        assert "Google_Sheets" in tool_names
+
+    def test_google_sheets_functions(self, registry):
+        """Test Google Sheets tool has expected functions."""
+        # Register tools first
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        # Get functions
+        functions = registry.get_tool_functions("Google_Sheets")
+        function_names = [f.__name__ for f in functions]
+
+        # Check for expected functions
+        expected_functions = [
+            "get_sheet_values",
+            "append_row", 
+            "update_cell",
+            "search_in_sheet",
+            "create_spreadsheet",
+            "get_spreadsheet_info",
+            "clear_range",
+            "batch_update_values",
+        ]
+
+        for expected in expected_functions:
+            assert expected in function_names, f"Missing function: {expected}"
+
+    def test_google_sheets_tool_metadata(self, registry):
+        """Test Google Sheets tool has proper metadata."""
+        # Register tools first
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        # Get Google Sheets tool class
+        sheets_class = registry.get_tool_class("Google_Sheets")
+        assert sheets_class is not None
+
+        # Create instance and check metadata
+        tool_instance = sheets_class(config={}, sensitive_config={})
+        assert hasattr(tool_instance, "metadata")
+        assert tool_instance.metadata is not None
+        assert tool_instance.metadata.name == "Google_Sheets"
+        assert "Google Sheets" in tool_instance.metadata.description
+        assert tool_instance.metadata.requires_auth is True
+        assert tool_instance.metadata.auth_type == "oauth2"
+
+    def test_google_sheets_instantiation(self, registry):
+        """Test Google Sheets tool can be instantiated with configs."""
+        # Register tools first
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        # Get Google Sheets tool class
+        sheets_class = registry.get_tool_class("Google_Sheets")
+
+        # Instantiate with config
+        config = {"spreadsheet_id": "test-id", "default_range": "Sheet1!A1:B10"}
+        sensitive_config = {
+            "access_token": "test-token",
+            "refresh_token": "test-refresh",
+        }
+        tool_instance = sheets_class(config=config, sensitive_config=sensitive_config)
+
+        assert tool_instance is not None
+        assert tool_instance.config.spreadsheet_id == "test-id"
+        assert tool_instance.config.default_range == "Sheet1!A1:B10"
+        assert tool_instance.sensitive_config.access_token == "test-token"

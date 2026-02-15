@@ -182,6 +182,7 @@ async def entrypoint(ctx: JobContext):
 
         # Build tools programmatically using function_tool() with adapters
         livekit_tools = []
+        enabled_tool_names = []
 
         for agent_tool in agent_tools:
             if not agent_tool.is_enabled or not agent_tool.tool:
@@ -208,6 +209,9 @@ async def entrypoint(ctx: JobContext):
             tool_instance = tool_class(
                 config=tool_config, sensitive_config=tool_sensitive_config
             )
+
+            # Track enabled tool names for prompt builder
+            enabled_tool_names.append(tool_name)
 
             # Get all functions for this tool
             functions = livekit_tool_registry.get_tool_functions(tool_name)
@@ -294,7 +298,8 @@ async def entrypoint(ctx: JobContext):
             instructions = PromptBuilder.build_system_prompt(
                 org=org,
                 agent=voice_agent,
-                default_rules=default_system_prompt
+                default_rules=default_system_prompt,
+                enabled_tools=enabled_tool_names
             )
         
         logger.debug(f"Enhanced instructions built (length: {len(instructions)})")
