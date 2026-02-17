@@ -128,6 +128,18 @@ class AgentService {
   async deleteAgentTool(agentToolId: string): Promise<void> {
     await apiClient.delete(`${this.toolBaseUrl}/agent/${agentToolId}`);
   }
+
+  // Test Token Methods
+  async getTestToken(
+    agentId: string,
+  ): Promise<{ token: string; serverUrl: string; roomName: string }> {
+    const response = await apiClient.post<{
+      token: string;
+      serverUrl: string;
+      roomName: string;
+    }>(`${this.agentBaseUrl}/${agentId}/test-token`);
+    return response.data;
+  }
 }
 
 export const agentService = new AgentService();

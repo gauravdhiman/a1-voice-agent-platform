@@ -25,6 +25,7 @@ import type { PlatformTool, AgentTool } from "@/types/agent";
 import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
+import { TestCallModal } from "@/components/agents/test-call-modal";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff } from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone } from "lucide-react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 
 export default function AgentDetailPage() {
@@ -80,6 +81,7 @@ export default function AgentDetailPage() {
   );
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
+  const [testCallOpen, setTestCallOpen] = React.useState(false);
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
@@ -440,9 +442,20 @@ export default function AgentDetailPage() {
             </p>
           </div>
         </div>
-        {canEdit && (
-          <DeleteButton onClick={handleDeleteAgent}>Delete Agent</DeleteButton>
-        )}
+        <div className="flex items-center gap-2">
+          {canEdit && agent.is_active && (
+            <Button
+              variant="outline"
+              onClick={() => setTestCallOpen(true)}
+            >
+              <Phone className="h-4 w-4 mr-2" />
+              Test Agent
+            </Button>
+          )}
+          {canEdit && (
+            <DeleteButton onClick={handleDeleteAgent}>Delete Agent</DeleteButton>
+          )}
+        </div>
       </div>
 
       <AnimatedTabs
@@ -750,6 +763,15 @@ Example for Support Agent:
           </Card>
         </TabsContent>
       </AnimatedTabs>
+
+      {agent && (
+        <TestCallModal
+          open={testCallOpen}
+          onOpenChange={setTestCallOpen}
+          agentId={agent.id}
+          agentName={agent.name}
+        />
+      )}
 
       {agent && (
         <AgentDeleteDialog

@@ -133,6 +133,19 @@ describe('AgentService', () => {
     })
   })
 
+  describe('Test Token Methods', () => {
+    it('getTestToken returns test token data', async () => {
+      const result = await agentService.getTestToken('agent-1')
+      expect(result).toMatchObject({
+        token: expect.any(String),
+        serverUrl: expect.any(String),
+        roomName: expect.any(String),
+      })
+      // Verify room name format
+      expect(result.roomName).toContain('test_')
+    })
+  })
+
   describe('Error Handling', () => {
     it('handles 404 errors gracefully', async () => {
       server.resetHandlers()

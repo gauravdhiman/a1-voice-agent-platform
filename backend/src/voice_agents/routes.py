@@ -3,22 +3,32 @@ Voice Agent API routes for multi-tenant SaaS platform.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from opentelemetry import trace
+from pydantic import BaseModel
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.prompt_builder import PromptBuilder
 from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.livekit_service import livekit_service
 from src.organization.service import OrganizationService
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])
+
+
+class TestTokenResponse(BaseModel):
+    """Response model for test token generation."""
+
+    token: str
+    serverUrl: str
+    roomName: str
 
 
 @agent_router.post("/", response_model=VoiceAgent, status_code=status.HTTP_201_CREATED)
@@ -136,6 +146,61 @@ async def get_agent(
             )
 
     return agent
+
+
+@agent_router.post("/{agent_id}/test-token", response_model=TestTokenResponse)
+@tracer.start_as_current_span("voice_agent.routes.get_test_token")
+async def get_test_token(
+    agent_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Generate a LiveKit token for browser-based agent testing.
+
+    This endpoint allows users to test voice agents directly from the browser
+    without making a phone call. The user connects to a LiveKit room where
+    the AI agent joins and responds to voice input.
+    """
+    current_user_id, user_profile = user_data
+
+    # Get the agent
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    # Permission check - user must have access to this organization
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role(
+            "org_admin", str(agent.organization_id)
+        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to test this agent",
+            )
+
+    # Check if agent is active
+    if not agent.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot test an inactive agent. Please activate the agent first.",
+        )
+
+    # Generate test token
+    token, server_url, room_name = livekit_service.generate_test_token(
+        agent_id=str(agent_id),
+        user_id=str(current_user_id),
+    )
+
+    if not token or not server_url or not room_name:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LiveKit is not configured. Please contact the administrator.",
+        )
+
+    return TestTokenResponse(
+        token=token,
+        serverUrl=server_url,
+        roomName=room_name,
+    )
 
 
 @agent_router.get("/{agent_id}/system-prompt", response_model=str)

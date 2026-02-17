@@ -148,26 +148,43 @@ async def entrypoint(ctx: JobContext):
         logger.info(f"Room name from job: {room_name}")
 
         phone_number = None
+        test_agent_id = None
+
         try:
-            # 1. Extract phone number from room name
-            # Room name format: call_NUMBER_random
-            parts = room_name.split("_")
-            phone_number = parts[1]
-            logger.info(f"Extracted phone number: {phone_number}")
+            # Check if this is a test room or a phone call room
+            # Test room format: test_{agent_id}_{random}
+            # Phone room format: call_{phone_number}_{random}
+            if room_name.startswith("test_"):
+                parts = room_name.split("_")
+                test_agent_id = parts[1]
+                logger.info(f"Test room detected, agent ID: {test_agent_id}")
+            else:
+                # 1. Extract phone number from room name
+                # Room name format: call_NUMBER_random
+                parts = room_name.split("_")
+                phone_number = parts[1]
+                logger.info(f"Extracted phone number: {phone_number}")
         except (IndexError, AttributeError) as e:
             logger.error(
-                f"Failed to extract phone number from room name '{room_name}': {e}"
+                f"Failed to extract room metadata from '{room_name}': {e}"
             )
             return
 
-        # 2. Fetch agent by phone number
-        voice_agent, error = await voice_agent_service.get_agent_by_phone(phone_number)
-        if error or not voice_agent:
-            logger.error(f"Failed to fetch agent for phone {phone_number}: {error}")
-            return
+        # 2. Fetch agent by ID (test room) or phone number (phone call)
+        if test_agent_id:
+            voice_agent, error = await voice_agent_service.get_agent_by_id(test_agent_id)
+            if error or not voice_agent:
+                logger.error(f"Failed to fetch agent for ID {test_agent_id}: {error}")
+                return
+            logger.info(f"Found agent: {voice_agent.name} (ID: {test_agent_id})")
+        else:
+            voice_agent, error = await voice_agent_service.get_agent_by_phone(phone_number)
+            if error or not voice_agent:
+                logger.error(f"Failed to fetch agent for phone {phone_number}: {error}")
+                return
+            logger.info(f"Found agent: {voice_agent.name} for phone: {phone_number}")
 
         agent_id = voice_agent.id
-        logger.info(f"Found agent ID: {agent_id} for phone: {phone_number}")
 
         logger.info(f"Starting Gemini S2S assistant for agent: {voice_agent.name}")
 

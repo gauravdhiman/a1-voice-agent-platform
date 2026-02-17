@@ -17,5 +17,8 @@
     "ui": "@/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
+  },
+  "registries": {
+    "@agents-ui": "https://livekit.io/ui/r/{name}.json"
   }
 }

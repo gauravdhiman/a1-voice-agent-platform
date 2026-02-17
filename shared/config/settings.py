@@ -132,6 +132,17 @@ class Settings(BaseSettings):
         default=False, description="OTLP logs insecure mode"
     )
 
+    # LiveKit Settings
+    livekit_url: Optional[str] = Field(
+        default=None, description="LiveKit server URL (e.g., wss://your-livekit-server.com)"
+    )
+    livekit_api_key: Optional[str] = Field(
+        default=None, description="LiveKit API key"
+    )
+    livekit_api_secret: Optional[str] = Field(
+        default=None, description="LiveKit API secret"
+    )
+
     # Token Refresh Service Settings
     token_refresh_check_interval_minutes: int = Field(
         default=5,
