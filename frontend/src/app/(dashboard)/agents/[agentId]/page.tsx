@@ -26,6 +26,7 @@ import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { TestCallModal } from "@/components/agents/test-call-modal";
+import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -444,13 +445,16 @@ export default function AgentDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {canEdit && agent.is_active && (
-            <Button
-              variant="outline"
-              onClick={() => setTestCallOpen(true)}
-            >
-              <Phone className="h-4 w-4 mr-2" />
-              Test Agent
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setTestCallOpen(true)}
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                Test Agent
+              </Button>
+              <EmbedButtonConfig agentId={agentId} />
+            </>
           )}
           {canEdit && (
             <DeleteButton onClick={handleDeleteAgent}>Delete Agent</DeleteButton>

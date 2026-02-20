@@ -35,9 +35,10 @@ Comprehensive documentation organized by feature.
 
 1. **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system and lifecycle
 2. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
-3. **[Worker README](../worker/README.md)** - Worker service architecture and setup
-4. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
-5. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
+3. **[Embed Call Button Plan](03_implementation/EMBED_CALL_BUTTON_PLAN.md)** - Embeddable call button feature architecture
+4. **[Worker README](../worker/README.md)** - Worker service architecture and setup
+5. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
+6. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
 
 ### Multi-Tenancy & RBAC
 

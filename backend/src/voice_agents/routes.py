@@ -6,7 +6,7 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
 from src.auth.middleware import get_authenticated_user
@@ -287,6 +287,302 @@ async def update_agent(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return updated_agent
+
+
+class EmbedConfigCreate(BaseModel):
+    """Request model for creating/updating embed configuration."""
+
+    button_text: str = "Call Us"
+    button_color: str = "#3b82f6"
+    button_text_color: str = "#ffffff"
+    button_border_radius: int = 8
+    button_size: str = "medium"
+    button_position: str = "bottom-right"
+    button_style: str = "filled"
+    allowed_domains: Optional[List[str]] = None
+    custom_css: Optional[str] = None
+    is_active: bool = True
+    daily_call_limit: int = 100
+
+
+class EmbedConfigResponse(BaseModel):
+    """Response model for embed configuration."""
+
+    id: UUID
+    agent_id: UUID
+    button_text: str
+    button_color: str
+    button_text_color: str
+    button_border_radius: int
+    button_size: str
+    button_position: str
+    button_style: str
+    allowed_domains: Optional[List[str]]
+    custom_css: Optional[str]
+    is_active: bool
+    daily_call_limit: int
+    created_at: str
+    updated_at: str
+
+
+class EmbedTokenResponse(BaseModel):
+    """Response model for embed token generation."""
+
+    embed_token: str
+    livekit_token: str
+    server_url: str
+    room_name: str
+
+
+@agent_router.get("/{agent_id}/embed-config", response_model=Optional[EmbedConfigResponse])
+@tracer.start_as_current_span("voice_agent.routes.get_embed_config")
+async def get_embed_config(
+    agent_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Get embed configuration for an agent."""
+    current_user_id, user_profile = user_data
+
+    # Get the agent
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    # Permission check
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role(
+            "org_admin", str(agent.organization_id)
+        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to view this agent",
+            )
+
+    # Get embed config from database
+    try:
+        response = (
+            voice_agent_service.supabase.table("agent_embed_configs")
+            .select("*")
+            .eq("agent_id", str(agent_id))
+            .execute()
+        )
+
+        # Check if we got any data back
+        if response.data and len(response.data) > 0:
+            return EmbedConfigResponse(**response.data[0])
+        return None
+
+    except Exception as e:
+        logger.error(f"Error fetching embed config: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch embed configuration",
+        )
+
+
+@agent_router.post("/{agent_id}/embed-config", response_model=EmbedConfigResponse)
+@tracer.start_as_current_span("voice_agent.routes.create_embed_config")
+async def create_embed_config(
+    agent_id: UUID,
+    config_data: EmbedConfigCreate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Create or update embed configuration for an agent."""
+    current_user_id, user_profile = user_data
+
+    # Get the agent
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    # Permission check - only org_admin or platform_admin can modify
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to modify embed configuration",
+            )
+
+    # Check if config already exists
+    try:
+        existing = (
+            voice_agent_service.supabase.table("agent_embed_configs")
+            .select("id")
+            .eq("agent_id", str(agent_id))
+            .execute()
+        )
+
+        config_dict = config_data.model_dump()
+        config_dict["agent_id"] = str(agent_id)
+
+        if existing.data:
+            # Update existing config
+            config_id = existing.data[0]["id"]
+            result = (
+                voice_agent_service.supabase.table("agent_embed_configs")
+                .update(config_dict)
+                .eq("id", config_id)
+                .execute()
+            )
+        else:
+            # Create new config
+            result = (
+                voice_agent_service.supabase.table("agent_embed_configs")
+                .insert(config_dict)
+                .execute()
+            )
+
+        if result.data:
+            return EmbedConfigResponse(**result.data[0])
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save embed configuration",
+            )
+
+    except Exception as e:
+        logger.error(f"Error saving embed config: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save embed configuration",
+        )
+
+
+@agent_router.delete("/{agent_id}/embed-config")
+@tracer.start_as_current_span("voice_agent.routes.delete_embed_config")
+async def delete_embed_config(
+    agent_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Delete embed configuration for an agent."""
+    current_user_id, user_profile = user_data
+
+    # Get the agent
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    # Permission check
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to delete embed configuration",
+            )
+
+    try:
+        result = (
+            voice_agent_service.supabase.table("agent_embed_configs")
+            .delete()
+            .eq("agent_id", str(agent_id))
+            .execute()
+        )
+
+        return {"message": "Embed configuration deleted successfully"}
+
+    except Exception as e:
+        logger.error(f"Error deleting embed config: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete embed configuration",
+        )
+
+
+@agent_router.post("/{agent_id}/embed-token", response_model=EmbedTokenResponse)
+@tracer.start_as_current_span("voice_agent.routes.get_embed_token")
+async def get_embed_token(
+    agent_id: UUID,
+    request: Request,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Generate an embed token for browser-based agent calls.
+
+    This endpoint is called from the embeddable call interface to obtain
+    a time-limited token for connecting to a LiveKit room.
+    """
+    from shared.voice_agents.embed_service import embed_service
+
+    current_user_id, user_profile = user_data
+
+    # Get the agent
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    # Permission check
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role(
+            "org_admin", str(agent.organization_id)
+        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+
+    # Check if agent is active
+    if not agent.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Agent is not active",
+        )
+
+    # Get embed config
+    try:
+        config_response = (
+            voice_agent_service.supabase.table("agent_embed_configs")
+            .select("*")
+            .eq("agent_id", str(agent_id))
+            .execute()
+        )
+
+        if not config_response.data or len(config_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Embed configuration not found",
+            )
+
+        embed_config = config_response.data[0]
+
+        if not embed_config.get("is_active", True):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Embed is not active",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching embed config: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch embed configuration",
+        )
+
+    # Generate embed token
+    domain = request.headers.get("origin", "")
+    ip_address = request.client.host if request.client else None
+
+    embed_token, livekit_token, server_url, room_name = (
+        embed_service.generate_embed_token(
+            agent_id=str(agent_id),
+            embed_config_id=str(embed_config["id"]),
+            domain=domain,
+            ip_address=ip_address,
+        )
+    )
+
+    if not embed_token or not livekit_token or not server_url or not room_name:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to generate embed token",
+        )
+
+    return EmbedTokenResponse(
+        embed_token=embed_token,
+        livekit_token=livekit_token,
+        server_url=server_url,
+        room_name=room_name,
+    )
 
 
 @agent_router.delete("/{agent_id}")

@@ -4,8 +4,6 @@ import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -33,7 +31,6 @@ export function TestCallModal({
   agentId,
   agentName,
 }: TestCallModalProps) {
-  const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -44,6 +41,9 @@ export function TestCallModal({
     toggleMute,
     remoteAudioTrack,
     localAudioTrack,
+    isAgentSpeaking,
+    isUserSpeaking,
+    isMuted,
   } = useTestCall({
     agentId,
     onConnected: () => {
@@ -71,28 +71,22 @@ export function TestCallModal({
     }
   }, [open, isConnected, isConnecting, startCall]);
 
-  const handleClose = () => {
+  const handleHangUp = () => {
     if (isConnected) {
       endCall();
     }
     onOpenChange(false);
   };
 
-  const handleToggleMute = () => {
-    toggleMute();
-    setIsMuted(!isMuted);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Test Agent</DialogTitle>
-          <DialogDescription>
-            Test {agentName} by speaking directly in your browser
-          </DialogDescription>
-        </DialogHeader>
-
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent 
+        className="sm:max-w-md"
+        hideCloseButton
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogTitle className="sr-only">Test Call with {agentName}</DialogTitle>
         <div className="flex flex-col items-center py-4 space-y-4">
           {error && (
             <div className="flex items-center gap-2 text-destructive p-3 bg-destructive/10 rounded-md w-full">
@@ -101,43 +95,8 @@ export function TestCallModal({
             </div>
           )}
 
-          {/* Main visualization area */}
-          <div className="flex items-center justify-center gap-8 py-4">
-            {isConnected ? (
-              <>
-                {/* User visualizer */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-20 h-20">
-                    <AgentAudioVisualizerWave
-                      size="sm"
-                      state="speaking"
-                      color="#3b82f6"
-                      audioTrack={localAudioTrack ?? undefined}
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground">You</span>
-                </div>
-
-                {/* Connection indicator */}
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <div className="w-8 h-px bg-border" />
-                </div>
-
-                {/* Agent visualizer */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-20 h-20">
-                    <AgentAudioVisualizerWave
-                      size="sm"
-                      state="speaking"
-                      color="#22c55e"
-                      audioTrack={remoteAudioTrack ?? undefined}
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground">{agentName}</span>
-                </div>
-              </>
-            ) : (
+          {!isConnected && !error && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-4">
               <div
                 className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
                   isConnecting ? "bg-yellow-50" : "bg-gray-50"
@@ -149,71 +108,83 @@ export function TestCallModal({
                   <Phone className="h-10 w-10 text-gray-400" />
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Status text */}
-          <div className="text-center h-6">
-            {isConnecting && (
-              <p className="text-sm text-muted-foreground">
-                Connecting to {agentName}...
-              </p>
-            )}
-            {isConnected && (
-              <p className="text-sm text-green-600 font-medium">
-                Connected - Start speaking
-              </p>
-            )}
-            {!isConnecting && !isConnected && !error && (
-              <p className="text-sm text-muted-foreground">Ready to connect</p>
-            )}
-          </div>
-
-          {/* Controls */}
-          {isConnected && (
-            <div className="flex items-center justify-center gap-4 pt-2">
-              <Button
-                variant={isMuted ? "destructive" : "outline"}
-                size="icon"
-                onClick={handleToggleMute}
-                className="h-12 w-12 rounded-full"
-              >
-                {isMuted ? (
-                  <MicOff className="h-5 w-5" />
-                ) : (
-                  <Mic className="h-5 w-5" />
+              <div className="text-center">
+                {isConnecting && (
+                  <p className="text-sm text-muted-foreground">
+                    Connecting to {agentName}...
+                  </p>
                 )}
-              </Button>
-
-              <Button
-                variant="destructive"
-                size="icon"
-                onClick={handleClose}
-                className="h-12 w-12 rounded-full"
-              >
-                <PhoneOff className="h-5 w-5" />
-              </Button>
+                {!isConnecting && (
+                  <Button
+                    onClick={startCall}
+                    disabled={isConnecting}
+                    className="w-full max-w-xs"
+                  >
+                    <Phone className="mr-2 h-4 w-4" />
+                    Start Test Call
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 
-          {!isConnected && (
-            <Button
-              onClick={startCall}
-              disabled={isConnecting}
-              className="w-full max-w-xs"
-            >
-              {isConnecting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <Phone className="mr-2 h-4 w-4" />
-                  Start Test Call
-                </>
-              )}
-            </Button>
+          {isConnected && (
+            <>
+              <div className="w-full max-w-sm space-y-4">
+                <div>
+                  <div className="text-center mb-2">
+                    <span className="text-sm font-medium text-gray-700">{agentName}</span>
+                  </div>
+                  <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <AgentAudioVisualizerWave
+                      audioTrack={remoteAudioTrack ?? undefined}
+                      state={isAgentSpeaking ? "speaking" : "listening"}
+                      color="#22c55e"
+                      className="w-full h-full"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-center mb-2">
+                    <span className="text-sm font-medium text-gray-700">You</span>
+                    {isMuted && <span className="ml-2 text-xs text-red-500">(Muted)</span>}
+                  </div>
+                  <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <AgentAudioVisualizerWave
+                      audioTrack={localAudioTrack ?? undefined}
+                      state={isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"}
+                      color={isMuted ? "#9ca3af" : "#3b82f6"}
+                      className="w-full h-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 pt-2">
+                <Button
+                  variant={isMuted ? "destructive" : "outline"}
+                  size="icon"
+                  onClick={toggleMute}
+                  className="h-14 w-14 rounded-full"
+                >
+                  {isMuted ? (
+                    <MicOff className="h-6 w-6" />
+                  ) : (
+                    <Mic className="h-6 w-6" />
+                  )}
+                </Button>
+
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={handleHangUp}
+                  className="h-14 w-14 rounded-full"
+                >
+                  <PhoneOff className="h-6 w-6" />
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </DialogContent>

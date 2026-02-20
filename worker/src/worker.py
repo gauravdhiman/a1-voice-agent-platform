@@ -151,13 +151,18 @@ async def entrypoint(ctx: JobContext):
         test_agent_id = None
 
         try:
-            # Check if this is a test room or a phone call room
+            # Check room type:
             # Test room format: test_{agent_id}_{random}
+            # Embed room format: embed_{agent_id}_{random}
             # Phone room format: call_{phone_number}_{random}
             if room_name.startswith("test_"):
                 parts = room_name.split("_")
                 test_agent_id = parts[1]
                 logger.info(f"Test room detected, agent ID: {test_agent_id}")
+            elif room_name.startswith("embed_"):
+                parts = room_name.split("_")
+                test_agent_id = parts[1]
+                logger.info(f"Embed room detected, agent ID: {test_agent_id}")
             else:
                 # 1. Extract phone number from room name
                 # Room name format: call_NUMBER_random

@@ -17,7 +17,7 @@ from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
 from src.organization.routes import organization_router
 from src.rbac.routes import rbac_router
-from src.voice_agents import agent_router, tool_router, voice_router
+from src.voice_agents import agent_router, embed_router, tool_router, voice_router
 
 from shared.config import settings, supabase_config
 
@@ -119,6 +119,9 @@ def create_app() -> FastAPI:
     app.include_router(agent_router)
     app.include_router(tool_router)
     app.include_router(voice_router)
+    
+    # Include embed routes (public, no auth required)
+    app.include_router(embed_router)
 
     return app
 
