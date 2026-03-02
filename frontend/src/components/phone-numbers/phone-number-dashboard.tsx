@@ -1,0 +1,237 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Phone, UserX, UserPlus, Settings, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  PhoneNumberWithAgent,
+  formatPhoneNumber,
+  getPhoneNumberTypeLabel,
+  getPhoneNumberStatusLabel,
+  PhoneNumberStatus,
+} from "@/types/phone-number";
+import { PhoneNumberAssignDialog } from "./phone-number-assign-dialog";
+import { PhoneNumberCancelDialog } from "./phone-number-cancel-dialog";
+
+interface PhoneNumberDashboardProps {
+  organizationId: string;
+  phoneNumbers: PhoneNumberWithAgent[];
+  isLoading?: boolean;
+  onRefresh?: () => void;
+}
+
+export function PhoneNumberDashboard({
+  organizationId,
+  phoneNumbers,
+  isLoading,
+  onRefresh,
+}: PhoneNumberDashboardProps) {
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedNumber, setSelectedNumber] = useState<PhoneNumberWithAgent | null>(
+    null,
+  );
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const unusedCount = phoneNumbers.filter((n) => !n.assigned_agent_id).length;
+
+  const handleAssign = (number: PhoneNumberWithAgent) => {
+    setSelectedNumber(number);
+    setAssignDialogOpen(true);
+  };
+
+  const handleCancel = (number: PhoneNumberWithAgent) => {
+    setSelectedNumber(number);
+    setCancelDialogOpen(true);
+  };
+
+  const handleAssignSuccess = () => {
+    toast.success("Phone number assigned successfully");
+    setAssignDialogOpen(false);
+    setSelectedNumber(null);
+    onRefresh?.();
+  };
+
+  const handleCancelSuccess = () => {
+    toast.success("Phone number cancelled successfully");
+    setCancelDialogOpen(false);
+    setSelectedNumber(null);
+    onRefresh?.();
+  };
+
+  const getStatusBadge = (status: PhoneNumberStatus, hasAgent: boolean) => {
+    if (status === "cancelled") {
+      return <Badge variant="destructive">Cancelled</Badge>;
+    }
+    if (hasAgent) {
+      return (
+        <Badge className="bg-green-100 text-green-800 border-green-200">
+          Active (used)
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary">Unused</Badge>;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading phone numbers...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {unusedCount > 0 && (
+        <Alert>
+          <UserX className="h-4 w-4" />
+          <AlertDescription>
+            You have {unusedCount} unused phone number
+            {unusedCount > 1 ? "s" : ""}. Assign them to agents or consider
+            releasing them to stop recurring charges.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {phoneNumbers.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">No phone numbers yet</p>
+            <p className="text-sm text-muted-foreground">
+              Purchase a phone number to get started
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {phoneNumbers.map((number) => (
+            <Card key={number.id}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <Phone className="w-6 h-6 text-muted-foreground" />
+                      <div>
+                        <div className="font-semibold text-lg">
+                          {formatPhoneNumber(number.phone_number)}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Badge variant="outline">
+                            {getPhoneNumberTypeLabel(number.phone_number_type)}
+                          </Badge>
+                          {getStatusBadge(
+                            number.status,
+                            !!number.assigned_agent_id,
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <div className="text-sm text-muted-foreground">Monthly</div>
+                      <div className="font-semibold">
+                        {number.monthly_cost_credits} credits
+                      </div>
+                    </div>
+
+                    <div className="text-right min-w-[150px]">
+                      {number.assigned_agent_id ? (
+                        <>
+                          <div className="text-sm text-muted-foreground">
+                            Assigned to
+                          </div>
+                          <div className="font-medium">{number.agent_name}</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-sm text-muted-foreground">Status</div>
+                          <div className="font-medium text-muted-foreground">
+                            Not assigned
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!number.assigned_agent_id &&
+                        number.status !== "cancelled" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAssign(number)}
+                            disabled={actionLoading === number.id}
+                          >
+                            {actionLoading === number.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <UserPlus className="w-4 h-4 mr-1" />
+                                Assign
+                              </>
+                            )}
+                          </Button>
+                        )}
+
+                      {number.status !== "cancelled" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => handleCancel(number)}
+                          disabled={actionLoading === number.id}
+                        >
+                          {actionLoading === number.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              Cancel
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {selectedNumber && (
+        <PhoneNumberAssignDialog
+          organizationId={organizationId}
+          phoneNumber={selectedNumber}
+          open={assignDialogOpen}
+          onOpenChange={setAssignDialogOpen}
+          onAssignSuccess={handleAssignSuccess}
+        />
+      )}
+
+      {selectedNumber && (
+        <PhoneNumberCancelDialog
+          phoneNumber={selectedNumber}
+          open={cancelDialogOpen}
+          onOpenChange={setCancelDialogOpen}
+          onCancelSuccess={handleCancelSuccess}
+        />
+      )}
+    </div>
+  );
+}

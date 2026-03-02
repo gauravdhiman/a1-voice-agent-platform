@@ -56,9 +56,12 @@ import {
 
 import { organizationService } from "@/services/organization-service";
 import { agentService } from "@/services/agent-service";
+import { phoneNumberService } from "@/services/phone-number-service";
 import { VoiceAgent } from "@/types/agent";
+import { PhoneNumberWithAgent } from "@/types/phone-number";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { AgentCard } from "@/components/agents/agent-card";
+import { PhoneNumberDashboard } from "@/components/phone-numbers/phone-number-dashboard";
 import { toast } from "sonner";
 
 // Use real services
@@ -100,6 +103,10 @@ export default function OrganizationPage() {
   const [selectedAgent, setSelectedAgent] = useState<VoiceAgent | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
+  // Phone numbers state
+  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumberWithAgent[]>([]);
+  const [phoneNumbersLoading, setPhoneNumbersLoading] = useState(false);
+
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
 
@@ -123,6 +130,10 @@ export default function OrganizationPage() {
       // Load agents
       const orgAgents = await agentService.getOrgAgents(orgId);
       setAgents(orgAgents);
+
+      // Load phone numbers
+      const numbers = await phoneNumberService.getOrganizationNumbers(orgId);
+      setPhoneNumbers(numbers.items);
     } catch (error) {
       console.error("Failed to load organization data:", error);
       toast.error("Failed to load organization data");
@@ -141,10 +152,24 @@ export default function OrganizationPage() {
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "ai-agent") {
+    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
+
+  const handleRefreshPhoneNumbers = useCallback(async () => {
+    if (!orgId) return;
+    setPhoneNumbersLoading(true);
+    try {
+      const numbers = await phoneNumberService.getOrganizationNumbers(orgId);
+      setPhoneNumbers(numbers.items);
+    } catch (error) {
+      console.error("Failed to refresh phone numbers:", error);
+      toast.error("Failed to refresh phone numbers");
+    } finally {
+      setPhoneNumbersLoading(false);
+    }
+  }, [orgId]);
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -420,6 +445,7 @@ export default function OrganizationPage() {
         <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
+          <TabsTrigger value="phone-numbers">Phone Numbers</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -733,6 +759,33 @@ During monsoon season (July-September), we have extended hours for flood-related
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Phone Numbers Tab */}
+        <TabsContent value="phone-numbers">
+          <Card>
+            <CardHeader className="p-5 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <Phone className="h-5 w-5" />
+                    <span>Phone Numbers</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Manage your organization&apos;s phone numbers
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <PhoneNumberDashboard
+                organizationId={orgId || ""}
+                phoneNumbers={phoneNumbers}
+                isLoading={phoneNumbersLoading}
+                onRefresh={handleRefreshPhoneNumbers}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </AnimatedTabs>
 

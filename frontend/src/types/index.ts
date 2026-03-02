@@ -22,3 +22,6 @@ export * from "./agent";
 
 // Common types
 export * from "./common";
+
+// Phone Number types
+export * from "./phone-number";

@@ -134,11 +134,10 @@ class Settings(BaseSettings):
 
     # LiveKit Settings
     livekit_url: Optional[str] = Field(
-        default=None, description="LiveKit server URL (e.g., wss://your-livekit-server.com)"
+        default=None,
+        description="LiveKit server URL (e.g., wss://your-livekit-server.com)",
     )
-    livekit_api_key: Optional[str] = Field(
-        default=None, description="LiveKit API key"
-    )
+    livekit_api_key: Optional[str] = Field(default=None, description="LiveKit API key")
     livekit_api_secret: Optional[str] = Field(
         default=None, description="LiveKit API secret"
     )
@@ -155,6 +154,17 @@ class Settings(BaseSettings):
         ge=1,
         le=60,
         description="Window in minutes before expiry to refresh tokens (default: 15)",
+    )
+
+    # Twilio Settings
+    twilio_account_sid: Optional[str] = Field(
+        default=None, description="Twilio Account SID"
+    )
+    twilio_auth_token: Optional[str] = Field(
+        default=None, description="Twilio Auth Token"
+    )
+    twilio_phone_number_sid: Optional[str] = Field(
+        default=None, description="Default Twilio phone number SID"
     )
 
     @validator("cors_origins", pre=True)

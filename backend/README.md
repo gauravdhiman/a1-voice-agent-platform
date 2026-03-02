@@ -110,6 +110,18 @@ backend/
 | `/health/ready` | GET    | Readiness check (Kubernetes) |
 | `/health/live`  | GET    | Liveness check (Kubernetes)  |
 
+### Phone Numbers
+
+| Endpoint                        | Method | Description                        |
+| ------------------------------- | ------ | ---------------------------------- |
+| `/api/v1/phone-numbers/available` | GET    | Search available phone numbers    |
+| `/api/v1/phone-numbers/purchase` | POST   | Purchase a phone number           |
+| `/api/v1/phone-numbers`          | GET    | List organization phone numbers   |
+| `/api/v1/phone-numbers/{id}/assign` | POST | Assign number to agent             |
+| `/api/v1/phone-numbers/{id}`     | DELETE | Cancel (release) a phone number   |
+
+For detailed API documentation, see [Phone Numbers PRD](../docs/PRD-phone-numbers.md).
+
 ### Example Response
 
 ```bash

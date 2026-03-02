@@ -8,6 +8,7 @@ import { type Organization } from '@/types/organization'
 import { type SubscriptionPlan } from '@/types/billing'
 import { type CreditBalance } from '@/types/billing'
 import { type Role, type Permission, type RoleWithPermissions } from '@/types/rbac'
+import { type PhoneNumber, type PhoneNumberWithAgent, type AvailablePhoneNumber, type PhoneNumberType, type PhoneNumberStatus } from '@/types/phone-number'
 
 export const createMockUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   id: 'user-1',
@@ -135,5 +136,48 @@ export const createMockPermission = (overrides: Partial<Permission> = {}): Permi
   action: 'read',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockPhoneNumber = (overrides: Partial<PhoneNumber> = {}): PhoneNumber => ({
+  id: 'phone-1',
+  phone_number: '+14155551234',
+  provider: 'twilio',
+  provider_sid: 'PN123',
+  phone_number_type: 'local' as PhoneNumberType,
+  country_code: 'US',
+  area_code: '415',
+  monthly_cost_credits: 200,
+  status: 'active' as PhoneNumberStatus,
+  assigned_agent_id: null,
+  is_incoming_enabled: true,
+  is_outgoing_enabled: true,
+  organization_id: 'org-1',
+  purchased_at: new Date().toISOString(),
+  cancelled_at: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockPhoneNumberWithAgent = (overrides: Partial<PhoneNumberWithAgent> = {}): PhoneNumberWithAgent => ({
+  ...createMockPhoneNumber(),
+  agent_name: null,
+  ...overrides,
+})
+
+export const createMockAvailablePhoneNumber = (overrides: Partial<AvailablePhoneNumber> = {}): AvailablePhoneNumber => ({
+  phone_number: '+14155551234',
+  phone_number_type: 'local' as PhoneNumberType,
+  country_code: 'US',
+  area_code: '415',
+  monthly_cost_credits: 200,
+  capabilities: {
+    voice: true,
+    sms: true,
+    mms: false,
+  },
+  locality: 'San Francisco',
+  postal_code: '94102',
   ...overrides,
 })

@@ -1,0 +1,185 @@
+"""
+Pydantic models for Phone Number functionality shared across backend and worker.
+"""
+
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class PhoneNumberProvider(str, Enum):
+    """Phone number provider enumeration."""
+
+    TWILIO = "twilio"
+
+
+class PhoneNumberStatus(str, Enum):
+    """Phone number status enumeration."""
+
+    AVAILABLE = "available"
+    PURCHASED = "purchased"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    CANCELLED = "cancelled"
+
+
+class PhoneNumberType(str, Enum):
+    """Phone number type enumeration."""
+
+    LOCAL = "local"
+    TOLL_FREE = "toll_free"
+    MOBILE = "mobile"
+
+
+class PhoneNumberBase(BaseModel):
+    """Base model for phone numbers."""
+
+    phone_number: str = Field(
+        ..., min_length=1, max_length=20, description="Phone number in E.164 format"
+    )
+    provider: PhoneNumberProvider = Field(..., description="Provider (twilio)")
+    provider_sid: Optional[str] = Field(
+        None, max_length=255, description="Provider's SID for the phone number"
+    )
+    phone_number_type: PhoneNumberType = Field(
+        ..., description="Type of phone number (local, toll_free, mobile)"
+    )
+    country_code: str = Field(
+        ..., min_length=2, max_length=2, description="Country code (e.g., US)"
+    )
+    area_code: Optional[str] = Field(
+        None, max_length=10, description="Area code for local numbers"
+    )
+    monthly_cost_credits: int = Field(..., ge=0, description="Monthly cost in credits")
+    status: PhoneNumberStatus = Field(
+        default=PhoneNumberStatus.PURCHASED, description="Current status"
+    )
+    assigned_agent_id: Optional[UUID] = Field(
+        None, description="UUID of the agent this number is assigned to"
+    )
+    is_incoming_enabled: bool = Field(
+        default=True, description="Whether incoming calls are enabled"
+    )
+    is_outgoing_enabled: bool = Field(
+        default=False, description="Whether outgoing calls are enabled"
+    )
+
+
+class PhoneNumberCreate(PhoneNumberBase):
+    """Model for creating a new phone number record."""
+
+    organization_id: UUID = Field(..., description="Organization that owns this number")
+    provider_sid: str = Field(..., description="Provider's SID for the phone number")
+
+
+class PhoneNumberUpdate(BaseModel):
+    """Model for updating a phone number."""
+
+    status: Optional[PhoneNumberStatus] = None
+    assigned_agent_id: Optional[UUID] = None
+    is_incoming_enabled: Optional[bool] = None
+    is_outgoing_enabled: Optional[bool] = None
+
+
+class PhoneNumber(PhoneNumberBase):
+    """Complete phone number model."""
+
+    id: UUID = Field(..., description="Phone number ID")
+    organization_id: UUID = Field(..., description="Organization that owns this number")
+    purchased_at: datetime = Field(..., description="When the number was purchased")
+    cancelled_at: Optional[datetime] = Field(
+        None, description="When the number was cancelled (if applicable)"
+    )
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+
+class PhoneNumberWithAgent(PhoneNumber):
+    """Phone number with agent details for display."""
+
+    agent_name: Optional[str] = Field(None, description="Name of assigned agent")
+
+
+class AvailablePhoneNumber(BaseModel):
+    """Model for available phone numbers from provider search."""
+
+    phone_number: str = Field(..., description="Phone number in E.164 format")
+    phone_number_type: PhoneNumberType = Field(..., description="Type of phone number")
+    country_code: str = Field(..., description="Country code")
+    area_code: Optional[str] = Field(None, description="Area code")
+    monthly_cost_credits: int = Field(..., description="Monthly cost in credits")
+    capabilities: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Capabilities (voice, sms, mms)",
+    )
+    locality: Optional[str] = Field(None, description="City or locality")
+    postal_code: Optional[str] = Field(None, description="Postal code")
+
+
+class PhoneNumberSearchRequest(BaseModel):
+    """Request model for searching available phone numbers."""
+
+    country_code: str = Field(
+        default="US", min_length=2, max_length=2, description="Country code"
+    )
+    phone_number_type: PhoneNumberType = Field(
+        default=PhoneNumberType.LOCAL, description="Type of phone number"
+    )
+    area_code: Optional[str] = Field(
+        None, max_length=10, description="Filter by area code"
+    )
+    contains: Optional[str] = Field(
+        None, max_length=10, description="Pattern to search for in number"
+    )
+    page: int = Field(default=1, ge=1, description="Page number")
+    page_size: int = Field(
+        default=50, ge=1, le=50, description="Results per page (max 50)"
+    )
+
+
+class PhoneNumberPurchaseRequest(BaseModel):
+    """Request model for purchasing a phone number."""
+
+    phone_number: str = Field(..., description="Phone number to purchase")
+    country_code: str = Field(
+        default="US", min_length=2, max_length=2, description="Country code"
+    )
+    phone_number_type: PhoneNumberType = Field(
+        default=PhoneNumberType.LOCAL, description="Type of phone number"
+    )
+
+
+class PhoneNumberAssignRequest(BaseModel):
+    """Request model for assigning a phone number to an agent."""
+
+    agent_id: UUID = Field(..., description="UUID of the agent to assign")
+
+
+class PhoneNumberSearchResponse(BaseModel):
+    """Response model for phone number search."""
+
+    items: list[AvailablePhoneNumber]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class PhoneNumberPurchaseResponse(BaseModel):
+    """Response model for phone number purchase."""
+
+    success: bool
+    phone_number: PhoneNumber
+    message: str
+    credit_balance_after: int
+
+
+class PhoneNumberListResponse(BaseModel):
+    """Response model for listing owned phone numbers."""
+
+    items: list[PhoneNumberWithAgent]
+    total_count: int
+    unused_count: int

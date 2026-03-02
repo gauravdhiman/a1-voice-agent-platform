@@ -74,3 +74,10 @@ Error responses should follow a consistent structure, including:
 
 - All API endpoints should be documented using OpenAPI (Swagger) specifications.
 - Maintain up-to-date documentation for all API versions.
+- Feature-specific API documentation should be included in the feature's PRD or implementation guide.
+
+## Example API Documentation
+
+See the following for comprehensive API documentation examples:
+
+- [Phone Numbers PRD](../PRD-phone-numbers.md) - Phone number API endpoints with request/response formats
