@@ -93,6 +93,7 @@ export default function OrganizationPage() {
     industry: string;
     location: string;
     business_details: string;
+    google_api_key: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -118,6 +119,7 @@ export default function OrganizationPage() {
         industry: org.industry || "",
         location: org.location || "",
         business_details: org.business_details || "",
+        google_api_key: org.google_api_key || "",
       });
 
       // Load agents
@@ -194,15 +196,6 @@ export default function OrganizationPage() {
     // Store original data for rollback if needed
     const originalData = { ...organizationData };
 
-    // 1. Optimistic Update: Update UI immediately
-    const updatedOrg = {
-      ...organizationData.organization,
-      ...editedOrg,
-    } as OrganizationEnhanced;
-
-    setOrganizationData({ organization: updatedOrg });
-    setIsEditing(false);
-
     setSaving(true);
     try {
       const response = await organizationService.updateOrganization(orgId, {
@@ -214,15 +207,24 @@ export default function OrganizationPage() {
         industry: editedOrg.industry,
         location: editedOrg.location,
         business_details: editedOrg.business_details,
+        // Send empty string to clear, or the actual value. Don't default to null.
+        google_api_key: editedOrg.google_api_key,
       });
 
-      // 2. Final Sync: Update with actual server response
+      // Only update UI after successful save
       setOrganizationData({ organization: response as OrganizationEnhanced });
+      setIsEditing(false);
       toast.success("Organization updated successfully");
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to update organization:", error);
-      toast.error("Failed to update organization");
-      // Rollback on failure
+      // Extract error message from API response
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null && 'detail' in error
+          ? (error as { detail: string }).detail
+          : "Failed to update organization";
+      toast.error(errorMessage);
+      // Don't update UI on error - keep original data showing
       setOrganizationData(originalData);
     } finally {
       setSaving(false);
@@ -245,6 +247,7 @@ export default function OrganizationPage() {
         industry: org.industry || "",
         location: org.location || "",
         business_details: org.business_details || "",
+        google_api_key: org.google_api_key || "",
       });
     }
   };
@@ -582,6 +585,29 @@ During monsoon season (July-September), we have extended hours for flood-related
                       className="min-h-[200px]"
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="google_api_key">
+                      Google API Key
+                    </Label>
+                    <Input
+                      id="google_api_key"
+                      type="password"
+                      value={editedOrg?.google_api_key || ""}
+                      onChange={(e) =>
+                        editedOrg &&
+                        setEditedOrg({
+                          ...editedOrg,
+                          google_api_key: e.target.value,
+                        })
+                      }
+                      placeholder="Enter your Google API key (leave empty to use platform key)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      If set, voice agents will use this API key instead of the platform key.
+                      This allows billing to go directly to your Google Cloud project.
+                    </p>
+                  </div>
                 </>
               ) : (
                 <>
@@ -651,6 +677,23 @@ During monsoon season (July-September), we have extended hours for flood-related
                     <p className="text-foreground whitespace-pre-wrap">
                       {displayOrg.business_details ||
                         "No business context provided"}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Google API Key
+                    </label>
+                    <p className="text-foreground">
+                      {displayOrg.google_api_key ? (
+                        <span className="text-green-600 flex items-center gap-2">
+                          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                          Configured
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Not configured (using platform key)
+                        </span>
+                      )}
                     </p>
                   </div>
                 </>

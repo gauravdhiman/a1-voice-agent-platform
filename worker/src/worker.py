@@ -16,6 +16,7 @@ from livekit.agents import (
 from livekit.agents.voice import room_io
 from livekit.plugins.google.realtime import RealtimeModel
 
+from shared.common.security import decrypt_data
 from shared.voice_agents.livekit_service import livekit_service
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_service import tool_service
@@ -316,6 +317,8 @@ async def entrypoint(ctx: JobContext):
             logger.warning(f"Could not fetch organization details: {org_error}. Using default prompt.")
             # Fallback to default prompt if org data unavailable
             instructions = default_system_prompt
+            # Fallback to platform key if org not found
+            org_google_api_key = None
         else:
             instructions = PromptBuilder.build_system_prompt(
                 org=org,
@@ -323,6 +326,8 @@ async def entrypoint(ctx: JobContext):
                 default_rules=default_system_prompt,
                 enabled_tools=enabled_tool_names
             )
+            # Get organization's Google API key
+            org_google_api_key = getattr(org, 'google_api_key', None)
         
         logger.debug(f"Enhanced instructions built (length: {len(instructions)})")
 
@@ -333,10 +338,27 @@ async def entrypoint(ctx: JobContext):
         await livekit_agent.update_tools(livekit_tools)
         logger.info(f"Updated agent with {len(livekit_tools)} tools")
 
-        # 4. Create Gemini RealtimeModel
+        # 4. Determine which API key to use
+        # Priority: 
+        # 1. If agent.use_platform_credits is True -> use platform key
+        # 2. If org has google_api_key -> use org key
+        # 3. Otherwise -> use platform key (fallback)
+        use_platform_credits = getattr(voice_agent, 'use_platform_credits', False)
+        
+        if use_platform_credits:
+            api_key = os.getenv("GEMINI_API_KEY")
+            logger.info(f"Agent {agent_id} configured to use platform API key")
+        elif org_google_api_key:
+            api_key = org_google_api_key
+            logger.info(f"Agent {agent_id} using organization API key")
+        else:
+            api_key = os.getenv("GEMINI_API_KEY")
+            logger.info(f"Agent {agent_id} using platform API key (no org key configured)")
+
+        # 5. Create Gemini RealtimeModel
         model = RealtimeModel(
             model="gemini-2.5-flash-native-audio-preview-12-2025",
-            api_key=os.getenv("GEMINI_API_KEY"),
+            api_key=api_key,
             voice="Puck",
             temperature=0.8,
         )

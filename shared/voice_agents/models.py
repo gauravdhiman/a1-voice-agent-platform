@@ -19,6 +19,21 @@ class VoiceAgentBase(BaseModel):
     persona: Optional[str] = Field(None, description="Agent persona or role")
     tone: Optional[str] = Field(None, description="Communication tone (e.g., professional, friendly)")
     mission: Optional[str] = Field(None, description="Specific goals or mission for this agent")
+    use_platform_credits: bool = Field(
+        default=False,
+        description="""
+        Use platform credits instead of organization API key.
+        
+        When False (default): Use organization's Google API key if configured,
+        otherwise fall back to platform key.
+        
+        When True: Always use platform API key, even if organization has their
+        own API key configured.
+        
+        This allows organizations to override the use of their own API key
+        on a per-agent basis.
+        """,
+    )
     custom_instructions: Optional[str] = Field(
         None,
         description="""
@@ -73,6 +88,15 @@ class VoiceAgentUpdate(BaseModel):
     persona: Optional[str] = Field(None, description="Agent persona or role")
     tone: Optional[str] = Field(None, description="Communication tone (e.g., professional, friendly)")
     mission: Optional[str] = Field(None, description="Specific goals or mission for this agent")
+    use_platform_credits: Optional[bool] = Field(
+        None,
+        description="""
+        Use platform credits instead of organization API key.
+        
+        When False: Use organization's Google API key if configured.
+        When True: Always use platform API key.
+        """,
+    )
     custom_instructions: Optional[str] = Field(
         None,
         description="""

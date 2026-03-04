@@ -14,6 +14,7 @@ export interface Organization {
   location?: string | null;
   created_at: string;
   updated_at: string;
+  google_api_key?: string | null;
 }
 
 // Enhanced Organization interface with business details field
@@ -53,6 +54,7 @@ export interface OrganizationUpdate {
   industry?: string | null;
   location?: string | null;
   business_details?: string | null;
+  google_api_key?: string | null;
 }
 
 // Minimal organization interface for utility functions

@@ -96,6 +96,7 @@ class OrganizationService(BaseOrganizationService):
                 industry=org_dict.get("industry"),
                 location=org_dict.get("location"),
                 business_details=org_dict.get("business_details"),
+                google_api_key=org_dict.get("google_api_key"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
             )
@@ -153,6 +154,7 @@ class OrganizationService(BaseOrganizationService):
                 industry=org_dict.get("industry"),
                 location=org_dict.get("location"),
                 business_details=org_dict.get("business_details"),
+                google_api_key=org_dict.get("google_api_key"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
             )
@@ -248,6 +250,7 @@ class OrganizationService(BaseOrganizationService):
                         industry=org_dict.get("industry"),
                         location=org_dict.get("location"),
                         business_details=org_dict.get("business_details"),
+                        google_api_key=org_dict.get("google_api_key"),
                         created_at=org_dict["created_at"],
                         updated_at=org_dict["updated_at"],
                     )
@@ -293,6 +296,36 @@ class OrganizationService(BaseOrganizationService):
                 update_data["location"] = org_data.location
             if org_data.business_details is not None:
                 update_data["business_details"] = org_data.business_details
+            
+            # Handle Google API key - validate non-empty, clear if empty, skip if not provided
+            logger.info(f"Google API key update check: value='{org_data.google_api_key}', is_none={org_data.google_api_key is None}, is_empty={org_data.google_api_key == '' if org_data.google_api_key is not None else 'N/A'}")
+            
+            # Validate Google API key if provided (non-empty)
+            if org_data.google_api_key is not None and org_data.google_api_key.strip() != "":
+                is_valid, validation_error = await self.validate_google_api_key(org_data.google_api_key)
+                is_valid, validation_error = await self.validate_google_api_key(org_data.google_api_key)
+                if not is_valid:
+                    current_span.set_status(
+                        trace.Status(
+                            trace.StatusCode.ERROR,
+                            f"Invalid Google API key: {validation_error}",
+                        )
+                    )
+                    organization_errors_counter.add(
+                        1,
+                        {
+                            "operation": "update_organization",
+                            "error": "invalid_google_api_key",
+                        },
+                    )
+                    return None, f"Invalid Google API key: {validation_error}"
+                update_data["google_api_key"] = org_data.google_api_key
+            elif org_data.google_api_key is not None:
+                # Empty string means clear the API key
+                logger.info(f"Clearing Google API key - setting to None")
+                update_data["google_api_key"] = None
+            else:
+                logger.info("Google API key not included in update request - keeping existing value")
 
             if not update_data:
                 return await self.get_organization_by_id(org_id)
@@ -332,6 +365,7 @@ class OrganizationService(BaseOrganizationService):
                 industry=org_dict.get("industry"),
                 location=org_dict.get("location"),
                 business_details=org_dict.get("business_details"),
+                google_api_key=org_dict.get("google_api_key"),
                 created_at=org_dict["created_at"],
                 updated_at=org_dict["updated_at"],
             )
@@ -700,6 +734,70 @@ class OrganizationService(BaseOrganizationService):
                 1, {"operation": "create_invitation", "error": "exception"}
             )
             return None, str(e)
+
+    @tracer.start_as_current_span("organization.validate_google_api_key")
+    async def validate_google_api_key(
+        self, api_key: str
+    ) -> tuple[bool, Optional[str]]:
+        """Validate a Google API key by making a test request.
+        
+        Args:
+            api_key: The Google API key to validate
+            
+        Returns:
+            tuple of (is_valid, error_message)
+        """
+        import httpx
+        
+        organization_operations_counter.add(1, {"operation": "validate_google_api_key"})
+        
+        current_span = trace.get_current_span()
+        current_span.set_attribute("api_key_present", bool(api_key))
+        
+        try:
+            # Test the API key by calling Google's models endpoint
+            # This is a lightweight call that validates the key
+            url = f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url)
+                
+                if response.status_code == 200:
+                    current_span.set_status(trace.Status(trace.StatusCode.OK))
+                    logger.info("Google API key validated successfully")
+                    return True, None
+                elif response.status_code == 401:
+                    error_msg = "Invalid API key - authentication failed"
+                    current_span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, error_msg)
+                    )
+                    logger.warning(f"Google API key validation failed: {error_msg}")
+                    return False, "Invalid API key"
+                elif response.status_code == 403:
+                    error_msg = "API key lacks required permissions"
+                    current_span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, error_msg)
+                    )
+                    logger.warning(f"Google API key validation failed: {error_msg}")
+                    return False, "API key lacks required permissions"
+                else:
+                    error_msg = f"API validation returned status {response.status_code}"
+                    current_span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, error_msg)
+                    )
+                    logger.warning(f"Google API key validation unexpected status: {response.status_code}")
+                    return False, f"Validation failed with status {response.status_code}"
+                    
+        except httpx.TimeoutException:
+            error_msg = "Validation request timed out"
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
+            logger.warning(f"Google API key validation timed out")
+            return False, "Validation timed out - please try again"
+        except Exception as e:
+            error_msg = f"Validation error: {str(e)}"
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
+            logger.error(f"Google API key validation exception: {e}", exc_info=True)
+            return False, "Unable to validate API key"
 
     def _get_frontend_url(self) -> str:
         """Get the frontend URL from environment variables."""
