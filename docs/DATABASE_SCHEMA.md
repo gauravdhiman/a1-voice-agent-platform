@@ -7,6 +7,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Database Overview](#database-overview)
 - [Core Tables](#core-tables)
 - [Voice Agent Tables](#voice-agent-tables)
+- [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
 - [Notification Tables](#notification-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
@@ -283,6 +284,63 @@ Junction table mapping voice agents to platform tools with configuration.
   "scope": "https://www.googleapis.com/auth/gmail.readonly"
 }
 ```
+
+---
+
+## Embed Button Tables
+
+### agent_embed_configs
+
+Stores embed button configuration for voice agents, enabling them to be embedded on external websites.
+
+| Column               | Type           | Constraints                     | Description                                      |
+| -------------------- | -------------- | ------------------------------- | ------------------------------------------------ |
+| id                   | UUID           | PRIMARY KEY                     | Unique embed config identifier                   |
+| agent_id             | UUID           | NOT NULL, FK → voice_agents.id  | Voice agent identifier                           |
+| button_text          | VARCHAR(50)    | NOT NULL, DEFAULT 'Call Us'     | Text displayed on the button                     |
+| button_color         | VARCHAR(7)     | NOT NULL, DEFAULT '#3b82f6'     | Button background/border color (hex)             |
+| button_text_color    | VARCHAR(7)     | NOT NULL, DEFAULT '#ffffff'     | Button text color (hex)                          |
+| button_border_radius | INTEGER        | NOT NULL, DEFAULT 8             | Corner roundness in pixels (0-50)                |
+| button_size          | VARCHAR(20)    | NOT NULL, DEFAULT 'medium'      | Size: small, medium, large                       |
+| button_position      | VARCHAR(20)    | NOT NULL, DEFAULT 'bottom-right'| Position on page (e.g., bottom-right, top-left)  |
+| button_style         | VARCHAR(20)    | NOT NULL, DEFAULT 'filled'      | Style: filled or outline                         |
+| allowed_domains      | ARRAY(TEXT)    | NULLABLE                        | Domains allowed to use embed (empty = all)       |
+| custom_css           | TEXT           | NULLABLE                        | Custom CSS for button styling                    |
+| is_active            | BOOLEAN        | NOT NULL, DEFAULT TRUE          | Embed active status                              |
+| daily_call_limit     | INTEGER        | NOT NULL, DEFAULT 100           | Maximum calls per day                            |
+| created_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()         | Creation timestamp                               |
+| updated_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()         | Last update timestamp                            |
+
+**Foreign Keys**: `agent_id` → `voice_agents.id` (CASCADE)
+**RLS**: Enabled
+**Unique Constraint**: `(agent_id)` - one config per agent
+
+---
+
+### embed_call_logs
+
+Tracks usage of embed call buttons for analytics and rate limiting.
+
+| Column            | Type         | Constraints                            | Description                            |
+| ----------------- | ------------ | -------------------------------------- | -------------------------------------- |
+| id                | UUID         | PRIMARY KEY                            | Unique log identifier                  |
+| embed_config_id   | UUID         | NOT NULL, FK → agent_embed_configs.id  | Embed configuration identifier         |
+| domain            | VARCHAR(255) | NULLABLE                               | Domain that initiated the call         |
+| ip_address        | VARCHAR(45)  | NULLABLE                               | Visitor IP address                     |
+| user_agent        | TEXT         | NULLABLE                               | Browser user agent                     |
+| status            | VARCHAR(20)  | NOT NULL, DEFAULT 'started'            | Status: started, completed, failed     |
+| duration_seconds  | INTEGER      | NULLABLE                               | Call duration in seconds               |
+| ended_at          | TIMESTAMPTZ  | NULLABLE                               | Call end timestamp                     |
+| started_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                | Call start timestamp                   |
+
+**Foreign Keys**: `embed_config_id` → `agent_embed_configs.id` (CASCADE)
+**RLS**: Enabled
+
+**Indexes**:
+
+- `idx_embed_call_logs_config_id`
+- `idx_embed_call_logs_started_at`
+- `idx_embed_call_logs_status`
 
 ---
 
@@ -618,6 +676,12 @@ Row Level Security is enabled on most application tables to enforce multi-tenant
 - **Org admins**: Full access to tools for agents in their organization
 - **Regular users**: Read-only access to tools for agents in their organization
 
+### Embed Config Table
+
+- **Platform admins**: Full access to all embed configurations
+- **Org admins**: Full access to embed configs for agents in their organization
+- **Regular users**: Read-only access to embed configs in their organization
+
 ### User Roles Table
 
 - **Platform admins**: Can manage all user roles
@@ -681,6 +745,36 @@ erDiagram
         timestamptz last_refreshed_at
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    agent_embed_configs {
+        uuid id
+        uuid agent_id
+        varchar button_text
+        varchar button_color
+        varchar button_text_color
+        integer button_border_radius
+        varchar button_size
+        varchar button_position
+        varchar button_style
+        varchar[] allowed_domains
+        text custom_css
+        boolean is_active
+        integer daily_call_limit
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    embed_call_logs {
+        uuid id
+        uuid embed_config_id
+        varchar domain
+        varchar ip_address
+        text user_agent
+        varchar status
+        integer duration_seconds
+        timestamptz ended_at
+        timestamptz started_at
     }
 
     auth {
@@ -887,7 +981,9 @@ erDiagram
 
     organizations ||--o{ voice_agents : "has many"
     voice_agents ||--o{ agent_tools : "has many"
+    voice_agents ||--o| agent_embed_configs : "has one"
     platform_tools ||--o{ agent_tools : "used by"
+    agent_embed_configs ||--o{ embed_call_logs : "tracks"
 
     auth ||--o{ user_roles : "has many"
     organizations ||--o{ user_roles : "has many"
@@ -932,6 +1028,7 @@ erDiagram
 11. `20260111000001` - Add auth columns to platform tools
 12. `20260118000001` - Add last_refreshed_at to agent_tools
 13. `20260127000001` - Enhance organization and agent models (add: industry, location, business_details, persona, tone, mission, custom_instructions; remove: system_prompt - now auto-generated via PromptBuilder)
+14. `20260217004742` - Add agent_embed_configs and embed_call_logs tables for embed button feature
 
 ---
 
@@ -1040,4 +1137,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-01-27
+**Last Updated**: 2026-02-20

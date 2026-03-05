@@ -24,6 +24,7 @@ Voice agents are AI-powered assistants that handle real-time voice conversations
 - ✅ **Function-level tool control** - enable/disable specific tool functions per agent
 - ✅ **OAuth integration** - secure authentication with external services (Google Calendar, etc.)
 - ✅ **Agent greeting** - personalized greeting when agent enters conversation
+- ✅ **Embed call button** - add voice calling to any external website
 
 ## Architecture
 
@@ -410,6 +411,64 @@ class DynamicAgent(Agent):
 - ✅ Improves user experience
 - ✅ Configurable per agent
 
+## Embed Call Button
+
+### What Is It?
+
+The embed call button allows you to add a customizable voice call button to any external website. Visitors can click the button to start a real-time voice conversation with your agent directly from your website.
+
+### How It Works
+
+1. **Configure**: Customize button appearance (colors, text, size, position)
+2. **Generate**: Get copy-paste ready embed code
+3. **Embed**: Paste the code into your website's HTML
+4. **Connect**: Visitors click to start voice calls via WebRTC
+
+### Key Features
+
+- **Customizable Appearance**: Button text, colors, size, position, and style (filled/outline)
+- **Secure Access**: Time-limited tokens with optional domain validation
+- **Rate Limiting**: Configurable daily call limits to prevent abuse
+- **Real-Time Calls**: WebRTC-based voice conversations with AI agent
+
+### Architecture
+
+```mermaid
+flowchart LR
+    subgraph External["External Website"]
+        Button["Call Button<br/>(call-button.js)"]
+        Modal["Call Modal<br/>(iframe)"]
+    end
+    
+    subgraph Platform["Platform"]
+        Config["Embed Config UI"]
+        API["Embed API"]
+        CallPage["/embed/call"]
+    end
+    
+    subgraph LiveKit["LiveKit"]
+        Room["Room"]
+        Worker["AI Worker"]
+    end
+    
+    Config -->|"Saves"| API
+    Button -->|"Opens"| Modal
+    Modal -->|"Loads"| CallPage
+    CallPage -->|"Token request"| API
+    API -->|"Returns token"| CallPage
+    CallPage -->|"Connects"| Room
+    Room -->|"Dispatches"| Worker
+```
+
+### Security
+
+- Tokens expire after 1 hour
+- Optional domain allowlist for restrictions
+- Daily call limits prevent abuse
+- No API keys exposed to browser
+
+See [Embed Button Documentation](./embed_button.md) for detailed usage guide.
+
 ## Configuration
 
 ### Agent Configuration
@@ -618,6 +677,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 
 ## Related Documentation
 
+- [Embed Call Button](embed_button.md) - Add voice calling to external websites
 - [Tool System](tool_system.md) - Creating and managing tools
 - [LiveKit Tool Wrapping](livekit_tool_wrapping.md) - Implementation details
 - [System Architecture](../../01_architecture/system_architecture.md) - Overall architecture
@@ -629,8 +689,9 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 1. **Create Your First Agent**: Use dashboard to create an agent
 2. **Add Tools**: Connect Google Calendar or custom API
 3. **Test Agent**: Make test call to verify functionality
-4. **Customize**: Adjust system prompt and tool configuration
-5. **Deploy**: Connect phone number and go live
+4. **Add to Website**: Generate embed code for your website
+5. **Customize**: Adjust system prompt and tool configuration
+6. **Deploy**: Connect phone number and go live
 
 ---
 

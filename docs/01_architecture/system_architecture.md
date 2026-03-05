@@ -75,6 +75,147 @@ sequenceDiagram
     Worker->>User: AI Agent speaks to user
 ```
 
+---
+
+## Embed Call Button Flow (Browser → LiveKit)
+
+The embed call button feature allows users to place a customizable call button on their websites, enabling visitors to initiate voice calls directly through the browser using WebRTC.
+
+### Architecture Overview
+
+```mermaid
+flowchart TB
+    subgraph External["External Website"]
+        Website["User's Website<br/>(HTML/JS)"]
+        EmbedScript["embed/call-button.js"]
+        CallButton["Floating Call Button"]
+    end
+
+    subgraph Platform["AI Voice Agent Platform"]
+        subgraph Frontend["Frontend (Next.js)"]
+            ConfigUI["Embed Config UI"]
+            CallPage["Call Interface<br/>/embed/call"]
+        end
+
+        subgraph Backend["Backend (FastAPI)"]
+            EmbedAPI["Embed API"]
+            TokenService["Token Service"]
+            LiveKitSvc["LiveKit Service"]
+        end
+
+        subgraph Database[(Database)]
+            EmbedTable["agent_embed_configs"]
+        end
+    end
+
+    subgraph LiveKit["LiveKit Cloud"]
+        Room["LiveKit Room"]
+        Worker["AI Worker"]
+        Agent["Voice Agent"]
+    end
+
+    Website -->|"Loads"| EmbedScript
+    EmbedScript -->|"Creates"| CallButton
+    CallButton -->|"Click"| CallPage
+    
+    ConfigUI -->|"Generates"| EmbedScript
+    ConfigUI -->|"Saves"| EmbedAPI
+    EmbedAPI -->|"Stores"| EmbedTable
+    
+    CallPage -->|"1. Request token"| EmbedAPI
+    EmbedAPI -->|"2. Generate"| TokenService
+    TokenService -->|"3. Create room"| LiveKitSvc
+    LiveKitSvc -->|"4. Connect"| Room
+    Room -->|"5. Join"| Worker
+    Worker -->|"6. Start"| Agent
+```
+
+### Embed Button Call Sequence
+
+```mermaid
+sequenceDiagram
+    actor Visitor as Website Visitor
+    participant Website as External Website
+    participant EmbedScript as Embed Script
+    participant CallPage as Call Interface
+    participant API as Backend API
+    participant LiveKit as LiveKit Cloud
+    participant Worker as AI Worker
+
+    Note over Visitor,Worker: Phase 1: Page Load
+    
+    Visitor->>Website: Visit website
+    Website->>EmbedScript: Load embed/call-button.js
+    EmbedScript->>Website: Display floating button
+    
+    Note over Visitor,Worker: Phase 2: Button Click & Token Generation
+    
+    Visitor->>EmbedScript: Click call button
+    EmbedScript->>CallPage: Open popup/modal
+    CallPage->>API: POST /agents/{id}/embed-token
+    API->>API: Validate domain & rate limits
+    API->>API: Generate JWT token (1hr expiry)
+    API-->>CallPage: Return {token, room_name, ws_url}
+    
+    Note over Visitor,Worker: Phase 3: WebRTC Connection
+    
+    CallPage->>LiveKit: Connect using embed token
+    LiveKit-->>CallPage: Connected to room
+    
+    Note over Visitor,Worker: Phase 4: Agent Joins
+    
+    LiveKit->>Worker: New participant
+    Worker->>API: Fetch agent config
+    API-->>Worker: Agent configuration
+    Worker->>Worker: Initialize AI agent
+    Worker->>LiveKit: Join room
+    Worker->>Visitor: "Hello! How can I help you?"
+    
+    Note over Visitor,Worker: Phase 5: Active Conversation
+    
+    loop Voice Exchange
+        Visitor->>LiveKit: Audio stream
+        LiveKit->>Worker: Forward audio
+        Worker->>Worker: STT → LLM → TTS
+        Worker->>LiveKit: Audio response
+        LiveKit->>Visitor: Play agent voice
+    end
+    
+    Note over Visitor,Worker: Phase 6: Call End
+    
+    Visitor->>CallPage: Close/Hang up
+    CallPage->>LiveKit: Disconnect
+    LiveKit->>Worker: Participant left
+    Worker->>Worker: Cleanup session
+    Worker->>API: Log call metrics
+```
+
+### Why Tokens Are Required
+
+**Security Layer:**
+- Tokens prevent unauthorized access to agents
+- Time-limited (1 hour expiration)
+- Scoped to specific agent/room only
+- Domain validation prevents misuse
+
+**Token Flow:**
+```
+Static Embed Code → Visitor Clicks → Token Generated → WebRTC Connection
+     (Public)           (Event)       (1hr JWT)         (Authenticated)
+```
+
+### Key Differences from Phone Calls
+
+| Aspect | Phone (Twilio) | Embed (WebRTC) |
+|--------|---------------|----------------|
+| Initiation | Phone dial | Button click |
+| Transport | PSTN/SIP | WebRTC |
+| Audio Quality | Variable | High (Opus) |
+| Latency | Higher | Lower |
+| Setup Time | ~5 seconds | ~2 seconds |
+| Token Required | No | Yes (1hr JWT) |
+| Domain Check | N/A | Optional |
+
 ### Twilio Webhook Endpoint
 
 **Location**: `backend/src/voice_agents/voice_routes.py`

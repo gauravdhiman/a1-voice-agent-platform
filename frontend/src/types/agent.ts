@@ -28,6 +28,7 @@ export interface VoiceAgent {
   custom_instructions: string | null;
   voice_settings: Record<string, unknown> | null;
   is_active: boolean;
+  use_platform_credits: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -43,6 +44,7 @@ export interface VoiceAgentCreate {
   mission?: string | null;
   custom_instructions?: string | null;
   is_active?: boolean;
+  use_platform_credits?: boolean;
 }
 
 export interface VoiceAgentUpdate {
@@ -54,6 +56,7 @@ export interface VoiceAgentUpdate {
   mission?: string | null;
   custom_instructions?: string | null;
   is_active?: boolean;
+  use_platform_credits?: boolean;
 }
 
 export interface PlatformToolFunction {

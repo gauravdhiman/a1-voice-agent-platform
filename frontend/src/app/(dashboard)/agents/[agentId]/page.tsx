@@ -26,6 +26,7 @@ import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { TestCallModal } from "@/components/agents/test-call-modal";
+import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -52,8 +53,9 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone } from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink } from "lucide-react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 export default function AgentDetailPage() {
   const { user } = useAuth();
@@ -104,6 +106,7 @@ export default function AgentDetailPage() {
     mission: "",
     custom_instructions: "",
     is_active: true,
+    use_platform_credits: false,
   });
 
   // Fetch data using React Query
@@ -156,6 +159,7 @@ export default function AgentDetailPage() {
         mission: agent.mission || "",
         custom_instructions: agent.custom_instructions || "",
         is_active: agent.is_active,
+        use_platform_credits: agent.use_platform_credits || false,
       });
     }
   }, [agent]);
@@ -444,13 +448,16 @@ export default function AgentDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {canEdit && agent.is_active && (
-            <Button
-              variant="outline"
-              onClick={() => setTestCallOpen(true)}
-            >
-              <Phone className="h-4 w-4 mr-2" />
-              Test Agent
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setTestCallOpen(true)}
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                Test Agent
+              </Button>
+              <EmbedButtonConfig agentId={agentId} />
+            </>
           )}
           {canEdit && (
             <DeleteButton onClick={handleDeleteAgent}>Delete Agent</DeleteButton>
@@ -656,6 +663,47 @@ Example for Support Agent:
                   Agent is active and ready to handle calls
                 </Label>
               </div>
+
+              {/* API Key Configuration */}
+              {organization?.google_api_key ? (
+                <div className="mt-6 p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="use_platform_credits"
+                      checked={agentForm.use_platform_credits}
+                      onCheckedChange={(checked) =>
+                        setAgentForm({ ...agentForm, use_platform_credits: checked === true })
+                      }
+                      disabled={!canEdit}
+                    />
+                    <Label
+                      htmlFor="use_platform_credits"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Use Your Plan Credits
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {agentForm.use_platform_credits
+                      ? "Calls will use your plan credits."
+                      : "Your plan credits will not be used. Calls will be billed directly to your Google API key configured under your organization settings."}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    <span className="font-medium">Using Platform Credits: </span>
+                    Calls will be using your plan credits. If you want to use your own Google API key, please configure it in your organization settings.
+                  </p>
+                  <Link
+                    href={`/organization?org_id=${agent?.organization_id}`}
+                    className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Configure Organization API Key
+                  </Link>
+                </div>
+              )}
 
               {canEdit && (
                 <div className="flex space-x-2 pt-4">

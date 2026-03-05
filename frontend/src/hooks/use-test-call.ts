@@ -11,6 +11,8 @@ export interface TestCallState {
   isConnecting: boolean;
   isConnected: boolean;
   error: string | null;
+  isAgentSpeaking: boolean;
+  isUserSpeaking: boolean;
 }
 
 export interface UseTestCallOptions {
@@ -26,6 +28,7 @@ export interface UseTestCallResult extends TestCallState {
   toggleMute: () => void;
   remoteAudioTrack: RemoteAudioTrack | null;
   localAudioTrack: LocalAudioTrack | null;
+  isMuted: boolean;
 }
 
 export function useTestCall({
@@ -38,10 +41,13 @@ export function useTestCall({
     isConnecting: false,
     isConnected: false,
     error: null,
+    isAgentSpeaking: false,
+    isUserSpeaking: false,
   });
 
   const [remoteAudioTrack, setRemoteAudioTrack] = useState<RemoteAudioTrack | null>(null);
   const [localAudioTrack, setLocalAudioTrack] = useState<LocalAudioTrack | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<{
@@ -53,7 +59,6 @@ export function useTestCall({
   });
 
   const endCall = useCallback(() => {
-    // Clean up any attached audio elements
     document.querySelectorAll('audio[data-livekit]').forEach(el => el.remove());
 
     if (roomRef.current) {
@@ -68,11 +73,14 @@ export function useTestCall({
 
     setRemoteAudioTrack(null);
     setLocalAudioTrack(null);
+    setIsMuted(false);
 
     setState({
       isConnecting: false,
       isConnected: false,
       error: null,
+      isAgentSpeaking: false,
+      isUserSpeaking: false,
     });
 
     onDisconnected?.();
@@ -83,8 +91,10 @@ export function useTestCall({
     if (audioTrack) {
       if (audioTrack.isMuted) {
         audioTrack.unmute();
+        setIsMuted(false);
       } else {
         audioTrack.mute();
+        setIsMuted(true);
       }
     }
   }, []);
@@ -131,13 +141,22 @@ export function useTestCall({
           console.log("Room disconnected");
           endCall();
         })
+        .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+          const localSid = room.localParticipant.sid;
+          const agentSpeaking = speakers.some((s) => s.sid !== localSid);
+          const userSpeaking = speakers.some((s) => s.sid === localSid);
+          setState((prev) => ({
+            ...prev,
+            isAgentSpeaking: agentSpeaking,
+            isUserSpeaking: userSpeaking,
+          }));
+        })
         .on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
           console.log("Track subscribed:", track.sid, "from", participant.identity, "kind:", track.kind);
           if (track.kind === "audio") {
             audioRef.current.remoteAudio = track as unknown as RemoteAudioTrack;
             setRemoteAudioTrack(track as unknown as RemoteAudioTrack);
             
-            // Attach and play the audio track
             const audioElement = track.attach();
             audioElement.autoplay = true;
             audioElement.setAttribute('data-livekit', 'true');
@@ -222,5 +241,6 @@ export function useTestCall({
     toggleMute,
     remoteAudioTrack,
     localAudioTrack,
+    isMuted,
   };
 }

@@ -47,10 +47,20 @@ class OrganizationBase(BaseModel):
         - Unique selling points and differentiators
         - Common customer questions and how to handle them
         - Emergency or after-hours protocols
-        - Any other context that helps the AI represent your business accurately
+        - Any other context helps the AI represent your business accurately
         
         This information is used to construct the AI agent's system prompt
         and will be referenced when interacting with callers.
+        """,
+    )
+    google_api_key: Optional[str] = Field(
+        None,
+        description="""
+        Organization's own Google API key for voice agents.
+        
+        If set, voice agents can use this API key instead of the platform key,
+        allowing billing to go directly to the organization's Google Cloud project.
+        The key is stored encrypted and decrypted only when needed.
         """,
     )
 
@@ -103,6 +113,15 @@ class OrganizationUpdate(BaseModel):
         
         This information is used to construct the AI agent's system prompt
         and will be referenced when interacting with callers.
+        """,
+    )
+    google_api_key: Optional[str] = Field(
+        None,
+        description="""
+        Organization's own Google API key for voice agents.
+        
+        If set, voice agents can use this API key instead of the platform key,
+        allowing billing to go directly to the organization's Google Cloud project.
         """,
     )
 

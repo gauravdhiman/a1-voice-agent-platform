@@ -140,6 +140,132 @@ class AgentService {
     }>(`${this.agentBaseUrl}/${agentId}/test-token`);
     return response.data;
   }
+
+  // Embed Configuration Methods
+  async getEmbedConfig(
+    agentId: string,
+  ): Promise<EmbedConfig | null> {
+    const response = await apiClient.get<EmbedConfigApiResponse | null>(
+      `${this.agentBaseUrl}/${agentId}/embed-config`,
+    );
+    if (!response.data) return null;
+    return transformEmbedConfigResponse(response.data);
+  }
+
+  async createEmbedConfig(
+    agentId: string,
+    configData: EmbedConfigCreate,
+  ): Promise<EmbedConfig> {
+    const response = await apiClient.post<EmbedConfigApiResponse>(
+      `${this.agentBaseUrl}/${agentId}/embed-config`,
+      transformEmbedConfigCreate(configData),
+    );
+    return transformEmbedConfigResponse(response.data);
+  }
+
+  async deleteEmbedConfig(agentId: string): Promise<void> {
+    await apiClient.delete(`${this.agentBaseUrl}/${agentId}/embed-config`);
+  }
+
+  // Embed Token Method (for authenticated testing)
+  async getEmbedToken(
+    agentId: string,
+  ): Promise<{ embedToken: string; livekitToken: string; serverUrl: string; roomName: string }> {
+    const response = await apiClient.post<{
+      embedToken: string;
+      livekitToken: string;
+      serverUrl: string;
+      roomName: string;
+    }>(`${this.agentBaseUrl}/${agentId}/embed-token`);
+    return response.data;
+  }
+}
+
+// Embed Configuration Types
+export interface EmbedConfig {
+  id: string;
+  agentId: string;
+  buttonText: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  buttonBorderRadius: number;
+  buttonSize: 'small' | 'medium' | 'large';
+  buttonPosition: 'bottom-right' | 'bottom-left' | 'bottom-center' | 'top-right' | 'top-left' | 'top-center' | 'center';
+  buttonStyle?: 'filled' | 'outline';
+  allowedDomains: string[] | null;
+  customCss: string | null;
+  isActive: boolean;
+  dailyCallLimit: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmbedConfigCreate {
+  buttonText: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  buttonBorderRadius: number;
+  buttonSize: 'small' | 'medium' | 'large';
+  buttonPosition: 'bottom-right' | 'bottom-left' | 'bottom-center' | 'top-right' | 'top-left' | 'top-center' | 'center';
+  buttonStyle?: 'filled' | 'outline';
+  allowedDomains?: string[];
+  customCss?: string;
+  isActive: boolean;
+  dailyCallLimit: number;
+}
+
+interface EmbedConfigApiResponse {
+  id: string;
+  agent_id: string;
+  button_text: string;
+  button_color: string;
+  button_text_color: string;
+  button_border_radius: number;
+  button_size: string;
+  button_position: string;
+  button_style: string;
+  allowed_domains: string[] | null;
+  custom_css: string | null;
+  is_active: boolean;
+  daily_call_limit: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function transformEmbedConfigResponse(data: EmbedConfigApiResponse): EmbedConfig {
+  return {
+    id: data.id,
+    agentId: data.agent_id,
+    buttonText: data.button_text,
+    buttonColor: data.button_color,
+    buttonTextColor: data.button_text_color,
+    buttonBorderRadius: data.button_border_radius,
+    buttonSize: data.button_size as EmbedConfig['buttonSize'],
+    buttonPosition: data.button_position as EmbedConfig['buttonPosition'],
+    buttonStyle: data.button_style as EmbedConfig['buttonStyle'],
+    allowedDomains: data.allowed_domains,
+    customCss: data.custom_css,
+    isActive: data.is_active,
+    dailyCallLimit: data.daily_call_limit,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+function transformEmbedConfigCreate(data: EmbedConfigCreate): Record<string, unknown> {
+  return {
+    button_text: data.buttonText,
+    button_color: data.buttonColor,
+    button_text_color: data.buttonTextColor,
+    button_border_radius: data.buttonBorderRadius,
+    button_size: data.buttonSize,
+    button_position: data.buttonPosition,
+    button_style: data.buttonStyle,
+    allowed_domains: data.allowedDomains,
+    custom_css: data.customCss,
+    is_active: data.isActive,
+    daily_call_limit: data.dailyCallLimit,
+  };
 }
 
 export const agentService = new AgentService();
