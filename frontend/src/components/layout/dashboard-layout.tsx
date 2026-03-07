@@ -14,6 +14,7 @@ import {
   ChevronRight,
   LogOut,
   Bot,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -43,6 +44,11 @@ const navigationItems = [
     name: "Agents",
     href: "/agents",
     icon: Bot,
+  },
+  {
+    name: "Phone Numbers",
+    href: "/phone-numbers",
+    icon: Phone,
   },
   {
     name: "Users",
@@ -110,6 +116,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     ) {
       breadcrumbs.push({ name: "Agents", href: "/agents" });
       breadcrumbs.push({ name: "Agent Details", href: null });
+    } else if (pathname === "/phone-numbers") {
+      breadcrumbs.push({ name: "Phone Numbers", href: null });
     } else if (pathname === "/users") {
       if (isPlatformAdmin) {
         breadcrumbs.push({ name: "Users", href: null });
