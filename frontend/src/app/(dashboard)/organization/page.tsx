@@ -40,6 +40,7 @@ import {
   Edit3,
   Phone,
   Info,
+  Key,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -143,7 +144,7 @@ export default function OrganizationPage() {
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "ai-agent") {
+    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "byok") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -422,6 +423,7 @@ export default function OrganizationPage() {
       >
         <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="byok">BYOK</TabsTrigger>
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
         </TabsList>
 
@@ -585,29 +587,6 @@ During monsoon season (July-September), we have extended hours for flood-related
                       className="min-h-[200px]"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="google_api_key">
-                      Google API Key
-                    </Label>
-                    <Input
-                      id="google_api_key"
-                      type="password"
-                      value={editedOrg?.google_api_key || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({
-                          ...editedOrg,
-                          google_api_key: e.target.value,
-                        })
-                      }
-                      placeholder="Enter your Google API key (leave empty to use platform key)"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      If set, voice agents will use this API key instead of the platform key.
-                      This allows billing to go directly to your Google Cloud project.
-                    </p>
-                  </div>
                 </>
               ) : (
                 <>
@@ -679,11 +658,100 @@ During monsoon season (July-September), we have extended hours for flood-related
                         "No business context provided"}
                     </p>
                   </div>
+                </>
+              )}
+            </CardContent>
+            {isEditing && (
+              <CardFooter className="flex justify-end space-x-2 p-5 border-t bg-muted/20">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="flex items-center space-x-2"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Cancel</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center space-x-2"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{saving ? "Saving..." : "Save Changes"}</span>
+                </Button>
+              </CardFooter>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* BYOK Tab */}
+        <TabsContent value="byok">
+          <Card>
+            <CardHeader className="p-5 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1">
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <Key className="h-5 w-5" />
+                    <span>API Keys</span>
+                  </CardTitle>
+                  <CardDescription>
+                    {isEditing
+                      ? "Configure your API keys for BYOK"
+                      : "Manage your API keys for Bring Your Own Key (BYOK)"}
+                  </CardDescription>
+                </div>
+                {canUpdateOrganization && !isEditing && (
+                  <Button variant="outline" size="sm" onClick={handleEdit}>
+                    <Edit3 className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-5 pt-0 space-y-4">
+              {isEditing ? (
+                <>
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-blue-800">
+                      Configure your own API keys to have direct billing go to your Google Cloud project.
+                      If not set, voice agents will use the platform key.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="google_api_key">
+                      Google API Key
+                    </Label>
+                    <Input
+                      id="google_api_key"
+                      type="password"
+                      value={editedOrg?.google_api_key || ""}
+                      onChange={(e) =>
+                        editedOrg &&
+                        setEditedOrg({
+                          ...editedOrg,
+                          google_api_key: e.target.value,
+                        })
+                      }
+                      placeholder="Enter your Google API key (leave empty to use platform key)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      If set, voice agents will use this API key instead of the platform key.
+                      This allows billing to go directly to your Google Cloud project.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
                       Google API Key
                     </label>
-                    <p className="text-foreground">
+                    <p className="text-foreground mt-1">
                       {displayOrg.google_api_key ? (
                         <span className="text-green-600 flex items-center gap-2">
                           <span className="w-2 h-2 bg-green-500 rounded-full"></span>
