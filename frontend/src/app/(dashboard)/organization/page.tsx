@@ -62,6 +62,7 @@ import { PhoneNumberWithAgent } from "@/types/phone-number";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { AgentCard } from "@/components/agents/agent-card";
 import { PhoneNumberDashboard } from "@/components/phone-numbers/phone-number-dashboard";
+import { useCreditBalance } from "@/hooks/use-credit-balance";
 import { toast } from "sonner";
 
 // Use real services
@@ -75,6 +76,7 @@ export default function OrganizationPage() {
   } = useOrganization();
   const { canUpdateOrganization, canViewMembers, isPlatformAdmin, isOrgAdmin } =
     useUserPermissions();
+  const { creditBalance } = useCreditBalance();
   const searchParams = useSearchParams();
   const router = useRouter();
   const orgId = searchParams.get("org_id");
@@ -824,6 +826,7 @@ During monsoon season (July-September), we have extended hours for flood-related
               <PhoneNumberDashboard
                 organizationId={orgId || ""}
                 phoneNumbers={phoneNumbers}
+                creditBalance={creditBalance || 0}
                 isLoading={phoneNumbersLoading}
                 onRefresh={handleRefreshPhoneNumbers}
               />

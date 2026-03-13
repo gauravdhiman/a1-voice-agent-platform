@@ -12,7 +12,7 @@ from twilio.rest import Client
 from twilio.rest.api.v2010.account.incoming_phone_number import (
     IncomingPhoneNumberInstance,
 )
-from twilio.rest.client import Page
+from twilio.base.page import Page
 
 from shared.config.settings import settings
 
