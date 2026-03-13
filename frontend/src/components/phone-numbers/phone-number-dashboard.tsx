@@ -11,7 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Phone, UserX, UserPlus, Settings, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Phone, UserX, UserPlus, Settings, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   PhoneNumberWithAgent,
@@ -22,10 +23,12 @@ import {
 } from "@/types/phone-number";
 import { PhoneNumberAssignDialog } from "./phone-number-assign-dialog";
 import { PhoneNumberCancelDialog } from "./phone-number-cancel-dialog";
+import { PhoneNumberSearch } from "./phone-number-search";
 
 interface PhoneNumberDashboardProps {
   organizationId: string;
   phoneNumbers: PhoneNumberWithAgent[];
+  creditBalance?: number;
   isLoading?: boolean;
   onRefresh?: () => void;
 }
@@ -33,11 +36,13 @@ interface PhoneNumberDashboardProps {
 export function PhoneNumberDashboard({
   organizationId,
   phoneNumbers,
+  creditBalance = 0,
   isLoading,
   onRefresh,
 }: PhoneNumberDashboardProps) {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<PhoneNumberWithAgent | null>(
     null,
   );
@@ -109,10 +114,11 @@ export function PhoneNumberDashboard({
         <Card>
           <CardContent className="py-12 text-center">
             <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No phone numbers yet</p>
-            <p className="text-sm text-muted-foreground">
-              Purchase a phone number to get started
-            </p>
+            <p className="text-muted-foreground mb-4">No phone numbers yet</p>
+            <Button onClick={() => setSearchDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Search & Purchase Phone Number
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -232,6 +238,22 @@ export function PhoneNumberDashboard({
           onCancelSuccess={handleCancelSuccess}
         />
       )}
+
+      <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Search & Purchase Phone Number</DialogTitle>
+          </DialogHeader>
+          <PhoneNumberSearch
+            organizationId={organizationId}
+            creditBalance={creditBalance}
+            onNumberSelected={() => {
+              setSearchDialogOpen(false);
+              onRefresh?.();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

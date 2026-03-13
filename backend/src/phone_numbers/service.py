@@ -57,6 +57,7 @@ class PhoneNumberService:
         """Initialize phone number service."""
         self.supabase = supabase_config.client
         self.billing_service = BillingService()
+        self.twilio_service = twilio_service
 
     async def search_available(
         self, search_request: PhoneNumberSearchRequest
@@ -70,7 +71,7 @@ class PhoneNumberService:
             Tuple of (search results, error message)
         """
         try:
-            if not twilio_service.is_configured():
+            if not self.twilio_service.is_configured():
                 return PhoneNumberSearchResponse(
                     items=[],
                     total_count=0,
@@ -81,7 +82,7 @@ class PhoneNumberService:
 
             twilio_type = search_request.phone_number_type.value
 
-            results = twilio_service.search_available_numbers(
+            results = self.twilio_service.search_available_numbers(
                 country_code=search_request.country_code,
                 number_type=twilio_type,
                 area_code=search_request.area_code,
@@ -157,7 +158,7 @@ class PhoneNumberService:
             Tuple of (purchase result, error message)
         """
         try:
-            if not twilio_service.is_configured():
+            if not self.twilio_service.is_configured():
                 return None, "Phone number provider not configured"
 
             cost = self._get_credits_for_type(purchase_request.phone_number_type)
@@ -169,7 +170,7 @@ class PhoneNumberService:
                     f"Insufficient credits. Need {cost} credits, have {balance.total_credits}",
                 )
 
-            purchased = twilio_service.purchase_phone_number(
+            purchased = self.twilio_service.purchase_phone_number(
                 phone_number=purchase_request.phone_number
             )
 
@@ -378,8 +379,8 @@ class PhoneNumberService:
             if phone_number.status == PhoneNumberStatus.CANCELLED:
                 return False, "Phone number is already cancelled"
 
-            if phone_number.provider_sid and twilio_service.is_configured():
-                twilio_service.release_phone_number(phone_number.provider_sid)
+            if phone_number.provider_sid and self.twilio_service.is_configured():
+                self.twilio_service.release_phone_number(phone_number.provider_sid)
 
             update_data = {
                 "status": PhoneNumberStatus.CANCELLED.value,
