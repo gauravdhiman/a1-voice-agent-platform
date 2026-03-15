@@ -3,7 +3,7 @@
  */
 
 import { http, HttpResponse } from 'msw'
-import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission } from '../utils/data-factories'
+import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber } from '../utils/data-factories'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -612,6 +612,74 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       data: { has_role: true },
+    })
+  }),
+
+  // Phone Number endpoints
+  http.get(`${API_BASE_URL}/api/v1/phone-numbers/available`, ({ request }) => {
+    const url = new URL(request.url)
+    const phoneNumberType = url.searchParams.get('phone_number_type')
+    const areaCode = url.searchParams.get('area_code')
+    const page = parseInt(url.searchParams.get('page') || '1')
+    const pageSize = parseInt(url.searchParams.get('page_size') || '10')
+
+    return HttpResponse.json({
+      success: true,
+      data: {
+        items: [createMockAvailablePhoneNumber({ phone_number_type: phoneNumberType as any, area_code: areaCode })],
+        total_count: 1,
+        page: page,
+        page_size: pageSize,
+        total_pages: Math.ceil(1 / pageSize),
+      },
+    })
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/phone-numbers/purchase`, async ({ request }) => {
+    const body = await request.json() as { phone_number: string }
+    return HttpResponse.json({
+      success: true,
+      data: {
+        success: true,
+        phone_number: createMockPhoneNumber({ phone_number: body.phone_number }),
+        message: 'Phone number purchased successfully',
+        credit_balance_after: 800,
+      },
+    })
+  }),
+
+  http.get(`${API_BASE_URL}/api/v1/phone-numbers`, ({ params, request }) => {
+    const url = new URL(request.url)
+    const organizationId = url.searchParams.get('organization_id')
+
+    return HttpResponse.json({
+      success: true,
+      data: {
+        items: [createMockPhoneNumberWithAgent({ organization_id: organizationId || 'org-1' })],
+        total_count: 1,
+        unused_count: 1,
+      },
+    })
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/phone-numbers/:id/assign`, async ({ params, request }) => {
+    const body = await request.json() as { agent_id: string }
+    return HttpResponse.json({
+      success: true,
+      data: {
+        success: true,
+        phone_number: createMockPhoneNumberWithAgent({ id: params.id as string, assigned_agent_id: body.agent_id, agent_name: 'Test Agent' }),
+      },
+    })
+  }),
+
+  http.delete(`${API_BASE_URL}/api/v1/phone-numbers/:id`, ({ params }) => {
+    return HttpResponse.json({
+      success: true,
+      data: {
+        success: true,
+        message: 'Phone number cancelled successfully',
+      },
     })
   }),
 ]

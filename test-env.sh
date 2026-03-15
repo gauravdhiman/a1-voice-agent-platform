@@ -12,11 +12,11 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="${PROJECT_ROOT}/backend:${PROJECT_ROOT}/shared:${PROJECT_ROOT}/worker:${PYTHONPATH}"
 
 # Add pytest to PATH
-export PATH="${PROJECT_ROOT}/backend/.venv-backend/bin:${PATH}"
+export PATH="${PROJECT_ROOT}/backend/.venv/bin:${PATH}"
 
 echo "✅ Test environment configured"
 echo "   PYTHONPATH includes: backend/src, shared, worker/src"
-echo "   Virtual env: backend/.venv-backend/bin"
+echo "   Virtual env: backend/.venv/bin"
 echo ""
 echo "🚀 Now you can run:"
 echo "   pytest                          # Run all tests"

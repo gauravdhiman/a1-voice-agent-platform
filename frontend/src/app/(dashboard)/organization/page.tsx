@@ -143,7 +143,7 @@ export default function OrganizationPage() {
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "ai-agent") {
+    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -423,6 +423,10 @@ export default function OrganizationPage() {
         <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
+          <TabsTrigger value="phone-numbers" className="flex items-center gap-2">
+            Phone Numbers
+            <Badge variant="secondary" className="text-xs py-0 px-1.5">Coming Soon</Badge>
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -776,6 +780,35 @@ During monsoon season (July-September), we have extended hours for flood-related
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/*
+          TODO: Phone Numbers — Twilio integration is complete but not yet surfaced in the UI.
+          - Backend: full API implemented (search available numbers, purchase, assign to agent, release)
+          - Database: `phone_numbers` table with RLS policies is in place (migration 20260301000001)
+          - Frontend: PhoneNumberDashboard component exists at src/components/phone-numbers/
+            and PhoneNumberService at src/services/phone-number-service.ts
+          - Blocked by: Twilio free account limitations (requires an upgraded account for live API access)
+          To re-enable: replace the Coming Soon card below with <PhoneNumberDashboard orgId={orgId!} />
+          and restore the import at the top of this file.
+        */}
+        {/* Phone Numbers Tab */}
+        <TabsContent value="phone-numbers">
+          <Card>
+            <CardContent className="py-16 text-center">
+              <div className="bg-muted/40 rounded-full p-4 w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+                <Phone className="h-10 w-10 text-muted-foreground opacity-60" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Phone Numbers — Coming Soon</h3>
+              <p className="text-muted-foreground max-w-md mx-auto mb-4">
+                Purchase and manage dedicated phone numbers for your AI voice agents.
+                Assign numbers directly to agents to handle inbound calls automatically.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                This feature is currently being set up and will be available shortly.
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </AnimatedTabs>
 

@@ -16,6 +16,7 @@ from src.auth.routes import auth_router
 from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
 from src.organization.routes import organization_router
+from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
 from src.voice_agents import agent_router, embed_router, tool_router, voice_router
 
@@ -114,6 +115,9 @@ def create_app() -> FastAPI:
 
     # Include notification routes
     app.include_router(notification_router)
+
+    # Include phone number routes
+    app.include_router(phone_number_router)
 
     # Include voice agent and tool routes
     app.include_router(agent_router)

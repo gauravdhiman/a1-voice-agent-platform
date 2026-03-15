@@ -41,6 +41,9 @@ services:
       # Token Refresh Service Configuration
       - TOKEN_REFRESH_CHECK_INTERVAL_MINUTES=${TOKEN_REFRESH_CHECK_INTERVAL_MINUTES:-5}
       - TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES=${TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES:-15}
+      # Twilio Configuration
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
       # OpenTelemetry Configuration
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=saas-platform-backend-dev

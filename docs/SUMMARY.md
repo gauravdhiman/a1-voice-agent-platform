@@ -53,6 +53,15 @@ Comprehensive documentation organized by feature.
 3. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
 4. **[Stripe Management](05_operations/stripe_management.md)** - CLI tool for managing Stripe products
 
+### Phone Numbers
+
+1. **[Phone Numbers PRD](PRD-phone-numbers.md)** - Complete phone number management feature including:
+   - User stories and acceptance criteria
+   - Purchase flow and credit pricing
+   - Agent assignment workflow
+   - Cancellation policy
+   - **API Documentation** - All endpoints with request/response formats
+
 ### Authentication & OAuth
 
 1. **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)** - Complete auth system
@@ -104,6 +113,12 @@ Comprehensive documentation organized by feature.
 3. Study **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Implementation details
 4. See existing tools in `shared/voice_agents/tools/implementations/`
 
+### Implementing Phone Numbers?
+
+1. Read **[Phone Numbers PRD](PRD-phone-numbers.md)** - Complete feature specification
+2. Review API Documentation section in the PRD
+3. Check **[Backend Phone Numbers Module](../backend/src/phone_numbers/)** - Implementation details
+
 ### Implementing Billing?
 
 1. Read **[Billing Overview](02_features/billing/overview.md)** - System overview
@@ -137,6 +152,7 @@ Comprehensive documentation organized by feature.
 - Database migrations
 - Testing strategies
 - **Comprehensive Testing Plan** (95% coverage roadmap)
+- **Phone Numbers feature** with API documentation
 
 ### In Progress 🚧
 
@@ -175,6 +191,7 @@ Comprehensive documentation organized by feature.
 - **Authentication**: See **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
 - **Multi-tenancy**: See **[System Architecture](01_architecture/system_architecture.md)**
 - **Billing**: See **[Billing Overview](02_features/billing/overview.md)**
+- **Phone Numbers**: See **[Phone Numbers PRD](PRD-phone-numbers.md)**
 - **RBAC**: See **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
 
 ### By Task

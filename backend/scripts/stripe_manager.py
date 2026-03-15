@@ -89,7 +89,7 @@ class StripeManager:
                 print(f"\n{i}. Price: {price.id}")
                 print(f"   Product: {price.product.name}")
                 print(
-                    f"   Amount: ${price.unit_amount/100:.2f} {price.currency.upper()}"
+                    f"   Amount: ${price.unit_amount / 100:.2f} {price.currency.upper()}"
                 )
                 print(f"   Type: {price.type}")
 
@@ -211,7 +211,7 @@ class StripeManager:
                 print(f"   Has {len(prices.data)} active prices:")
 
                 for price in prices.data:
-                    print(f"     - ${price.unit_amount/100:.2f} ({price.id})")
+                    print(f"     - ${price.unit_amount / 100:.2f} ({price.id})")
 
                     if not dry_run:
                         # Deactivate price
@@ -371,7 +371,9 @@ class StripeManager:
 
             if verbose:
                 print(f"\nAnalyzing: {product.name} ({price.type})")
-                print(f"  Price: ${price.unit_amount/100:.2f} {price.currency.upper()}")
+                print(
+                    f"  Price: ${price.unit_amount / 100:.2f} {price.currency.upper()}"
+                )
                 if price.type == "recurring":
                     print(f"  Billing: {price.recurring.interval}")
                 print(f"  Metadata: {dict(metadata) if metadata else 'None'}")
@@ -436,7 +438,7 @@ class StripeManager:
                         product_data = {
                             "name": product.name,
                             "description": product.description
-                            or f"{credit_amount} credits for ${price.unit_amount/100:.2f}",
+                            or f"{credit_amount} credits for ${price.unit_amount / 100:.2f}",
                             "stripe_price_id": price.id,
                             "stripe_product_id": product.id,
                             "credit_amount": credit_amount,
@@ -523,7 +525,7 @@ class StripeManager:
             print("🔍 DRY RUN - Would seed the following subscription plans:")
             for plan in plans_data:
                 print(
-                    f"  - {plan['name']}: ${plan['price_amount']/100:.2f}/{plan['interval']} ({plan['included_credits']} credits)"
+                    f"  - {plan['name']}: ${plan['price_amount'] / 100:.2f}/{plan['interval']} ({plan['included_credits']} credits)"
                 )
             return
 
@@ -589,7 +591,7 @@ class StripeManager:
             print("🔍 DRY RUN - Would seed the following credit products:")
             for product in products_data:
                 print(
-                    f"  - {product['name']}: {product['credit_amount']} credits for ${product['price_amount']/100:.2f}"
+                    f"  - {product['name']}: {product['credit_amount']} credits for ${product['price_amount'] / 100:.2f}"
                 )
             return
 
@@ -670,6 +672,12 @@ class StripeManager:
                 "description": "Webhook delivery attempt",
                 "credit_cost": 2,
                 "category": "api_call",
+            },
+            {
+                "name": "phone_number_purchase",
+                "description": "Purchase of a phone number (local, toll-free, or mobile)",
+                "credit_cost": 0,
+                "category": "phone_number",
             },
         ]
 
