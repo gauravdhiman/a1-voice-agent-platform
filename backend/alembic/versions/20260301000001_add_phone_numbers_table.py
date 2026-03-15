@@ -1,7 +1,7 @@
 """add phone numbers table
 
 Revision ID: 20260301000001
-Revises: 20260127000001
+Revises: 20260222000000
 Create Date: 2026-03-01 00:00:01.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "20260301000001"
-down_revision: Union[str, None] = "20260127000001"
+down_revision: Union[str, None] = "20260222000000"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -90,7 +90,7 @@ def upgrade() -> None:
         USING (
             organization_id IN (
                 SELECT organization_id::uuid
-                FROM organization_members
+                FROM user_roles
                 WHERE user_id::uuid = auth.uid()
             )
         )

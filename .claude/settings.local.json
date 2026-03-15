@@ -8,7 +8,15 @@
       "Bash(python3:*)",
       "Bash(source:*)",
       "Bash(python -c:*)",
-      "Bash(./start.sh build dev:*)"
+      "Bash(./start.sh build dev:*)",
+      "Bash(docker compose:*)",
+      "Bash(source ./test-env.sh && pytest backend/tests/ -v --tb=short 2>&1)",
+      "Bash(cd /Users/gauravdhiman/projects/python/ai/real_projects/ai-voice-agent-platform/frontend && npm run test:run 2>&1)",
+      "Bash(source ./test-env.sh && pytest backend/tests/ --tb=short -q 2>&1 | tail -40)",
+      "Bash(cd /Users/gauravdhiman/projects/python/ai/real_projects/ai-voice-agent-platform/backend && .venv-backend/bin/pytest tests/ --tb=short -q 2>&1)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001 2>/dev/null || echo \"not_running\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000 2>/dev/null || echo \"not_running\")",
+      "Bash(cd /Users/gauravdhiman/projects/python/ai/real_projects/ai-voice-agent-platform && ./scripts/run-e2e.sh 2>&1)"
     ]
   }
 }

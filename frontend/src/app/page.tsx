@@ -538,7 +538,7 @@ export default function LandingPage() {
                 Simple pricing, no surprises
               </h2>
               <p className="max-w-[600px] text-muted-foreground md:text-lg">
-                Start free. Upgrade when you're ready. Cancel anytime.
+                Start free. Upgrade when you&apos;re ready. Cancel anytime.
               </p>
             </div>
 

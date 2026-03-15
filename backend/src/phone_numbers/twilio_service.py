@@ -95,13 +95,13 @@ class TwilioService:
 
         try:
             if number_type == "toll_free":
-                resource = self.client.available_phone_numbers.toll_free
+                resource = self.client.available_phone_numbers(country_code).toll_free
             elif number_type == "mobile":
-                resource = self.client.available_phone_numbers.mobile
+                resource = self.client.available_phone_numbers(country_code).mobile
             else:
-                resource = self.client.available_phone_numbers.local
+                resource = self.client.available_phone_numbers(country_code).local
 
-            params = {"country_code": country_code, "page_size": min(limit, 50)}
+            params = {"limit": min(limit, 50)}
 
             if area_code:
                 params["area_code"] = area_code

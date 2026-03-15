@@ -616,7 +616,7 @@ export const handlers = [
   }),
 
   // Phone Number endpoints
-  http.get(`${API_BASE_URL}/api/v1/phone-numbers/search`, ({ request }) => {
+  http.get(`${API_BASE_URL}/api/v1/phone-numbers/available`, ({ request }) => {
     const url = new URL(request.url)
     const phoneNumberType = url.searchParams.get('phone_number_type')
     const areaCode = url.searchParams.get('area_code')

@@ -4,7 +4,6 @@
 
 import { apiClient } from "@/lib/api/client";
 import type {
-  AvailablePhoneNumber,
   PhoneNumber,
   PhoneNumberAssignRequest,
   PhoneNumberListResponse,
@@ -42,7 +41,7 @@ class PhoneNumberService {
     }
 
     const response = await apiClient.get<PhoneNumberSearchResponse>(
-      `${this.baseUrl}/search?${params}`,
+      `${this.baseUrl}/available?${params}`,
     );
     return response.data;
   }

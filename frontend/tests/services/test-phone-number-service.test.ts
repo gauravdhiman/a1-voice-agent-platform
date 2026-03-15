@@ -142,7 +142,7 @@ describe('PhoneNumberService', () => {
     it('handles 404 errors gracefully', async () => {
       server.resetHandlers()
       server.use(
-        http.get(`${API_BASE_URL}/api/v1/phone-numbers/search`, () => {
+        http.get(`${API_BASE_URL}/api/v1/phone-numbers/available`, () => {
           return new HttpResponse(null, { status: 404 })
         })
       )
