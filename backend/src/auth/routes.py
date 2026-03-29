@@ -9,8 +9,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pydantic import BaseModel, Field
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import (
     AuthResponse,
@@ -21,8 +19,7 @@ from src.auth.models import (
 )
 from src.auth.service import auth_service
 from src.organization.service import organization_service
-
-limiter = Limiter(key_func=get_remote_address)
+from src.security.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 

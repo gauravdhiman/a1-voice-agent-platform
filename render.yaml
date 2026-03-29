@@ -88,6 +88,8 @@ services:
         sync: false
 
       # JWT / Auth
+      # JWT_SECRET_KEY must match your Supabase JWT secret
+      # (Supabase Dashboard → Settings → API → JWT Secret)
       - key: JWT_SECRET_KEY
         sync: false
 

@@ -2,6 +2,7 @@
 Authentication middleware for extracting user information from JWT tokens.
 """
 
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -13,24 +14,29 @@ from src.rbac.user_roles.service import user_role_service
 
 from shared.config import settings, supabase_config
 
+logger = logging.getLogger(__name__)
+
 
 def _decode_jwt_verified(token: str) -> dict:
     """
     Decode and verify a JWT token signature.
 
     Uses settings.jwt_secret_key for HS256 verification when configured.
-    Raises HTTPException 401 if the signature is invalid or the key is not configured.
+    Raises HTTPException 500 (misconfiguration) or 401 (bad token).
     """
     if not settings.jwt_secret_key:
+        logger.error(
+            "_decode_jwt_verified: JWT_SECRET_KEY is not set — authentication service unavailable"
+        )
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Server misconfiguration: JWT secret key not set",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service unavailable",
         )
     try:
         return jwt.decode(
             token,
             key=settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
+            algorithms=["HS256"],  # hardcoded — never runtime-configurable
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
