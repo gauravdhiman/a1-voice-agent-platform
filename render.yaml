@@ -1,0 +1,233 @@
+# Render.com Blueprint — Voice AI Agents Platform
+# https://render.com/docs/blueprint-spec
+#
+# DEPLOYMENT ORDER:
+#   1. Deploy otel-collector first (optional — can skip and use New Relic directly)
+#   2. Deploy backend
+#   3. Deploy worker
+#   4. Deploy frontend LAST (needs backend URL as build arg)
+#
+# BEFORE FIRST DEPLOY:
+#   - Set all `sync: false` env vars in Render dashboard (Settings → Environment)
+#   - Update NEXT_PUBLIC_API_URL in the frontend dockerBuildArgs to your backend's
+#     Render URL: https://cog-backend.onrender.com (or your custom domain)
+#   - Update CORS_ORIGINS in backend to include your frontend URL
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1. OpenTelemetry Collector (OPTIONAL — skip for initial launch)
+  #    Uses New Relic as the telemetry backend.
+  #    To skip: comment out this block and set OTEL_ENABLED=false on other services.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: cog-otel-collector
+    runtime: docker
+    dockerfilePath: ./otel-collector/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /
+    port: 13133
+    envVars:
+      - key: NEW_RELIC_LICENSE_KEY
+        sync: false
+      # Set to your production frontend URL after deploying frontend
+      # e.g., https://cog-frontend.onrender.com or your custom domain
+      - key: FRONTEND_URL
+        sync: false
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2. Backend (FastAPI)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: cog-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: standard
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: PYTHONPATH
+        value: /app
+
+      # Supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      # Database (Supabase Postgres — for Alembic migrations)
+      - key: DATABASE_URL
+        sync: false
+
+      # Stripe
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+      # Twilio
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+
+      # Google OAuth (tool integration)
+      - key: GOOGLE_OAUTH_TOOL_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_TOOL_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_TOOL_REDIRECT_URI
+        sync: false
+
+      # JWT / Auth
+      - key: JWT_SECRET_KEY
+        sync: false
+
+      # CORS — set to your production frontend URL
+      # e.g., ["https://cog-frontend.onrender.com"] or your custom domain
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Token refresh intervals
+      - key: TOKEN_REFRESH_CHECK_INTERVAL_MINUTES
+        value: "5"
+      - key: TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES
+        value: "15"
+
+      # OpenTelemetry — set OTEL_ENABLED=false to skip OTel Collector
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: cog-backend-prod
+      # Update these to cog-otel-collector private URL, or use New Relic directly:
+      #   https://otlp.nr-data.net:4317 (gRPC) with header api-key=<NEW_RELIC_LICENSE_KEY>
+      - key: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        value: http://cog-otel-collector:4317
+      - key: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+        value: grpc
+      - key: OTEL_EXPORTER_OTLP_TRACES_INSECURE
+        value: "true"
+      - key: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+        value: http://cog-otel-collector:4317
+      - key: OTEL_EXPORTER_OTLP_METRICS_PROTOCOL
+        value: grpc
+      - key: OTEL_EXPORTER_OTLP_METRICS_INSECURE
+        value: "true"
+      - key: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+        value: http://cog-otel-collector:4317
+      - key: OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+        value: grpc
+      - key: OTEL_EXPORTER_OTLP_LOGS_INSECURE
+        value: "true"
+      - key: OTEL_PYTHON_FASTAPI_EXCLUDED_URLS
+        value: /health,/health/ready,/health/live
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 3. Worker (LiveKit Voice Agent)
+  #    Background worker — no HTTP listener, runs as persistent process.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: worker
+    name: cog-worker
+    runtime: docker
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: .
+    plan: standard
+    region: oregon
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: PYTHONPATH
+        value: /app
+
+      # Supabase (worker needs DB access for agent config)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      # LiveKit
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_SIP_DOMAIN
+        sync: false
+
+      # AI Models
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # OpenTelemetry
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: cog-worker-prod
+      - key: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        value: http://cog-otel-collector:4317
+      - key: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+        value: grpc
+      - key: OTEL_EXPORTER_OTLP_TRACES_INSECURE
+        value: "true"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 4. Frontend (Next.js)
+  #    Deploy LAST — requires backend URL as a Docker build arg.
+  #    NEXT_PUBLIC_* vars are baked into the Next.js bundle at build time.
+  #
+  #    Update NEXT_PUBLIC_API_URL to your backend's Render URL before deploying.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: cog-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/health
+    dockerBuildArgs:
+      # !! UPDATE BEFORE DEPLOYING: set to your backend's Render URL
+      - key: NEXT_PUBLIC_API_URL
+        value: https://cog-backend.onrender.com
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_LIVEKIT_URL
+        sync: false
+      - key: NEXT_PUBLIC_OTEL_ENABLED
+        value: "true"
+      - key: NEXT_PUBLIC_OTEL_SERVICE_NAME
+        value: cog-frontend-prod
+      # OTel Collector HTTP endpoint (frontend runs in browser, must be public URL)
+      # Set to your cog-otel-collector public URL + /v1/traces
+      # e.g., https://cog-otel-collector.onrender.com:4318/v1/traces
+      # OR disable frontend OTel: set NEXT_PUBLIC_OTEL_ENABLED=false above
+      - key: NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        value: https://cog-otel-collector.onrender.com/v1/traces
+      - key: NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+        value: http/protobuf
+      - key: NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+        value: https://cog-otel-collector.onrender.com/v1/metrics
+      - key: NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+        value: https://cog-otel-collector.onrender.com/v1/logs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://cog-backend.onrender.com
