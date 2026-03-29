@@ -56,7 +56,6 @@ export interface OrganizationUpdate {
   location?: string | null;
   business_details?: string | null;
   google_api_key?: string | null;
-  onboarding_completed?: boolean;
 }
 
 // Minimal organization interface for utility functions

@@ -361,6 +361,44 @@ async def update_organization(
     return organization
 
 
+@organization_router.post("/{org_id}/complete-onboarding", response_model=Organization)
+@tracer.start_as_current_span("organization.routes.complete_onboarding")
+async def complete_onboarding(
+    org_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Mark onboarding as completed for an organization (org_admin only, one-way, idempotent)."""
+    current_user_id, user_profile = user_data
+    current_span = trace.get_current_span()
+    current_span.set_attribute("user.id", str(current_user_id))
+    current_span.set_attribute("organization.id", str(org_id))
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            current_span.set_status(
+                trace.Status(
+                    trace.StatusCode.ERROR,
+                    "Only organization administrators can complete onboarding",
+                )
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization administrators can complete onboarding",
+            )
+
+    organization, error = await organization_service.complete_onboarding(org_id)
+    if error:
+        if "not found" in error.lower():
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+        else:
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+    current_span.set_status(trace.Status(trace.StatusCode.OK))
+    return organization
+
+
 @organization_router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT)
 @tracer.start_as_current_span("organization.routes.delete_organization")
 async def delete_organization(

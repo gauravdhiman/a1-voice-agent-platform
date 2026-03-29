@@ -320,3 +320,59 @@ class TestOrganizationService:
 
         assert error is None
         assert len(results) == 0
+
+    @pytest.mark.asyncio
+    async def test_complete_onboarding_success(
+        self,
+        organization_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_organization,
+    ):
+        """Complete onboarding sets onboarding_completed to True."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        completed_org = {
+            **sample_organization,
+            "onboarding_completed": True,
+            "updated_at": now.isoformat(),
+        }
+
+        mock_response = MagicMock()
+        mock_response.data = [completed_org]
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+
+        result, error = await organization_service.complete_onboarding(sample_org_id)
+
+        assert error is None
+        assert result is not None
+        assert result.onboarding_completed is True
+        # Verify the update call used onboarding_completed=True
+        mock_supabase_client.table.return_value.update.assert_called_once_with(
+            {"onboarding_completed": True}
+        )
+
+    @pytest.mark.asyncio
+    async def test_complete_onboarding_not_found(
+        self,
+        organization_service,
+        mock_supabase_client,
+        sample_org_id,
+    ):
+        """Complete onboarding returns error when org not found."""
+        mock_response = MagicMock()
+        mock_response.data = []
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+
+        result, error = await organization_service.complete_onboarding(sample_org_id)
+
+        assert result is None
+        assert error == "Organization not found"
+
+    def test_organization_update_no_onboarding_completed_field(self):
+        """OrganizationUpdate must not allow setting onboarding_completed."""
+        from shared.organization.models import OrganizationUpdate
+        import pydantic
+
+        # onboarding_completed should not be a field on OrganizationUpdate
+        assert "onboarding_completed" not in OrganizationUpdate.model_fields

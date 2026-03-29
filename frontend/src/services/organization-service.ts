@@ -75,11 +75,11 @@ class OrganizationService {
     return response.data;
   }
 
-  // Mark onboarding as completed for an organization
+  // Mark onboarding as completed for an organization (org_admin only, one-way)
   async completeOnboarding(orgId: string): Promise<Organization> {
-    const response = await apiClient.put<Organization>(`${this.baseUrl}/${orgId}`, {
-      onboarding_completed: true,
-    });
+    const response = await apiClient.post<Organization>(
+      `${this.baseUrl}/${orgId}/complete-onboarding`,
+    );
     return response.data;
   }
 

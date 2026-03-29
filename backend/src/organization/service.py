@@ -300,8 +300,6 @@ class OrganizationService(BaseOrganizationService):
                 update_data["location"] = org_data.location
             if org_data.business_details is not None:
                 update_data["business_details"] = org_data.business_details
-            if org_data.onboarding_completed is not None:
-                update_data["onboarding_completed"] = org_data.onboarding_completed
 
             # Handle Google API key - validate non-empty, clear if empty, skip if not provided
             logger.info(f"Google API key update check: value='{org_data.google_api_key}', is_none={org_data.google_api_key is None}, is_empty={org_data.google_api_key == '' if org_data.google_api_key is not None else 'N/A'}")
@@ -386,6 +384,63 @@ class OrganizationService(BaseOrganizationService):
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
             organization_errors_counter.add(
                 1, {"operation": "update_organization", "error": "exception"}
+            )
+            return None, str(e)
+
+    @tracer.start_as_current_span("organization.complete_onboarding")
+    async def complete_onboarding(
+        self, org_id: UUID
+    ) -> tuple[Optional[Organization], Optional[str]]:
+        """Mark organization onboarding as completed (idempotent, one-way)."""
+        organization_operations_counter.add(1, {"operation": "complete_onboarding"})
+
+        current_span = trace.get_current_span()
+        current_span.set_attribute("organization.id", str(org_id))
+        try:
+            response = (
+                self.supabase.table("organizations")
+                .update({"onboarding_completed": True})
+                .eq("id", str(org_id))
+                .execute()
+            )
+
+            if not response.data:
+                logger.error(f"Organization not found for onboarding completion: {org_id}")
+                current_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, "Organization not found")
+                )
+                organization_errors_counter.add(
+                    1, {"operation": "complete_onboarding", "error": "not_found"}
+                )
+                return None, "Organization not found"
+
+            org_dict = response.data[0]
+            organization = Organization(
+                id=org_dict["id"],
+                name=org_dict["name"],
+                description=org_dict["description"],
+                slug=org_dict["slug"],
+                website=org_dict.get("website"),
+                is_active=org_dict["is_active"],
+                industry=org_dict.get("industry"),
+                location=org_dict.get("location"),
+                business_details=org_dict.get("business_details"),
+                google_api_key=org_dict.get("google_api_key"),
+                onboarding_completed=org_dict.get("onboarding_completed", False),
+                created_at=org_dict["created_at"],
+                updated_at=org_dict["updated_at"],
+            )
+            current_span.set_status(trace.Status(trace.StatusCode.OK))
+            return organization, None
+
+        except Exception as e:
+            logger.error(
+                f"Exception while completing onboarding for organization {org_id}: {e}",
+                exc_info=True,
+            )
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            organization_errors_counter.add(
+                1, {"operation": "complete_onboarding", "error": "exception"}
             )
             return None, str(e)
 

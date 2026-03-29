@@ -124,9 +124,6 @@ class OrganizationUpdate(BaseModel):
         allowing billing to go directly to the organization's Google Cloud project.
         """,
     )
-    onboarding_completed: Optional[bool] = Field(
-        None, description="Whether the onboarding wizard has been completed"
-    )
 
 
 class Organization(OrganizationBase):
