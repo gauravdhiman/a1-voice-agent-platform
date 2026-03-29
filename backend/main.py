@@ -22,6 +22,7 @@ from src.organization.routes import organization_router
 from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
 from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
+from src.call_logs import call_logs_router
 from src.voice_agents import agent_router, embed_router, tool_router, voice_router
 from src.voice_templates import voice_templates_router
 
@@ -144,6 +145,9 @@ def create_app() -> FastAPI:
 
     # Include voice templates routes
     app.include_router(voice_templates_router)
+
+    # Include call logs routes
+    app.include_router(call_logs_router)
 
     return app
 

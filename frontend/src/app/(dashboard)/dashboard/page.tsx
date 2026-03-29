@@ -9,9 +9,182 @@ import {
   ArrowDownRight,
   DollarSign,
   BarChart3,
+  Phone,
+  PhoneIncoming,
+  PhoneMissed,
+  Clock,
+  Loader2,
 } from "lucide-react";
+import { useOrganization } from "@/contexts/organization-context";
+import { useCallAnalytics } from "@/hooks/use-call-logs";
+
+function formatDuration(seconds: number): string {
+  if (!seconds) return "0s";
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function CallAnalyticsSection({ orgId }: { orgId: string }) {
+  const { data, isLoading, error } = useCallAnalytics(orgId);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
+        <span className="text-sm text-muted-foreground">Loading call analytics…</span>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="text-sm text-muted-foreground text-center py-4">
+        Call analytics unavailable.
+      </div>
+    );
+  }
+
+  const callStats = [
+    {
+      title: "Calls This Week",
+      value: String(data.total_calls_week),
+      icon: Phone,
+      color: "text-blue-500",
+      bg: "bg-blue-500/10",
+    },
+    {
+      title: "Calls This Month",
+      value: String(data.total_calls_month),
+      icon: PhoneIncoming,
+      color: "text-green-500",
+      bg: "bg-green-500/10",
+    },
+    {
+      title: "Avg Duration",
+      value: formatDuration(data.avg_duration_seconds),
+      icon: Clock,
+      color: "text-purple-500",
+      bg: "bg-purple-500/10",
+    },
+    {
+      title: "Missed / No Answer",
+      value: String(
+        (data.calls_by_status.find((s) => s.status === "missed")?.count ?? 0) +
+          (data.calls_by_status.find((s) => s.status === "no-answer")?.count ?? 0)
+      ),
+      icon: PhoneMissed,
+      color: "text-orange-500",
+      bg: "bg-orange-500/10",
+    },
+  ];
+
+  // Peak call hour
+  const peakHour = [...data.calls_by_hour].sort((a, b) => b.calls - a.calls)[0];
+  const peakLabel = peakHour?.calls
+    ? `${peakHour.hour}:00–${peakHour.hour + 1}:00`
+    : "—";
+
+  // Max bar height scaling
+  const maxCalls = Math.max(...data.calls_by_hour.map((h) => h.calls), 1);
+
+  return (
+    <div className="space-y-4">
+      {/* Stats row */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {callStats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div
+              key={stat.title}
+              className="rounded-xl border border-border bg-card text-card-foreground shadow-sm p-5"
+            >
+              <div className="flex items-center justify-between pb-2">
+                <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                <div className={`p-1.5 rounded-full ${stat.bg}`}>
+                  <Icon className={`h-4 w-4 ${stat.color}`} />
+                </div>
+              </div>
+              <div className="text-2xl font-bold">{stat.value}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Charts row */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Peak call hours bar chart */}
+        <div className="rounded-xl border border-border bg-card text-card-foreground shadow-sm p-5">
+          <div className="mb-3">
+            <h3 className="font-semibold text-sm">Peak Call Hours</h3>
+            <p className="text-xs text-muted-foreground">
+              Busiest hour: {peakLabel}
+            </p>
+          </div>
+          <div className="flex items-end gap-0.5 h-24">
+            {data.calls_by_hour.map((h) => (
+              <div
+                key={h.hour}
+                className="flex-1 flex flex-col items-center gap-0.5"
+                title={`${h.hour}:00 — ${h.calls} call${h.calls !== 1 ? "s" : ""}`}
+              >
+                <div
+                  className="w-full bg-primary/70 rounded-t-sm transition-all"
+                  style={{ height: `${Math.max(2, (h.calls / maxCalls) * 88)}px` }}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-xs text-muted-foreground">12am</span>
+            <span className="text-xs text-muted-foreground">12pm</span>
+            <span className="text-xs text-muted-foreground">11pm</span>
+          </div>
+        </div>
+
+        {/* Calls by agent */}
+        <div className="rounded-xl border border-border bg-card text-card-foreground shadow-sm p-5">
+          <div className="mb-3">
+            <h3 className="font-semibold text-sm">Calls by Agent</h3>
+            <p className="text-xs text-muted-foreground">Last 30 days</p>
+          </div>
+          {data.calls_by_agent.length === 0 ? (
+            <div className="flex items-center justify-center h-20">
+              <p className="text-xs text-muted-foreground">No call data yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.calls_by_agent.slice(0, 5).map((a) => {
+                const maxCount = data.calls_by_agent[0]?.count || 1;
+                const pct = Math.round((a.count / maxCount) * 100);
+                return (
+                  <div key={a.agent_id} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-foreground font-medium truncate max-w-[70%]">
+                        {a.agent_name}
+                      </span>
+                      <span className="text-muted-foreground">{a.count}</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
+  const { currentOrganization } = useOrganization();
+
   const stats = [
     {
       title: "Total Revenue",
@@ -106,6 +279,17 @@ export default function DashboardPage() {
           );
         })}
       </div>
+
+      {/* Call Analytics Section */}
+      {currentOrganization && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Phone className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">Call Analytics</h2>
+          </div>
+          <CallAnalyticsSection orgId={currentOrganization.id} />
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4 rounded-xl border border-border bg-card text-card-foreground shadow-sm">
