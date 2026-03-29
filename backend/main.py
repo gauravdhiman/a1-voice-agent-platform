@@ -8,16 +8,19 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from src.auth.routes import auth_router
 from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
 from src.organization.routes import organization_router
 from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
+from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
 from src.voice_agents import agent_router, embed_router, tool_router, voice_router
 
 from shared.config import settings, supabase_config
@@ -74,6 +77,16 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
     )
+
+    # Attach shared rate limiter and 429 handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+    # Add SlowAPI middleware for rate limiting
+    app.add_middleware(SlowAPIMiddleware)
+
+    # Add security headers to all responses
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Configure CORS
     app.add_middleware(
@@ -156,7 +169,13 @@ async def lifespan(app: FastAPI):
         - Stops token refresh service on shutdown
         - Ensures graceful shutdown of background tasks
     """
-    # Startup
+    # Startup — fail fast if required secrets are not configured
+    if not settings.jwt_secret_key:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is not set. "
+            "Set it to your Supabase JWT secret (Dashboard → Settings → API → JWT Secret)."
+        )
+
     from shared.voice_agents.tool_service import ToolService
     from shared.voice_agents.tools.base.registry_livekit import (
         livekit_tool_registry,

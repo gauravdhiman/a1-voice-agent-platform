@@ -5,7 +5,7 @@ Authentication API routes.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from src.auth.models import (
 )
 from src.auth.service import auth_service
 from src.organization.service import organization_service
+from src.security.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +43,13 @@ class ProcessInvitationRequest(BaseModel):
     responses={
         400: {"model": ErrorResponse, "description": "Validation error"},
         409: {"model": ErrorResponse, "description": "User already exists"},
+        429: {"description": "Too many requests"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
+@limiter.limit("5/minute")
 @tracer.start_as_current_span("auth.routes.sign_up")
-async def sign_up(request: SignUpRequest) -> AuthResponse:
+async def sign_up(http_request: Request, request: SignUpRequest) -> AuthResponse:
     """
     Register a new user account.
 
@@ -86,11 +89,13 @@ async def sign_up(request: SignUpRequest) -> AuthResponse:
     response_model=AuthResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Invalid credentials"},
+        429: {"description": "Too many requests"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
+@limiter.limit("10/minute")
 @tracer.start_as_current_span("auth.routes.sign_in")
-async def sign_in(request: SignInRequest) -> AuthResponse:
+async def sign_in(http_request: Request, request: SignInRequest) -> AuthResponse:
     """
     Authenticate user with email and password.
 
@@ -169,11 +174,13 @@ async def sign_out(authorization: str = Header(None)) -> JSONResponse:
     response_model=AuthResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Invalid refresh token"},
+        429: {"description": "Too many requests"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
+@limiter.limit("30/minute")
 @tracer.start_as_current_span("auth.routes.refresh_token")
-async def refresh_token(request: dict[str, str]) -> AuthResponse:
+async def refresh_token(http_request: Request, request: dict[str, str]) -> AuthResponse:
     """
     Refresh access token using refresh token.
 

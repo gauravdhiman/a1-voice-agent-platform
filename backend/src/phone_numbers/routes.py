@@ -5,9 +5,10 @@ API routes for phone number management.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from src.auth.middleware import check_billing_permissions, get_authenticated_user
 from src.auth.models import UserProfile
+from src.security.rate_limiter import limiter
 
 from shared.organization.phone_number_models import (
     PhoneNumberAssignRequest,
@@ -71,7 +72,9 @@ async def search_available_numbers(
 
 
 @router.post("/purchase", response_model=PhoneNumberPurchaseResponse)
+@limiter.limit("3/hour")
 async def purchase_phone_number(
+    http_request: Request,
     purchase_request: PhoneNumberPurchaseRequest,
     organization_id: UUID,
     user_auth: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
