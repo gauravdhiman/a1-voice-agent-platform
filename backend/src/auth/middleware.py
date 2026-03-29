@@ -97,9 +97,10 @@ async def check_billing_permissions(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("check_billing_permissions: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authorization error: {str(e)}",
+            detail="Authorization error",
         )
 
 
@@ -147,9 +148,10 @@ async def get_current_user_id(authorization: str = Header(None)) -> UUID:
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("get_current_user_id: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}",
+            detail="Authentication failed",
         )
 
 
@@ -226,9 +228,10 @@ async def get_authenticated_user(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("get_authenticated_user: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}",
+            detail="Authentication failed",
         )
 
 
@@ -302,7 +305,8 @@ async def check_organization_access(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("check_organization_access: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authorization error: {str(e)}",
+            detail="Authorization error",
         )
