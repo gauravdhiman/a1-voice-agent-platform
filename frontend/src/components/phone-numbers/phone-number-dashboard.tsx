@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, Phone, UserX, UserPlus, Settings, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
+  AvailablePhoneNumber,
   PhoneNumberWithAgent,
   formatPhoneNumber,
   getPhoneNumberTypeLabel,
@@ -23,6 +24,7 @@ import {
 } from "@/types/phone-number";
 import { PhoneNumberAssignDialog } from "./phone-number-assign-dialog";
 import { PhoneNumberCancelDialog } from "./phone-number-cancel-dialog";
+import { PhoneNumberPurchase } from "./phone-number-purchase";
 import { PhoneNumberSearch } from "./phone-number-search";
 
 interface PhoneNumberDashboardProps {
@@ -43,9 +45,11 @@ export function PhoneNumberDashboard({
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<PhoneNumberWithAgent | null>(
     null,
   );
+  const [selectedAvailableNumber, setSelectedAvailableNumber] = useState<AvailablePhoneNumber | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const unusedCount = phoneNumbers.filter((n) => !n.assigned_agent_id).length;
@@ -71,6 +75,18 @@ export function PhoneNumberDashboard({
     toast.success("Phone number cancelled successfully");
     setCancelDialogOpen(false);
     setSelectedNumber(null);
+    onRefresh?.();
+  };
+
+  const handleNumberSelectedFromSearch = (number: AvailablePhoneNumber) => {
+    setSelectedAvailableNumber(number);
+    setSearchDialogOpen(false);
+    setPurchaseDialogOpen(true);
+  };
+
+  const handlePurchaseSuccess = () => {
+    setPurchaseDialogOpen(false);
+    setSelectedAvailableNumber(null);
     onRefresh?.();
   };
 
@@ -123,6 +139,12 @@ export function PhoneNumberDashboard({
         </Card>
       ) : (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setSearchDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Phone Number
+            </Button>
+          </div>
           {phoneNumbers.map((number) => (
             <Card key={number.id}>
               <CardContent className="p-6">
@@ -247,13 +269,19 @@ export function PhoneNumberDashboard({
           <PhoneNumberSearch
             organizationId={organizationId}
             creditBalance={creditBalance}
-            onNumberSelected={() => {
-              setSearchDialogOpen(false);
-              onRefresh?.();
-            }}
+            onNumberSelected={handleNumberSelectedFromSearch}
           />
         </DialogContent>
       </Dialog>
+
+      <PhoneNumberPurchase
+        organizationId={organizationId}
+        creditBalance={creditBalance}
+        selectedNumber={selectedAvailableNumber}
+        open={purchaseDialogOpen}
+        onOpenChange={setPurchaseDialogOpen}
+        onPurchaseSuccess={handlePurchaseSuccess}
+      />
     </div>
   );
 }
