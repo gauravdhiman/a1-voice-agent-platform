@@ -19,6 +19,7 @@ from src.organization.routes import organization_router
 from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
 from src.voice_agents import agent_router, embed_router, tool_router, voice_router
+from src.voice_templates import voice_templates_router
 
 from shared.config import settings, supabase_config
 
@@ -126,6 +127,9 @@ def create_app() -> FastAPI:
     
     # Include embed routes (public, no auth required)
     app.include_router(embed_router)
+
+    # Include voice templates routes
+    app.include_router(voice_templates_router)
 
     return app
 

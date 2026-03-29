@@ -75,6 +75,14 @@ class OrganizationService {
     return response.data;
   }
 
+  // Mark onboarding as completed for an organization
+  async completeOnboarding(orgId: string): Promise<Organization> {
+    const response = await apiClient.put<Organization>(`${this.baseUrl}/${orgId}`, {
+      onboarding_completed: true,
+    });
+    return response.data;
+  }
+
   // Invite a member to the organization
   async inviteMember(orgId: string, email: string): Promise<Invitation> {
     const response = await apiClient.post<Invitation>(

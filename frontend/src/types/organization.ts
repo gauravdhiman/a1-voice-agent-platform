@@ -12,6 +12,7 @@ export interface Organization {
   is_active: boolean;
   industry?: string | null;
   location?: string | null;
+  onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
   google_api_key?: string | null;
@@ -55,6 +56,7 @@ export interface OrganizationUpdate {
   location?: string | null;
   business_details?: string | null;
   google_api_key?: string | null;
+  onboarding_completed?: boolean;
 }
 
 // Minimal organization interface for utility functions

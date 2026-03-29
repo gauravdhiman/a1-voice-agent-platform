@@ -119,10 +119,13 @@ class OrganizationUpdate(BaseModel):
         None,
         description="""
         Organization's own Google API key for voice agents.
-        
+
         If set, voice agents can use this API key instead of the platform key,
         allowing billing to go directly to the organization's Google Cloud project.
         """,
+    )
+    onboarding_completed: Optional[bool] = Field(
+        None, description="Whether the onboarding wizard has been completed"
     )
 
 
@@ -130,5 +133,8 @@ class Organization(OrganizationBase):
     """Model for an organization with all attributes."""
 
     id: UUID = Field(..., description="Organization ID")
+    onboarding_completed: bool = Field(
+        default=False, description="Whether the onboarding wizard has been completed"
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
