@@ -8,10 +8,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from src.auth.routes import auth_router
 from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
@@ -40,6 +43,9 @@ logging.basicConfig(
 # This needs to happen before configuring logging to ensure proper integration
 setup_manual_opentelemetry()
 
+
+# Rate limiter — keyed by client IP address
+limiter = Limiter(key_func=get_remote_address)
 
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)
@@ -74,6 +80,10 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
     )
+
+    # Attach rate limiter and its 429 error handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # Configure CORS
     app.add_middleware(

@@ -11,7 +11,42 @@ from src.auth.models import UserProfile
 from src.auth.service import auth_service
 from src.rbac.user_roles.service import user_role_service
 
-from shared.config import supabase_config
+from shared.config import settings, supabase_config
+
+
+def _decode_jwt_verified(token: str) -> dict:
+    """
+    Decode and verify a JWT token signature.
+
+    Uses settings.jwt_secret_key for HS256 verification when configured.
+    Raises HTTPException 401 if the signature is invalid or the key is not configured.
+    """
+    if not settings.jwt_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Server misconfiguration: JWT secret key not set",
+        )
+    try:
+        return jwt.decode(
+            token,
+            key=settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+        )
+    except jwt.InvalidSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token signature",
+        )
+    except jwt.DecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format",
+        )
 
 
 async def check_billing_permissions(
@@ -83,16 +118,12 @@ async def get_current_user_id(authorization: str = Header(None)) -> UUID:
 
     token = authorization.replace("Bearer ", "")
 
-    # E2E Mocking Bypass
-    from shared.config import settings
-    if settings.environment in ["test", "development"] and token == "mock-jwt-token":
-        return UUID("00000000-0000-0000-0000-000000000000") # Use a fixed test UUID
+    # E2E test mock bypass — test environment only
+    if settings.environment == "test" and token == "mock-jwt-token":
+        return UUID("00000000-0000-0000-0000-000000000000")
 
     try:
-        # Decode the JWT token using Supabase's public key
-        # In a real implementation, you would verify the token properly
-        # For now, we'll extract the user ID directly from the token
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = _decode_jwt_verified(token)
         user_id = payload.get("sub")
 
         if not user_id:
@@ -103,14 +134,12 @@ async def get_current_user_id(authorization: str = Header(None)) -> UUID:
 
         return UUID(user_id)
 
-    except jwt.DecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -148,9 +177,8 @@ async def get_authenticated_user(
 
     token = authorization.replace("Bearer ", "")
 
-    # E2E Mocking Bypass
-    from shared.config import settings
-    if settings.environment in ["test", "development"] and token == "mock-jwt-token":
+    # E2E test mock bypass — test environment only
+    if settings.environment == "test" and token == "mock-jwt-token":
         test_uuid = UUID("00000000-0000-0000-0000-000000000000")
         mock_user = UserProfile(
             id=test_uuid,
@@ -164,19 +192,10 @@ async def get_authenticated_user(
         return test_uuid, mock_user
 
     try:
-        # Decode JWT to get user ID
-        payload = jwt.decode(token, options={"verify_signature": False})
-        user_id = payload.get("sub")
+        # Step 1: Verify JWT signature before trusting any claims
+        _decode_jwt_verified(token)
 
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: user ID not found",
-            )
-
-        user_uuid = UUID(user_id)
-
-        # Step 2: Validate user exists and get profile
+        # Step 2: Validate token against Supabase and get authoritative user profile
         user_profile, error = await auth_service.get_user(token)
 
         if error:
@@ -191,15 +210,9 @@ async def get_authenticated_user(
                 detail="User not found or inactive",
             )
 
-        # Step 3: Additional user status checks could be added here
-        # For example, checking if user is banned, email verified, etc.
+        # Use the user ID from the Supabase-validated profile (authoritative source)
+        return user_profile.id, user_profile
 
-        return user_uuid, user_profile
-
-    except jwt.DecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format"
-        )
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID in token"
@@ -227,13 +240,11 @@ def verify_supabase_token(token: str) -> tuple[Optional[dict], Optional[str]]:
         if not supabase_config.is_configured():
             return None, "Supabase not configured"
 
-        # In a real implementation, you would verify the token using Supabase's public key
-        # This is a simplified version for demonstration
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = _decode_jwt_verified(token)
         return payload, None
 
-    except jwt.DecodeError:
-        return None, "Invalid token"
+    except HTTPException as e:
+        return None, e.detail
     except Exception as e:
         return None, str(e)
 
