@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
@@ -20,10 +21,12 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info } from "lucide-react";
+import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
+import { voiceTemplateService } from "@/services/voice-template-service";
 import { toast } from "sonner";
 import type { VoiceAgentCreate } from "@/types/agent";
+import type { VoiceTemplate } from "@/types/voice-template";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
@@ -45,13 +48,14 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-type Stage = "basic" | "phone" | "tools" | "review";
+type Stage = "template" | "basic" | "phone" | "tools" | "review";
 
 const stageConfig = {
-  basic: { step: 1, title: "Basic Information", icon: Bot },
-  phone: { step: 2, title: "Phone Number", icon: Phone },
-  tools: { step: 3, title: "Platform Tools", icon: Check },
-  review: { step: 4, title: "Review & Create", icon: Check },
+  template: { step: 1, title: "Template", icon: Mic },
+  basic: { step: 2, title: "Basic Information", icon: Bot },
+  phone: { step: 3, title: "Phone Number", icon: Phone },
+  tools: { step: 4, title: "Platform Tools", icon: Check },
+  review: { step: 5, title: "Review & Create", icon: Check },
 };
 
 function StepIndicator({
@@ -117,12 +121,132 @@ function StepIndicator({
   );
 }
 
+function TemplateSelectionStage({
+  onSelect,
+  onSkip,
+}: {
+  onSelect: (template: VoiceTemplate) => void;
+  onSkip: () => void;
+}) {
+  const [templates, setTemplates] = useState<VoiceTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<VoiceTemplate | null>(null);
+  const [preview, setPreview] = useState<VoiceTemplate | null>(null);
+
+  useEffect(() => {
+    voiceTemplateService
+      .listTemplates()
+      .then(setTemplates)
+      .catch(() => toast.error("Failed to load templates"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold mb-1">Start from a template</h3>
+        <p className="text-sm text-muted-foreground">
+          Pick an industry template to pre-fill your agent configuration, or skip to set it up manually.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="w-7 h-7 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {templates.map((t) => {
+            const isSelected = selected?.id === t.id;
+            return (
+              <div
+                key={t.id}
+                onClick={() => setSelected(t)}
+                className={cn(
+                  "p-3 border-2 rounded-lg cursor-pointer transition-all",
+                  isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40 hover:bg-muted/40",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm text-foreground">{t.name}</span>
+                      <Badge variant="secondary" className="text-xs capitalize">{t.industry.replace("_", " ")}</Badge>
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                    </div>
+                    {t.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{t.description}</p>
+                    )}
+                    {t.tone && (
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">Tone: {t.tone}</p>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 h-7 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreview(preview?.id === t.id ? null : t);
+                    }}
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    {preview?.id === t.id ? "Hide" : "Preview"}
+                  </Button>
+                </div>
+                {preview?.id === t.id && (
+                  <div className="mt-2 pt-2 border-t border-border/60 space-y-1">
+                    {t.greeting && (
+                      <p className="text-xs text-foreground/80">
+                        <span className="font-medium">Greeting:</span> {t.greeting.replace("[Business Name]", "Your Business")}
+                      </p>
+                    )}
+                    {t.mission && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Mission:</span> {t.mission}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-2 border-t">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onSkip}
+          className="flex-1"
+        >
+          <SkipForward className="w-4 h-4 mr-2" />
+          Skip — set up manually
+        </Button>
+        <Button
+          type="button"
+          disabled={!selected}
+          onClick={() => selected && onSelect(selected)}
+          className="flex-1"
+        >
+          Use Template
+          <ChevronRight className="w-4 h-4 ml-2" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function AgentCreateWidget() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { organizations, currentOrganization } = useOrganization();
   const createAgentMutation = useCreateAgent();
-  const [currentStage, setCurrentStage] = useState<Stage>("basic");
+  const [currentStage, setCurrentStage] = useState<Stage>("template");
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -148,13 +272,28 @@ export function AgentCreateWidget() {
     }
   }, [searchParams, organizations, form]);
 
-  const stages: Stage[] = ["basic", "phone", "tools", "review"];
+  const stages: Stage[] = ["template", "basic", "phone", "tools", "review"];
   const currentIndex = stages.indexOf(currentStage);
   const isFirstStage = currentIndex === 0;
   const isLastStage = currentIndex === stages.length - 1;
 
+  const handleTemplateSelect = (template: VoiceTemplate) => {
+    form.setValue("persona", template.persona ?? "");
+    form.setValue("tone", template.tone ?? "Professional");
+    form.setValue("mission", template.mission ?? "");
+    const instructions = [
+      template.custom_instructions,
+      template.greeting ? `Default greeting: ${template.greeting}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    form.setValue("custom_instructions", instructions);
+    setCurrentStage("basic");
+  };
+
   const validateCurrentStage = async (): Promise<boolean> => {
     const fieldsToValidate: Record<Stage, (keyof FormData)[]> = {
+      template: [],
       basic: ["organization_id", "name", "persona", "tone", "mission"],
       phone: ["phone_number"],
       tools: [],
@@ -545,45 +684,53 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
             onSubmit={form.handleSubmit(handleSubmit)}
             className="space-y-6"
           >
+            {currentStage === "template" && (
+              <TemplateSelectionStage
+                onSelect={handleTemplateSelect}
+                onSkip={() => setCurrentStage("basic")}
+              />
+            )}
             {currentStage === "basic" && renderBasicStage()}
             {currentStage === "phone" && renderPhoneStage()}
             {currentStage === "tools" && renderToolsStage()}
             {currentStage === "review" && renderReviewStage()}
 
-            <div className="flex items-center justify-between pt-6 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleBack}
-                disabled={isFirstStage}
-              >
-                <ChevronLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
+            {currentStage !== "template" && (
+              <div className="flex items-center justify-between pt-6 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleBack}
+                  disabled={isFirstStage}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
 
-              <div className="flex items-center gap-2">
-                {isLastStage ? (
-                  <Button
-                    type="submit"
-                    disabled={createAgentMutation.isPending}
-                  >
-                    {createAgentMutation.isPending ? (
-                      <>Creating...</>
-                    ) : (
-                      <>
-                        Create Agent
-                        <Check className="h-4 w-4 ml-2" />
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <Button type="button" onClick={handleNext}>
-                    Next Step
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {isLastStage ? (
+                    <Button
+                      type="submit"
+                      disabled={createAgentMutation.isPending}
+                    >
+                      {createAgentMutation.isPending ? (
+                        <>Creating...</>
+                      ) : (
+                        <>
+                          Create Agent
+                          <Check className="h-4 w-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={handleNext}>
+                      Next Step
+                      <ChevronRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </form>
         </Form>
       </Card>
