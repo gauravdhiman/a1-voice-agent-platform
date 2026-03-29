@@ -74,7 +74,7 @@ async def search_available_numbers(
 @router.post("/purchase", response_model=PhoneNumberPurchaseResponse)
 @limiter.limit("3/hour")
 async def purchase_phone_number(
-    http_request: Request,
+    request: Request,
     purchase_request: PhoneNumberPurchaseRequest,
     organization_id: UUID,
     user_auth: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
