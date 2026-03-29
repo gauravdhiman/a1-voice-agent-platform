@@ -34,21 +34,7 @@ async def handle_twilio_incoming(request: Request):
 
     if error or not agent:
         logger.warning(f"No agent found for phone number {to_number}")
-        # Log the failed call attempt without agent/org association
-        if call_sid:
-            try:
-                await call_log_service.create_call_log(
-                    CallLogCreate(
-                        call_sid=call_sid,
-                        organization_id=None,  # type: ignore[arg-type]
-                        caller_number=from_number,
-                        called_number=to_number,
-                        status="failed",
-                        started_at=datetime.now(timezone.utc),
-                    )
-                )
-            except Exception:
-                pass  # Don't fail the call response if logging fails
+        # Cannot log call without an organization — skip logging
         response = VoiceResponse()
         response.say("I'm sorry, this number is not assigned to an active agent.")
         return Response(content=str(response), media_type="application/xml")
