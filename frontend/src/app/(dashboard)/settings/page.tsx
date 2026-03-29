@@ -1,7 +1,10 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "@/contexts/theme-context";
+import { useOrganization } from "@/contexts/organization-context";
+import { organizationService } from "@/services/organization-service";
 import {
   Card,
   CardContent,
@@ -9,10 +12,27 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Settings as SettingsIcon, Palette } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Settings as SettingsIcon, Palette, Rocket } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { currentOrganization, refreshOrganizations } = useOrganization();
+  const router = useRouter();
+
+  const handleRelaunchOnboarding = async () => {
+    if (!currentOrganization) return;
+    try {
+      await organizationService.updateOrganization(currentOrganization.id, {
+        onboarding_completed: false,
+      });
+      await refreshOrganizations();
+      router.push("/onboarding");
+    } catch {
+      toast.error("Failed to relaunch onboarding");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -30,6 +50,25 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Onboarding */}
+        <Card>
+          <CardHeader className="p-5 pb-3">
+            <CardTitle className="flex items-center space-x-2 text-lg">
+              <Rocket className="h-5 w-5" />
+              <span>Setup Wizard</span>
+            </CardTitle>
+            <CardDescription>
+              Re-run the guided onboarding wizard to reconfigure your AI voice agent
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <Button variant="outline" onClick={handleRelaunchOnboarding}>
+              <Rocket className="w-4 h-4 mr-2" />
+              Relaunch Setup Wizard
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="p-5 pb-3">
             <CardTitle className="flex items-center space-x-2 text-lg">

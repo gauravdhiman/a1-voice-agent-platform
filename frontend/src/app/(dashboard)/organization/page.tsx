@@ -59,6 +59,10 @@ import { agentService } from "@/services/agent-service";
 import { VoiceAgent } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { AgentCard } from "@/components/agents/agent-card";
+import { PhoneNumberDashboard } from "@/components/phone-numbers/phone-number-dashboard";
+import { phoneNumberService } from "@/services/phone-number-service";
+import { billingService } from "@/services/billing-service";
+import { PhoneNumberWithAgent } from "@/types/phone-number";
 import { toast } from "sonner";
 
 // Use real services
@@ -101,6 +105,11 @@ export default function OrganizationPage() {
   const [selectedAgent, setSelectedAgent] = useState<VoiceAgent | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
+  // Phone number state
+  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumberWithAgent[]>([]);
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [phoneNumbersLoading, setPhoneNumbersLoading] = useState(false);
+
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
 
@@ -133,6 +142,24 @@ export default function OrganizationPage() {
     }
   }, [orgId]);
 
+  const loadPhoneNumbers = useCallback(async () => {
+    if (!orgId) return;
+    setPhoneNumbersLoading(true);
+    try {
+      const [numbersRes, balanceRes] = await Promise.all([
+        phoneNumberService.getOrganizationNumbers(orgId),
+        billingService.getCreditBalance(orgId),
+      ]);
+      setPhoneNumbers(numbersRes.items);
+      setCreditBalance(balanceRes.total_credits);
+    } catch (error) {
+      console.error("Failed to load phone numbers:", error);
+      toast.error("Failed to load phone numbers");
+    } finally {
+      setPhoneNumbersLoading(false);
+    }
+  }, [orgId]);
+
   // Load data when component mounts or orgId changes
   useEffect(() => {
     if (orgId) {
@@ -145,8 +172,11 @@ export default function OrganizationPage() {
     const tabParam = searchParams.get("tab");
     if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers") {
       setActiveTab(tabParam);
+      if (tabParam === "phone-numbers" && orgId) {
+        loadPhoneNumbers();
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, orgId, loadPhoneNumbers]);
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -154,8 +184,11 @@ export default function OrganizationPage() {
       router.push(`/organization?org_id=${orgId}&tab=${value}`, {
         scroll: false,
       });
+      if (value === "phone-numbers") {
+        loadPhoneNumbers();
+      }
     },
-    [router, orgId],
+    [router, orgId, loadPhoneNumbers],
   );
 
   // Validate organization access when orgId is provided
@@ -425,7 +458,6 @@ export default function OrganizationPage() {
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
           <TabsTrigger value="phone-numbers" className="flex items-center gap-2">
             Phone Numbers
-            <Badge variant="secondary" className="text-xs py-0 px-1.5">Coming Soon</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -782,33 +814,15 @@ During monsoon season (July-September), we have extended hours for flood-related
           </div>
         </TabsContent>
 
-        {/*
-          TODO: Phone Numbers — Twilio integration is complete but not yet surfaced in the UI.
-          - Backend: full API implemented (search available numbers, purchase, assign to agent, release)
-          - Database: `phone_numbers` table with RLS policies is in place (migration 20260301000001)
-          - Frontend: PhoneNumberDashboard component exists at src/components/phone-numbers/
-            and PhoneNumberService at src/services/phone-number-service.ts
-          - Blocked by: Twilio free account limitations (requires an upgraded account for live API access)
-          To re-enable: replace the Coming Soon card below with <PhoneNumberDashboard orgId={orgId!} />
-          and restore the import at the top of this file.
-        */}
         {/* Phone Numbers Tab */}
         <TabsContent value="phone-numbers">
-          <Card>
-            <CardContent className="py-16 text-center">
-              <div className="bg-muted/40 rounded-full p-4 w-20 h-20 mx-auto mb-6 flex items-center justify-center">
-                <Phone className="h-10 w-10 text-muted-foreground opacity-60" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Phone Numbers — Coming Soon</h3>
-              <p className="text-muted-foreground max-w-md mx-auto mb-4">
-                Purchase and manage dedicated phone numbers for your AI voice agents.
-                Assign numbers directly to agents to handle inbound calls automatically.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                This feature is currently being set up and will be available shortly.
-              </p>
-            </CardContent>
-          </Card>
+          <PhoneNumberDashboard
+            organizationId={orgId!}
+            phoneNumbers={phoneNumbers}
+            creditBalance={creditBalance}
+            isLoading={phoneNumbersLoading}
+            onRefresh={loadPhoneNumbers}
+          />
         </TabsContent>
       </AnimatedTabs>
 

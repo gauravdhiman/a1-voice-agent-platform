@@ -11,6 +11,7 @@ export function OrganizationCheck({ children }: OrganizationCheckProps) {
   const { user, loading: authLoading } = useAuth();
   const {
     organizations,
+    currentOrganization,
     loading: orgLoading,
     error: orgError,
     refreshOrganizations,
@@ -55,6 +56,13 @@ export function OrganizationCheck({ children }: OrganizationCheckProps) {
         }
       }
 
+      // Redirect new users who haven't completed onboarding
+      if (currentOrganization && currentOrganization.onboarding_completed === false) {
+        setRedirecting(true);
+        router.replace("/onboarding");
+        return;
+      }
+
       setChecking(false);
     };
 
@@ -64,6 +72,7 @@ export function OrganizationCheck({ children }: OrganizationCheckProps) {
     authLoading,
     orgLoading,
     organizations,
+    currentOrganization,
     orgError,
     router,
     refreshOrganizations,
