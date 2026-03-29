@@ -8,11 +8,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from src.auth.routes import auth_router
@@ -81,7 +80,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Attach limiter to app state and register 429 handler
+    # Attach shared rate limiter and 429 handler
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
@@ -178,7 +177,13 @@ async def lifespan(app: FastAPI):
         - Stops token refresh service on shutdown
         - Ensures graceful shutdown of background tasks
     """
-    # Startup
+    # Startup — fail fast if required secrets are not configured
+    if not settings.jwt_secret_key:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is not set. "
+            "Set it to your Supabase JWT secret (Dashboard → Settings → API → JWT Secret)."
+        )
+
     from shared.voice_agents.tool_service import ToolService
     from shared.voice_agents.tools.base.registry_livekit import (
         livekit_tool_registry,

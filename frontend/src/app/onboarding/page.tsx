@@ -338,6 +338,13 @@ function Step2Template({
           Continue <ChevronRight className="w-4 h-4 ml-2" />
         </Button>
       </div>
+      {!state.selectedTemplate && (
+        <div className="text-center">
+          <Button variant="ghost" size="sm" onClick={onNext} className="text-gray-400 hover:text-gray-600">
+            <SkipForward className="w-4 h-4 mr-1" /> Skip template selection
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -531,7 +538,7 @@ function Step4Tools({
             onNext();
           }}
         >
-          Connect
+          Set up later
         </Button>
       </div>
 
@@ -557,11 +564,13 @@ function Step4Tools({
 function Step5Test({
   state,
   orgId,
+  onChange,
   onComplete,
   onBack,
 }: {
   state: WizardState;
   orgId: string;
+  onChange: (update: Partial<WizardState>) => void;
   onComplete: () => void;
   onBack: () => void;
 }) {
@@ -576,9 +585,13 @@ function Step5Test({
       return;
     }
 
+    if (!state.selectedTemplate) {
+      return;
+    }
+
     setCreating(true);
     try {
-      const template = state.selectedTemplate!;
+      const template = state.selectedTemplate;
       const agentName = `${state.businessName} AI Agent`;
       const greeting = template.greeting?.replace("[Business Name]", state.businessName) ?? undefined;
       const businessContext = state.businessDescription
@@ -603,6 +616,7 @@ function Step5Test({
       });
 
       setAgentId(agent.id);
+      onChange({ createdAgentId: agent.id });
       setTestCallOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create agent");
@@ -642,12 +656,12 @@ function Step5Test({
             {state.selectedTemplate?.name ?? "Your AI Agent"}
           </p>
           <p className="text-sm text-gray-500">
-            {state.businessName} · {state.selectedTemplate?.industry}
+            {state.selectedTemplate ? `${state.businessName} · ${state.selectedTemplate.industry}` : state.businessName}
           </p>
         </div>
         <Button
           onClick={handleCreateAndTest}
-          disabled={creating}
+          disabled={creating || !state.selectedTemplate}
           size="lg"
           className="px-8"
         >
@@ -657,6 +671,9 @@ function Step5Test({
             <><Phone className="w-4 h-4 mr-2" /> Start test call</>
           )}
         </Button>
+        {!state.selectedTemplate && (
+          <p className="text-xs text-gray-400">Select a template in Step 2 to enable test calls</p>
+        )}
       </div>
 
       {agentId && (
@@ -818,6 +835,7 @@ export default function OnboardingPage() {
           <Step5Test
             state={wizardState}
             orgId={currentOrganization.id}
+            onChange={updateState}
             onComplete={handleComplete}
             onBack={() => setStep(4)}
           />

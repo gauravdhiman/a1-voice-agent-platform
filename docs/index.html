@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cognitio AI — Your AI front desk answers calls, books appointments, and qualifies leads 24/7. Never miss a customer again." />
+  <title>Cognitio AI — Never Miss a Job. Never Miss a Call.</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue-900: #0f1f3d;
+      --blue-800: #1a3460;
+      --blue-700: #1e4080;
+      --blue-600: #2255a4;
+      --blue-500: #2e6bd6;
+      --blue-400: #4d87ef;
+      --blue-100: #dce9fd;
+      --blue-50:  #f0f6ff;
+      --white:    #ffffff;
+      --gray-50:  #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-500: #64748b;
+      --gray-700: #334155;
+      --gray-900: #0f172a;
+      --green-600:#16a34a;
+      --green-50: #f0fdf4;
+      --accent:   #f59e0b;
+      --radius:   8px;
+      --shadow:   0 4px 24px rgba(15,31,61,0.10);
+      --shadow-lg:0 8px 40px rgba(15,31,61,0.16);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--gray-900);
+      background: var(--white);
+      line-height: 1.6;
+    }
+
+    /* ── Utility ── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .section { padding: 80px 0; }
+    .section-alt { background: var(--gray-50); }
+    .tag {
+      display: inline-block;
+      background: var(--blue-100);
+      color: var(--blue-700);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 99px;
+      margin-bottom: 16px;
+    }
+    .section-title { font-size: clamp(26px, 4vw, 38px); font-weight: 800; color: var(--blue-900); line-height: 1.2; margin-bottom: 14px; }
+    .section-sub   { font-size: 18px; color: var(--gray-500); max-width: 600px; }
+    .center        { text-align: center; }
+    .center .section-sub { margin: 0 auto; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 14px 28px; border-radius: var(--radius);
+      font-size: 16px; font-weight: 700; text-decoration: none;
+      cursor: pointer; border: none; transition: all .2s;
+    }
+    .btn-primary {
+      background: var(--blue-500); color: var(--white);
+      box-shadow: 0 2px 12px rgba(46,107,214,.35);
+    }
+    .btn-primary:hover { background: var(--blue-600); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(46,107,214,.45); }
+    .btn-outline {
+      background: transparent; color: var(--blue-500);
+      border: 2px solid var(--blue-500);
+    }
+    .btn-outline:hover { background: var(--blue-50); }
+    .btn-white {
+      background: var(--white); color: var(--blue-700);
+      box-shadow: 0 2px 12px rgba(15,31,61,.12);
+    }
+    .btn-white:hover { background: var(--blue-50); transform: translateY(-1px); }
+    .btn-white-outline {
+      background: transparent; color: var(--white);
+      border: 2px solid rgba(255,255,255,.6);
+    }
+    .btn-white-outline:hover { background: rgba(255,255,255,.1); }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(15,31,61,.97);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      font-size: 22px; font-weight: 900; color: var(--white);
+      text-decoration: none; letter-spacing: -.01em;
+    }
+    .nav-logo span { color: var(--blue-400); }
+    .nav-cta { display: flex; gap: 12px; }
+    .nav-cta a { padding: 9px 20px; font-size: 14px; border-radius: 6px; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, var(--blue-900) 0%, var(--blue-700) 60%, var(--blue-600) 100%);
+      padding: 100px 0 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::after {
+      content: "";
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1.5' fill='rgba(255,255,255,.06)'/%3E%3C/svg%3E");
+    }
+    .hero-inner { position: relative; z-index: 1; max-width: 800px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 99px; padding: 6px 16px;
+      font-size: 13px; color: rgba(255,255,255,.85); margin-bottom: 28px;
+    }
+    .hero-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 64px); font-weight: 900;
+      color: var(--white); line-height: 1.1; margin-bottom: 24px;
+    }
+    .hero h1 em { font-style: normal; color: var(--blue-400); }
+    .hero p {
+      font-size: clamp(17px, 2.5vw, 21px); color: rgba(255,255,255,.8);
+      max-width: 640px; margin-bottom: 40px; line-height: 1.65;
+    }
+    .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+    .hero-stats {
+      margin-top: 64px; display: flex; gap: 48px; flex-wrap: wrap;
+      border-top: 1px solid rgba(255,255,255,.15); padding-top: 40px;
+    }
+    .hero-stat-num  { font-size: 32px; font-weight: 900; color: var(--white); }
+    .hero-stat-label{ font-size: 14px; color: rgba(255,255,255,.6); margin-top: 2px; }
+
+    /* ── Value Props ── */
+    .props-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 32px; margin-top: 56px; }
+    .prop-card {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: 12px; padding: 32px;
+      box-shadow: var(--shadow); transition: transform .2s, box-shadow .2s;
+    }
+    .prop-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .prop-icon {
+      width: 52px; height: 52px; border-radius: 12px;
+      background: var(--blue-50); display: flex; align-items: center; justify-content: center;
+      font-size: 26px; margin-bottom: 20px;
+    }
+    .prop-card h3 { font-size: 20px; font-weight: 700; color: var(--blue-900); margin-bottom: 10px; }
+    .prop-card p  { font-size: 15px; color: var(--gray-500); line-height: 1.65; }
+
+    /* ── How It Works ── */
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; margin-top: 56px; position: relative; }
+    .steps::before {
+      content: "";
+      position: absolute; top: 28px; left: 12.5%; right: 12.5%; height: 2px;
+      background: linear-gradient(90deg, var(--blue-200, #bfdbfe), var(--blue-400));
+    }
+    .step { text-align: center; padding: 0 20px; position: relative; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--blue-600); color: var(--white);
+      font-size: 20px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px; position: relative; z-index: 1;
+      box-shadow: 0 4px 16px rgba(34,85,164,.35);
+    }
+    .step h3 { font-size: 17px; font-weight: 700; color: var(--blue-900); margin-bottom: 8px; }
+    .step p  { font-size: 14px; color: var(--gray-500); line-height: 1.6; }
+
+    /* ── Pricing ── */
+    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 56px; }
+    .plan-card {
+      border-radius: 14px; padding: 36px 32px;
+      border: 2px solid var(--gray-200); background: var(--white);
+      position: relative; transition: transform .2s, box-shadow .2s;
+    }
+    .plan-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .plan-card.featured {
+      border-color: var(--blue-500);
+      background: linear-gradient(160deg, var(--blue-900), var(--blue-800));
+      color: var(--white);
+    }
+    .plan-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: var(--blue-500); color: var(--white);
+      font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      padding: 4px 16px; border-radius: 99px;
+    }
+    .plan-name { font-size: 15px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--blue-600); margin-bottom: 8px; }
+    .plan-card.featured .plan-name { color: var(--blue-300, #93c5fd); }
+    .plan-price { font-size: 48px; font-weight: 900; color: var(--blue-900); line-height: 1; }
+    .plan-card.featured .plan-price { color: var(--white); }
+    .plan-price sup { font-size: 22px; vertical-align: top; margin-top: 10px; }
+    .plan-price span { font-size: 16px; font-weight: 400; color: var(--gray-500); }
+    .plan-card.featured .plan-price span { color: rgba(255,255,255,.6); }
+    .plan-desc { font-size: 14px; color: var(--gray-500); margin: 12px 0 24px; }
+    .plan-card.featured .plan-desc { color: rgba(255,255,255,.7); }
+    .plan-features { list-style: none; margin-bottom: 32px; }
+    .plan-features li { font-size: 14px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 10px; }
+    .plan-card.featured .plan-features li { border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.9); }
+    .plan-features li::before { content: "✓"; color: var(--green-600); font-weight: 700; flex-shrink: 0; }
+    .plan-card.featured .plan-features li::before { color: #4ade80; }
+    .plan-note { text-align: center; margin-top: 32px; font-size: 14px; color: var(--gray-500); }
+
+    /* ── Testimonials ── */
+    .testimonials-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-top: 56px; }
+    .testimonial {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: 12px; padding: 32px; box-shadow: var(--shadow);
+    }
+    .stars { color: var(--accent); font-size: 18px; margin-bottom: 16px; letter-spacing: 2px; }
+    .testimonial blockquote { font-size: 16px; color: var(--gray-700); line-height: 1.7; margin-bottom: 24px; font-style: italic; }
+    .testimonial cite { display: flex; align-items: center; gap: 14px; font-style: normal; }
+    .cite-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue-500), var(--blue-700));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: var(--white);
+      flex-shrink: 0;
+    }
+    .cite-name  { font-size: 15px; font-weight: 700; color: var(--blue-900); }
+    .cite-title { font-size: 13px; color: var(--gray-500); }
+
+    /* ── Verticals ── */
+    .verticals-list { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 40px; justify-content: center; }
+    .vertical-chip {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: 99px; padding: 12px 24px;
+      font-size: 15px; font-weight: 600; color: var(--blue-800);
+      box-shadow: var(--shadow);
+    }
+    .vertical-chip span { font-size: 22px; }
+
+    /* ── FAQ ── */
+    .faq-list { max-width: 760px; margin: 48px auto 0; }
+    .faq-item { border-bottom: 1px solid var(--gray-200); }
+    .faq-q {
+      width: 100%; text-align: left; background: none; border: none;
+      padding: 22px 0; font-size: 17px; font-weight: 600; color: var(--blue-900);
+      cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    }
+    .faq-q:hover { color: var(--blue-600); }
+    .faq-icon { font-size: 22px; color: var(--blue-500); flex-shrink: 0; transition: transform .3s; }
+    .faq-a { display: none; padding: 0 0 22px; font-size: 15px; color: var(--gray-500); line-height: 1.75; }
+    .faq-item.open .faq-a { display: block; }
+    .faq-item.open .faq-icon { transform: rotate(45deg); }
+
+    /* ── Waitlist Form ── */
+    #waitlist { background: linear-gradient(135deg, var(--blue-900), var(--blue-700)); }
+    #waitlist .section-title { color: var(--white); }
+    #waitlist .section-sub   { color: rgba(255,255,255,.75); }
+    .form-wrap {
+      max-width: 520px; margin: 44px auto 0;
+      background: var(--white); border-radius: 14px;
+      padding: 40px 36px; box-shadow: var(--shadow-lg);
+    }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-size: 14px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+    .form-group input, .form-group select {
+      width: 100%; padding: 13px 16px;
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius);
+      font-size: 15px; color: var(--gray-900);
+      transition: border-color .2s;
+      background: var(--white);
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none; border-color: var(--blue-500);
+      box-shadow: 0 0 0 3px rgba(46,107,214,.12);
+    }
+    .form-submit { width: 100%; padding: 15px; font-size: 16px; }
+    #form-success {
+      display: none; text-align: center;
+      background: var(--green-50); border: 1px solid #86efac;
+      border-radius: var(--radius); padding: 24px 20px; margin-top: 20px;
+      font-size: 15px; color: var(--green-600); font-weight: 600;
+    }
+
+    /* ── Final CTA ── */
+    .final-cta {
+      background: var(--blue-50); text-align: center;
+    }
+    .final-cta .section-title { max-width: 600px; margin: 0 auto 16px; }
+    .final-cta .section-sub   { max-width: 500px; margin: 0 auto 40px; }
+    .final-cta-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+    /* ── Footer ── */
+    footer {
+      background: var(--blue-900); color: rgba(255,255,255,.5);
+      text-align: center; padding: 36px 24px;
+      font-size: 14px;
+    }
+    footer strong { color: var(--white); }
+    footer .footer-tagline { margin-top: 6px; font-size: 13px; color: rgba(255,255,255,.35); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .section { padding: 60px 0; }
+      .hero { padding: 72px 0 60px; }
+      .hero-stats { gap: 32px; }
+      .steps::before { display: none; }
+      .form-wrap { padding: 28px 20px; }
+      nav { padding: 0 16px; }
+      .nav-cta .btn-white-outline { display: none; }
+    }
+    @media (max-width: 480px) {
+      .container { padding: 0 16px; }
+      .hero-actions .btn { width: 100%; }
+      .hero-actions { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ NAV ═══════════════════ -->
+<nav>
+  <div class="container nav-inner">
+    <a href="#" class="nav-logo">Cognitio<span>AI</span></a>
+    <div class="nav-cta">
+      <a href="#waitlist" class="btn btn-white-outline">Join Waitlist</a>
+      <a href="#waitlist" class="btn btn-primary">Start Free Trial</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════ HERO ═══════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Now in early access — join the waitlist today
+      </div>
+      <h1>Never Miss a Call.<br><em>Book More Jobs.</em><br>Grow Revenue.</h1>
+      <p>Your AI front desk answers calls, books appointments, and qualifies leads 24/7 — so you never miss a customer.</p>
+      <div class="hero-actions">
+        <a href="#waitlist" class="btn btn-white">Start Free Trial</a>
+        <a href="#how-it-works" class="btn btn-white-outline">See How It Works ↓</a>
+      </div>
+      <div class="hero-stats">
+        <div>
+          <div class="hero-stat-num">24/7</div>
+          <div class="hero-stat-label">Always-on AI receptionist</div>
+        </div>
+        <div>
+          <div class="hero-stat-num">3 min</div>
+          <div class="hero-stat-label">Average setup time</div>
+        </div>
+        <div>
+          <div class="hero-stat-num">14-day</div>
+          <div class="hero-stat-label">Free trial, no card needed</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ VALUE PROPS ═══════════════════ -->
+<section class="section">
+  <div class="container">
+    <div class="center">
+      <span class="tag">Why Cognitio</span>
+      <h2 class="section-title">Everything your front desk does,<br>done automatically</h2>
+      <p class="section-sub">Stop losing leads to voicemail. Your AI agent handles it all — even at 2 AM on a Sunday.</p>
+    </div>
+    <div class="props-grid">
+      <div class="prop-card">
+        <div class="prop-icon">📞</div>
+        <h3>24/7 Call Answering</h3>
+        <p>Never send a caller to voicemail again. Your AI agent answers every call professionally, in your brand's voice, any time of day or night.</p>
+      </div>
+      <div class="prop-card">
+        <div class="prop-icon">📅</div>
+        <h3>Appointment Booking</h3>
+        <p>Customers book jobs while you're on another call or asleep. Cognitio checks your availability and confirms appointments instantly.</p>
+      </div>
+      <div class="prop-card">
+        <div class="prop-icon">🎯</div>
+        <h3>Lead Qualification</h3>
+        <p>Ask the right questions upfront — service type, location, urgency. Only your best leads get escalated to you, saving hours of back-and-forth.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ HOW IT WORKS ═══════════════════ -->
+<section class="section section-alt" id="how-it-works">
+  <div class="container">
+    <div class="center">
+      <span class="tag">Simple Setup</span>
+      <h2 class="section-title">Live in under 10 minutes</h2>
+      <p class="section-sub">No IT team needed. No complicated integrations. Just connect, configure, and let Cognitio handle the calls.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Connect Your Number</h3>
+        <p>Forward your business phone to Cognitio, or get a new dedicated number in seconds.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Set Your Availability</h3>
+        <p>Tell us your service hours, zip codes you cover, and booking preferences. Takes 3 minutes.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>AI Takes Over</h3>
+        <p>Cognitio answers, qualifies callers, and books appointments — all in natural conversation.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>You Get Notifications</h3>
+        <p>Receive instant SMS alerts for every new booking, hot lead, or caller who needs your personal attention.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ PRICING ═══════════════════ -->
+<section class="section" id="pricing">
+  <div class="container">
+    <div class="center">
+      <span class="tag">Pricing</span>
+      <h2 class="section-title">Transparent, simple pricing</h2>
+      <p class="section-sub">No hidden fees. No per-minute surprises. Choose the plan that fits your business and cancel any time.</p>
+    </div>
+    <div class="pricing-grid">
+
+      <!-- Starter -->
+      <div class="plan-card">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price"><sup>$</sup>49<span>/mo</span></div>
+        <p class="plan-desc">Perfect for solo operators and small crews just getting started with AI.</p>
+        <ul class="plan-features">
+          <li>1 AI agent</li>
+          <li>500 minutes/month</li>
+          <li>Appointment booking</li>
+          <li>FAQ auto-responses</li>
+          <li>Email &amp; chat support</li>
+          <li>14-day free trial</li>
+        </ul>
+        <a href="#waitlist" class="btn btn-outline" style="width:100%;justify-content:center;">Get Started Free</a>
+      </div>
+
+      <!-- Growth (featured) -->
+      <div class="plan-card featured">
+        <div class="plan-badge">Most Popular</div>
+        <div class="plan-name">Growth</div>
+        <div class="plan-price"><sup>$</sup>149<span>/mo</span></div>
+        <p class="plan-desc">For growing businesses that need lead qualification and multi-location support.</p>
+        <ul class="plan-features">
+          <li>3 AI agents</li>
+          <li>1,500 minutes/month</li>
+          <li>Lead qualification</li>
+          <li>Multi-location support</li>
+          <li>Priority support</li>
+          <li>14-day free trial</li>
+        </ul>
+        <a href="#waitlist" class="btn btn-white" style="width:100%;justify-content:center;">Get Started Free</a>
+      </div>
+
+      <!-- Pro -->
+      <div class="plan-card">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price"><sup>$</sup>399<span>/mo</span></div>
+        <p class="plan-desc">For established businesses ready to scale with advanced automation and analytics.</p>
+        <ul class="plan-features">
+          <li>10 AI agents</li>
+          <li>Unlimited minutes</li>
+          <li>Advanced analytics</li>
+          <li>API access &amp; webhooks</li>
+          <li>Custom integrations</li>
+          <li>14-day free trial</li>
+        </ul>
+        <a href="#waitlist" class="btn btn-outline" style="width:100%;justify-content:center;">Get Started Free</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="plan-card">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price" style="font-size:36px;line-height:1.3;">Custom</div>
+        <p class="plan-desc">For franchises and multi-location operations that need unlimited scale.</p>
+        <ul class="plan-features">
+          <li>Unlimited AI agents</li>
+          <li>Unlimited minutes</li>
+          <li>API access &amp; webhooks</li>
+          <li>Custom integrations</li>
+          <li>Dedicated account manager</li>
+          <li>SLA guarantee</li>
+        </ul>
+        <a href="#waitlist" class="btn btn-outline" style="width:100%;justify-content:center;">Contact Sales</a>
+      </div>
+
+    </div>
+    <p class="plan-note">✓ 14-day free trial &nbsp;·&nbsp; ✓ No credit card required &nbsp;·&nbsp; ✓ Cancel any time</p>
+  </div>
+</section>
+
+<!-- ═══════════════════ TESTIMONIALS ═══════════════════ -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="center">
+      <span class="tag">Social Proof</span>
+      <h2 class="section-title">Home service pros love Cognitio</h2>
+      <p class="section-sub">Real results from businesses just like yours.</p>
+    </div>
+    <div class="testimonials-grid">
+
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <blockquote>"I used to miss 4–5 calls a day while under a sink. Now Cognitio handles every one. Booked $3,200 in new jobs in the first week alone."</blockquote>
+        <cite>
+          <div class="cite-avatar">M</div>
+          <div>
+            <div class="cite-name">Mike R.</div>
+            <div class="cite-title">Owner, Mike's Plumbing &amp; Drain</div>
+          </div>
+        </cite>
+      </div>
+
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <blockquote>"Our front desk used to spend half the day answering the same questions. Cognitio handles all the FAQs and books routine cleanings automatically. Game changer."</blockquote>
+        <cite>
+          <div class="cite-avatar">S</div>
+          <div>
+            <div class="cite-name">Sarah L.</div>
+            <div class="cite-title">Practice Manager, Bright Smile Dental</div>
+          </div>
+        </cite>
+      </div>
+
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <blockquote>"HVAC season is brutal — hundreds of calls a day during a heat wave. Cognitio triage all the leads, books the easy ones, and flags the emergencies. My team closes more and stresses less."</blockquote>
+        <cite>
+          <div class="cite-avatar">J</div>
+          <div>
+            <div class="cite-name">James T.</div>
+            <div class="cite-title">CEO, TempRight HVAC Services</div>
+          </div>
+        </cite>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ VERTICALS ═══════════════════ -->
+<section class="section">
+  <div class="container center">
+    <span class="tag">Built For</span>
+    <h2 class="section-title">Made for home service businesses</h2>
+    <p class="section-sub center">Whether you have 1 truck or 50, Cognitio is purpose-built for the trades.</p>
+    <div class="verticals-list">
+      <div class="vertical-chip"><span>❄️</span> HVAC</div>
+      <div class="vertical-chip"><span>🔧</span> Plumbing</div>
+      <div class="vertical-chip"><span>⚡</span> Electrical</div>
+      <div class="vertical-chip"><span>🦷</span> Dental</div>
+      <div class="vertical-chip"><span>✂️</span> Salon &amp; Spa</div>
+      <div class="vertical-chip"><span>🌿</span> Landscaping</div>
+      <div class="vertical-chip"><span>🧹</span> Cleaning Services</div>
+      <div class="vertical-chip"><span>🏠</span> Home Renovation</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ FAQ ═══════════════════ -->
+<section class="section section-alt" id="faq">
+  <div class="container">
+    <div class="center">
+      <span class="tag">FAQ</span>
+      <h2 class="section-title">Common questions</h2>
+    </div>
+    <div class="faq-list">
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Do I need to change my phone number? <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">No. You simply forward your existing business number to Cognitio. You can keep your current number and carrier — no porting required. You can also get a new dedicated number through our platform at no extra cost.</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          What happens when a caller needs a human? <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">Cognitio recognizes escalation signals and transfers the call to you (or your team) instantly. You configure the fallback number in your dashboard. If you're unavailable, Cognitio takes a detailed message and sends you an SMS notification immediately.</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          How does it know my availability? <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">You set your working hours, blocked dates, and service areas in your dashboard. Cognitio only books within those windows. You can also connect Google Calendar or iCal for real-time sync (available on Growth and above).</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          What if I'm already paying for an answering service? <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">Most traditional answering services cost $200–500/month, charge per minute, and still miss calls during high volume. Cognitio starts at $49/month, never charges extra per minute, and handles unlimited simultaneous calls. Most customers see a positive ROI within the first week.</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          Is there a setup fee or long-term contract? <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">No setup fee. No annual contract required. Month-to-month billing. We're confident you'll love the results — but if you don't, cancel at any time with no penalty.</div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          How do you handle Spanish-speaking callers? <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">Cognitio can detect the caller's language and respond in Spanish (or other supported languages). Multi-language support is available on Growth and above.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ WAITLIST / CTA ═══════════════════ -->
+<section class="section" id="waitlist">
+  <div class="container center">
+    <span class="tag" style="background:rgba(255,255,255,.15);color:rgba(255,255,255,.9);">Early Access</span>
+    <h2 class="section-title">Ready to stop missing jobs?</h2>
+    <p class="section-sub">Join hundreds of home service businesses on the waitlist. Get 3 months at 50% off when we launch.</p>
+
+    <div class="form-wrap">
+      <h3 style="font-size:20px;font-weight:700;color:var(--blue-900);margin-bottom:6px;">Join the Waitlist</h3>
+      <p style="font-size:14px;color:var(--gray-500);margin-bottom:28px;">Free 14-day trial · No credit card required</p>
+
+      <!--
+        FORMSPREE SETUP:
+        1. Go to https://formspree.io and create a free account
+        2. Create a new form and copy the form endpoint URL
+        3. Replace "YOUR_FORMSPREE_FORM_ID" below with your actual form ID
+           e.g., https://formspree.io/f/xpzgkdqr
+      -->
+      <form id="waitlist-form" action="https://formspree.io/f/YOUR_FORMSPREE_FORM_ID" method="POST">
+        <div class="form-group">
+          <label for="email">Work Email *</label>
+          <input type="email" id="email" name="email" placeholder="you@yourbusiness.com" required />
+        </div>
+        <div class="form-group">
+          <label for="business_type">Business Type</label>
+          <select id="business_type" name="business_type">
+            <option value="">Select your industry…</option>
+            <option value="hvac">HVAC</option>
+            <option value="plumbing">Plumbing</option>
+            <option value="electrical">Electrical</option>
+            <option value="dental">Dental / Medical</option>
+            <option value="salon">Salon &amp; Spa</option>
+            <option value="landscaping">Landscaping</option>
+            <option value="cleaning">Cleaning Services</option>
+            <option value="renovation">Home Renovation</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <input type="hidden" name="_subject" value="New Cognitio Waitlist Signup" />
+        <button type="submit" class="btn btn-primary form-submit">Join Waitlist &amp; Get Early Access →</button>
+      </form>
+
+      <div id="form-success">
+        🎉 You're on the list! We'll be in touch with early access details and your exclusive launch discount.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ FINAL CTA ═══════════════════ -->
+<section class="section final-cta">
+  <div class="container">
+    <h2 class="section-title">Never miss a job. Never miss a call.</h2>
+    <p class="section-sub">Start your free 14-day trial today and see how many jobs Cognitio books for you in the first week.</p>
+    <div class="final-cta-actions">
+      <a href="#waitlist" class="btn btn-primary">Start Free Trial</a>
+      <a href="#faq" class="btn btn-outline">Read the FAQ</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<footer>
+  <div class="container">
+    <strong>CognitioAI</strong> — Never miss a job. Never miss a call.
+    <div class="footer-tagline">© 2026 Cognitio AI. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  // FAQ accordion
+  function toggleFaq(btn) {
+    var item = btn.closest('.faq-item');
+    var wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(function(el) { el.classList.remove('open'); });
+    if (!wasOpen) item.classList.add('open');
+  }
+
+  // Formspree AJAX submit
+  var form = document.getElementById('waitlist-form');
+  var success = document.getElementById('form-success');
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var data = new FormData(form);
+    fetch(form.action, {
+      method: 'POST',
+      body: data,
+      headers: { 'Accept': 'application/json' }
+    }).then(function(res) {
+      if (res.ok) {
+        form.style.display = 'none';
+        success.style.display = 'block';
+      } else {
+        res.json().then(function(d) {
+          alert(d.errors ? d.errors.map(function(e){return e.message;}).join(', ') : 'Something went wrong. Please try again.');
+        });
+      }
+    }).catch(function() {
+      alert('Network error. Please try again.');
+    });
+  });
+
+  // Smooth scroll for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      var target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+</script>
+</body>
+</html>

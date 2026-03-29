@@ -38,7 +38,6 @@ class TestRateLimiter:
 
     def test_exceeding_limit_returns_429(self, rate_limited_app):
         client = TestClient(rate_limited_app)
-        # Make 2 requests (within limit)
         client.get("/limited")
         client.get("/limited")
         # 3rd request exceeds the 2/minute limit

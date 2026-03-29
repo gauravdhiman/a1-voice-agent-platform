@@ -20,6 +20,7 @@ from src.auth.models import (
 )
 from src.auth.service import auth_service
 from src.organization.service import organization_service
+from src.security.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ async def sign_up(http_request: Request, request: SignUpRequest) -> AuthResponse
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 @tracer.start_as_current_span("auth.routes.sign_in")
 async def sign_in(http_request: Request, request: SignInRequest) -> AuthResponse:
     """
@@ -178,7 +179,7 @@ async def sign_out(authorization: str = Header(None)) -> JSONResponse:
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 @tracer.start_as_current_span("auth.routes.refresh_token")
 async def refresh_token(http_request: Request, request: dict[str, str]) -> AuthResponse:
     """
