@@ -585,9 +585,13 @@ function Step5Test({
       return;
     }
 
+    if (!state.selectedTemplate) {
+      return;
+    }
+
     setCreating(true);
     try {
-      const template = state.selectedTemplate!;
+      const template = state.selectedTemplate;
       const agentName = `${state.businessName} AI Agent`;
       const greeting = template.greeting?.replace("[Business Name]", state.businessName) ?? undefined;
       const businessContext = state.businessDescription
@@ -652,12 +656,12 @@ function Step5Test({
             {state.selectedTemplate?.name ?? "Your AI Agent"}
           </p>
           <p className="text-sm text-gray-500">
-            {state.businessName} · {state.selectedTemplate?.industry}
+            {state.selectedTemplate ? `${state.businessName} · ${state.selectedTemplate.industry}` : state.businessName}
           </p>
         </div>
         <Button
           onClick={handleCreateAndTest}
-          disabled={creating}
+          disabled={creating || !state.selectedTemplate}
           size="lg"
           className="px-8"
         >
@@ -667,6 +671,9 @@ function Step5Test({
             <><Phone className="w-4 h-4 mr-2" /> Start test call</>
           )}
         </Button>
+        {!state.selectedTemplate && (
+          <p className="text-xs text-gray-400">Select a template in Step 2 to enable test calls</p>
+        )}
       </div>
 
       {agentId && (
