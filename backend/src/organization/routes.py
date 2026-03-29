@@ -319,7 +319,7 @@ async def get_all_organizations(
         return organizations
 
 
-@organization_router.put("/{org_id}", response_model=Organization)
+@organization_router.patch("/{org_id}", response_model=Organization)
 @tracer.start_as_current_span("organization.routes.update_organization")
 async def update_organization(
     org_id: UUID,

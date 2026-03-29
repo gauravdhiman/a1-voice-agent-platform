@@ -47,7 +47,7 @@ class OrganizationService {
     orgId: string,
     orgData: OrganizationUpdate,
   ): Promise<Organization> {
-    const response = await apiClient.put<Organization>(
+    const response = await apiClient.patch<Organization>(
       `${this.baseUrl}/${orgId}`,
       orgData,
     );

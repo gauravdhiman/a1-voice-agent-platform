@@ -168,7 +168,7 @@ export const handlers = [
     })
   }),
 
-  http.put(`${API_BASE_URL}/api/v1/organizations/:id`, async ({ params, request }) => {
+  http.patch(`${API_BASE_URL}/api/v1/organizations/:id`, async ({ params, request }) => {
     const body = await request.json() as Record<string, any>
     return HttpResponse.json({
       success: true,
