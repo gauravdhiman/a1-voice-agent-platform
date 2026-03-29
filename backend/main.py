@@ -12,12 +12,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from src.auth.routes import auth_router
 from src.billing.routes import router as billing_router
 from src.notifications.routes import router as notification_router
 from src.organization.routes import organization_router
 from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
+from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
 from src.voice_agents import agent_router, embed_router, tool_router, voice_router
 from src.voice_templates import voice_templates_router
 
@@ -75,6 +79,16 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
     )
+
+    # Attach limiter to app state and register 429 handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+    # Add SlowAPI middleware for rate limiting
+    app.add_middleware(SlowAPIMiddleware)
+
+    # Add security headers to all responses
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Configure CORS
     app.add_middleware(
