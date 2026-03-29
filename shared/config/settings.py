@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # JWT Settings (Future auth integration)
     jwt_secret_key: Optional[str] = Field(default=None, description="JWT secret key")
-    jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
+    # jwt_algorithm intentionally omitted — JWT verification hardcodes algorithms=["HS256"] in middleware.py
     jwt_expire_minutes: int = Field(default=30, description="JWT expiration in minutes")
 
     # External API Settings (Future integrations)
