@@ -30,6 +30,9 @@ def upgrade() -> None:
             server_default=sa.text("false"),
         ),
     )
+    # Backfill: treat all pre-existing orgs as already onboarded so they
+    # are not redirected to the wizard on their next login.
+    op.execute("UPDATE organizations SET onboarding_completed = true")
 
     # Create voice_templates table
     op.create_table(

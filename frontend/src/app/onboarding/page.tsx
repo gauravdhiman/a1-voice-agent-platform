@@ -338,6 +338,13 @@ function Step2Template({
           Continue <ChevronRight className="w-4 h-4 ml-2" />
         </Button>
       </div>
+      {!state.selectedTemplate && (
+        <div className="text-center">
+          <Button variant="ghost" size="sm" onClick={onNext} className="text-gray-400 hover:text-gray-600">
+            <SkipForward className="w-4 h-4 mr-1" /> Skip template selection
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -531,7 +538,7 @@ function Step4Tools({
             onNext();
           }}
         >
-          Connect
+          Set up later
         </Button>
       </div>
 
@@ -557,11 +564,13 @@ function Step4Tools({
 function Step5Test({
   state,
   orgId,
+  onChange,
   onComplete,
   onBack,
 }: {
   state: WizardState;
   orgId: string;
+  onChange: (update: Partial<WizardState>) => void;
   onComplete: () => void;
   onBack: () => void;
 }) {
@@ -603,6 +612,7 @@ function Step5Test({
       });
 
       setAgentId(agent.id);
+      onChange({ createdAgentId: agent.id });
       setTestCallOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create agent");
@@ -818,6 +828,7 @@ export default function OnboardingPage() {
           <Step5Test
             state={wizardState}
             orgId={currentOrganization.id}
+            onChange={updateState}
             onComplete={handleComplete}
             onBack={() => setStep(4)}
           />
