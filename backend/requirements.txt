@@ -38,6 +38,9 @@ resend==2.15.0
 # Security and encryption
 cryptography==43.0.1
 
+# Rate limiting
+slowapi==0.1.9
+
 # Database and migrations
 sqlalchemy==2.0.36
 alembic==1.14.0

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pydantic import BaseModel, Field
 from src.auth.middleware import get_authenticated_user
+from src.security.rate_limiter import limiter
 from src.auth.models import (
     AuthResponse,
     ErrorResponse,

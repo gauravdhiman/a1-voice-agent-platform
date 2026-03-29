@@ -14,6 +14,7 @@ import {
   ChevronRight,
   LogOut,
   Bot,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -43,6 +44,11 @@ const navigationItems = [
     name: "Agents",
     href: "/agents",
     icon: Bot,
+  },
+  {
+    name: "Calls",
+    href: "/calls",
+    icon: Phone,
   },
   {
     name: "Users",
