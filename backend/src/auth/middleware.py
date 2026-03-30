@@ -37,6 +37,7 @@ def _decode_jwt_verified(token: str) -> dict:
             token,
             key=settings.jwt_secret_key,
             algorithms=["HS256"],  # hardcoded — never runtime-configurable
+            audience="authenticated",  # Supabase JWTs always have aud: "authenticated"
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -47,6 +48,11 @@ def _decode_jwt_verified(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token signature",
+        )
+    except jwt.InvalidAudienceError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token audience",
         )
     except jwt.DecodeError:
         raise HTTPException(
