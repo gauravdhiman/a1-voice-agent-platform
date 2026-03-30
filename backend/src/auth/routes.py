@@ -50,7 +50,7 @@ class ProcessInvitationRequest(BaseModel):
 )
 @limiter.limit("5/minute")
 @tracer.start_as_current_span("auth.routes.sign_up")
-async def sign_up(http_request: Request, request: SignUpRequest) -> AuthResponse:
+async def sign_up(request: Request, body: SignUpRequest) -> AuthResponse:
     """
     Register a new user account.
 
@@ -61,24 +61,18 @@ async def sign_up(http_request: Request, request: SignUpRequest) -> AuthResponse
     - **last_name**: User's last name
     """
     current_span = trace.get_current_span()
-    current_span.set_attribute("user.email", request.email)
+    current_span.set_attribute("user.email", body.email)
 
-    auth_response, error = await auth_service.sign_up(request)
+    auth_response, error = await auth_service.sign_up(body)
 
     if error:
-        status_code = status.HTTP_400_BAD_REQUEST
-        if (
-            error.error == "auth_error"
-            and "already registered" in error.message.lower()
-        ):
-            status_code = status.HTTP_409_CONFLICT
+        detail = error.detail if isinstance(error.detail, str) else str(error.detail)
+        if error.status_code == status.HTTP_409_CONFLICT or "already registered" in detail.lower():
             current_span.set_attribute("error.type", "user_already_exists")
-        elif error.error == "internal_error":
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        elif error.status_code >= 500:
             current_span.set_attribute("error.type", "internal_error")
-
-        current_span.set_status(trace.Status(trace.StatusCode.ERROR, error.message))
-        raise HTTPException(status_code=status_code, detail=error.message)
+        current_span.set_status(trace.Status(trace.StatusCode.ERROR, detail))
+        raise error
 
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
@@ -96,7 +90,7 @@ async def sign_up(http_request: Request, request: SignUpRequest) -> AuthResponse
 )
 @limiter.limit("10/minute")
 @tracer.start_as_current_span("auth.routes.sign_in")
-async def sign_in(http_request: Request, request: SignInRequest) -> AuthResponse:
+async def sign_in(request: Request, body: SignInRequest) -> AuthResponse:
     """
     Authenticate user with email and password.
 
@@ -104,20 +98,18 @@ async def sign_in(http_request: Request, request: SignInRequest) -> AuthResponse
     - **password**: User password
     """
     current_span = trace.get_current_span()
-    current_span.set_attribute("user.email", request.email)
+    current_span.set_attribute("user.email", body.email)
 
-    auth_response, error = await auth_service.sign_in(request)
+    auth_response, error = await auth_service.sign_in(body)
 
     if error:
-        status_code = status.HTTP_400_BAD_REQUEST
-        if error.error == "internal_error":
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        detail = error.detail if isinstance(error.detail, str) else str(error.detail)
+        if error.status_code >= 500:
             current_span.set_attribute("error.type", "internal_error")
         else:
             current_span.set_attribute("error.type", "invalid_credentials")
-
-        current_span.set_status(trace.Status(trace.StatusCode.ERROR, error.message))
-        raise HTTPException(status_code=status_code, detail=error.message)
+        current_span.set_status(trace.Status(trace.StatusCode.ERROR, detail))
+        raise error
 
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
@@ -181,14 +173,14 @@ async def sign_out(authorization: str = Header(None)) -> JSONResponse:
 )
 @limiter.limit("30/minute")
 @tracer.start_as_current_span("auth.routes.refresh_token")
-async def refresh_token(http_request: Request, request: dict[str, str]) -> AuthResponse:
+async def refresh_token(request: Request, body: dict[str, str]) -> AuthResponse:
     """
     Refresh access token using refresh token.
 
     - **refresh_token**: Valid refresh token
     """
     current_span = trace.get_current_span()
-    refresh_token = request.get("refresh_token")
+    refresh_token = body.get("refresh_token")
     if not refresh_token:
         current_span.set_status(
             trace.Status(trace.StatusCode.ERROR, "Refresh token is required")
@@ -203,15 +195,13 @@ async def refresh_token(http_request: Request, request: dict[str, str]) -> AuthR
     auth_response, error = await auth_service.refresh_token(refresh_token)
 
     if error:
-        status_code = status.HTTP_400_BAD_REQUEST
-        if error.error == "internal_error":
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        detail = error.detail if isinstance(error.detail, str) else str(error.detail)
+        if error.status_code >= 500:
             current_span.set_attribute("error.type", "internal_error")
         else:
             current_span.set_attribute("error.type", "invalid_token")
-
-        current_span.set_status(trace.Status(trace.StatusCode.ERROR, error.message))
-        raise HTTPException(status_code=status_code, detail=error.message)
+        current_span.set_status(trace.Status(trace.StatusCode.ERROR, detail))
+        raise error
 
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))

@@ -84,6 +84,7 @@ export const createMockOrganization = (overrides: Partial<Organization> = {}): O
   slug: 'test-org',
   website: 'https://example.com',
   is_active: true,
+  onboarding_completed: false,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   ...overrides,

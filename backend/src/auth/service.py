@@ -7,6 +7,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from gotrue.errors import AuthApiError
 from opentelemetry import metrics, trace
 from src.organization.models import OrganizationCreate
 from src.rbac.roles.service import role_service
@@ -197,18 +198,29 @@ class AuthService:
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return auth_response, None
 
-        except Exception as e:
+        except AuthApiError as e:
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-            logging.error(f"Sign up error: {e}")
-            auth_failure_counter.add(1, {"operation": "signup", "error": "exception"})
-
-            # Handle specific Supabase errors
-            if "already registered" in str(e).lower():
+            logging.warning(f"Sign up auth error: {e}")
+            auth_failure_counter.add(1, {"operation": "signup", "error": "auth_error"})
+            error_msg = str(e).lower()
+            if "already registered" in error_msg or "user already" in error_msg:
                 return None, HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="User already registered",
                 )
-
+            if "rate limit" in error_msg or "email rate" in error_msg:
+                return None, HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many signup attempts. Please try again later.",
+                )
+            return None, HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+        except Exception as e:
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            logging.error(f"Sign up error: {e}")
+            auth_failure_counter.add(1, {"operation": "signup", "error": "exception"})
             return None, HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error during sign up",
@@ -290,6 +302,14 @@ class AuthService:
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return auth_response, None
 
+        except AuthApiError as e:
+            current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            logging.warning(f"Sign in auth error: {e}")
+            auth_failure_counter.add(1, {"operation": "signin", "error": "auth_error"})
+            return None, HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid credentials. Please try again with the correct credentials.",
+            )
         except Exception as e:
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
             logging.error(f"Sign in error: {e}")
