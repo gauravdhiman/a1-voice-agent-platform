@@ -28,6 +28,12 @@ All environment variables required for production deployment across all 4 servic
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | Stripe Dashboard → Developers → Webhooks → signing secret | **Yes** |
 | `TWILIO_ACCOUNT_SID` | Twilio account identifier | Twilio Console → Account Info | No |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token | Twilio Console → Account Info | **Yes** |
+| `TWILIO_PHONE_NUMBER_SID` | Default Twilio phone number SID | Twilio Console → Phone Numbers → your number → SID | No |
+| `LIVEKIT_API_KEY` | LiveKit API key (for voice token generation) | cloud.livekit.io → project → Settings → Keys | **Yes** |
+| `LIVEKIT_API_SECRET` | LiveKit API secret | cloud.livekit.io → project → Settings → Keys | **Yes** |
+| `LIVEKIT_URL` | LiveKit WebSocket URL | cloud.livekit.io → project → Settings (starts with `wss://`) | No |
+| `LIVEKIT_SIP_DOMAIN` | LiveKit SIP domain (used by `voice_routes.py`) | cloud.livekit.io → project → SIP settings | No |
+| `RESEND_API_KEY` | Resend email API key for notification emails | resend.com → API Keys | **Yes** |
 | `GOOGLE_OAUTH_TOOL_CLIENT_ID` | Google OAuth client ID | Google Cloud Console → APIs & Services → Credentials | No |
 | `GOOGLE_OAUTH_TOOL_CLIENT_SECRET` | Google OAuth client secret | Google Cloud Console → APIs & Services → Credentials | **Yes** |
 | `GOOGLE_OAUTH_TOOL_REDIRECT_URI` | Google OAuth redirect URI | Set to `https://cog-backend.onrender.com/auth/google/callback` | No |

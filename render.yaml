@@ -78,6 +78,22 @@ services:
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
+      - key: TWILIO_PHONE_NUMBER_SID
+        sync: false
+
+      # LiveKit (used by voice token generation and SIP dispatch)
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_SIP_DOMAIN
+        sync: false
+
+      # Resend (email notifications)
+      - key: RESEND_API_KEY
+        sync: false
 
       # Google OAuth (tool integration)
       - key: GOOGLE_OAUTH_TOOL_CLIENT_ID
