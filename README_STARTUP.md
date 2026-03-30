@@ -131,6 +131,39 @@ Required variables:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+### Environment Isolation (Local vs Cloud)
+
+The project maintains three env files to isolate local dev from cloud/staging:
+
+| File | Purpose | Supabase |
+|------|---------|----------|
+| `.env` | **Active config** — local dev default | Local Supabase (`http://host.docker.internal:54321`) |
+| `.env.local` | Local dev template | Local Supabase (same as above) |
+| `.env.dev` | Cloud/staging template | Cloud Supabase (`https://zymiyfilulmtrmyyhvzw.supabase.co`) |
+
+**To switch to cloud Supabase** (e.g. for staging/production testing):
+```bash
+cp .env.dev .env
+```
+
+**To switch back to local Supabase** (normal dev):
+```bash
+cp .env.local .env
+```
+
+**Starting local Supabase** (required for local dev):
+```bash
+supabase start        # start local Supabase
+supabase status       # confirm running at http://127.0.0.1:54321
+```
+
+**Running migrations against local Supabase**:
+```bash
+docker compose -f docker-compose.dev.yml run --rm backend-dev alembic upgrade head
+```
+
+> **Note:** Local Supabase CLI v2.75+ uses ES256 JWT signing (asymmetric keys), while cloud Supabase uses HS256. The backend middleware auto-detects the algorithm via the JWT header and fetches the public key from the JWKS endpoint when ES256 is used. No manual configuration is needed when switching environments.
+
 ## Smart Features
 
 The startup script includes several smart features:

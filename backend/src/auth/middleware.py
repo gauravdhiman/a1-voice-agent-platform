@@ -2,10 +2,14 @@
 Authentication middleware for extracting user information from JWT tokens.
 """
 
+import base64
+import json
 import logging
+import time
 from typing import Optional
 from uuid import UUID
 
+import httpx
 import jwt
 from fastapi import Header, HTTPException, status
 from src.auth.models import UserProfile
@@ -16,29 +20,90 @@ from shared.config import settings, supabase_config
 
 logger = logging.getLogger(__name__)
 
+# Module-level JWKS cache to avoid fetching on every request
+_jwks_cache: dict = {"keys": {}, "fetched_at": 0.0}
+_JWKS_CACHE_TTL = 300  # 5 minutes
+
+
+def _get_jwks_key(kid: str) -> Optional[dict]:
+    """Return the JWKS key dict for a given kid, refreshing cache as needed."""
+    global _jwks_cache
+    now = time.monotonic()
+    if now - _jwks_cache["fetched_at"] > _JWKS_CACHE_TTL or kid not in _jwks_cache["keys"]:
+        supabase_url = settings.supabase_url or ""
+        # Inside Docker the URL uses host.docker.internal; try both host variants
+        jwks_url = f"{supabase_url}/auth/v1/.well-known/jwks.json"
+        fallback_url = jwks_url.replace("host.docker.internal", "127.0.0.1")
+        for url in [jwks_url, fallback_url]:
+            try:
+                resp = httpx.get(url, timeout=5)
+                resp.raise_for_status()
+                keys_list = resp.json().get("keys", [])
+                _jwks_cache["keys"] = {k["kid"]: k for k in keys_list}
+                _jwks_cache["fetched_at"] = now
+                break
+            except Exception as exc:
+                logger.debug("_get_jwks_key: failed to fetch JWKS from %s: %s", url, exc)
+    return _jwks_cache["keys"].get(kid)
+
+
+def _peek_jwt_header(token: str) -> dict:
+    """Decode the JWT header without signature verification."""
+    try:
+        header_b64 = token.split(".")[0]
+        # Add padding
+        header_b64 += "=" * (4 - len(header_b64) % 4)
+        return json.loads(base64.urlsafe_b64decode(header_b64))
+    except Exception:
+        return {}
+
 
 def _decode_jwt_verified(token: str) -> dict:
     """
     Decode and verify a JWT token signature.
 
-    Uses settings.jwt_secret_key for HS256 verification when configured.
+    Supports both HS256 (cloud Supabase, uses JWT_SECRET_KEY) and
+    ES256 (local Supabase CLI v2.75+, uses JWKS endpoint).
     Raises HTTPException 500 (misconfiguration) or 401 (bad token).
     """
-    if not settings.jwt_secret_key:
-        logger.error(
-            "_decode_jwt_verified: JWT_SECRET_KEY is not set — authentication service unavailable"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication service unavailable",
-        )
+    header = _peek_jwt_header(token)
+    alg = header.get("alg", "HS256")
+
     try:
-        return jwt.decode(
-            token,
-            key=settings.jwt_secret_key,
-            algorithms=["HS256"],  # hardcoded — never runtime-configurable
-            audience="authenticated",  # Supabase JWTs always have aud: "authenticated"
-        )
+        if alg == "ES256":
+            kid = header.get("kid", "")
+            jwk = _get_jwks_key(kid)
+            if jwk is None:
+                logger.error("_decode_jwt_verified: ES256 key kid=%s not found in JWKS", kid)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token signing key not found",
+                )
+            public_key = jwt.algorithms.ECAlgorithm.from_jwk(jwk)
+            return jwt.decode(
+                token,
+                key=public_key,
+                algorithms=["ES256"],
+                audience="authenticated",
+            )
+        else:
+            # HS256 path (cloud Supabase)
+            if not settings.jwt_secret_key:
+                logger.error(
+                    "_decode_jwt_verified: JWT_SECRET_KEY is not set — authentication service unavailable"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Authentication service unavailable",
+                )
+            return jwt.decode(
+                token,
+                key=settings.jwt_secret_key,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+    except HTTPException:
+        raise
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
