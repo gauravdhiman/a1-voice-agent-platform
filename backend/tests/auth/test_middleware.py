@@ -24,6 +24,9 @@ TEST_USER_ID = str(uuid4())
 
 
 def make_token(payload: dict, secret: str = TEST_SECRET, algorithm: str = "HS256") -> str:
+    # Supabase JWTs always include aud: "authenticated" — mirror that in tests
+    if "aud" not in payload:
+        payload = {**payload, "aud": "authenticated"}
     return jwt.encode(payload, secret, algorithm=algorithm)
 
 
@@ -75,6 +78,16 @@ class TestDecodeJwtVerified:
             with pytest.raises(HTTPException) as exc_info:
                 _decode_jwt_verified(forged)
         assert exc_info.value.status_code == 401
+
+    def test_wrong_audience_raises_401(self):
+        """Token with aud != 'authenticated' must be rejected."""
+        token = jwt.encode({"sub": TEST_USER_ID, "aud": "anon"}, TEST_SECRET, algorithm="HS256")
+        with patch("src.auth.middleware.settings") as mock_settings:
+            mock_settings.jwt_secret_key = TEST_SECRET
+            with pytest.raises(HTTPException) as exc_info:
+                _decode_jwt_verified(token)
+        assert exc_info.value.status_code == 401
+        assert "audience" in exc_info.value.detail.lower()
 
 
 # --- Tests for get_current_user_id mock bypass security ---
