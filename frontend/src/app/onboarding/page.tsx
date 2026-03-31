@@ -21,6 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { TestCallModal } from "@/components/agents/test-call-modal";
 import { cn } from "@/lib/utils";
 import {
@@ -34,7 +41,6 @@ import {
   ChevronLeft,
   Loader2,
   Search,
-  SkipForward,
   Calendar,
   Check,
   Eye,
@@ -306,24 +312,52 @@ function Step2Template({
         </div>
       )}
 
-      {previewTemplate && (
-        <div className="p-4 bg-gray-50 border rounded-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-gray-800">{previewTemplate.name} — Preview</span>
-            <Button variant="ghost" size="sm" onClick={() => setPreviewTemplate(null)}>
+      <Dialog open={!!previewTemplate} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{previewTemplate?.name} — Preview</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-gray-600 space-y-3 py-2">
+            {previewTemplate?.greeting && (
+              <div>
+                <span className="font-medium text-gray-800">Greeting:</span>
+                <p className="mt-1">{previewTemplate.greeting.replace("[Business Name]", state.businessName || "Your Business")}</p>
+              </div>
+            )}
+            {previewTemplate?.mission && (
+              <div>
+                <span className="font-medium text-gray-800">Mission:</span>
+                <p className="mt-1">{previewTemplate.mission}</p>
+              </div>
+            )}
+            {previewTemplate?.tone && (
+              <div>
+                <span className="font-medium text-gray-800">Tone:</span>
+                <p className="mt-1">{previewTemplate.tone}</p>
+              </div>
+            )}
+            {previewTemplate?.persona && (
+              <div>
+                <span className="font-medium text-gray-800">Persona:</span>
+                <p className="mt-1">{previewTemplate.persona}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPreviewTemplate(null)}>
               Close
             </Button>
-          </div>
-          <div className="text-sm text-gray-600 space-y-1">
-            {previewTemplate.greeting && (
-              <p><span className="font-medium">Greeting:</span> {previewTemplate.greeting.replace("[Business Name]", state.businessName || "Your Business")}</p>
-            )}
-            {previewTemplate.mission && (
-              <p><span className="font-medium">Mission:</span> {previewTemplate.mission}</p>
-            )}
-          </div>
-        </div>
-      )}
+            <Button
+              onClick={() => {
+                if (previewTemplate) onChange({ selectedTemplate: previewTemplate });
+                setPreviewTemplate(null);
+              }}
+            >
+              Select this template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex gap-3">
         <Button variant="outline" onClick={onBack} className="w-32">
@@ -341,7 +375,7 @@ function Step2Template({
       {!state.selectedTemplate && (
         <div className="text-center">
           <Button variant="ghost" size="sm" onClick={onNext} className="text-gray-400 hover:text-gray-600">
-            <SkipForward className="w-4 h-4 mr-1" /> Skip template selection
+            <ChevronRight className="w-4 h-4 mr-1" /> Skip template selection
           </Button>
         </div>
       )}
@@ -499,7 +533,7 @@ function Step3Phone({
           <ChevronLeft className="w-4 h-4 mr-1" /> Back
         </Button>
         <Button variant="outline" onClick={onNext} className="flex-1">
-          <SkipForward className="w-4 h-4 mr-2" /> Skip for now
+          <ChevronRight className="w-4 h-4 mr-2" /> Skip for now
         </Button>
       </div>
     </div>
@@ -517,9 +551,9 @@ function Step4Tools({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Connect a tool (optional)</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Tools (optional)</h2>
         <p className="text-gray-500 mt-1">
-          Connect Google Calendar so your AI agent can schedule appointments automatically.
+          Your agent can connect to tools like Google Calendar to book appointments. You can set these up after completing onboarding.
         </p>
       </div>
 
@@ -531,15 +565,6 @@ function Step4Tools({
           <p className="font-semibold text-gray-900">Google Calendar</p>
           <p className="text-sm text-gray-500">Let your agent book appointments in real time</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            toast.info("Connect Google Calendar from the Tools page after setup.");
-            onNext();
-          }}
-        >
-          Set up later
-        </Button>
       </div>
 
       <Alert>
@@ -552,8 +577,8 @@ function Step4Tools({
         <Button variant="outline" onClick={onBack} className="w-32">
           <ChevronLeft className="w-4 h-4 mr-1" /> Back
         </Button>
-        <Button variant="outline" onClick={onNext} className="flex-1">
-          <SkipForward className="w-4 h-4 mr-2" /> Skip for now
+        <Button onClick={onNext} className="flex-1" size="lg">
+          Continue <ChevronRight className="w-4 h-4 ml-2" />
         </Button>
       </div>
     </div>
@@ -575,55 +600,57 @@ function Step5Test({
   onBack: () => void;
 }) {
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(state.createdAgentId);
   const [testCallOpen, setTestCallOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
 
-  const handleCreateAndTest = async () => {
-    if (agentId) {
-      setTestCallOpen(true);
-      return;
-    }
+  // Auto-create the agent when the user arrives at step 5
+  useEffect(() => {
+    if (agentId || creating || !state.selectedTemplate) return;
 
-    if (!state.selectedTemplate) {
-      return;
-    }
+    const createAgent = async () => {
+      setCreating(true);
+      setCreateError(null);
+      try {
+        const template = state.selectedTemplate!;
+        const agentName = `${state.businessName} AI Agent`;
+        const greeting = template.greeting?.replace("[Business Name]", state.businessName) ?? undefined;
+        const businessContext = state.businessDescription
+          ? `Business: ${state.businessName}\nLocation: ${state.location}\n\n${state.businessDescription}`
+          : `Business: ${state.businessName}\nLocation: ${state.location}`;
 
-    setCreating(true);
-    try {
-      const template = state.selectedTemplate;
-      const agentName = `${state.businessName} AI Agent`;
-      const greeting = template.greeting?.replace("[Business Name]", state.businessName) ?? undefined;
-      const businessContext = state.businessDescription
-        ? `Business: ${state.businessName}\nLocation: ${state.location}\n\n${state.businessDescription}`
-        : `Business: ${state.businessName}\nLocation: ${state.location}`;
+        const agent = await agentService.createAgent({
+          organization_id: orgId,
+          name: agentName,
+          phone_number: state.purchasedPhoneNumber ?? undefined,
+          persona: template.persona ?? undefined,
+          tone: template.tone ?? undefined,
+          mission: template.mission ?? undefined,
+          custom_instructions: [
+            template.custom_instructions,
+            greeting ? `Default greeting: ${greeting}` : null,
+            businessContext,
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined,
+          is_active: true,
+        });
 
-      const agent = await agentService.createAgent({
-        organization_id: orgId,
-        name: agentName,
-        phone_number: state.purchasedPhoneNumber ?? undefined,
-        persona: template.persona ?? undefined,
-        tone: template.tone ?? undefined,
-        mission: template.mission ?? undefined,
-        custom_instructions: [
-          template.custom_instructions,
-          greeting ? `Default greeting: ${greeting}` : null,
-          businessContext,
-        ]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
-        is_active: true,
-      });
+        setAgentId(agent.id);
+        onChange({ createdAgentId: agent.id });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to create agent";
+        setCreateError(msg);
+        toast.error(msg);
+      } finally {
+        setCreating(false);
+      }
+    };
 
-      setAgentId(agent.id);
-      onChange({ createdAgentId: agent.id });
-      setTestCallOpen(true);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create agent");
-    } finally {
-      setCreating(false);
-    }
-  };
+    createAgent();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFinish = async () => {
     setCompleting(true);
@@ -638,18 +665,32 @@ function Step5Test({
     }
   };
 
+  const isReady = !!agentId;
+
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Test your AI agent</h2>
+        <h2 className="text-2xl font-bold text-gray-900">
+          {creating ? "Almost done — setting up your agent" : isReady ? "Your agent is ready!" : "Test your AI agent"}
+        </h2>
         <p className="text-gray-500 mt-1">
-          Your agent is ready. Make a quick test call from your browser to hear it in action.
+          {creating
+            ? "Creating your AI agent, this will only take a moment..."
+            : isReady
+              ? "Make a quick test call from your browser to hear it in action."
+              : createError
+                ? "There was an issue creating your agent. You can retry or continue to your dashboard."
+                : "Your agent will be set up automatically."}
         </p>
       </div>
 
       <div className="p-6 bg-blue-50 border border-blue-200 rounded-xl text-center space-y-4">
         <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto">
-          <Mic className="w-8 h-8 text-white" />
+          {creating ? (
+            <Loader2 className="w-8 h-8 text-white animate-spin" />
+          ) : (
+            <Mic className="w-8 h-8 text-white" />
+          )}
         </div>
         <div>
           <p className="font-semibold text-gray-900 text-lg">
@@ -659,37 +700,47 @@ function Step5Test({
             {state.selectedTemplate ? `${state.businessName} · ${state.selectedTemplate.industry}` : state.businessName}
           </p>
         </div>
-        <Button
-          onClick={handleCreateAndTest}
-          disabled={creating || !state.selectedTemplate}
-          size="lg"
-          className="px-8"
-        >
-          {creating ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Setting up agent...</>
-          ) : (
-            <><Phone className="w-4 h-4 mr-2" /> Start test call</>
-          )}
-        </Button>
-        {!state.selectedTemplate && (
-          <p className="text-xs text-gray-400">Select a template in Step 2 to enable test calls</p>
+        {isReady && (
+          <Button
+            onClick={() => setTestCallOpen(true)}
+            size="lg"
+            className="px-8"
+          >
+            <Phone className="w-4 h-4 mr-2" /> Start test call
+          </Button>
+        )}
+        {creating && (
+          <p className="text-sm text-blue-600">Setting up your agent...</p>
         )}
       </div>
 
-      {agentId && (
+      {isReady && (
         <Alert className="border-green-200 bg-green-50">
           <CheckCircle2 className="w-4 h-4 text-green-600" />
           <AlertDescription className="text-green-700 ml-2">
             Agent created successfully! You can test call it or proceed to your dashboard.
+            {!state.purchasedPhoneNumber && (
+              <span className="block mt-1 text-xs text-green-600">
+                Note: no phone number configured — inbound calls will not work until you add one from Settings.
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {createError && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertDescription className="text-red-700 ml-2">
+            {createError} — you can still continue to your dashboard and set up your agent there.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="flex gap-3">
-        <Button variant="outline" onClick={onBack} className="w-32" disabled={completing}>
+        <Button variant="outline" onClick={onBack} className="w-32" disabled={completing || creating}>
           <ChevronLeft className="w-4 h-4 mr-1" /> Back
         </Button>
-        <Button onClick={handleFinish} className="flex-1" size="lg" disabled={completing}>
+        <Button onClick={handleFinish} className="flex-1" size="lg" disabled={completing || creating}>
           {completing ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Finishing...</>
           ) : (
@@ -712,7 +763,7 @@ function Step5Test({
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { currentOrganization, refreshOrganizations } = useOrganization();
+  const { currentOrganization, setCurrentOrganization, refreshOrganizations } = useOrganization();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [wizardState, setWizardState] = useState<WizardState>({
@@ -767,8 +818,12 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleComplete = async () => {
-    await refreshOrganizations();
+  const handleComplete = () => {
+    // Synchronously mark onboarding complete in context before navigating
+    // so the OrganizationCheck guard sees the updated state immediately
+    if (currentOrganization) {
+      setCurrentOrganization({ ...currentOrganization, onboarding_completed: true });
+    }
     router.replace("/dashboard");
   };
 
