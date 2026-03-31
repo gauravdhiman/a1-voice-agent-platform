@@ -702,7 +702,10 @@ After implementing any fix or new feature, you MUST:
    - Verify the change works as expected from the UI
 3. **If browser testing reveals issues**, fix them and re-test before marking the task as done.
 4. **Update documentation** if the change affects user-facing behavior, API contracts, or developer workflows.
-5. A task is only considered **done** when: tests pass, coverage is adequate, docs are current, and agent browser testing confirms correct behavior.
+5. **Verify syntax/build** after every code change:
+   - **Python**: Run `python -m py_compile <file>` on every changed `.py` file to confirm it compiles without syntax errors.
+   - **Frontend**: Run `cd frontend && npm run build` to confirm the Next.js build succeeds with no TypeScript or import errors.
+6. A task is only considered **done** when: tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
 
 ### Development
 

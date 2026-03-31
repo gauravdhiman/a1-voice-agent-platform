@@ -4,22 +4,24 @@ import React, { useState } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Phone, UserX, UserPlus, Settings, Trash2, Plus } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Loader2, Phone, UserX, UserPlus, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   AvailablePhoneNumber,
   PhoneNumberWithAgent,
   formatPhoneNumber,
   getPhoneNumberTypeLabel,
-  getPhoneNumberStatusLabel,
   PhoneNumberStatus,
 } from "@/types/phone-number";
 import { PhoneNumberAssignDialog } from "./phone-number-assign-dialog";
@@ -261,18 +263,21 @@ export function PhoneNumberDashboard({
         />
       )}
 
-      <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Search & Purchase Phone Number</DialogTitle>
-          </DialogHeader>
-          <PhoneNumberSearch
-            organizationId={organizationId}
-            creditBalance={creditBalance}
-            onNumberSelected={handleNumberSelectedFromSearch}
-          />
-        </DialogContent>
-      </Dialog>
+      <Sheet open={searchDialogOpen} onOpenChange={setSearchDialogOpen}>
+        <SheetContent className="flex flex-col w-full sm:max-w-xl">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle>Search & Purchase Phone Number</SheetTitle>
+            <SheetDescription>Find and select a phone number for your organization</SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <PhoneNumberSearch
+              organizationId={organizationId}
+              creditBalance={creditBalance}
+              onNumberSelected={handleNumberSelectedFromSearch}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <PhoneNumberPurchase
         organizationId={organizationId}

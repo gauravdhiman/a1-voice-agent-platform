@@ -22,12 +22,13 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { TestCallModal } from "@/components/agents/test-call-modal";
 import { cn } from "@/lib/utils";
 import {
@@ -312,38 +313,47 @@ function Step2Template({
         </div>
       )}
 
-      <Dialog open={!!previewTemplate} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{previewTemplate?.name} — Preview</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-gray-600 space-y-3 py-2">
+      <Sheet open={!!previewTemplate} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
+        <SheetContent className="flex flex-col w-full sm:max-w-md">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle>{previewTemplate?.name}</SheetTitle>
+            <SheetDescription>Template preview</SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
             {previewTemplate?.greeting && (
               <div>
-                <span className="font-medium text-gray-800">Greeting:</span>
-                <p className="mt-1">{previewTemplate.greeting.replace("[Business Name]", state.businessName || "Your Business")}</p>
+                <span className="text-sm font-medium text-gray-800">Greeting</span>
+                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
+                  {previewTemplate.greeting.replace("[Business Name]", state.businessName || "Your Business")}
+                </p>
               </div>
             )}
             {previewTemplate?.mission && (
               <div>
-                <span className="font-medium text-gray-800">Mission:</span>
-                <p className="mt-1">{previewTemplate.mission}</p>
+                <span className="text-sm font-medium text-gray-800">Mission</span>
+                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{previewTemplate.mission}</p>
               </div>
             )}
             {previewTemplate?.tone && (
               <div>
-                <span className="font-medium text-gray-800">Tone:</span>
-                <p className="mt-1">{previewTemplate.tone}</p>
+                <span className="text-sm font-medium text-gray-800">Tone</span>
+                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{previewTemplate.tone}</p>
               </div>
             )}
             {previewTemplate?.persona && (
               <div>
-                <span className="font-medium text-gray-800">Persona:</span>
-                <p className="mt-1">{previewTemplate.persona}</p>
+                <span className="text-sm font-medium text-gray-800">Persona</span>
+                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{previewTemplate.persona}</p>
+              </div>
+            )}
+            {previewTemplate?.custom_instructions && (
+              <div>
+                <span className="text-sm font-medium text-gray-800">Custom Instructions</span>
+                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-line">{previewTemplate.custom_instructions}</p>
               </div>
             )}
           </div>
-          <DialogFooter className="gap-2">
+          <SheetFooter className="px-6 py-4 border-t gap-2">
             <Button variant="outline" onClick={() => setPreviewTemplate(null)}>
               Close
             </Button>
@@ -355,9 +365,9 @@ function Step2Template({
             >
               Select this template
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <div className="flex gap-3">
         <Button variant="outline" onClick={onBack} className="w-32">
