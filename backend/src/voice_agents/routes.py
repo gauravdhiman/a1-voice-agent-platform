@@ -48,6 +48,10 @@ async def create_agent(
                 detail="Insufficient permissions to create agents for this organization",
             )
 
+    # Force inactive if no phone number assigned
+    if not agent_data.phone_number:
+        agent_data.is_active = False
+
     agent, error = await voice_agent_service.create_agent(agent_data)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
@@ -177,13 +181,6 @@ async def get_test_token(
                 detail="Insufficient permissions to test this agent",
             )
 
-    # Check if agent is active
-    if not agent.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot test an inactive agent. Please activate the agent first.",
-        )
-
     # Generate test token
     token, server_url, room_name = livekit_service.generate_test_token(
         agent_id=str(agent_id),
@@ -281,6 +278,16 @@ async def update_agent(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions to update this agent",
+            )
+
+    # Prevent activating an agent without a phone number
+    if agent_data.is_active is True:
+        # Check the phone number that will be effective after update
+        effective_phone = agent_data.phone_number if agent_data.phone_number is not None else agent.phone_number
+        if not effective_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot activate an agent without a phone number. Please assign a phone number first.",
             )
 
     updated_agent, error = await voice_agent_service.update_agent(agent_id, agent_data)

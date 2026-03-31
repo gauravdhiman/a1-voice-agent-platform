@@ -647,21 +647,35 @@ Example for Support Agent:
                 )}
               </div>
 
-              <div className="flex items-center space-x-2 pt-2">
-                <Switch
-                  id="active"
-                  checked={agentForm.is_active}
-                  onCheckedChange={(checked) =>
-                    setAgentForm({ ...agentForm, is_active: checked === true })
-                  }
-                  disabled={!canEdit}
-                />
-                <Label
-                  htmlFor="active"
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  Agent is active and ready to handle calls
-                </Label>
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="active"
+                    checked={agentForm.is_active}
+                    onCheckedChange={(checked) => {
+                      if (checked && !agentForm.phone_number?.trim()) {
+                        toast.warning(
+                          "A phone number is required to activate this agent. Please assign a phone number first.",
+                        );
+                        return;
+                      }
+                      setAgentForm({ ...agentForm, is_active: checked === true });
+                    }}
+                    disabled={!canEdit}
+                  />
+                  <Label
+                    htmlFor="active"
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Agent is active and ready to handle calls
+                  </Label>
+                </div>
+                {!agentForm.phone_number?.trim() && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <Info className="w-3 h-3" />
+                    A phone number must be configured before the agent can be activated.
+                  </p>
+                )}
               </div>
 
               {/* API Key Configuration */}

@@ -673,6 +673,37 @@ Run `pre-commit run --all-files` manually before pushing.
   - Should any TODOs be addressed now instead of later?
   - Are there related TODOs that should be grouped?
 
+### Working Directory
+
+- All changes MUST be made within this project's root directory. Do NOT modify files outside this directory (e.g. external tooling directories, etc.).
+- If Docker containers are running from a different copy (e.g. a other porject  instance), stop them and recreate from this project root using `docker compose -f docker-compose.dev.yml up -d`.
+
+### Local Development Environment
+
+- **Backend, frontend, and worker** run via Docker Compose (`docker-compose.dev.yml`).
+- **Local Supabase** is used for development (not cloud Supabase). It runs on `http://127.0.0.1:54321`.
+- The `.env` file in the project root has local Supabase credentials. `.env.dev` has cloud/staging credentials — do not confuse the two.
+- Backend hot-reloads via volume mounts (`./backend:/app`, `./shared:/app/shared`).
+
+### Test User (Local Supabase)
+
+- **Email:** `test@cogninets.local`
+- **Password:** `Password123!`
+
+### Validation Requirements
+
+After implementing any fix or new feature, you MUST:
+
+1. **Run relevant unit/integration tests** and ensure they pass with good coverage.
+2. **Use the `agent-browser` skill** to validate the change from a user's perspective:
+   - Open the application at `http://localhost:3000`
+   - Log in with the test account (`test@cogninets.local` / `Password123!`)
+   - Navigate through the complete implemented functionality or affected workflow
+   - Verify the change works as expected from the UI
+3. **If browser testing reveals issues**, fix them and re-test before marking the task as done.
+4. **Update documentation** if the change affects user-facing behavior, API contracts, or developer workflows.
+5. A task is only considered **done** when: tests pass, coverage is adequate, docs are current, and agent browser testing confirms correct behavior.
+
 ### Development
 
 - Use `async/await` for all async operations
