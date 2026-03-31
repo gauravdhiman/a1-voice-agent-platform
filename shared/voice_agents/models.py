@@ -14,7 +14,7 @@ class VoiceAgentBase(BaseModel):
     """Base model for Voice Agent."""
 
     name: str = Field(..., min_length=1, max_length=100, description="Agent name")
-    phone_number: str = Field(..., max_length=20, description="Twilio phone number")
+    phone_number: Optional[str] = Field(None, max_length=20, description="Twilio phone number")
     is_active: bool = Field(default=True, description="Whether the agent is active")
     persona: Optional[str] = Field(None, description="Agent persona or role")
     tone: Optional[str] = Field(None, description="Communication tone (e.g., professional, friendly)")
@@ -54,8 +54,10 @@ class VoiceAgentBase(BaseModel):
 
     @field_validator("phone_number")
     @classmethod
-    def validate_phone_number(cls, v: str) -> str:
+    def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
         """Validate E.164 phone number format."""
+        if v is None:
+            return v
         # E.164 format requires country code (1-3 digits) + subscriber number
         # Minimum 8 characters total (including +) for valid international numbers
         if not re.match(r"^\+[1-9]\d{7,14}$", v):

@@ -974,7 +974,13 @@ class UserRoleService:
                         name=org_dict["name"],
                         description=org_dict["description"],
                         slug=org_dict["slug"],
+                        website=org_dict.get("website"),
                         is_active=org_dict["is_active"],
+                        industry=org_dict.get("industry"),
+                        location=org_dict.get("location"),
+                        business_details=org_dict.get("business_details"),
+                        google_api_key=org_dict.get("google_api_key"),
+                        onboarding_completed=org_dict.get("onboarding_completed", False),
                         created_at=org_dict["created_at"],
                         updated_at=org_dict["updated_at"],
                     )
