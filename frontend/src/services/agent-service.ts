@@ -51,6 +51,13 @@ class AgentService {
     return response.data;
   }
 
+  async generateMarkdown(agentId: string): Promise<string> {
+    const response = await apiClient.post<string>(
+      `${this.agentBaseUrl}/${agentId}/generate-markdown`,
+    );
+    return response.data;
+  }
+
   async updateAgent(
     agentId: string,
     agentData: VoiceAgentUpdate,

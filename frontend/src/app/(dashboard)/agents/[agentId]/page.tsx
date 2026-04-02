@@ -53,7 +53,23 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink } from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { voiceTemplateService } from "@/services/voice-template-service";
+import type { VoiceTemplate } from "@/types/voice-template";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -84,6 +100,8 @@ export default function AgentDetailPage() {
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
   const [testCallOpen, setTestCallOpen] = React.useState(false);
+  const [voiceTemplates, setVoiceTemplates] = React.useState<VoiceTemplate[]>([]);
+  const [pendingTemplate, setPendingTemplate] = React.useState<VoiceTemplate | null>(null);
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
@@ -107,6 +125,7 @@ export default function AgentDetailPage() {
     custom_instructions: "",
     is_active: true,
     use_platform_credits: false,
+    instructions_markdown: "",
   });
 
   // Fetch data using React Query
@@ -148,6 +167,49 @@ export default function AgentDetailPage() {
     }
   }, [agent?.organization_id]);
 
+  // Load voice templates for the "Insert template" dropdown
+  React.useEffect(() => {
+    voiceTemplateService
+      .listTemplates()
+      .then(setVoiceTemplates)
+      .catch(() => {});
+  }, []);
+
+  const buildMarkdownFromTemplate = useCallback((template: VoiceTemplate): string => {
+    const sections: string[] = [];
+
+    // Identity & Persona
+    if (template.persona) {
+      sections.push(`# Identity and Persona\n\n${template.persona}`);
+    }
+    if (template.tone) {
+      sections.push(`Your communication style is ${template.tone}.`);
+    }
+
+    // Mission
+    if (template.mission) {
+      sections.push(`# Mission\n\n${template.mission}`);
+    }
+
+    // Business Context (using template variables)
+    sections.push(
+      `# Business Context\n\n- **Business:** {{org.name}}\n- **Industry:** {{org.industry}}\n- **Location:** {{org.location}}\n\n{{org.business_details}}`
+    );
+
+    // Greeting
+    if (template.greeting) {
+      const greeting = template.greeting.replace("[Business Name]", "{{org.name}}");
+      sections.push(`# Default Greeting\n\n${greeting}`);
+    }
+
+    // Procedures / Custom Instructions
+    if (template.custom_instructions) {
+      sections.push(`# Procedures\n\n${template.custom_instructions}`);
+    }
+
+    return sections.join("\n\n");
+  }, []);
+
   // Update form when agent data changes
   React.useEffect(() => {
     if (agent) {
@@ -160,6 +222,7 @@ export default function AgentDetailPage() {
         custom_instructions: agent.custom_instructions || "",
         is_active: agent.is_active,
         use_platform_credits: agent.use_platform_credits || false,
+        instructions_markdown: agent.instructions_markdown || "",
       });
     }
   }, [agent]);
@@ -523,81 +586,97 @@ export default function AgentDetailPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="persona">Agent Persona / Role</Label>
-                  <Input
-                    id="persona"
-                    value={agentForm.persona}
-                    onChange={(e) =>
-                      setAgentForm({ ...agentForm, persona: e.target.value })
-                    }
-                    placeholder="e.g., Front Desk Coordinator"
-                    disabled={!canEdit}
-                  />
+              {/* Agent Instructions (Markdown) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="instructions_markdown" className="text-sm font-medium">
+                      Agent Instructions
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Define your agent&apos;s behavior, persona, and procedures in{" "}
+                      <a
+                        href="https://www.markdownguide.org/basic-syntax/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      >
+                        markdown format
+                      </a>.
+                      Use <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{org.name}}"}</code>,{" "}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{org.industry}}"}</code>,{" "}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{agent.name}}"}</code>{" "}
+                      for dynamic context.
+                    </p>
+                  </div>
+                  {canEdit && voiceTemplates.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <FileText className="w-3.5 h-3.5 mr-1.5" />
+                          Insert template
+                          <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        {voiceTemplates.map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onClick={() => {
+                              if (agentForm.instructions_markdown?.trim()) {
+                                setPendingTemplate(template);
+                                return;
+                              }
+                              const markdown = buildMarkdownFromTemplate(template);
+                              setAgentForm({ ...agentForm, instructions_markdown: markdown });
+                              toast.success(`"${template.name}" template inserted`);
+                            }}
+                          >
+                            <div>
+                              <div className="font-medium text-sm">{template.name}</div>
+                              <div className="text-xs text-muted-foreground">{template.industry}</div>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tone">Communication Tone</Label>
-                  <select
-                    id="tone"
-                    value={agentForm.tone}
-                    onChange={(e) =>
-                      setAgentForm({ ...agentForm, tone: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
-                    disabled={!canEdit}
-                  >
-                    <option value="Professional">Professional</option>
-                    <option value="Friendly">Friendly</option>
-                    <option value="Enthusiastic">Enthusiastic</option>
-                    <option value="Minimalist">Minimalist / Formal</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="mission">Key Mission</Label>
                 <Textarea
-                  id="mission"
-                  value={agentForm.mission}
-                  onChange={(e) =>
-                    setAgentForm({ ...agentForm, mission: e.target.value })
-                  }
-                  placeholder="What should this agent accomplish?"
-                  className="min-h-[80px]"
-                  disabled={!canEdit}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="custom_instructions">
-                  Additional Instructions
-                </Label>
-                <Textarea
-                  id="custom_instructions"
-                  value={agentForm.custom_instructions}
+                  id="instructions_markdown"
+                  value={agentForm.instructions_markdown}
                   onChange={(e) =>
                     setAgentForm({
                       ...agentForm,
-                      custom_instructions: e.target.value,
+                      instructions_markdown: e.target.value,
                     })
                   }
-                  placeholder={`Add context specific to this agent's role. Include:
+                  placeholder={`# Identity and Persona
 
-• Company policies and procedures (for support agents)
-• Unique selling points and differentiators (for sales agents)
-• Common customer questions and how to handle them
-• Emergency or after-hours protocols
-• Specific workflows or escalation procedures
-• Any other context that helps this agent handle calls effectively
+You are a friendly receptionist representing {{org.name}}.
+Your communication style is warm, professional, and reassuring.
 
-Example for Sales Agent:
-"Always mention our 30-day money-back guarantee. If a customer asks about pricing, emphasize our competitive rates and bundle discounts. For enterprise inquiries, gather company size and current provider before scheduling a demo."
+# Mission
 
-Example for Support Agent:
-"For billing issues, verify account details first. If the issue requires escalation, collect callback number and best time to reach them. For technical problems, try basic troubleshooting steps before creating a ticket."`}
-                  className="min-h-[200px]"
+Help patients schedule appointments, answer common questions,
+and provide a welcoming experience.
+
+# Business Context
+
+- Industry: {{org.industry}}
+- Location: {{org.location}}
+
+# Procedures
+
+## Appointment Booking
+1. Ask for preferred date and time
+2. Check availability
+3. Confirm details with caller
+
+## After Hours
+If calling outside business hours, offer to take a message
+and confirm someone will call back the next business day.`}
+                  className="min-h-[400px] font-mono text-sm"
                   disabled={!canEdit}
                 />
               </div>
@@ -615,7 +694,7 @@ Example for Support Agent:
                     ) : (
                       <Eye className="h-4 w-4 text-slate-600" />
                     )}
-                    <span className="font-medium text-sm">Preview Generated System Prompt</span>
+                    <span className="font-medium text-sm">Preview System Prompt</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {showSystemPrompt ? "Click to hide" : "Click to view"}
@@ -625,7 +704,7 @@ Example for Support Agent:
                 {showSystemPrompt && (
                   <div className="p-4 bg-slate-50 border-t">
                     <p className="text-sm text-muted-foreground mb-3">
-                      This is the system prompt the AI receives based on your organization and agent configuration. It combines your business details, agent persona, and instructions into a comprehensive prompt.
+                      This is the final system prompt the AI receives — your markdown instructions plus system guardrails and tool guidelines.
                     </p>
                     {systemPromptLoading ? (
                       <div className="flex items-center justify-center py-8">
@@ -633,14 +712,12 @@ Example for Support Agent:
                         <span className="ml-2 text-sm text-muted-foreground">Generating preview...</span>
                       </div>
                     ) : systemPromptPreview ? (
-                      <div className="bg-white border rounded-md p-4 overflow-x-auto">
-                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
-                          {systemPromptPreview}
-                        </pre>
+                      <div className="bg-white border rounded-md p-4 overflow-x-auto prose prose-sm prose-slate max-w-none">
+                        <ReactMarkdown>{systemPromptPreview}</ReactMarkdown>
                       </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm">
-                        Unable to generate preview. Please ensure organization and agent data is saved.
+                        Unable to generate preview. Save your instructions first, then check the preview.
                       </div>
                     )}
                   </div>
@@ -879,6 +956,35 @@ Example for Support Agent:
           toolName={selectedTool.name.replace(/_/g, " ")}
         />
       )}
+
+      <Dialog open={!!pendingTemplate} onOpenChange={(open) => !open && setPendingTemplate(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace current instructions?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Inserting the <span className="font-medium text-foreground">{pendingTemplate?.name}</span> template
+            will replace your current agent instructions. This action cannot be undone.
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPendingTemplate(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (pendingTemplate) {
+                  const markdown = buildMarkdownFromTemplate(pendingTemplate);
+                  setAgentForm({ ...agentForm, instructions_markdown: markdown });
+                  toast.success(`"${pendingTemplate.name}" template inserted`);
+                }
+                setPendingTemplate(null);
+              }}
+            >
+              Replace instructions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -73,7 +73,109 @@ TOOLSET_INSTRUCTIONS = {
 
 
 class PromptBuilder:
-    """Service for building system prompts from organization and agent details."""
+    """Service for building system prompts from organization and agent details.
+
+    Supports two prompt building strategies:
+    - **Field-based** (legacy): Assembles prompt from individual agent fields
+      (persona, tone, mission, custom_instructions) via build_system_prompt().
+    - **Markdown-based**: Uses agent's instructions_markdown directly, rendering
+      template variables like {{org.name}}, via build_from_markdown().
+
+    The build() method auto-selects the appropriate strategy based on
+    whether instructions_markdown is set on the agent.
+    """
+
+    # Template variables supported in markdown instructions
+    TEMPLATE_VARS = {
+        "org.name": lambda org, agent: org.name or "",
+        "org.industry": lambda org, agent: org.industry or "",
+        "org.location": lambda org, agent: org.location or "",
+        "org.business_details": lambda org, agent: org.business_details or "",
+        "agent.name": lambda org, agent: agent.name or "",
+    }
+
+    @staticmethod
+    def build(
+        org: Organization,
+        agent: VoiceAgent,
+        default_rules: Optional[str] = None,
+        enabled_tools: Optional[List[str]] = None,
+    ) -> str:
+        """Build system prompt, auto-selecting markdown or field-based strategy.
+
+        If the agent has instructions_markdown set, uses that as the primary
+        prompt content with template variable rendering. Otherwise falls back
+        to the field-based build_system_prompt() method.
+
+        Args:
+            org: Organization details for context injection.
+            agent: Voice agent configuration.
+            default_rules: Optional output rules to append.
+            enabled_tools: Optional list of enabled tool names.
+
+        Returns:
+            Complete system prompt string.
+        """
+        if agent.instructions_markdown:
+            return PromptBuilder.build_from_markdown(
+                org, agent, agent.instructions_markdown,
+                default_rules, enabled_tools,
+            )
+        return PromptBuilder.build_system_prompt(
+            org, agent, default_rules, enabled_tools,
+        )
+
+    @staticmethod
+    def build_from_markdown(
+        org: Organization,
+        agent: VoiceAgent,
+        markdown: str,
+        default_rules: Optional[str] = None,
+        enabled_tools: Optional[List[str]] = None,
+    ) -> str:
+        """Build system prompt from user-provided markdown with template variable rendering.
+
+        Template variables like {{org.name}} are replaced with actual values.
+        System guardrails and tool guidelines are appended after the user's content
+        to ensure safety policies cannot be overridden.
+
+        Args:
+            org: Organization details for template variable rendering.
+            agent: Voice agent configuration.
+            markdown: Raw markdown instructions with optional template variables.
+            default_rules: Optional output rules to append.
+            enabled_tools: Optional list of enabled tool names.
+
+        Returns:
+            Complete system prompt string with rendered variables and appended guardrails.
+        """
+        # Render template variables
+        rendered = markdown
+        for var_name, resolver in PromptBuilder.TEMPLATE_VARS.items():
+            placeholder = "{{" + var_name + "}}"
+            rendered = rendered.replace(placeholder, resolver(org, agent))
+
+        sections = [rendered]
+
+        # Always append guardrails (safety net)
+        sections.append(GENERIC_SYSTEM_GUARDRAILS)
+
+        # Append tool guidelines if applicable
+        if enabled_tools:
+            tool_instructions = []
+            for tool_name in enabled_tools:
+                if tool_name in TOOLSET_INSTRUCTIONS:
+                    tool_instructions.append(TOOLSET_INSTRUCTIONS[tool_name])
+            if tool_instructions:
+                sections.append(
+                    "# TOOLSET-SPECIFIC GUIDELINES\n" + "\n\n".join(tool_instructions)
+                )
+
+        # Append output rules if provided
+        if default_rules:
+            sections.append(default_rules)
+
+        return "\n\n".join(sections)
 
     @staticmethod
     def build_system_prompt(
@@ -99,7 +201,7 @@ class PromptBuilder:
 
         # 1. Identity & Persona
         role = agent.persona or "a helpful AI voice assistant"
-        identity_text = f"You are {role}"
+        identity_text = role if role.lower().startswith("you are") else f"You are {role}"
         if org.name:
             identity_text += f" representing {org.name}"
 

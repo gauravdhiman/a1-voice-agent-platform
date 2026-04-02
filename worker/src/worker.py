@@ -320,7 +320,7 @@ async def entrypoint(ctx: JobContext):
             # Fallback to platform key if org not found
             org_google_api_key = None
         else:
-            instructions = PromptBuilder.build_system_prompt(
+            instructions = PromptBuilder.build(
                 org=org,
                 agent=voice_agent,
                 default_rules=default_system_prompt,

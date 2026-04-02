@@ -119,6 +119,153 @@ class TestPromptBuilder:
         # No rules section when default_rules is None
         assert "# OUTPUT RULES" not in prompt
 
+    def test_build_from_markdown_with_template_vars(self):
+        """Test markdown prompt building with template variable rendering."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Pleasant Pediatrics",
+            slug="pleasant-pediatrics",
+            industry="dental",
+            location="Phoenix, AZ",
+            business_details="Family dental office",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Receptionist",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        markdown = "You are a receptionist at {{org.name}} in {{org.location}}.\nIndustry: {{org.industry}}\nAgent: {{agent.name}}"
+        prompt = PromptBuilder.build_from_markdown(org, agent, markdown)
+
+        assert "Pleasant Pediatrics" in prompt
+        assert "Phoenix, AZ" in prompt
+        assert "dental" in prompt
+        assert "Receptionist" in prompt
+        # Guardrails always appended
+        assert "SYSTEM GUARDRAILS" in prompt
+
+    def test_build_from_markdown_missing_vars_render_empty(self):
+        """Test that unresolved template vars render as empty strings."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        markdown = "Location: {{org.location}}, Details: {{org.business_details}}"
+        prompt = PromptBuilder.build_from_markdown(org, agent, markdown)
+
+        assert "Location: , Details: " in prompt
+
+    def test_build_from_markdown_includes_tool_guidelines(self):
+        """Test that tool guidelines are appended in markdown mode."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        markdown = "# My Agent"
+        prompt = PromptBuilder.build_from_markdown(
+            org, agent, markdown, enabled_tools=["Google_Calendar"]
+        )
+
+        assert "Google Calendar Tool Guidelines" in prompt
+
+    def test_build_routes_to_markdown_when_set(self):
+        """Test that build() uses markdown when instructions_markdown is set."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            persona="Should NOT appear",
+            instructions_markdown="# Custom Instructions\n\nThis is my agent at {{org.name}}.",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build(org, agent)
+
+        # Should use markdown content, not field-based
+        assert "Custom Instructions" in prompt
+        assert "This is my agent at Test Co" in prompt
+        # Field-based persona should NOT be assembled
+        assert "Should NOT appear" not in prompt
+
+    def test_build_falls_back_to_fields_when_no_markdown(self):
+        """Test that build() uses field-based when no markdown is set."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            persona="Sales Rep",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build(org, agent)
+
+        # Should use field-based builder
+        assert "Sales Rep" in prompt
+        assert "IDENTITY AND PERSONA" in prompt
+
     def test_build_system_prompt_business_context_partial(self):
         """Test business context section with only some fields."""
         now = datetime.now(timezone.utc)

@@ -249,13 +249,80 @@ async def get_agent_system_prompt(
 - Never share sensitive information
 """
     
-    system_prompt = PromptBuilder.build_system_prompt(
+    system_prompt = PromptBuilder.build(
         org=org,
         agent=agent,
         default_rules=default_rules
     )
 
     return system_prompt
+
+
+@agent_router.post("/{agent_id}/generate-markdown", response_model=str)
+@tracer.start_as_current_span("voice_agent.routes.generate_markdown")
+async def generate_markdown_from_fields(
+    agent_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Generate markdown instructions from existing field-based agent config.
+
+    This helper converts the agent's current field-based configuration
+    (persona, tone, mission, custom_instructions) plus organization context
+    into a single markdown document that the user can edit.
+    """
+    current_user_id, user_profile = user_data
+
+    agent, error = await voice_agent_service.get_agent_by_id(agent_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role(
+            "org_admin", str(agent.organization_id)
+        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to view this agent",
+            )
+
+    org_service = OrganizationService()
+    org, org_error = await org_service.get_organization_by_id(agent.organization_id)
+
+    if org_error or not org:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not fetch organization data: {org_error}",
+        )
+
+    # Build the field-based prompt (without guardrails/tool sections)
+    # so the user gets a clean starting point for markdown editing
+    sections = []
+
+    role = agent.persona or "a helpful AI voice assistant"
+    identity = role if role.lower().startswith("you are") else f"You are {role}"
+    if org.name:
+        identity += f" representing {org.name}"
+    if agent.tone:
+        identity += f". Your communication style is {agent.tone}."
+    sections.append(f"# Identity and Persona\n\n{identity}")
+
+    if agent.mission:
+        sections.append(f"# Mission\n\n{agent.mission}")
+
+    business_info = []
+    if org.industry:
+        business_info.append(f"- **Industry:** {org.industry}")
+    if org.location:
+        business_info.append(f"- **Location:** {org.location}")
+    if org.business_details:
+        business_info.append(f"\n{org.business_details}")
+    if business_info:
+        sections.append("# Business Context\n\n" + "\n".join(business_info))
+
+    if agent.custom_instructions:
+        sections.append(f"# Additional Instructions\n\n{agent.custom_instructions}")
+
+    return "\n\n".join(sections)
 
 
 @agent_router.put("/{agent_id}", response_model=VoiceAgent)

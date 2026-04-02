@@ -630,6 +630,30 @@ function Step5Test({
           ? `Business: ${state.businessName}\nLocation: ${state.location}\n\n${state.businessDescription}`
           : `Business: ${state.businessName}\nLocation: ${state.location}`;
 
+        // Assemble markdown instructions from template + business context
+        const markdownSections: string[] = [];
+
+        if (template.persona) {
+          markdownSections.push(`# Identity and Persona\n\n${template.persona}`);
+        }
+        if (template.tone) {
+          markdownSections.push(`Your communication style is ${template.tone}.`);
+        }
+        if (template.mission) {
+          markdownSections.push(`# Mission\n\n${template.mission}`);
+        }
+
+        markdownSections.push(`# Business Context\n\n${businessContext}`);
+
+        if (greeting) {
+          markdownSections.push(`# Default Greeting\n\n${greeting}`);
+        }
+        if (template.custom_instructions) {
+          markdownSections.push(`# Procedures\n\n${template.custom_instructions}`);
+        }
+
+        const instructionsMarkdown = markdownSections.join("\n\n");
+
         const agent = await agentService.createAgent({
           organization_id: orgId,
           name: agentName,
@@ -637,13 +661,8 @@ function Step5Test({
           persona: template.persona ?? undefined,
           tone: template.tone ?? undefined,
           mission: template.mission ?? undefined,
-          custom_instructions: [
-            template.custom_instructions,
-            greeting ? `Default greeting: ${greeting}` : null,
-            businessContext,
-          ]
-            .filter(Boolean)
-            .join("\n\n") || undefined,
+          custom_instructions: template.custom_instructions ?? undefined,
+          instructions_markdown: instructionsMarkdown,
           is_active: true,
         });
 
