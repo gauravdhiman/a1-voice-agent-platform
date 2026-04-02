@@ -510,7 +510,7 @@ export default function AgentDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {canEdit && agent.is_active && (
+          {canEdit && (
             <>
               <Button
                 variant="outline"
@@ -519,7 +519,7 @@ export default function AgentDetailPage() {
                 <Phone className="h-4 w-4 mr-2" />
                 Test Agent
               </Button>
-              <EmbedButtonConfig agentId={agentId} />
+              {agent.is_active && <EmbedButtonConfig agentId={agentId} />}
             </>
           )}
           {canEdit && (
