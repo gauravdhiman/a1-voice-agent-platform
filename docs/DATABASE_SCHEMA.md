@@ -203,6 +203,8 @@ Stores voice agent configurations for each organization.
 | tone                | VARCHAR(100) | NULLABLE                        | Communication style (Professional, etc) |
 | mission             | TEXT         | NULLABLE                        | Primary goals for this agent            |
 | custom_instructions | TEXT         | NULLABLE                        | Agent-specific context (policies, USPs, FAQs, protocols) |
+| instructions_markdown | TEXT       | NULLABLE                        | Full agent instructions in markdown (replaces field-based prompt building when set). Supports template variables: `{{org.name}}`, `{{org.industry}}`, `{{org.location}}`, `{{org.business_details}}`, `{{agent.name}}` |
+| use_platform_credits | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Use platform credits instead of org API key |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
@@ -1029,6 +1031,10 @@ erDiagram
 12. `20260118000001` - Add last_refreshed_at to agent_tools
 13. `20260127000001` - Enhance organization and agent models (add: industry, location, business_details, persona, tone, mission, custom_instructions; remove: system_prompt - now auto-generated via PromptBuilder)
 14. `20260217004742` - Add agent_embed_configs and embed_call_logs tables for embed button feature
+15. `20260222000000` - Add use_platform_credits column to voice_agents
+16. `20260329000001` - Add phone_numbers table for Twilio phone number management
+17. `20260329000002` - Add call_logs table for tracking voice agent calls
+18. `20260331000001` - Add instructions_markdown column to voice_agents (Phase 1: markdown-based agent instructions)
 
 ---
 

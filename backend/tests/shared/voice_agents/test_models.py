@@ -1,0 +1,124 @@
+"""
+Tests for Voice Agent Pydantic models.
+"""
+
+from datetime import datetime, timezone
+from uuid import UUID
+
+import pytest
+from pydantic import ValidationError
+from shared.voice_agents.models import (
+    VoiceAgent,
+    VoiceAgentBase,
+    VoiceAgentCreate,
+    VoiceAgentUpdate,
+)
+
+
+class TestPhoneNumberValidation:
+    """Test cases for phone number E.164 validation."""
+
+    def test_valid_us_phone_number(self):
+        """Test valid US phone number passes validation."""
+        agent = VoiceAgentBase(name="Test", phone_number="+14155551234")
+        assert agent.phone_number == "+14155551234"
+
+    def test_valid_uk_phone_number(self):
+        """Test valid UK phone number passes validation."""
+        agent = VoiceAgentBase(name="Test", phone_number="+441632960000")
+        assert agent.phone_number == "+441632960000"
+
+    def test_none_phone_number_allowed(self):
+        """Test None phone number is allowed (agent without phone)."""
+        agent = VoiceAgentBase(name="Test", phone_number=None)
+        assert agent.phone_number is None
+
+    def test_empty_string_phone_number_becomes_none(self):
+        """Test empty string phone number is converted to None."""
+        agent = VoiceAgentBase(name="Test", phone_number="")
+        assert agent.phone_number is None
+
+    def test_missing_phone_number_defaults_to_none(self):
+        """Test omitted phone number defaults to None."""
+        agent = VoiceAgentBase(name="Test")
+        assert agent.phone_number is None
+
+    def test_invalid_phone_number_no_plus(self):
+        """Test phone number without + prefix is rejected."""
+        with pytest.raises(ValidationError, match="E.164 format"):
+            VoiceAgentBase(name="Test", phone_number="14155551234")
+
+    def test_invalid_phone_number_too_short(self):
+        """Test phone number that is too short is rejected."""
+        with pytest.raises(ValidationError, match="E.164 format"):
+            VoiceAgentBase(name="Test", phone_number="+123")
+
+    def test_invalid_phone_number_letters(self):
+        """Test phone number with letters is rejected."""
+        with pytest.raises(ValidationError, match="E.164 format"):
+            VoiceAgentBase(name="Test", phone_number="+1415abc1234")
+
+
+class TestInstructionsMarkdown:
+    """Test cases for instructions_markdown field."""
+
+    def test_instructions_markdown_default_none(self):
+        """Test instructions_markdown defaults to None."""
+        agent = VoiceAgentBase(name="Test")
+        assert agent.instructions_markdown is None
+
+    def test_instructions_markdown_with_content(self):
+        """Test instructions_markdown accepts markdown content."""
+        md = "# Agent\n\nYou are a receptionist for {{org.name}}."
+        agent = VoiceAgentBase(name="Test", instructions_markdown=md)
+        assert agent.instructions_markdown == md
+
+    def test_instructions_markdown_with_template_vars(self):
+        """Test instructions_markdown preserves template variables as-is."""
+        md = "Industry: {{org.industry}}\nLocation: {{org.location}}"
+        agent = VoiceAgentBase(name="Test", instructions_markdown=md)
+        assert "{{org.industry}}" in agent.instructions_markdown
+        assert "{{org.location}}" in agent.instructions_markdown
+
+    def test_create_model_includes_instructions_markdown(self):
+        """Test VoiceAgentCreate accepts instructions_markdown."""
+        agent = VoiceAgentCreate(
+            name="Test Agent",
+            organization_id=UUID("00000000-0000-0000-0000-000000000001"),
+            instructions_markdown="# Test\n\nInstructions here.",
+        )
+        assert agent.instructions_markdown == "# Test\n\nInstructions here."
+
+    def test_update_model_includes_instructions_markdown(self):
+        """Test VoiceAgentUpdate accepts instructions_markdown."""
+        update = VoiceAgentUpdate(instructions_markdown="# Updated instructions")
+        assert update.instructions_markdown == "# Updated instructions"
+
+    def test_voice_agent_response_includes_instructions_markdown(self):
+        """Test VoiceAgent response model includes instructions_markdown."""
+        now = datetime.now(timezone.utc)
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            organization_id=UUID("00000000-0000-0000-0000-000000000002"),
+            name="Test",
+            is_active=True,
+            instructions_markdown="# My Agent",
+            created_at=now,
+            updated_at=now,
+        )
+        assert agent.instructions_markdown == "# My Agent"
+
+    def test_voice_agent_without_markdown_falls_back(self):
+        """Test VoiceAgent works without instructions_markdown (backward compat)."""
+        now = datetime.now(timezone.utc)
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            organization_id=UUID("00000000-0000-0000-0000-000000000002"),
+            name="Test",
+            persona="A helpful assistant",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        assert agent.instructions_markdown is None
+        assert agent.persona == "A helpful assistant"

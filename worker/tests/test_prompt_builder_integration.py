@@ -312,3 +312,75 @@ class TestPromptBuilderEdgeCases:
         assert "1-800-555-0123" in prompt
         assert 'Handle "urgent" requests first' in prompt
         assert "<script> tags" in prompt
+
+    def test_build_uses_markdown_when_instructions_markdown_set(self, sample_organization):
+        """Test that PromptBuilder.build() uses markdown instructions when set."""
+        from shared.voice_agents.prompt_builder import PromptBuilder
+        from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+
+        now = datetime.now(timezone.utc)
+        org_data = sample_organization
+        org = Organization(**org_data)
+
+        agent = VoiceAgent(
+            id=UUID("87654321-4321-8765-4321-876543218765"),
+            organization_id=org.id,
+            name="Markdown Agent",
+            persona="Should NOT appear in prompt",
+            instructions_markdown="# Custom Receptionist\n\nYou work at {{org.name}} in {{org.location}}.",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        default_rules = "# OUTPUT RULES\n- Be concise"
+
+        prompt = PromptBuilder.build(
+            org=org,
+            agent=agent,
+            default_rules=default_rules,
+            enabled_tools=["Google_Calendar"],
+        )
+
+        # Markdown content used with template vars rendered
+        assert "Custom Receptionist" in prompt
+        assert "Acme Corporation" in prompt
+        assert "123 Innovation Drive" in prompt
+        # Field-based persona NOT used
+        assert "Should NOT appear" not in prompt
+        # Guardrails appended
+        assert "SYSTEM GUARDRAILS" in prompt
+        # Tool guidelines appended
+        assert "Google Calendar Tool Guidelines" in prompt
+        # Default rules appended
+        assert "OUTPUT RULES" in prompt
+
+    def test_build_falls_back_to_fields_when_no_markdown(self, sample_organization):
+        """Test that PromptBuilder.build() falls back to field-based when no markdown."""
+        from shared.voice_agents.prompt_builder import PromptBuilder
+        from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+
+        now = datetime.now(timezone.utc)
+        org_data = sample_organization
+        org = Organization(**org_data)
+
+        agent = VoiceAgent(
+            id=UUID("87654321-4321-8765-4321-876543218765"),
+            organization_id=org.id,
+            name="Field Agent",
+            persona="Technical Support Specialist",
+            tone="professional",
+            mission="Resolve issues quickly",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build(org=org, agent=agent)
+
+        # Field-based content used
+        assert "Technical Support Specialist" in prompt
+        assert "IDENTITY AND PERSONA" in prompt
+        assert "Resolve issues quickly" in prompt

@@ -695,19 +695,28 @@ Run `pre-commit run --all-files` manually before pushing.
 
 After implementing any fix or new feature, you MUST:
 
-1. **Run relevant unit/integration tests** and ensure they pass with good coverage.
-2. **Use the `agent-browser` skill** to validate the change from a user's perspective:
+1. **Add or update tests** for every code change, BEFORE raising a PR:
+   - **Unit tests** (Python `pytest`): Test models, validators, service methods, PromptBuilder logic
+   - **Route/integration tests** (Python `pytest`): Test API endpoints with mocked dependencies
+   - **Worker integration tests**: Test PromptBuilder integration, tool integration
+   - **Frontend tests** (if applicable): Test service methods, component behavior
+   - Rule: If you changed code, there must be a corresponding test change. No exceptions.
+2. **Run relevant unit/integration tests** and ensure they pass with good coverage.
+3. **Use the `agent-browser` skill** to validate the change from a user's perspective:
    - Open the application at `http://localhost:3000`
    - Log in with the test account (`test@cogninets.local` / `Password123!`)
    - Navigate through the complete implemented functionality or affected workflow
    - Verify the change works as expected from the UI
-3. **If browser testing reveals issues**, fix them and re-test before marking the task as done.
-4. **Update documentation** if the change affects user-facing behavior, API contracts, or developer workflows.
-5. **Verify syntax/build** after every code change:
+4. **If browser testing reveals issues**, fix them and re-test before marking the task as done.
+5. **Update documentation** if the change affects user-facing behavior, API contracts, or developer workflows:
+   - `docs/DATABASE_SCHEMA.md` — Update when tables/columns change
+   - `docs/` relevant section — Update when API endpoints, features, or architecture change
+   - `AGENTS.md` — Update when new conventions or rules are established
+6. **Verify syntax/build** after every code change:
    - **Python**: Run `python -m py_compile <file>` on every changed `.py` file to confirm it compiles without syntax errors.
-   - **Frontend**: Run `cd frontend && npm run build` to confirm the Next.js build succeeds with no TypeScript or import errors.
-     - **IMPORTANT**: Never run `next build` or `npm run build` inside the frontend **dev** container. The build output overwrites the `.next` directory used by the dev server, causing `ENOENT` errors and `Internal Server Error`. Instead, run the build check in a separate one-off container or locally outside Docker.
-6. A task is only considered **done** when: tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
+   - **Frontend**: Run `docker exec <container> npx tsc --noEmit` to confirm TypeScript compiles with no errors in source files (ignore pre-existing `.next/types` and test file errors).
+     - **IMPORTANT**: Never run `next build` or `npm run build` inside the frontend **dev** container. The build output overwrites the `.next` directory used by the dev server, causing `ENOENT` errors and `Internal Server Error`. Instead, use `tsc --noEmit` for type checking only.
+7. A task is only considered **done** when: tests are added/updated, tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
 
 ### Development
 
