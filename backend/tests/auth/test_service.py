@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
+from gotrue.errors import AuthApiError
 
 from src.auth.service import AuthService
 from src.auth.models import SignUpRequest, SignInRequest
@@ -154,7 +155,7 @@ class TestAuthServiceSignUp:
         mock_supabase_auth
     ):
         """Returns 409 Conflict for duplicate email."""
-        mock_supabase_auth.sign_up.side_effect = Exception("User already registered")
+        mock_supabase_auth.sign_up.side_effect = AuthApiError("User already registered", 422, "user_already_exists")
         
         result, error = await auth_service.sign_up(sign_up_request)
         

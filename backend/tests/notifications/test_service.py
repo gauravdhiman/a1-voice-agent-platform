@@ -387,15 +387,15 @@ class TestNotificationServiceTemplates:
         required_vars = ["name"]
         template_vars = {"name": "John"}
         
-        with patch('src.notifications.service.settings') as mock_settings:
+        with patch('shared.config.settings') as mock_settings:
             mock_settings.app_name = "SaaS Platform API"
             mock_settings.app_base_url = "https://test.app"
-            
+
             result = validate_template_variables(required_vars, template_vars, apply_defaults=True)
-        
+
         assert result["name"] == "John"
         assert result["app_name"] == "SaaS Platform API"
-        assert result["app_url"] == "http://localhost:3000"
+        assert result["app_url"] == "https://test.app"
 
     @pytest.mark.asyncio
     async def test_sanitize_template_variables(
