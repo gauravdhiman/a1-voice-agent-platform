@@ -114,8 +114,13 @@ class TestTestTokenEndpoint:
             assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_get_test_token_inactive_agent(self):
-        """Test test token when agent is inactive."""
+    async def test_get_test_token_allows_inactive_agent(self):
+        """Test that inactive agents are allowed to generate test tokens.
+
+        Browser-based testing via LiveKit doesn't require the agent to be
+        active (active status only gates inbound phone calls, not test calls).
+        Without LiveKit configured, this returns 503 — same as active agents.
+        """
         from src.voice_agents.routes import get_test_token
         from fastapi import HTTPException
         from shared.voice_agents.models import VoiceAgent
@@ -140,14 +145,19 @@ class TestTestTokenEndpoint:
         with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with pytest.raises(HTTPException) as exc_info:
-                await get_test_token(
-                    agent_id=test_agent_id,
-                    user_data=(test_user_id, mock_user_profile),
-                )
+            with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
+                # Simulate LiveKit not configured
+                mock_livekit.generate_test_token = Mock(return_value=(None, None, None))
 
-            assert exc_info.value.status_code == 400
-            assert "inactive" in exc_info.value.detail.lower()
+                # Inactive agents proceed to LiveKit (not blocked by is_active check).
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_test_token(
+                        agent_id=test_agent_id,
+                        user_data=(test_user_id, mock_user_profile),
+                    )
+
+                assert exc_info.value.status_code == 503
+                assert "LiveKit" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_test_token_livekit_not_configured(self):
