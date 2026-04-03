@@ -3,7 +3,7 @@
  */
 
 import { http, HttpResponse } from 'msw'
-import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber } from '../utils/data-factories'
+import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber, createMockOrganizationSkill, createMockAgentSkill } from '../utils/data-factories'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -681,5 +681,76 @@ export const handlers = [
         message: 'Phone number cancelled successfully',
       },
     })
+  }),
+
+  // Skill endpoints
+  http.get(`${API_BASE_URL}/api/v1/organizations/:orgId/skills`, () => {
+    return HttpResponse.json([
+      createMockOrganizationSkill(),
+      createMockOrganizationSkill({
+        id: 'skill-2',
+        slug: 'call-transfer',
+        name: 'Call Transfer',
+        description: 'Escalate calls to a human agent.',
+        category: 'built_in',
+      }),
+      createMockOrganizationSkill({
+        id: 'skill-3',
+        slug: 'my-custom-skill',
+        name: 'My Custom Skill',
+        description: 'A custom skill.',
+        category: 'custom',
+        author: null,
+        version: null,
+      }),
+    ])
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills`, async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json(
+      createMockOrganizationSkill({
+        id: 'skill-new',
+        slug: body.slug as string,
+        name: body.name as string,
+        description: body.description as string,
+        content: body.content as string,
+        category: 'custom',
+      }),
+      { status: 201 }
+    )
+  }),
+
+  http.put(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/:skillId`, async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json(
+      createMockOrganizationSkill({
+        id: params.skillId as string,
+        name: (body.name as string) || 'Updated Skill',
+        content: (body.content as string) || '# Updated',
+      })
+    )
+  }),
+
+  http.delete(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/:skillId`, () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/seed`, () => {
+    return HttpResponse.json({ seeded: 6 })
+  }),
+
+  http.get(`${API_BASE_URL}/api/v1/agents/:agentId/skills`, () => {
+    return HttpResponse.json([
+      createMockAgentSkill(),
+    ])
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/agents/:agentId/skills`, () => {
+    return HttpResponse.json({ success: true }, { status: 201 })
+  }),
+
+  http.delete(`${API_BASE_URL}/api/v1/agents/:agentId/skills/:skillId`, () => {
+    return new HttpResponse(null, { status: 204 })
   }),
 ]

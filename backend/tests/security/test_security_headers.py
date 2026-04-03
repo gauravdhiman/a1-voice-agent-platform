@@ -69,7 +69,7 @@ class TestSecurityHeaders:
         assert "frame-ancestors 'none'" in csp
         # connect-src should be restricted to 'self', not open to all https:
         assert "connect-src 'self'" in csp
-        assert "connect-src 'self' https:" not in csp
+        assert "connect-src 'self' https:*" not in csp
 
     def test_headers_on_all_responses(self, client):
         """Security headers must be present even on error responses."""
@@ -92,3 +92,23 @@ class TestSecurityHeaders:
             s.environment = "development"
             response = client.get("/")
         assert "Strict-Transport-Security" not in response.headers
+
+    def test_csp_allows_cdn_in_debug_mode(self, client):
+        """CSP must allow cdn.jsdelivr.net and unsafe-inline in debug mode for Swagger UI."""
+        with patch("src.security.headers.settings") as s:
+            s.environment = "development"
+            s.debug = True
+            response = client.get("/")
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "'unsafe-inline'" in csp
+        assert "https://cdn.jsdelivr.net" in csp
+        assert "connect-src 'self' https://cdn.jsdelivr.net" in csp
+
+    def test_csp_no_cdn_in_production(self, client):
+        """CSP must NOT allow cdn.jsdelivr.net when debug is off."""
+        with patch("src.security.headers.settings") as s:
+            s.environment = "production"
+            s.debug = False
+            response = client.get("/")
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "cdn.jsdelivr.net" not in csp

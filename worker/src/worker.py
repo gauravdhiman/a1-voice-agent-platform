@@ -310,7 +310,33 @@ async def entrypoint(ctx: JobContext):
                 livekit_tools.append(tool)
                 logger.info(f"Built function_tool for: {func_name}")
 
-        # 3b. Build enhanced system prompt
+        # 3b. Fetch agent skills for progressive disclosure
+        from shared.voice_agents.skill_service import skill_service
+        from src.tools.skill_tool import create_load_skill_function
+
+        skill_summaries, skill_error = await skill_service.get_agent_skill_summaries(
+            voice_agent.id
+        )
+        if skill_error:
+            logger.warning(f"Could not fetch agent skills: {skill_error}")
+            skill_summaries = []
+        else:
+            logger.info(f"Fetched {len(skill_summaries)} skill summaries for agent {agent_id}")
+
+        # Register load_skill tool if agent has skills
+        if skill_summaries:
+            load_skill_fn = create_load_skill_function(
+                str(voice_agent.organization_id), skill_service
+            )
+            load_skill_tool = function_tool(
+                load_skill_fn,
+                name="load_skill",
+                description="Load a skill's full procedures. Call with the skill slug from Available Skills.",
+            )
+            livekit_tools.append(load_skill_tool)
+            logger.info("Registered load_skill tool")
+
+        # 3c. Build enhanced system prompt
         logger.info(f"Building enhanced system prompt for agent {agent_id}")
         org, org_error = await organization_service.get_organization_by_id(voice_agent.organization_id)
         if org_error or not org:
@@ -324,7 +350,8 @@ async def entrypoint(ctx: JobContext):
                 org=org,
                 agent=voice_agent,
                 default_rules=default_system_prompt,
-                enabled_tools=enabled_tool_names
+                enabled_tools=enabled_tool_names,
+                agent_skills=skill_summaries,
             )
             # Get organization's Google API key
             org_google_api_key = getattr(org, 'google_api_key', None)

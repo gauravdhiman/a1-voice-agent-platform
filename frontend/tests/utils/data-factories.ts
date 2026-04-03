@@ -9,6 +9,7 @@ import { type SubscriptionPlan } from '@/types/billing'
 import { type CreditBalance } from '@/types/billing'
 import { type Role, type Permission, type RoleWithPermissions } from '@/types/rbac'
 import { type PhoneNumber, type PhoneNumberWithAgent, type AvailablePhoneNumber, type PhoneNumberType, type PhoneNumberStatus } from '@/types/phone-number'
+import { type OrganizationSkill, type AgentSkill } from '@/types/skill'
 
 export const createMockUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   id: 'user-1',
@@ -42,6 +43,7 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
   mission: null,
   custom_instructions: null,
   use_platform_credits: true,
+  instructions_markdown: null,
   ...overrides,
 })
 
@@ -181,5 +183,34 @@ export const createMockAvailablePhoneNumber = (overrides: Partial<AvailablePhone
   },
   locality: 'San Francisco',
   postal_code: '94102',
+  ...overrides,
+})
+
+export const createMockOrganizationSkill = (overrides: Partial<OrganizationSkill> = {}): OrganizationSkill => ({
+  id: 'skill-1',
+  organization_id: 'org-1',
+  slug: 'appointment-booking',
+  name: 'Appointment Booking',
+  description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
+  content: '# Appointment Booking\n\n## When to Use\n- Caller asks to book\n\n## Procedure\n1. Ask for date',
+  category: 'built_in',
+  is_active: true,
+  version: '1.0.0',
+  author: 'Platform',
+  content_hash: 'abc123def456',
+  source_url: null,
+  source_ref: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockAgentSkill = (overrides: Partial<AgentSkill> = {}): AgentSkill => ({
+  id: 'agent-skill-1',
+  agent_id: 'agent-1',
+  skill_id: 'skill-1',
+  skill: createMockOrganizationSkill(),
+  is_active: true,
+  created_at: new Date().toISOString(),
   ...overrides,
 })

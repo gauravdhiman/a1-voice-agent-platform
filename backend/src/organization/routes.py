@@ -395,6 +395,13 @@ async def complete_onboarding(
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
+    # Seed built-in skills for the organization (idempotent)
+    try:
+        from shared.voice_agents.skill_service import skill_service
+        await skill_service.seed_built_in_skills(org_id)
+    except Exception as e:
+        logger.warning(f"Failed to seed skills for org {org_id}: {e}")
+
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return organization
 

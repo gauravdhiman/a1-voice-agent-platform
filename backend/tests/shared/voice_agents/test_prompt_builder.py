@@ -266,6 +266,79 @@ class TestPromptBuilder:
         assert "Sales Rep" in prompt
         assert "IDENTITY AND PERSONA" in prompt
 
+    def test_build_injects_skill_metadata_in_markdown_mode(self):
+        """Test that skill summaries are injected as metadata in markdown mode."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            instructions_markdown="# My Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        # Simulate skill summaries (like OrganizationSkillSummary)
+        class SkillSummary:
+            def __init__(self, slug, name, description):
+                self.slug = slug
+                self.name = name
+                self.description = description
+
+        skills = [
+            SkillSummary("appointment-booking", "Appointment Booking", "Handle scheduling"),
+            SkillSummary("call-transfer", "Call Transfer", "Escalate to human"),
+        ]
+
+        prompt = PromptBuilder.build(org, agent, agent_skills=skills)
+
+        # Skill metadata should be present
+        assert "AVAILABLE SKILLS" in prompt
+        assert "appointment-booking" in prompt
+        assert "Handle scheduling" in prompt
+        assert "call-transfer" in prompt
+        assert "load_skill" in prompt
+        # Full skill content should NOT be present (progressive disclosure)
+        assert "# Appointment Booking" not in prompt.split("AVAILABLE SKILLS")[1].split("SYSTEM GUARDRAILS")[0]
+
+    def test_build_no_skills_section_when_empty(self):
+        """Test that no skills section appears when agent has no skills."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            instructions_markdown="# My Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build(org, agent, agent_skills=None)
+        assert "AVAILABLE SKILLS" not in prompt
+
+        prompt2 = PromptBuilder.build(org, agent, agent_skills=[])
+        assert "AVAILABLE SKILLS" not in prompt2
+
     def test_build_system_prompt_business_context_partial(self):
         """Test business context section with only some fields."""
         now = datetime.now(timezone.utc)

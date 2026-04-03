@@ -1035,6 +1035,67 @@ erDiagram
 16. `20260329000001` - Add phone_numbers table for Twilio phone number management
 17. `20260329000002` - Add call_logs table for tracking voice agent calls
 18. `20260331000001` - Add instructions_markdown column to voice_agents (Phase 1: markdown-based agent instructions)
+19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure)
+
+---
+
+### Skills Tables (Phase 2a)
+
+#### organization_skills
+
+Organization-level skill library. Skills are reusable knowledge/procedure packages in markdown.
+
+| Column              | Type         | Constraints                     | Description                             |
+| ------------------- | ------------ | ------------------------------- | --------------------------------------- |
+| id                  | UUID         | PRIMARY KEY                     | Unique skill identifier                 |
+| organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
+| slug                | VARCHAR(100) | NOT NULL                        | URL-safe unique identifier (kebab-case) |
+| name                | VARCHAR(200) | NOT NULL                        | Skill display name                      |
+| description         | TEXT         | NULLABLE                        | Short description for prompt metadata   |
+| content             | TEXT         | NOT NULL                        | Full skill content in markdown          |
+| category            | VARCHAR(50)  | NOT NULL, DEFAULT 'custom'      | 'built_in' or 'custom'                 |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Whether the skill is active             |
+| version             | VARCHAR(50)  | NULLABLE                        | Skill version (e.g., '1.0.0')          |
+| author              | VARCHAR(200) | NULLABLE                        | Skill author attribution                |
+| content_hash        | VARCHAR(64)  | NULLABLE                        | SHA-256 hash for change detection       |
+| source_url          | TEXT         | NULLABLE                        | Source URL for imported skills           |
+| source_ref          | VARCHAR(100) | NULLABLE                        | Source version reference (commit hash)  |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
+
+**Unique Constraint**: (organization_id, slug)
+**RLS**: Enabled
+
+#### organization_skill_files
+
+Reference files for skills (Phase 2b data, table exists for schema stability).
+
+| Column              | Type         | Constraints                             | Description                     |
+| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
+| skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Parent skill                    |
+| file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md"  |
+| content             | TEXT         | NOT NULL                                | File content                    |
+| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset'  |
+| content_hash        | VARCHAR(64)  | NULLABLE                                | SHA-256 hash for change detection |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Last update timestamp           |
+
+**Unique Constraint**: (skill_id, file_path)
+
+#### agent_skills
+
+Junction table linking agents to skills from their organization's library.
+
+| Column              | Type         | Constraints                             | Description                     |
+| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| id                  | UUID         | PRIMARY KEY                             | Unique assignment identifier    |
+| agent_id            | UUID         | NOT NULL, FK → voice_agents.id          | Agent identifier                |
+| skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Skill identifier                |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE                  | Whether assignment is active    |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
+
+**Unique Constraint**: (agent_id, skill_id)
 
 ---
 

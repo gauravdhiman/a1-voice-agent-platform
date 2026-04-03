@@ -40,6 +40,10 @@ import {
   Edit3,
   Phone,
   Info,
+  Zap,
+  Eye,
+  Search,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -63,6 +67,17 @@ import { PhoneNumberDashboard } from "@/components/phone-numbers/phone-number-da
 import { phoneNumberService } from "@/services/phone-number-service";
 import { billingService } from "@/services/billing-service";
 import { PhoneNumberWithAgent } from "@/types/phone-number";
+import { skillService } from "@/services/skill-service";
+import type { OrganizationSkill } from "@/types/skill";
+import { Switch } from "@/components/ui/switch";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 
 // Use real services
@@ -110,6 +125,19 @@ export default function OrganizationPage() {
   const [creditBalance, setCreditBalance] = useState(0);
   const [phoneNumbersLoading, setPhoneNumbersLoading] = useState(false);
 
+  // Skills state
+  const [orgSkills, setOrgSkills] = useState<OrganizationSkill[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<OrganizationSkill | null>(null);
+  const [skillFilter, setSkillFilter] = useState("");
+  const [createSkillOpen, setCreateSkillOpen] = useState(false);
+  const [newSkill, setNewSkill] = useState({ name: "", slug: "", description: "", content: "" });
+  const [creatingSkill, setCreatingSkill] = useState(false);
+  const [seedingSkills, setSeedingSkills] = useState(false);
+  const [editingSkill, setEditingSkill] = useState(false);
+  const [editSkillData, setEditSkillData] = useState({ name: "", description: "", content: "" });
+  const [savingSkill, setSavingSkill] = useState(false);
+
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
 
@@ -142,6 +170,19 @@ export default function OrganizationPage() {
     }
   }, [orgId]);
 
+  const loadSkills = useCallback(async () => {
+    if (!orgId) return;
+    setSkillsLoading(true);
+    try {
+      const skills = await skillService.getOrganizationSkills(orgId);
+      setOrgSkills(skills);
+    } catch (error) {
+      console.error("Failed to load skills:", error);
+    } finally {
+      setSkillsLoading(false);
+    }
+  }, [orgId]);
+
   const loadPhoneNumbers = useCallback(async () => {
     if (!orgId) return;
     setPhoneNumbersLoading(true);
@@ -164,19 +205,24 @@ export default function OrganizationPage() {
   useEffect(() => {
     if (orgId) {
       loadOrganizationData();
+      // Also load skills eagerly so they're ready when tab is clicked
+      loadSkills();
     }
-  }, [orgId, loadOrganizationData]);
+  }, [orgId, loadOrganizationData, loadSkills]);
 
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers") {
+    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers" || tabParam === "skills") {
       setActiveTab(tabParam);
       if (tabParam === "phone-numbers" && orgId) {
         loadPhoneNumbers();
       }
+      if (tabParam === "skills" && orgId) {
+        loadSkills();
+      }
     }
-  }, [searchParams, orgId, loadPhoneNumbers]);
+  }, [searchParams, orgId, loadPhoneNumbers, loadSkills]);
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -187,8 +233,11 @@ export default function OrganizationPage() {
       if (value === "phone-numbers") {
         loadPhoneNumbers();
       }
+      if (value === "skills") {
+        loadSkills();
+      }
     },
-    [router, orgId, loadPhoneNumbers],
+    [router, orgId, loadPhoneNumbers, loadSkills],
   );
 
   // Validate organization access when orgId is provided
@@ -456,6 +505,10 @@ export default function OrganizationPage() {
         <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
+          <TabsTrigger value="skills" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Skills
+          </TabsTrigger>
           <TabsTrigger value="phone-numbers" className="flex items-center gap-2">
             Phone Numbers
           </TabsTrigger>
@@ -813,6 +866,354 @@ During monsoon season (July-September), we have extended hours for flood-related
             </Card>
           </div>
         </TabsContent>
+
+        {/* Skills Tab — Split View: list on left, content on right */}
+        <TabsContent value="skills">
+          {skillsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="ml-2 text-sm text-muted-foreground">Loading skills...</span>
+            </div>
+          ) : orgSkills.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Zap className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No skills yet.</p>
+                <p className="text-sm mt-1 mb-4">Seed built-in skills to get started, or create custom ones.</p>
+                <div className="flex justify-center gap-3">
+                  {(isOrgAdmin || isPlatformAdmin) && (
+                    <>
+                      <Button
+                        variant="outline"
+                        disabled={seedingSkills}
+                        onClick={async () => {
+                          if (!orgId) return;
+                          setSeedingSkills(true);
+                          try {
+                            const result = await skillService.seedSkills(orgId);
+                            toast.success(`Seeded ${result.seeded} built-in skills`);
+                            loadSkills();
+                          } catch {
+                            toast.error("Failed to seed skills");
+                          } finally {
+                            setSeedingSkills(false);
+                          }
+                        }}
+                      >
+                        {seedingSkills ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
+                        Seed Built-in Skills
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setNewSkill({ name: "", slug: "", description: "", content: "" });
+                          setCreateSkillOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create Custom Skill
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="flex gap-4 min-h-[500px]">
+              {/* Left panel — skill list */}
+              <div className="w-80 shrink-0 flex flex-col border rounded-lg bg-card">
+                <div className="p-3 border-b space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{orgSkills.length} skills</span>
+                    {(isOrgAdmin || isPlatformAdmin) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setNewSkill({ name: "", slug: "", description: "", content: "" });
+                          setCreateSkillOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter skills..."
+                      value={skillFilter}
+                      onChange={(e) => setSkillFilter(e.target.value)}
+                      className="pl-8 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {orgSkills
+                    .filter((s) =>
+                      !skillFilter ||
+                      s.name.toLowerCase().includes(skillFilter.toLowerCase()) ||
+                      s.slug.toLowerCase().includes(skillFilter.toLowerCase()) ||
+                      (s.description || "").toLowerCase().includes(skillFilter.toLowerCase())
+                    )
+                    .map((skill) => (
+                      <div
+                        key={skill.id}
+                        className={`px-3 py-2.5 cursor-pointer border-b last:border-b-0 transition-colors ${
+                          selectedSkill?.id === skill.id
+                            ? "bg-primary/5 border-l-2 border-l-primary"
+                            : "hover:bg-muted/50 border-l-2 border-l-transparent"
+                        }`}
+                        onClick={() => {
+                          setSelectedSkill(skill);
+                          setEditingSkill(false);
+                        }}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="font-medium text-sm truncate">{skill.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 ml-5">
+                          <Badge
+                            variant={skill.category === "built_in" ? "secondary" : "outline"}
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            {skill.category === "built_in" ? "Built-in" : "Custom"}
+                          </Badge>
+                          {skill.version && (
+                            <span className="text-[10px] text-muted-foreground">v{skill.version}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Right panel — skill content */}
+              <div className="flex-1 border rounded-lg bg-card flex flex-col min-w-0">
+                {selectedSkill ? (
+                  <>
+                    {/* Header */}
+                    <div className="p-4 border-b">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-lg">{selectedSkill.name}</h3>
+                          <Badge
+                            variant={selectedSkill.category === "built_in" ? "secondary" : "outline"}
+                            className="text-xs"
+                          >
+                            {selectedSkill.category === "built_in" ? "Built-in" : "Custom"}
+                          </Badge>
+                        </div>
+                        {selectedSkill.category === "custom" && (isOrgAdmin || isPlatformAdmin) && !editingSkill && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditSkillData({
+                                name: selectedSkill.name || "",
+                                description: selectedSkill.description || "",
+                                content: selectedSkill.content || "",
+                              });
+                              setEditingSkill(true);
+                            }}
+                          >
+                            <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
+                          </Button>
+                        )}
+                      </div>
+                      {selectedSkill.description && !editingSkill && (
+                        <p className="text-sm text-muted-foreground mt-1">{selectedSkill.description}</p>
+                      )}
+                      <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                        {selectedSkill.author && <span><strong>Author:</strong> {selectedSkill.author}</span>}
+                        {selectedSkill.version && <span><strong>Version:</strong> {selectedSkill.version}</span>}
+                        <span><strong>Mode:</strong> {selectedSkill.category === "built_in" ? "Read only" : "Editable"}</span>
+                        <span><strong>Slug:</strong> <code className="text-xs bg-muted px-1 py-0.5 rounded">{selectedSkill.slug}</code></span>
+                      </div>
+                    </div>
+
+                    {/* Content area */}
+                    {editingSkill ? (
+                      <>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-skill-name">Name</Label>
+                            <Input
+                              id="edit-skill-name"
+                              value={editSkillData.name}
+                              onChange={(e) => setEditSkillData({ ...editSkillData, name: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-skill-desc">Description</Label>
+                            <Input
+                              id="edit-skill-desc"
+                              value={editSkillData.description}
+                              onChange={(e) => setEditSkillData({ ...editSkillData, description: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-skill-content">Content (Markdown)</Label>
+                            <Textarea
+                              id="edit-skill-content"
+                              value={editSkillData.content}
+                              onChange={(e) => setEditSkillData({ ...editSkillData, content: e.target.value })}
+                              className="min-h-[300px] font-mono text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="p-4 border-t flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setEditingSkill(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            disabled={savingSkill || !editSkillData.name || !editSkillData.content}
+                            onClick={async () => {
+                              if (!orgId || !selectedSkill) return;
+                              setSavingSkill(true);
+                              try {
+                                const updated = await skillService.updateSkill(orgId, selectedSkill.id, {
+                                  name: editSkillData.name,
+                                  description: editSkillData.description || undefined,
+                                  content: editSkillData.content,
+                                });
+                                toast.success("Skill updated");
+                                setSelectedSkill(updated);
+                                setEditingSkill(false);
+                                loadSkills();
+                              } catch {
+                                toast.error("Failed to update skill");
+                              } finally {
+                                setSavingSkill(false);
+                              }
+                            }}
+                          >
+                            {savingSkill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                            Save Changes
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none">
+                        <ReactMarkdown>{selectedSkill.content}</ReactMarkdown>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <Zap className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">Select a skill to view its content</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Create Skill Drawer */}
+        <Sheet open={createSkillOpen} onOpenChange={setCreateSkillOpen}>
+          <SheetContent className="flex flex-col w-full sm:max-w-xl">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+              <SheetTitle>Create Custom Skill</SheetTitle>
+              <SheetDescription>
+                Define a reusable skill with procedures and knowledge in markdown.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="skill-name">Name</Label>
+                <Input
+                  id="skill-name"
+                  value={newSkill.name}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+                    setNewSkill({ ...newSkill, name, slug });
+                  }}
+                  placeholder="e.g., Insurance Verification"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="skill-slug">Slug</Label>
+                <Input
+                  id="skill-slug"
+                  value={newSkill.slug}
+                  onChange={(e) => setNewSkill({ ...newSkill, slug: e.target.value })}
+                  placeholder="e.g., insurance-verification"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  URL-safe identifier. Auto-generated from name.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="skill-description">Description</Label>
+                <Input
+                  id="skill-description"
+                  value={newSkill.description}
+                  onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
+                  placeholder="Short description for skill selection"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="skill-content">Skill Content (Markdown)</Label>
+                <Textarea
+                  id="skill-content"
+                  value={newSkill.content}
+                  onChange={(e) => setNewSkill({ ...newSkill, content: e.target.value })}
+                  placeholder={`# Insurance Verification
+
+## When to Use
+- Caller asks about insurance coverage
+- New patient needs insurance verified
+
+## Procedure
+1. Ask for insurance provider name
+2. Request member ID and group number
+3. Verify coverage using the system
+4. Confirm copay and deductible amounts`}
+                  className="min-h-[300px] font-mono text-sm"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCreateSkillOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={creatingSkill || !newSkill.name || !newSkill.slug || !newSkill.content}
+                onClick={async () => {
+                  if (!orgId) return;
+                  setCreatingSkill(true);
+                  try {
+                    await skillService.createSkill(orgId, {
+                      organization_id: orgId,
+                      slug: newSkill.slug,
+                      name: newSkill.name,
+                      description: newSkill.description || undefined,
+                      content: newSkill.content,
+                      category: "custom",
+                    });
+                    toast.success(`Skill "${newSkill.name}" created`);
+                    setCreateSkillOpen(false);
+                    loadSkills();
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : "Failed to create skill";
+                    toast.error(msg);
+                  } finally {
+                    setCreatingSkill(false);
+                  }
+                }}
+              >
+                {creatingSkill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                Create Skill
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* Phone Numbers Tab */}
         <TabsContent value="phone-numbers">
