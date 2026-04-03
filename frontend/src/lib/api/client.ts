@@ -62,11 +62,16 @@ class ApiClient {
 
       // Handle different response types
       let data;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
+      if (response.status === 204) {
+        // No Content — don't try to parse body
+        data = null;
       } else {
-        data = await response.text();
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          data = await response.text();
+        }
       }
 
       if (!response.ok) {

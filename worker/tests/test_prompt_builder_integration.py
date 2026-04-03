@@ -356,6 +356,105 @@ class TestPromptBuilderEdgeCases:
         # Default rules appended
         assert "OUTPUT RULES" in prompt
 
+    def test_build_with_skills_injects_metadata_only(self, sample_organization):
+        """Test that PromptBuilder.build() injects skill metadata, not full content.
+
+        This integration test verifies the full prompt assembly chain with skills:
+        agent markdown + skill metadata + guardrails + tool guidelines.
+        Skills should appear as a lightweight 'Available Skills' section with
+        only slugs and descriptions, not full content (progressive disclosure).
+        """
+        from shared.voice_agents.prompt_builder import PromptBuilder
+        from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+
+        now = datetime.now(timezone.utc)
+        org = Organization(**sample_organization)
+
+        agent = VoiceAgent(
+            id=UUID("87654321-4321-8765-4321-876543218765"),
+            organization_id=org.id,
+            name="Skilled Agent",
+            instructions_markdown="# Receptionist\n\nYou help callers at {{org.name}}.",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        # Simulate skill summaries (slug + description only)
+        class SkillSummary:
+            def __init__(self, slug, name, description):
+                self.slug = slug
+                self.name = name
+                self.description = description
+
+        skills = [
+            SkillSummary("appointment-booking", "Appointment Booking", "Handle scheduling and cancellations"),
+            SkillSummary("call-transfer", "Call Transfer", "Escalate to human agent"),
+            SkillSummary("faq-responder", "FAQ Responder", "Answer common questions"),
+        ]
+
+        prompt = PromptBuilder.build(
+            org=org,
+            agent=agent,
+            default_rules="# OUTPUT RULES\n- Be concise",
+            enabled_tools=["Google_Calendar"],
+            agent_skills=skills,
+        )
+
+        # Agent markdown rendered
+        assert "Receptionist" in prompt
+        assert "Acme Corporation" in prompt
+
+        # Skills metadata section present
+        assert "AVAILABLE SKILLS" in prompt
+        assert "appointment-booking" in prompt
+        assert "Handle scheduling" in prompt
+        assert "call-transfer" in prompt
+        assert "faq-responder" in prompt
+        assert "load_skill" in prompt
+
+        # Guardrails present
+        assert "SYSTEM GUARDRAILS" in prompt
+
+        # Tool guidelines present
+        assert "Google Calendar Tool Guidelines" in prompt
+
+        # Output rules present
+        assert "OUTPUT RULES" in prompt
+
+        # Verify ordering: markdown → skills → guardrails → tools → rules
+        md_pos = prompt.index("Receptionist")
+        skills_pos = prompt.index("AVAILABLE SKILLS")
+        guardrails_pos = prompt.index("SYSTEM GUARDRAILS")
+        assert md_pos < skills_pos < guardrails_pos
+
+    def test_build_without_skills_has_no_skills_section(self, sample_organization):
+        """Test that prompt has no skills section when agent has none assigned."""
+        from shared.voice_agents.prompt_builder import PromptBuilder
+        from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+
+        now = datetime.now(timezone.utc)
+        org = Organization(**sample_organization)
+
+        agent = VoiceAgent(
+            id=UUID("87654321-4321-8765-4321-876543218765"),
+            organization_id=org.id,
+            name="No Skills Agent",
+            instructions_markdown="# Basic Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build(org=org, agent=agent, agent_skills=[])
+
+        assert "AVAILABLE SKILLS" not in prompt
+        assert "load_skill" not in prompt
+        # Guardrails still present
+        assert "SYSTEM GUARDRAILS" in prompt
+
     def test_build_falls_back_to_fields_when_no_markdown(self, sample_organization):
         """Test that PromptBuilder.build() falls back to field-based when no markdown."""
         from shared.voice_agents.prompt_builder import PromptBuilder

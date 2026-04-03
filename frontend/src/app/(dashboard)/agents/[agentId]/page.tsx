@@ -53,7 +53,16 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
   DropdownMenu,
@@ -70,6 +79,8 @@ import {
 } from "@/components/ui/dialog";
 import { voiceTemplateService } from "@/services/voice-template-service";
 import type { VoiceTemplate } from "@/types/voice-template";
+import { skillService } from "@/services/skill-service";
+import type { OrganizationSkill, AgentSkill } from "@/types/skill";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -102,6 +113,11 @@ export default function AgentDetailPage() {
   const [testCallOpen, setTestCallOpen] = React.useState(false);
   const [voiceTemplates, setVoiceTemplates] = React.useState<VoiceTemplate[]>([]);
   const [pendingTemplate, setPendingTemplate] = React.useState<VoiceTemplate | null>(null);
+  const [orgSkills, setOrgSkills] = React.useState<OrganizationSkill[]>([]);
+  const [agentSkillIds, setAgentSkillIds] = React.useState<Set<string>>(new Set());
+  const [skillsLoading, setSkillsLoading] = React.useState(false);
+  const [skillToggling, setSkillToggling] = React.useState<string | null>(null);
+  const [viewingSkill, setViewingSkill] = React.useState<OrganizationSkill | null>(null);
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
@@ -175,6 +191,22 @@ export default function AgentDetailPage() {
       .catch(() => {});
   }, []);
 
+  // Load org skills and agent skill assignments
+  React.useEffect(() => {
+    if (!agent?.organization_id) return;
+    setSkillsLoading(true);
+    Promise.all([
+      skillService.getOrganizationSkills(agent.organization_id),
+      skillService.getAgentSkills(agentId),
+    ])
+      .then(([skills, agentSkills]) => {
+        setOrgSkills(skills.filter((s) => s.is_active));
+        setAgentSkillIds(new Set(agentSkills.map((as) => as.skill_id)));
+      })
+      .catch(() => {})
+      .finally(() => setSkillsLoading(false));
+  }, [agent?.organization_id, agentId]);
+
   const buildMarkdownFromTemplate = useCallback((template: VoiceTemplate): string => {
     const sections: string[] = [];
 
@@ -209,6 +241,27 @@ export default function AgentDetailPage() {
 
     return sections.join("\n\n");
   }, []);
+
+  const handleSkillToggle = useCallback(async (skillId: string, assign: boolean) => {
+    setSkillToggling(skillId);
+    try {
+      if (assign) {
+        await skillService.assignSkill(agentId, skillId);
+        setAgentSkillIds((prev) => new Set([...prev, skillId]));
+      } else {
+        await skillService.unassignSkill(agentId, skillId);
+        setAgentSkillIds((prev) => {
+          const next = new Set(prev);
+          next.delete(skillId);
+          return next;
+        });
+      }
+    } catch {
+      toast.error(`Failed to ${assign ? "assign" : "unassign"} skill`);
+    } finally {
+      setSkillToggling(null);
+    }
+  }, [agentId]);
 
   // Update form when agent data changes
   React.useEffect(() => {
@@ -252,7 +305,7 @@ export default function AgentDetailPage() {
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "properties" || tabParam === "tools") {
+    if (tabParam === "properties" || tabParam === "tools" || tabParam === "skills") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -535,6 +588,7 @@ export default function AgentDetailPage() {
       >
         <TabsList className="w-full">
           <TabsTrigger value="properties">Properties</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
         </TabsList>
 
@@ -812,6 +866,118 @@ and confirm someone will call back the next business day.`}
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Skills Tab */}
+        <TabsContent value="skills">
+          <Card>
+            <CardHeader className="p-5 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <Zap className="h-5 w-5" />
+                    <span>Agent Skills</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Assign skills to give this agent domain-specific knowledge and procedures.
+                    Skills are loaded on-demand during conversations.
+                  </CardDescription>
+                </div>
+                {canEdit && agent?.organization_id && (
+                  <Link
+                    href={`/organization?org_id=${agent.organization_id}&tab=skills`}
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 underline underline-offset-2"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Manage Skills
+                  </Link>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-5 pt-2">
+              {skillsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading skills...</span>
+                </div>
+              ) : orgSkills.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Zap className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No skills available for this organization.</p>
+                  <p className="text-sm mt-1">Add skills from Organization Settings to get started.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {orgSkills.map((skill) => {
+                    const isAssigned = agentSkillIds.has(skill.id);
+                    const isToggling = skillToggling === skill.id;
+                    return (
+                      <div
+                        key={skill.id}
+                        className={cn(
+                          "flex items-center justify-between p-4 border rounded-lg transition-colors cursor-pointer",
+                          isAssigned ? "bg-primary/5 border-primary/20" : "hover:bg-muted/50",
+                        )}
+                        onClick={() => setViewingSkill(skill)}
+                      >
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Switch
+                              checked={isAssigned}
+                              onCheckedChange={(checked) =>
+                                handleSkillToggle(skill.id, checked === true)
+                              }
+                              disabled={!canEdit || isToggling}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{skill.name}</span>
+                              <Badge
+                                variant={skill.category === "built_in" ? "secondary" : "outline"}
+                                className="text-xs"
+                              >
+                                {skill.category === "built_in" ? "Built-in" : "Custom"}
+                              </Badge>
+                            </div>
+                            {skill.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                {skill.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Skill content viewer drawer */}
+        <Sheet open={!!viewingSkill} onOpenChange={(open) => !open && setViewingSkill(null)}>
+          <SheetContent className="flex flex-col w-full sm:max-w-lg">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                {viewingSkill?.name}
+                <Badge
+                  variant={viewingSkill?.category === "built_in" ? "secondary" : "outline"}
+                  className="text-xs"
+                >
+                  {viewingSkill?.category === "built_in" ? "Built-in" : "Custom"}
+                </Badge>
+              </SheetTitle>
+              {viewingSkill?.description && (
+                <SheetDescription>{viewingSkill.description}</SheetDescription>
+              )}
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
+              {viewingSkill && <ReactMarkdown>{viewingSkill.content}</ReactMarkdown>}
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* Tools Tab */}
         <TabsContent value="tools">

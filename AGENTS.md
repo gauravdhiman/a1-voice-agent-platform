@@ -729,6 +729,10 @@ After implementing any fix or new feature, you MUST:
 - Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
 - You can create alembic migrations scripts but never run them without user's permission. Always ask first.
 
+### Python: Avoid local imports that shadow top-level imports
+
+Never use `from X import Y` inside a function if `Y` is already imported at the top of the file. In Python, a local import makes the name local to the **entire function** — even lines before the import statement. This causes `UnboundLocalError` on earlier references. If you need a conditional import, use a different variable name or import the module instead (`import X; X.Y`).
+
 ### Frontend: Tailwind CSS v4
 
 This project uses **Tailwind CSS v4**, which has a fundamentally different configuration system from v3:

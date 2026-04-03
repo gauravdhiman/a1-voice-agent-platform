@@ -166,7 +166,8 @@ def setup_boundary_mocks(page: Page):
             "id": "{test_org_id}",
             "name": "Test Organization",
             "slug": "test-org",
-            "is_active": true
+            "is_active": true,
+            "onboarding_completed": true
         }}]'''
     ))
 

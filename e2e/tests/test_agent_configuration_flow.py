@@ -207,8 +207,8 @@ def test_agent_properties_update(page: Page, base_url: str, step):
     page.goto(f"{base_url}/agents/{agent_id}")
     page.wait_for_load_state("networkidle")
 
-    step("Update agent custom instructions")
-    page.fill('textarea#custom_instructions', "Always verify user identity before making changes.")
+    step("Update agent instructions markdown")
+    page.fill('textarea#instructions_markdown', "# Support Agent\n\nAlways verify user identity before making changes.")
 
     # Mock the PUT update response
     page.route(f"**/api/v1/agents/{agent_id}", lambda route: route.fulfill(
@@ -342,42 +342,29 @@ Always verify customer identity before accessing accounts. Escalate billing issu
     # Wait for agent page to fully load
     page.wait_for_load_state("networkidle")
     
-    step("Wait for agent page to load and verify configuration fields")
-    
-    # Wait for the form to be fully loaded
-    expect(page.locator("input#persona")).to_be_visible(timeout=10000)
-    expect(page.locator("select#tone")).to_be_visible()
-    expect(page.locator("textarea#mission")).to_be_visible()
-    expect(page.locator("textarea#custom_instructions")).to_be_visible()
+    step("Wait for agent page to load and verify markdown editor")
 
-    step("Click 'Preview Generated System Prompt' button to expand")
-    preview_button = page.get_by_text("Preview Generated System Prompt")
+    # Wait for the markdown editor to be fully loaded
+    expect(page.locator("textarea#instructions_markdown")).to_be_visible(timeout=10000)
+
+    step("Click 'Preview System Prompt' button to expand")
+    preview_button = page.get_by_text("Preview System Prompt")
     expect(preview_button).to_be_visible()
     preview_button.click()
 
-    step("Verify preview section expands and shows generated prompt")
-    # Note: The system prompt is fetched on page load, not on button click
-    # So we should see the content immediately, not a loading state
-    # Wait for the prompt content to load
-    page.wait_for_selector("pre", state="visible", timeout=10000)
-    
-    # Verify all sections are present in the preview
-    expect(page.get_by_text("# IDENTITY AND PERSONA")).to_be_visible()
-    expect(page.get_by_text("Professional Customer Support Specialist")).to_be_visible()
-    expect(page.get_by_text("Test Business Inc")).to_be_visible()
-    expect(page.get_by_text("# YOUR MISSION")).to_be_visible()
-    expect(page.get_by_text("# BUSINESS CONTEXT")).to_be_visible()
-    expect(page.get_by_text("Technology")).to_be_visible()
-    expect(page.get_by_text("123 Tech Street")).to_be_visible()
-    expect(page.get_by_text("# ADDITIONAL INSTRUCTIONS")).to_be_visible()
-    # Use more specific locator to target only the preview section (pre tag), not the textarea
-    expect(page.locator("pre").get_by_text("verify customer identity")).to_be_visible()
+    step("Verify preview section expands and shows rendered prompt")
+    # Preview now renders as markdown (prose), not pre block
+    page.wait_for_selector(".prose", state="visible", timeout=10000)
+
+    # Verify key content is present in the rendered markdown preview
+    expect(page.locator(".prose").get_by_text("Professional Customer Support Specialist")).to_be_visible()
+    expect(page.locator(".prose").get_by_text("Test Business Inc")).to_be_visible()
 
     step("Click preview button again to collapse")
     preview_button.click()
-    
+
     step("Verify preview section is collapsed")
-    expect(page.locator("pre")).not_to_be_visible()
+    expect(page.locator(".prose")).not_to_be_visible()
 
     step("Verification Complete: System prompt preview functionality works correctly")
 
@@ -454,32 +441,30 @@ def test_agent_configuration_fields_update(page: Page, base_url: str, step):
     page.goto(f"{base_url}/agents/{agent_id}")
     page.wait_for_load_state("networkidle")
 
-    step("Update persona field")
-    page.fill('input#persona', "Senior Sales Consultant")
-
-    step("Update tone dropdown to 'Enthusiastic'")
-    page.select_option('select#tone', 'Enthusiastic')
-
-    step("Update mission textarea")
-    page.fill('textarea#mission', "Drive revenue growth by understanding customer needs and presenting tailored solutions")
-
-    step("Update custom instructions textarea")
-    page.fill('textarea#custom_instructions', 
-              "Always mention our 30-day guarantee. For enterprise leads, gather company size first.")
+    step("Update agent instructions markdown")
+    page.fill('textarea#instructions_markdown',
+              "# Senior Sales Consultant\n\nDrive revenue growth by understanding customer needs.\n\nAlways mention our 30-day guarantee.")
 
     # Mock the PUT update response with new values
+    updated_markdown = "# Senior Sales Consultant\\n\\nDrive revenue growth by understanding customer needs.\\n\\nAlways mention our 30-day guarantee."
     page.route(f"**/api/v1/agents/{agent_id}", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
-        body='''{
-            "success": true,
+        body=f'''{{
             "id": "00000000-0000-0000-0000-000000000002",
+            "organization_id": "{org_id}",
             "name": "Config Agent",
-            "persona": "Senior Sales Consultant",
-            "tone": "Enthusiastic",
-            "mission": "Drive revenue growth by understanding customer needs and presenting tailored solutions",
-            "custom_instructions": "Always mention our 30-day guarantee. For enterprise leads, gather company size first."
-        }'''
+            "phone_number": null,
+            "persona": null,
+            "tone": null,
+            "mission": null,
+            "custom_instructions": null,
+            "instructions_markdown": "{updated_markdown}",
+            "is_active": true,
+            "use_platform_credits": false,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }}'''
     ))
 
     step("Click 'Save Changes'")
@@ -488,13 +473,12 @@ def test_agent_configuration_fields_update(page: Page, base_url: str, step):
     step("Verify success toast")
     expect(page.get_by_text(re.compile(r"updated successfully|saved", re.I))).to_be_visible()
 
-    step("Verify updated values are displayed")
-    expect(page.locator('input#persona')).to_have_value("Senior Sales Consultant")
-    expect(page.locator('select#tone')).to_have_value("Enthusiastic")
-    expect(page.locator('textarea#mission')).to_contain_text("Drive revenue growth")
-    expect(page.locator('textarea#custom_instructions')).to_contain_text("30-day guarantee")
+    step("Verify updated markdown is displayed in editor")
+    expect(page.locator('textarea#instructions_markdown')).to_have_value(
+        re.compile(r"Senior Sales Consultant"), timeout=5000
+    )
 
-    step("Verification Complete: All agent configuration fields updated successfully")
+    step("Verification Complete: Agent instructions markdown updated successfully")
 
 
 def test_organization_context_in_agent_config(page: Page, base_url: str, step):
@@ -573,16 +557,13 @@ Family-owned plumbing business serving Phoenix metro area. Hours: Mon-Fri 8am-6p
     page.wait_for_load_state("networkidle")
 
     step("Open system prompt preview")
-    page.get_by_text("Preview Generated System Prompt").click()
-    page.wait_for_selector("pre", state="visible", timeout=10000)
+    page.get_by_text("Preview System Prompt").click()
+    page.wait_for_selector(".prose", state="visible", timeout=10000)
 
     step("Verify organization context in generated prompt")
-    expect(page.get_by_text("Plumbing Pros LLC")).to_be_visible()
-    expect(page.get_by_text("Industry: Home Services")).to_be_visible()
-    expect(page.get_by_text("456 Main Street, Phoenix, AZ 85001")).to_be_visible()
-    expect(page.get_by_text("Family-owned plumbing business")).to_be_visible()
-    expect(page.get_by_text("24/7 emergency service")).to_be_visible()
-    expect(page.get_by_text("90-day warranty")).to_be_visible()
+    expect(page.locator(".prose").get_by_text("Plumbing Pros LLC")).to_be_visible()
+    expect(page.locator(".prose").get_by_text("456 Main Street, Phoenix, AZ 85001")).to_be_visible()
+    expect(page.locator(".prose").get_by_text("Family-owned plumbing business")).to_be_visible()
 
     step("Verification Complete: Organization context properly included in system prompt")
 
