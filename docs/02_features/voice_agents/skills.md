@@ -6,15 +6,17 @@ Skills are reusable knowledge and procedure packages (written in markdown) that 
 
 ## Progressive Disclosure
 
-Skills use **progressive disclosure** — a two-step loading process that keeps the agent's initial system prompt small and focused:
+Skills use **progressive disclosure** — a three-level loading process that keeps the agent's initial system prompt small and focused:
 
 1. **At call start**: Only skill metadata (name + description) is included in the system prompt as an "Available Skills" section.
-2. **During conversation**: When the agent needs a specific procedure, it calls the `load_skill` tool with the skill slug. The full skill content is loaded into context on-demand.
+2. **During conversation**: When the agent needs a specific procedure, it calls the `load_skill` tool with the skill slug. The full SKILL.md content is loaded into context on-demand.
+3. **Deeper references**: If a loaded skill references a sub-file (e.g., "see *references/policies.md*"), the agent calls `load_skill_reference` with the skill slug and file path to load that file's content.
 
 This design is critical for voice agents where:
 - Latency matters (smaller initial prompt = faster first response)
 - Most calls only use 1-2 skills out of many assigned
 - Token usage is minimized (unused skills aren't loaded)
+- Reference files (scripts, documentation, data) are never loaded unless explicitly needed
 
 ## Skill Architecture
 
@@ -52,7 +54,13 @@ Key fields:
 
 ### organization_skill_files
 
-Reference files for skills (Phase 2b). Stores additional files like `references/policies.md` that skills can reference.
+Reference files for skills. Stores additional files like `references/policies.md` that skills can reference. Files are loaded on-demand via the `load_skill_reference` tool for progressive disclosure.
+
+Key fields:
+- `file_path` — Relative path within the skill (e.g., "references/booking-policies.md")
+- `content` — Full file content
+- `file_kind` — Classification: `reference`, `script`, `asset`, or `other`
+- `content_hash` — SHA-256 of content for change detection
 
 ### agent_skills
 
@@ -86,6 +94,17 @@ POST   /api/v1/organizations/{org_id}/skills         — Create custom skill (ad
 PUT    /api/v1/organizations/{org_id}/skills/{id}     — Update skill (admin only)
 DELETE /api/v1/organizations/{org_id}/skills/{id}     — Delete custom skill (admin only)
 POST   /api/v1/organizations/{org_id}/skills/seed    — Seed built-in skills (idempotent)
+POST   /api/v1/organizations/{org_id}/skills/import  — Import skill from GitHub/skills.sh URL (admin only)
+GET    /api/v1/organizations/{org_id}/skills/{id}/agents — List agents using a skill
+```
+
+### Skill files
+
+```
+GET    /api/v1/organizations/{org_id}/skills/{id}/files          — List skill files (summaries)
+POST   /api/v1/organizations/{org_id}/skills/{id}/files          — Create file (admin only)
+PUT    /api/v1/organizations/{org_id}/skills/{id}/files/{fid}    — Update file (admin only)
+DELETE /api/v1/organizations/{org_id}/skills/{id}/files/{fid}    — Delete file (admin only)
 ```
 
 ### Agent-level
@@ -99,8 +118,9 @@ DELETE /api/v1/agents/{agent_id}/skills/{skill_id}    — Unassign skill (admin 
 ### Tool-facing
 
 ```
-GET    /api/v1/skills/{org_id}/{slug}                — Get full skill content by slug
-POST   /api/v1/skills/sync-all                       — Sync built-in skills across all orgs (platform admin)
+GET    /api/v1/skills/{org_id}/{slug}                         — Get full skill content (load_skill tool)
+GET    /api/v1/skills/{org_id}/{slug}/files/{file_path}       — Get reference file content (load_skill_reference tool)
+POST   /api/v1/skills/sync-all                               — Sync built-in skills across all orgs (platform admin)
 ```
 
 ## Permissions
@@ -115,19 +135,25 @@ POST   /api/v1/skills/sync-all                       — Sync built-in skills ac
 | Delete built-in skill | ✗ | ✗ | ✗ |
 | Enable/disable built-in | ✓ | ✓ | ✗ |
 | Assign skill to agent | ✓ | ✓ | ✗ |
+| Create/edit/delete skill files | ✓ | ✓ | ✗ |
+| Import skills from URL | ✓ | ✓ | ✗ |
 | Sync all orgs | ✓ | ✗ | ✗ |
 
 ## Worker Integration
 
-The worker registers a `load_skill` function tool when an agent has assigned skills:
+The worker registers `load_skill` and `load_skill_reference` function tools when an agent has assigned skills:
 
 ```python
 # Fetch skill summaries for prompt metadata
 skill_summaries = await skill_service.get_agent_skill_summaries(agent_id)
 
-# Register load_skill tool
+# Register load_skill tool (Level 2: load SKILL.md)
 load_skill_fn = create_load_skill_function(org_id, skill_service)
 livekit_tools.append(function_tool(load_skill_fn, ...))
+
+# Register load_skill_reference tool (Level 3: load sub-files)
+load_skill_ref_fn = create_load_skill_reference_function(org_id, skill_service)
+livekit_tools.append(function_tool(load_skill_ref_fn, ...))
 
 # Build prompt with skill metadata
 instructions = PromptBuilder.build(
@@ -141,14 +167,38 @@ instructions = PromptBuilder.build(
 ### Organization Page — Skills Tab
 
 Split-view layout:
-- **Left panel**: Filterable skill list with category badges
-- **Right panel**: Selected skill content rendered as markdown
+- **Left panel**: Filterable skill list with expandable accordions showing file trees
+- **Right panel**: Selected skill or file content rendered as markdown/code/JSON
 - Create custom skills via side drawer
 - Edit custom skills inline (built-in skills are read-only)
+- Import skills from GitHub/skills.sh URLs via input field
+- Add/edit/delete reference files within custom skills
+- Delete custom skill with agent-usage warning dialog
+- URL state management (`?skill=...&file=...`) for bookmarkable navigation
 
 ### Agent Detail Page — Skills Tab
 
 Toggle-based assignment:
 - Each org skill shown as a card with toggle switch
-- Click row to view skill content in side drawer
+- Click row to view skill content in side drawer with file tree
+- Click individual files to view content (markdown, code, JSON rendering)
 - "Manage Skills" link (admin only) to organization settings
+
+## Skill Import
+
+Skills can be imported from GitHub repositories or skills.sh URLs. The importer fetches the entire skill package (SKILL.md + all reference files) via the GitHub REST API — no git clone or shell commands.
+
+**Supported URL formats:**
+- GitHub tree: `https://github.com/owner/repo/tree/main/skills/my-skill`
+- GitHub repo: `https://github.com/owner/repo` (imports all skills)
+- skills.sh: `https://skills.sh/owner/repo/skill-name`
+- Key shorthand: `owner/repo/skill-name`
+- npx command: `npx skillsadd owner/repo`
+
+**Import process:**
+1. Parse URL → extract owner, repo, ref, path
+2. Fetch repo tree recursively via GitHub API
+3. Locate SKILL.md files within the specified path
+4. Parse YAML frontmatter for name/description metadata
+5. Fetch all companion files (references, scripts, assets)
+6. Store skill + files in database with source_url/source_ref

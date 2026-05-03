@@ -48,3 +48,27 @@ export interface AgentSkill {
   is_active: boolean;
   created_at: string;
 }
+
+export interface SkillFile {
+  id: string;
+  skill_id: string;
+  file_path: string;
+  content: string;
+  file_kind: "reference" | "script" | "asset" | "other";
+  content_hash: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillFileSummary {
+  id: string;
+  file_path: string;
+  file_kind: string;
+  content_hash: string | null;
+}
+
+export interface SkillImportResult {
+  skill: OrganizationSkill;
+  files_imported: number;
+  source_url: string;
+}

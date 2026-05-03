@@ -22,6 +22,10 @@ from .skill_models import (
     OrganizationSkill,
     OrganizationSkillCreate,
     OrganizationSkillSummary,
+    SkillFile,
+    SkillFileCreate,
+    SkillFileSummary,
+    SkillFileUpdate,
     OrganizationSkillUpdate,
 )
 
@@ -118,6 +122,20 @@ class SkillService:
         """Create a new organization skill."""
         skill_operations_counter.add(1, {"operation": "create_skill"})
         try:
+            # Check for duplicate slug within the same organization
+            existing = (
+                self.supabase.table("organization_skills")
+                .select("id, name")
+                .eq("organization_id", str(skill_data.organization_id))
+                .eq("slug", skill_data.slug)
+                .execute()
+            )
+            if existing.data:
+                return None, (
+                    f"A skill with slug '{skill_data.slug}' already exists in this organization "
+                    f"('{existing.data[0]['name']}'). Delete the existing skill first or use a different slug."
+                )
+
             response = (
                 self.supabase.table("organization_skills")
                 .insert(
@@ -294,6 +312,210 @@ class SkillService:
         except Exception as e:
             logger.error(f"Error unassigning skill: {e}", exc_info=True)
             return False, str(e)
+
+    @tracer.start_as_current_span("skill.get_agents_using_skill")
+    async def get_agents_using_skill(
+        self, skill_id: UUID
+    ) -> tuple[List[dict], Optional[str]]:
+        """Get agents that have this skill assigned (for deletion warnings).
+
+        Returns a list of {id, name, is_active} dicts.
+        """
+        try:
+            response = (
+                self.supabase.table("agent_skills")
+                .select("agent:voice_agents(id, name, is_active)")
+                .eq("skill_id", str(skill_id))
+                .execute()
+            )
+            agents = []
+            for item in response.data:
+                if item.get("agent"):
+                    agents.append(item["agent"])
+            return agents, None
+        except Exception as e:
+            logger.error(f"Error getting agents for skill {skill_id}: {e}", exc_info=True)
+            return [], str(e)
+
+    # --- Skill file CRUD ---
+
+    @tracer.start_as_current_span("skill.get_skill_files")
+    async def get_skill_files(
+        self, skill_id: UUID
+    ) -> tuple[List[SkillFileSummary], Optional[str]]:
+        """Get all files for a skill (summaries without content, for file tree)."""
+        skill_operations_counter.add(1, {"operation": "get_skill_files"})
+        try:
+            response = (
+                self.supabase.table("organization_skill_files")
+                .select("id, file_path, file_kind, content_hash")
+                .eq("skill_id", str(skill_id))
+                .order("file_path")
+                .execute()
+            )
+            files = [SkillFileSummary(**item) for item in response.data]
+            return files, None
+        except Exception as e:
+            logger.error(f"Error getting skill files {skill_id}: {e}", exc_info=True)
+            return [], str(e)
+
+    @tracer.start_as_current_span("skill.get_skill_file_content")
+    async def get_skill_file_content(
+        self, skill_id: UUID, file_path: str
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Get a specific file's content by skill_id and file_path.
+
+        Used by the load_skill_reference tool for progressive disclosure.
+        """
+        skill_operations_counter.add(1, {"operation": "get_skill_file_content"})
+        try:
+            response = (
+                self.supabase.table("organization_skill_files")
+                .select("content")
+                .eq("skill_id", str(skill_id))
+                .eq("file_path", file_path)
+                .execute()
+            )
+            if not response.data:
+                return None, f"File '{file_path}' not found in skill"
+            return response.data[0]["content"], None
+        except Exception as e:
+            logger.error(f"Error getting skill file content: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("skill.get_skill_file_content_by_slug")
+    async def get_skill_file_content_by_slug(
+        self, org_id: UUID, slug: str, file_path: str
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Get file content by org_id, skill slug, and file path.
+
+        Used by the load_skill_reference worker tool.
+        """
+        skill_operations_counter.add(1, {"operation": "get_skill_file_content_by_slug"})
+        try:
+            # First get the skill ID
+            skill_response = (
+                self.supabase.table("organization_skills")
+                .select("id")
+                .eq("organization_id", str(org_id))
+                .eq("slug", slug)
+                .eq("is_active", True)
+                .execute()
+            )
+            if not skill_response.data:
+                return None, f"Skill '{slug}' not found or inactive"
+
+            skill_id = skill_response.data[0]["id"]
+            return await self.get_skill_file_content(skill_id, file_path)
+        except Exception as e:
+            logger.error(f"Error getting skill file by slug: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("skill.create_skill_file")
+    async def create_skill_file(
+        self, skill_id: UUID, file_data: SkillFileCreate
+    ) -> tuple[Optional[SkillFile], Optional[str]]:
+        """Create a reference file within a skill."""
+        skill_operations_counter.add(1, {"operation": "create_skill_file"})
+        try:
+            content_hash = _compute_content_hash(file_data.content)
+            response = (
+                self.supabase.table("organization_skill_files")
+                .insert({
+                    "skill_id": str(skill_id),
+                    "file_path": file_data.file_path,
+                    "content": file_data.content,
+                    "file_kind": file_data.file_kind,
+                    "content_hash": content_hash,
+                })
+                .execute()
+            )
+            if not response.data:
+                return None, "Failed to create skill file"
+            return SkillFile(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error creating skill file: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("skill.update_skill_file")
+    async def update_skill_file(
+        self, file_id: UUID, file_data: SkillFileUpdate
+    ) -> tuple[Optional[SkillFile], Optional[str]]:
+        """Update a reference file's content and/or path."""
+        skill_operations_counter.add(1, {"operation": "update_skill_file"})
+        try:
+            update_dict = {}
+            if file_data.file_path is not None:
+                update_dict["file_path"] = file_data.file_path
+            if file_data.content is not None:
+                update_dict["content"] = file_data.content
+                update_dict["content_hash"] = _compute_content_hash(file_data.content)
+
+            if not update_dict:
+                return None, "No fields to update"
+
+            response = (
+                self.supabase.table("organization_skill_files")
+                .update(update_dict)
+                .eq("id", str(file_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "File not found or update failed"
+            return SkillFile(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error updating skill file: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("skill.delete_skill_file")
+    async def delete_skill_file(
+        self, file_id: UUID
+    ) -> tuple[bool, Optional[str]]:
+        """Delete a reference file."""
+        skill_operations_counter.add(1, {"operation": "delete_skill_file"})
+        try:
+            response = (
+                self.supabase.table("organization_skill_files")
+                .delete()
+                .eq("id", str(file_id))
+                .execute()
+            )
+            if not response.data:
+                return False, "File not found"
+            return True, None
+        except Exception as e:
+            logger.error(f"Error deleting skill file: {e}", exc_info=True)
+            return False, str(e)
+
+    @tracer.start_as_current_span("skill.bulk_create_skill_files")
+    async def bulk_create_skill_files(
+        self, skill_id: UUID, files: List[SkillFileCreate]
+    ) -> tuple[int, Optional[str]]:
+        """Create multiple files for a skill (used during import)."""
+        skill_operations_counter.add(1, {"operation": "bulk_create_skill_files"})
+        try:
+            rows = []
+            for f in files:
+                rows.append({
+                    "skill_id": str(skill_id),
+                    "file_path": f.file_path,
+                    "content": f.content,
+                    "file_kind": f.file_kind,
+                    "content_hash": _compute_content_hash(f.content),
+                })
+
+            if not rows:
+                return 0, None
+
+            response = (
+                self.supabase.table("organization_skill_files")
+                .insert(rows)
+                .execute()
+            )
+            return len(response.data), None
+        except Exception as e:
+            logger.error(f"Error bulk creating skill files: {e}", exc_info=True)
+            return 0, str(e)
 
     # --- Seeding ---
 

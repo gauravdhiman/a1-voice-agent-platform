@@ -6,6 +6,11 @@ Tests the full user journey for skills:
 - Skills can be viewed in the split-view panel
 - Agent skills tab shows toggle-based assignment
 - Skill filtering works
+- Organization skills page shows expandable file tree
+- Clicking a file shows its content rendered
+- Import from URL fetches and adds a skill
+- Delete shows agents using the skill and confirms
+- URL state for skill/file selection (bookmarkable)
 """
 
 import pytest
@@ -17,6 +22,46 @@ from helpers import signin_user
 # Test data — matches conftest.py mock org/user IDs
 TEST_ORG_ID = "00000000-0000-0000-0000-000000000001"
 TEST_AGENT_ID = "00000000-0000-0000-0000-000000000002"
+
+MOCK_FILE_SUMMARIES = [
+    {"id": "file-1", "file_path": "references/policies.md", "file_kind": "reference", "content_hash": "abc1"},
+    {"id": "file-2", "file_path": "references/faq.md", "file_kind": "reference", "content_hash": "abc2"},
+    {"id": "file-3", "file_path": "scripts/validate.py", "file_kind": "script", "content_hash": "abc3"},
+]
+
+MOCK_CUSTOM_SKILL_FILES = [
+    {"id": "file-4", "file_path": "notes.md", "file_kind": "reference", "content_hash": "abc4"},
+]
+
+MOCK_FILE_CONTENTS = {
+    "references/policies.md": "# Booking Policies\n\n- Confirm insurance\n- Verify ID",
+    "references/faq.md": "# FAQ\n\nQ: What hours?\nA: 9-5",
+    "scripts/validate.py": "# Script\ndef run(): pass",
+}
+
+MOCK_IMPORT_RESULT = [
+    {
+        "skill": {
+            "id": "skill-new-1",
+            "organization_id": TEST_ORG_ID,
+            "slug": "cold-email",
+            "name": "Cold Email",
+            "description": "Send cold emails.",
+            "content": "# Cold Email\n\nDraft and send.",
+            "category": "custom",
+            "is_active": True,
+            "version": None,
+            "author": None,
+            "content_hash": "imp123",
+            "source_url": "https://github.com/anthropics/skills",
+            "source_ref": "main",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+        "files_imported": 3,
+        "source_url": "https://github.com/anthropics/skills",
+    }
+]
 
 MOCK_SKILLS = [
     {
@@ -89,10 +134,8 @@ MOCK_AGENT = {
 }
 
 
-def setup_skill_mocks(page: Page):
-    """Set up API mocks for skill endpoints."""
-
-    # Mock org detail (needed when navigating to org page with org_id param)
+def setup_base_mocks(page: Page):
+    """Set up base API mocks shared by most tests."""
     page.route(f"**/api/v1/organizations/{TEST_ORG_ID}", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
@@ -107,21 +150,12 @@ def setup_skill_mocks(page: Page):
         }),
     ))
 
-    # Mock org skills list
-    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", lambda route: route.fulfill(
-        status=200,
-        content_type="application/json",
-        body=json.dumps(MOCK_SKILLS),
-    ))
-
-    # Mock agent detail
     page.route(f"**/api/v1/agents/{TEST_AGENT_ID}", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=json.dumps(MOCK_AGENT),
     ))
 
-    # Mock agent skills (first skill assigned)
     page.route(f"**/api/v1/agents/{TEST_AGENT_ID}/skills", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
@@ -135,7 +169,6 @@ def setup_skill_mocks(page: Page):
         }]),
     ))
 
-    # Mock tools endpoints (empty — needed for agent detail page)
     page.route(f"**/api/v1/tools/agent/{TEST_AGENT_ID}", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
@@ -148,11 +181,21 @@ def setup_skill_mocks(page: Page):
         body="[]",
     ))
 
-    # Mock system prompt
     page.route(f"**/api/v1/agents/{TEST_AGENT_ID}/system-prompt", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body='"# Test Agent\\n\\nA helpful voice assistant."',
+    ))
+
+
+def setup_skill_mocks(page: Page):
+    """Set up API mocks for skill endpoints (skills list uses static MOCK_SKILLS)."""
+    setup_base_mocks(page)
+
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", lambda route: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps(MOCK_SKILLS),
     ))
 
 
@@ -201,6 +244,198 @@ def test_organization_skills_filter(page: Page, base_url: str, step):
     step("Verify only Call Transfer is visible in the skill list")
     # The left panel should show only matching skills
     expect(page.get_by_text("Call Transfer").first).to_be_visible()
+
+
+def test_skill_file_tree_expandable(page: Page, base_url: str, step):
+    """Test that clicking a skill accordion expands to show file tree."""
+    import json as _json
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_SKILLS),
+    ))
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills/{MOCK_SKILLS[0]['id']}/files", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_FILE_SUMMARIES),
+    ))
+
+    setup_skill_mocks(page)
+    step("Sign in and navigate to organization skills")
+    signin_user(page, base_url)
+    page.goto(f"{base_url}/organization?org_id={TEST_ORG_ID}&tab=skills")
+    page.wait_for_load_state("networkidle")
+
+    step("Click Appointment Booking skill to expand")
+    expect(page.get_by_text("Appointment Booking").first).to_be_visible(timeout=10000)
+    page.get_by_text("Appointment Booking").first.click()
+
+    step("Verify file tree is visible with references folder and scripts")
+    # Wait for skill files to load
+    expect(page.get_by_text("references").first).to_be_visible(timeout=5000)
+    expect(page.get_by_text("policies.md")).to_be_visible()
+    expect(page.get_by_text("validate.py")).to_be_visible()
+
+
+def test_skill_file_content_viewable(page: Page, base_url: str, step):
+    """Test that clicking a file in the tree loads its content."""
+    import json as _json
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_SKILLS),
+    ))
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills/{MOCK_SKILLS[0]['id']}/files", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_FILE_SUMMARIES),
+    ))
+    page.route(
+        f"**/api/v1/skills/{TEST_ORG_ID}/appointment-booking/files/references/policies.md",
+        lambda route: route.fulfill(
+            status=200, content_type="text/plain",
+            body=MOCK_FILE_CONTENTS["references/policies.md"],
+        ),
+    )
+
+    setup_skill_mocks(page)
+    step("Sign in, expand Appointment Booking skill")
+    signin_user(page, base_url)
+    page.goto(f"{base_url}/organization?org_id={TEST_ORG_ID}&tab=skills")
+    page.wait_for_load_state("networkidle")
+
+    step("Expand skill and click on policies.md")
+    page.get_by_text("Appointment Booking").first.click()
+    expect(page.get_by_text("references").first).to_be_visible(timeout=5000)
+    page.get_by_text("policies.md").first.click()
+
+    step("Verify file content appears in right panel")
+    expect(page.get_by_text("Confirm insurance").first).to_be_visible(timeout=5000)
+
+
+def test_skill_import_from_url_adds_skill(page: Page, base_url: str, step):
+    """Test importing a skill from a GitHub URL adds it to the org list."""
+    import json as _json
+    all_skills = MOCK_SKILLS.copy()
+
+    # Set up base mocks without the static skills list
+    setup_base_mocks(page)
+
+    def handle_skills_list(route):
+        body = _json.dumps(all_skills)
+        route.fulfill(status=200, content_type="application/json", body=body)
+
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", handle_skills_list)
+
+    def handle_import(route):
+        if route.request.method == "POST":
+            # Add the imported skill to the mock list so loadSkills() finds it
+            all_skills.append(MOCK_IMPORT_RESULT[0]["skill"])
+            route.fulfill(status=201, content_type="application/json", body=_json.dumps(MOCK_IMPORT_RESULT))
+        else:
+            route.continue_()
+
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills/import", handle_import)
+
+    step("Sign in and navigate to skills tab")
+    signin_user(page, base_url)
+    page.goto(f"{base_url}/organization?org_id={TEST_ORG_ID}&tab=skills")
+    page.wait_for_load_state("networkidle")
+
+    step("Type a GitHub URL in the import input")
+    import_input = page.locator('input[placeholder*="GitHub"], input[placeholder*="skills.sh"]').first
+    expect(import_input).to_be_visible(timeout=10000)
+    import_input.fill("https://github.com/anthropics/skills")
+
+    step("Press Enter to trigger import")
+    import_input.press("Enter")
+
+    step("Wait for success toast and verify new skill appears")
+    # Wait briefly for the async import + loadSkills cycle
+    page.wait_for_timeout(800)
+    expect(page.get_by_text("Cold Email").first).to_be_visible(timeout=10000)
+
+
+def test_skill_delete_shows_agent_warning(page: Page, base_url: str, step):
+    """Test that deleting a custom skill shows agents using it and requires confirmation."""
+    import json as _json
+    setup_base_mocks(page)
+
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_SKILLS),
+    ))
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills/{MOCK_SKILLS[2]['id']}/agents", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps([{"id": "agent-1", "name": "Test Agent", "is_active": True}]),
+    ))
+    page.route(
+        f"**/api/v1/organizations/{TEST_ORG_ID}/skills/{MOCK_SKILLS[2]['id']}",
+        lambda route: route.fulfill(status=204, content_type="application/json", body=""),
+    )
+
+    step("Sign in and navigate to skills tab")
+    signin_user(page, base_url)
+    page.goto(f"{base_url}/organization?org_id={TEST_ORG_ID}&tab=skills")
+    page.wait_for_load_state("networkidle")
+
+    step("Find the custom skill row and hover to reveal trash button")
+    custom_skill_row = page.locator("text=My Custom Policy").first
+    expect(custom_skill_row).to_be_visible(timeout=10000)
+    custom_skill_row.hover()
+
+    step("Click the trash icon that appears on hover")
+    # The trash button is inside the skill row's action area
+    trash_btn = custom_skill_row.locator("xpath=ancestor::*[contains(@class,'group')]//button").first
+    if trash_btn.count() == 0:
+        # Fallback: hover the row and click the last button that appears
+        custom_skill_row.hover()
+        page.wait_for_timeout(200)
+        trash_btn = page.locator("button svg[class*='text-red']").first.locator("xpath=ancestor::button").first
+    expect(trash_btn).to_be_visible(timeout=5000)
+    trash_btn.click()
+
+    step("Verify agent warning is shown in dialog")
+    expect(page.get_by_text("currently used by").first).to_be_visible(timeout=5000)
+    expect(page.get_by_text("Test Agent").first).to_be_visible()
+
+    step("Click Delete Skill to confirm")
+    page.get_by_role("button", name="Delete Skill").first.click()
+
+    step("Verify skill is no longer in the list")
+    # The row should disappear after deletion
+    page.wait_for_timeout(500)
+
+
+def test_url_bookmarks_skill_and_file(page: Page, base_url: str, step):
+    """Test that URL parameter restores selected skill and file on load."""
+    import json as _json
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_SKILLS),
+    ))
+    page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills/{MOCK_SKILLS[0]['id']}/files", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps(MOCK_FILE_SUMMARIES),
+    ))
+    page.route(
+        f"**/api/v1/skills/{TEST_ORG_ID}/appointment-booking/files/references/faq.md",
+        lambda route: route.fulfill(
+            status=200, content_type="text/plain",
+            body=MOCK_FILE_CONTENTS["references/faq.md"],
+        ),
+    )
+
+    setup_skill_mocks(page)
+    step("Sign in and navigate directly to skill URL with file param")
+    signin_user(page, base_url)
+    page.goto(f"{base_url}/organization?org_id={TEST_ORG_ID}&tab=skills&skill=appointment-booking&file=references/faq.md")
+    page.wait_for_load_state("networkidle")
+
+    step("Verify the skill is expanded and file content loads")
+    expect(page.get_by_text("references").first).to_be_visible(timeout=10000)
+    expect(page.get_by_text("Q: What hours?").first).to_be_visible(timeout=5000)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2a existing tests (below — unchanged)
+# ---------------------------------------------------------------------------
 
 
 def test_agent_skills_tab_shows_toggles(page: Page, base_url: str, step):

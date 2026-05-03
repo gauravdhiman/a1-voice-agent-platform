@@ -98,13 +98,60 @@ class AgentSkillResponse(BaseModel):
     created_at: datetime
 
 
-class SkillFileResponse(BaseModel):
-    """Response model for a skill reference file (Phase 2b)."""
+class SkillFileCreate(BaseModel):
+    """Model for creating a reference file within a skill."""
+
+    file_path: str = Field(..., min_length=1, description="File path within skill (e.g., 'references/policies.md')")
+    content: str = Field(..., min_length=1, description="File content")
+    file_kind: str = Field(default="reference", description="File kind: 'reference', 'script', 'asset', 'other'")
+
+    @field_validator("file_kind")
+    @classmethod
+    def validate_file_kind(cls, v: str) -> str:
+        allowed = {"reference", "script", "asset", "other"}
+        if v not in allowed:
+            raise ValueError(f"File kind must be one of: {', '.join(allowed)}")
+        return v
+
+
+class SkillFileUpdate(BaseModel):
+    """Model for updating a reference file."""
+
+    file_path: Optional[str] = Field(None, min_length=1, description="New file path (for renaming/moving)")
+    content: Optional[str] = Field(None, min_length=1)
+
+
+class SkillFile(BaseModel):
+    """Full response model for a skill reference file."""
 
     id: UUID
     skill_id: UUID
     file_path: str
     content: str
     file_kind: str
+    content_hash: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class SkillFileSummary(BaseModel):
+    """Lightweight file summary (no content) for file tree listings."""
+
+    id: UUID
+    file_path: str
+    file_kind: str
+    content_hash: Optional[str] = None
+
+
+class SkillImportRequest(BaseModel):
+    """Request model for importing a skill from an external URL."""
+
+    url: str = Field(..., min_length=1, description="GitHub URL or skills.sh URL")
+
+
+class SkillImportResult(BaseModel):
+    """Result of a skill import operation."""
+
+    skill: OrganizationSkill
+    files_imported: int
+    source_url: str

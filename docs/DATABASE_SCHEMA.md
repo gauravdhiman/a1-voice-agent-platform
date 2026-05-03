@@ -1035,7 +1035,7 @@ erDiagram
 16. `20260329000001` - Add phone_numbers table for Twilio phone number management
 17. `20260329000002` - Add call_logs table for tracking voice agent calls
 18. `20260331000001` - Add instructions_markdown column to voice_agents (Phase 1: markdown-based agent instructions)
-19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure)
+19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure; Phase 2b: file CRUD, skill import, load_skill_reference tool)
 
 ---
 
@@ -1068,7 +1068,7 @@ Organization-level skill library. Skills are reusable knowledge/procedure packag
 
 #### organization_skill_files
 
-Reference files for skills (Phase 2b data, table exists for schema stability).
+Reference files for skills. Stores additional files like `references/policies.md` that skills can reference. Files are loaded on-demand via the `load_skill_reference` worker tool.
 
 | Column              | Type         | Constraints                             | Description                     |
 | ------------------- | ------------ | --------------------------------------- | ------------------------------- |
@@ -1076,7 +1076,7 @@ Reference files for skills (Phase 2b data, table exists for schema stability).
 | skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Parent skill                    |
 | file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md"  |
 | content             | TEXT         | NOT NULL                                | File content                    |
-| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset'  |
+| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset', 'other' |
 | content_hash        | VARCHAR(64)  | NULLABLE                                | SHA-256 hash for change detection |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Last update timestamp           |

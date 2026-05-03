@@ -21,6 +21,12 @@ from shared.voice_agents.skill_models import (
     OrganizationSkill,
     OrganizationSkillCreate,
     OrganizationSkillUpdate,
+    SkillFile,
+    SkillFileCreate,
+    SkillFileSummary,
+    SkillFileUpdate,
+    SkillImportRequest,
+    SkillImportResult,
 )
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.service import voice_agent_service
@@ -338,3 +344,256 @@ async def sync_built_in_skills_all_orgs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
         )
     return {"synced": total}
+
+
+@skill_router.get(
+    "/organizations/{org_id}/skills/{skill_id}/agents",
+)
+@tracer.start_as_current_span("skill.routes.get_agents_using_skill")
+async def get_agents_using_skill(
+    org_id: UUID,
+    skill_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Get agents that have this skill assigned. Used for deletion warnings."""
+    agents, error = await skill_service.get_agents_using_skill(skill_id)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    return agents
+
+
+# --- Skill reference files ---
+
+
+@skill_router.get(
+    "/organizations/{org_id}/skills/{skill_id}/files",
+    response_model=List[SkillFileSummary],
+)
+@tracer.start_as_current_span("skill.routes.get_skill_files")
+async def get_skill_files(
+    org_id: UUID,
+    skill_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Get all files for a skill (summaries without content, for file tree)."""
+    files, error = await skill_service.get_skill_files(skill_id)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    return files
+
+
+@skill_router.post(
+    "/organizations/{org_id}/skills/{skill_id}/files",
+    response_model=SkillFile,
+    status_code=status.HTTP_201_CREATED,
+)
+@tracer.start_as_current_span("skill.routes.create_skill_file")
+async def create_skill_file(
+    org_id: UUID,
+    skill_id: UUID,
+    file_data: SkillFileCreate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Create a reference file within a skill. Admin only."""
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to create skill files",
+            )
+
+    # Verify skill exists and belongs to this org
+    existing, err = await skill_service.get_skill_by_id(skill_id)
+    if err or not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+    if str(existing.organization_id) != str(org_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
+
+    file, error = await skill_service.create_skill_file(skill_id, file_data)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return file
+
+
+@skill_router.put(
+    "/organizations/{org_id}/skills/{skill_id}/files/{file_id}",
+    response_model=SkillFile,
+)
+@tracer.start_as_current_span("skill.routes.update_skill_file")
+async def update_skill_file(
+    org_id: UUID,
+    skill_id: UUID,
+    file_id: UUID,
+    file_data: SkillFileUpdate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Update a reference file. Admin only."""
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to update skill files",
+            )
+
+    file, error = await skill_service.update_skill_file(file_id, file_data)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return file
+
+
+@skill_router.delete(
+    "/organizations/{org_id}/skills/{skill_id}/files/{file_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@tracer.start_as_current_span("skill.routes.delete_skill_file")
+async def delete_skill_file(
+    org_id: UUID,
+    skill_id: UUID,
+    file_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Delete a reference file. Admin only."""
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to delete skill files",
+            )
+
+    success, error = await skill_service.delete_skill_file(file_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+
+# --- Tool-facing: reference file content retrieval ---
+
+
+@skill_router.get(
+    "/skills/{org_id}/{slug}/files/{file_path:path}",
+    response_model=str,
+)
+@tracer.start_as_current_span("skill.routes.get_skill_file_content")
+async def get_skill_file_content(
+    org_id: UUID,
+    slug: str,
+    file_path: str,
+):
+    """Get a skill reference file's content by org_id, slug, and file path.
+
+    Called by the worker's load_skill_reference tool for progressive disclosure.
+    """
+    content, error = await skill_service.get_skill_file_content_by_slug(
+        org_id, slug, file_path
+    )
+    if error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+    return content
+
+
+# --- Skill import ---
+
+
+@skill_router.post(
+    "/organizations/{org_id}/skills/import",
+    response_model=List[SkillImportResult],
+)
+@tracer.start_as_current_span("skill.routes.import_skill")
+async def import_skill_from_url(
+    org_id: UUID,
+    request: SkillImportRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Import a skill from a GitHub URL or skills.sh URL.
+
+    Fetches the entire skill package (SKILL.md + all reference files)
+    via GitHub REST API. Admin only.
+    """
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to import skills",
+            )
+
+    try:
+        from src.voice_agents.skill_import import SkillImporter
+
+        importer = SkillImporter()
+        packages = await importer.fetch_skill_packages(request.url)
+
+        results = []
+        for pkg in packages:
+            # Create the skill
+            from shared.voice_agents.skill_models import OrganizationSkillCreate
+
+            skill_data = OrganizationSkillCreate(
+                organization_id=org_id,
+                slug=pkg.slug,
+                name=pkg.name,
+                description=pkg.description,
+                content=pkg.content,
+                category="custom",
+                source_url=pkg.source_url,
+                source_ref=pkg.source_ref,
+            )
+
+            skill, error = await skill_service.create_skill(skill_data)
+            if error:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to create skill '{pkg.slug}': {error}",
+                )
+
+            # Create reference files
+            files_count = 0
+            if pkg.files and skill:
+                from shared.voice_agents.skill_models import SkillFileCreate
+
+                file_creates = [
+                    SkillFileCreate(
+                        file_path=f.file_path,
+                        content=f.content,
+                        file_kind=f.file_kind,
+                    )
+                    for f in pkg.files
+                ]
+                files_count, file_error = await skill_service.bulk_create_skill_files(
+                    skill.id, file_creates
+                )
+                if file_error:
+                    logger.warning(
+                        f"Failed to create some files for '{pkg.slug}': {file_error}"
+                    )
+
+            results.append(
+                SkillImportResult(
+                    skill=skill,
+                    files_imported=files_count,
+                    source_url=pkg.source_url,
+                )
+            )
+
+        return results
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions (e.g., duplicate skill) directly
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error importing skill: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}",
+        )

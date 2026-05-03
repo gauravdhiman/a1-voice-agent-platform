@@ -9,7 +9,7 @@ import { type SubscriptionPlan } from '@/types/billing'
 import { type CreditBalance } from '@/types/billing'
 import { type Role, type Permission, type RoleWithPermissions } from '@/types/rbac'
 import { type PhoneNumber, type PhoneNumberWithAgent, type AvailablePhoneNumber, type PhoneNumberType, type PhoneNumberStatus } from '@/types/phone-number'
-import { type OrganizationSkill, type AgentSkill } from '@/types/skill'
+import { type OrganizationSkill, type AgentSkill, type SkillFile, type SkillFileSummary, type SkillImportResult } from '@/types/skill'
 
 export const createMockUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   id: 'user-1',
@@ -212,5 +212,32 @@ export const createMockAgentSkill = (overrides: Partial<AgentSkill> = {}): Agent
   skill: createMockOrganizationSkill(),
   is_active: true,
   created_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockSkillFileSummary = (overrides: Partial<SkillFileSummary> = {}): SkillFileSummary => ({
+  id: 'file-summary-1',
+  file_path: 'references/policies.md',
+  file_kind: 'reference',
+  content_hash: 'filehash123',
+  ...overrides,
+})
+
+export const createMockSkillFile = (overrides: Partial<SkillFile> = {}): SkillFile => ({
+  id: 'file-1',
+  skill_id: 'skill-1',
+  file_path: 'references/policies.md',
+  content: '# Policies\n\n- Be respectful\n- Verify identity',
+  file_kind: 'reference' as const,
+  content_hash: 'filehash123',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockSkillImportResult = (overrides: Partial<SkillImportResult> = {}): SkillImportResult => ({
+  skill: createMockOrganizationSkill({ slug: 'imported-skill', name: 'Imported Skill' }),
+  files_imported: 3,
+  source_url: 'https://github.com/owner/repo/tree/main/my-skill',
   ...overrides,
 })
