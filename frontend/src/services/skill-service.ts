@@ -1,8 +1,12 @@
 /**
- * Service for managing organization skills and agent skill assignments.
+ * Service for managing organization skills, platform skills, and agent skill assignments.
  *
  * Skills are reusable knowledge/procedure packages (markdown) that can be
  * assigned to agents via progressive disclosure.
+ *
+ * Platform skills are immutable templates that org admins can fork into their
+ * own editable libraries. Forked skills can optionally be refreshed to receive
+ * updates from the platform source.
  */
 
 import { apiClient } from "@/lib/api/client";
@@ -14,10 +18,16 @@ import type {
   SkillFile,
   SkillFileSummary,
   SkillImportResult,
+  PlatformSkill,
+  PlatformSkillSummary,
+  SkillForkRequest,
+  SkillRefreshRequest,
 } from "@/types/skill";
 
 class SkillService {
-  // --- Organization skill library ---
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // Organization Skill Library
+  // ═══════════════════════════════════════════════════════════════════════════════
 
   async getOrganizationSkills(orgId: string): Promise<OrganizationSkill[]> {
     const response = await apiClient.get<OrganizationSkill[]>(
@@ -53,14 +63,72 @@ class SkillService {
     await apiClient.delete(`/api/v1/organizations/${orgId}/skills/${skillId}`);
   }
 
-  async seedSkills(orgId: string): Promise<{ seeded: number }> {
-    const response = await apiClient.post<{ seeded: number }>(
-      `/api/v1/organizations/${orgId}/skills/seed`,
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // Platform Skills (Read-only for org users, CRUD for platform admins)
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async listPlatformSkills(): Promise<PlatformSkillSummary[]> {
+    const response = await apiClient.get<PlatformSkillSummary[]>(
+      `/api/v1/platform/skills`,
     );
     return response.data;
   }
 
-  // --- Agent skill assignments ---
+  async getPlatformSkill(skillId: string): Promise<PlatformSkill> {
+    const response = await apiClient.get<PlatformSkill>(
+      `/api/v1/platform/skills/${skillId}`,
+    );
+    return response.data;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // Fork / Refresh (Org-level)
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async forkPlatformSkill(
+    orgId: string,
+    request: SkillForkRequest,
+  ): Promise<OrganizationSkill> {
+    const response = await apiClient.post<OrganizationSkill>(
+      `/api/v1/organizations/${orgId}/skills/fork`,
+      request,
+    );
+    return response.data;
+  }
+
+  async checkUpdateAvailable(
+    orgId: string,
+    skillId: string,
+  ): Promise<{
+    update_available: boolean;
+    latest_version: string;
+    current_version: string | null;
+  }> {
+    const response = await apiClient.get<{
+      update_available: boolean;
+      latest_version: string;
+      current_version: string | null;
+    }>(
+      `/api/v1/organizations/${orgId}/skills/${skillId}/update-check`,
+    );
+    return response.data;
+  }
+
+  async refreshSkill(
+    orgId: string,
+    skillId: string,
+    request: SkillRefreshRequest,
+  ): Promise<OrganizationSkill> {
+    const response = await apiClient.post<OrganizationSkill>(
+      `/api/v1/organizations/${orgId}/skills/${skillId}/refresh`,
+      request,
+    );
+    return response.data;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // Agent Skill Assignments
+  // ═══════════════════════════════════════════════════════════════════════════════
 
   async getAgentSkills(agentId: string): Promise<AgentSkill[]> {
     const response = await apiClient.get<AgentSkill[]>(
@@ -79,7 +147,9 @@ class SkillService {
     await apiClient.delete(`/api/v1/agents/${agentId}/skills/${skillId}`);
   }
 
-  // --- Skill reference files ---
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // Skill Reference Files
+  // ═══════════════════════════════════════════════════════════════════════════════
 
   async getSkillFiles(
     orgId: string,
@@ -147,7 +217,9 @@ class SkillService {
     return response.data;
   }
 
-  // --- Import ---
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // Import
+  // ═══════════════════════════════════════════════════════════════════════════════
 
   async importSkill(
     orgId: string,

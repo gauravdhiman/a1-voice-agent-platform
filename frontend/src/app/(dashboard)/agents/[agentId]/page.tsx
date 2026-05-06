@@ -204,10 +204,13 @@ export default function AgentDetailPage() {
       skillService.getAgentSkills(agentId),
     ])
       .then(([skills, agentSkills]) => {
-        setOrgSkills(skills.filter((s) => s.is_active));
+        // Only show visible AND active skills for assignment
+        setOrgSkills(skills.filter((s) => s.is_active && s.is_visible));
         setAgentSkillIds(new Set(agentSkills.map((as) => as.skill_id)));
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Failed to load skills:", err);
+      })
       .finally(() => setSkillsLoading(false));
   }, [agent?.organization_id, agentId]);
 
@@ -949,10 +952,10 @@ and confirm someone will call back the next business day.`}
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-sm">{skill.name}</span>
                               <Badge
-                                variant={skill.category === "built_in" ? "secondary" : "outline"}
+                                variant={skill.source_skill_id ? "secondary" : "outline"}
                                 className="text-xs"
                               >
-                                {skill.category === "built_in" ? "Built-in" : "Custom"}
+                                {skill.source_skill_id ? "Platform" : "Custom"}
                               </Badge>
                             </div>
                             {skill.description && (
@@ -983,10 +986,10 @@ and confirm someone will call back the next business day.`}
               <SheetTitle className="flex items-center gap-2">
                 {viewingSkill?.name}
                 <Badge
-                  variant={viewingSkill?.category === "built_in" ? "secondary" : "outline"}
+                  variant={viewingSkill?.source_skill_id ? "secondary" : "outline"}
                   className="text-xs"
                 >
-                  {viewingSkill?.category === "built_in" ? "Built-in" : "Custom"}
+                  {viewingSkill?.source_skill_id ? "Platform" : "Custom"}
                 </Badge>
               </SheetTitle>
               {viewingSkill?.description && (

@@ -42,6 +42,10 @@ import {
   Info,
   Zap,
   Eye,
+  EyeOff,
+  Library,
+  RefreshCw,
+  GitFork,
   Search,
   Loader2,
   ChevronRight,
@@ -88,6 +92,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import ReactMarkdown from "react-markdown";
@@ -154,6 +159,7 @@ export default function OrganizationPage() {
   const [expandedSkills, setExpandedSkills] = useState<Set<string>>(new Set());
   const [skillFiles, setSkillFiles] = useState<Record<string, import("@/types/skill").SkillFileSummary[]>>({});
   const [selectedFile, setSelectedFile] = useState<{ skillId: string; filePath: string; content?: string } | null>(null);
+  const [importSheetOpen, setImportSheetOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [loadingFileContent, setLoadingFileContent] = useState(false);
@@ -167,6 +173,22 @@ export default function OrganizationPage() {
   const [editingFile, setEditingFile] = useState(false);
   const [editFileData, setEditFileData] = useState({ filePath: "", content: "", fileId: "" });
   const [savingFile, setSavingFile] = useState(false);
+
+  // Platform skills library
+  const [browsePlatformOpen, setBrowsePlatformOpen] = useState(false);
+  const [platformSkills, setPlatformSkills] = useState<import("@/types/skill").PlatformSkillSummary[]>([]);
+  const [platformSkillFilter, setPlatformSkillFilter] = useState("");
+  const [loadingPlatform, setLoadingPlatform] = useState(false);
+  const [forkingSkillId, setForkingSkillId] = useState<string | null>(null);
+
+  // Refresh
+  const [refreshConfirmOpen, setRefreshConfirmOpen] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    update_available: boolean;
+    latest_version: string;
+    current_version: string | null;
+  } | null>(null);
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -212,6 +234,37 @@ export default function OrganizationPage() {
       setSkillsLoading(false);
     }
   }, [orgId]);
+
+  const handleImportSubmit = useCallback(async () => {
+    if (!orgId || !importUrl.trim()) return;
+    if (importing) return;
+    setImporting(true);
+    try {
+      const results = await skillService.importSkill(orgId, importUrl.trim());
+      const total = results.reduce((sum, r) => sum + r.files_imported, 0);
+      toast.success(`Successfully imported ${results.length} skill(s) with ${total} files!`);
+      setImportUrl("");
+      setImportSheetOpen(false);
+      loadSkills();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Import failed";
+      toast.error(msg);
+    } finally {
+      setImporting(false);
+    }
+  }, [orgId, importUrl, importing, loadSkills]);
+
+  const loadPlatformSkills = useCallback(async () => {
+    setLoadingPlatform(true);
+    try {
+      const skills = await skillService.listPlatformSkills();
+      setPlatformSkills(skills);
+    } catch (error) {
+      console.error("Failed to load platform skills:", error);
+    } finally {
+      setLoadingPlatform(false);
+    }
+  }, []);
 
   const loadPhoneNumbers = useCallback(async () => {
     if (!orgId) return;
@@ -946,29 +999,20 @@ During monsoon season (July-September), we have extended hours for flood-related
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Zap className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No skills yet.</p>
-                <p className="text-sm mt-1 mb-4">Seed built-in skills to get started, or create custom ones.</p>
+                <p className="text-sm mt-1 mb-4">Browse the platform skill library to add pre-built capabilities, or create a custom skill.</p>
                 <div className="flex justify-center gap-3">
                   {(isOrgAdmin || isPlatformAdmin) && (
                     <>
                       <Button
                         variant="outline"
-                        disabled={seedingSkills}
-                        onClick={async () => {
-                          if (!orgId) return;
-                          setSeedingSkills(true);
-                          try {
-                            const result = await skillService.seedSkills(orgId);
-                            toast.success(`Seeded ${result.seeded} built-in skills`);
-                            loadSkills();
-                          } catch {
-                            toast.error("Failed to seed skills");
-                          } finally {
-                            setSeedingSkills(false);
-                          }
+                        onClick={() => {
+                          loadPlatformSkills();
+                          setPlatformSkillFilter("");
+                          setBrowsePlatformOpen(true);
                         }}
                       >
-                        {seedingSkills ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
-                        Seed Built-in Skills
+                        <Library className="h-4 w-4 mr-2" />
+                        Browse Platform Library
                       </Button>
                       <Button
                         variant="outline"
@@ -986,80 +1030,56 @@ During monsoon season (July-September), we have extended hours for flood-related
               </CardContent>
             </Card>
           ) : (
-            <div className="flex gap-4 min-h-[500px]">
+            <div className="flex gap-4 h-[calc(100vh-180px)] overflow-hidden">
               {/* Left panel — skill list with expandable file tree */}
-              <div className="w-80 shrink-0 flex flex-col border rounded-lg bg-card">
+              <div className="w-80 shrink-0 flex flex-col border rounded-lg bg-card h-full overflow-hidden">
                 <div className="p-3 border-b space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{orgSkills.length} skills</span>
                     {(isOrgAdmin || isPlatformAdmin) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setNewSkill({ name: "", slug: "", description: "", content: "" });
-                          setCreateSkillOpen(true);
-                        }}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
+                      <>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add
+                              <ChevronDown className="h-3 w-3 ml-1" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                loadPlatformSkills();
+                                setPlatformSkillFilter("");
+                                setBrowsePlatformOpen(true);
+                              }}
+                            >
+                              <Library className="h-4 w-4 mr-2" />
+                              Create from Platform Library
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setNewSkill({ name: "", slug: "", description: "", content: "" });
+                                setCreateSkillOpen(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Create Custom Skill
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setImportUrl("");
+                                setImportSheetOpen(true);
+                              }}
+                            >
+                              <Import className="h-4 w-4 mr-2" />
+                              Import from URL
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </>
                     )}
                   </div>
-                  {/* Import URL input */}
-                  {(isOrgAdmin || isPlatformAdmin) && (
-                    <div className="flex gap-1">
-                      <Input
-                        placeholder="Paste GitHub URL or skills.sh..."
-                        value={importUrl}
-                        onChange={(e) => setImportUrl(e.target.value)}
-                        className="h-7 text-xs"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && importUrl.trim()) {
-                            (async () => {
-                              if (!orgId) return;
-                              setImporting(true);
-                              try {
-                                const results = await skillService.importSkill(orgId, importUrl.trim());
-                                const total = results.reduce((sum, r) => sum + r.files_imported, 0);
-                                toast.success(`Imported ${results.length} skill(s) with ${total} files`);
-                                setImportUrl("");
-                                loadSkills();
-                              } catch (err) {
-                                const msg = err instanceof Error ? err.message : "Import failed";
-                                toast.error(msg);
-                              } finally {
-                                setImporting(false);
-                              }
-                            })();
-                          }
-                        }}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2"
-                        disabled={importing || !importUrl.trim()}
-                        onClick={async () => {
-                          if (!orgId || !importUrl.trim()) return;
-                          setImporting(true);
-                          try {
-                            const results = await skillService.importSkill(orgId, importUrl.trim());
-                            const total = results.reduce((sum, r) => sum + r.files_imported, 0);
-                            toast.success(`Imported ${results.length} skill(s) with ${total} files`);
-                            setImportUrl("");
-                            loadSkills();
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : "Import failed";
-                            toast.error(msg);
-                          } finally {
-                            setImporting(false);
-                          }
-                        }}
-                      >
-                        {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Import className="h-3.5 w-3.5" />}
-                      </Button>
-                    </div>
-                  )}
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
@@ -1119,7 +1139,7 @@ During monsoon season (July-September), we have extended hours for flood-related
                               }
                               <Zap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               <span className="font-medium text-sm truncate flex-1">{skill.name}</span>
-                              {skill.category === "custom" && (isOrgAdmin || isPlatformAdmin) && (
+                              {(isOrgAdmin || isPlatformAdmin) && (
                                 <button
                                   className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-100"
                                   onClick={async (e) => {
@@ -1141,13 +1161,19 @@ During monsoon season (July-September), we have extended hours for flood-related
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5 ml-8">
                               <Badge
-                                variant={skill.category === "built_in" ? "secondary" : "outline"}
+                                variant={skill.source_skill_id ? "secondary" : "outline"}
                                 className="text-[11px] px-1.5 py-0"
                               >
-                                {skill.category === "built_in" ? "Built-in" : "Custom"}
+                                {skill.source_skill_id ? "Platform" : "Custom"}
                               </Badge>
-                              {skill.version && (
-                                <span className="text-[11px] text-muted-foreground">v{skill.version}</span>
+                              {skill.source_version && (
+                                <span className="text-[11px] text-muted-foreground">v{skill.source_version}</span>
+                              )}
+                              {!skill.is_visible && (
+                                <Badge variant="outline" className="text-[11px] px-1.5 py-0 border-orange-200 text-orange-600 bg-orange-50">
+                                  <EyeOff className="h-3 w-3 mr-1" />
+                                  Hidden
+                                </Badge>
                               )}
                             </div>
                           </div>
@@ -1273,8 +1299,8 @@ During monsoon season (July-September), we have extended hours for flood-related
                                 </div>
                               )}
 
-                              {/* Add File button for custom skills */}
-                              {skill.category === "custom" && (isOrgAdmin || isPlatformAdmin) && (
+                              {/* Add File button */}
+                              {(isOrgAdmin || isPlatformAdmin) && (
                                 <div
                                   className="pl-10 pr-3 py-1.5 cursor-pointer text-xs text-primary hover:bg-muted/50 flex items-center gap-1.5"
                                   onClick={(e) => {
@@ -1297,7 +1323,7 @@ During monsoon season (July-September), we have extended hours for flood-related
               </div>
 
               {/* Right panel — skill content */}
-              <div className="flex-1 border rounded-lg bg-card flex flex-col min-w-0">
+              <div className="flex-1 border rounded-lg bg-card flex flex-col min-w-0 h-full overflow-hidden">
                 {selectedSkill ? (
                   <>
                     {/* Header */}
@@ -1306,14 +1332,20 @@ During monsoon season (July-September), we have extended hours for flood-related
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-lg">{selectedSkill.name}</h3>
                           <Badge
-                            variant={selectedSkill.category === "built_in" ? "secondary" : "outline"}
+                            variant={selectedSkill.source_skill_id ? "secondary" : "outline"}
                             className="text-xs"
                           >
-                            {selectedSkill.category === "built_in" ? "Built-in" : "Custom"}
+                            {selectedSkill.source_skill_id ? "Platform" : "Custom"}
                           </Badge>
+                          {!selectedSkill.is_visible && (
+                            <Badge variant="outline" className="text-xs border-orange-200 text-orange-600 bg-orange-50">
+                              <EyeOff className="h-3 w-3 mr-1" /> Hidden
+                            </Badge>
+                          )}
                         </div>
-                        {selectedSkill.category === "custom" && (isOrgAdmin || isPlatformAdmin) && !editingSkill && !editingFile && (
+                        {(isOrgAdmin || isPlatformAdmin) && !editingSkill && !editingFile && (
                           <>
+                            <div className="flex items-center gap-1.5">
                             {/* Edit SKILL.md — when no file is selected */}
                             {!selectedFile && (
                               <Button
@@ -1350,6 +1382,62 @@ During monsoon season (July-September), we have extended hours for flood-related
                                 <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
                               </Button>
                             )}
+                            {/* Visibility toggle */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                if (!orgId) return;
+                                try {
+                                  await skillService.updateSkill(orgId, selectedSkill.id, {
+                                    is_visible: !selectedSkill.is_visible,
+                                  });
+                                  toast.success(selectedSkill.is_visible ? "Skill hidden from library" : "Skill visible in library");
+                                  loadSkills();
+                                } catch {
+                                  toast.error("Failed to update visibility");
+                                }
+                              }}
+                              title={selectedSkill.is_visible ? "Hide from library" : "Show in library"}
+                            >
+                              {selectedSkill.is_visible ? (
+                                <><Eye className="h-3.5 w-3.5 mr-1" /> Hide</>
+                              ) : (
+                                <><EyeOff className="h-3.5 w-3.5 mr-1" /> Show</>
+                              )}
+                            </Button>
+                            {/* Refresh (only for forked skills) */}
+                            {selectedSkill.source_skill_id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  if (!orgId) return;
+                                  setCheckingUpdate(true);
+                                  try {
+                                    const info = await skillService.checkUpdateAvailable(orgId, selectedSkill.id);
+                                    setUpdateInfo(info);
+                                    if (info.update_available) {
+                                      setRefreshConfirmOpen(true);
+                                    } else {
+                                      toast.success("Skill is up to date");
+                                    }
+                                  } catch {
+                                    toast.error("Failed to check for updates");
+                                  } finally {
+                                    setCheckingUpdate(false);
+                                  }
+                                }}
+                                disabled={checkingUpdate}
+                              >
+                                {checkingUpdate ? (
+                                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                ) : (
+                                  <><RefreshCw className="h-3.5 w-3.5 mr-1" /> Check Update</>
+                                )}
+                              </Button>
+                            )}
+                            </div>
                           </>
                         )}
                       </div>
@@ -1359,7 +1447,8 @@ During monsoon season (July-September), we have extended hours for flood-related
                       <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
                         {selectedSkill.author && <span><strong>Author:</strong> {selectedSkill.author}</span>}
                         {selectedSkill.version && <span><strong>Version:</strong> {selectedSkill.version}</span>}
-                        <span><strong>Mode:</strong> {selectedSkill.category === "built_in" ? "Read only" : "Editable"}</span>
+                        {selectedSkill.source_version && <span><strong>Source:</strong> v{selectedSkill.source_version}</span>}
+                        <span><strong>Mode:</strong> Editable</span>
                         <span><strong>Slug:</strong> <code className="text-xs bg-muted px-1 py-0.5 rounded">{selectedSkill.slug}</code></span>
                       </div>
                     </div>
@@ -1801,6 +1890,207 @@ During monsoon season (July-September), we have extended hours for flood-related
               >
                 {creatingSkill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                 Create Skill
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Platform Skills Browser Sheet */}
+        <Sheet open={browsePlatformOpen} onOpenChange={setBrowsePlatformOpen}>
+          <SheetContent className="flex flex-col w-full sm:max-w-xl">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                <Library className="h-5 w-5" />
+                Platform Skill Library
+              </SheetTitle>
+              <SheetDescription>
+                Fork pre-built capabilities into your organization&apos;s library.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {loadingPlatform ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading platform skills...</span>
+                </div>
+              ) : platformSkills.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Library className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                  <p>No platform skills available yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter platform skills..."
+                      value={platformSkillFilter}
+                      onChange={(e) => setPlatformSkillFilter(e.target.value)}
+                      className="pl-8 h-9 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    {platformSkills
+                      .filter((s) =>
+                        !platformSkillFilter ||
+                        s.name.toLowerCase().includes(platformSkillFilter.toLowerCase()) ||
+                        (s.description || "").toLowerCase().includes(platformSkillFilter.toLowerCase())
+                      )
+                      .map((skill) => (
+                        <div key={skill.id} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium text-sm">{skill.name}</h4>
+                            <Badge variant="secondary" className="text-[11px]">v{skill.version}</Badge>
+                          </div>
+                          {skill.description && (
+                            <p className="text-xs text-muted-foreground leading-relaxed">{skill.description}</p>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            disabled={forkingSkillId === skill.id}
+                            onClick={async () => {
+                              if (!orgId) return;
+                              setForkingSkillId(skill.id);
+                              try {
+                                const forked = await skillService.forkPlatformSkill(orgId, {
+                                  platform_skill_id: skill.id,
+                                });
+                                toast.success(`Forked "${skill.name}" into your library`);
+                                setOrgSkills((prev) => [forked, ...prev]);
+                                setSelectedSkill(forked);
+                                setExpandedSkills(new Set([forked.id]));
+                                updateSkillUrl(forked.slug);
+                                setBrowsePlatformOpen(false);
+                                skillService.getSkillFiles(orgId, forked.id)
+                                  .then((files) => setSkillFiles((prev) => ({ ...prev, [forked.id]: files })))
+                                  .catch(() => {});
+                              } catch (err) {
+                                const rawMsg = err instanceof Error ? err.message : "Fork failed";
+                                // Show friendly duplicate message
+                                const msg = rawMsg.includes("already exists")
+                                  ? `"${skill.name}" is already in your library. You can only have one copy of each platform skill.`
+                                  : rawMsg;
+                                toast.error(msg);
+                              } finally {
+                                setForkingSkillId(null);
+                              }
+                            }}
+                          >
+                            {forkingSkillId === skill.id ? (
+                              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                            ) : (
+                              <GitFork className="h-3.5 w-3.5 mr-1" />
+                            )}
+                            Fork into Library
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end">
+              <Button variant="outline" onClick={() => setBrowsePlatformOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Refresh Confirmation Dialog */}
+        {updateInfo && (
+          <Dialog open={refreshConfirmOpen} onOpenChange={setRefreshConfirmOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Refresh Skill</DialogTitle>
+                <DialogDescription>
+                  This will replace all content and files with the latest platform version.
+                  Any customizations you made will be lost.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Current version:</span>
+                  <span>v{selectedSkill?.source_version || "unknown"}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Latest version:</span>
+                  <span className="font-medium">v{updateInfo.latest_version}</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setRefreshConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={async () => {
+                    if (!orgId || !selectedSkill) return;
+                    try {
+                      await skillService.refreshSkill(orgId, selectedSkill.id, {
+                        confirm_overwrite: true,
+                      });
+                      toast.success("Skill refreshed successfully");
+                      loadSkills();
+                      setRefreshConfirmOpen(false);
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Refresh failed";
+                      toast.error(msg);
+                    }
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Refresh Now
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Import from URL Sheet */}
+        <Sheet open={importSheetOpen} onOpenChange={setImportSheetOpen}>
+          <SheetContent className="flex flex-col w-full sm:max-w-xl">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                <Import className="h-5 w-5" />
+                Import Skill from URL
+              </SheetTitle>
+              <SheetDescription>
+                Paste a GitHub repository URL or a skills.sh shorthand to import a skill into your library.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="import-url">GitHub URL or skills.sh shorthand</Label>
+                <Input
+                  id="import-url"
+                  placeholder="https://github.com/user/repo or skills.sh/skill-name"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  disabled={importing}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && importUrl.trim() && !importing) {
+                      handleImportSubmit();
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supported formats: full GitHub repo URL, or skills.sh shorthand like <code>skills.sh/appointment-booking</code>.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-between gap-3">
+              <Button variant="outline" onClick={() => setImportSheetOpen(false)} disabled={importing}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleImportSubmit}
+                disabled={!importUrl.trim() || importing}
+              >
+                {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Import className="h-4 w-4 mr-2" />}
+                Import Skill
               </Button>
             </div>
           </SheetContent>

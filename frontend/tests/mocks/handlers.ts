@@ -3,7 +3,7 @@
  */
 
 import { http, HttpResponse } from 'msw'
-import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber, createMockOrganizationSkill, createMockAgentSkill, createMockSkillFileSummary, createMockSkillFile, createMockSkillImportResult } from '../utils/data-factories'
+import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber, createMockOrganizationSkill, createMockAgentSkill, createMockSkillFileSummary, createMockSkillFile, createMockSkillImportResult, createMockPlatformSkillSummary } from '../utils/data-factories'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -692,7 +692,7 @@ export const handlers = [
         slug: 'call-transfer',
         name: 'Call Transfer',
         description: 'Escalate calls to a human agent.',
-        category: 'built_in',
+        category: 'custom',
       }),
       createMockOrganizationSkill({
         id: 'skill-3',
@@ -737,7 +737,37 @@ export const handlers = [
   }),
 
   http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/seed`, () => {
-    return HttpResponse.json({ seeded: 6 })
+    return HttpResponse.json({ seeded: 0 })
+  }),
+
+  // Platform skills endpoints
+  http.get(`${API_BASE_URL}/api/v1/platform/skills`, () => {
+    return HttpResponse.json([
+      createMockPlatformSkillSummary(),
+    ])
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/fork`, async ({ request }) => {
+    const body = (await request.json()) as { platform_skill_id: string }
+    const forked = createMockOrganizationSkill({
+      slug: 'appointment-booking',
+      name: 'Appointment Booking',
+      source_skill_id: body.platform_skill_id,
+      source_version: '2026.01.01_1',
+    })
+    return HttpResponse.json(forked)
+  }),
+
+  http.get(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/:skillId/update-check`, () => {
+    return HttpResponse.json({ update_available: true, latest_version: '2026.05.01_2', current_version: null })
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/:skillId/refresh`, async ({ request }) => {
+    const body = (await request.json()) as { confirm_overwrite: boolean }
+    if (!body.confirm_overwrite) {
+      return HttpResponse.json({ detail: 'confirm_overwrite required' }, { status: 400 })
+    }
+    return HttpResponse.json(createMockOrganizationSkill())
   }),
 
   http.get(`${API_BASE_URL}/api/v1/agents/:agentId/skills`, () => {

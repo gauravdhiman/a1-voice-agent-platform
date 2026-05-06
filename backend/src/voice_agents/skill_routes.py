@@ -25,8 +25,10 @@ from shared.voice_agents.skill_models import (
     SkillFileCreate,
     SkillFileSummary,
     SkillFileUpdate,
+    SkillForkRequest,
     SkillImportRequest,
     SkillImportResult,
+    SkillRefreshRequest,
 )
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.service import voice_agent_service
@@ -127,14 +129,6 @@ async def update_skill(
     if str(existing.organization_id) != str(org_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
 
-    # Prevent editing built-in skills' content (only allow toggling is_active)
-    if existing.category == "built_in":
-        if skill_data.content is not None or skill_data.name is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Built-in skills cannot be edited. You can only enable or disable them.",
-            )
-
     skill, error = await skill_service.update_skill(skill_id, skill_data)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
@@ -161,17 +155,12 @@ async def delete_skill(
                 detail="Insufficient permissions to delete skills",
             )
 
-    # Verify skill belongs to this org and is not built-in
+    # Verify skill belongs to this org
     existing, err = await skill_service.get_skill_by_id(skill_id)
     if err or not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
     if str(existing.organization_id) != str(org_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill not found")
-    if existing.category == "built_in":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Built-in skills cannot be deleted. Disable them instead.",
-        )
 
     success, error = await skill_service.delete_skill(skill_id)
     if error:
@@ -291,25 +280,27 @@ async def get_skill_content(
 
 
 @skill_router.post(
-    "/organizations/{org_id}/skills/seed",
+    "/skills/seed-platform",
     status_code=status.HTTP_200_OK,
 )
-@tracer.start_as_current_span("skill.routes.seed_skills")
-async def seed_organization_skills(
-    org_id: UUID,
+@tracer.start_as_current_span("skill.routes.seed_platform")
+async def seed_platform_skills(
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Seed built-in skills for an organization. Idempotent."""
+    """Manually re-seed platform skills from code templates.
+
+    Platform admin only. Idempotent — uses content_hash to skip unchanged skills.
+    Call this after updating built-in skill definitions in the codebase.
+    """
     current_user_id, user_profile = user_data
 
     if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only platform admins can seed platform skills",
+        )
 
-    count, error = await skill_service.seed_built_in_skills(org_id)
+    count, error = await skill_service.seed_platform_skills()
     if error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
@@ -318,24 +309,25 @@ async def seed_organization_skills(
 
 
 @skill_router.post(
-    "/skills/sync-all",
+    "/skills/sync-platform",
     status_code=status.HTTP_200_OK,
 )
-@tracer.start_as_current_span("skill.routes.sync_all_orgs")
-async def sync_built_in_skills_all_orgs(
+@tracer.start_as_current_span("skill.routes.sync_platform")
+async def sync_platform_skills(
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Sync built-in skills across all organizations.
+    """Sync platform skills across all organizations.
 
-    Platform admin only. Uses content_hash to efficiently skip unchanged skills.
-    Call this after adding or updating built-in skill definitions.
+    Platform admin only. Ensures all orgs have the latest built-in skill templates
+    available in the platform library. Uses content_hash to efficiently skip
+    unchanged skills. Call this after adding or updating built-in skill definitions.
     """
     current_user_id, user_profile = user_data
 
     if not user_profile.has_role("platform_admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform admins can sync skills across all organizations",
+            detail="Only platform admins can sync platform skills",
         )
 
     total, error = await skill_service.sync_built_in_skills_all_orgs()
@@ -545,8 +537,6 @@ async def import_skill_from_url(
                 description=pkg.description,
                 content=pkg.content,
                 category="custom",
-                source_url=pkg.source_url,
-                source_ref=pkg.source_ref,
             )
 
             skill, error = await skill_service.create_skill(skill_data)
@@ -597,3 +587,110 @@ async def import_skill_from_url(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Import failed: {str(e)}",
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fork / Refresh (Platform Skill → Org Skill)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@skill_router.post(
+    "/organizations/{org_id}/skills/fork",
+    response_model=OrganizationSkill,
+    status_code=status.HTTP_201_CREATED,
+)
+@tracer.start_as_current_span("skill.routes.fork_skill")
+async def fork_platform_skill(
+    org_id: UUID,
+    request: SkillForkRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Fork a platform skill into the org's library.
+
+    Creates an independent copy with all files. Org admin can edit freely.
+    """
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to fork skills",
+            )
+
+    skill, error = await skill_service.fork_platform_skill(
+        org_id=org_id,
+        platform_skill_id=request.platform_skill_id,
+        custom_name=request.custom_name,
+        custom_slug=request.custom_slug,
+    )
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return skill
+
+
+@skill_router.get(
+    "/organizations/{org_id}/skills/{skill_id}/update-check",
+)
+@tracer.start_as_current_span("skill.routes.check_update")
+async def check_skill_update(
+    org_id: UUID,
+    skill_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Check if a forked skill has an update available from its platform source."""
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+
+    has_update, latest_version, error = await skill_service.check_update_available(skill_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+    return {
+        "update_available": has_update,
+        "latest_version": latest_version,
+        "current_version": None,  # Frontend has this from skill object
+    }
+
+
+@skill_router.post(
+    "/organizations/{org_id}/skills/{skill_id}/refresh",
+    response_model=OrganizationSkill,
+)
+@tracer.start_as_current_span("skill.routes.refresh_skill")
+async def refresh_forked_skill(
+    org_id: UUID,
+    skill_id: UUID,
+    request: SkillRefreshRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Refresh a forked skill from its platform source.
+
+    Replaces ALL content and files with the platform's latest version.
+    Requires explicit confirmation (confirm_overwrite=true).
+    """
+    current_user_id, user_profile = user_data
+
+    if not user_profile.has_role("platform_admin"):
+        if not user_profile.has_role("org_admin", str(org_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to refresh skills",
+            )
+
+    if not request.confirm_overwrite:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="confirm_overwrite must be true to accept full bundle replacement",
+        )
+
+    skill, error = await skill_service.refresh_forked_skill(skill_id, current_user_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return skill

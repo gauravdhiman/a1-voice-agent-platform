@@ -193,15 +193,25 @@ export const createMockOrganizationSkill = (overrides: Partial<OrganizationSkill
   name: 'Appointment Booking',
   description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
   content: '# Appointment Booking\n\n## When to Use\n- Caller asks to book\n\n## Procedure\n1. Ask for date',
-  category: 'built_in',
+  category: 'custom' as const,
   is_active: true,
   version: '1.0.0',
   author: 'Platform',
   content_hash: 'abc123def456',
-  source_url: null,
-  source_ref: null,
+  is_visible: true,
+  source_skill_id: null,
+  source_version: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockPlatformSkillSummary = (overrides: Partial<import("@/types/skill").PlatformSkillSummary> = {}): import("@/types/skill").PlatformSkillSummary => ({
+  id: 'platform-skill-1',
+  slug: 'appointment-booking',
+  name: 'Appointment Booking',
+  description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
+  version: '2026.01.01_1',
   ...overrides,
 })
 

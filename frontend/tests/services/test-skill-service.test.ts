@@ -61,9 +61,13 @@ describe('SkillService', () => {
       ).resolves.not.toThrow()
     })
 
-    it('seedSkills returns seeded count', async () => {
-      const result = await skillService.seedSkills('org-1')
-      expect(result).toEqual({ seeded: 6 })
+    it('listPlatformSkills returns platform skill summaries', async () => {
+      const result = await skillService.listPlatformSkills()
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        slug: 'appointment-booking',
+        name: 'Appointment Booking',
+      })
     })
   })
 
