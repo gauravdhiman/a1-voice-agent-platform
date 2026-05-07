@@ -341,6 +341,27 @@ For more detailed information about using Alembic with this project, see [alembi
 6. **Monitoring**: Logging and metrics
 7. **Documentation**: OpenAPI schema optimization
 
+## 📝 Skills System
+
+The backend supports a **platform skills fork/refresh model** for managing reusable AI capabilities:
+
+- **Platform Skills** (`platform_skills` table): Immutable templates maintained by platform admins. Seeded on startup from `backend/src/voice_agents/skill_seeds.py`.
+- **Organization Skills** (`organization_skills` table): Editable copies forked from platform templates, created from scratch, or imported from GitHub/skills.sh URLs.
+- **Agent Assignments** (`agent_skills` table): Junction table linking agents to their org's skills.
+- **Update Logs** (`skill_update_logs` table): Audit trail for refresh operations.
+
+### Key API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/organizations/{id}/skills/fork` | Fork a platform skill into an org library |
+| `POST /api/v1/organizations/{id}/skills/{id}/refresh` | Refresh forked skill from latest platform version |
+| `GET /api/v1/organizations/{id}/skills/{id}/update-check` | Check if a forked skill has updates available |
+| `GET /api/v1/platform/skills` | List all platform skills (platform admin) |
+| `POST /api/v1/platform/skills` | Create/update a platform skill (platform admin) |
+
+For the full architecture, see [Platform Skills Fork Model](../docs/03_implementation/platform_skills_fork_model.md).
+
 ## 🚨 Development Commands
 
 ```bash

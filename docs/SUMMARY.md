@@ -39,6 +39,7 @@ Comprehensive documentation organized by feature.
 4. **[Worker README](../worker/README.md)** - Worker service architecture and setup
 5. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
 6. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
+7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 
 ### Multi-Tenancy & RBAC
 
@@ -186,7 +187,7 @@ Comprehensive documentation organized by feature.
 
 ### By Feature
 
-- **Voice Agents**: See **[Voice Agents Overview](02_features/voice_agents/overview.md)**
+- **Voice Agents**: See **[Voice Agents Overview](02_features/voice_agents/overview.md)** and **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)**
 - **Tools**: See **[Tool System](03_implementation/tool_system.md)** and **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)**
 - **Authentication**: See **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
 - **Multi-tenancy**: See **[System Architecture](01_architecture/system_architecture.md)**

@@ -204,8 +204,8 @@ export default function AgentDetailPage() {
       skillService.getAgentSkills(agentId),
     ])
       .then(([skills, agentSkills]) => {
-        // Only show visible AND active skills for assignment
-        setOrgSkills(skills.filter((s) => s.is_active && s.is_visible));
+        // Show all active skills; hidden ones will be shown if assigned
+        setOrgSkills(skills.filter((s) => s.is_active));
         setAgentSkillIds(new Set(agentSkills.map((as) => as.skill_id)));
       })
       .catch((err) => {
@@ -957,6 +957,11 @@ and confirm someone will call back the next business day.`}
                               >
                                 {skill.source_skill_id ? "Platform" : "Custom"}
                               </Badge>
+                              {!skill.is_visible && (
+                                <Badge variant="outline" className="text-[11px] border-orange-200 text-orange-600 bg-orange-50">
+                                  <EyeOff className="h-3 w-3 mr-0.5" /> Hidden
+                                </Badge>
+                              )}
                             </div>
                             {skill.description && (
                               <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -996,6 +1001,38 @@ and confirm someone will call back the next business day.`}
                 <SheetDescription>{viewingSkill.description}</SheetDescription>
               )}
             </SheetHeader>
+
+            {viewingSkill && !viewingSkill.is_visible && (
+              <div className="px-6 py-2.5 border-b bg-orange-50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 text-sm text-orange-700">
+                  <EyeOff className="h-4 w-4" />
+                  <span>This skill is hidden from your organization library.</span>
+                </div>
+                {canEdit && agent?.organization_id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={async () => {
+                      try {
+                        await skillService.updateSkill(agent.organization_id, viewingSkill.id, {
+                          is_visible: true,
+                        });
+                        toast.success("Skill is now visible in the library");
+                        // Refresh org skills list
+                        const skills = await skillService.getOrganizationSkills(agent.organization_id);
+                        setOrgSkills(skills.filter((s) => s.is_active));
+                      } catch {
+                        toast.error("Failed to update visibility");
+                      }
+                    }}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Show in Library
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* File tabs */}
             {viewingSkillFiles.length > 0 && (

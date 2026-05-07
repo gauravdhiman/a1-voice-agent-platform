@@ -235,6 +235,26 @@ export function Component({ ...props }: ComponentProps) {
 5. **Testing**: Jest and React Testing Library
 6. **Storybook**: Component documentation
 
+## 📝 Skills System
+
+The frontend supports a **platform skills fork/refresh model** for managing reusable AI capabilities:
+
+- **Organization Skills Tab** (`/organization?tab=skills`): Split-view UI with a skill list on the left and content editor on the right. Supports creating custom skills, forking from platform templates, and importing from GitHub/skills.sh URLs.
+- **Agent Skills Tab** (`/agents/{id}`): Toggle skills on/off per agent. Hidden skills still appear if assigned, with a "Hidden" badge and a quick action to show them in the library.
+- **Platform Library Sheet**: Browse immutable platform skill templates. Filter by name/description. Fork into org library.
+- **Refresh Confirmation Dialog**: Warns before overwriting all content and files with the latest platform version.
+
+### Key Components
+
+| Component | Location |
+|-----------|----------|
+| Skills Management | `src/app/(dashboard)/organization/page.tsx` |
+| Agent Skill Assignment | `src/app/(dashboard)/agents/[agentId]/page.tsx` |
+| Skill Service | `src/services/skill-service.ts` |
+| Skill Types | `src/types/skill.ts` |
+
+For the full architecture, see [Platform Skills Fork Model](../docs/03_implementation/platform_skills_fork_model.md).
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
