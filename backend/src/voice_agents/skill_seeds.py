@@ -4,6 +4,13 @@ Platform skill templates for seeding the platform_skills table.
 These are immutable skill definitions that org admins can fork into their
 own libraries. Each skill represents a universal agent capability.
 
+Capabilities are composable: an agent can have `appointment-booking` +
+`insurance-verification` + `call-transfer` all active at once.
+
+Reference files (service menus, hours, policies, FAQs) are seeded as templates
+that organizations customize for their business. These files are loaded on-demand
+via the `load_skill_reference` tool for progressive disclosure.
+
 The seeding process populates platform_skills (not organization_skills).
 No per-org seeding is needed — org admins fork what they need.
 """

@@ -49,19 +49,43 @@ Build an AI voice agent platform that combines:
 ---
 
 ### F1: Skills System for Voice Agents
-**Status:** Ready | **Effort:** Medium | **Impact:** High
+**Status:** In Progress | **Effort:** Medium | **Impact:** High
 
 **What:**
-- Enable extensibility through Agent Skills format
-- Allow users to add custom capabilities to voice agents
-- Support marketplace for sharing skills
+- Enable extensibility through **composable agent capabilities**
+- Capabilities are universal functions: `appointment-booking`, `call-transfer`, `insurance-verification`
+- Each capability is configured with business-specific reference files (service menu, hours, policies)
+- Agents compose capabilities like building blocks, not monolithic industry personas
 
 **Why:**
-- Extensibility beyond built-in tools
-- Community marketplace potential
-- Knowledge base management
+- **Composable:** Mix `appointment-booking` + `insurance-verification` for a dental agent, or `appointment-booking` + `dispatch-coordination` for HVAC — same capability, different context
+- **Reusable:** Build `appointment-booking` once, every business uses it
+- **Maintainable:** Update one capability, all agents using it improve
+- **Focused:** Each capability does ONE thing exceptionally well
 
-**File:** `PRD-skills-system.md` (exists)
+**Skill Structure:**
+```
+appointment-booking/
+├── SKILL.md              # Core capability instructions (decision trees, templates, guardrails)
+├── references/
+│   ├── faqs.md           # Common questions and approved answers
+│   ├── glossary.md       # Domain terminology
+│   └── (business-configurable files uploaded by user)
+│       ├── service-menu.md    # Services, durations, prices
+│       ├── hours.md           # Operating hours, holidays
+│       ├── staff-directory.md # Extensions, departments
+│       └── policies.md        # Cancellation, refund, no-show rules
+```
+
+**First Capability:** `appointment-booking` — universal need, clear boundaries, testable end-to-end
+
+**Subsequent Capabilities (priority order):**
+1. `call-handling`, `call-transfer` — Core communication
+2. `insurance-verification`, `new-patient-intake` — Business operations
+3. `lead-qualification`, `intake-qualification` — Qualification & sales
+4. `appointment-reminders`, `feedback-collection` — Follow-up
+
+**File:** `PRD-skills-system.md` (updated)
 
 ---
 
@@ -149,13 +173,27 @@ Build an AI voice agent platform that combines:
 
 ## 🔄 Sprint Planning
 
-### Sprint 1 (Current)
-- [ ] F1: Skills System - Research complete, ready to implement
-- [ ] F2: Phone Numbers - PRD ready, can start
+### Sprint 1 (Complete)
+- ✅ F1: Skills System — Foundation + Progressive Disclosure + CRUD & Import (Phases 1, 2a, 2b)
 
-### Sprint 2+
-- [ ] F3: Chat Agents with Memory
-- [ ] F4: Call Analytics Dashboard
+### Sprint 2 (Current)
+- 🎯 F1: Skills System — Pre-Built Skill Content (Phase 2c)
+  - Perfect one skill (Dental Assistant recommended)
+  - Establish skill-building patterns
+  - Validate with E2E call simulations
+
+### Sprint 3
+- 📞 F2: Phone Number Management (Twilio + LiveKit)
+  - Buy, manage, assign numbers
+  - Unified provider abstraction
+
+### Sprint 4
+- 💬 F3: Chat Agents with Memory
+  - Long-running chat agents
+  - Persistent memory architecture
+
+### Future (Backlog)
+- Phase 5: Marketplace (re-evaluate when 50+ orgs using skills)
 
 ---
 

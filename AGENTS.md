@@ -725,6 +725,7 @@ After implementing any fix or new feature, you MUST:
 - Use `FastAPI` for backend APIs
 - Use `Next.js` for frontend
 - IMPORTANT: Never stage the code changes in git by yourself, unless user explicitly asks you to do so. Always let user review and stage them manually.
+- CRITICAL: **NEVER commit changes to Git without explicit user approval.** The user must always review and stage changes themselves. You may make changes, run tests, and validate — but only the user commits. Always keep the user in the loop and ask for approval before any git commit.
 - Use Docker for development and production. Even when start application on local machine for dev, use `./start.sh` script to manage docker containers.
 - Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
 - You can create alembic migrations scripts but never run them without user's permission. Always ask first.

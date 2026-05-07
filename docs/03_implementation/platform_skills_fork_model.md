@@ -761,14 +761,14 @@ Once the fork model is implemented:
 
 ## Success Criteria
 
-- [ ] `platform_skills` table exists with seeded data
-- [ ] All existing org skills migrated to forked copies
-- [ ] Org admin can fork a platform skill via UI
-- [ ] Org admin can refresh a forked skill with warning modal
-- [ ] Refresh replaces ALL files (no merge)
-- [ ] Hidden skills show badge on agent tab, toggles still work
-- [ ] Platform admin can create/update platform skills via API
-- [ ] All existing tests pass
-- [ ] New tests cover fork, refresh, and migration
-- [ ] E2E tests cover fork + refresh flows
-- [ ] Stashed `appointment-booking` content applied as platform skill
+- [x] `platform_skills` table exists with seeded data
+- [x] All existing org skills migrated to forked copies
+- [x] Org admin can fork a platform skill via UI
+- [x] Org admin can refresh a forked skill with warning modal
+- [x] Refresh replaces ALL files (no merge)
+- [x] Hidden skills show badge on agent tab, toggles still work
+- [x] Platform admin can create/update platform skills via API
+- [x] All existing tests pass
+- [x] New tests cover fork, refresh, and migration
+- [x] E2E tests cover fork + refresh flows
+- [x] Stashed `appointment-booking` content applied as platform skill

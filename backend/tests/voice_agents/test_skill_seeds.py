@@ -110,7 +110,7 @@ class TestPlatformSkillSeeds:
             "references/faqs.md",
         }
         actual_paths = {f["file_path"] for f in files}
-        assert actual_paths == expected_paths
+        assert actual_paths == expected_paths, f"Missing or extra files: {actual_paths ^ expected_paths}"
 
     def test_appointment_booking_content_is_comprehensive(self):
         """Test that appointment-booking has substantial, structured content."""
@@ -131,3 +131,11 @@ class TestPlatformSkillSeeds:
 
         # Should reference load_skill_reference for progressive disclosure
         assert "load_skill_reference" in content
+
+    def test_non_booking_skills_have_no_default_files(self):
+        """Test that only appointment-booking has default files (for now)."""
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            if skill["slug"] != "appointment-booking":
+                files = skill.get("default_files", [])
+                assert len(files) == 0, \
+                    f"Skill '{skill['slug']}' unexpectedly has {len(files)} default files"

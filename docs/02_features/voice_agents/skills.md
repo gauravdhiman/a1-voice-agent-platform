@@ -2,7 +2,14 @@
 
 ## Overview
 
-Skills are reusable knowledge and procedure packages (written in markdown) that can be assigned to voice agents. They enable agents to handle specific scenarios (booking appointments, transferring calls, answering FAQs) without embedding all procedures directly into the agent's instructions.
+Skills are **composable agent capabilities** — reusable functions (written in markdown) that extend what a voice agent can do. They are not industry-specific roles. Instead, each skill represents a single capability like `appointment-booking`, `call-transfer`, or `insurance-verification`.
+
+A dental agent = `appointment-booking` + `insurance-verification` + `new-patient-intake`
+An HVAC agent = `appointment-booking` + `dispatch-coordination` + `warranty-check`
+
+The same `appointment-booking` skill works across all businesses. What changes are the **reference files** — business-specific data like service menus, hours, and policies that the user uploads to configure the skill for their context.
+
+This keeps skills **focused, reusable, and maintainable**: improve `appointment-booking` once, and every agent using it gets better.
 
 ## Progressive Disclosure
 
@@ -21,21 +28,29 @@ This design is critical for voice agents where:
 ## Skill Architecture
 
 ```
-Organization Skill Library          Agent Skill Assignment
-┌─────────────────────────┐        ┌──────────────────────┐
-│ Built-in Skills         │        │ Receptionist Agent   │
-│  📋 appointment-booking │───────>│  ✓ appointment-booking│
-│  📋 call-transfer       │───────>│  ✓ call-transfer     │
-│  📋 faq-responder       │───────>│  ✓ faq-responder     │
-│  📋 after-hours         │        │                      │
-│  📋 lead-qualification  │        └──────────────────────┘
-│  📋 payment-collection  │
-│                         │
-│ Custom Skills           │
-│  📋 insurance-verify    │
-│  📋 company-policies    │
-└─────────────────────────┘
+Organization Capability Library              Agent Capability Composition
+┌─────────────────────────────┐            ┌──────────────────────────────┐
+│ Built-in Capabilities         │            │ Dental Receptionist Agent      │
+│                               │            │                              │
+│  📅 appointment-booking         │───────>│  ✓ appointment-booking         │
+│  📞 call-transfer             │───────>│  ✓ insurance-verification      │
+│  ✅ insurance-verification    │───────>│  ✓ new-patient-intake          │
+│  📝 new-patient-intake        │            │                              │
+│  🚗 dispatch-coordination     │            │ HVAC Dispatch Agent          │
+│  💬 lead-qualification        │───────>│  ✓ appointment-booking         │
+│                               │            │  ✓ dispatch-coordination     │
+│ Custom Capabilities           │            │  ✓ warranty-check              │
+│  📋 company-policies          │            │                              │
+│  📋 custom-intake             │            │ Restaurant Host Agent          │
+│                               │            │  ✓ reservation-booking         │
+│ Reference Files (per org)     │            │  ✓ menu-inquiry                │
+│  ├── service-menu.md          │            │  ✓ order-status                │
+│  ├── hours.md                 │            │                              │
+│  └── policies.md              │            └──────────────────────────────┘
+└─────────────────────────────┘
 ```
+
+**Key principle:** Capabilities are universal. Reference files are business-specific.
 
 ## Database Tables
 
@@ -66,23 +81,34 @@ Key fields:
 
 Junction table linking agents to skills. Each assignment has an `is_active` flag.
 
-## Built-in Skills
+## Built-in Skills (Capabilities)
 
-Six built-in skills are seeded when an organization completes onboarding:
+Six built-in capabilities are seeded when an organization completes onboarding. These are universal functions that work across all industries when configured with business-specific reference files.
 
-| Skill | Slug | Purpose |
-|-------|------|---------|
-| Appointment Booking | `appointment-booking` | Schedule, reschedule, cancel appointments |
-| Call Transfer | `call-transfer` | Escalate to human with context handoff |
-| FAQ Responder | `faq-responder` | Answer common questions from knowledge base |
-| After Hours | `after-hours` | Handle calls outside business hours |
-| Lead Qualification | `lead-qualification` | Qualify inbound sales leads (BANT framework) |
-| Payment Collection | `payment-collection` | Process payments, explain invoices |
+| Capability | Slug | What It Does |
+|-----------|------|-------------|
+| **Appointment Booking** | `appointment-booking` | Schedule, reschedule, cancel appointments |
+| **Call Transfer** | `call-transfer` | Escalate to human with context handoff |
+| **FAQ Responder** | `faq-responder` | Answer common questions from knowledge base |
+| **After Hours** | `after-hours` | Handle calls outside business hours |
+| **Lead Qualification** | `lead-qualification` | Qualify inbound sales leads (BANT framework) |
+| **Payment Collection** | `payment-collection` | Process payments, explain invoices |
 
-Built-in skills are:
-- **Read-only** — Org admins cannot edit content (can only enable/disable)
-- **Auto-synced** — Platform admins can update content across all orgs via `POST /api/v1/skills/sync-all`
-- **Content-hashed** — Sync uses SHA-256 comparison to skip unchanged skills
+**Built-in capabilities are:**
+- **Read-only content** — Org admins cannot edit SKILL.md (platform controls the capability logic)
+- **Configurable via reference files** — Admins upload business-specific data (service menu, hours, policies) as skill files
+- **Auto-synced** — Platform admins can update capability logic across all orgs via `POST /api/v1/skills/sync-all`
+- **Composable** — An agent can have `appointment-booking` + `insurance-verification` + `call-transfer` all active
+
+**How they work together:**
+```
+Caller: "I need to book a cleaning and I have Delta Dental"
+Agent (with appointment-booking + insurance-verification):
+  1. Uses appointment-booking SKILL.md to gather: service type, date, time
+  2. Uses insurance-verification SKILL.md to check: Delta Dental coverage, copay
+  3. Uses appointment-booking reference files to confirm: cleaning takes 45 min, $120
+  4. Books appointment with all context
+```
 
 ## API Endpoints
 
