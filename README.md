@@ -533,7 +533,7 @@ alembic downgrade -1             # Rollback one migration
 
 #### Backend Tests (Pytest)
 ```bash
-cd <project-root>
+cd <project-root>/backend
 
 # Set up test environment (run once per session)
 source ./test-env.sh
@@ -556,11 +556,19 @@ pytest --cov
 
 ```
 
+#### Worker Test (Pytest)
+```bash
+cd <project-root>/worker
+../backend/.venv/bin/python -m pytest tests/ --cov
+```
+
 #### Frontend Unit Tests (Vitest)
 ```bash
 cd <project-root>/frontend
 # Run all tests
 npm run test
+or
+npx vitest run
 
 # Run with coverage
 npm run test:coverage
@@ -587,6 +595,7 @@ npm run test:run
 ```
 
 #### End-to-End Tests (Playwright + Isolated Stack)
+Run all e2e tests. This will start the test specific container app stack and after test will also tear it down.
 ```bash
 cd <project-root>
 
@@ -597,6 +606,11 @@ cd <project-root>
 ./scripts/run-e2e.sh --video-on
 
 # E2E test results are saved to: e2e/reports/report.html
+```
+
+Run specific e2e tests against already running app stack. Example below assumes the app (UI server) is running on port 3000:
+```bash
+E2E_BASE_URL=http://localhost:3000 backend/.venv/bin/python -m pytest e2e/tests/test_skill_workflow.py -x -v
 ```
 
 **Note**: Always source `./test-env.sh` before running tests. This sets up the Python paths for all modules (backend/src, shared). Run tests from project root directory for best results.

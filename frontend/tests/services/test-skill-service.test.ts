@@ -2,7 +2,7 @@
  * Tests for SkillService
  *
  * Covers: organization skill CRUD, agent skill assignment/unassignment,
- * skill seeding, and proper handling of 204 No Content responses.
+ * skill seeding, reference file CRUD, skill import, 204 No Content handling.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -56,15 +56,18 @@ describe('SkillService', () => {
     })
 
     it('deleteSkill handles 204 No Content response', async () => {
-      // This should not throw — 204 means success with no body
       await expect(
         skillService.deleteSkill('org-1', 'skill-3')
       ).resolves.not.toThrow()
     })
 
-    it('seedSkills returns seeded count', async () => {
-      const result = await skillService.seedSkills('org-1')
-      expect(result).toEqual({ seeded: 6 })
+    it('listPlatformSkills returns platform skill summaries', async () => {
+      const result = await skillService.listPlatformSkills()
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        slug: 'appointment-booking',
+        name: 'Appointment Booking',
+      })
     })
   })
 
@@ -90,7 +93,6 @@ describe('SkillService', () => {
     })
 
     it('unassignSkill handles 204 No Content response', async () => {
-      // This is the critical test — 204 responses caused crashes before the fix
       await expect(
         skillService.unassignSkill('agent-1', 'skill-1')
       ).resolves.not.toThrow()
@@ -146,6 +148,85 @@ describe('SkillService', () => {
       await expect(
         skillService.assignSkill('agent-1', 'skill-1')
       ).rejects.toThrow()
+    })
+  })
+
+  describe('Skill Reference Files', () => {
+    it('getSkillFiles returns file summaries', async () => {
+      const result = await skillService.getSkillFiles('org-1', 'skill-1')
+      expect(result).toHaveLength(3)
+      expect(result[0]).toMatchObject({
+        file_path: 'references/policies.md',
+        file_kind: 'reference',
+      })
+      expect(result[2]).toMatchObject({
+        file_path: 'scripts/validate.py',
+        file_kind: 'script',
+      })
+    })
+
+    it('createSkillFile creates a new reference file', async () => {
+      const result = await skillService.createSkillFile('org-1', 'skill-1', {
+        file_path: 'references/new-policy.md',
+        content: '# New Policy\n\nFollow this.',
+        file_kind: 'reference',
+      })
+
+      expect(result).toMatchObject({
+        file_path: 'references/new-policy.md',
+        content: '# New Policy\n\nFollow this.',
+      })
+    })
+
+    it('updateSkillFile updates file content', async () => {
+      const result = await skillService.updateSkillFile(
+        'org-1', 'skill-1', 'file-1',
+        { content: '# Updated content' },
+      )
+
+      expect(result).toMatchObject({
+        content: '# Updated content',
+      })
+    })
+
+    it('deleteSkillFile handles 204 No Content', async () => {
+      await expect(
+        skillService.deleteSkillFile('org-1', 'skill-1', 'file-1')
+      ).resolves.not.toThrow()
+    })
+
+    it('getAgentsUsingSkill returns agent list', async () => {
+      const result = await skillService.getAgentsUsingSkill('org-1', 'skill-1')
+      expect(result).toHaveLength(2)
+      expect(result[0]).toMatchObject({ name: 'Support Agent' })
+      expect(result[1]).toMatchObject({ name: 'Sales Agent', is_active: false })
+    })
+
+    it('getSkillFileContent returns file content string', async () => {
+      const result = await skillService.getSkillFileContent(
+        '00000000-0000-0000-0000-000000000001', 'appointment-booking', 'references/policies.md'
+      )
+      expect(result).toContain('Booking Policies')
+      expect(result).toContain('Confirm insurance')
+    })
+  })
+
+  describe('Skill Import', () => {
+    it('importSkill returns import results with file counts', async () => {
+      const result = await skillService.importSkill(
+        'org-1',
+        'https://github.com/owner/repo/tree/main/my-skill',
+      )
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        files_imported: 3,
+        source_url: 'https://github.com/owner/repo/tree/main/my-skill',
+      })
+      expect(result[0].skill).toMatchObject({
+        slug: 'imported-skill',
+        name: 'Imported Skill',
+      })
     })
   })
 })

@@ -62,8 +62,9 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap } from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -118,6 +119,9 @@ export default function AgentDetailPage() {
   const [skillsLoading, setSkillsLoading] = React.useState(false);
   const [skillToggling, setSkillToggling] = React.useState<string | null>(null);
   const [viewingSkill, setViewingSkill] = React.useState<OrganizationSkill | null>(null);
+  const [viewingSkillFiles, setViewingSkillFiles] = React.useState<import("@/types/skill").SkillFileSummary[]>([]);
+  const [viewingFile, setViewingFile] = React.useState<{ filePath: string; content: string } | null>(null);
+  const [loadingViewFile, setLoadingViewFile] = React.useState(false);
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
@@ -200,12 +204,27 @@ export default function AgentDetailPage() {
       skillService.getAgentSkills(agentId),
     ])
       .then(([skills, agentSkills]) => {
+        // Show all active skills; hidden ones will be shown if assigned
         setOrgSkills(skills.filter((s) => s.is_active));
         setAgentSkillIds(new Set(agentSkills.map((as) => as.skill_id)));
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Failed to load skills:", err);
+      })
       .finally(() => setSkillsLoading(false));
   }, [agent?.organization_id, agentId]);
+
+  // Fetch skill files when viewing a skill in the drawer
+  React.useEffect(() => {
+    if (viewingSkill && agent?.organization_id) {
+      setViewingFile(null);
+      skillService.getSkillFiles(agent.organization_id, viewingSkill.id)
+        .then(setViewingSkillFiles)
+        .catch(() => setViewingSkillFiles([]));
+    } else {
+      setViewingSkillFiles([]);
+    }
+  }, [viewingSkill, agent?.organization_id]);
 
   const buildMarkdownFromTemplate = useCallback((template: VoiceTemplate): string => {
     const sections: string[] = [];
@@ -767,7 +786,7 @@ and confirm someone will call back the next business day.`}
                       </div>
                     ) : systemPromptPreview ? (
                       <div className="bg-white border rounded-md p-4 overflow-x-auto prose prose-sm prose-slate max-w-none">
-                        <ReactMarkdown>{systemPromptPreview}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{systemPromptPreview}</ReactMarkdown>
                       </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm">
@@ -933,11 +952,16 @@ and confirm someone will call back the next business day.`}
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-sm">{skill.name}</span>
                               <Badge
-                                variant={skill.category === "built_in" ? "secondary" : "outline"}
+                                variant={skill.source_skill_id ? "secondary" : "outline"}
                                 className="text-xs"
                               >
-                                {skill.category === "built_in" ? "Built-in" : "Custom"}
+                                {skill.source_skill_id ? "Platform" : "Custom"}
                               </Badge>
+                              {!skill.is_visible && (
+                                <Badge variant="outline" className="text-[11px] border-orange-200 text-orange-600 bg-orange-50">
+                                  <EyeOff className="h-3 w-3 mr-0.5" /> Hidden
+                                </Badge>
+                              )}
                             </div>
                             {skill.description && (
                               <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -956,26 +980,191 @@ and confirm someone will call back the next business day.`}
           </Card>
         </TabsContent>
 
-        {/* Skill content viewer drawer */}
-        <Sheet open={!!viewingSkill} onOpenChange={(open) => !open && setViewingSkill(null)}>
-          <SheetContent className="flex flex-col w-full sm:max-w-lg">
+        {/* Skill content viewer drawer with file tree */}
+        <Sheet open={!!viewingSkill} onOpenChange={(open) => {
+          if (!open) {
+            setViewingSkill(null);
+          }
+        }}>
+          <SheetContent className="flex flex-col w-full sm:max-w-2xl">
             <SheetHeader className="px-6 pt-6 pb-4 border-b">
               <SheetTitle className="flex items-center gap-2">
                 {viewingSkill?.name}
                 <Badge
-                  variant={viewingSkill?.category === "built_in" ? "secondary" : "outline"}
+                  variant={viewingSkill?.source_skill_id ? "secondary" : "outline"}
                   className="text-xs"
                 >
-                  {viewingSkill?.category === "built_in" ? "Built-in" : "Custom"}
+                  {viewingSkill?.source_skill_id ? "Platform" : "Custom"}
                 </Badge>
               </SheetTitle>
               {viewingSkill?.description && (
                 <SheetDescription>{viewingSkill.description}</SheetDescription>
               )}
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
-              {viewingSkill && <ReactMarkdown>{viewingSkill.content}</ReactMarkdown>}
-            </div>
+
+            {viewingSkill && !viewingSkill.is_visible && (
+              <div className="px-6 py-2.5 border-b bg-orange-50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 text-sm text-orange-700">
+                  <EyeOff className="h-4 w-4" />
+                  <span>This skill is hidden from your organization library.</span>
+                </div>
+                {canEdit && agent?.organization_id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={async () => {
+                      try {
+                        await skillService.updateSkill(agent.organization_id, viewingSkill.id, {
+                          is_visible: true,
+                        });
+                        toast.success("Skill is now visible in the library");
+                        // Refresh org skills list
+                        const skills = await skillService.getOrganizationSkills(agent.organization_id);
+                        setOrgSkills(skills.filter((s) => s.is_active));
+                      } catch {
+                        toast.error("Failed to update visibility");
+                      }
+                    }}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Show in Library
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* File tabs */}
+            {viewingSkillFiles.length > 0 && (
+              <div className="px-6 py-2 border-b flex flex-wrap gap-1 bg-muted/20">
+                <button
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs flex items-center gap-1 transition-colors",
+                    !viewingFile
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                  onClick={() => setViewingFile(null)}
+                >
+                  <FileText className="h-3 w-3" />
+                  SKILL.md
+                </button>
+                {(() => {
+                  const folders: Record<string, typeof viewingSkillFiles> = {};
+                  const rootFiles: typeof viewingSkillFiles = [];
+                  viewingSkillFiles.forEach((f) => {
+                    const parts = f.file_path.split("/");
+                    if (parts.length > 1) {
+                      const folder = parts[0];
+                      if (!folders[folder]) folders[folder] = [];
+                      folders[folder].push(f);
+                    } else {
+                      rootFiles.push(f);
+                    }
+                  });
+                  return (
+                    <>
+                      {Object.entries(folders).map(([folder, files]) => (
+                        <div key={folder} className="flex items-center gap-0.5">
+                          <span className="text-[10px] text-muted-foreground ml-1">
+                            <FolderOpen className="h-3 w-3 inline mr-0.5" />{folder}/
+                          </span>
+                          {files.map((f) => (
+                            <button
+                              key={f.id}
+                              className={cn(
+                                "px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors",
+                                viewingFile?.filePath === f.file_path
+                                  ? "bg-primary/10 text-primary font-medium"
+                                  : "text-muted-foreground hover:bg-muted"
+                              )}
+                              onClick={async () => {
+                                if (!agent?.organization_id || !viewingSkill) return;
+                                setLoadingViewFile(true);
+                                try {
+                                  const content = await skillService.getSkillFileContent(
+                                    agent.organization_id, viewingSkill.slug, f.file_path
+                                  );
+                                  setViewingFile({ filePath: f.file_path, content });
+                                } catch {
+                                  toast.error("Failed to load file");
+                                }
+                                setLoadingViewFile(false);
+                              }}
+                            >
+                              <FileText className="h-3 w-3" />
+                              {f.file_path.split("/").pop()}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                      {rootFiles.map((f) => (
+                        <button
+                          key={f.id}
+                          className={cn(
+                            "px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors",
+                            viewingFile?.filePath === f.file_path
+                              ? "bg-primary/10 text-primary font-medium"
+                              : "text-muted-foreground hover:bg-muted"
+                          )}
+                          onClick={async () => {
+                            if (!agent?.organization_id || !viewingSkill) return;
+                            setLoadingViewFile(true);
+                            try {
+                              const content = await skillService.getSkillFileContent(
+                                agent.organization_id, viewingSkill.slug, f.file_path
+                              );
+                              setViewingFile({ filePath: f.file_path, content });
+                            } catch {
+                              toast.error("Failed to load file");
+                            }
+                            setLoadingViewFile(false);
+                          }}
+                        >
+                          <FileText className="h-3 w-3" />
+                          {f.file_path}
+                        </button>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Content area */}
+            {loadingViewFile ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : viewingFile ? (
+              <>
+                <div className="px-6 py-1.5 border-b bg-muted/30 text-xs text-muted-foreground flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5" />
+                  <code>{viewingFile.filePath}</code>
+                </div>
+                {viewingFile.filePath.endsWith(".json") ? (
+                  <div className="flex-1 overflow-y-auto p-5">
+                    <pre className="text-xs font-mono bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">
+                      {(() => { try { return JSON.stringify(JSON.parse(viewingFile.content), null, 2); } catch { return viewingFile.content; } })()}
+                    </pre>
+                  </div>
+                ) : viewingFile.filePath.match(/\.(py|js|ts|sh|bash|yaml|yml|toml)$/) ? (
+                  <div className="flex-1 overflow-y-auto p-5">
+                    <pre className="text-xs font-mono bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">
+                      {viewingFile.content}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingFile.content}</ReactMarkdown>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
+                {viewingSkill && <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingSkill.content}</ReactMarkdown>}
+              </div>
+            )}
           </SheetContent>
         </Sheet>
 

@@ -74,6 +74,8 @@ backend/sdist/
 backend/var/
 backend/venv/
 backend/wheels/
+# Migration backups
+backend/scripts/backups/
 build/
 coverage/
 develop-eggs/

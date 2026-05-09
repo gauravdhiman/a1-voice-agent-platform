@@ -312,7 +312,7 @@ async def entrypoint(ctx: JobContext):
 
         # 3b. Fetch agent skills for progressive disclosure
         from shared.voice_agents.skill_service import skill_service
-        from src.tools.skill_tool import create_load_skill_function
+        from src.tools.skill_tool import create_load_skill_function, create_load_skill_reference_function
 
         skill_summaries, skill_error = await skill_service.get_agent_skill_summaries(
             voice_agent.id
@@ -335,6 +335,18 @@ async def entrypoint(ctx: JobContext):
             )
             livekit_tools.append(load_skill_tool)
             logger.info("Registered load_skill tool")
+
+            # Also register load_skill_reference for multi-level progressive disclosure
+            load_skill_ref_fn = create_load_skill_reference_function(
+                str(voice_agent.organization_id), skill_service
+            )
+            load_skill_ref_tool = function_tool(
+                load_skill_ref_fn,
+                name="load_skill_reference",
+                description="Load a reference file from a skill. Call when a loaded skill mentions a file to read.",
+            )
+            livekit_tools.append(load_skill_ref_tool)
+            logger.info("Registered load_skill_reference tool")
 
         # 3c. Build enhanced system prompt
         logger.info(f"Building enhanced system prompt for agent {agent_id}")
