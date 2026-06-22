@@ -2,6 +2,12 @@
 
 Central index for all documentation in the AI Voice Agent Platform.
 
+## 🧭 Roadmap & Status
+
+- **[Sprint Board](SPRINT-BOARD.md)** — Current status, in-progress work, and voice-focused backlog (reconciled 2026-06-19).
+- **[Feature Priority List](PRIORITY-LIST.md)** — Feature backlog with effort/impact and sprint planning.
+- **Product direction: Voice-only.** Chat agents (F3) and multi-channel (F14) are deprioritized.
+
 ## 📖 Documentation Structure
 
 ### 00_getting_started/ - Getting Started
@@ -40,6 +46,7 @@ Comprehensive documentation organized by feature.
 5. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
 6. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
 7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
+8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 
 ### Multi-Tenancy & RBAC
 

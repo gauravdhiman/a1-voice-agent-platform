@@ -15,6 +15,7 @@ import {
   LogOut,
   Bot,
   Phone,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -55,6 +56,11 @@ const navigationItems = [
     href: "/users",
     icon: Users,
   },
+  {
+    name: "Platform Skills",
+    href: "/platform/skills",
+    icon: BookOpen,
+  },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -79,8 +85,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Filter navigation items based on user permissions
   const filteredNavigationItems = navigationItems.filter((item) => {
-    if (item.name === "Users") {
-      return isPlatformAdmin; // Only show Users to platform admins
+    if (item.name === "Users" || item.name === "Platform Skills") {
+      return isPlatformAdmin; // Only show platform-admin items to platform admins
     }
     return true; // Show all other items
   });
@@ -119,6 +125,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     } else if (pathname === "/users") {
       if (isPlatformAdmin) {
         breadcrumbs.push({ name: "Users", href: null });
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
+    } else if (pathname === "/platform/skills") {
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Platform Skills", href: null });
       } else {
         breadcrumbs.push({ name: "Dashboard", href: null });
       }

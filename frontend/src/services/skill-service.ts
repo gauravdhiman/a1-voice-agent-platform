@@ -19,6 +19,12 @@ import type {
   SkillFileSummary,
   SkillImportResult,
   PlatformSkill,
+  PlatformSkillCreate,
+  PlatformSkillUpdate,
+  PlatformSkillFile,
+  PlatformSkillFileCreate,
+  PlatformSkillImportResult,
+  PlatformSkillFileSummary,
   PlatformSkillSummary,
   SkillForkRequest,
   SkillRefreshRequest,
@@ -67,10 +73,20 @@ class SkillService {
   // Platform Skills (Read-only for org users, CRUD for platform admins)
   // ═══════════════════════════════════════════════════════════════════════════════
 
-  async listPlatformSkills(): Promise<PlatformSkillSummary[]> {
-    const response = await apiClient.get<PlatformSkillSummary[]>(
-      `/api/v1/platform/skills`,
-    );
+  /**
+   * List platform skill templates.
+   *
+   * @param includeInactive - When true, return ALL skills including deprecated
+   *   ones. Restricted to platform admins server-side (non-admins get 403).
+   *   Default (false) returns only active skills (for org browsing/forking).
+   */
+  async listPlatformSkills(
+    includeInactive = false,
+  ): Promise<PlatformSkillSummary[]> {
+    const endpoint = includeInactive
+      ? `/api/v1/platform/skills?include_inactive=true`
+      : `/api/v1/platform/skills`;
+    const response = await apiClient.get<PlatformSkillSummary[]>(endpoint);
     return response.data;
   }
 
@@ -79,6 +95,100 @@ class SkillService {
       `/api/v1/platform/skills/${skillId}`,
     );
     return response.data;
+  }
+
+  /** Create a new platform skill template (platform admin only). */
+  async createPlatformSkill(
+    data: PlatformSkillCreate,
+  ): Promise<PlatformSkill> {
+    const response = await apiClient.post<PlatformSkill>(
+      `/api/v1/platform/skills`,
+      data,
+    );
+    return response.data;
+  }
+
+  /** Update a platform skill (platform admin only). Bumps version automatically. */
+  async updatePlatformSkill(
+    skillId: string,
+    data: PlatformSkillUpdate,
+  ): Promise<PlatformSkill> {
+    const response = await apiClient.put<PlatformSkill>(
+      `/api/v1/platform/skills/${skillId}`,
+      data,
+    );
+    return response.data;
+  }
+
+  /**
+   * Deprecate (hide) a platform skill by setting is_active=false.
+   * Existing org forks keep working; new forks are blocked. (Platform admin only.)
+   */
+  async deletePlatformSkill(skillId: string): Promise<void> {
+    await apiClient.delete(`/api/v1/platform/skills/${skillId}`);
+  }
+
+  /**
+   * Import skill(s) from a GitHub / skills.sh URL as platform skill templates.
+   * Platform admin only. Imported skills become platform-level templates.
+   */
+  async importPlatformSkill(url: string): Promise<PlatformSkillImportResult[]> {
+    const response = await apiClient.post<PlatformSkillImportResult[]>(
+      `/api/v1/platform/skills/import`,
+      { url },
+    );
+    return response.data;
+  }
+
+  // ─── Platform skill reference files (platform admin only) ───
+
+  async listPlatformSkillFiles(
+    skillId: string,
+  ): Promise<PlatformSkillFileSummary[]> {
+    const response = await apiClient.get<PlatformSkillFileSummary[]>(
+      `/api/v1/platform/skills/${skillId}/files`,
+    );
+    return response.data;
+  }
+
+  async getPlatformSkillFile(
+    skillId: string,
+    fileId: string,
+  ): Promise<PlatformSkillFile> {
+    const response = await apiClient.get<PlatformSkillFile>(
+      `/api/v1/platform/skills/${skillId}/files/${fileId}`,
+    );
+    return response.data;
+  }
+
+  async createPlatformSkillFile(
+    skillId: string,
+    data: PlatformSkillFileCreate,
+  ): Promise<PlatformSkillFile> {
+    const response = await apiClient.post<PlatformSkillFile>(
+      `/api/v1/platform/skills/${skillId}/files`,
+      data,
+    );
+    return response.data;
+  }
+
+  async updatePlatformSkillFile(
+    skillId: string,
+    fileId: string,
+    data: PlatformSkillFileCreate,
+  ): Promise<PlatformSkillFile> {
+    const response = await apiClient.put<PlatformSkillFile>(
+      `/api/v1/platform/skills/${skillId}/files/${fileId}`,
+      data,
+    );
+    return response.data;
+  }
+
+  async deletePlatformSkillFile(
+    skillId: string,
+    fileId: string,
+  ): Promise<void> {
+    await apiClient.delete(`/api/v1/platform/skills/${skillId}/files/${fileId}`);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════

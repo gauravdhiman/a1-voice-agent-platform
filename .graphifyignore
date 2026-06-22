@@ -1,0 +1,50 @@
+# .graphifyignore — code-only knowledge graph for the voice-agent platform.
+# Layered on top of .gitignore (graphify respects both; gitignore last-match-wins).
+#
+# Goal: build the graph from CODE only (no docs / images / papers), so no LLM
+# API key is required ("A code-only corpus needs no key").
+#
+# Extension sets are graphify's own classifications (detect.py):
+#   DOC_EXTENSIONS   = .md .mdx .qmd .txt .rst .html .yaml .yml
+#   IMAGE_EXTENSIONS = .png .jpg .jpeg .gif .webp .svg
+#   PAPER_EXTENSIONS = .pdf
+#   (CODE_EXTENSIONS — .py .ts .tsx .js .jsx .json .sh .sql .tf … — NOT excluded)
+
+# ─── Exclude ALL doc / image / paper extensions (anywhere in the tree) ───
+# Docs (graphify classifies these as documents)
+*.md
+*.mdx
+*.qmd
+*.txt
+*.rst
+*.html
+*.yaml
+*.yml
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.PNG
+*.JPG
+*.JPEG
+*.GIF
+*.WEBP
+*.SVG
+# Papers
+*.pdf
+*.PDF
+
+# ─── Exclude vendored AI-tooling skill packs (their CODE, not the platform) ───
+# These contain real .ts/.tsx/.py/.sh files (web-artifacts-builder mockup,
+# pdf/xlsx scripts, mermaid scripts) that would pollute a platform code graph.
+.claude/
+.codex/
+.cline/
+
+# ─── Exclude scratch / generated non-code dirs ───
+.docs/
+worker/.docs/
+e2e/reports/

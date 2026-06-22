@@ -70,13 +70,19 @@ class PlatformSkill(PlatformSkillBase):
 
 
 class PlatformSkillSummary(BaseModel):
-    """Lightweight summary for template browsing."""
+    """Lightweight summary for template browsing.
+
+    Includes ``is_active`` so platform admins can see and manage deprecated
+    (hidden) skills. For non-admin browsing the value is always ``True`` since
+    inactive skills are filtered out server-side.
+    """
 
     id: UUID
     slug: str
     name: str
     description: Optional[str]
     version: str
+    is_active: bool = True
 
 
 class PlatformSkillFileCreate(BaseModel):
@@ -289,9 +295,21 @@ class SkillImportRequest(BaseModel):
 
 
 class SkillImportResult(BaseModel):
-    """Result of a skill import operation."""
+    """Result of a skill import operation (organization skill)."""
 
     skill: OrganizationSkill
+    files_imported: int
+    source_url: str
+
+
+class PlatformSkillImportResult(BaseModel):
+    """Result of importing an external skill as a platform skill template.
+
+    Platform admins import skills from external marketplaces/GitHub; the
+    imported package becomes a platform-level template (not an org custom skill).
+    """
+
+    skill: PlatformSkill
     files_imported: int
     source_url: str
 

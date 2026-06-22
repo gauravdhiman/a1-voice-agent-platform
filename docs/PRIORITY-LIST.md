@@ -1,32 +1,43 @@
 # VoiceAI Platform - Feature Priority List
 
-**Last Updated:** 2026-03-01
-**Version:** 2.0
+**Last Updated:** 2026-06-19
+**Version:** 2.1
+
+> **Product Direction:** Voice-only. The platform focuses exclusively on phone-call AI agents. Chat agents (F3) and multi-channel (F14) are deprioritized — see `SPRINT-BOARD.md`.
 
 ---
 
 ## Vision
-Build an AI voice agent platform that combines:
-1. **Voice Agents** - Phone-call capable AI agents (current)
+Build an **AI voice agent platform** (voice-only) that combines:
+1. **Voice Agents** - Phone-call capable AI agents (current, core focus)
 2. **Skills System** - Agentic capabilities extension (Agent Skills format)
-3. **Chat Agents** - Long-running task agents with memory (Agno/Letta-based)
-4. **Phone Numbers** - Buy, manage, and use phone numbers seamlessly
+3. **Phone Numbers** - Buy, manage, and use phone numbers seamlessly
+
+> Chat Agents with long-term memory (formerly pillar #3) are **out of scope** for
+> the current voice-only direction. The PRD (`PRD-chat-agents-memory.md`) is kept
+> for future reference only.
 
 ---
 
 ## 📋 Feature Backlog (Scrum Style)
 
-### 🟢 Ready to Start (This Sprint)
-| ID | Feature | Effort | Impact | Sprint |
-|----|---------|--------|--------|--------|
-| F1 | Skills System for Voice Agents | M | High | 1 |
-| F2 | Phone Number Management (Twilio + LiveKit) | L | High | 1 |
+### 🟢 Done (Shipped)
+| ID | Feature | Effort | Impact | Completed |
+|----|---------|--------|--------|-----------|
+| F1 | Skills System for Voice Agents (Phases 1, 2a, 2b, 2c) | M | High | 2026-05-06 |
+| F2 | Phone Number Management (Twilio + LiveKit) | L | High | 2026-03-15 |
 
-### 🟡 In Discovery/Planning
+### 🟡 In Progress / Next
 | ID | Feature | Effort | Impact | Status |
 |----|---------|--------|--------|--------|
-| F3 | Chat Agents with Memory | H | High | PRD Draft |
-| F4 | Call Analytics Dashboard | L | Medium | - |
+| F1+ | Built-in skill library expansion (`insurance-verification`, `dispatch-coordination`) | M | High | Next |
+| — | Worker single-instance scaling (TokenRefreshService) | M | High | Under review |
+
+### ⚪ Deprioritized (Voice-Only Direction)
+| ID | Feature | Effort | Impact | Status |
+|----|---------|--------|--------|--------|
+| F3 | Chat Agents with Memory | H | High | Deprioritized — out of voice-only scope |
+| F4 | Call Analytics Dashboard | L | Medium | Backlog |
 
 ### 🔴 Future (Backlog)
 | ID | Feature | Effort | Impact |
@@ -49,7 +60,7 @@ Build an AI voice agent platform that combines:
 ---
 
 ### F1: Skills System for Voice Agents
-**Status:** In Progress | **Effort:** Medium | **Impact:** High
+**Status:** Done (Phases 1–2c shipped) — built-in skill library expansion in progress | **Effort:** Medium | **Impact:** High
 
 **What:**
 - Enable extensibility through **composable agent capabilities**
@@ -89,8 +100,8 @@ appointment-booking/
 
 ---
 
-### F2: Phone Number Management (Twilio + LiveKit) ⚡ NEW
-**Status:** Ready | **Effort:** Low | **Impact:** High
+### F2: Phone Number Management (Twilio + LiveKit)
+**Status:** Done (2026-03-15) | **Effort:** Medium | **Impact:** High
 
 **What:**
 - Buy phone numbers directly from the platform
@@ -123,7 +134,7 @@ appointment-booking/
 ---
 
 ### F3: Chat Agents with Long-term Memory
-**Status:** PRD Draft | **Effort:** High | **Impact:** High
+**Status:** Deprioritized (voice-only direction) | **Effort:** High | **Impact:** High
 
 **What:**
 - Create chat-based AI agents (not just voice)
@@ -174,23 +185,21 @@ appointment-booking/
 ## 🔄 Sprint Planning
 
 ### Sprint 1 (Complete)
-- ✅ F1: Skills System — Foundation + Progressive Disclosure + CRUD & Import (Phases 1, 2a, 2b)
+- ✅ F2: Phone Number Management — shipped 2026-03-15 (PR #2).
+- ✅ F1: Skills System — Phases 1, 2a, 2b, 2c shipped (2026-04-01 → 2026-05-06).
+- ✅ Landing page, onboarding wizard, security hardening, Render.com deployment.
 
 ### Sprint 2 (Current)
-- 🎯 F1: Skills System — Pre-Built Skill Content (Phase 2c)
-  - Perfect one skill (Dental Assistant recommended)
-  - Establish skill-building patterns
-  - Validate with E2E call simulations
+- 🎯 Built-in skill library expansion: add `insurance-verification` and
+  `dispatch-coordination` (PRD-named composable capabilities). Note:
+  `call-transfer`, `faq-responder`, `after-hours`, `lead-qualification`, and
+  `payment-collection` are already seeded in `skill_seeds.py`.
+- 🎯 Worker single-instance scaling: resolve `TokenRefreshService` race-condition
+  TODO (scope decision: distributed lock vs Celery+Redis).
 
-### Sprint 3
-- 📞 F2: Phone Number Management (Twilio + LiveKit)
-  - Buy, manage, assign numbers
-  - Unified provider abstraction
-
-### Sprint 4
-- 💬 F3: Chat Agents with Memory
-  - Long-running chat agents
-  - Persistent memory architecture
+### Deprioritized
+- 💬 F3: Chat Agents with Memory — out of voice-only scope. PRD retained for
+  future reference only.
 
 ### Future (Backlog)
 - Phase 5: Marketplace (re-evaluate when 50+ orgs using skills)
