@@ -1,7 +1,7 @@
 # VoiceAI Platform - Feature Priority List
 
-**Last Updated:** 2026-06-19
-**Version:** 2.1
+**Last Updated:** 2026-06-23
+**Version:** 2.2
 
 > **Product Direction:** Voice-only. The platform focuses exclusively on phone-call AI agents. Chat agents (F3) and multi-channel (F14) are deprioritized — see `SPRINT-BOARD.md`.
 
@@ -24,14 +24,18 @@ Build an **AI voice agent platform** (voice-only) that combines:
 ### 🟢 Done (Shipped)
 | ID | Feature | Effort | Impact | Completed |
 |----|---------|--------|--------|-----------|
-| F1 | Skills System for Voice Agents (Phases 1, 2a, 2b, 2c) | M | High | 2026-05-06 |
+| F1 | Skills System — Phases 1, 2a, 2b, 2c | M | High | 2026-05-06 |
+| F1 | Built-in skill library (8 skills) | M | High | 2026-06-22 |
+| F1 | Platform Skills Management (Admin UI) | M | High | 2026-06-22 |
+| F1 | Shared `<SkillEditor>` + org skills tab migration | M | High | 2026-06-22 |
 | F2 | Phone Number Management (Twilio + LiveKit) | L | High | 2026-03-15 |
 
-### 🟡 In Progress / Next
-| ID | Feature | Effort | Impact | Status |
-|----|---------|--------|--------|--------|
-| F1+ | Built-in skill library expansion (`insurance-verification`, `dispatch-coordination`) | M | High | Next |
-| — | Worker single-instance scaling (TokenRefreshService) | M | High | Under review |
+### 🟡 In Progress / Next (priority order)
+| # | Feature | Effort | Impact | Status |
+|---|---------|--------|--------|--------|
+| 1 | Worker single-instance scaling (`TokenRefreshService` race condition) | M | High | Decision pending — recommend Postgres advisory lock vs Celery+Redis |
+| 2 | Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore | M | High | Next — finishes platform admin CRUD |
+| 3 | Skill library continuation (`call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`) | M | High | Next |
 
 ### ⚪ Deprioritized (Voice-Only Direction)
 | ID | Feature | Effort | Impact | Status |
@@ -60,7 +64,7 @@ Build an **AI voice agent platform** (voice-only) that combines:
 ---
 
 ### F1: Skills System for Voice Agents
-**Status:** Done (Phases 1–2c shipped) — built-in skill library expansion in progress | **Effort:** Medium | **Impact:** High
+**Status:** Done (Phases 1–2c + admin UI + shared editor + 8 built-in skills) — skill library continuation is next | **Effort:** Medium | **Impact:** High
 
 **What:**
 - Enable extensibility through **composable agent capabilities**
@@ -90,11 +94,15 @@ appointment-booking/
 
 **First Capability:** `appointment-booking` — universal need, clear boundaries, testable end-to-end
 
-**Subsequent Capabilities (priority order):**
-1. `call-handling`, `call-transfer` — Core communication
-2. `insurance-verification`, `new-patient-intake` — Business operations
-3. `lead-qualification`, `intake-qualification` — Qualification & sales
-4. `appointment-reminders`, `feedback-collection` — Follow-up
+**Seeded built-in skills (8, done):** `appointment-booking`, `insurance-verification`,
+`dispatch-coordination`, `call-transfer`, `faq-responder`, `after-hours`,
+`lead-qualification`, `payment-collection` — in `backend/src/voice_agents/skill_seeds.py`.
+
+**Subsequent Capabilities (pending, priority order):**
+1. `call-handling`, `voicemail-management` — Core communication (call-transfer already seeded)
+2. `new-patient-intake` — Business operations (insurance-verification, payment-collection already seeded)
+3. `intake-qualification`, `menu-inquiry`, `order-status` — Qualification & sales (lead-qualification already seeded)
+4. `appointment-reminders`, `feedback-collection`, `recall-campaigns` — Follow-up
 
 **File:** `PRD-skills-system.md` (updated)
 
@@ -190,12 +198,11 @@ appointment-booking/
 - ✅ Landing page, onboarding wizard, security hardening, Render.com deployment.
 
 ### Sprint 2 (Current)
-- 🎯 Built-in skill library expansion: add `insurance-verification` and
-  `dispatch-coordination` (PRD-named composable capabilities). Note:
-  `call-transfer`, `faq-responder`, `after-hours`, `lead-qualification`, and
-  `payment-collection` are already seeded in `skill_seeds.py`.
-- 🎯 Worker single-instance scaling: resolve `TokenRefreshService` race-condition
-  TODO (scope decision: distributed lock vs Celery+Redis).
+- ✅ Built-in skill library expanded to 8 skills (added `insurance-verification`, `dispatch-coordination`).
+- ✅ Platform Skills Management (admin UI) — `/platform/skills` with create/edit/hide-restore/files + import-from-URL.
+- ✅ Shared `<SkillEditor>` extracted; org skills tab migrated to it (org + platform share one UI).
+- 🎯 Worker single-instance scaling: resolve `TokenRefreshService` race-condition TODO (recommend Postgres advisory lock vs Celery+Redis).
+- 🎯 Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
 
 ### Deprioritized
 - 💬 F3: Chat Agents with Memory — out of voice-only scope. PRD retained for
@@ -237,8 +244,11 @@ docs/
 ---
 
 ## Next Steps
-1. ✅ Review updated priority list
-2. ⏳ Create PRD for Phone Numbers (F2)
-3. ⏳ Finalize PRD for Skills System (F1)
-4. Start Sprint 1 implementation
+1. Pick the worker-scaling approach (recommend Postgres advisory lock) and implement + test.
+2. Implement platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
+3. Continue the built-in skill library (`new-patient-intake`, `call-handling`, …).
+4. (Optional) prune merged/stale git branches.
+
+> Full status, ordering, and rationale live in `SPRINT-BOARD.md` (the source of
+> truth). This file is the feature backlog/spec companion.
 
