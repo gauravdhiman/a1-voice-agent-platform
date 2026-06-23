@@ -631,16 +631,30 @@ class SkillService:
     # ═════════════════════════════════════════════════════════════════════════
 
     @tracer.start_as_current_span("skill.list_platform_skills")
-    async def list_platform_skills(self) -> tuple[List[PlatformSkillSummary], Optional[str]]:
-        """List all active platform skills."""
+    async def list_platform_skills(
+        self, include_inactive: bool = False
+    ) -> tuple[List[PlatformSkillSummary], Optional[str]]:
+        """List platform skills.
+
+        Args:
+            include_inactive: When True, return ALL platform skills including
+                deprecated (is_active=False) ones. Intended for platform-admin
+                management only. When False (default), only active skills are
+                returned (used for org browsing/forking).
+
+        Returns:
+            Tuple of (list of PlatformSkillSummary, error). Each summary
+            includes ``is_active`` so admins can distinguish hidden skills.
+        """
         try:
-            response = (
+            query = (
                 self.supabase.table("platform_skills")
-                .select("id, slug, name, description, version")
-                .eq("is_active", True)
+                .select("id, slug, name, description, version, is_active")
                 .order("name")
-                .execute()
             )
+            if not include_inactive:
+                query = query.eq("is_active", True)
+            response = query.execute()
             skills = [PlatformSkillSummary(**row) for row in response.data or []]
             return skills, None
         except Exception as e:

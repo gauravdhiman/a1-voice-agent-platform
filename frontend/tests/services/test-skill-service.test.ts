@@ -25,7 +25,7 @@ describe('SkillService', () => {
       expect(result[0]).toMatchObject({
         slug: 'appointment-booking',
         name: 'Appointment Booking',
-        category: 'built_in',
+        category: 'custom',
       })
     })
 
@@ -68,6 +68,78 @@ describe('SkillService', () => {
         slug: 'appointment-booking',
         name: 'Appointment Booking',
       })
+    })
+  })
+
+  describe('Platform Skills (admin CRUD)', () => {
+    it('listPlatformSkills(includeInactive=true) returns all skills incl. deprecated', async () => {
+      const result = await skillService.listPlatformSkills(true)
+      expect(result).toHaveLength(2)
+      expect(result[1]).toMatchObject({ is_active: false })
+    })
+
+    it('getPlatformSkill returns full skill with content', async () => {
+      const result = await skillService.getPlatformSkill('platform-skill-1')
+      expect(result).toMatchObject({ slug: 'appointment-booking' })
+      expect(result.content).toContain('# Appointment Booking')
+    })
+
+    it('createPlatformSkill POSTs and returns created skill', async () => {
+      const result = await skillService.createPlatformSkill({
+        slug: 'new-skill',
+        name: 'New Skill',
+        content: '# New',
+      })
+      expect(result).toMatchObject({ slug: 'new-skill', name: 'New Skill' })
+    })
+
+    it('updatePlatformSkill PUTs partial update (e.g. hide via is_active=false)', async () => {
+      const result = await skillService.updatePlatformSkill('platform-skill-1', { is_active: false })
+      expect(result.is_active).toBe(false)
+    })
+
+    it('deletePlatformSkill handles 204 (deprecate)', async () => {
+      await expect(skillService.deletePlatformSkill('platform-skill-1')).resolves.toBeUndefined()
+    })
+
+    it('listPlatformSkillFiles returns file summaries', async () => {
+      const result = await skillService.listPlatformSkillFiles('platform-skill-1')
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ file_path: 'references/faqs.md' })
+    })
+
+    it('getPlatformSkillFile returns full file with content', async () => {
+      const result = await skillService.getPlatformSkillFile('platform-skill-1', 'platform-file-1')
+      expect(result.content).toContain('# FAQs')
+    })
+
+    it('createPlatformSkillFile POSTs and returns created file', async () => {
+      const result = await skillService.createPlatformSkillFile('platform-skill-1', {
+        file_path: 'references/new.md',
+        content: '# New file',
+      })
+      expect(result).toMatchObject({ file_path: 'references/new.md' })
+    })
+
+    it('updatePlatformSkillFile PUTs updated content', async () => {
+      const result = await skillService.updatePlatformSkillFile('platform-skill-1', 'platform-file-1', {
+        file_path: 'references/faqs.md',
+        content: '# Updated',
+      })
+      expect(result.content).toBe('# Updated')
+    })
+
+    it('importPlatformSkill POSTs to /platform/skills/import and returns results', async () => {
+      const result = await skillService.importPlatformSkill('https://github.com/o/r')
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ source_url: 'https://github.com/o/r' })
+      expect(result[0].skill).toMatchObject({ slug: 'imported-platform-skill' })
+    })
+
+        it('deletePlatformSkillFile handles 204', async () => {
+      await expect(
+        skillService.deletePlatformSkillFile('platform-skill-1', 'platform-file-1'),
+      ).resolves.toBeUndefined()
     })
   })
 

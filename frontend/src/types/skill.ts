@@ -31,6 +31,44 @@ export interface PlatformSkillSummary {
   name: string;
   description: string | null;
   version: string;
+  /** Active (visible/forkable) vs deprecated (hidden). Always true for non-admin lists. */
+  is_active: boolean;
+}
+
+/** Payload for creating a new platform skill template (platform admin only). */
+export interface PlatformSkillCreate {
+  slug: string;
+  name: string;
+  description?: string | null;
+  content: string;
+  author?: string | null;
+}
+
+/** Payload for updating a platform skill (platform admin only). Bumps version. */
+export interface PlatformSkillUpdate {
+  name?: string;
+  description?: string | null;
+  content?: string;
+  is_active?: boolean;
+}
+
+/** Full platform skill reference file (with content). */
+export interface PlatformSkillFile {
+  id: string;
+  skill_id: string;
+  file_path: string;
+  content: string;
+  file_kind: "reference" | "script" | "asset" | "other";
+  content_hash: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Payload for creating/updating a platform skill reference file. */
+export interface PlatformSkillFileCreate {
+  file_path: string;
+  content: string;
+  file_kind?: "reference" | "script" | "asset" | "other";
 }
 
 export interface PlatformSkill {
@@ -112,6 +150,13 @@ export interface SkillFileSummary {
 
 export interface SkillImportResult {
   skill: OrganizationSkill;
+  files_imported: number;
+  source_url: string;
+}
+
+/** Result of importing an external skill as a platform skill template. */
+export interface PlatformSkillImportResult {
+  skill: PlatformSkill;
   files_imported: number;
   source_url: string;
 }

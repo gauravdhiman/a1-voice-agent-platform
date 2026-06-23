@@ -53,7 +53,7 @@ skill-name/
 | Admin | I want to enable skills for my agent | Can toggle skills on/off in agent config | ✅ Done |
 | Admin | I want to preview skill content | Can expand file tree and view file contents | ✅ Done |
 | Admin | I want to delete skills safely | Warned if skill is used by agents; can confirm delete | ✅ Done |
-| Admin | I want pre-built skills for my industry | Can enable built-in skills with rich domain knowledge | 🎯 Phase 2c |
+| Admin | I want pre-built skills for my industry | Can enable built-in skills with rich domain knowledge | 🔄 In progress — 7 seeded (appointment-booking, insurance-verification, call-transfer, faq-responder, after-hours, lead-qualification, payment-collection) |
 | Agent | I want to use skill knowledge in calls | Skill instructions injected into system prompt during calls | ✅ Done |
 
 ---
@@ -316,19 +316,22 @@ Notice `appointment-booking` appears everywhere — it's a universal capability 
 
 ### Subsequent Capabilities (batches)
 
+> **Status legend:** ✅ seeded as a built-in platform skill (`backend/src/voice_agents/skill_seeds.py`) · 🎯 planned · 🛠️ not started.  
+> Shipped built-ins also include `faq-responder` and `after-hours` (not listed in the original batches).
+
 **Batch 1 — Core Communication:**
 - `call-handling` — Greetings, hold etiquette, call wrap-up, tone/voice guidelines
-- `call-transfer` — Routing rules (department, urgency, availability), warm vs cold transfer
+- `call-transfer` — Routing rules (department, urgency, availability), warm vs cold transfer ✅
 - `voicemail-management` — Taking detailed messages, urgency triage, callback scheduling
 
 **Batch 2 — Business Operations:**
-- `insurance-verification` — Eligibility checks, coverage questions, pre-auth status, copay/deductible lookup
+- `insurance-verification` — Eligibility checks, coverage questions, pre-auth status, copay/deductible lookup ✅
 - `new-patient-intake` — Information gathering, form completion, consent, medical history
-- `payment-processing` — Collecting payments over phone, billing questions, payment plan setup
-- `dispatch-coordination` — Technician assignment, ETA communication, parts availability, job status
+- `payment-processing` — Collecting payments over phone, billing questions, payment plan setup ✅ *(shipped as `payment-collection`)*
+- `dispatch-coordination` — Technician assignment, ETA communication, parts availability, job status 🎯 *(proposed next)*
 
 **Batch 3 — Qualification & Sales:**
-- `lead-qualification` — BANT-style questions, urgency assessment, fit scoring
+- `lead-qualification` — BANT-style questions, urgency assessment, fit scoring ✅
 - `intake-qualification` — Legal matter screening, practice-area routing, conflict check
 - `menu-inquiry` — Item descriptions, dietary restrictions, daily specials, allergy handling
 - `order-status` — Lookup, modification, cancellation, refund policy

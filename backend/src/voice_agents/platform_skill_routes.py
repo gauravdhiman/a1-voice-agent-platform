@@ -9,7 +9,7 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from opentelemetry import trace
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -22,6 +22,8 @@ from shared.voice_agents.skill_models import (
     PlatformSkillFileSummary,
     PlatformSkillSummary,
     PlatformSkillUpdate,
+    PlatformSkillImportResult,
+    SkillImportRequest,
 )
 from shared.voice_agents.skill_service import skill_service
 
@@ -51,14 +53,30 @@ def _require_platform_admin(user_profile: UserProfile) -> None:
 )
 @tracer.start_as_current_span("skill.platform.list")
 async def list_platform_skills(
+    include_inactive: bool = Query(
+        False,
+        description="If true, return all skills including deprecated ones "
+        "(platform admin only). Default returns only active skills.",
+    ),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ) -> List[PlatformSkillSummary]:
-    """List all active platform skills.
+    """List platform skills.
 
-    Available to any authenticated user so org admins can browse and fork
-    skills into their organization's library.
+    By default returns only active platform skills — available to any
+    authenticated user so org admins can browse and fork skills into their
+    organization's library.
+
+    When ``include_inactive=true`` is passed, ALL skills (including deprecated
+    ones) are returned. This is restricted to platform admins only; non-admins
+    requesting it receive 403.
     """
-    skills, error = await skill_service.list_platform_skills()
+    current_user_id, user_profile = user_data
+    if include_inactive:
+        _require_platform_admin(user_profile)
+
+    skills, error = await skill_service.list_platform_skills(
+        include_inactive=include_inactive
+    )
     if error:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
     return skills
@@ -150,6 +168,93 @@ async def delete_platform_skill(
     success, error = await skill_service.delete_platform_skill(skill_id)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Platform Skill Import (from external URL)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@platform_skill_router.post(
+    "/platform/skills/import",
+    response_model=List[PlatformSkillImportResult],
+    status_code=status.HTTP_201_CREATED,
+)
+@tracer.start_as_current_span("skill.platform.import")
+async def import_platform_skill_from_url(
+    request: SkillImportRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> List[PlatformSkillImportResult]:
+    """Import skill(s) from a GitHub / skills.sh URL as platform skill templates.
+
+    Platform admin only. Fetches each skill package (SKILL.md + reference files)
+    via the GitHub REST API and stores it as an immutable platform-level template
+    (platform_skills + platform_skill_files). Imported skills are platform skills,
+    available to all organizations via forking.
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    try:
+        from src.voice_agents.skill_import import SkillImporter
+
+        importer = SkillImporter()
+        packages = await importer.fetch_skill_packages(request.url)
+
+        results: List[PlatformSkillImportResult] = []
+        for pkg in packages:
+            skill_data = PlatformSkillCreate(
+                slug=pkg.slug,
+                name=pkg.name,
+                description=pkg.description,
+                content=pkg.content,
+                author="Platform (imported)",
+            )
+            skill, error = await skill_service.create_platform_skill(skill_data)
+            if error:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to create platform skill '{pkg.slug}': {error}",
+                )
+
+            files_count = 0
+            if pkg.files and skill:
+                for f in pkg.files:
+                    file_data = PlatformSkillFileCreate(
+                        file_path=f.file_path,
+                        content=f.content,
+                        file_kind=f.file_kind,
+                    )
+                    _, file_error = await skill_service.create_platform_skill_file(
+                        skill.id, file_data
+                    )
+                    if file_error:
+                        logger.warning(
+                            f"Failed to create file '{f.file_path}' for '{pkg.slug}': {file_error}"
+                        )
+                    else:
+                        files_count += 1
+
+            results.append(
+                PlatformSkillImportResult(
+                    skill=skill,
+                    files_imported=files_count,
+                    source_url=pkg.source_url,
+                )
+            )
+
+        return results
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error importing platform skill: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}",
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

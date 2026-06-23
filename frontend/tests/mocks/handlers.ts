@@ -3,7 +3,7 @@
  */
 
 import { http, HttpResponse } from 'msw'
-import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber, createMockOrganizationSkill, createMockAgentSkill, createMockSkillFileSummary, createMockSkillFile, createMockSkillImportResult, createMockPlatformSkillSummary } from '../utils/data-factories'
+import { createMockUser, createMockAgent, createMockPlatformTool, createMockOrganization, createMockSubscriptionPlan, createMockCreditBalance, createMockRole, createMockPermission, createMockPhoneNumber, createMockPhoneNumberWithAgent, createMockAvailablePhoneNumber, createMockOrganizationSkill, createMockAgentSkill, createMockSkillFileSummary, createMockSkillFile, createMockSkillImportResult, createMockPlatformSkillSummary, createMockPlatformSkill, createMockPlatformSkillFileSummary, createMockPlatformSkillFile, createMockPlatformSkillImportResult } from '../utils/data-factories'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -741,10 +741,58 @@ export const handlers = [
   }),
 
   // Platform skills endpoints
-  http.get(`${API_BASE_URL}/api/v1/platform/skills`, () => {
+  http.get(`${API_BASE_URL}/api/v1/platform/skills`, ({ request }) => {
+    const url = new URL(request.url)
+    const includeInactive = url.searchParams.get('include_inactive') === 'true'
+    if (includeInactive) {
+      return HttpResponse.json([
+        createMockPlatformSkillSummary(),
+        createMockPlatformSkillSummary({ id: 'platform-skill-2', slug: 'old-skill', name: 'Old Skill', is_active: false }),
+      ])
+    }
     return HttpResponse.json([
       createMockPlatformSkillSummary(),
     ])
+  }),
+
+  http.get(`${API_BASE_URL}/api/v1/platform/skills/:skillId`, () => {
+    return HttpResponse.json(createMockPlatformSkill())
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/platform/skills`, async ({ request }) => {
+    const body = (await request.json()) as { slug: string; name: string }
+    return HttpResponse.json(createMockPlatformSkill({ slug: body.slug, name: body.name }), { status: 201 })
+  }),
+
+  http.put(`${API_BASE_URL}/api/v1/platform/skills/:skillId`, async ({ request }) => {
+    const body = (await request.json()) as { name?: string; is_active?: boolean }
+    return HttpResponse.json(createMockPlatformSkill({ name: body.name ?? 'Appointment Booking', is_active: body.is_active ?? true }))
+  }),
+
+  http.delete(`${API_BASE_URL}/api/v1/platform/skills/:skillId`, () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${API_BASE_URL}/api/v1/platform/skills/:skillId/files`, () => {
+    return HttpResponse.json([createMockPlatformSkillFileSummary()])
+  }),
+
+  http.get(`${API_BASE_URL}/api/v1/platform/skills/:skillId/files/:fileId`, () => {
+    return HttpResponse.json(createMockPlatformSkillFile())
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/platform/skills/:skillId/files`, async ({ request }) => {
+    const body = (await request.json()) as { file_path: string }
+    return HttpResponse.json(createMockPlatformSkillFile({ file_path: body.file_path }), { status: 201 })
+  }),
+
+  http.put(`${API_BASE_URL}/api/v1/platform/skills/:skillId/files/:fileId`, async ({ request }) => {
+    const body = (await request.json()) as { file_path: string; content: string }
+    return HttpResponse.json(createMockPlatformSkillFile({ file_path: body.file_path, content: body.content }))
+  }),
+
+  http.delete(`${API_BASE_URL}/api/v1/platform/skills/:skillId/files/:fileId`, () => {
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/fork`, async ({ request }) => {
@@ -841,7 +889,20 @@ export const handlers = [
     return HttpResponse.json('# Booking Policies\n\n- Confirm insurance\n- Verify ID')
   }),
 
-  http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/import`, async ({ request }) => {
+  http.post(`${API_BASE_URL}/api/v1/platform/skills/import`, async ({ request }) => {
+    const body = await request.json() as { url: string }
+    return HttpResponse.json(
+      [
+        createMockPlatformSkillImportResult({
+          source_url: body.url,
+          skill: createMockPlatformSkill({ slug: 'imported-platform-skill', name: 'Imported Platform Skill' }),
+        }),
+      ],
+      { status: 201 },
+    )
+  }),
+
+    http.post(`${API_BASE_URL}/api/v1/organizations/:orgId/skills/import`, async ({ request }) => {
     const body = await request.json() as { url: string }
     return HttpResponse.json(
       [

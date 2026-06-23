@@ -212,6 +212,51 @@ export const createMockPlatformSkillSummary = (overrides: Partial<import("@/type
   name: 'Appointment Booking',
   description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
   version: '2026.01.01_1',
+  is_active: true,
+  ...overrides,
+})
+
+export const createMockPlatformSkill = (overrides: Partial<import("@/types/skill").PlatformSkill> = {}): import("@/types/skill").PlatformSkill => ({
+  id: 'platform-skill-1',
+  slug: 'appointment-booking',
+  name: 'Appointment Booking',
+  description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
+  content: '# Appointment Booking\n\n## When to use\n...',
+  version: '2026.01.01_1',
+  author: 'Platform',
+  content_hash: 'hash-platform-skill-1',
+  is_active: true,
+  files: [],
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockPlatformSkillFileSummary = (overrides: Partial<import("@/types/skill").PlatformSkillFileSummary> = {}): import("@/types/skill").PlatformSkillFileSummary => ({
+  id: 'platform-file-1',
+  skill_id: 'platform-skill-1',
+  file_path: 'references/faqs.md',
+  file_kind: 'reference',
+  content_hash: 'hash-file-1',
+  ...overrides,
+})
+
+export const createMockPlatformSkillImportResult = (overrides: Partial<import("@/types/skill").PlatformSkillImportResult> = {}): import("@/types/skill").PlatformSkillImportResult => ({
+  skill: createMockPlatformSkill(),
+  files_imported: 2,
+  source_url: 'https://github.com/owner/repo',
+  ...overrides,
+})
+
+export const createMockPlatformSkillFile = (overrides: Partial<import("@/types/skill").PlatformSkillFile> = {}): import("@/types/skill").PlatformSkillFile => ({
+  id: 'platform-file-1',
+  skill_id: 'platform-skill-1',
+  file_path: 'references/faqs.md',
+  content: '# FAQs\n\nCommon questions.',
+  file_kind: 'reference',
+  content_hash: 'hash-file-1',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
   ...overrides,
 })
 

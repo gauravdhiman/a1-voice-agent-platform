@@ -716,6 +716,7 @@ After implementing any fix or new feature, you MUST:
    - **Python**: Run `python -m py_compile <file>` on every changed `.py` file to confirm it compiles without syntax errors.
    - **Frontend**: Run `docker exec <container> npx tsc --noEmit` to confirm TypeScript compiles with no errors in source files (ignore pre-existing `.next/types` and test file errors).
      - **IMPORTANT**: Never run `next build` or `npm run build` inside the frontend **dev** container. The build output overwrites the `.next` directory used by the dev server, causing `ENOENT` errors and `Internal Server Error`. Instead, use `tsc --noEmit` for type checking only.
+     - **Frontend unit tests (vitest) cannot run inside the frontend dev container**: the dev image ships Node 18, but `vitest@4` requires Node 20+. Running `npx vitest` in the container fails with `ERR_REQUIRE_ESM` from `vite`. Run frontend tests on the **host** instead (`cd frontend && npx vitest run <file>`), where Node 22 is available and `frontend/node_modules` is installed.
 7. A task is only considered **done** when: tests are added/updated, tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
 
 ### Development
@@ -800,3 +801,15 @@ When a process, workflow, or technique proves valuable through repeated use or s
 - Store project-level skills in the `.claude/` project directory (not in the repo itself)
 - Review existing skills before creating new ones to avoid duplication
 
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
