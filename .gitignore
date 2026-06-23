@@ -1,6 +1,7 @@
 
 __pycache__/
 ._*
+.agents/
 .coverage
 .DS_Store
 .DS_Store?
@@ -74,6 +75,8 @@ backend/sdist/
 backend/var/
 backend/venv/
 backend/wheels/
+# Migration backups
+backend/scripts/backups/
 build/
 coverage/
 develop-eggs/
@@ -109,3 +112,12 @@ venv/
 wheels/
 yarn-debug.log*
 yarn-error.log*
+.research/
+
+# graphify (codebase knowledge-graph tooling)
+# Generated graph output, cache, and report — never commit these.
+graphify-out/
+# graphify skill install (reproducible via `graphify install`) — local tooling.
+.codex/skills/graphify/
+# Codex local hooks (machine-specific; contains absolute path to local graphify binary)
+.codex/hooks.json

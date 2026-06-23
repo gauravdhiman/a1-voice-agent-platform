@@ -160,8 +160,16 @@ def test_create_voice_agent_journey(page: Page, base_url: str, step):
     page.wait_for_load_state("networkidle")
 
     step("Verify agent creation wizard is displayed")
-    expect(page.get_by_text("Create New Voice Agent")).to_be_visible()
-    expect(page.get_by_role("heading", name="Basic Information").first).to_be_visible()
+    expect(page.get_by_text("Create New Voice Agent")).to_be_visible(timeout=10000)
+
+    step("Skip template selection to go to Basic Information")
+    # The wizard starts on Template step — click Skip or Next to proceed
+    skip_btn = page.get_by_role("button", name=re.compile(r"Skip|Next", re.I))
+    if skip_btn.is_visible(timeout=3000):
+        skip_btn.click()
+
+    step("Verify Basic Information step is displayed")
+    expect(page.get_by_role("heading", name="Basic Information").first).to_be_visible(timeout=5000)
 
     step("Fill in Basic Information step")
     # Select organization

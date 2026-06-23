@@ -10,6 +10,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
 - [Notification Tables](#notification-tables)
+- [Platform Skills Tables](#platform-skills-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
 - [Indexes](#indexes)
 - [Row Level Security (RLS)](#row-level-security-rls)
@@ -203,6 +204,8 @@ Stores voice agent configurations for each organization.
 | tone                | VARCHAR(100) | NULLABLE                        | Communication style (Professional, etc) |
 | mission             | TEXT         | NULLABLE                        | Primary goals for this agent            |
 | custom_instructions | TEXT         | NULLABLE                        | Agent-specific context (policies, USPs, FAQs, protocols) |
+| instructions_markdown | TEXT       | NULLABLE                        | Full agent instructions in markdown (replaces field-based prompt building when set). Supports template variables: `{{org.name}}`, `{{org.industry}}`, `{{org.location}}`, `{{org.business_details}}`, `{{agent.name}}` |
+| use_platform_credits | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Use platform credits instead of org API key |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
@@ -985,6 +988,14 @@ erDiagram
     platform_tools ||--o{ agent_tools : "used by"
     agent_embed_configs ||--o{ embed_call_logs : "tracks"
 
+    organizations ||--o{ organization_skills : "has many"
+    organization_skills ||--o{ organization_skill_files : "has many"
+    organization_skills ||--o{ agent_skills : "assigned via"
+    voice_agents ||--o{ agent_skills : "uses"
+    platform_skills ||--o{ organization_skills : "forked into"
+    platform_skills ||--o{ platform_skill_files : "has many"
+    organization_skills ||--o{ skill_update_logs : "refreshed"
+
     auth ||--o{ user_roles : "has many"
     organizations ||--o{ user_roles : "has many"
     roles ||--o{ user_roles : "assigned to"
@@ -1029,6 +1040,130 @@ erDiagram
 12. `20260118000001` - Add last_refreshed_at to agent_tools
 13. `20260127000001` - Enhance organization and agent models (add: industry, location, business_details, persona, tone, mission, custom_instructions; remove: system_prompt - now auto-generated via PromptBuilder)
 14. `20260217004742` - Add agent_embed_configs and embed_call_logs tables for embed button feature
+15. `20260222000000` - Add use_platform_credits column to voice_agents
+16. `20260329000001` - Add phone_numbers table for Twilio phone number management
+17. `20260329000002` - Add call_logs table for tracking voice agent calls
+18. `20260331000001` - Add instructions_markdown column to voice_agents (Phase 1: markdown-based agent instructions)
+19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure)
+20. `20260503000001` - Add platform_skills, platform_skill_files, skill_update_logs tables. Add fork model columns (source_skill_id, source_version, is_visible) to organization_skills. Remove source_url/source_ref. Convert built_in category to custom (Phase 2c: platform skills fork/refresh model)
+
+---
+
+### Skills Tables (Phase 2a)
+
+#### organization_skills
+
+Organization-level skill library. Skills are reusable knowledge/procedure packages in markdown.
+
+| Column              | Type         | Constraints                     | Description                             |
+| ------------------- | ------------ | ------------------------------- | --------------------------------------- |
+| id                  | UUID         | PRIMARY KEY                     | Unique skill identifier                 |
+| organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
+| slug                | VARCHAR(100) | NOT NULL                        | URL-safe unique identifier (kebab-case) |
+| name                | VARCHAR(200) | NOT NULL                        | Skill display name                      |
+| description         | TEXT         | NULLABLE                        | Short description for prompt metadata   |
+| content             | TEXT         | NOT NULL                        | Full skill content in markdown          |
+| category            | VARCHAR(50)  | NOT NULL, DEFAULT 'custom'      | Always 'custom' (forked, created, or imported) |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Whether the skill is active             |
+| is_visible          | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Visibility in org library UI (does NOT affect agent assignment) |
+| version             | VARCHAR(50)  | NULLABLE                        | Skill version (e.g., '1.0.0')          |
+| author              | VARCHAR(200) | NULLABLE                        | Skill author attribution                |
+| content_hash        | VARCHAR(64)  | NULLABLE                        | SHA-256 hash for change detection       |
+| source_skill_id     | UUID         | NULLABLE, FK → platform_skills.id | Platform skill this was forked from (NULL = created/imported) |
+| source_version      | VARCHAR(20)  | NULLABLE                        | Platform skill version at time of fork  |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
+
+**Unique Constraint**: (organization_id, slug)
+**RLS**: Enabled
+
+#### organization_skill_files
+
+Reference files for skills. Stores additional files like `references/policies.md` that skills can reference. Files are loaded on-demand via the `load_skill_reference` worker tool.
+
+| Column              | Type         | Constraints                             | Description                     |
+| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
+| skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Parent skill                    |
+| file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md"  |
+| content             | TEXT         | NOT NULL                                | File content                    |
+| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset', 'other' |
+| content_hash        | VARCHAR(64)  | NULLABLE                                | SHA-256 hash for change detection |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Last update timestamp           |
+
+**Unique Constraint**: (skill_id, file_path)
+
+#### agent_skills
+
+Junction table linking agents to skills from their organization's library.
+
+| Column              | Type         | Constraints                             | Description                     |
+| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| id                  | UUID         | PRIMARY KEY                             | Unique assignment identifier    |
+| agent_id            | UUID         | NOT NULL, FK → voice_agents.id          | Agent identifier                |
+| skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Skill identifier                |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE                  | Whether assignment is active    |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
+
+**Unique Constraint**: (agent_id, skill_id)
+
+---
+
+### Platform Skills Tables (Phase 2c)
+
+These tables support the **fork/refresh model**: platform admins maintain immutable skill templates, and organizations fork editable copies into their own libraries. Forked skills can later be refreshed from their source when updates become available.
+
+#### platform_skills
+
+Immutable skill templates controlled by the platform. These are the source of truth for forked copies in organization libraries.
+
+| Column              | Type         | Constraints                     | Description                                      |
+| ------------------- | ------------ | ------------------------------- | ------------------------------------------------ |
+| id                  | UUID         | PRIMARY KEY                     | Unique platform skill identifier                 |
+| slug                | VARCHAR(100) | NOT NULL, UNIQUE                | Global URL-safe identifier (kebab-case)          |
+| name                | VARCHAR(200) | NOT NULL                        | Display name shown in template library           |
+| description         | TEXT         | NULLABLE                        | Short description for template browsing          |
+| content             | TEXT         | NOT NULL                        | Full SKILL.md content                            |
+| version             | VARCHAR(20)  | NOT NULL                        | Date-based version (`YYYY.MM.DD_N`)              |
+| content_hash        | VARCHAR(64)  | NULLABLE                        | SHA-256 hash for change detection                |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Platform-level visibility (deprecation toggle)   |
+| author              | VARCHAR(200) | NULLABLE                        | Attribution (e.g., "Platform Team")              |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                               |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                            |
+
+**Access**: No RLS. Platform admin only.
+
+#### platform_skill_files
+
+Default reference files bundled with a platform skill. These files are copied to the organization skill on fork.
+
+| Column              | Type         | Constraints                             | Description                     |
+| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
+| skill_id            | UUID         | NOT NULL, FK → platform_skills.id       | Parent platform skill           |
+| file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md" |
+| content             | TEXT         | NOT NULL                                | File content                    |
+| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset'  |
+| content_hash        | VARCHAR(64)  | NULLABLE                                | SHA-256 hash for change detection |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Last update timestamp           |
+
+**Unique Constraint**: (skill_id, file_path)  
+**Access**: No RLS. Platform admin only.
+
+#### skill_update_logs
+
+Audit trail for refresh operations. Each time an organization refreshes a forked skill from its platform source, a log entry is created.
+
+| Column              | Type         | Constraints                             | Description                     |
+| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| id                  | UUID         | PRIMARY KEY                             | Unique log entry identifier     |
+| org_skill_id        | UUID         | NOT NULL, FK → organization_skills.id   | Forked skill that was refreshed |
+| old_source_version  | VARCHAR(20)  | NULLABLE                                | Platform version before refresh   |
+| new_source_version  | VARCHAR(20)  | NULLABLE                                | Platform version after refresh  |
+| performed_by        | UUID         | NULLABLE, FK → auth.users.id            | User who triggered the refresh  |
+| performed_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Timestamp of the refresh        |
 
 ---
 
@@ -1137,4 +1272,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-02-20
+**Last Updated**: 2026-05-06

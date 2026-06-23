@@ -53,7 +53,35 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { voiceTemplateService } from "@/services/voice-template-service";
+import type { VoiceTemplate } from "@/types/voice-template";
+import { skillService } from "@/services/skill-service";
+import type { OrganizationSkill, AgentSkill } from "@/types/skill";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -84,6 +112,16 @@ export default function AgentDetailPage() {
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
   const [testCallOpen, setTestCallOpen] = React.useState(false);
+  const [voiceTemplates, setVoiceTemplates] = React.useState<VoiceTemplate[]>([]);
+  const [pendingTemplate, setPendingTemplate] = React.useState<VoiceTemplate | null>(null);
+  const [orgSkills, setOrgSkills] = React.useState<OrganizationSkill[]>([]);
+  const [agentSkillIds, setAgentSkillIds] = React.useState<Set<string>>(new Set());
+  const [skillsLoading, setSkillsLoading] = React.useState(false);
+  const [skillToggling, setSkillToggling] = React.useState<string | null>(null);
+  const [viewingSkill, setViewingSkill] = React.useState<OrganizationSkill | null>(null);
+  const [viewingSkillFiles, setViewingSkillFiles] = React.useState<import("@/types/skill").SkillFileSummary[]>([]);
+  const [viewingFile, setViewingFile] = React.useState<{ filePath: string; content: string } | null>(null);
+  const [loadingViewFile, setLoadingViewFile] = React.useState(false);
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
@@ -107,6 +145,7 @@ export default function AgentDetailPage() {
     custom_instructions: "",
     is_active: true,
     use_platform_credits: false,
+    instructions_markdown: "",
   });
 
   // Fetch data using React Query
@@ -148,6 +187,101 @@ export default function AgentDetailPage() {
     }
   }, [agent?.organization_id]);
 
+  // Load voice templates for the "Insert template" dropdown
+  React.useEffect(() => {
+    voiceTemplateService
+      .listTemplates()
+      .then(setVoiceTemplates)
+      .catch(() => {});
+  }, []);
+
+  // Load org skills and agent skill assignments
+  React.useEffect(() => {
+    if (!agent?.organization_id) return;
+    setSkillsLoading(true);
+    Promise.all([
+      skillService.getOrganizationSkills(agent.organization_id),
+      skillService.getAgentSkills(agentId),
+    ])
+      .then(([skills, agentSkills]) => {
+        // Show all active skills; hidden ones will be shown if assigned
+        setOrgSkills(skills.filter((s) => s.is_active));
+        setAgentSkillIds(new Set(agentSkills.map((as) => as.skill_id)));
+      })
+      .catch((err) => {
+        console.error("Failed to load skills:", err);
+      })
+      .finally(() => setSkillsLoading(false));
+  }, [agent?.organization_id, agentId]);
+
+  // Fetch skill files when viewing a skill in the drawer
+  React.useEffect(() => {
+    if (viewingSkill && agent?.organization_id) {
+      setViewingFile(null);
+      skillService.getSkillFiles(agent.organization_id, viewingSkill.id)
+        .then(setViewingSkillFiles)
+        .catch(() => setViewingSkillFiles([]));
+    } else {
+      setViewingSkillFiles([]);
+    }
+  }, [viewingSkill, agent?.organization_id]);
+
+  const buildMarkdownFromTemplate = useCallback((template: VoiceTemplate): string => {
+    const sections: string[] = [];
+
+    // Identity & Persona
+    if (template.persona) {
+      sections.push(`# Identity and Persona\n\n${template.persona}`);
+    }
+    if (template.tone) {
+      sections.push(`Your communication style is ${template.tone}.`);
+    }
+
+    // Mission
+    if (template.mission) {
+      sections.push(`# Mission\n\n${template.mission}`);
+    }
+
+    // Business Context (using template variables)
+    sections.push(
+      `# Business Context\n\n- **Business:** {{org.name}}\n- **Industry:** {{org.industry}}\n- **Location:** {{org.location}}\n\n{{org.business_details}}`
+    );
+
+    // Greeting
+    if (template.greeting) {
+      const greeting = template.greeting.replace("[Business Name]", "{{org.name}}");
+      sections.push(`# Default Greeting\n\n${greeting}`);
+    }
+
+    // Procedures / Custom Instructions
+    if (template.custom_instructions) {
+      sections.push(`# Procedures\n\n${template.custom_instructions}`);
+    }
+
+    return sections.join("\n\n");
+  }, []);
+
+  const handleSkillToggle = useCallback(async (skillId: string, assign: boolean) => {
+    setSkillToggling(skillId);
+    try {
+      if (assign) {
+        await skillService.assignSkill(agentId, skillId);
+        setAgentSkillIds((prev) => new Set([...prev, skillId]));
+      } else {
+        await skillService.unassignSkill(agentId, skillId);
+        setAgentSkillIds((prev) => {
+          const next = new Set(prev);
+          next.delete(skillId);
+          return next;
+        });
+      }
+    } catch {
+      toast.error(`Failed to ${assign ? "assign" : "unassign"} skill`);
+    } finally {
+      setSkillToggling(null);
+    }
+  }, [agentId]);
+
   // Update form when agent data changes
   React.useEffect(() => {
     if (agent) {
@@ -160,6 +294,7 @@ export default function AgentDetailPage() {
         custom_instructions: agent.custom_instructions || "",
         is_active: agent.is_active,
         use_platform_credits: agent.use_platform_credits || false,
+        instructions_markdown: agent.instructions_markdown || "",
       });
     }
   }, [agent]);
@@ -189,7 +324,7 @@ export default function AgentDetailPage() {
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "properties" || tabParam === "tools") {
+    if (tabParam === "properties" || tabParam === "tools" || tabParam === "skills") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -447,7 +582,7 @@ export default function AgentDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {canEdit && agent.is_active && (
+          {canEdit && (
             <>
               <Button
                 variant="outline"
@@ -456,7 +591,7 @@ export default function AgentDetailPage() {
                 <Phone className="h-4 w-4 mr-2" />
                 Test Agent
               </Button>
-              <EmbedButtonConfig agentId={agentId} />
+              {agent.is_active && <EmbedButtonConfig agentId={agentId} />}
             </>
           )}
           {canEdit && (
@@ -472,6 +607,7 @@ export default function AgentDetailPage() {
       >
         <TabsList className="w-full">
           <TabsTrigger value="properties">Properties</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
         </TabsList>
 
@@ -523,81 +659,97 @@ export default function AgentDetailPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="persona">Agent Persona / Role</Label>
-                  <Input
-                    id="persona"
-                    value={agentForm.persona}
-                    onChange={(e) =>
-                      setAgentForm({ ...agentForm, persona: e.target.value })
-                    }
-                    placeholder="e.g., Front Desk Coordinator"
-                    disabled={!canEdit}
-                  />
+              {/* Agent Instructions (Markdown) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="instructions_markdown" className="text-sm font-medium">
+                      Agent Instructions
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Define your agent&apos;s behavior, persona, and procedures in{" "}
+                      <a
+                        href="https://www.markdownguide.org/basic-syntax/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      >
+                        markdown format
+                      </a>.
+                      Use <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{org.name}}"}</code>,{" "}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{org.industry}}"}</code>,{" "}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{agent.name}}"}</code>{" "}
+                      for dynamic context.
+                    </p>
+                  </div>
+                  {canEdit && voiceTemplates.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <FileText className="w-3.5 h-3.5 mr-1.5" />
+                          Insert template
+                          <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        {voiceTemplates.map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onClick={() => {
+                              if (agentForm.instructions_markdown?.trim()) {
+                                setPendingTemplate(template);
+                                return;
+                              }
+                              const markdown = buildMarkdownFromTemplate(template);
+                              setAgentForm({ ...agentForm, instructions_markdown: markdown });
+                              toast.success(`"${template.name}" template inserted`);
+                            }}
+                          >
+                            <div>
+                              <div className="font-medium text-sm">{template.name}</div>
+                              <div className="text-xs text-muted-foreground">{template.industry}</div>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tone">Communication Tone</Label>
-                  <select
-                    id="tone"
-                    value={agentForm.tone}
-                    onChange={(e) =>
-                      setAgentForm({ ...agentForm, tone: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
-                    disabled={!canEdit}
-                  >
-                    <option value="Professional">Professional</option>
-                    <option value="Friendly">Friendly</option>
-                    <option value="Enthusiastic">Enthusiastic</option>
-                    <option value="Minimalist">Minimalist / Formal</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="mission">Key Mission</Label>
                 <Textarea
-                  id="mission"
-                  value={agentForm.mission}
-                  onChange={(e) =>
-                    setAgentForm({ ...agentForm, mission: e.target.value })
-                  }
-                  placeholder="What should this agent accomplish?"
-                  className="min-h-[80px]"
-                  disabled={!canEdit}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="custom_instructions">
-                  Additional Instructions
-                </Label>
-                <Textarea
-                  id="custom_instructions"
-                  value={agentForm.custom_instructions}
+                  id="instructions_markdown"
+                  value={agentForm.instructions_markdown}
                   onChange={(e) =>
                     setAgentForm({
                       ...agentForm,
-                      custom_instructions: e.target.value,
+                      instructions_markdown: e.target.value,
                     })
                   }
-                  placeholder={`Add context specific to this agent's role. Include:
+                  placeholder={`# Identity and Persona
 
-• Company policies and procedures (for support agents)
-• Unique selling points and differentiators (for sales agents)
-• Common customer questions and how to handle them
-• Emergency or after-hours protocols
-• Specific workflows or escalation procedures
-• Any other context that helps this agent handle calls effectively
+You are a friendly receptionist representing {{org.name}}.
+Your communication style is warm, professional, and reassuring.
 
-Example for Sales Agent:
-"Always mention our 30-day money-back guarantee. If a customer asks about pricing, emphasize our competitive rates and bundle discounts. For enterprise inquiries, gather company size and current provider before scheduling a demo."
+# Mission
 
-Example for Support Agent:
-"For billing issues, verify account details first. If the issue requires escalation, collect callback number and best time to reach them. For technical problems, try basic troubleshooting steps before creating a ticket."`}
-                  className="min-h-[200px]"
+Help patients schedule appointments, answer common questions,
+and provide a welcoming experience.
+
+# Business Context
+
+- Industry: {{org.industry}}
+- Location: {{org.location}}
+
+# Procedures
+
+## Appointment Booking
+1. Ask for preferred date and time
+2. Check availability
+3. Confirm details with caller
+
+## After Hours
+If calling outside business hours, offer to take a message
+and confirm someone will call back the next business day.`}
+                  className="min-h-[400px] font-mono text-sm"
                   disabled={!canEdit}
                 />
               </div>
@@ -615,7 +767,7 @@ Example for Support Agent:
                     ) : (
                       <Eye className="h-4 w-4 text-slate-600" />
                     )}
-                    <span className="font-medium text-sm">Preview Generated System Prompt</span>
+                    <span className="font-medium text-sm">Preview System Prompt</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {showSystemPrompt ? "Click to hide" : "Click to view"}
@@ -625,7 +777,7 @@ Example for Support Agent:
                 {showSystemPrompt && (
                   <div className="p-4 bg-slate-50 border-t">
                     <p className="text-sm text-muted-foreground mb-3">
-                      This is the system prompt the AI receives based on your organization and agent configuration. It combines your business details, agent persona, and instructions into a comprehensive prompt.
+                      This is the final system prompt the AI receives — your markdown instructions plus system guardrails and tool guidelines.
                     </p>
                     {systemPromptLoading ? (
                       <div className="flex items-center justify-center py-8">
@@ -633,14 +785,12 @@ Example for Support Agent:
                         <span className="ml-2 text-sm text-muted-foreground">Generating preview...</span>
                       </div>
                     ) : systemPromptPreview ? (
-                      <div className="bg-white border rounded-md p-4 overflow-x-auto">
-                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
-                          {systemPromptPreview}
-                        </pre>
+                      <div className="bg-white border rounded-md p-4 overflow-x-auto prose prose-sm prose-slate max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{systemPromptPreview}</ReactMarkdown>
                       </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm">
-                        Unable to generate preview. Please ensure organization and agent data is saved.
+                        Unable to generate preview. Save your instructions first, then check the preview.
                       </div>
                     )}
                   </div>
@@ -735,6 +885,288 @@ Example for Support Agent:
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Skills Tab */}
+        <TabsContent value="skills">
+          <Card>
+            <CardHeader className="p-5 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <Zap className="h-5 w-5" />
+                    <span>Agent Skills</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Assign skills to give this agent domain-specific knowledge and procedures.
+                    Skills are loaded on-demand during conversations.
+                  </CardDescription>
+                </div>
+                {canEdit && agent?.organization_id && (
+                  <Link
+                    href={`/organization?org_id=${agent.organization_id}&tab=skills`}
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 underline underline-offset-2"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Manage Skills
+                  </Link>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-5 pt-2">
+              {skillsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading skills...</span>
+                </div>
+              ) : orgSkills.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Zap className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No skills available for this organization.</p>
+                  <p className="text-sm mt-1">Add skills from Organization Settings to get started.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {orgSkills.map((skill) => {
+                    const isAssigned = agentSkillIds.has(skill.id);
+                    const isToggling = skillToggling === skill.id;
+                    return (
+                      <div
+                        key={skill.id}
+                        className={cn(
+                          "flex items-center justify-between p-4 border rounded-lg transition-colors cursor-pointer",
+                          isAssigned ? "bg-primary/5 border-primary/20" : "hover:bg-muted/50",
+                        )}
+                        onClick={() => setViewingSkill(skill)}
+                      >
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Switch
+                              checked={isAssigned}
+                              onCheckedChange={(checked) =>
+                                handleSkillToggle(skill.id, checked === true)
+                              }
+                              disabled={!canEdit || isToggling}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{skill.name}</span>
+                              <Badge
+                                variant={skill.source_skill_id ? "secondary" : "outline"}
+                                className="text-xs"
+                              >
+                                {skill.source_skill_id ? "Platform" : "Custom"}
+                              </Badge>
+                              {!skill.is_visible && (
+                                <Badge variant="outline" className="text-[11px] border-orange-200 text-orange-600 bg-orange-50">
+                                  <EyeOff className="h-3 w-3 mr-0.5" /> Hidden
+                                </Badge>
+                              )}
+                            </div>
+                            {skill.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                {skill.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Skill content viewer drawer with file tree */}
+        <Sheet open={!!viewingSkill} onOpenChange={(open) => {
+          if (!open) {
+            setViewingSkill(null);
+          }
+        }}>
+          <SheetContent className="flex flex-col w-full sm:max-w-2xl">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                {viewingSkill?.name}
+                <Badge
+                  variant={viewingSkill?.source_skill_id ? "secondary" : "outline"}
+                  className="text-xs"
+                >
+                  {viewingSkill?.source_skill_id ? "Platform" : "Custom"}
+                </Badge>
+              </SheetTitle>
+              {viewingSkill?.description && (
+                <SheetDescription>{viewingSkill.description}</SheetDescription>
+              )}
+            </SheetHeader>
+
+            {viewingSkill && !viewingSkill.is_visible && (
+              <div className="px-6 py-2.5 border-b bg-orange-50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 text-sm text-orange-700">
+                  <EyeOff className="h-4 w-4" />
+                  <span>This skill is hidden from your organization library.</span>
+                </div>
+                {canEdit && agent?.organization_id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={async () => {
+                      try {
+                        await skillService.updateSkill(agent.organization_id, viewingSkill.id, {
+                          is_visible: true,
+                        });
+                        toast.success("Skill is now visible in the library");
+                        // Refresh org skills list
+                        const skills = await skillService.getOrganizationSkills(agent.organization_id);
+                        setOrgSkills(skills.filter((s) => s.is_active));
+                      } catch {
+                        toast.error("Failed to update visibility");
+                      }
+                    }}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Show in Library
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* File tabs */}
+            {viewingSkillFiles.length > 0 && (
+              <div className="px-6 py-2 border-b flex flex-wrap gap-1 bg-muted/20">
+                <button
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs flex items-center gap-1 transition-colors",
+                    !viewingFile
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                  onClick={() => setViewingFile(null)}
+                >
+                  <FileText className="h-3 w-3" />
+                  SKILL.md
+                </button>
+                {(() => {
+                  const folders: Record<string, typeof viewingSkillFiles> = {};
+                  const rootFiles: typeof viewingSkillFiles = [];
+                  viewingSkillFiles.forEach((f) => {
+                    const parts = f.file_path.split("/");
+                    if (parts.length > 1) {
+                      const folder = parts[0];
+                      if (!folders[folder]) folders[folder] = [];
+                      folders[folder].push(f);
+                    } else {
+                      rootFiles.push(f);
+                    }
+                  });
+                  return (
+                    <>
+                      {Object.entries(folders).map(([folder, files]) => (
+                        <div key={folder} className="flex items-center gap-0.5">
+                          <span className="text-[10px] text-muted-foreground ml-1">
+                            <FolderOpen className="h-3 w-3 inline mr-0.5" />{folder}/
+                          </span>
+                          {files.map((f) => (
+                            <button
+                              key={f.id}
+                              className={cn(
+                                "px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors",
+                                viewingFile?.filePath === f.file_path
+                                  ? "bg-primary/10 text-primary font-medium"
+                                  : "text-muted-foreground hover:bg-muted"
+                              )}
+                              onClick={async () => {
+                                if (!agent?.organization_id || !viewingSkill) return;
+                                setLoadingViewFile(true);
+                                try {
+                                  const content = await skillService.getSkillFileContent(
+                                    agent.organization_id, viewingSkill.slug, f.file_path
+                                  );
+                                  setViewingFile({ filePath: f.file_path, content });
+                                } catch {
+                                  toast.error("Failed to load file");
+                                }
+                                setLoadingViewFile(false);
+                              }}
+                            >
+                              <FileText className="h-3 w-3" />
+                              {f.file_path.split("/").pop()}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                      {rootFiles.map((f) => (
+                        <button
+                          key={f.id}
+                          className={cn(
+                            "px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors",
+                            viewingFile?.filePath === f.file_path
+                              ? "bg-primary/10 text-primary font-medium"
+                              : "text-muted-foreground hover:bg-muted"
+                          )}
+                          onClick={async () => {
+                            if (!agent?.organization_id || !viewingSkill) return;
+                            setLoadingViewFile(true);
+                            try {
+                              const content = await skillService.getSkillFileContent(
+                                agent.organization_id, viewingSkill.slug, f.file_path
+                              );
+                              setViewingFile({ filePath: f.file_path, content });
+                            } catch {
+                              toast.error("Failed to load file");
+                            }
+                            setLoadingViewFile(false);
+                          }}
+                        >
+                          <FileText className="h-3 w-3" />
+                          {f.file_path}
+                        </button>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Content area */}
+            {loadingViewFile ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : viewingFile ? (
+              <>
+                <div className="px-6 py-1.5 border-b bg-muted/30 text-xs text-muted-foreground flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5" />
+                  <code>{viewingFile.filePath}</code>
+                </div>
+                {viewingFile.filePath.endsWith(".json") ? (
+                  <div className="flex-1 overflow-y-auto p-5">
+                    <pre className="text-xs font-mono bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">
+                      {(() => { try { return JSON.stringify(JSON.parse(viewingFile.content), null, 2); } catch { return viewingFile.content; } })()}
+                    </pre>
+                  </div>
+                ) : viewingFile.filePath.match(/\.(py|js|ts|sh|bash|yaml|yml|toml)$/) ? (
+                  <div className="flex-1 overflow-y-auto p-5">
+                    <pre className="text-xs font-mono bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">
+                      {viewingFile.content}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingFile.content}</ReactMarkdown>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
+                {viewingSkill && <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingSkill.content}</ReactMarkdown>}
+              </div>
+            )}
+          </SheetContent>
+        </Sheet>
 
         {/* Tools Tab */}
         <TabsContent value="tools">
@@ -879,6 +1311,35 @@ Example for Support Agent:
           toolName={selectedTool.name.replace(/_/g, " ")}
         />
       )}
+
+      <Dialog open={!!pendingTemplate} onOpenChange={(open) => !open && setPendingTemplate(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace current instructions?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Inserting the <span className="font-medium text-foreground">{pendingTemplate?.name}</span> template
+            will replace your current agent instructions. This action cannot be undone.
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPendingTemplate(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (pendingTemplate) {
+                  const markdown = buildMarkdownFromTemplate(pendingTemplate);
+                  setAgentForm({ ...agentForm, instructions_markdown: markdown });
+                  toast.success(`"${pendingTemplate.name}" template inserted`);
+                }
+                setPendingTemplate(null);
+              }}
+            >
+              Replace instructions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

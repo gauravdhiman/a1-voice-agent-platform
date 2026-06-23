@@ -9,6 +9,7 @@ import { type SubscriptionPlan } from '@/types/billing'
 import { type CreditBalance } from '@/types/billing'
 import { type Role, type Permission, type RoleWithPermissions } from '@/types/rbac'
 import { type PhoneNumber, type PhoneNumberWithAgent, type AvailablePhoneNumber, type PhoneNumberType, type PhoneNumberStatus } from '@/types/phone-number'
+import { type OrganizationSkill, type AgentSkill, type SkillFile, type SkillFileSummary, type SkillImportResult } from '@/types/skill'
 
 export const createMockUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   id: 'user-1',
@@ -42,6 +43,7 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
   mission: null,
   custom_instructions: null,
   use_platform_credits: true,
+  instructions_markdown: null,
   ...overrides,
 })
 
@@ -181,5 +183,116 @@ export const createMockAvailablePhoneNumber = (overrides: Partial<AvailablePhone
   },
   locality: 'San Francisco',
   postal_code: '94102',
+  ...overrides,
+})
+
+export const createMockOrganizationSkill = (overrides: Partial<OrganizationSkill> = {}): OrganizationSkill => ({
+  id: 'skill-1',
+  organization_id: 'org-1',
+  slug: 'appointment-booking',
+  name: 'Appointment Booking',
+  description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
+  content: '# Appointment Booking\n\n## When to Use\n- Caller asks to book\n\n## Procedure\n1. Ask for date',
+  category: 'custom' as const,
+  is_active: true,
+  version: '1.0.0',
+  author: 'Platform',
+  content_hash: 'abc123def456',
+  is_visible: true,
+  source_skill_id: null,
+  source_version: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockPlatformSkillSummary = (overrides: Partial<import("@/types/skill").PlatformSkillSummary> = {}): import("@/types/skill").PlatformSkillSummary => ({
+  id: 'platform-skill-1',
+  slug: 'appointment-booking',
+  name: 'Appointment Booking',
+  description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
+  version: '2026.01.01_1',
+  is_active: true,
+  ...overrides,
+})
+
+export const createMockPlatformSkill = (overrides: Partial<import("@/types/skill").PlatformSkill> = {}): import("@/types/skill").PlatformSkill => ({
+  id: 'platform-skill-1',
+  slug: 'appointment-booking',
+  name: 'Appointment Booking',
+  description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
+  content: '# Appointment Booking\n\n## When to use\n...',
+  version: '2026.01.01_1',
+  author: 'Platform',
+  content_hash: 'hash-platform-skill-1',
+  is_active: true,
+  files: [],
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockPlatformSkillFileSummary = (overrides: Partial<import("@/types/skill").PlatformSkillFileSummary> = {}): import("@/types/skill").PlatformSkillFileSummary => ({
+  id: 'platform-file-1',
+  skill_id: 'platform-skill-1',
+  file_path: 'references/faqs.md',
+  file_kind: 'reference',
+  content_hash: 'hash-file-1',
+  ...overrides,
+})
+
+export const createMockPlatformSkillImportResult = (overrides: Partial<import("@/types/skill").PlatformSkillImportResult> = {}): import("@/types/skill").PlatformSkillImportResult => ({
+  skill: createMockPlatformSkill(),
+  files_imported: 2,
+  source_url: 'https://github.com/owner/repo',
+  ...overrides,
+})
+
+export const createMockPlatformSkillFile = (overrides: Partial<import("@/types/skill").PlatformSkillFile> = {}): import("@/types/skill").PlatformSkillFile => ({
+  id: 'platform-file-1',
+  skill_id: 'platform-skill-1',
+  file_path: 'references/faqs.md',
+  content: '# FAQs\n\nCommon questions.',
+  file_kind: 'reference',
+  content_hash: 'hash-file-1',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockAgentSkill = (overrides: Partial<AgentSkill> = {}): AgentSkill => ({
+  id: 'agent-skill-1',
+  agent_id: 'agent-1',
+  skill_id: 'skill-1',
+  skill: createMockOrganizationSkill(),
+  is_active: true,
+  created_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockSkillFileSummary = (overrides: Partial<SkillFileSummary> = {}): SkillFileSummary => ({
+  id: 'file-summary-1',
+  file_path: 'references/policies.md',
+  file_kind: 'reference',
+  content_hash: 'filehash123',
+  ...overrides,
+})
+
+export const createMockSkillFile = (overrides: Partial<SkillFile> = {}): SkillFile => ({
+  id: 'file-1',
+  skill_id: 'skill-1',
+  file_path: 'references/policies.md',
+  content: '# Policies\n\n- Be respectful\n- Verify identity',
+  file_kind: 'reference' as const,
+  content_hash: 'filehash123',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+})
+
+export const createMockSkillImportResult = (overrides: Partial<SkillImportResult> = {}): SkillImportResult => ({
+  skill: createMockOrganizationSkill({ slug: 'imported-skill', name: 'Imported Skill' }),
+  files_imported: 3,
+  source_url: 'https://github.com/owner/repo/tree/main/my-skill',
   ...overrides,
 })

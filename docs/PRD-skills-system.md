@@ -12,25 +12,25 @@
 
 ### Current State
 - Voice agents have fixed capabilities defined in system prompts
-- No easy way to extend agent knowledge for specific domains
-- Each customer needs custom prompts for their business context
-- No reusability or marketplace for agent capabilities
+- No easy way to add new capabilities (appointment booking, insurance checks, call transfers)
+- Each customer writes custom prompts from scratch for common functions
+- Capabilities built once cannot be reused across agents or organizations
 
 ### Pain Points
-1. **Knowledge Gaps:** Agents don't have domain-specific knowledge (legal, medical, technical)
-2. **Reusability:** Can't share agent configurations across organizations
-3. **Maintenance:** Hard to update agent behavior without code changes
-4. **Extensibility:** No marketplace to discover new capabilities
+1. **Capability Gaps:** Agents can't perform common business functions (book appointments, verify insurance, transfer calls) without custom prompt engineering
+2. **Reusability:** Every organization re-invents "appointment booking" in their own prompts
+3. **Maintenance:** Updating how agents handle bookings requires editing every agent's system prompt
+4. **Composition:** No way to combine capabilities — an agent either has a dental prompt OR an HVAC prompt, not both
 
 ---
 
 ## 2. Solution Overview
 
 Implement the **Agent Skills** format (agentskills.io) to enable:
-- **Knowledge Packs:** Domain-specific knowledge (legal, real estate, dental, etc.)
+- **Knowledge Packs:** Domain-specific knowledge (legal, real estate, dental, HVAC, etc.)
 - **Workflows:** Multi-step repeatable processes
 - **Tools:** Custom tool definitions and configurations
-- **Marketplace:** Share and discover skills from community
+- ~~**Marketplace:** Share and discover skills from community~~ *(Deprioritized — see Section 8)*
 
 ### What are Agent Skills?
 A skill is a folder containing:
@@ -46,13 +46,15 @@ skill-name/
 
 ## 3. User Stories
 
-| User | Story | Acceptance Criteria |
-|------|-------|-------------------|
-| Admin | I want to upload a skill package | Can upload .zip or connect from marketplace |
-| Admin | I want to enable skills for my agent | Can select skills in agent config |
-| Admin | I want to create custom skills | Can define SKILL.md with business knowledge |
-| Developer | I want to publish skills to marketplace | Can publish and version skills |
-| Agent | I want to load relevant skills on demand | Agent activates skills based on conversation |
+| User | Story | Acceptance Criteria | Status |
+|------|-------|-------------------|--------|
+| Admin | I want to import skills from GitHub | Can paste a GitHub skills repo URL and import | ✅ Done |
+| Admin | I want to create custom skills | Can define name, description, and upload files inline | ✅ Done |
+| Admin | I want to enable skills for my agent | Can toggle skills on/off in agent config | ✅ Done |
+| Admin | I want to preview skill content | Can expand file tree and view file contents | ✅ Done |
+| Admin | I want to delete skills safely | Warned if skill is used by agents; can confirm delete | ✅ Done |
+| Admin | I want pre-built skills for my industry | Can enable built-in skills with rich domain knowledge | 🔄 In progress — 7 seeded (appointment-booking, insurance-verification, call-transfer, faq-responder, after-hours, lead-qualification, payment-collection) |
+| Agent | I want to use skill knowledge in calls | Skill instructions injected into system prompt during calls | ✅ Done |
 
 ---
 
@@ -259,22 +261,108 @@ Business: {context.get('business_name')}
 
 ---
 
-## 6. Pre-built Skills (MVP)
+## 6. Pre-built Skills (Phase 2c)
 
-### Healthcare
-- Dental Assistant
-- Medical Scheduling
-- Insurance Verification
+### Strategy: Capabilities, Not Industries
 
-### Business
-- Appointment Scheduler
-- Lead Qualifier
-- Customer Support
+Skills represent **agent capabilities** — composable functions an agent can perform. They are not industry-specific roles.
 
-### Industry
-- Restaurant Reservations
-- Real Estate Inquiries
-- Legal Consultations
+**Why capabilities?**
+- **Composable:** An agent can have `appointment-booking` + `call-transfer` + `insurance-verification` all active at once
+- **Reusable:** `appointment-booking` works for dental, HVAC, legal, salons — same capability, different context
+- **Focused:** Each skill does ONE thing exceptionally well, with clear boundaries
+- **Maintainable:** Update `appointment-booking` once, all agents using it improve
+
+**What a capability skill contains:**
+- **Instructions:** How to perform the capability (decision trees, response templates, guardrails)
+- **Reference files:** Domain data the capability needs (pricing, forms, FAQs, service menus)
+- **Tool integration:** What external actions it can take (calendar API, CRM lookup, form submission)
+
+**Example composition:**
+
+| Business Type | Active Capabilities |
+|-------------|---------------------|
+| Dental Practice | `appointment-booking` + `insurance-verification` + `new-patient-intake` |
+| Restaurant | `reservation-booking` + `menu-inquiry` + `order-status` |
+| HVAC Service | `appointment-booking` + `dispatch-coordination` + `warranty-check` |
+| Law Firm | `appointment-booking` + `intake-qualification` + `conflict-check` |
+
+Notice `appointment-booking` appears everywhere — it's a universal capability with business-specific reference files.
+
+---
+
+### First Skill: `appointment-booking`
+
+**Why this capability first:**
+1. **Universal need** — Every business that takes calls needs to schedule something
+2. **Clear boundaries** — Inputs (date, time, service), outputs (confirmed booking), edge cases (reschedule, cancel, conflict)
+3. **Tool integration** — Naturally connects to calendar APIs, demonstrating real value
+4. **Reference-driven** — Different businesses configure it with their own service menus and hours
+5. **E2E testable** — We can simulate a complete booking flow and assert outcomes
+
+**What `appointment-booking` includes:**
+- **SKILL.md:** How to gather booking requirements, handle conflicts, confirm details, send reminders, reschedule, cancel
+- **references/service-menu.md:** Services offered, durations, prices (business-configurable)
+- **references/hours.md:** Business hours, blackout dates, holiday closures (business-configurable)
+- **references/faqs.md:** Common questions (cancellation policy, deposit required, what to bring)
+- **references/forms.md:** Pre-appointment forms the agent can help complete
+
+**Validation criteria:**
+- E2E test: 10 realistic caller scenarios (book, reschedule, cancel, conflict, after-hours inquiry)
+- Agent produces correct calendar event details every time
+- Agent handles edge cases gracefully (double-booking, invalid times, no-show policy)
+
+---
+
+### Subsequent Capabilities (batches)
+
+> **Status legend:** ✅ seeded as a built-in platform skill (`backend/src/voice_agents/skill_seeds.py`) · 🎯 planned · 🛠️ not started.  
+> Shipped built-ins also include `faq-responder` and `after-hours` (not listed in the original batches).
+
+**Batch 1 — Core Communication:**
+- `call-handling` — Greetings, hold etiquette, call wrap-up, tone/voice guidelines
+- `call-transfer` — Routing rules (department, urgency, availability), warm vs cold transfer ✅
+- `voicemail-management` — Taking detailed messages, urgency triage, callback scheduling
+
+**Batch 2 — Business Operations:**
+- `insurance-verification` — Eligibility checks, coverage questions, pre-auth status, copay/deductible lookup ✅
+- `new-patient-intake` — Information gathering, form completion, consent, medical history
+- `payment-processing` — Collecting payments over phone, billing questions, payment plan setup ✅ *(shipped as `payment-collection`)*
+- `dispatch-coordination` — Technician assignment, ETA communication, parts availability, job status 🎯 *(proposed next)*
+
+**Batch 3 — Qualification & Sales:**
+- `lead-qualification` — BANT-style questions, urgency assessment, fit scoring ✅
+- `intake-qualification` — Legal matter screening, practice-area routing, conflict check
+- `menu-inquiry` — Item descriptions, dietary restrictions, daily specials, allergy handling
+- `order-status` — Lookup, modification, cancellation, refund policy
+
+**Batch 4 — Follow-up:**
+- `appointment-reminders` — Confirmation calls, no-show prevention, rescheduling outreach
+- `feedback-collection` — Post-visit surveys, review requests, complaint handling
+- `recall-campaigns` — Routine maintenance reminders, annual checkups, seasonal campaigns
+
+### Per-Capability Standard
+Every skill must include:
+
+1. **`SKILL.md`** (200+ lines) structured as:
+   - **Capability overview** — What this skill enables, when to use it
+   - **Decision trees** — Caller says X → agent does Y (flowchart in comments)
+   - **Response templates** — Greetings, confirmations, escalations, hold messages
+   - **Guardrails** — What the agent MUST NOT do (e.g., "never confirm a booking without verifying phone number")
+   - **Tool calls** — When and how to invoke external tools (calendar, CRM, forms)
+   - **Error handling** — What to say when tools fail or data is missing
+
+2. **`references/faqs.md`** — Caller questions and approved answers
+
+3. **`references/glossary.md`** — Domain terminology the agent must understand and use correctly
+
+4. **Business-configurable references** (skill files with `file_kind: "reference"`):
+   - `service-menu.md` — What services are offered, durations, prices
+   - `hours.md` — Operating hours, holidays, special schedules
+   - `staff-directory.md` — Who handles what, extensions, availability
+   - `policies.md` — Cancellation, refund, deposit, no-show, rescheduling rules
+
+5. **Validation:** E2E test simulating 5-10 realistic caller scenarios per skill, asserting correct behavior
 
 ---
 
@@ -289,34 +377,86 @@ Business: {context.get('business_name')}
 
 ## 8. Phased Implementation
 
-### Phase 1: Foundation (2 weeks)
-- Database schema
-- Basic CRUD APIs
-- Skill loader in worker
-- Simple skill selection UI
+### Phase 1: Foundation ✅ COMPLETE
+- Database schema (`organization_skills`, `organization_skill_files`, `agent_skills`)
+- CRUD APIs (create, update, delete, list)
+- File management (upload, read, update, delete)
+- Skill import from GitHub URL
+- URL-based bookmarking (skill tabs, file selection)
+- Skill loader in worker (`load_skill_reference` function)
+- Agent skill assignment with toggle switches
 
-### Phase 2: Marketplace (2 weeks)
-- Public skill browsing
-- Category navigation
+### Phase 2a: Progressive Disclosure ✅ COMPLETE
+- Skills visible on organization page (not in main nav)
+- Built-in vs custom skill badges
+- Expandable file tree with content preview
+- Import drawer with GitHub URL input
+
+### Phase 2b: CRUD & Agent Integration ✅ COMPLETE
+- Create/edit custom skills inline
+- Delete with agent-usage warning
+- Real-time file count updates
+- Agent skills tab with toggles
+- E2E test coverage for all flows
+
+### Phase 2c: Pre-Built Skill Content — NEXT 🎯
+**Status:** Ready to start | **Effort:** Medium | **Impact:** High
+
+Build exceptional, content-rich pre-built skills. We will perfect **one skill first** to establish reusable patterns, then replicate for others.
+
+**Target industries/use cases:**
+- Healthcare (dental, medical scheduling, insurance verification)
+- Food service (restaurant reservations, order handling)
+- Real estate (inquiries, showings, follow-ups)
+- Legal (consultations, intake, scheduling)
+- Home services (HVAC, electrician, plumber — scheduling, estimates, dispatch)
+
+**Per-skill deliverables:**
+1. Rich `SKILL.md` with deep domain instructions, decision trees, and response templates
+2. Reference files (FAQs, pricing sheets, service menus, insurance forms)
+3. Validation: E2E call simulation confirming the skill produces correct agent behavior
+4. Documentation: What it does, when to use it, configuration options
+
+**Approach:**
+- Pick **one skill** (recommendation: *Dental Assistant* or *Restaurant Reservations*)
+- Build it to "exceptional" standard — not just functional, but genuinely useful
+- Learn patterns: what makes a skill effective? What files does it need? How should instructions be structured?
+- Apply learnings to subsequent skills in batches
+
+### Phase 3: Phone Number Management (F2)
+**Status:** PRD ready | **Effort:** Large | **Impact:** High
+
+Move to Feature F2 per `PRIORITY-LIST.md`. Buying, managing, and assigning phone numbers directly from the platform.
+
+### Phase 4: Chat Agents with Memory (F3)
+**Status:** PRD draft | **Effort:** XL | **Impact:** High
+
+Move to Feature F3 per `PRIORITY-LIST.md`. Long-running chat agents with persistent memory.
+
+### Phase 5: Marketplace — DEPRIORITIZED 🚫
+**Rationale:** A marketplace requires a community of users creating and sharing skills. With zero users today, marketplace infrastructure delivers no value. Re-evaluate when:
+- 50+ organizations actively using skills
+- 10+ custom skills created by users organically
+- Clear demand signal (users asking to share/publish skills)
+
+**If revisited later:**
+- Public skill browsing with categories
 - Search and filters
-- Rating system
-
-### Phase 3: Advanced (2 weeks)
+- Rating/review system
+- Publishing workflow (private → public)
 - Skill versioning
-- Custom scripts execution
-- Analytics dashboard
-- Publishing workflow
 
 ---
 
 ## 9. Success Metrics
 
-| Metric | Target |
-|--------|--------|
-| Skills created (first month) | 20+ |
-| Skills activated (first month) | 100+ |
-| Time to configure agent | -50% |
-| Customer satisfaction | +20% |
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Skills system foundation | 100% | All Phase 1-2b features deployed with tests | ✅ |
+| First pre-built skill quality | Exceptional | E2E call simulations pass 90%+ of scenarios | 🎯 Phase 2c |
+| Pre-built skill library | 5+ skills | At least one per target industry | 🎯 Phase 2c |
+| Time to configure agent | -50% | User enables pre-built skill vs writing custom prompt | Future |
+| Customer satisfaction | +20% | NPS or CSAT survey post-call | Future |
 
 ---
 

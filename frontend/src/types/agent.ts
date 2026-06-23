@@ -29,6 +29,7 @@ export interface VoiceAgent {
   voice_settings: Record<string, unknown> | null;
   is_active: boolean;
   use_platform_credits: boolean;
+  instructions_markdown: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -45,6 +46,7 @@ export interface VoiceAgentCreate {
   custom_instructions?: string | null;
   is_active?: boolean;
   use_platform_credits?: boolean;
+  instructions_markdown?: string | null;
 }
 
 export interface VoiceAgentUpdate {
@@ -57,6 +59,7 @@ export interface VoiceAgentUpdate {
   custom_instructions?: string | null;
   is_active?: boolean;
   use_platform_credits?: boolean;
+  instructions_markdown?: string | null;
 }
 
 export interface PlatformToolFunction {

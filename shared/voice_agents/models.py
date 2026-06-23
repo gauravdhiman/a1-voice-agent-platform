@@ -52,12 +52,32 @@ class VoiceAgentBase(BaseModel):
         """,
     )
 
+    instructions_markdown: Optional[str] = Field(
+        None,
+        description="""
+        Full agent instructions in markdown format.
+
+        When provided, this markdown is used as the primary system prompt
+        instead of building it from individual fields (persona, tone, mission, etc.).
+
+        Supports template variables for dynamic context injection:
+        - {{org.name}} — Organization name
+        - {{org.industry}} — Organization industry
+        - {{org.location}} — Organization location
+        - {{org.business_details}} — Business description
+        - {{agent.name}} — Agent name
+
+        System guardrails and tool guidelines are always appended
+        regardless of whether markdown instructions are used.
+        """,
+    )
+
     @field_validator("phone_number")
     @classmethod
     def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
         """Validate E.164 phone number format."""
-        if v is None:
-            return v
+        if v is None or v == "":
+            return None
         # E.164 format requires country code (1-3 digits) + subscriber number
         # Minimum 8 characters total (including +) for valid international numbers
         if not re.match(r"^\+[1-9]\d{7,14}$", v):
@@ -115,6 +135,10 @@ class VoiceAgentUpdate(BaseModel):
         This information is used to construct the agent's system prompt
         and will be referenced when interacting with callers.
         """,
+    )
+    instructions_markdown: Optional[str] = Field(
+        None,
+        description="Full agent instructions in markdown format.",
     )
 
 

@@ -26,6 +26,7 @@ services:
       - SUPABASE_URL=https://zymiyfilulmtrmyyhvzw.supabase.co
       - SUPABASE_SERVICE_KEY=mock-key
       - SUPABASE_ANON_KEY=mock-key
+      - JWT_SECRET_KEY=super-secret-test-key-for-e2e-testing-only
       - OTEL_ENABLED=false
     depends_on:
       db_e2e:

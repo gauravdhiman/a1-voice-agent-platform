@@ -16,7 +16,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +39,7 @@ import {
   Edit3,
   Phone,
   Info,
+  Zap,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -63,6 +63,7 @@ import { PhoneNumberDashboard } from "@/components/phone-numbers/phone-number-da
 import { phoneNumberService } from "@/services/phone-number-service";
 import { billingService } from "@/services/billing-service";
 import { PhoneNumberWithAgent } from "@/types/phone-number";
+import { OrganizationSkillsTab } from "@/components/skills/organization-skills-tab";
 import { toast } from "sonner";
 
 // Use real services
@@ -170,7 +171,7 @@ export default function OrganizationPage() {
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers") {
+    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers" || tabParam === "skills") {
       setActiveTab(tabParam);
       if (tabParam === "phone-numbers" && orgId) {
         loadPhoneNumbers();
@@ -456,6 +457,10 @@ export default function OrganizationPage() {
         <TabsList className="w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
+          <TabsTrigger value="skills" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Skills
+          </TabsTrigger>
           <TabsTrigger value="phone-numbers" className="flex items-center gap-2">
             Phone Numbers
           </TabsTrigger>
@@ -814,7 +819,17 @@ During monsoon season (July-September), we have extended hours for flood-related
           </div>
         </TabsContent>
 
-        {/* Phone Numbers Tab */}
+        {/* Skills Tab — Split View: list on left, content on right */}
+        <TabsContent value="skills">
+          {orgId && (
+            <OrganizationSkillsTab
+              orgId={orgId}
+              canCreate={isOrgAdmin || isPlatformAdmin}
+              canEdit={isOrgAdmin || isPlatformAdmin}
+            />
+          )}
+        </TabsContent>
+
         <TabsContent value="phone-numbers">
           <PhoneNumberDashboard
             organizationId={orgId!}

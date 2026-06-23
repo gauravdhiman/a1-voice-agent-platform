@@ -261,6 +261,7 @@ async def method_name():
 
 ### Frontend (TypeScript/React)
 
+**No browser alerts**: Never use `window.confirm()`, `window.alert()`, or `window.prompt()`. Always use modal Dialog components for user confirmations and notifications.
 **Component Structure**: Use interface for props, cn utility for className
 **Service Pattern**: Return {success, error?, data?} object
 **Type Safety**: Use type annotations and import types from @/types
@@ -694,18 +695,29 @@ Run `pre-commit run --all-files` manually before pushing.
 
 After implementing any fix or new feature, you MUST:
 
-1. **Run relevant unit/integration tests** and ensure they pass with good coverage.
-2. **Use the `agent-browser` skill** to validate the change from a user's perspective:
+1. **Add or update tests** for every code change, BEFORE raising a PR:
+   - **Unit tests** (Python `pytest`): Test models, validators, service methods, PromptBuilder logic
+   - **Route/integration tests** (Python `pytest`): Test API endpoints with mocked dependencies
+   - **Worker integration tests**: Test PromptBuilder integration, tool integration
+   - **Frontend tests** (if applicable): Test service methods, component behavior
+   - Rule: If you changed code, there must be a corresponding test change. No exceptions.
+2. **Run relevant unit/integration tests** and ensure they pass with good coverage.
+3. **Use the `agent-browser` skill** to validate the change from a user's perspective:
    - Open the application at `http://localhost:3000`
    - Log in with the test account (`test@cogninets.local` / `Password123!`)
    - Navigate through the complete implemented functionality or affected workflow
    - Verify the change works as expected from the UI
-3. **If browser testing reveals issues**, fix them and re-test before marking the task as done.
-4. **Update documentation** if the change affects user-facing behavior, API contracts, or developer workflows.
-5. **Verify syntax/build** after every code change:
+4. **If browser testing reveals issues**, fix them and re-test before marking the task as done.
+5. **Update documentation** if the change affects user-facing behavior, API contracts, or developer workflows:
+   - `docs/DATABASE_SCHEMA.md` — Update when tables/columns change
+   - `docs/` relevant section — Update when API endpoints, features, or architecture change
+   - `AGENTS.md` — Update when new conventions or rules are established
+6. **Verify syntax/build** after every code change:
    - **Python**: Run `python -m py_compile <file>` on every changed `.py` file to confirm it compiles without syntax errors.
-   - **Frontend**: Run `cd frontend && npm run build` to confirm the Next.js build succeeds with no TypeScript or import errors.
-6. A task is only considered **done** when: tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
+   - **Frontend**: Run `docker exec <container> npx tsc --noEmit` to confirm TypeScript compiles with no errors in source files (ignore pre-existing `.next/types` and test file errors).
+     - **IMPORTANT**: Never run `next build` or `npm run build` inside the frontend **dev** container. The build output overwrites the `.next` directory used by the dev server, causing `ENOENT` errors and `Internal Server Error`. Instead, use `tsc --noEmit` for type checking only.
+     - **Frontend unit tests (vitest) cannot run inside the frontend dev container**: the dev image ships Node 18, but `vitest@4` requires Node 20+. Running `npx vitest` in the container fails with `ERR_REQUIRE_ESM` from `vite`. Run frontend tests on the **host** instead (`cd frontend && npx vitest run <file>`), where Node 22 is available and `frontend/node_modules` is installed.
+7. A task is only considered **done** when: tests are added/updated, tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
 
 ### Development
 
@@ -714,7 +726,90 @@ After implementing any fix or new feature, you MUST:
 - Use `FastAPI` for backend APIs
 - Use `Next.js` for frontend
 - IMPORTANT: Never stage the code changes in git by yourself, unless user explicitly asks you to do so. Always let user review and stage them manually.
+- CRITICAL: **NEVER commit changes to Git without explicit user approval.** The user must always review and stage changes themselves. You may make changes, run tests, and validate — but only the user commits. Always keep the user in the loop and ask for approval before any git commit.
 - Use Docker for development and production. Even when start application on local machine for dev, use `./start.sh` script to manage docker containers.
 - Never install Python packages in global scope / env. Always install it in virtual env and docker containers. Same for NodeJS too.
 - You can create alembic migrations scripts but never run them without user's permission. Always ask first.
 
+### Python: Avoid local imports that shadow top-level imports
+
+Never use `from X import Y` inside a function if `Y` is already imported at the top of the file. In Python, a local import makes the name local to the **entire function** — even lines before the import statement. This causes `UnboundLocalError` on earlier references. If you need a conditional import, use a different variable name or import the module instead (`import X; X.Y`).
+
+### Frontend: Tailwind CSS v4
+
+This project uses **Tailwind CSS v4**, which has a fundamentally different configuration system from v3:
+
+- **Plugins**: Add via `@plugin` directive in `globals.css`, NOT via `require()` in `tailwind.config.js`.
+  ```css
+  /* In src/app/globals.css */
+  @import "tailwindcss";
+  @plugin "@tailwindcss/typography";
+  ```
+- **Theme customization**: Uses `@theme inline {}` blocks in CSS, not `theme.extend` in JS config.
+- **Custom variants**: Use `@custom-variant` in CSS (e.g., `@custom-variant dark (&:is(.dark *))`).
+- **The `tailwind.config.js`** file still exists for `content` paths and color definitions, but the `plugins` array should remain empty — all plugins go in CSS.
+- After adding a new `@plugin`, the frontend container may need a restart for Tailwind to regenerate CSS.
+
+### Continuous Learning (Self-Update)
+
+After every significant implementation, debugging session, or resolved issue, **self-analyze what was learned** and update this file (`AGENTS.md`) if any of the following apply:
+
+- A **new "do" or "don't"** was discovered (e.g., "don't run `next build` in the dev container")
+- A **technology-specific gotcha** was hit (e.g., Tailwind v4 plugin system differs from v3)
+- A **project convention** was established or clarified through trial and error
+- A **debugging pattern** was found that would save time in the future
+- A **best practice** was validated or invalidated for this specific codebase
+
+**What to update:**
+- Add the learning to the most relevant section in this file (e.g., frontend gotchas go under "Frontend: Tailwind CSS v4", backend patterns go under "Python Backend")
+- If no section fits, create a new subsection under the appropriate parent
+- Keep entries concise — lead with the rule, then briefly explain why
+
+**What NOT to add:**
+- One-off fixes that are obvious from the code or git history
+- Generic programming knowledge that any developer would know
+- Temporary workarounds that will be removed soon
+
+This ensures that `AGENTS.md` evolves into a living knowledge base that prevents repeated mistakes and encodes project-specific expertise. The goal is that any agent (or developer) reading this file gets the full picture of how to work effectively in this codebase.
+
+### Skill Creation (Reusable Workflows)
+
+When a process, workflow, or technique proves valuable through repeated use or significant trial-and-error, consider whether it should become a **reusable skill** in the `.claude/skills/` project directory.
+
+**When to create a skill:**
+- A multi-step workflow was refined through iteration and is likely to be reused (e.g., a specific testing pattern, a deployment checklist, a code review process)
+- A complex domain-specific procedure was figured out that would be hard to rediscover (e.g., how to set up a specific integration, a migration strategy)
+- The knowledge is **procedural** ("how to do X step by step") rather than **declarative** ("always do X") — declarative rules belong in `AGENTS.md`
+
+**When NOT to create a skill (put it in `AGENTS.md` instead):**
+- Simple rules, conventions, or do's/don'ts → `AGENTS.md`
+- Technology-specific gotchas or config notes → `AGENTS.md`
+- One-time processes that won't be repeated → nowhere (it's in git history)
+
+**Skill vs AGENTS.md boundary:**
+| Type of Knowledge | Where It Goes |
+|-------------------|---------------|
+| "Don't run `next build` in dev container" | `AGENTS.md` (simple rule) |
+| "Tailwind v4 uses `@plugin` in CSS" | `AGENTS.md` (config note) |
+| "How to create and validate an Alembic migration end-to-end" | **Skill** (multi-step procedure) |
+| "How to set up and run E2E tests with the isolated Docker stack" | **Skill** (complex workflow) |
+| "How to analyze a competitor repo and produce implementation docs" | **Skill** (reusable methodology) |
+
+**Skill management guidelines:**
+- Keep the number of project-level skills small and focused — quality over quantity
+- Each skill should have clear boundaries — if two skills overlap, merge them
+- Store project-level skills in the `.claude/` project directory (not in the repo itself)
+- Review existing skills before creating new ones to avoid duplication
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

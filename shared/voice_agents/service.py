@@ -58,6 +58,7 @@ class VoiceAgentService:
                         "tone": agent_data.tone,
                         "mission": agent_data.mission,
                         "custom_instructions": agent_data.custom_instructions,
+                        "instructions_markdown": agent_data.instructions_markdown,
                     }
                 )
                 .execute()

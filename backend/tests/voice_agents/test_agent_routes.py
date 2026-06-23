@@ -182,3 +182,122 @@ class TestAgentRoutes:
 
                 assert exc_info.value.status_code == 500
                 assert "Could not fetch organization" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_get_agent_system_prompt_uses_markdown_when_set(self):
+        """Test system prompt uses instructions_markdown when available."""
+        from src.voice_agents.routes import get_agent_system_prompt
+        from shared.voice_agents.models import VoiceAgent
+        from shared.organization.models import Organization
+
+        test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+        test_org_id = UUID("00000000-0000-0000-0000-000000000002")
+        test_user_id = UUID("00000000-0000-0000-0000-000000000003")
+
+        agent = VoiceAgent(
+            id=test_agent_id,
+            organization_id=test_org_id,
+            name="Test Agent",
+            persona="Should NOT appear in output",
+            instructions_markdown="# Custom Agent\n\nYou are a receptionist for {{org.name}}.",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+        org = Organization(
+            id=test_org_id,
+            name="Pleasant Pediatrics",
+            slug="test-org",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+        mock_user_profile = Mock()
+        mock_user_profile.has_role = Mock(return_value=True)
+
+        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+            mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
+
+            with patch("src.voice_agents.routes.OrganizationService") as mock_org_service_class:
+                mock_org_service = Mock()
+                mock_org_service.get_organization_by_id = AsyncMock(return_value=(org, None))
+                mock_org_service_class.return_value = mock_org_service
+
+                result = await get_agent_system_prompt(
+                    agent_id=test_agent_id,
+                    user_data=(test_user_id, mock_user_profile),
+                )
+
+                # Markdown content should be used with template vars rendered
+                assert "Custom Agent" in result
+                assert "Pleasant Pediatrics" in result
+                # Field-based persona should NOT appear
+                assert "Should NOT appear" not in result
+                # Guardrails always appended
+                assert "SYSTEM GUARDRAILS" in result
+
+    @pytest.mark.asyncio
+    async def test_generate_markdown_from_fields(self):
+        """Test generate-markdown endpoint converts fields to markdown."""
+        from src.voice_agents.routes import generate_markdown_from_fields
+        from shared.voice_agents.models import VoiceAgent
+        from shared.organization.models import Organization
+
+        test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+        test_org_id = UUID("00000000-0000-0000-0000-000000000002")
+        test_user_id = UUID("00000000-0000-0000-0000-000000000003")
+
+        agent = VoiceAgent(
+            id=test_agent_id,
+            organization_id=test_org_id,
+            name="Test Agent",
+            persona="a friendly dental receptionist",
+            tone="warm, professional",
+            mission="Help patients schedule appointments",
+            custom_instructions="Always confirm appointment details",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+        org = Organization(
+            id=test_org_id,
+            name="Pleasant Pediatrics",
+            slug="test-org",
+            industry="dental",
+            location="Phoenix, AZ",
+            business_details="Family dental office",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+        mock_user_profile = Mock()
+        mock_user_profile.has_role = Mock(return_value=True)
+
+        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+            mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
+
+            with patch("src.voice_agents.routes.OrganizationService") as mock_org_service_class:
+                mock_org_service = Mock()
+                mock_org_service.get_organization_by_id = AsyncMock(return_value=(org, None))
+                mock_org_service_class.return_value = mock_org_service
+
+                result = await generate_markdown_from_fields(
+                    agent_id=test_agent_id,
+                    user_data=(test_user_id, mock_user_profile),
+                )
+
+                # Should have markdown sections
+                assert "# Identity and Persona" in result
+                assert "dental receptionist" in result
+                assert "warm, professional" in result
+                assert "# Mission" in result
+                assert "schedule appointments" in result
+                assert "# Business Context" in result
+                assert "dental" in result
+                assert "Phoenix, AZ" in result
+                assert "# Additional Instructions" in result
+                assert "confirm appointment details" in result

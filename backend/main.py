@@ -22,7 +22,7 @@ from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
 from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
 from src.call_logs import call_logs_router
-from src.voice_agents import agent_router, embed_router, tool_router, voice_router
+from src.voice_agents import agent_router, embed_router, platform_skill_router, skill_router, tool_router, voice_router
 from src.voice_templates import voice_templates_router
 
 from shared.config import settings, supabase_config
@@ -138,7 +138,11 @@ def create_app() -> FastAPI:
     app.include_router(agent_router)
     app.include_router(tool_router)
     app.include_router(voice_router)
-    
+
+    # Include skill routes (org-level + platform admin)
+    app.include_router(skill_router)
+    app.include_router(platform_skill_router)
+
     # Include embed routes (public, no auth required)
     app.include_router(embed_router)
 
@@ -205,6 +209,16 @@ async def lifespan(app: FastAPI):
     logging.info("Syncing tools to database using LiveKit native registry...")
     await livekit_tool_registry.sync_with_db(tool_service)
     logging.info("Tools synchronized with database")
+
+    # Seed platform skills (idempotent — uses content_hash)
+    from shared.voice_agents.skill_service import skill_service
+
+    logging.info("Seeding platform skills from code templates...")
+    count, error = await skill_service.seed_platform_skills()
+    if error:
+        logging.warning(f"Platform skill seeding issue: {error}")
+    else:
+        logging.info(f"Platform skills seeded: {count} created/updated")
 
     # Start token refresh service
     logging.info("Starting token refresh service...")
