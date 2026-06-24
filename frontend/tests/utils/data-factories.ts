@@ -212,7 +212,7 @@ export const createMockPlatformSkillSummary = (overrides: Partial<import("@/type
   name: 'Appointment Booking',
   description: 'Handle scheduling, rescheduling, and cancellation of appointments.',
   version: '2026.01.01_1',
-  is_active: true,
+  status: 'active',
   ...overrides,
 })
 
@@ -225,7 +225,7 @@ export const createMockPlatformSkill = (overrides: Partial<import("@/types/skill
   version: '2026.01.01_1',
   author: 'Platform',
   content_hash: 'hash-platform-skill-1',
-  is_active: true,
+  status: 'active',
   files: [],
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),

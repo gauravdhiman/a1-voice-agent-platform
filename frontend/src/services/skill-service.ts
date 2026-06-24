@@ -25,6 +25,7 @@ import type {
   PlatformSkillFileCreate,
   PlatformSkillImportResult,
   PlatformSkillFileSummary,
+  PlatformSkillStatus,
   PlatformSkillSummary,
   SkillForkRequest,
   SkillRefreshRequest,
@@ -74,19 +75,30 @@ class SkillService {
   // ═══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * List platform skill templates.
+   * List platform skill templates filtered by status.
    *
-   * @param includeInactive - When true, return ALL skills including deprecated
-   *   ones. Restricted to platform admins server-side (non-admins get 403).
-   *   Default (false) returns only active skills (for org browsing/forking).
+   * @param statuses - List of statuses to include. Defaults to `["active"]`
+   *   so org admins browsing/forking only see forkable skills. Platform
+   *   admins can pass e.g. `["active", "deprecated"]` to also see
+   *   deprecated skills, or `["deleted"]` to view the trash bin.
+   *
+   *   The query is built with one `statuses=` param per value
+   *   (`?statuses=active&statuses=deprecated`), which FastAPI parses into
+   *   the corresponding `List[PlatformSkillStatus]` server-side.
+   *
+   *   Server-side enforces admin-only access for any non-active filter.
    */
   async listPlatformSkills(
-    includeInactive = false,
+    statuses: PlatformSkillStatus[] = ["active"],
   ): Promise<PlatformSkillSummary[]> {
-    const endpoint = includeInactive
-      ? `/api/v1/platform/skills?include_inactive=true`
-      : `/api/v1/platform/skills`;
-    const response = await apiClient.get<PlatformSkillSummary[]>(endpoint);
+    const params = new URLSearchParams();
+    for (const s of statuses) {
+      params.append("statuses", s);
+    }
+    const qs = params.toString();
+    const response = await apiClient.get<PlatformSkillSummary[]>(
+      `/api/v1/platform/skills${qs ? `?${qs}` : ""}`,
+    );
     return response.data;
   }
 
@@ -121,11 +133,38 @@ class SkillService {
   }
 
   /**
-   * Deprecate (hide) a platform skill by setting is_active=false.
-   * Existing org forks keep working; new forks are blocked. (Platform admin only.)
+   * Soft-delete a platform skill (status → DELETED). Hidden from
+   * forking/browsing; restorable via restorePlatformSkill().
+   * Existing org forks keep working. (Platform admin only.)
+   *
+   * Throws if the skill is already deleted (no-op double-delete).
    */
   async deletePlatformSkill(skillId: string): Promise<void> {
     await apiClient.delete(`/api/v1/platform/skills/${skillId}`);
+  }
+
+  /** Restore a soft-deleted platform skill (status: DELETED → ACTIVE). */
+  async restorePlatformSkill(skillId: string): Promise<PlatformSkill> {
+    const response = await apiClient.post<PlatformSkill>(
+      `/api/v1/platform/skills/${skillId}/restore`,
+    );
+    return response.data;
+  }
+
+  /** Deprecate a platform skill (status: ACTIVE → DEPRECATED). */
+  async deprecatePlatformSkill(skillId: string): Promise<PlatformSkill> {
+    const response = await apiClient.post<PlatformSkill>(
+      `/api/v1/platform/skills/${skillId}/deprecate`,
+    );
+    return response.data;
+  }
+
+  /** Reactivate a deprecated platform skill (status: DEPRECATED → ACTIVE). */
+  async reactivatePlatformSkill(skillId: string): Promise<PlatformSkill> {
+    const response = await apiClient.post<PlatformSkill>(
+      `/api/v1/platform/skills/${skillId}/reactivate`,
+    );
+    return response.data;
   }
 
   /**

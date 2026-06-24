@@ -1078,6 +1078,7 @@ erDiagram
 19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure)
 20. `20260503000001` - Add platform_skills, platform_skill_files, skill_update_logs tables. Add fork model columns (source_skill_id, source_version, is_visible) to organization_skills. Remove source_url/source_ref. Convert built_in category to custom (Phase 2c: platform skills fork/refresh model)
 21. `20260623000001` - Add `token_refresh_leases` table + `claim_token_refresh`/`release_token_refresh` SQL functions (Postgres-backed per-tool lease lock to prevent the multi-instance OAuth token-refresh race)
+22. `20260624000001` - Replace `platform_skills.is_active` + `is_deleted` booleans with a single `status VARCHAR(20)` enum (draft/active/deprecated/deleted). Adds a CHECK constraint and dedicated state-machine transitions in the service layer (deprecate/reactivate/delete/restore).
 
 ---
 
@@ -1159,12 +1160,31 @@ Immutable skill templates controlled by the platform. These are the source of tr
 | content             | TEXT         | NOT NULL                        | Full SKILL.md content                            |
 | version             | VARCHAR(20)  | NOT NULL                        | Date-based version (`YYYY.MM.DD_N`)              |
 | content_hash        | VARCHAR(64)  | NULLABLE                        | SHA-256 hash for change detection                |
-| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Platform-level visibility (deprecation toggle)   |
+| status              | VARCHAR(20)  | NOT NULL, DEFAULT 'active', CHECK IN ('draft','active','deprecated','deleted') | Lifecycle status (state machine; transitions go through dedicated endpoints) |
 | author              | VARCHAR(200) | NULLABLE                        | Attribution (e.g., "Platform Team")              |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                               |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                            |
 
+**Status state machine**:
+
+    DRAFT ──publish──► ACTIVE ──deprecate──► DEPRECATED ──reactivate──► ACTIVE
+                                       │              │
+                                       │              ▼
+                                       └──────────► DELETED ──restore──► ACTIVE
+
+- `DRAFT`: work-in-progress; hidden from org admins; visible to platform admins.
+- `ACTIVE`: default. Visible to org admins in the browse/fork list.
+- `DEPRECATED`: hidden from org admins; visible to platform admins; existing
+  org forks keep working but no new forks allowed.
+- `DELETED`: soft-delete (trash bin); hidden from everyone except via the
+  `include_deleted=true` filter; restorable.
+
 **Access**: No RLS. Platform admin only.
+
+**Migration history**:
+- `20260624000001` - Replace `is_active` + `is_deleted` booleans with a single
+  `status VARCHAR(20)` enum. Backfilled legacy rows using the matrix above,
+  then dropped the booleans and added a CHECK constraint.
 
 #### platform_skill_files
 

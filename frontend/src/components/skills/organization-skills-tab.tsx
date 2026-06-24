@@ -47,7 +47,6 @@ function toEditable(s: OrganizationSkill): EditableSkill {
     content: s.content,
     version: s.version,
     author: s.author,
-    is_active: s.is_active,
     is_visible: s.is_visible,
     source_skill_id: s.source_skill_id,
     source_version: s.source_version,

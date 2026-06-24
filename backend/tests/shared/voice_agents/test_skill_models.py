@@ -47,32 +47,11 @@ class TestSkillSlugValidation:
             )
 
 
-class TestSkillCategoryValidation:
-    """Test cases for skill category validation."""
-
-    def test_valid_built_in(self):
-        skill = OrganizationSkillBase(
-            name="Test", slug="test", content="# Test", category="built_in"
-        )
-        assert skill.category == "built_in"
-
-    def test_valid_custom(self):
-        skill = OrganizationSkillBase(
-            name="Test", slug="test", content="# Test", category="custom"
-        )
-        assert skill.category == "custom"
-
-    def test_default_category_is_custom(self):
-        skill = OrganizationSkillBase(
-            name="Test", slug="test", content="# Test"
-        )
-        assert skill.category == "custom"
-
-    def test_invalid_category(self):
-        with pytest.raises(ValidationError, match="Category must be"):
-            OrganizationSkillBase(
-                name="Test", slug="test", content="# Test", category="invalid"
-            )
+# NOTE: TestSkillCategoryValidation was deleted because the ``category``
+# field was removed in Phase 2c (commit 9dd430f, "Replace built-in skill
+# seeding with immutable platform templates"). The category enum (built_in /
+# custom) was superseded by the platform fork model: org skills are always
+# "custom", with platform_skills as the source of truth.
 
 
 class TestSkillCreateModel:
@@ -100,7 +79,6 @@ class TestSkillCreateModel:
             slug="test",
             content="# Test",
         )
-        assert skill.category == "custom"
         assert skill.version is None
         assert skill.author is None
         assert skill.content_hash is None
@@ -258,7 +236,6 @@ class TestSkillImportResultModel:
             slug="imported-skill",
             name="Imported Skill",
             content="# Imported",
-            category="custom",
             is_active=True,
             created_at="2024-01-01T00:00:00",
             updated_at="2024-01-01T00:00:00",

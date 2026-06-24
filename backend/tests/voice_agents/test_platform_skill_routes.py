@@ -20,6 +20,7 @@ from shared.voice_agents.skill_models import (
     PlatformSkillFile,
     PlatformSkillFileCreate,
     PlatformSkillFileSummary,
+    PlatformSkillStatus,
     PlatformSkillSummary,
     PlatformSkillUpdate,
 )
@@ -36,18 +37,18 @@ def _profile(is_admin: bool) -> Mock:
     return p
 
 
-def _summary(active: bool = True) -> PlatformSkillSummary:
+def _summary(status: PlatformSkillStatus = PlatformSkillStatus.ACTIVE) -> PlatformSkillSummary:
     return PlatformSkillSummary(
         id=TEST_SKILL_ID,
         slug="appointment-booking",
         name="Appointment Booking",
         description="desc",
         version="2026.06.19_1",
-        is_active=active,
+        status=status,
     )
 
 
-def _full_skill() -> PlatformSkill:
+def _full_skill(status: PlatformSkillStatus = PlatformSkillStatus.ACTIVE) -> PlatformSkill:
     return PlatformSkill(
         id=TEST_SKILL_ID,
         slug="appointment-booking",
@@ -56,7 +57,7 @@ def _full_skill() -> PlatformSkill:
         content="# Skill",
         version="2026.06.19_1",
         content_hash="hash",
-        is_active=True,
+        status=status,
         created_at=datetime(2026, 6, 19),
         updated_at=datetime(2026, 6, 19),
     )
@@ -99,52 +100,57 @@ class TestPlatformSkillRoutesAuthz:
                 return_value=([_summary()], None)
             )
             result = await list_platform_skills(
-                include_inactive=False,
                 user_data=(TEST_USER_ID, _profile(is_admin=False)),
             )
         assert len(result) == 1
-        # include_inactive=False must be forwarded
-        mock_service.list_platform_skills.assert_awaited_once_with(
-            include_inactive=False
-        )
+        # default must be [ACTIVE]
+        called = mock_service.list_platform_skills.call_args
+        called_statuses = called.kwargs.get("statuses") or (called.args[0] if called.args else None)
+        assert called_statuses == [PlatformSkillStatus.ACTIVE]
 
     @pytest.mark.asyncio
-    async def test_list_inactive_requires_platform_admin(self):
-        """include_inactive=true is forbidden for non-admins (403)."""
+    async def test_list_deprecated_requires_platform_admin(self):
+        """statuses including DEPRECATED is forbidden for non-admins (403)."""
         from src.voice_agents.platform_skill_routes import list_platform_skills
 
         with patch(
             "src.voice_agents.platform_skill_routes.skill_service"
         ) as mock_service:
             mock_service.list_platform_skills = AsyncMock(
-                return_value=([_summary(active=False), _summary(active=True)], None)
+                return_value=([_summary(PlatformSkillStatus.DEPRECATED), _summary()], None)
             )
             with pytest.raises(HTTPException) as exc_info:
                 await list_platform_skills(
-                    include_inactive=True,
+                    statuses=[PlatformSkillStatus.ACTIVE, PlatformSkillStatus.DEPRECATED],
                     user_data=(TEST_USER_ID, _profile(is_admin=False)),
                 )
         assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_list_inactive_succeeds_for_platform_admin(self):
-        """include_inactive=true returns all skills for platform admins."""
+    async def test_list_multiple_statuses_succeeds_for_platform_admin(self):
+        """statuses=[active, deprecated] returns both for platform admins."""
         from src.voice_agents.platform_skill_routes import list_platform_skills
 
         with patch(
             "src.voice_agents.platform_skill_routes.skill_service"
         ) as mock_service:
             mock_service.list_platform_skills = AsyncMock(
-                return_value=([_summary(active=False), _summary(active=True)], None)
+                return_value=(
+                    [_summary(PlatformSkillStatus.DEPRECATED), _summary()],
+                    None,
+                )
             )
             result = await list_platform_skills(
-                include_inactive=True,
+                statuses=[PlatformSkillStatus.ACTIVE, PlatformSkillStatus.DEPRECATED],
                 user_data=(TEST_USER_ID, _profile(is_admin=True)),
             )
         assert len(result) == 2
-        mock_service.list_platform_skills.assert_awaited_once_with(
-            include_inactive=True
-        )
+        called = mock_service.list_platform_skills.call_args
+        called_statuses = called.kwargs.get("statuses") or (called.args[0] if called.args else None)
+        assert called_statuses == [
+            PlatformSkillStatus.ACTIVE,
+            PlatformSkillStatus.DEPRECATED,
+        ]
 
     @pytest.mark.asyncio
     async def test_get_platform_skill_requires_platform_admin(self):
@@ -225,7 +231,7 @@ class TestPlatformSkillRoutesAuthz:
     async def test_update_platform_skill_succeeds_for_admin(self):
         from src.voice_agents.platform_skill_routes import update_platform_skill
 
-        payload = PlatformSkillUpdate(is_active=False)
+        payload = PlatformSkillUpdate(name="Renamed")
         with patch(
             "src.voice_agents.platform_skill_routes.skill_service"
         ) as mock_service:
@@ -335,6 +341,69 @@ class TestPlatformSkillRoutesAuthz:
                 user_data=(TEST_USER_ID, _profile(is_admin=True)),
             )
         assert result.file_path == "references/faqs.md"
+
+    # ─── Trash bin: list deleted-only (admin only) ─────
+
+    @pytest.mark.asyncio
+    async def test_list_deleted_only_requires_platform_admin(self):
+        """statuses=[DELETED] is forbidden for non-admins (403)."""
+        from src.voice_agents.platform_skill_routes import list_platform_skills
+
+        with patch(
+            "src.voice_agents.platform_skill_routes.skill_service"
+        ) as mock_service:
+            mock_service.list_platform_skills = AsyncMock(return_value=([], None))
+            with pytest.raises(HTTPException) as exc_info:
+                await list_platform_skills(
+                    statuses=[PlatformSkillStatus.DELETED],
+                    user_data=(TEST_USER_ID, _profile(is_admin=False)),
+                )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_list_deleted_only_succeeds_for_admin(self):
+        """statuses=[DELETED] returns deleted skills for admins."""
+        from src.voice_agents.platform_skill_routes import list_platform_skills
+
+        with patch(
+            "src.voice_agents.platform_skill_routes.skill_service"
+        ) as mock_service:
+            mock_service.list_platform_skills = AsyncMock(return_value=([], None))
+            await list_platform_skills(
+                statuses=[PlatformSkillStatus.DELETED],
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        called = mock_service.list_platform_skills.call_args
+        called_statuses = called.kwargs.get("statuses") or (called.args[0] if called.args else None)
+        assert called_statuses == [PlatformSkillStatus.DELETED]
+
+    @pytest.mark.asyncio
+    async def test_restore_requires_platform_admin(self):
+        """Restoring a soft-deleted skill is platform-admin only (403 otherwise)."""
+        from src.voice_agents.platform_skill_routes import restore_platform_skill
+
+        with pytest.raises(HTTPException) as exc_info:
+            await restore_platform_skill(
+                skill_id=TEST_SKILL_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_restore_succeeds_for_admin(self):
+        from src.voice_agents.platform_skill_routes import restore_platform_skill
+
+        with patch(
+            "src.voice_agents.platform_skill_routes.skill_service"
+        ) as mock_service:
+            mock_service.restore_platform_skill = AsyncMock(return_value=(_full_skill(), None))
+            result = await restore_platform_skill(
+                skill_id=TEST_SKILL_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result.slug == "appointment-booking"
+        mock_service.restore_platform_skill.assert_awaited_once_with(TEST_SKILL_ID)
+
 
 class TestPlatformSkillImportRoute:
     """Authorization + wiring tests for platform skill import-from-URL."""

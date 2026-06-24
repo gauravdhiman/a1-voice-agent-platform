@@ -8,10 +8,59 @@ loaded in the system prompt; full content is loaded on-demand via tool call.
 
 import re
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class PlatformSkillStatus(str, Enum):
+    """Lifecycle status of a platform skill template.
+
+    State machine (see docs/02_features/voice_agents/platform_skills_admin.md):
+
+        DRAFT      ──publish──►  ACTIVE       ──deprecate──►  DEPRECATED
+                                                       ▲              │
+                                                       │              ├──reactivate──► ACTIVE
+                                                       │              │
+                                                       │              ▼
+                                                       └──────────  DELETED
+                                                                          │
+                                                                          └──restore──► ACTIVE
+
+    Notes:
+        - Org admins only see ``ACTIVE`` skills in the default list/fork UI.
+        - ``DRAFT`` and ``DEPRECATED`` are admin-only (hidden from org admins
+          but visible to platform admins when filtered in).
+        - ``DELETED`` is admin-only via the trash filter; restored skills
+          always return to ``ACTIVE`` (admin can re-deprecate if needed).
+        - Org forks are independent of the source skill's state machine;
+          forking a deprecated/deleted skill is blocked, but existing forks
+          keep their own lifecycle.
+    """
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    DEPRECATED = "deprecated"
+    DELETED = "deleted"
+
+
+def _validate_status(v):
+    """Coerce/validate a PlatformSkillStatus value.
+
+    Accepts enum members or raw strings; rejects anything else so a typo at
+    the API boundary can't silently corrupt state.
+    """
+    if isinstance(v, PlatformSkillStatus):
+        return v
+    if isinstance(v, str):
+        try:
+            return PlatformSkillStatus(v)
+        except ValueError:
+            valid = ", ".join(s.value for s in PlatformSkillStatus)
+            raise ValueError(f"Invalid status '{v}'. Must be one of: {valid}")
+    raise ValueError(f"status must be a string or PlatformSkillStatus, got {type(v).__name__}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -27,8 +76,18 @@ class PlatformSkillBase(BaseModel):
     content: str = Field(..., min_length=1, description="Full skill content in markdown (SKILL.md)")
     version: str = Field(default="1970.01.01_1", description="Date-based version (YYYY.MM.DD_N)")
     content_hash: Optional[str] = Field(None, max_length=64, description="SHA-256 hash of content")
-    is_active: bool = Field(default=True, description="Platform-level visibility")
+    status: PlatformSkillStatus = Field(
+        default=PlatformSkillStatus.ACTIVE,
+        description="Lifecycle status. New skills are ACTIVE by default; "
+        "transitions (deprecate/reactivate/delete/restore) go through "
+        "dedicated endpoints so the state machine is enforceable.",
+    )
     author: Optional[str] = Field(None, max_length=200, description="Attribution (e.g., 'Platform', 'John Doe')")
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _validate_status_field(cls, v):
+        return _validate_status(v)
 
     @field_validator("slug")
     @classmethod
@@ -53,12 +112,17 @@ class PlatformSkillCreate(PlatformSkillBase):
 
 
 class PlatformSkillUpdate(BaseModel):
-    """Model for updating a platform skill. Bumps version automatically."""
+    """Model for updating a platform skill content. Bumps version automatically.
+
+    Status transitions (deprecate/reactivate/delete/restore) are intentionally
+    NOT part of this model — they go through dedicated endpoints so the
+    state machine is enforceable server-side. Including ``status`` here
+    would let a content edit silently flip visibility.
+    """
 
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     content: Optional[str] = Field(None, min_length=1)
-    is_active: Optional[bool] = None
 
 
 class PlatformSkill(PlatformSkillBase):
@@ -72,9 +136,10 @@ class PlatformSkill(PlatformSkillBase):
 class PlatformSkillSummary(BaseModel):
     """Lightweight summary for template browsing.
 
-    Includes ``is_active`` so platform admins can see and manage deprecated
-    (hidden) skills. For non-admin browsing the value is always ``True`` since
-    inactive skills are filtered out server-side.
+    Includes ``status`` so platform admins can see and manage skills in any
+    state (active/draft/deprecated/deleted). For non-admin browsing the
+    server filters to ``ACTIVE`` only, so the value here is effectively
+    always ``ACTIVE`` in that case.
     """
 
     id: UUID
@@ -82,7 +147,12 @@ class PlatformSkillSummary(BaseModel):
     name: str
     description: Optional[str]
     version: str
-    is_active: bool = True
+    status: PlatformSkillStatus = PlatformSkillStatus.ACTIVE
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _validate_status_field(cls, v):
+        return _validate_status(v)
 
 
 class PlatformSkillFileCreate(BaseModel):

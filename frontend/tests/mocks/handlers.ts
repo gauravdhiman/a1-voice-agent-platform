@@ -743,16 +743,41 @@ export const handlers = [
   // Platform skills endpoints
   http.get(`${API_BASE_URL}/api/v1/platform/skills`, ({ request }) => {
     const url = new URL(request.url)
-    const includeInactive = url.searchParams.get('include_inactive') === 'true'
-    if (includeInactive) {
-      return HttpResponse.json([
-        createMockPlatformSkillSummary(),
-        createMockPlatformSkillSummary({ id: 'platform-skill-2', slug: 'old-skill', name: 'Old Skill', is_active: false }),
-      ])
+    const statuses = url.searchParams.getAll('statuses')
+    const skillList: ReturnType<typeof createMockPlatformSkillSummary>[] = [createMockPlatformSkillSummary()]
+    if (statuses.includes('deprecated')) {
+      skillList.push(
+        createMockPlatformSkillSummary({
+          id: 'platform-skill-2',
+          slug: 'old-skill',
+          name: 'Old Skill',
+          status: 'deprecated',
+        }),
+      )
     }
-    return HttpResponse.json([
-      createMockPlatformSkillSummary(),
-    ])
+    if (statuses.includes('deleted')) {
+      skillList.push(
+        createMockPlatformSkillSummary({
+          id: 'platform-skill-3',
+          slug: 'deleted-skill',
+          name: 'Deleted Skill',
+          status: 'deleted',
+        }),
+      )
+    }
+    return HttpResponse.json(skillList)
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/platform/skills/:skillId/restore`, () => {
+    return HttpResponse.json(createMockPlatformSkill({ status: 'active' }))
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/platform/skills/:skillId/deprecate`, () => {
+    return HttpResponse.json(createMockPlatformSkill({ status: 'deprecated' }))
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/platform/skills/:skillId/reactivate`, () => {
+    return HttpResponse.json(createMockPlatformSkill({ status: 'active' }))
   }),
 
   http.get(`${API_BASE_URL}/api/v1/platform/skills/:skillId`, () => {
@@ -765,8 +790,8 @@ export const handlers = [
   }),
 
   http.put(`${API_BASE_URL}/api/v1/platform/skills/:skillId`, async ({ request }) => {
-    const body = (await request.json()) as { name?: string; is_active?: boolean }
-    return HttpResponse.json(createMockPlatformSkill({ name: body.name ?? 'Appointment Booking', is_active: body.is_active ?? true }))
+    const body = (await request.json()) as { name?: string }
+    return HttpResponse.json(createMockPlatformSkill({ name: body.name ?? 'Appointment Booking' }))
   }),
 
   http.delete(`${API_BASE_URL}/api/v1/platform/skills/:skillId`, () => {

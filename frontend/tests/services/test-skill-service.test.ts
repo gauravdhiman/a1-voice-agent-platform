@@ -72,10 +72,10 @@ describe('SkillService', () => {
   })
 
   describe('Platform Skills (admin CRUD)', () => {
-    it('listPlatformSkills(includeInactive=true) returns all skills incl. deprecated', async () => {
-      const result = await skillService.listPlatformSkills(true)
+    it('listPlatformSkills with [active, deprecated] returns all skills incl. deprecated', async () => {
+      const result = await skillService.listPlatformSkills(['active', 'deprecated'])
       expect(result).toHaveLength(2)
-      expect(result[1]).toMatchObject({ is_active: false })
+      expect(result[1]).toMatchObject({ status: 'deprecated' })
     })
 
     it('getPlatformSkill returns full skill with content', async () => {
@@ -93,9 +93,9 @@ describe('SkillService', () => {
       expect(result).toMatchObject({ slug: 'new-skill', name: 'New Skill' })
     })
 
-    it('updatePlatformSkill PUTs partial update (e.g. hide via is_active=false)', async () => {
-      const result = await skillService.updatePlatformSkill('platform-skill-1', { is_active: false })
-      expect(result.is_active).toBe(false)
+    it('updatePlatformSkill PUTs partial update (name only — status transitions are dedicated)', async () => {
+      const result = await skillService.updatePlatformSkill('platform-skill-1', { name: 'Renamed' })
+      expect(result.name).toBe('Renamed')
     })
 
     it('deletePlatformSkill handles 204 (deprecate)', async () => {
@@ -129,7 +129,18 @@ describe('SkillService', () => {
       expect(result.content).toBe('# Updated')
     })
 
-    it('importPlatformSkill POSTs to /platform/skills/import and returns results', async () => {
+    it('restorePlatformSkill POSTs to /platform/skills/:id/restore', async () => {
+      const result = await skillService.restorePlatformSkill('platform-skill-1')
+      expect(result.status).toBe('active')
+    })
+
+    it('listPlatformSkills with [active, deprecated, deleted] returns all incl. deleted', async () => {
+      const result = await skillService.listPlatformSkills(['active', 'deprecated', 'deleted'])
+      expect(result).toHaveLength(3)
+      expect(result[2]).toMatchObject({ slug: 'deleted-skill', status: 'deleted' })
+    })
+
+        it('importPlatformSkill POSTs to /platform/skills/import and returns results', async () => {
       const result = await skillService.importPlatformSkill('https://github.com/o/r')
       expect(result).toHaveLength(1)
       expect(result[0]).toMatchObject({ source_url: 'https://github.com/o/r' })

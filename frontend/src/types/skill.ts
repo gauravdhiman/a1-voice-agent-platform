@@ -4,7 +4,21 @@
  * Skills are reusable knowledge/procedure packages (markdown) that can be
  * assigned to agents. They use progressive disclosure — only metadata is
  * in the system prompt; full content loads on-demand via tool call.
+ *
+ * Platform skills use a single ``status`` enum to model their lifecycle:
+ *
+ *   draft → active → deprecated → deleted
+ *                       ↑     ↓      ↑
+ *                       │ reactivate  │
+ *                       └──────────── restore
+ *
+ * See ``docs/02_features/voice_agents/platform_skills_admin.md``.
  */
+
+export type PlatformSkillStatus = "draft" | "active" | "deprecated" | "deleted";
+
+/** Query-string parsing helper. Accepts "active,deprecated,draft" or repeated params. */
+export type PlatformSkillStatusFilter = PlatformSkillStatus | PlatformSkillStatus[];
 
 export interface OrganizationSkill {
   id: string;
@@ -31,8 +45,8 @@ export interface PlatformSkillSummary {
   name: string;
   description: string | null;
   version: string;
-  /** Active (visible/forkable) vs deprecated (hidden). Always true for non-admin lists. */
-  is_active: boolean;
+  /** Lifecycle status. Defaults to "active" for non-admin lists. */
+  status: PlatformSkillStatus;
 }
 
 /** Payload for creating a new platform skill template (platform admin only). */
@@ -44,12 +58,17 @@ export interface PlatformSkillCreate {
   author?: string | null;
 }
 
-/** Payload for updating a platform skill (platform admin only). Bumps version. */
+/** Payload for updating a platform skill (platform admin only). Bumps version.
+ *
+ * Status transitions (deprecate/reactivate/delete/restore) are NOT part of
+ * this model — they go through dedicated endpoints so the state machine is
+ * enforceable. Including ``status`` here would let a content edit silently
+ * flip visibility.
+ */
 export interface PlatformSkillUpdate {
   name?: string;
   description?: string | null;
   content?: string;
-  is_active?: boolean;
 }
 
 /** Full platform skill reference file (with content). */
@@ -80,7 +99,8 @@ export interface PlatformSkill {
   version: string;
   author: string | null;
   content_hash: string;
-  is_active: boolean;
+  /** Lifecycle status. */
+  status: PlatformSkillStatus;
   files?: PlatformSkillFileSummary[];
   created_at: string;
   updated_at: string;

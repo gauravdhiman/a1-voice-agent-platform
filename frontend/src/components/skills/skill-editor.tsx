@@ -33,6 +33,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  Archive,
   ChevronDown,
   ChevronRight,
   Edit3,
@@ -48,6 +49,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  RotateCcw,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -86,7 +88,8 @@ export interface EditableSkill {
   content: string;
   version: string | null;
   author?: string | null;
-  is_active?: boolean;
+  /** Platform-skill lifecycle status (draft/active/deprecated/deleted). */
+  status?: "draft" | "active" | "deprecated" | "deleted";
   is_visible?: boolean; // org only
   source_skill_id?: string | null; // org only (forked from platform)
   source_version?: string | null;
@@ -131,7 +134,7 @@ export interface CheckUpdateInfo {
  * supplies the concrete service calls.
  */
 export interface SkillEditorAdapter {
-  loadSkills(): Promise<EditableSkill[]>;
+  loadSkills(includeDeleted?: boolean): Promise<EditableSkill[]>;
   loadFiles(skillId: string): Promise<EditableFileSummary[]>;
   getFileContent(skill: EditableSkill, file: EditableFileSummary): Promise<string>;
   createSkill(input: SkillCreateInput): Promise<EditableSkill>;
@@ -152,8 +155,13 @@ export interface SkillEditorAdapter {
    * already return content in loadSkills() can omit this.
    */
   hydrateSkill?(skill: EditableSkill): Promise<EditableSkill>;
-  // org-only (hard delete with agents-using pre-check):
+  // delete + restore:
   deleteSkill?(skillId: string): Promise<void>;
+  restoreSkill?(skillId: string): Promise<void>;
+  // platform-only: status transitions (deprecate/reactivate)
+  deprecateSkill?(skillId: string): Promise<void>;
+  reactivateSkill?(skillId: string): Promise<void>;
+  // org-only (hard delete pre-check):
   getAgentsUsingSkill?(skillId: string): Promise<{ id: string; name: string; is_active: boolean }[]>;
 }
 
@@ -162,8 +170,12 @@ export interface SkillEditorProps {
   adapter: SkillEditorAdapter;
   canCreate: boolean;
   canEdit: boolean;
-  /** Show the per-skill delete (trash) action. Org: true (hard delete + agents-using check). Platform: false (soft-delete is a separate, future item). */
+  /** Show the per-skill delete (trash) action. Org: hard delete + agents-using check. Platform: soft delete + restore. */
   canDelete?: boolean;
+  /** Delete behavior: "hard" (org — permanent, with agents-using check) | "soft" (platform — hide + restorable). */
+  deleteMode?: "hard" | "soft";
+  /** Show a "Show deleted" toggle to reveal soft-deleted skills and restore them (platform). */
+  showDeletedFilter?: boolean;
   /** org: show Platform/Custom badge + source version. */
   showSourceBadge?: boolean;
   /** org: show the library visibility (is_visible) eye toggle. */
@@ -185,12 +197,98 @@ const FILE_KINDS = ["reference", "script", "asset", "other"] as const;
 
 type SelectedFile = { skillId: string; filePath: string; content?: string } | null;
 
+/**
+ * Resolve the list of available row-level actions for a skill based on its
+ * current ``status`` and the adapter's capabilities.
+ *
+ * The action set follows the same state machine as the backend
+ * (``shared.voice_agents.skill_models.PlatformSkillStatus``):
+ *
+ *     active    → deprecate, delete
+ *     deprecated→ reactivate, delete
+ *     draft     → delete             (publish arrives later)
+ *     deleted   → restore
+ *
+ * Returning an array instead of a single chained ternary means all valid
+ * transitions render side-by-side. Previously a deprecated skill showed
+ * only "reactivate" because the chained ternary hit the deprecated branch
+ * first and never reached the delete fallback — that was the bug.
+ */
+function availableActions(
+  skill: EditableSkill,
+  deleteMode: "hard" | "soft",
+  adapter: SkillEditorAdapter,
+): Array<{
+  id: "restore" | "deprecate" | "reactivate" | "delete";
+  title: string;
+  icon: typeof RotateCcw;
+  iconClass: string;
+}> {
+  const actions: Array<{
+    id: "restore" | "deprecate" | "reactivate" | "delete";
+    title: string;
+    icon: typeof RotateCcw;
+    iconClass: string;
+  }> = [];
+
+  const status = skill.status ?? "active";
+
+  if (status === "deleted") {
+    // Trash bin: restore is the only meaningful action.
+    if (deleteMode === "soft" && adapter.restoreSkill) {
+      actions.push({
+        id: "restore",
+        title: "Restore skill",
+        icon: RotateCcw,
+        iconClass: "text-muted-foreground hover:text-foreground",
+      });
+    }
+    return actions;
+  }
+
+  // Non-deleted states: each row gets the relevant status transitions +
+  // delete (where the org adapter supports it). Draft has no transitions
+  // today — when we add a publish endpoint we'll slot it in here.
+  if (status === "active" && adapter.deprecateSkill) {
+    actions.push({
+      id: "deprecate",
+      title: "Deprecate skill",
+      icon: Archive,
+      iconClass: "text-amber-400 hover:text-amber-600",
+    });
+  }
+  if (status === "deprecated" && adapter.reactivateSkill) {
+    actions.push({
+      id: "reactivate",
+      title: "Reactivate skill",
+      icon: RotateCcw,
+      iconClass: "text-emerald-400 hover:text-emerald-600",
+    });
+  }
+  // Delete is available on every non-deleted state when the adapter
+  // supports it. Soft-delete (platform) and hard-delete (org) both flow
+  // through the same adapter.deleteSkill; the deleteMode prop on the
+  // editor controls the confirm dialog copy + behavior.
+  if (adapter.deleteSkill) {
+    actions.push({
+      id: "delete",
+      title: "Delete skill",
+      icon: Trash2,
+      iconClass: "text-red-400 hover:text-red-600",
+    });
+  }
+
+  return actions;
+}
+
 export function SkillEditor({
   mode,
   adapter,
   canCreate,
   canEdit,
   canDelete = false,
+  deleteMode = "hard",
+  showDeletedFilter = false,
   showSourceBadge = false,
   showVisibilityToggle = false,
   showRefresh = false,
@@ -223,10 +321,13 @@ export function SkillEditor({
   const [newFile, setNewFile] = useState<FileWriteInput>({ file_path: "", content: "", file_kind: "reference" });
   const [creatingFile, setCreatingFile] = useState(false);
 
-  // delete skill (org-only hard delete with agents-using pre-check)
+  // delete / restore skill
   const [deleteTarget, setDeleteTarget] = useState<EditableSkill | null>(null);
   const [deleteAgents, setDeleteAgents] = useState<{ id: string; name: string; is_active: boolean }[]>([]);
   const [deletingSkill, setDeletingSkill] = useState(false);
+  // platform soft-delete: "show deleted" filter + restore
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -251,14 +352,14 @@ export function SkillEditor({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await adapter.loadSkills();
+      const list = await adapter.loadSkills(showDeleted);
       setSkills(list);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load skills");
     } finally {
       setLoading(false);
     }
-  }, [adapter]);
+  }, [adapter, showDeleted]);
 
   useEffect(() => {
     reload();
@@ -378,11 +479,12 @@ export function SkillEditor({
     [adapter, pushUrl],
   );
 
-  // ─── delete skill (org-only) ───
+  // ─── delete skill ───
   const requestDelete = async (skill: EditableSkill) => {
     setDeleteTarget(skill);
     setDeleteAgents([]);
-    if (adapter.getAgentsUsingSkill) {
+    // Hard delete (org) pre-checks agents using the skill; soft delete (platform) does not.
+    if (deleteMode === "hard" && adapter.getAgentsUsingSkill) {
       try {
         setDeleteAgents(await adapter.getAgentsUsingSkill(skill.id));
       } catch {
@@ -391,12 +493,30 @@ export function SkillEditor({
     }
   };
 
+  const requestRestore = async (skill: EditableSkill) => {
+    if (!adapter.restoreSkill) return;
+    setRestoringId(skill.id);
+    try {
+      await adapter.restoreSkill(skill.id);
+      toast.success(`Skill "${skill.name}" restored`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to restore skill");
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget || !adapter.deleteSkill) return;
     setDeletingSkill(true);
     try {
       await adapter.deleteSkill(deleteTarget.id);
-      toast.success(`Skill "${deleteTarget.name}" deleted`);
+      toast.success(
+        deleteMode === "soft"
+          ? `Skill "${deleteTarget.name}" moved to deleted (restore via "Show deleted")`
+          : `Skill "${deleteTarget.name}" deleted`,
+      );
       setDeleteTarget(null);
       if (selectedSkill?.id === deleteTarget.id) {
         setSelectedSkill(null);
@@ -408,6 +528,27 @@ export function SkillEditor({
       toast.error(err instanceof Error ? err.message : "Failed to delete skill");
     } finally {
       setDeletingSkill(false);
+    }
+  };
+  const requestDeprecate = async (skill: EditableSkill) => {
+    if (!adapter.deprecateSkill) return;
+    try {
+      await adapter.deprecateSkill(skill.id);
+      toast.success(`Skill "${skill.name}" deprecated`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to deprecate skill");
+    }
+  };
+
+  const requestReactivate = async (skill: EditableSkill) => {
+    if (!adapter.reactivateSkill) return;
+    try {
+      await adapter.reactivateSkill(skill.id);
+      toast.success(`Skill "${skill.name}" reactivated`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reactivate skill");
     }
   };
 
@@ -647,6 +788,16 @@ export function SkillEditor({
               className="pl-8 h-8 text-sm"
             />
           </div>
+          {showDeletedFilter && (
+            <Button
+              variant={showDeleted ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setShowDeleted((v) => !v)}
+            >
+              {showDeleted ? "Hide deleted" : "Show deleted"}
+            </Button>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {loading ? (
@@ -693,17 +844,42 @@ export function SkillEditor({
                             <EyeOff className="h-3 w-3 mr-1" />Hidden
                           </Badge>
                         )}
+                        {skill.status === "deleted" && (
+                          <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Deleted</Badge>
+                        )}
+                        {skill.status === "deprecated" && (
+                          <Badge variant="outline" className="text-[11px] px-1.5 py-0 border-amber-200 text-amber-700 bg-amber-50">
+                            Deprecated
+                          </Badge>
+                        )}
+                        {skill.status === "draft" && (
+                          <Badge variant="outline" className="text-[11px] px-1.5 py-0 border-slate-200 text-slate-600 bg-slate-50">
+                            Draft
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    {canDelete && (
+                    {availableActions(skill, deleteMode, adapter).map((action) => (
                       <button
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-100"
-                        onClick={(e) => { e.stopPropagation(); requestDelete(skill); }}
-                        title="Delete skill"
+                        key={action.id}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (action.id === "restore") requestRestore(skill);
+                          else if (action.id === "deprecate") requestDeprecate(skill);
+                          else if (action.id === "reactivate") requestReactivate(skill);
+                          else if (action.id === "delete") requestDelete(skill);
+                        }}
+                        disabled={restoringId === skill.id}
+                        title={action.title}
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-red-400 hover:text-red-600" />
+                        {restoringId === skill.id && action.id === "restore" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <action.icon className={`h-3.5 w-3.5 ${action.iconClass}`} />
+                        )}
                       </button>
-                    )}
+                    ))}
                   </div>
                   {isExpanded && (
                     <div className="border-b bg-muted/20">
@@ -1057,18 +1233,20 @@ export function SkillEditor({
         </SheetContent>
       </Sheet>
 
-      {/* Delete skill confirmation (org only — hard delete + agents-using check) */}
+      {/* Delete skill confirmation */}
       {canDelete && deleteTarget && (
         <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Delete skill: {deleteTarget.name}?</DialogTitle>
+              <DialogTitle>{deleteMode === "soft" ? "Delete skill" : `Delete skill: ${deleteTarget.name}?`}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                This will permanently delete this skill and all its reference files.
+                {deleteMode === "soft"
+                  ? `"${deleteTarget.name}" will be hidden from forking and from the default list. Existing org forks keep working. You can restore it later via "Show deleted".`
+                  : "This will permanently delete this skill and all its reference files."}
               </p>
-              {deleteAgents.length > 0 && (
+              {deleteMode === "hard" && deleteAgents.length > 0 && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-sm font-medium text-amber-800">
                     This skill is currently used by {deleteAgents.length} agent{deleteAgents.length > 1 ? "s" : ""}:

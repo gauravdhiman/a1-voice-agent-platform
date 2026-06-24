@@ -20,6 +20,7 @@ from shared.voice_agents.skill_models import (
     PlatformSkillFile,
     PlatformSkillFileCreate,
     PlatformSkillFileSummary,
+    PlatformSkillStatus,
     PlatformSkillSummary,
     PlatformSkillUpdate,
     PlatformSkillImportResult,
@@ -53,30 +54,52 @@ def _require_platform_admin(user_profile: UserProfile) -> None:
 )
 @tracer.start_as_current_span("skill.platform.list")
 async def list_platform_skills(
-    include_inactive: bool = Query(
-        False,
-        description="If true, return all skills including deprecated ones "
-        "(platform admin only). Default returns only active skills.",
+    statuses: Optional[List[PlatformSkillStatus]] = Query(
+        None,
+        description=(
+            "Filter by status. Defaults to active only. Repeat the param to "
+            "request multiple statuses, e.g. "
+            "?statuses=active&statuses=deprecated. Org admins only see ACTIVE "
+            "skills; DRAFT, DEPRECATED, and DELETED are platform-admin only."
+        ),
     ),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ) -> List[PlatformSkillSummary]:
-    """List platform skills.
+    """List platform skills filtered by status.
 
-    By default returns only active platform skills — available to any
-    authenticated user so org admins can browse and fork skills into their
-    organization's library.
-
-    When ``include_inactive=true`` is passed, ALL skills (including deprecated
-    ones) are returned. This is restricted to platform admins only; non-admins
-    requesting it receive 403.
+    Default behavior (no ``statuses`` query param) returns only ACTIVE skills,
+    which is the org-admin browse/fork list. Any non-default filter (DRAFT,
+    DEPRECATED, DELETED) requires platform-admin authz and returns 403 for
+    non-admins. Unknown status values return 400.
     """
     current_user_id, user_profile = user_data
-    if include_inactive:
+
+    # When called outside HTTP context (unit tests), Query() returns the Query
+    # sentinel object instead of None or a list. Treat it as "no value supplied".
+    if statuses is None or hasattr(statuses, "__class__") and statuses.__class__.__name__ == "Query":
+        statuses = [PlatformSkillStatus.ACTIVE]
+    else:
+        statuses = list(statuses)
+
+    # Validate statuses — reject unknown values early so the URL is a stable API
+    invalid = [s for s in statuses if not isinstance(s, PlatformSkillStatus)]
+    if invalid:
+        valid = ", ".join(s.value for s in PlatformSkillStatus)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status value(s): {invalid}. Must be one of: {valid}",
+        )
+
+    # Admin-only statuses require platform-admin role
+    admin_only = {
+        PlatformSkillStatus.DRAFT,
+        PlatformSkillStatus.DEPRECATED,
+        PlatformSkillStatus.DELETED,
+    }
+    if any(s in admin_only for s in statuses):
         _require_platform_admin(user_profile)
 
-    skills, error = await skill_service.list_platform_skills(
-        include_inactive=include_inactive
-    )
+    skills, error = await skill_service.list_platform_skills(statuses=statuses)
     if error:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
     return skills
@@ -148,6 +171,54 @@ async def update_platform_skill(
     return skill
 
 
+@platform_skill_router.post(
+    "/platform/skills/{skill_id}/deprecate",
+    response_model=PlatformSkill,
+)
+@tracer.start_as_current_span("skill.platform.deprecate")
+async def deprecate_platform_skill(
+    skill_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> PlatformSkill:
+    """Deprecate a platform skill (platform admin only).
+
+    Transitions ``ACTIVE → DEPRECATED``. Deprecated skills are hidden from
+    org admins in the default list but remain visible to platform admins and
+    keep all existing org forks working. Returns 400 if the skill is in any
+    state other than ACTIVE.
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    skill, error = await skill_service.deprecate_platform_skill(skill_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return skill
+
+
+@platform_skill_router.post(
+    "/platform/skills/{skill_id}/reactivate",
+    response_model=PlatformSkill,
+)
+@tracer.start_as_current_span("skill.platform.reactivate")
+async def reactivate_platform_skill(
+    skill_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> PlatformSkill:
+    """Reactivate a deprecated platform skill (platform admin only).
+
+    Transitions ``DEPRECATED → ACTIVE``. Returns 400 if the skill is in any
+    state other than DEPRECATED (use ``/restore`` for deleted skills).
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    skill, error = await skill_service.reactivate_platform_skill(skill_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return skill
+
+
 @platform_skill_router.delete(
     "/platform/skills/{skill_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -157,10 +228,14 @@ async def delete_platform_skill(
     skill_id: UUID,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ) -> None:
-    """Deprecate a platform skill (platform admin only).
+    """Soft-delete a platform skill (platform admin only).
 
-    This sets is_active=false. Existing forks in orgs continue to work,
-    but new forks are blocked.
+    Transitions the skill to ``DELETED`` status. Hidden from forking/browsing
+    and from the default admin list, but the row is retained so it can be
+    restored via ``POST /platform/skills/{id}/restore``. Existing org forks
+    keep working.
+
+    Returns 400 if the skill is already deleted (no-op double-delete).
     """
     current_user_id, user_profile = user_data
     _require_platform_admin(user_profile)
@@ -168,6 +243,34 @@ async def delete_platform_skill(
     success, error = await skill_service.delete_platform_skill(skill_id)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+
+@platform_skill_router.post(
+    "/platform/skills/{skill_id}/restore",
+    response_model=PlatformSkill,
+)
+@tracer.start_as_current_span("skill.platform.restore")
+async def restore_platform_skill(
+    skill_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> PlatformSkill:
+    """Restore a soft-deleted platform skill (platform admin only).
+
+    Transitions ``DELETED → ACTIVE`` so the skill reappears in the default
+    list and is forkable again. Returns 400 if the skill is not in
+    ``DELETED`` state (no-op restore on active/deprecated/draft).
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    skill, error = await skill_service.restore_platform_skill(skill_id)
+    if error:
+        # State-machine violations and missing skills both surface here.
+        # Treat "not in deleted state" as 400, missing as 404.
+        if "cannot restore" in error.lower():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+    return skill
 
 
 # ─────────────────────────────────────────────────────────────────────────────
