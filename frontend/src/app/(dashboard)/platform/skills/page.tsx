@@ -8,9 +8,11 @@
  * The editor delegates to the platform-skill service via an adapter; the
  * backend independently enforces platform_admin on every write endpoint.
  *
- * Out of scope here (separate upcoming item): soft-delete (`is_deleted`),
- * show-deleted filter, and restore. The page therefore ships without a
- * delete/hide control — see TODO below.
+ * Soft-delete (status=DRAFT/active/deprecated/deleted state machine) +
+ * show-deleted filter + restore are enabled via the shared editor's
+ * `deleteMode="soft"` and `showDeletedFilter` props. The platform admin
+ * controls all transitions through dedicated endpoints (deprecate,
+ * reactivate, delete, restore).
  *
  * @example
  * ```tsx
@@ -28,7 +30,7 @@ import { skillService } from "@/services/skill-service";
 import type {
   EditableSkill, // re-exported via component? no — defined in component
 } from "@/components/skills/skill-editor";
-import type { PlatformSkillFile } from "@/types/skill";
+import type { PlatformSkillFile, PlatformSkillStatus } from "@/types/skill";
 
 export default function PlatformSkillsPage() {
   const { user } = useAuth();
@@ -67,13 +69,15 @@ export default function PlatformSkillsPage() {
   );
 
   // Adapter: maps the shared editor to platform-skill service calls.
-  // TODO: [Platform Skills] Add soft-delete (is_deleted) + show-deleted filter +
-  //   restore as a separate item. Until then, no delete/hide control is exposed
-  //   here (the existing backend deprecate endpoint remains available via API).
   const adapter: SkillEditorAdapter = useMemo<SkillEditorAdapter>(() => ({
-    loadSkills: async () => {
-      // Platform admins see all skills incl. deprecated (is_active=false).
-      const list = await skillService.listPlatformSkills(true);
+    loadSkills: async (includeDeleted = false) => {
+      // Platform-admin view: see active + deprecated by default; include
+      // deleted (trash bin) when requested.
+      const list = await skillService.listPlatformSkills(
+        includeDeleted
+          ? ["active", "deprecated", "deleted"]
+          : ["active", "deprecated"],
+      );
       return list.map((s) => ({
         id: s.id,
         slug: s.slug,
@@ -81,7 +85,7 @@ export default function PlatformSkillsPage() {
         description: s.description,
         content: "", // loaded on demand via getPlatformSkill when editing
         version: s.version,
-        is_active: s.is_active,
+        status: s.status,
         created_at: "",
         updated_at: "",
       }));
@@ -135,7 +139,20 @@ export default function PlatformSkillsPage() {
       });
     },
     deleteFile: async () => {
-      // Not exposed in the platform UI yet; kept for adapter completeness.
+      // Not exposed in the platform UI; kept for adapter completeness.
+    },
+    deleteSkill: async (skillId) => {
+      // Soft delete (transition to DELETED status).
+      await skillService.deletePlatformSkill(skillId);
+    },
+    restoreSkill: async (skillId) => {
+      await skillService.restorePlatformSkill(skillId);
+    },
+    deprecateSkill: async (skillId) => {
+      await skillService.deprecatePlatformSkill(skillId);
+    },
+    reactivateSkill: async (skillId) => {
+      await skillService.reactivatePlatformSkill(skillId);
     },
     importFromUrl: async (url) => {
       const results = await skillService.importPlatformSkill(url);
@@ -157,6 +174,9 @@ export default function PlatformSkillsPage() {
         adapter={adapter}
         canCreate
         canEdit
+        canDelete
+        deleteMode="soft"
+        showDeletedFilter
         syncUrl={syncUrl}
         initialSelection={initialSelection}
         emptyHint="Select a skill to view its content"
@@ -174,7 +194,7 @@ function toEditable(s: {
   content: string;
   version: string;
   author?: string | null;
-  is_active?: boolean;
+  status?: PlatformSkillStatus;
   created_at?: string;
   updated_at?: string;
 }): EditableSkill {
@@ -186,7 +206,7 @@ function toEditable(s: {
     content: s.content,
     version: s.version,
     author: s.author ?? null,
-    is_active: s.is_active ?? true,
+    status: s.status ?? "active",
     created_at: s.created_at ?? "",
     updated_at: s.updated_at ?? "",
   };

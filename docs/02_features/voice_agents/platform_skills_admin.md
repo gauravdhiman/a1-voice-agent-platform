@@ -35,14 +35,31 @@ item) and the backend (defense in depth).
 
 | Action | Endpoint | Auth |
 |--------|----------|------|
-| List (active) | `GET /platform/skills` | any authenticated user |
-| List all (incl. deprecated) | `GET /platform/skills?include_inactive=true` | platform admin |
+| List (active) | `GET /platform/skills` | any authenticated user (default filter `statuses=active`) |
+| List by status(es) | `GET /platform/skills?statuses=active&statuses=deprecated&statuses=deleted` | platform admin (any non-active filter) |
 | Get full skill + files | `GET /platform/skills/{id}` | platform admin |
-| Create | `POST /platform/skills` | platform admin (version auto-set) |
-| Update | `PUT /platform/skills/{id}` | platform admin (bumps version; org forks unaffected until refreshed) |
-| Deprecate | `DELETE /platform/skills/{id}` | platform admin (sets `is_active=false`) |
+| Create | `POST /platform/skills` | platform admin (status defaults to `active`) |
+| Update | `PUT /platform/skills/{id}` | platform admin (bumps version; status is NOT settable here — use transition endpoints) |
+| Deprecate | `POST /platform/skills/{id}/deprecate` | platform admin (`active` → `deprecated`) |
+| Reactivate | `POST /platform/skills/{id}/reactivate` | platform admin (`deprecated` → `active`) |
+| Soft delete | `DELETE /platform/skills/{id}` | platform admin (`*` → `deleted`; rejects already-deleted) |
+| Restore | `POST /platform/skills/{id}/restore` | platform admin (`deleted` → `active`; rejects other states) |
 | Import from URL | `POST /platform/skills/import` | platform admin |
 | Files CRUD | `/platform/skills/{id}/files…` | platform admin |
+
+**Status state machine**
+
+```
+DRAFT ──(publish, future)──► ACTIVE ──deprecate──► DEPRECATED ──reactivate──► ACTIVE
+                                       │              │
+                                       │              ▼
+                                       └──────────► DELETED ──restore──► ACTIVE
+```
+
+The transition endpoints are the only way to change status. `PUT` only edits
+`name` / `description` / `content`. Invalid transitions return 400 (e.g.,
+deprecating a `deleted` skill). `restore` always lands on `active`; admins
+can re-deprecate if needed.
 
 ## Authorization (defense in depth)
 
@@ -62,12 +79,16 @@ item) and the backend (defense in depth).
   badge, `is_visible` library toggle, fork-from-platform-library, refresh, hard
   delete with an agents-using pre-check) without affecting the platform page.
 
-## Out of scope (separate upcoming item)
+## Implemented
 
-- **Soft delete (`is_deleted`) + show-deleted filter + restore** for platform
-  skills. Today the platform page exposes no delete/hide control; the existing
-  backend deprecate endpoint (`DELETE /platform/skills/{id}` → `is_active=false`)
-  remains available via API. See `SPRINT-BOARD.md`.
+- **Soft delete (`status=deleted`) + show-deleted filter + restore** is live.
+  The platform page exposes delete via the trash icon on each row and restore
+  via the rotate-ccw icon next to deleted skills. Admins also see deprecate
+  (archive icon, active → deprecated) and reactivate (rotate-ccw, deprecated
+  → active) controls.
+- **Dedicated transition endpoints** enforce the state machine: invalid
+  transitions (e.g. deprecate a deleted skill, restore an active skill)
+  return 400 with a descriptive message.
 
 ## Testing
 

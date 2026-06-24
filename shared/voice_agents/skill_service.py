@@ -28,6 +28,7 @@ from .skill_models import (
     PlatformSkillFile,
     PlatformSkillFileCreate,
     PlatformSkillFileSummary,
+    PlatformSkillStatus,
     PlatformSkillSummary,
     PlatformSkillUpdate,
     SkillFile,
@@ -597,6 +598,9 @@ class SkillService:
                 today = date.today().strftime("%Y.%m.%d")
                 version = f"{today}_1"
 
+                # status defaults to 'active' in the DB; we do not pass it
+                # explicitly so the seeder keeps working regardless of which
+                # platform-skill status columns exist.
                 response = self.supabase.table("platform_skills").insert({
                     "slug": seed["slug"],
                     "name": seed["name"],
@@ -604,7 +608,6 @@ class SkillService:
                     "content": seed["content"],
                     "version": version,
                     "content_hash": new_hash,
-                    "is_active": True,
                     "author": "Platform",
                 }).execute()
 
@@ -632,28 +635,48 @@ class SkillService:
 
     @tracer.start_as_current_span("skill.list_platform_skills")
     async def list_platform_skills(
-        self, include_inactive: bool = False
+        self,
+        statuses: Optional[List[PlatformSkillStatus]] = None,
     ) -> tuple[List[PlatformSkillSummary], Optional[str]]:
-        """List platform skills.
+        """List platform skills filtered by status.
 
         Args:
-            include_inactive: When True, return ALL platform skills including
-                deprecated (is_active=False) ones. Intended for platform-admin
-                management only. When False (default), only active skills are
-                returned (used for org browsing/forking).
+            statuses: List of statuses to include. Defaults to ``[ACTIVE]``
+                so org admins browsing/forking only see forkable skills.
+                Platform admins may pass e.g.
+                ``[ACTIVE, DEPRECATED]`` or ``[DELETED]`` (trash bin).
+
+                An empty list is rejected — callers must explicitly opt-in
+                to a non-default status set, which catches accidental
+                "show nothing" calls. Unknown statuses are rejected.
 
         Returns:
             Tuple of (list of PlatformSkillSummary, error). Each summary
-            includes ``is_active`` so admins can distinguish hidden skills.
+            includes ``status`` so admins can distinguish active/deprecated/
+            deleted skills in the UI.
         """
+        if statuses is None:
+            statuses = [PlatformSkillStatus.ACTIVE]
+
+        if not statuses:
+            return [], "statuses must be a non-empty list"
+
+        # Validate all values are known enum members
+        invalid = [s for s in statuses if not isinstance(s, PlatformSkillStatus)]
+        if invalid:
+            valid = ", ".join(s.value for s in PlatformSkillStatus)
+            return [], (
+                f"Invalid status value(s): {invalid}. Must be one of: {valid}"
+            )
+
         try:
+            status_values = [s.value for s in statuses]
             query = (
                 self.supabase.table("platform_skills")
-                .select("id, slug, name, description, version, is_active")
+                .select("id, slug, name, description, version, status")
                 .order("name")
+                .in_("status", status_values)
             )
-            if not include_inactive:
-                query = query.eq("is_active", True)
             response = query.execute()
             skills = [PlatformSkillSummary(**row) for row in response.data or []]
             return skills, None
@@ -688,6 +711,9 @@ class SkillService:
             version = f"{today}_1"
 
             content_hash = _compute_content_hash(skill_data.content)
+            # status defaults to 'active' in the DB; we deliberately do not
+            # accept a status on create — DRAFT/publish will get a dedicated
+            # endpoint when we add the draft UI.
             response = self.supabase.table("platform_skills").insert({
                 "slug": skill_data.slug,
                 "name": skill_data.name,
@@ -695,7 +721,6 @@ class SkillService:
                 "content": skill_data.content,
                 "version": version,
                 "content_hash": content_hash,
-                "is_active": skill_data.is_active,
                 "author": skill_data.author,
             }).execute()
 
@@ -722,8 +747,10 @@ class SkillService:
             if skill_data.content is not None:
                 update_dict["content"] = skill_data.content
                 update_dict["content_hash"] = _compute_content_hash(skill_data.content)
-            if skill_data.is_active is not None:
-                update_dict["is_active"] = skill_data.is_active
+            # Status changes are NOT part of update_platform_skill — use the
+            # dedicated transition endpoints (deprecate/reactivate/delete/restore).
+            # This keeps the state machine explicit and prevents accidental
+            # visibility flips during a content edit.
 
             # Auto-bump version on any content change
             if "content" in update_dict:
@@ -755,13 +782,121 @@ class SkillService:
 
     @tracer.start_as_current_span("skill.delete_platform_skill")
     async def delete_platform_skill(self, skill_id: UUID) -> tuple[bool, Optional[str]]:
-        """Deprecate a platform skill (set is_active=false)."""
+        """Soft-delete a platform skill (transition to DELETED).
+
+        Allowed transitions: ACTIVE / DEPRECATED / DRAFT → DELETED.
+        Already-DELETED skills return an error so accidental double-delete
+        is impossible. Existing org forks keep working.
+
+        Returns:
+            Tuple of (success, error). ``success=False`` and ``error`` set
+            when the skill is missing or already deleted.
+        """
         try:
-            self.supabase.table("platform_skills").update({"is_active": False}).eq("id", str(skill_id)).execute()
+            existing, err = await self.get_platform_skill_by_id(skill_id)
+            if err or not existing:
+                return False, err or "Skill not found"
+            if existing.status == PlatformSkillStatus.DELETED:
+                return False, "Skill is already deleted"
+            self.supabase.table("platform_skills").update(
+                {"status": PlatformSkillStatus.DELETED.value}
+            ).eq("id", str(skill_id)).execute()
             return True, None
         except Exception as e:
-            logger.error(f"Error deprecating platform skill: {e}", exc_info=True)
+            logger.error(f"Error soft-deleting platform skill: {e}", exc_info=True)
             return False, str(e)
+
+    @tracer.start_as_current_span("skill.restore_platform_skill")
+    async def restore_platform_skill(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+        """Restore a soft-deleted platform skill (DELETED → ACTIVE).
+
+        Only skills in DELETED state can be restored. Restored skills always
+        land on ACTIVE — admins can re-deprecate via the deprecate endpoint
+        if desired. Restoring an already-active/deprecated/draft skill
+        returns an error to keep the state machine explicit.
+        """
+        try:
+            existing, err = await self.get_platform_skill_by_id(skill_id)
+            if err or not existing:
+                return None, err or "Platform skill not found"
+            if existing.status != PlatformSkillStatus.DELETED:
+                return None, (
+                    f"Cannot restore skill in state '{existing.status.value}': "
+                    "only deleted skills can be restored"
+                )
+            response = (
+                self.supabase.table("platform_skills")
+                .update({"status": PlatformSkillStatus.ACTIVE.value})
+                .eq("id", str(skill_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform skill not found"
+            return PlatformSkill(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error restoring platform skill: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("skill.deprecate_platform_skill")
+    async def deprecate_platform_skill(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+        """Deprecate a platform skill (ACTIVE → DEPRECATED).
+
+        Only ACTIVE skills can be deprecated; DRAFT/DEPRECATED/DELETED
+        states return an error so admins use the explicit right endpoint
+        (publish for draft, restore for deleted). Deprecated skills are
+        hidden from org admins in the default list but remain visible to
+        platform admins and keep all existing org forks working.
+        """
+        try:
+            existing, err = await self.get_platform_skill_by_id(skill_id)
+            if err or not existing:
+                return None, err or "Skill not found"
+            if existing.status != PlatformSkillStatus.ACTIVE:
+                return None, (
+                    f"Cannot deprecate skill in state '{existing.status.value}': "
+                    "only active skills can be deprecated"
+                )
+            response = (
+                self.supabase.table("platform_skills")
+                .update({"status": PlatformSkillStatus.DEPRECATED.value})
+                .eq("id", str(skill_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform skill not found"
+            return PlatformSkill(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error deprecating platform skill: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("skill.reactivate_platform_skill")
+    async def reactivate_platform_skill(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+        """Reactivate a deprecated platform skill (DEPRECATED → ACTIVE).
+
+        Only DEPRECATED skills can be reactivated; ACTIVE/DRAFT/DELETED
+        states return an error so admins use the explicit right endpoint.
+        """
+        try:
+            existing, err = await self.get_platform_skill_by_id(skill_id)
+            if err or not existing:
+                return None, err or "Skill not found"
+            if existing.status != PlatformSkillStatus.DEPRECATED:
+                return None, (
+                    f"Cannot reactivate skill in state '{existing.status.value}': "
+                    "only deprecated skills can be reactivated"
+                )
+            response = (
+                self.supabase.table("platform_skills")
+                .update({"status": PlatformSkillStatus.ACTIVE.value})
+                .eq("id", str(skill_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform skill not found"
+            return PlatformSkill(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error reactivating platform skill: {e}", exc_info=True)
+            return None, str(e)
 
     @tracer.start_as_current_span("skill.list_platform_skill_files")
     async def list_platform_skill_files(self, skill_id: UUID) -> tuple[List[PlatformSkillFileSummary], Optional[str]]:

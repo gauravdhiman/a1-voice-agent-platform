@@ -26,6 +26,7 @@ the active roadmap.
 | Platform Skills Management (Admin UI) | 2026-06-22 | Platform-admin-only UI at `/platform/skills`: list/create/edit/hide-restore/files + import-from-URL. Backend RBAC on all routes; `include_inactive` admin list. |
 | Shared `<SkillEditor>` + org skills tab migration | 2026-06-22 | Extracted shared master-detail editor (`frontend/src/components/skills/skill-editor.tsx`); org skills tab now renders it via `OrganizationSkillsTab`. Org + platform share one UI — no drift. |
 | Worker token-refresh race condition (multi-instance) | 2026-06-23 | Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim_token_refresh`/`release_token_refresh` SQL fns, migration `20260623000001`). `TokenRefreshService` claims before the OAuth call, releases in `finally`. Lease TTL auto-recovers from crashes; fail-closed. **Note:** used a row-lease via RPC rather than `pg_advisory_lock` because advisory locks need session affinity, which Supabase/PostgREST connection pooling breaks. TDD (red→green), 9 new tests. |
+| Platform skills status enum (single source of truth) | 2026-06-24 | Consolidated `is_active` + `is_deleted` booleans into a single `status VARCHAR(20)` enum (draft / active / deprecated / deleted) with a CHECK constraint. Dedicated transition endpoints (`deprecate` / `reactivate` / `delete` / `restore`) enforce the state machine server-side. Frontend adapter passes `statuses` query param. Migration `20260624000001`. TDD red→green, 36+ tests across backend + frontend. |
 
 ### Platform foundations (shipped)
 | Item | Completed | Notes |
@@ -50,7 +51,7 @@ the active roadmap.
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1 | **Platform skills soft-delete + show-deleted/restore** | Next | Add `is_deleted` to `platform_skills`; admin "show deleted" filter + Restore. Finishes the platform-admin CRUD story (create/edit/import ✅; delete/restore ❌). TODO at `frontend/src/app/(dashboard)/platform/skills/page.tsx`. |
+| 1 | **Platform skills status enum (single source of truth)** | Done | Replaced `is_active` + `is_deleted` booleans with a single `status VARCHAR(20)` enum (draft/active/deprecated/deleted). Dedicated transition endpoints (`deprecate`/`reactivate`/`delete`/`restore`) enforce the state machine. Migration `20260624000001`. 36 new + migrated tests, full frontend + backend suites green. |
 | 2 | **Skill library continuation** | Next | Build remaining PRD capabilities: `call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`. |
 
 ---
