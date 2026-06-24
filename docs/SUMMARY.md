@@ -47,6 +47,7 @@ Comprehensive documentation organized by feature.
 6. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
 7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
+9. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
 
 ### Multi-Tenancy & RBAC
 

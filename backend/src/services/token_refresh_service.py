@@ -3,17 +3,23 @@
 This service automatically refreshes OAuth tokens before they expire.
 It runs as a background task using APScheduler.
 
-TODO: Future Enhancement
-------------------------
-When scaling to multiple backend instances, this approach will cause race conditions
-as each instance will attempt to refresh tokens independently. Migrate to Celery + Redis
-for distributed task queue with proper locking.
+Concurrency: per-agent_tool refresh is guarded by a Postgres-backed lease lock
+(:meth:`shared.voice_agents.tool_service.ToolService.claim_refresh_lock` /
+``release_refresh_lock``, backed by the ``claim_token_refresh`` /
+``release_token_refresh`` SQL functions — see Alembic migration 20260623000001).
+Only one backend instance refreshes a given token at a time, even across
+multiple instances; a crashed holder's lease auto-expires (TTL) so refresh is
+not blocked. Fail-closed: if the lock cannot be acquired/verified, the refresh
+is skipped rather than racing.
 
-Current approach works for single-instance deployments.
+Parallelism: tokens are refreshed concurrently using ``asyncio.gather`` with a
+semaphore to limit the number of simultaneous OAuth round-trips. Concurrency
+is configurable via ``TOKEN_REFRESH_MAX_CONCURRENT_REFRESHES`` (default: 5).
 """
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 from uuid import UUID
@@ -145,12 +151,10 @@ class TokenRefreshService:
     async def _refresh_expired_tokens(self) -> None:
         """Find and refresh tokens that are about to expire.
 
-        This queries all agent_tools that require OAuth and have tokens
-        expiring within the next 15 minutes, then refreshes them.
+        Queries all enabled agent_tools that require OAuth and refreshes tokens
+        expiring within the configured window.  Refreshes run concurrently with
+        a configurable concurrency limit (``TOKEN_REFRESH_MAX_CONCURRENT_REFRESHES``).
         """
-        # Get all agent tools with auth
-        # TODO: Create a method in tool_service to get tools requiring auth
-        # For now, we'll implement the query here
         agent_tools = await self._get_tools_requiring_auth()
 
         if not agent_tools:
@@ -159,18 +163,27 @@ class TokenRefreshService:
 
         logger.info(f"Checking {len(agent_tools)} tools for token refresh")
 
+        max_concurrent = settings.token_refresh_max_concurrent_refreshes
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def _limited_refresh(at: AgentTool) -> bool:
+            async with semaphore:
+                return await self._check_and_refresh_token(at)
+
+        results = await asyncio.gather(
+            *(_limited_refresh(at) for at in agent_tools),
+            return_exceptions=True,
+        )
+
         refresh_count = 0
-        for agent_tool in agent_tools:
-            logger.info(f"Processing tool: {agent_tool.tool.name}, enabled: {agent_tool.is_enabled}")
-            try:
-                refreshed = await self._check_and_refresh_token(agent_tool)
-                if refreshed:
-                    refresh_count += 1
-            except Exception as e:
+        for at, result in zip(agent_tools, results):
+            if isinstance(result, Exception):
                 logger.error(
-                    f"Error checking token for tool {agent_tool.tool.name}: {e}",
-                    exc_info=True,
+                    f"Error checking token for tool {at.tool.name}: {result}",
+                    exc_info=result,
                 )
+            elif result is True:
+                refresh_count += 1
 
         if refresh_count > 0:
             logger.info(f"Successfully refreshed {refresh_count} token(s)")
@@ -190,137 +203,201 @@ class TokenRefreshService:
     async def _check_and_refresh_token(self, agent_tool: AgentTool) -> bool:
         """Check if a token needs refresh and refresh it.
 
+        Orchestrates the full lifecycle: expiry check → OAuth config resolution
+        → lease acquisition → HTTP refresh → DB update → lease release.
+
         Args:
             agent_tool: AgentTool instance to check and potentially refresh
 
         Returns:
             True if token was refreshed, False otherwise
-
-        Notes:
-            - Expiry window is configurable via TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES
-            - Default: 15 minutes before token expiry
         """
         try:
-            now = datetime.now(timezone.utc)
-            expiry_window_minutes = settings.token_refresh_expiry_window_minutes
-            expiry_threshold = now + timedelta(minutes=expiry_window_minutes)
-
-            # sensitive_config is already decrypted by tool_service.get_all_agent_tools_with_auth()
-            sensitive_config = agent_tool.sensitive_config
-
-            if not sensitive_config:
-                logger.warning(f"No sensitive_config for tool {agent_tool.tool.name}")
+            needs_refresh, _minutes_until_expiry = self._is_token_expiring(agent_tool)
+            if not needs_refresh:
                 return False
 
-            # Check if token exists and is expiring
-            expires_at = sensitive_config.get("expires_at")
-            if not expires_at:
-                logger.warning(f"No expires_at info found for tool {agent_tool.tool.name}")
+            oauth_data, token_url = self._resolve_oauth_config(agent_tool)
+            if oauth_data is None:
                 return False
 
-            expires_datetime = datetime.fromtimestamp(expires_at, timezone.utc)
+            return await self._perform_token_refresh(agent_tool, oauth_data, token_url)
+        except Exception as e:
+            logger.error(
+                f"Error refreshing token for {agent_tool.tool.name}: {e}",
+                exc_info=True,
+            )
+            return False
 
-            # Check if token has already expired
-            if expires_datetime < now:
-                minutes_expired = (now - expires_datetime).total_seconds() / 60
-                logger.warning(
-                    f"Token for tool {agent_tool.tool.name} EXPIRED "
-                    f"({minutes_expired:.1f} minutes ago)"
-                )
-                return False
+    def _is_token_expiring(self, agent_tool: AgentTool) -> tuple[bool, Optional[float]]:
+        """Check whether the token for *agent_tool* needs refresh.
 
-            # Calculate time until expiry
-            minutes_until_expiry = (expires_datetime - now).total_seconds() / 60
+        Args:
+            agent_tool: The agent tool whose token to inspect.
 
-            # Refresh if expiring within configured window (expires before or at threshold)
-            if expires_datetime > expiry_threshold:
-                # Token is still valid for more than expiry window, so no refresh needed
-                logger.debug(f"Tool {agent_tool.tool.name} token valid for {minutes_until_expiry:.1f} minutes (expires at {expires_datetime.strftime('%H:%M:%S')}), skipping refresh")
-                return False
+        Returns:
+            A tuple of ``(needs_refresh, minutes_until_expiry)``.
+            ``needs_refresh`` is ``True`` when the token is within the expiry
+            window and should be refreshed. ``minutes_until_expiry`` is the
+            number of minutes until the token expires (``None`` when
+            ``needs_refresh`` is ``False`` for reasons other than "still valid
+            for a long time" — e.g. missing config or already expired).
+        """
+        now = datetime.now(timezone.utc)
+        expiry_threshold = now + timedelta(
+            minutes=settings.token_refresh_expiry_window_minutes,
+        )
 
+        sensitive_config = agent_tool.sensitive_config
+        if not sensitive_config:
+            logger.warning(f"No sensitive_config for tool {agent_tool.tool.name}")
+            return False, None
+
+        expires_at = sensitive_config.get("expires_at")
+        if not expires_at:
+            logger.warning(f"No expires_at info found for tool {agent_tool.tool.name}")
+            return False, None
+
+        expires_datetime = datetime.fromtimestamp(expires_at, timezone.utc)
+
+        if expires_datetime < now:
+            minutes_expired = (now - expires_datetime).total_seconds() / 60
+            logger.warning(
+                f"Token for tool {agent_tool.tool.name} EXPIRED "
+                f"({minutes_expired:.1f} minutes ago)"
+            )
+            return False, None
+
+        minutes_until_expiry = (expires_datetime - now).total_seconds() / 60
+
+        if expires_datetime > expiry_threshold:
+            logger.debug(
+                f"Tool {agent_tool.tool.name} token valid for "
+                f"{minutes_until_expiry:.1f} minutes, skipping refresh"
+            )
+            return False, None
+
+        logger.info(
+            f"Token for {agent_tool.tool.name} expires in "
+            f"{minutes_until_expiry:.1f} minutes "
+            f"(at {expires_datetime.strftime('%H:%M:%S')} UTC), refreshing..."
+        )
+        return True, minutes_until_expiry
+
+    def _resolve_oauth_config(
+        self, agent_tool: AgentTool,
+    ) -> tuple[Optional[Dict[str, str]], Optional[str]]:
+        """Resolve OAuth provider, token URL and build the refresh request payload.
+
+        Args:
+            agent_tool: The agent tool whose OAuth config to resolve.
+
+        Returns:
+            A tuple of ``(oauth_data, token_url)``. Both are ``None`` when the
+            config is missing or incomplete (errors are logged inside).
+        """
+        sensitive_config = agent_tool.sensitive_config or {}
+        refresh_token = sensitive_config.get("refresh_token")
+        if not refresh_token:
+            logger.warning(
+                f"No refresh_token available for tool {agent_tool.tool.name}. "
+                "User will need to re-authenticate."
+            )
+            return None, None
+
+        auth_config = agent_tool.tool.auth_config
+        if not auth_config:
+            logger.error(f"No auth_config for tool {agent_tool.tool.name}")
+            return None, None
+
+        oauth_manager = get_oauth_manager()
+        provider, token_url = oauth_manager.extract_oauth_config(auth_config)
+
+        if not token_url:
+            logger.error(f"No token_url in auth_config for tool {agent_tool.tool.name}")
+            return None, None
+
+        try:
+            oauth_manager.get_credentials(provider)
+        except ValueError as e:
+            logger.error(f"Error getting OAuth credentials: {e}")
+            return None, None
+
+        oauth_data = oauth_manager.get_auth_data(
+            provider=provider,
+            flow="refresh",
+            refresh_token=refresh_token,
+        )
+        return oauth_data, token_url
+
+    async def _perform_token_refresh(
+        self,
+        agent_tool: AgentTool,
+        oauth_data: Dict[str, str],
+        token_url: str,
+    ) -> bool:
+        """Acquire the lease, refresh the token, persist it, and release the lease.
+
+        This is the core "do the work" method — everything that follows the
+        expiry check and config resolution.
+
+        Args:
+            agent_tool: The agent tool to refresh.
+            oauth_data: OAuth refresh request payload.
+            token_url: The OAuth provider's token endpoint.
+
+        Returns:
+            True on success, False on any failure.
+        """
+        tool_name = agent_tool.tool.name
+
+        claim_id = await self.tool_service.claim_refresh_lock(
+            agent_tool.id,
+            lease_seconds=settings.token_refresh_lock_lease_seconds,
+        )
+        if not claim_id:
             logger.info(
-                f"Token for {agent_tool.tool.name} expires in {minutes_until_expiry:.1f} minutes "
-                f"(at {expires_datetime.strftime('%H:%M:%S')} UTC), refreshing..."
+                f"Skipping refresh for {tool_name}: another instance holds the lock"
             )
+            return False
 
-            # Check if refresh_token exists
-            refresh_token = sensitive_config.get("refresh_token")
-            if not refresh_token:
-                logger.warning(
-                    f"No refresh_token available for tool {agent_tool.tool.name}. "
-                    "User will need to re-authenticate."
-                )
-                return False
-
-            # Get OAuth config using centralized utility
-            tool = agent_tool.tool
-            auth_config = tool.auth_config
-
-            if not auth_config:
-                logger.error(f"No auth_config for tool {tool.name}")
-                return False
-
-            # Get OAuth provider manager singleton
-            oauth_manager = get_oauth_manager()
-
-            # Extract provider and token_url using singleton manager
-            provider, token_url = oauth_manager.extract_oauth_config(auth_config)
-
-            if not token_url:
-                logger.error(f"No token_url in auth_config for tool {tool.name}")
-                return False
-
-            # Get OAuth credentials using singleton manager
-            try:
-                credentials = oauth_manager.get_credentials(provider)
-            except ValueError as e:
-                logger.error(f"Error getting OAuth credentials: {e}")
-                return False
-
-            # Get OAuth data for refresh using singleton manager
-            oauth_data = oauth_manager.get_auth_data(
-                provider=provider,
-                flow="refresh",
-                refresh_token=refresh_token,
-            )
-
+        try:
             new_tokens = await self._refresh_oauth_token(
                 token_url=token_url,
                 oauth_data=oauth_data,
             )
-
             if not new_tokens:
-                logger.error(f"Failed to refresh token for tool {tool.name}")
+                logger.error(f"Failed to refresh token for tool {tool_name}")
                 return False
 
-            # Update sensitive config with new tokens
+            sensitive_config = agent_tool.sensitive_config
             sensitive_config["access_token"] = new_tokens["access_token"]
             if "expires_in" in new_tokens:
-                expires_in = new_tokens["expires_in"]
                 sensitive_config["expires_at"] = (
-                    datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                    datetime.now(timezone.utc)
+                    + timedelta(seconds=new_tokens["expires_in"])
                 ).timestamp()
             if "refresh_token" in new_tokens:
                 sensitive_config["refresh_token"] = new_tokens["refresh_token"]
-                logger.info(f"Received new refresh_token for tool {tool.name}")
+                logger.info(f"Received new refresh_token for tool {tool_name}")
 
-            # Update agent_tools table with refreshed tokens
-            await self._update_agent_tool(
+            updated = await self._update_agent_tool(
                 agent_tool_id=agent_tool.id,
                 sensitive_config=sensitive_config,
-                tool_name=agent_tool.tool.name,
+                tool_name=tool_name,
             )
 
-            # Database update triggers Supabase Realtime, which auto-updates UI
+            if not updated:
+                logger.critical(
+                    f"Refreshed token for {tool_name} could not be persisted to the "
+                    f"DB (provider likely rotated the refresh_token). The stored "
+                    f"token is now invalid; the user must re-authenticate this tool."
+                )
+                return False
 
             return True
-
-        except Exception as e:
-            logger.error(
-                f"Error refreshing token for tool {agent_tool.tool.name}: {e}",
-                exc_info=True,
-            )
-            return False
+        finally:
+            await self.tool_service.release_refresh_lock(agent_tool.id, claim_id)
 
     async def _refresh_oauth_token(
         self,
@@ -346,7 +423,10 @@ class TokenRefreshService:
             - Works with any provider implementing OAuth 2.0 refresh flow
             - Provider-specific differences handled via centralized OAuth utilities
         """
-        async with httpx.AsyncClient() as client:
+        # Bound the provider round-trip so a hung connection cannot stall the
+        # refresh loop (and outlive the lease TTL). 30s is generous for token
+        # endpoints; tune via settings if a provider needs more.
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
             response = await client.post(token_url, data=oauth_data)
 
             if response.status_code != 200:
@@ -360,13 +440,19 @@ class TokenRefreshService:
 
     async def _update_agent_tool(
         self, agent_tool_id: UUID, sensitive_config: dict[str, str | float], tool_name: str
-    ) -> None:
+    ) -> bool:
         """Update agent tool with new tokens.
 
         Args:
             agent_tool_id: ID of the agent_tool to update (UUID)
             sensitive_config: Decrypted dict with new tokens (will be encrypted by tool_service)
             tool_name: Tool name for logging (passed from caller)
+
+        Returns:
+            True if the DB update succeeded, False otherwise. A False return after a
+            successful OAuth refresh is critical: the provider likely rotated the
+            refresh_token, so the unpersisted new token is lost and the stored one is
+            now invalid (the caller logs CRITICAL and the user must re-authenticate).
         """
         from shared.voice_agents.tool_models import AgentToolUpdate
 
@@ -381,8 +467,9 @@ class TokenRefreshService:
 
         if error:
             logger.error(f"Failed to update {tool_name}: {error}")
-        else:
-            logger.info(f"Successfully refreshed {tool_name} token")
+            return False
+        logger.info(f"Successfully refreshed {tool_name} token")
+        return True
 
 
 # Global instance

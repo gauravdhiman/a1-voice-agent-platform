@@ -6,7 +6,7 @@ import logging
 import time
 from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from opentelemetry import trace
 from supabase import Client
@@ -158,6 +158,91 @@ class ToolService:
     def supabase(self) -> Optional[Client]:
         """Get Supabase client."""
         return self.supabase_config.client
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Token-refresh distributed lock (Postgres-backed lease)
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Prevents multiple backend instances from refreshing the same OAuth token at
+    # once (which races: providers rotate refresh tokens, concurrent refreshes
+    # invalidate each other and the last DB write wins with a stale token). The lock
+    # is a per-agent_tool lease with a TTL, implemented by the `claim_token_refresh`
+    # / `release_token_refresh` Postgres functions (see Alembic migration
+    # 20260623000001). Fail-closed: if the lock cannot be acquired/verified, refresh
+    # is skipped rather than racing.
+    REFRESH_LOCK_LEASE_SECONDS: int = 120
+
+    @tracer.start_as_current_span("tool.claim_refresh_lock")
+    async def claim_refresh_lock(
+        self,
+        agent_tool_id: UUID,
+        lease_seconds: int = REFRESH_LOCK_LEASE_SECONDS,
+    ) -> Optional[str]:
+        """Atomically claim a per-agent_tool refresh lease.
+
+        Args:
+            agent_tool_id: The agent tool whose token we want to refresh.
+            lease_seconds: Lease TTL; a crashed holder's lease auto-expires so
+                refresh is not blocked forever.
+
+        Returns:
+            A claim id (str) if this caller acquired the lease, else ``None``
+            (another instance holds it, or the lock could not be verified —
+            fail-closed). The same claim id must be passed to
+            :meth:`release_refresh_lock`.
+        """
+        claim_id = str(uuid4())
+        try:
+            response = self.supabase.rpc(
+                "claim_token_refresh",
+                {
+                    "p_tool_id": str(agent_tool_id),
+                    "p_claim": claim_id,
+                    "p_lease_seconds": lease_seconds,
+                },
+            ).execute()
+            data = getattr(response, "data", None)
+            if isinstance(data, dict):
+                return claim_id if data.get("claimed") else None
+            # Defensive fallback for scalar returns.
+            return claim_id if data else None
+        except Exception as e:
+            logger.error(
+                f"Error claiming refresh lock for {agent_tool_id}: {e}",
+                exc_info=True,
+            )
+            return None  # fail-closed: do not refresh if the lock is unverifiable
+
+    @tracer.start_as_current_span("tool.release_refresh_lock")
+    async def release_refresh_lock(
+        self,
+        agent_tool_id: UUID,
+        claim_id: str,
+    ) -> bool:
+        """Release a refresh lease, only if it still belongs to this caller.
+
+        Args:
+            agent_tool_id: The agent tool whose lease to release.
+            claim_id: The claim id returned by :meth:`claim_refresh_lock`.
+
+        Returns:
+            True if this caller's lease was released, False otherwise (e.g. it
+            had already expired and been re-acquired by another instance).
+        """
+        try:
+            response = self.supabase.rpc(
+                "release_token_refresh",
+                {"p_tool_id": str(agent_tool_id), "p_claim": claim_id},
+            ).execute()
+            data = getattr(response, "data", None)
+            if isinstance(data, dict):
+                return bool(data.get("released"))
+            return bool(data)
+        except Exception as e:
+            logger.error(
+                f"Error releasing refresh lock for {agent_tool_id}: {e}",
+                exc_info=True,
+            )
+            return False
 
     # Platform Tools
     @tracer.start_as_current_span("tool.upsert_platform_tool")
@@ -506,11 +591,16 @@ class ToolService:
             response = (
                 self.supabase.table("agent_tools")
                 .select("*, tool:platform_tools(*)")
+                .eq("is_enabled", True)
                 .execute()
             )
 
             agent_tools = []
             for item in response.data:
+                # Defense-in-depth: skip disabled tools even if the DB filter changes.
+                if not item.get("is_enabled", True):
+                    continue
+
                 # Extract tool details from joined query
                 tool_data = item.get("tool")
 

@@ -141,6 +141,10 @@ class TestTokenRefreshService:
 
     async def test_check_and_refresh_token_success(self, token_refresh_service, sample_agent_tool):
         """Test successful token refresh."""
+        # Mock the distributed refresh lock (acquired -> refresh proceeds -> released).
+        token_refresh_service.tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
+        token_refresh_service.tool_service.release_refresh_lock = AsyncMock(return_value=True)
+
         # Mock the OAuth manager
         with patch('src.services.token_refresh_service.get_oauth_manager') as mock_get_manager:
             mock_manager = MagicMock()
@@ -165,6 +169,9 @@ class TestTokenRefreshService:
                     mock_refresh.assert_called_once()
                     # Verify update was called
                     mock_update.assert_called_once()
+                    # Lock acquired before refresh and released after.
+                    token_refresh_service.tool_service.claim_refresh_lock.assert_awaited_once()
+                    token_refresh_service.tool_service.release_refresh_lock.assert_awaited_once()
 
     async def test_refresh_oauth_token_success(self, token_refresh_service):
         """Test successful OAuth token refresh."""

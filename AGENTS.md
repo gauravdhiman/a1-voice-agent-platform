@@ -483,6 +483,40 @@ export const authService = new AuthService()
 
 ## Testing Guidelines
 
+### Test-Driven Development (red-green) — REQUIRED
+
+All code changes must follow the **red-green TDD** cycle:
+
+1. **Red — write the test first.** Add/extend a test that asserts the *new or
+   changed* behavior **before** writing the implementation. Run it and confirm
+   it **fails** (for the right reason — assertion failure, missing method, etc.),
+   not for an unrelated infra reason. This proves the test actually exercises the
+   behavior.
+2. **Green — implement the minimum to pass.** Write the implementation so the
+   test passes. Re-run the test (and the surrounding suite) until green.
+3. **Refactor — keep tests green.** Clean up while tests stay passing.
+
+Rules:
+- **No production code change without a corresponding test change.** If you
+  changed behavior, there must be a test that would have failed without the
+  change. (See also *Validation Requirements* below.)
+- When fixing a bug, write a failing test that reproduces the bug first, then fix.
+- When modifying existing behavior, **update the existing tests** that the change
+  affects (don't delete them to make the suite pass).
+- Run the relevant suite after each step (red, green, refactor) — not only at the
+  end.
+- Prefer focused unit tests (mock external/DB/HTTP) so behavior is deterministic
+  and fast; add integration tests where the boundary itself is the risk.
+
+### Coverage expectations
+
+Aim for **100% coverage of changed/added code paths**, including failure/edge
+branches (auth denial, errors, empty input, concurrency guards). It is acceptable
+for project-wide coverage to be below 100%, but **new/changed code should not
+ship with uncovered branches**. Run coverage locally (`pytest --cov`) and review
+the diff's uncovered lines before considering a task done.
+
+
 ### Python Tests
 
 ```python
