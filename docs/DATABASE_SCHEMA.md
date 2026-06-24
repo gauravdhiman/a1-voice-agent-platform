@@ -290,6 +290,31 @@ Junction table mapping voice agents to platform tools with configuration.
 
 ---
 
+### token_refresh_leases
+
+Per-agent_tool refresh lease used by `TokenRefreshService` to guarantee only one
+backend instance refreshes a given OAuth token at a time (multi-instance safety).
+One row exists per tool **only while a refresh is in flight**; it is deleted on
+release. A crashed holder's lease auto-expires via the `claim_token_refresh` TTL,
+so refresh is not blocked forever.
+
+| Column         | Type        | Constraints                              | Description                                  |
+| -------------- | ----------- | ---------------------------------------- | -------------------------------------------- |
+| agent_tool_id  | UUID         | PRIMARY KEY, FK → agent_tools.id (CASCADE) | The agent tool whose token is being refreshed |
+| locked_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                  | When the lease was acquired (used for TTL)   |
+| claim          | TEXT        | NOT NULL                                 | Unique claim id from the acquiring instance  |
+
+**RLS**: Enabled (no policies — only the backend service role, which bypasses RLS, accesses it).
+
+**SQL functions** (created by the same migration):
+
+- `claim_token_refresh(p_tool_id uuid, p_claim text, p_lease_seconds int DEFAULT 120) → jsonb`
+  — atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE locked_at < now()-lease`. Returns `{"claimed": bool, "claim": text}`.
+- `release_token_refresh(p_tool_id uuid, p_claim text) → jsonb`
+  — deletes the lease row only if `claim` matches this caller. Returns `{"released": bool}`.
+
+---
+
 ## Embed Button Tables
 
 ### agent_embed_configs
@@ -750,6 +775,12 @@ erDiagram
         timestamptz updated_at
     }
 
+    token_refresh_leases {
+        uuid agent_tool_id
+        timestamptz locked_at
+        text claim
+    }
+
     agent_embed_configs {
         uuid id
         uuid agent_id
@@ -1046,6 +1077,7 @@ erDiagram
 18. `20260331000001` - Add instructions_markdown column to voice_agents (Phase 1: markdown-based agent instructions)
 19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure)
 20. `20260503000001` - Add platform_skills, platform_skill_files, skill_update_logs tables. Add fork model columns (source_skill_id, source_version, is_visible) to organization_skills. Remove source_url/source_ref. Convert built_in category to custom (Phase 2c: platform skills fork/refresh model)
+21. `20260623000001` - Add `token_refresh_leases` table + `claim_token_refresh`/`release_token_refresh` SQL functions (Postgres-backed per-tool lease lock to prevent the multi-instance OAuth token-refresh race)
 
 ---
 

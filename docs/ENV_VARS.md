@@ -41,6 +41,10 @@ All environment variables required for production deployment across all 4 servic
 | `CORS_ORIGINS` | JSON array of allowed frontend origins | Set to `["https://cog-frontend.onrender.com"]` (update for custom domain) | No |
 | `ENVIRONMENT` | Runtime environment | Set to `production` | No |
 | `DEBUG` | Debug mode flag | Set to `false` | No |
+| `TOKEN_REFRESH_CHECK_INTERVAL_MINUTES` | How often (minutes) to scan for tokens nearing expiry | Default `5` (1–60) | No |
+| `TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES` | Refresh tokens expiring within this window (minutes) | Default `15` (1–60) | No |
+| `TOKEN_REFRESH_LOCK_LEASE_SECONDS` | TTL (seconds) of the per-tool refresh lease lock; must exceed the slowest OAuth refresh round-trip | Default `120` (10–600) | No |
+| `TOKEN_REFRESH_MAX_CONCURRENT_REFRESHES` | Max OAuth refresh round-trips to run in parallel per cycle | Default `5` (1–20) | No |
 
 ---
 

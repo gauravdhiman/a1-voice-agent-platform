@@ -28,14 +28,14 @@ Build an **AI voice agent platform** (voice-only) that combines:
 | F1 | Built-in skill library (8 skills) | M | High | 2026-06-22 |
 | F1 | Platform Skills Management (Admin UI) | M | High | 2026-06-22 |
 | F1 | Shared `<SkillEditor>` + org skills tab migration | M | High | 2026-06-22 |
+| — | Worker token-refresh race condition (multi-instance lease lock) | M | High | 2026-06-23 |
 | F2 | Phone Number Management (Twilio + LiveKit) | L | High | 2026-03-15 |
 
 ### 🟡 In Progress / Next (priority order)
 | # | Feature | Effort | Impact | Status |
 |---|---------|--------|--------|--------|
-| 1 | Worker single-instance scaling (`TokenRefreshService` race condition) | M | High | Decision pending — recommend Postgres advisory lock vs Celery+Redis |
-| 2 | Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore | M | High | Next — finishes platform admin CRUD |
-| 3 | Skill library continuation (`call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`) | M | High | Next |
+| 1 | Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore | M | High | Next — finishes platform admin CRUD |
+| 2 | Skill library continuation (`call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`) | M | High | Next |
 
 ### ⚪ Deprioritized (Voice-Only Direction)
 | ID | Feature | Effort | Impact | Status |
@@ -201,7 +201,7 @@ appointment-booking/
 - ✅ Built-in skill library expanded to 8 skills (added `insurance-verification`, `dispatch-coordination`).
 - ✅ Platform Skills Management (admin UI) — `/platform/skills` with create/edit/hide-restore/files + import-from-URL.
 - ✅ Shared `<SkillEditor>` extracted; org skills tab migrated to it (org + platform share one UI).
-- 🎯 Worker single-instance scaling: resolve `TokenRefreshService` race-condition TODO (recommend Postgres advisory lock vs Celery+Redis).
+- ✅ Worker single-instance scaling: Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim/release_token_refresh` SQL fns). Used a row-lease via RPC instead of `pg_advisory_lock` (advisory locks need session affinity, broken by PostgREST pooling). Run `alembic upgrade head` to apply migration `20260623000001`.
 - 🎯 Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
 
 ### Deprioritized
@@ -244,7 +244,7 @@ docs/
 ---
 
 ## Next Steps
-1. Pick the worker-scaling approach (recommend Postgres advisory lock) and implement + test.
+1. Run `alembic upgrade head` to apply the token-refresh lock migration (`20260623000001`) to your DB.
 2. Implement platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
 3. Continue the built-in skill library (`new-patient-intake`, `call-handling`, …).
 4. (Optional) prune merged/stale git branches.

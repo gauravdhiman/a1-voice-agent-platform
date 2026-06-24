@@ -155,6 +155,21 @@ class Settings(BaseSettings):
         le=60,
         description="Window in minutes before expiry to refresh tokens (default: 15)",
     )
+    token_refresh_lock_lease_seconds: int = Field(
+        default=120,
+        ge=10,
+        le=600,
+        description="TTL (seconds) of the per-tool refresh lease lock. Must exceed "
+        "the slowest expected OAuth refresh round-trip so the lease does not expire "
+        "mid-refresh (default: 120).",
+    )
+    token_refresh_max_concurrent_refreshes: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Max number of OAuth refresh round-trips to run in parallel per "
+        "cycle. Higher values refresh faster but load providers more (default: 5).",
+    )
 
     # Twilio Settings
     twilio_account_sid: Optional[str] = Field(
