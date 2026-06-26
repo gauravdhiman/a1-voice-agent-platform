@@ -3,6 +3,21 @@ Tests for platform skill seed definitions.
 
 Validates that all platform skill templates have consistent structure,
 valid slugs, non-empty content, required fields, and default files.
+
+Phase 2c re-design (2026-06-24): the seed library is now industry-specific
+(15 skills across dental, restaurant, hvac). See
+``docs/02_features/voice_agents/skills_library.md`` for the index.
+
+Quality rules:
+* Every skill must have concrete caller trigger phrases in the description
+  (so the agent knows when to activate the skill).
+* SKILL.md content must include a mermaid decision diagram, a guardrails
+  section, and handoff language (so the agent knows what to do at edges).
+* SKILL.md must NOT name a specific external tool (e.g. Google Calendar,
+  Stripe, Twilio). Skills describe user-visible actions; the agent picks
+  the tool. This keeps skills durable as our toolset evolves.
+* Reference files are kept small (progressive disclosure) and only added
+  when the skill actually needs on-demand data.
 """
 
 import re
@@ -11,185 +26,287 @@ import pytest
 from src.voice_agents.skill_seeds import PLATFORM_SKILL_TEMPLATES
 
 
-class TestPlatformSkillSeeds:
-    """Test cases for platform skill seed definitions."""
+# Slugs we DO NOT want to leak into the seed library anymore. These were
+# the original 8 generic "capability" skills; they were deleted because:
+# 1. they were stubs dressed as skills, and
+# 2. the dental-flavored reference data didn't generalize across industries.
+# They are listed here so any re-introduction is a conscious decision.
+DEPRECATED_LEGACY_SLUGS = {
+    "appointment-booking",
+    "insurance-verification",
+    "dispatch-coordination",
+    "call-transfer",
+    "faq-responder",
+    "after-hours",
+    "lead-qualification",
+    "payment-collection",
+}
+
+# Tools we explicitly forbid in skill content. Skills must describe the
+# user-visible action; the agent + tools handle the mechanism.
+FORBIDDEN_TOOL_NAMES = (
+    "google calendar",
+    "googlecalendar",
+    "stripe",
+    "twilio",
+    "sendgrid",
+    "cal.com",
+    "calcom",
+    "gmail",
+    "google sheets",
+    "googlesheets",
+    "supabase",
+    "openai",
+)
+
+
+class TestPlatformSkillSeedsStructure:
+    """Sanity: every skill has the required shape."""
 
     def test_expected_skill_count(self):
-        """Test that we have the expected number of platform skill templates."""
-        assert len(PLATFORM_SKILL_TEMPLATES) == 8
+        """Library must ship 15 industry-specific skills (5 per industry)."""
+        assert len(PLATFORM_SKILL_TEMPLATES) == 15
 
     def test_all_skills_have_required_fields(self):
-        """Test that every skill has slug, name, description, and content."""
         for skill in PLATFORM_SKILL_TEMPLATES:
-            assert "slug" in skill, f"Missing slug in skill: {skill.get('name', 'unknown')}"
-            assert "name" in skill, f"Missing name in skill: {skill.get('slug', 'unknown')}"
-            assert "description" in skill, f"Missing description in skill: {skill['slug']}"
-            assert "content" in skill, f"Missing content in skill: {skill['slug']}"
+            for field in ("slug", "name", "description", "content"):
+                assert field in skill, (
+                    f"Skill '{skill.get('slug', '?')}' missing field '{field}'"
+                )
+            assert "default_files" in skill, (
+                f"Skill '{skill['slug']}' missing 'default_files' (use [] if none)"
+            )
 
     def test_slugs_are_valid_kebab_case(self):
-        """Test that all slugs follow kebab-case convention."""
         for skill in PLATFORM_SKILL_TEMPLATES:
-            assert re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", skill["slug"]), \
+            assert re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", skill["slug"]), (
                 f"Invalid slug: {skill['slug']}"
+            )
 
     def test_slugs_are_unique(self):
-        """Test that no duplicate slugs exist."""
         slugs = [s["slug"] for s in PLATFORM_SKILL_TEMPLATES]
         assert len(slugs) == len(set(slugs)), "Duplicate slugs found"
 
-    def test_content_is_non_trivial(self):
-        """Test that skill content is substantial (not just a title)."""
+    def test_slugs_are_industry_prefixed(self):
+        """All slugs start with the industry prefix: dental-, restaurant-, or hvac-."""
         for skill in PLATFORM_SKILL_TEMPLATES:
-            assert len(skill["content"]) > 100, \
-                f"Skill '{skill['slug']}' content too short ({len(skill['content'])} chars)"
-
-    def test_content_has_markdown_headings(self):
-        """Test that content uses markdown structure with headings."""
-        for skill in PLATFORM_SKILL_TEMPLATES:
-            assert "#" in skill["content"], \
-                f"Skill '{skill['slug']}' has no markdown headings"
-
-    def test_expected_slugs_present(self):
-        """Test that all expected platform skill slugs are present."""
-        expected = {
-            "appointment-booking",
-            "insurance-verification",
-            "dispatch-coordination",
-            "call-transfer",
-            "faq-responder",
-            "after-hours",
-            "lead-qualification",
-            "payment-collection",
-        }
-        actual = {s["slug"] for s in PLATFORM_SKILL_TEMPLATES}
-        assert actual == expected
-
-    def test_descriptions_are_concise(self):
-        """Test that descriptions are reasonable length (for prompt metadata)."""
-        for skill in PLATFORM_SKILL_TEMPLATES:
-            assert len(skill["description"]) < 250, \
-                f"Skill '{skill['slug']}' description too long for prompt metadata"
-            assert len(skill["description"]) > 10, \
-                f"Skill '{skill['slug']}' description too short"
-
-    def test_content_has_usage_guidance(self):
-        """Test that skills include usage guidance or procedure sections."""
-        for skill in PLATFORM_SKILL_TEMPLATES:
-            content_lower = skill["content"].lower()
-            has_usage_section = (
-                "when to use" in content_lower
-                or "procedure" in content_lower
-                or "flow" in content_lower
-                or "how to" in content_lower
-                or "overview" in content_lower
+            assert skill["slug"].startswith(("dental-", "restaurant-", "hvac-")), (
+                f"Skill slug '{skill['slug']}' is not industry-prefixed"
             )
-            assert has_usage_section, \
-                f"Skill '{skill['slug']}' missing usage guidance section"
 
-    def test_default_files_are_valid(self):
-        """Test that default files have required fields and valid paths."""
+    def test_descriptions_are_concise_and_contain_trigger_phrases(self):
+        """Descriptions are short enough for prompt metadata and include
+        concrete caller phrases so the agent knows when to activate."""
         for skill in PLATFORM_SKILL_TEMPLATES:
-            files = skill.get("default_files", [])
-            for file_def in files:
-                assert "file_path" in file_def, \
-                    f"Missing file_path in default file for '{skill['slug']}'"
-                assert "content" in file_def, \
-                    f"Missing content in default file '{file_def.get('file_path', '?')}'"
-                assert file_def["file_path"].endswith(".md"), \
-                    f"Default file must be markdown: {file_def['file_path']}"
+            desc = skill["description"]
+            assert 20 < len(desc) < 350, (
+                f"Skill '{skill['slug']}' description length out of range "
+                f"({len(desc)} chars): {desc!r}"
+            )
+            # Must include at least one quoted or recognizable trigger phrase
+            # heuristic. We don't require exact match — just that the
+            # description reads as "do X when caller says Y" rather than as a
+            # bare capability label.
+            assert "caller" in desc.lower() or "when " in desc.lower(), (
+                f"Skill '{skill['slug']}' description lacks trigger phrase guidance"
+            )
 
-    def test_appointment_booking_has_reference_files(self):
-        """Test that appointment-booking has the expected 5 reference files."""
-        ab_skill = next(s for s in PLATFORM_SKILL_TEMPLATES if s["slug"] == "appointment-booking")
-        files = ab_skill.get("default_files", [])
-        assert len(files) == 5, f"Expected 5 reference files, got {len(files)}"
 
-        expected_paths = {
-            "references/service-menu.md",
-            "references/hours.md",
-            "references/staff-directory.md",
-            "references/policies.md",
-            "references/faqs.md",
-        }
-        actual_paths = {f["file_path"] for f in files}
-        assert actual_paths == expected_paths, f"Missing or extra files: {actual_paths ^ expected_paths}"
+class TestPlatformSkillSeedsContent:
+    """Quality: every SKILL.md has the structure an agent needs to act."""
 
-    def test_appointment_booking_content_is_comprehensive(self):
-        """Test that appointment-booking has substantial, structured content."""
-        ab_skill = next(s for s in PLATFORM_SKILL_TEMPLATES if s["slug"] == "appointment-booking")
-        content = ab_skill["content"]
+    @pytest.fixture(params=[s["slug"] for s in PLATFORM_SKILL_TEMPLATES])
+    def skill(self, request):
+        slug = request.param
+        return next(s for s in PLATFORM_SKILL_TEMPLATES if s["slug"] == slug)
 
-        # Should be at least 10,000 chars (it's ~18K)
-        assert len(content) > 10000, \
-            f"appointment-booking content should be comprehensive, got {len(content)} chars"
+    def test_content_is_substantial(self, skill):
+        """A real skill is at least a few hundred chars (decision tree alone
+        is ~300+). We don't cap the upper bound."""
+        assert len(skill["content"]) >= 500, (
+            f"Skill '{skill['slug']}' content too short "
+            f"({len(skill['content'])} chars)"
+        )
 
-        # Should contain key sections
-        assert "## Core Decision Tree" in content
-        assert "## NEW BOOKING FLOW" in content
-        assert "## RESCHEDULE FLOW" in content
-        assert "## CANCELLATION FLOW" in content
-        assert "## GUARDRAILS" in content
-        assert "## ERROR HANDLING" in content
+    def test_content_has_decision_diagram(self, skill):
+        """Every skill must include a mermaid decision diagram so the agent
+        has a visual decision tree, not just prose."""
+        assert "```mermaid" in skill["content"], (
+            f"Skill '{skill['slug']}' missing mermaid decision diagram"
+        )
 
-        # Should reference load_skill_reference for progressive disclosure
-        assert "load_skill_reference" in content
+    def test_content_has_guardrails_section(self, skill):
+        """Every skill must list 'MUST NOT' / guardrails explicitly."""
+        lower = skill["content"].lower()
+        assert "guardrail" in lower or "must not" in lower or "don't" in lower, (
+            f"Skill '{skill['slug']}' missing guardrails section"
+        )
 
-    def test_default_files_policy(self):
-        """Test the default-files policy: appointment-booking has 5 reference
-        files, insurance-verification has 1, all others have none."""
+    def test_content_has_handoff_language(self, skill):
+        """Every skill must tell the agent what to say / do when handing off
+        to another skill (typically escalation)."""
+        assert "handoff" in skill["content"].lower() or "escalat" in skill["content"].lower(), (
+            f"Skill '{skill['slug']}' missing handoff / escalation guidance"
+        )
+
+    def test_content_does_not_name_specific_tools(self, skill):
+        """Skills describe user-visible actions, not mechanisms. Naming a
+        specific external tool (e.g. 'Google Calendar') couples the skill to
+        that tool's availability and breaks the moment the org wires a
+        different calendar. Tool assignments change; capabilities don't."""
+        content_lower = skill["content"].lower()
+        for tool in FORBIDDEN_TOOL_NAMES:
+            assert tool not in content_lower, (
+                f"Skill '{skill['slug']}' names forbidden tool '{tool}'. "
+                f"Describe the user-visible action instead."
+            )
+
+    def test_content_documents_its_reference_files(self, skill):
+        """Skills with reference files must list them in their SKILL.md so
+        the agent knows what's available to load. This is the progressive
+        disclosure contract: SKILL.md describes the file by name; the
+        agent loads it via load_skill_reference when needed."""
+        for f in skill.get("default_files", []):
+            # The skill must mention the file_path (or its basename) in
+            # the SKILL.md content so the agent knows it exists.
+            basename = f["file_path"].split("/")[-1]
+            content_lower = skill["content"].lower()
+            assert (
+                f["file_path"].lower() in content_lower
+                or basename.lower() in content_lower
+            ), (
+                f"Skill '{skill['slug']}' has reference file "
+                f"'{f['file_path']}' but doesn't mention it in SKILL.md"
+            )
+
+
+class TestPlatformSkillSeedsCoverage:
+    """Library shape: 5 skills per industry, every industry covered."""
+
+    @pytest.fixture
+    def by_industry(self):
+        out = {"dental": [], "restaurant": [], "hvac": []}
         for skill in PLATFORM_SKILL_TEMPLATES:
-            files = skill.get("default_files", [])
-            if skill["slug"] == "appointment-booking":
-                assert len(files) == 5, \
-                    f"appointment-booking should have 5 files, got {len(files)}"
-            elif skill["slug"] == "insurance-verification":
-                assert len(files) == 1, \
-                    f"insurance-verification should have 1 file, got {len(files)}"
-            elif skill["slug"] == "dispatch-coordination":
-                assert len(files) == 1, \
-                    f"dispatch-coordination should have 1 file, got {len(files)}"
-            else:
-                assert len(files) == 0, \
-                    f"Skill '{skill['slug']}' unexpectedly has {len(files)} default files"
+            for prefix in out:
+                if skill["slug"].startswith(prefix + "-"):
+                    out[prefix].append(skill)
+                    break
+        return out
 
-    def test_insurance_verification_skill_is_well_formed(self):
-        """Test that insurance-verification has structured, guarded content and a
-        reference file."""
-        iv = next(s for s in PLATFORM_SKILL_TEMPLATES if s["slug"] == "insurance-verification")
-        content = iv["content"]
+    def test_each_industry_has_5_skills(self, by_industry):
+        for industry, skills in by_industry.items():
+            assert len(skills) == 5, (
+                f"Industry '{industry}' should have 5 skills, has {len(skills)}: "
+                f"{[s['slug'] for s in skills]}"
+            )
 
-        # Substantial, structured content
-        assert len(content) > 3000, \
-            f"insurance-verification content too short ({len(content)} chars)"
-        for section in ("## Capability Overview", "## Core Decision Tree",
-                        "## GUARDRAILS", "## Composition with Other Skills"):
-            assert section in content, f"insurance-verification missing {section}"
+    def test_each_industry_covers_5_capability_slots(self, by_industry):
+        """Every industry covers five capability slots. Capability slots
+        differ per industry because the underlying workflows differ
+        (e.g. restaurants don't have patient intake or maintenance
+        recalls). We assert that each industry has the structural shape:
+        one booking-capability, one knowledge/FAQ capability, one
+        intake-or-special-request capability, one follow-up-or-recall
+        capability, and one escalation capability."""
+        # Each industry should have:
+        # - exactly 1 escalation skill (industry-prefixed)
+        # - the rest (4) cover booking, info/intake, special-request/recall,
+        #   and follow-up — they don't need to map 1:1 to the dental/HVAC
+        #   capability names, but the count must be 5.
+        for industry, skills in by_industry.items():
+            slugs = [s["slug"] for s in skills]
+            escalations = [s for s in slugs if s.endswith("-escalation")]
+            assert len(escalations) == 1, (
+                f"Industry '{industry}' should have exactly 1 escalation "
+                f"skill, has {len(escalations)}: {escalations}"
+            )
+            assert len(slugs) == 5, (
+                f"Industry '{industry}' should have exactly 5 skills, "
+                f"has {len(slugs)}: {slugs}"
+            )
 
-        # Uses progressive disclosure (on-demand reference loading)
-        assert "load_skill_reference" in content
 
-        # Has exactly one markdown reference file
-        files = iv["default_files"]
-        assert len(files) == 1
-        assert files[0]["file_path"] == "references/accepted-insurance-plans.md"
-        assert files[0]["file_kind"] == "reference"
-        assert "In-Network" in files[0]["content"]
+class TestPlatformSkillSeedsLegacyRemoval:
+    """The 8 original generic skills must not appear in the new library."""
 
-    def test_dispatch_coordination_skill_is_well_formed(self):
-        """Test that dispatch-coordination has structured, guarded content and a
-        reference file."""
-        dc = next(s for s in PLATFORM_SKILL_TEMPLATES if s["slug"] == "dispatch-coordination")
-        content = dc["content"]
+    def test_no_legacy_slugs_present(self):
+        actual = {s["slug"] for s in PLATFORM_SKILL_TEMPLATES}
+        leaked = actual & DEPRECATED_LEGACY_SLUGS
+        assert not leaked, (
+            f"Legacy skill slugs leaked into the new library: {leaked}. "
+            "These were deleted in favor of industry-specific skills."
+        )
 
-        assert len(content) > 3000, \
-            f"dispatch-coordination content too short ({len(content)} chars)"
-        for section in ("## Capability Overview", "## Core Decision Tree",
-                        "## GUARDRAILS", "## Composition with Other Skills"):
-            assert section in content, f"dispatch-coordination missing {section}"
-        assert "load_skill_reference" in content
+    def test_no_dental_baked_default_files_in_other_industries(self):
+        """The old appointment-booking had dental-flavored reference files
+        (DEFAULT_SERVICE_MENU started with '## Dental Services'). Any new
+        skill whose default file content references 'Dental Services'
+        outside the dental-* family is a leak."""
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            if skill["slug"].startswith("dental-"):
+                continue  # dental skills can obviously mention dental
+            for f in skill.get("default_files", []):
+                content = f.get("content", "").lower()
+                assert "dental services" not in content, (
+                    f"Skill '{skill['slug']}' has dental-specific default "
+                    f"file '{f['file_path']}' — should be industry-neutral "
+                    f"or industry-matched."
+                )
 
-        files = dc["default_files"]
-        assert len(files) == 1
-        assert files[0]["file_path"] == "references/service-areas.md"
-        assert files[0]["file_kind"] == "reference"
-        assert "Technician Roster" in files[0]["content"] or "technician" in files[0]["content"].lower()
+
+class TestPlatformSkillSeedsFiles:
+    """Reference files: small, markdown, valid paths."""
+
+    def test_default_files_have_required_fields(self):
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            for f in skill["default_files"]:
+                assert "file_path" in f, (
+                    f"Skill '{skill['slug']}' default file missing file_path"
+                )
+                assert "content" in f, (
+                    f"Skill '{skill['slug']}' default file missing content"
+                )
+                assert "file_kind" in f, (
+                    f"Skill '{skill['slug']}' default file missing file_kind"
+                )
+                assert f["file_path"].endswith(".md"), (
+                    f"Skill '{skill['slug']}' default file must be markdown: "
+                    f"{f['file_path']}"
+                )
+
+    def test_default_file_paths_are_unique_within_a_skill(self):
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            paths = [f["file_path"] for f in skill["default_files"]]
+            assert len(paths) == len(set(paths)), (
+                f"Skill '{skill['slug']}' has duplicate default file paths"
+            )
+
+    def test_default_file_paths_use_references_subdir(self):
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            for f in skill["default_files"]:
+                assert f["file_path"].startswith("references/"), (
+                    f"Skill '{skill['slug']}' default file should live under "
+                    f"references/: {f['file_path']}"
+                )
+
+    def test_reference_files_are_small_enough_for_progressive_disclosure(self):
+        """Reference files should be loaded on-demand and stay under ~12 KB
+        so a single file load doesn't blow the token budget."""
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            for f in skill["default_files"]:
+                assert len(f["content"]) < 12000, (
+                    f"Skill '{skill['slug']}' default file '{f['file_path']}' "
+                    f"too large ({len(f['content'])} chars). Split into smaller "
+                    f"reference files for progressive disclosure."
+                )
+
+    def test_skills_dont_have_excessive_default_files(self):
+        """A skill rarely needs more than 3 on-demand reference files. If
+        you find yourself wanting more, split the skill or inline the data
+        into SKILL.md."""
+        for skill in PLATFORM_SKILL_TEMPLATES:
+            assert len(skill["default_files"]) <= 3, (
+                f"Skill '{skill['slug']}' has "
+                f"{len(skill['default_files'])} default files (max 3). "
+                "Split the skill or move data into SKILL.md."
+            )

@@ -746,12 +746,18 @@ After implementing any fix or new feature, you MUST:
    - `docs/DATABASE_SCHEMA.md` — Update when tables/columns change
    - `docs/` relevant section — Update when API endpoints, features, or architecture change
    - `AGENTS.md` — Update when new conventions or rules are established
-6. **Verify syntax/build** after every code change:
+6. **Clean up after browser / smoke validation.** Any artifacts created only to validate the change (temporary skills, rows, files, screenshots, permission grants, role changes) MUST be removed before the task is marked done. Browser smoke tests are not exempt from the unit/E2E rule that tests clean up after themselves. Concretely:
+   - Delete any platform/org skills, agents, files, or other rows that the smoke run created (use the API where one exists; SQL only as a last resort, and prefer soft-delete when the model supports it so audit history is preserved).
+   - Revert any role/permission grants made solely to reach the smoke target (e.g. granting `platform_admin` to the local test user).
+   - Delete screenshots, video recordings, downloaded fixtures, and any throwaway scripts that were written only for this validation.
+   - Keep cleanup scripts in `/tmp/` or under `.tmp/` and remove them too. Persistent smoke artifacts in the repo (committed PNGs, leftover fixture data) are considered a regression and must be flagged in code review.
+   - The only exception is durable tests (unit, integration, E2E) where leaving fixtures is the point of the test. Smoke tests are not durable.
+7. **Verify syntax/build** after every code change:
    - **Python**: Run `python -m py_compile <file>` on every changed `.py` file to confirm it compiles without syntax errors.
    - **Frontend**: Run `docker exec <container> npx tsc --noEmit` to confirm TypeScript compiles with no errors in source files (ignore pre-existing `.next/types` and test file errors).
      - **IMPORTANT**: Never run `next build` or `npm run build` inside the frontend **dev** container. The build output overwrites the `.next` directory used by the dev server, causing `ENOENT` errors and `Internal Server Error`. Instead, use `tsc --noEmit` for type checking only.
      - **Frontend unit tests (vitest) cannot run inside the frontend dev container**: the dev image ships Node 18, but `vitest@4` requires Node 20+. Running `npx vitest` in the container fails with `ERR_REQUIRE_ESM` from `vite`. Run frontend tests on the **host** instead (`cd frontend && npx vitest run <file>`), where Node 22 is available and `frontend/node_modules` is installed.
-7. A task is only considered **done** when: tests are added/updated, tests pass, coverage is adequate, docs are current, syntax/build checks pass, and agent browser testing confirms correct behavior.
+8. A task is only considered **done** when: tests are added/updated, tests pass, coverage is adequate, docs are current, syntax/build checks pass, agent browser testing confirms correct behavior, and the smoke-test cleanup in step 6 has run.
 
 ### Development
 

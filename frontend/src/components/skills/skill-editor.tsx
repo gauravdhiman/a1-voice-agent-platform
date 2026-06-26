@@ -53,8 +53,8 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/markdown";
+// and adds Mermaid rendering. See @/components/markdown.
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -348,6 +348,10 @@ export function SkillEditor({
   // refresh (org only)
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [refreshInfo, setRefreshInfo] = useState<CheckUpdateInfo | null>(null);
+  // When the platform source skill is gone (removed via seeder), we hide
+  // the refresh button and show an info note instead. The fork itself is
+  // unaffected — only the "refresh from platform" action is unavailable.
+  const [sourceUnavailable, setSourceUnavailable] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -431,6 +435,7 @@ export function SkillEditor({
     (skill: EditableSkill) => {
       setSelectedSkill(skill);
       setSelectedFile(null);
+      setSourceUnavailable(false);  // reset refresh-source-missing state on switch
       setEditingSkill(false);
       setEditingFile(false);
       setExpanded((prev) => {
@@ -1125,13 +1130,13 @@ export function SkillEditor({
                 ) : selectedFile.filePath.match(/\.(py|js|ts|sh|bash|yaml|yml|toml)$/) ? (
                   <div className="flex-1 overflow-y-auto p-5"><pre className="text-xs font-mono bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">{selectedFile.content}</pre></div>
                 ) : (
-                  <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedFile.content}</ReactMarkdown></div>
+                  <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none"><MarkdownRenderer content={selectedFile.content} /></div>
                 )}
               </>
             ) : loadingFileContent ? (
               <div className="flex-1 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedSkill.content}</ReactMarkdown></div>
+              <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none"><MarkdownRenderer content={selectedSkill.content} /></div>
             )}
           </>
         ) : (

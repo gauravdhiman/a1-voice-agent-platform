@@ -63,8 +63,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/markdown";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -786,7 +785,7 @@ and confirm someone will call back the next business day.`}
                       </div>
                     ) : systemPromptPreview ? (
                       <div className="bg-white border rounded-md p-4 overflow-x-auto prose prose-sm prose-slate max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{systemPromptPreview}</ReactMarkdown>
+                        <MarkdownRenderer content={systemPromptPreview} />
                       </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm">
@@ -1156,13 +1155,13 @@ and confirm someone will call back the next business day.`}
                   </div>
                 ) : (
                   <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingFile.content}</ReactMarkdown>
+                    <MarkdownRenderer content={viewingFile.content} />
                   </div>
                 )}
               </>
             ) : (
               <div className="flex-1 overflow-y-auto px-6 py-5 prose prose-sm prose-slate max-w-none">
-                {viewingSkill && <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingSkill.content}</ReactMarkdown>}
+                {viewingSkill && <MarkdownRenderer content={viewingSkill.content} />}
               </div>
             )}
           </SheetContent>

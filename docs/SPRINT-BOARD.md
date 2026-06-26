@@ -22,7 +22,8 @@ the active roadmap.
 | Phase 2b — CRUD / Import / Files / Assignment | 2026-05-03 | Skill CRUD, GitHub import, file mgmt, agent assignment. |
 | Phase 2c — Platform skills fork/refresh | 2026-05-06 | Orgs fork platform skills + refresh; hidden-skills badge. |
 | Elaborate `appointment-booking` skill | 2026-05-06 | First "exceptional capability" w/ rich reference files. |
-| Built-in skill library (8 skills) | 2026-06-22 | Added `insurance-verification` + `dispatch-coordination`. Full set: appointment-booking, insurance-verification, dispatch-coordination, call-transfer, faq-responder, after-hours, lead-qualification, payment-collection. (`backend/src/voice_agents/skill_seeds.py`) |
+| Built-in skill library (8 generic skills) | 2026-06-22 | Original generic library: appointment-booking, insurance-verification, dispatch-coordination, call-transfer, faq-responder, after-hours, lead-qualification, payment-collection. **Superseded** by the Phase 2c redesign. |
+| Built-in skill library (15 industry-specific skills) | 2026-06-24 | Phase 2c re-design: 15 industry-specific skills, 5 per industry (dental, restaurant, HVAC), one per capability slot. Each skill is industry-tuned with its own decision tree, mermaid diagram, guardrails, and reference files. Skills are decoupled from specific tools — they describe user-visible actions. Library index in `docs/02_features/voice_agents/skills_library.md`. |
 | Platform Skills Management (Admin UI) | 2026-06-22 | Platform-admin-only UI at `/platform/skills`: list/create/edit/hide-restore/files + import-from-URL. Backend RBAC on all routes; `include_inactive` admin list. |
 | Shared `<SkillEditor>` + org skills tab migration | 2026-06-22 | Extracted shared master-detail editor (`frontend/src/components/skills/skill-editor.tsx`); org skills tab now renders it via `OrganizationSkillsTab`. Org + platform share one UI — no drift. |
 | Worker token-refresh race condition (multi-instance) | 2026-06-23 | Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim_token_refresh`/`release_token_refresh` SQL fns, migration `20260623000001`). `TokenRefreshService` claims before the OAuth call, releases in `finally`. Lease TTL auto-recovers from crashes; fail-closed. **Note:** used a row-lease via RPC rather than `pg_advisory_lock` because advisory locks need session affinity, which Supabase/PostgREST connection pooling breaks. TDD (red→green), 9 new tests. |
@@ -52,7 +53,7 @@ the active roadmap.
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 1 | **Platform skills status enum (single source of truth)** | Done | Replaced `is_active` + `is_deleted` booleans with a single `status VARCHAR(20)` enum (draft/active/deprecated/deleted). Dedicated transition endpoints (`deprecate`/`reactivate`/`delete`/`restore`) enforce the state machine. Migration `20260624000001`. 36 new + migrated tests, full frontend + backend suites green. |
-| 2 | **Skill library continuation** | Next | Build remaining PRD capabilities: `call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`. |
+| 2 | **Industry-template onboarding (Phase B)** | Next | Schema + fork-injection: `organizations.industry` column + `industry_skill_templates` table; on org creation or industry change, fork the matching industry skills into the org library automatically. Separate PR after Phase 2c is reviewed. |
 
 ---
 
