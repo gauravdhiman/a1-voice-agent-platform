@@ -1,15 +1,20 @@
 # Skills System
 
+> **Library index:** see [`skills_library.md`](./skills_library.md) for the
+> current 15-skill library, industry coverage, content standards, and the
+> rationale for industry-specific (rather than universal) skills.
+
 ## Overview
 
-Skills are **composable agent capabilities** — reusable functions (written in markdown) that extend what a voice agent can do. They are not industry-specific roles. Instead, each skill represents a single capability like `appointment-booking`, `call-transfer`, or `insurance-verification`.
+Skills are **composable agent capabilities** — markdown instructions that
+extend what a voice agent can do. The platform ships a focused library
+of built-in skills that org admins can enable per-agent; orgs can also
+fork any platform skill to customize it for their own workflows.
 
-A dental agent = `appointment-booking` + `insurance-verification` + `new-patient-intake`
-An HVAC agent = `appointment-booking` + `dispatch-coordination` + `warranty-check`
-
-The same `appointment-booking` skill works across all businesses. What changes are the **reference files** — business-specific data like service menus, hours, and policies that the user uploads to configure the skill for their context.
-
-This keeps skills **focused, reusable, and maintainable**: improve `appointment-booking` once, and every agent using it gets better.
+The current library is industry-specific: each business type (dental,
+restaurant, HVAC) gets its own set of skills tuned to that industry's
+workflows. The skill catalog and rationale live in
+[`skills_library.md`](./skills_library.md).
 
 ## Progressive Disclosure
 
@@ -28,29 +33,37 @@ This design is critical for voice agents where:
 ## Skill Architecture
 
 ```
-Organization Capability Library              Agent Capability Composition
-┌─────────────────────────────┐            ┌──────────────────────────────┐
-│ Built-in Capabilities         │            │ Dental Receptionist Agent      │
-│                               │            │                              │
-│  📅 appointment-booking         │───────>│  ✓ appointment-booking         │
-│  📞 call-transfer             │───────>│  ✓ insurance-verification      │
-│  ✅ insurance-verification    │───────>│  ✓ new-patient-intake          │
-│  📝 new-patient-intake        │            │                              │
-│  🚗 dispatch-coordination     │            │ HVAC Dispatch Agent          │
-│  💬 lead-qualification        │───────>│  ✓ appointment-booking         │
-│                               │            │  ✓ dispatch-coordination     │
-│ Custom Capabilities           │            │  ✓ warranty-check              │
-│  📋 company-policies          │            │                              │
-│  📋 custom-intake             │            │ Restaurant Host Agent          │
-│                               │            │  ✓ reservation-booking         │
-│ Reference Files (per org)     │            │  ✓ menu-inquiry                │
-│  ├── service-menu.md          │            │  ✓ order-status                │
-│  ├── hours.md                 │            │                              │
-│  └── policies.md              │            └──────────────────────────────┘
-└─────────────────────────────┘
+Industry-Specific Library         Agent Composition (Example: Dental)
+┌─────────────────────────────┐  ┌──────────────────────────────┐
+│ Built-in Skills (15)          │  │ Dental Receptionist Agent      │
+│                               │  │                              │
+│  Dental (5)                  │  │  ✓ dental-appointment-booking │
+│   • dental-appointment-booking│──┤  ✓ dental-faq                  │
+│   • dental-faq               │  │  ✓ dental-new-patient-intake   │
+│   • dental-new-patient-intake │  │  ✓ dental-recall-and-reminder  │
+│   • dental-recall-and-reminder│  │  ✓ dental-escalation           │
+│   • dental-escalation        │  │                              │
+│                               │  │ HVAC Service Agent           │
+│  Restaurant (5)              │  │                              │
+│   • restaurant-reservation-...│  │  ✓ hvac-service-appointment    │
+│   • restaurant-menu-and-info  │  │  ✓ hvac-service-info           │
+│   • restaurant-special-request│  │  ✓ hvac-diagnosis-and-triage   │
+│   • restaurant-reservation-...│  │  ✓ hvac-maintenance-recall     │
+│   • restaurant-escalation     │  │  ✓ hvac-escalation             │
+│                               │  │                              │
+│  HVAC (5)                    │  └──────────────────────────────┘
+│   • hvac-service-appointment  │
+│   • hvac-service-info         │  Org Skill Library (per org)
+│   • hvac-diagnosis-and-triage │  ┌──────────────────────────────┐
+│   • hvac-maintenance-recall   │  │ Forks of platform skills      │
+│   • hvac-escalation           │  │ Custom org-specific skills    │
+│                               │  │ Reference files (per skill)  │
+└─────────────────────────────┘  └──────────────────────────────┘
 ```
 
-**Key principle:** Capabilities are universal. Reference files are business-specific.
+**Key principle:** Platform skills are industry-specific. Org admins
+pick the ones that match their business; they fork to customize.
+Reference files are loaded on-demand via `load_skill_reference`.
 
 ## Database Tables
 

@@ -623,11 +623,54 @@ class SkillService:
                         }).execute()
                     count += 1
 
-            logger.info(f"Seeded {count} platform skills")
+            # Cleanup pass: remove any platform_skills rows whose slugs are
+            # no longer in PLATFORM_SKILL_TEMPLATES. Idempotent and safe.
+            orphan_count = self._prune_orphan_platform_skills()
+
+            logger.info(
+                f"Seeded {count} platform skills; removed {orphan_count} orphan(s)"
+            )
             return count, None
         except Exception as e:
             logger.error(f"Error seeding platform skills: {e}", exc_info=True)
             return 0, str(e)
+
+    @tracer.start_as_current_span("skill.prune_orphan_platform_skills")
+    async def _prune_orphan_platform_skills(self) -> int:
+        """Delete platform_skills rows whose slugs aren't in PLATFORM_SKILL_TEMPLATES.
+
+        Called by ``seed_platform_skills`` on every startup. Removing a
+        slug from the seed list is a deliberate removal from the platform
+        library; the next deploy deletes the row.
+
+        Existing org forks are unaffected — they own their own content +
+        files. The fork's ``source_skill_id`` becomes a dangling pointer,
+        which the ``refresh_forked_skill`` and ``check_update_available``
+        paths handle gracefully with a user-friendly message.
+
+        Returns:
+            Number of orphan rows deleted.
+        """
+        from src.voice_agents.skill_seeds import PLATFORM_SKILL_TEMPLATES
+
+        seeded_slugs = {s["slug"] for s in PLATFORM_SKILL_TEMPLATES}
+        existing_rows = (
+            self.supabase.table("platform_skills")
+            .select("id, slug")
+            .execute()
+        ).data or []
+        orphan_count = 0
+        for row in existing_rows:
+            if row["slug"] not in seeded_slugs:
+                self.supabase.table("platform_skills").delete().eq(
+                    "id", row["id"]
+                ).execute()
+                orphan_count += 1
+                logger.info(
+                    f"Removed orphan platform skill '{row['slug']}' "
+                    f"(no longer in PLATFORM_SKILL_TEMPLATES)"
+                )
+        return orphan_count
 
     # ═════════════════════════════════════════════════════════════════════════
     # PLATFORM SKILL CRUD (New)
@@ -1066,7 +1109,11 @@ class SkillService:
             if not source_skill_id:
                 return None, "This skill was not forked from a platform skill"
 
-            # Get current platform skill
+            # Get current platform skill. If it's gone (e.g. removed from
+            # PLATFORM_SKILL_TEMPLATES and cleaned up by the seeder), we
+            # surface a clear, actionable message rather than a generic
+            # 404 — the fork itself is fine, only the refresh target is
+            # unavailable.
             platform_resp = (
                 self.supabase.table("platform_skills")
                 .select("*, platform_skill_files(*)")
@@ -1075,7 +1122,12 @@ class SkillService:
                 .execute()
             )
             if not platform_resp.data:
-                return None, "Source platform skill no longer exists"
+                return None, (
+                    "The base skill this fork was created from is no longer "
+                    "available. Your fork is unaffected — you can keep using "
+                    "it as-is. To get updates from a current platform skill, "
+                    "fork the new version from the Platform Skills library."
+                )
 
             platform_skill = platform_resp.data
             old_version = org_skill.get("source_version")
@@ -1158,7 +1210,10 @@ class SkillService:
                 .execute()
             )
             if not platform_resp.data:
-                return False, None, "Source platform skill not found"
+                return False, None, (
+                    "The base skill this fork was created from is no longer "
+                    "available. Updates cannot be checked."
+                )
 
             latest_version = platform_resp.data.get("version")
             current_version = org_skill.get("source_version")
