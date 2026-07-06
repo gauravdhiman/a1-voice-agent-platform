@@ -73,8 +73,11 @@ async def get_permission(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("permission.id", str(permission_id))
 
-    # Check if user has permission to read permissions
-    if not user_profile.has_permission("permission:read"):
+    # Check if user is a platform administrator.
+    # The platform-wide permissions catalog is platform-admin-only; a
+    # non-platform-admin who happens to hold `permission:read` via a
+    # role grant should NOT see platform permissions. (See Task #34.)
+    if not user_profile.has_role("platform_admin"):
         current_span.set_status(
             trace.Status(
                 trace.StatusCode.ERROR, "Insufficient permissions to view permissions"
@@ -104,8 +107,8 @@ async def get_all_permissions(
     current_span = trace.get_current_span()
     current_span.set_attribute("user.id", str(current_user_id))
 
-    # Check if user has permission to read permissions
-    if not user_profile.has_permission("permission:read"):
+    # Check if user is a platform administrator (See Task #34.)
+    if not user_profile.has_role("platform_admin"):
         current_span.set_status(
             trace.Status(
                 trace.StatusCode.ERROR, "Insufficient permissions to view permissions"
@@ -313,8 +316,8 @@ async def get_permissions_for_role(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("role.id", str(role_id))
 
-    # Check if user has permission to read permissions
-    if not user_profile.has_permission("permission:read"):
+    # Check if user is a platform administrator (See Task #34.)
+    if not user_profile.has_role("platform_admin"):
         current_span.set_status(
             trace.Status(
                 trace.StatusCode.ERROR, "Insufficient permissions to view permissions"

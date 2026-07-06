@@ -428,11 +428,38 @@ async def update_skill_file(
     """Update a reference file. Admin only."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
+    is_platform_admin = user_profile.has_role("platform_admin")
+    if not is_platform_admin:
         if not user_profile.has_role("org_admin", str(org_id)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions to update skill files",
+            )
+
+    # CRIT: cross-org IDOR guard. The caller's role was checked against
+    # the path's org_id, but the file_id in the path may belong to a
+    # DIFFERENT org. Verify the file's parent skill is in `org_id`
+    # before allowing the write. platform_admin is org-agnostic and
+    # bypasses the ownership check.
+    file, file_error = await skill_service.get_skill_file(file_id)
+    if file_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=file_error
+        )
+    if file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Skill file not found"
+        )
+    if not is_platform_admin:
+        parent_skill, skill_error = await skill_service.get_skill_by_id(file.skill_id)
+        if skill_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=skill_error
+            )
+        if parent_skill is None or parent_skill.organization_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Skill file does not belong to this organization",
             )
 
     file, error = await skill_service.update_skill_file(file_id, file_data)
@@ -455,11 +482,35 @@ async def delete_skill_file(
     """Delete a reference file. Admin only."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
+    is_platform_admin = user_profile.has_role("platform_admin")
+    if not is_platform_admin:
         if not user_profile.has_role("org_admin", str(org_id)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions to delete skill files",
+            )
+
+    # CRIT: cross-org IDOR guard (mirror of update_skill_file above).
+    # platform_admin bypasses the ownership check.
+    file, file_error = await skill_service.get_skill_file(file_id)
+    if file_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=file_error
+        )
+    if file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Skill file not found"
+        )
+    if not is_platform_admin:
+        parent_skill, skill_error = await skill_service.get_skill_by_id(file.skill_id)
+        if skill_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=skill_error
+            )
+        if parent_skill is None or parent_skill.organization_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Skill file does not belong to this organization",
             )
 
     success, error = await skill_service.delete_skill_file(file_id)
@@ -677,11 +728,29 @@ async def refresh_forked_skill(
     """
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
+    is_platform_admin = user_profile.has_role("platform_admin")
+    if not is_platform_admin:
         if not user_profile.has_role("org_admin", str(org_id)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions to refresh skills",
+            )
+
+    # CRIT: cross-org IDOR guard. The role check above is against the
+    # path's org_id, but the skill_id in the path may belong to a
+    # DIFFERENT org. Verify the skill is in `org_id` before allowing
+    # the refresh (which overwrites ALL content and files).
+    # platform_admin is org-agnostic and bypasses the ownership check.
+    if not is_platform_admin:
+        skill, skill_error = await skill_service.get_skill_by_id(skill_id)
+        if skill_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=skill_error
+            )
+        if skill is None or skill.organization_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Skill does not belong to this organization",
             )
 
     if not request.confirm_overwrite:

@@ -268,12 +268,19 @@ async def get_current_user(
             "model": ErrorResponse,
             "description": "Invalid invitation token or user",
         },
+        403: {
+            "model": ErrorResponse,
+            "description": "user_id does not match the authenticated caller",
+        },
         404: {"model": ErrorResponse, "description": "Invitation not found"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
 @tracer.start_as_current_span("auth.routes.process_invitation")
-async def process_invitation(request: ProcessInvitationRequest) -> JSONResponse:
+async def process_invitation(
+    request: ProcessInvitationRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> JSONResponse:
     """
     Process an invitation to add a user to an organization.
 
@@ -281,8 +288,23 @@ async def process_invitation(request: ProcessInvitationRequest) -> JSONResponse:
     It links the user to the organization specified in the invitation.
 
     - **token**: Invitation token from email
-    - **user_id**: User ID to add to organization
+    - **user_id**: User ID to add to organization. Must match the
+      authenticated caller — the invitation can only be processed by
+      the user whose account the invitation was issued for. Substituting
+      another user's UUID returns 403.
     """
+    current_user_id, user_profile = user_data
+
+    # CRIT: the body's user_id MUST match the authenticated caller.
+    # Without this check, an attacker who intercepts an invitation
+    # token could substitute any other user's UUID and have the
+    # new member be linked to the wrong account.
+    if request.user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="user_id does not match the authenticated caller",
+        )
+
     current_span = trace.get_current_span()
     current_span.set_attribute("invitation.token", request.token[:8] + "...")
     current_span.set_attribute("user.id", str(request.user_id))

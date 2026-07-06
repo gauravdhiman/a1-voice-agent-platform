@@ -184,7 +184,7 @@ async def invite_member(
     # Check if user has permission to invite members
     if not user_profile.has_role("platform_admin"):
         if not user_profile.has_role("org_admin", str(org_id)):
-            if not user_profile.has_permission("member:invite", str(org_id)):
+            if not user_profile.has_permission("member:create", str(org_id)):
                 current_span.set_status(
                     trace.Status(
                         trace.StatusCode.ERROR,
