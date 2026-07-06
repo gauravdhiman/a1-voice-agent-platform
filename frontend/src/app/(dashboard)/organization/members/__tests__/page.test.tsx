@@ -91,7 +91,12 @@ vi.mock("@/components/data-table/data-table", () => ({
 vi.mock(
   "@/components/organization-members/organization-members-data-table-columns",
   () => ({
-    organizationMembersColumns: [],
+    // The real factory is `organizationMembersColumns(canManage: boolean)`.
+    // The page test only checks the page renders — DataTable itself is also
+    // stubbed, so returning an empty column array is fine. We just need
+    // a callable so the page's `columns={organizationMembersColumns(...)}`
+    // expression doesn't throw.
+    organizationMembersColumns: vi.fn(() => []),
   }),
 );
 
@@ -250,6 +255,75 @@ describe("/organization/members page (N1 — fallback to currentOrganization)", 
     await waitFor(() => {
       expect(screen.getByText(/access denied/i)).toBeInTheDocument();
     });
+  });
+
+  it("passes canManage=true to the columns factory for an admin (N1 #1 — CRIT)", async () => {
+    // The columns factory is the strict gate for the per-row Actions
+    // dropdown. A regular org member must NOT see Edit Roles / Remove
+    // Member in the table. The page is the only caller, so it must
+    // pass `true` only when the user can manage members.
+    const { organizationMembersColumns } = await import(
+      "@/components/organization-members/organization-members-data-table-columns"
+    );
+    const factory = organizationMembersColumns as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    factory.mockClear();
+
+    mockUseUserPermissions.mockReturnValue({
+      isPlatformAdmin: false,
+      isOrgAdmin: true,
+      canViewMembers: true,
+      canManageMembers: true, // <-- admin: per-row Actions must show
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationMembersPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Acme Members/i).length,
+      ).toBeGreaterThan(0);
+    });
+    expect(factory).toHaveBeenCalled();
+    expect(factory).toHaveBeenCalledWith(true);
+  });
+
+  it("passes canManage=false to the columns factory for a regular member (N1 #1 — CRIT)", async () => {
+    // Same gate, opposite side. A regular org member CAN view the page
+    // (canViewMembers is true) but MUST NOT see the per-row Actions
+    // dropdown (canManageMembers is false). The factory must be called
+    // with `false` so the actions column is omitted from the table.
+    const { organizationMembersColumns } = await import(
+      "@/components/organization-members/organization-members-data-table-columns"
+    );
+    const factory = organizationMembersColumns as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    factory.mockClear();
+
+    mockUseUserPermissions.mockReturnValue({
+      isPlatformAdmin: false,
+      isOrgAdmin: false,
+      canViewMembers: true,
+      canManageMembers: false, // <-- regular member: no per-row Actions
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationMembersPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Acme Members/i).length,
+      ).toBeGreaterThan(0);
+    });
+    expect(factory).toHaveBeenCalledWith(false);
   });
 
   it("setCurrentOrganization is NOT called during render (useEffect guard)", async () => {

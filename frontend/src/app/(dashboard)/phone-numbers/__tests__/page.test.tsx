@@ -7,6 +7,9 @@
  *     search param, falling back to the currentOrganization from context).
  *   - Loading and error states match the embedded version (the dashboard
  *     is a controlled component, so the page owns the fetch).
+ *   - The dashboard receives `canManage={isPlatformAdmin || isOrgAdmin}`
+ *     — a regular member gets `canManage=false` so the per-card write
+ *     buttons don't render (N1 #2 follow-up).
  */
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -26,6 +29,11 @@ const mockGetOrganizationNumbers = vi.fn();
 const mockGetCreditBalance = vi.fn();
 const mockPush = vi.fn();
 const mockReplace = vi.fn();
+
+// Record the props the page passes to <PhoneNumberDashboard> so the
+// test can assert the `canManage` wire-up without having to render
+// the dashboard's full child tree.
+const mockDashboardProps: Record<string, unknown> = {};
 
 vi.mock("@/contexts/organization-context", () => ({
   useOrganization: () => mockUseOrganization(),
@@ -48,6 +56,13 @@ vi.mock("@/services/billing-service", () => ({
   },
 }));
 
+vi.mock("@/components/phone-numbers/phone-number-dashboard", () => ({
+  PhoneNumberDashboard: (props: Record<string, unknown>) => {
+    Object.assign(mockDashboardProps, props);
+    return <div data-testid="phone-number-dashboard" />;
+  },
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mockPush,
@@ -64,6 +79,9 @@ import PhoneNumbersPage from "../page";
 describe("/phone-numbers page (N1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.keys(mockDashboardProps).forEach(
+      (k) => delete mockDashboardProps[k],
+    );
     globalThis.__pnSearchParams = "org_id=org-1";
     mockUseOrganization.mockReturnValue({
       organizations: [],
@@ -131,5 +149,55 @@ describe("/phone-numbers page (N1)", () => {
     expect(
       screen.getByText(/select an organization/i),
     ).toBeInTheDocument();
+  });
+
+  it("passes canManage=true to the dashboard for an org admin (N1 #2)", async () => {
+    mockUseUserPermissions.mockReturnValue({
+      isPlatformAdmin: false,
+      isOrgAdmin: true,
+    });
+
+    render(<PhoneNumbersPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("phone-number-dashboard"),
+      ).toBeInTheDocument();
+    });
+    expect(mockDashboardProps.canManage).toBe(true);
+  });
+
+  it("passes canManage=true to the dashboard for a platform admin", async () => {
+    mockUseUserPermissions.mockReturnValue({
+      isPlatformAdmin: true,
+      isOrgAdmin: false,
+    });
+
+    render(<PhoneNumbersPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("phone-number-dashboard"),
+      ).toBeInTheDocument();
+    });
+    expect(mockDashboardProps.canManage).toBe(true);
+  });
+
+  it("passes canManage=false to the dashboard for a regular org member (N1 #2 — CRIT)", async () => {
+    mockUseUserPermissions.mockReturnValue({
+      isPlatformAdmin: false,
+      isOrgAdmin: false,
+    });
+
+    render(<PhoneNumbersPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("phone-number-dashboard"),
+      ).toBeInTheDocument();
+    });
+    // The page is the strict gate — the regular member must NOT see
+    // the dashboard's write buttons.
+    expect(mockDashboardProps.canManage).toBe(false);
   });
 });

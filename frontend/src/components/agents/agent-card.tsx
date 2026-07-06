@@ -3,7 +3,6 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -72,27 +71,55 @@ export function AgentCard({
 }: AgentCardFinalProps) {
   const router = useRouter();
 
-  const handleEdit = () => {
+  const handleEdit = (e: React.MouseEvent) => {
+    // Don't bubble to the card body click — the Edit button has its
+    // own destination and we don't want to navigate twice.
+    e.stopPropagation();
     router.push(`/agents/${agent.id}?tab=properties`);
   };
 
-  const handleConfigureTools = () => {
+  const handleConfigureTools = (e: React.MouseEvent) => {
+    e.stopPropagation();
     router.push(`/agents/${agent.id}?tab=tools`);
   };
 
-  const handleDelete = () => {
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onDelete(agent);
+  };
+
+  // The whole card is clickable: regular members (no Edit/Tools/Trash
+  // buttons) use this to open the read-only detail view. The card is
+  // a <div role="button"> (not a real <button>) so it can legally
+  // contain the inner Edit/Tools/Trash buttons — nesting <button>
+  // inside <button> is invalid HTML and the browser silently moves
+  // the inner ones out, breaking layout.
+  const handleCardClick = () => {
+    router.push(`/agents/${agent.id}?tab=properties`);
+  };
+  const handleCardKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      router.push(`/agents/${agent.id}?tab=properties`);
+    }
   };
 
   if (view === "list") {
     return (
-      <Card className={cn(
-        "hover:border-primary/50 transition-colors",
-        agent.is_active
-          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
-          : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75" // Red background for inactive agents
-      )}>
-        <CardContent className="p-5">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
+        aria-label={`View details for ${agent.name}`}
+        className={cn(
+          "block w-full text-left rounded-xl border transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer",
+          agent.is_active
+            ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+            : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75",
+        )}
+      >
+        <div className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4 flex-1">
               <div className="bg-primary/10 p-3 rounded-lg">
@@ -155,19 +182,26 @@ export function AgentCard({
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className={cn(
-      "overflow-hidden border-muted/60 hover:border-primary/50 transition-colors",
-      agent.is_active
-        ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
-        : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75" // Red background for inactive agents
-    )}>
-      <CardContent className="p-4">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      aria-label={`View details for ${agent.name}`}
+      className={cn(
+        "block w-full text-left rounded-xl border transition-colors overflow-hidden border-muted/60 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer",
+        agent.is_active
+          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+          : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75",
+      )}
+    >
+      <div className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold text-base truncate mb-2">
@@ -243,7 +277,7 @@ export function AgentCard({
             <ChevronRight className="h-3.5 w-3.5 ml-2" />
           </Button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

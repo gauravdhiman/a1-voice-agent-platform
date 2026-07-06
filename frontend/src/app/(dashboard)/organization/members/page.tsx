@@ -174,7 +174,7 @@ function MembersPageContent({
         </CardHeader>
         <CardContent className="p-5 pt-0">
           <DataTable
-            columns={organizationMembersColumns}
+            columns={organizationMembersColumns(userPermissions.canManageMembers)}
             data={members}
             filterColumn="member"
             filterPlaceholder="Filter members..."

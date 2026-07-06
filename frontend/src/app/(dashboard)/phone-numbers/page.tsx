@@ -72,6 +72,8 @@ export default function PhoneNumbersPage() {
     );
   }
 
+  const canManage = isPlatformAdmin || isOrgAdmin;
+
   return (
     <div className="space-y-6">
       <div>
@@ -87,8 +89,9 @@ export default function PhoneNumbersPage() {
         creditBalance={creditBalance}
         isLoading={isLoading}
         onRefresh={loadPhoneNumbers}
+        canManage={canManage}
       />
-      {!isPlatformAdmin && !isOrgAdmin ? (
+      {!canManage ? (
         <p className="text-xs text-muted-foreground">
           You have read-only access. Contact an org admin to add or change
           phone numbers.

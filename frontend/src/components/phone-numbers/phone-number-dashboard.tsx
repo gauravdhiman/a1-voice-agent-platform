@@ -35,6 +35,13 @@ interface PhoneNumberDashboardProps {
   creditBalance?: number;
   isLoading?: boolean;
   onRefresh?: () => void;
+  /**
+   * Whether the current user can manage (add, assign, cancel) phone
+   * numbers. Defaults to `true` for back-compat with pre-N1 call
+   * sites. The /phone-numbers page is the strict gate — it must
+   * pass `canManage={isPlatformAdmin || isOrgAdmin}`.
+   */
+  canManage?: boolean;
 }
 
 export function PhoneNumberDashboard({
@@ -43,6 +50,7 @@ export function PhoneNumberDashboard({
   creditBalance = 0,
   isLoading,
   onRefresh,
+  canManage = true,
 }: PhoneNumberDashboardProps) {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -133,19 +141,23 @@ export function PhoneNumberDashboard({
           <CardContent className="py-12 text-center">
             <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">No phone numbers yet</p>
-            <Button onClick={() => setSearchDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Search & Purchase Phone Number
-            </Button>
+            {canManage && (
+              <Button onClick={() => setSearchDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Search & Purchase Phone Number
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setSearchDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Phone Number
-            </Button>
+            {canManage && (
+              <Button variant="outline" onClick={() => setSearchDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Phone Number
+              </Button>
+            )}
           </div>
           {phoneNumbers.map((number) => (
             <Card key={number.id}>
@@ -198,7 +210,8 @@ export function PhoneNumberDashboard({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {!number.assigned_agent_id &&
+                      {canManage &&
+                        !number.assigned_agent_id &&
                         number.status !== "cancelled" && (
                           <Button
                             size="sm"
@@ -217,7 +230,7 @@ export function PhoneNumberDashboard({
                           </Button>
                         )}
 
-                      {number.status !== "cancelled" && (
+                      {canManage && number.status !== "cancelled" && (
                         <Button
                           size="sm"
                           variant="outline"
