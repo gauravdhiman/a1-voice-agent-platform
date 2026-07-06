@@ -34,6 +34,65 @@ tracer = trace.get_tracer(__name__)
 tool_router = APIRouter(prefix="/api/v1/tools", tags=["Tools"])
 
 
+async def _assert_agent_tool_admin(
+    agent_tool_id: UUID, user_profile: UserProfile
+) -> AgentToolResponse:
+    """Verify the caller can administer the given agent_tool.
+
+    Resolves ``agent_tool_id`` → ``agent_id`` → ``organization_id`` and
+    enforces that the caller is either a ``platform_admin`` (org-agnostic)
+    or an ``org_admin`` on the agent's organization. All four write
+    endpoints on the agent-tools resource (``update``, ``logout``,
+    ``api-key``, ``delete``) call this before touching the service layer.
+
+    Args:
+        agent_tool_id: UUID of the ``agent_tools`` row being mutated.
+        user_profile: The authenticated caller's profile (carries roles).
+
+    Returns:
+        The resolved ``AgentToolResponse`` so the caller can reuse it
+        without re-querying.
+
+    Raises:
+        HTTPException: 404 if the agent_tool does not exist, 403 if the
+        caller is not a platform/org admin on the agent's organization.
+    """
+    agent_tool, error = await tool_service.get_agent_tool_by_id(agent_tool_id)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error
+        )
+    if agent_tool is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent tool not found",
+        )
+
+    agent, agent_error = await voice_agent_service.get_agent_by_id(
+        agent_tool.agent_id
+    )
+    if agent_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=agent_error
+        )
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+        )
+
+    org_id_str = str(agent.organization_id)
+    if not (
+        user_profile.has_role("platform_admin")
+        or user_profile.has_role("org_admin", org_id_str)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required to modify this agent tool",
+        )
+
+    return agent_tool
+
+
 # Platform Tools (Admin only for write operations)
 @tool_router.post(
     "/platform", response_model=PlatformTool, status_code=status.HTTP_201_CREATED
@@ -337,10 +396,10 @@ async def update_agent_tool(
 ):
     """Update an agent tool configuration."""
     current_user_id, user_profile = user_data
-
-    # We'd need to fetch the agent_tool first to check organization permissions
-    # For now, let's keep it simple and assume the user has access if they know the ID,
-    # but in production we should check org_id.
+    # CRIT: must verify the caller is an admin on the agent's org before
+    # allowing this write (any logged-in user could otherwise rewrite the
+    # tool config by guessing the UUID).
+    await _assert_agent_tool_admin(agent_tool_id, user_profile)
 
     updated_tool, error = await tool_service.update_agent_tool(
         agent_tool_id, update_data
@@ -358,6 +417,9 @@ async def logout_agent_tool(
 ):
     """Logout from a tool by clearing its sensitive config (tokens)."""
     current_user_id, user_profile = user_data
+    # CRIT: any logged-in user could otherwise clear a real user's
+    # OAuth tokens by guessing the agent_tool_id.
+    await _assert_agent_tool_admin(agent_tool_id, user_profile)
 
     updated_tool, error = await tool_service.update_agent_tool(
         agent_tool_id, AgentToolUpdate(sensitive_config=None)
@@ -376,6 +438,9 @@ async def set_api_key(
 ):
     """Save or update API key in sensitive_config for a tool."""
     current_user_id, user_profile = user_data
+    # CRIT: most dangerous endpoint — any logged-in user could otherwise
+    # overwrite a real user's Google API key by guessing the agent_tool_id.
+    await _assert_agent_tool_admin(agent_tool_id, user_profile)
 
     if not api_key or not api_key.strip():
         raise HTTPException(
@@ -400,6 +465,9 @@ async def delete_agent_tool(
 ):
     """Delete an agent tool configuration permanently."""
     current_user_id, user_profile = user_data
+    # CRIT: any logged-in user could otherwise permanently delete a tool
+    # configuration by guessing the agent_tool_id.
+    await _assert_agent_tool_admin(agent_tool_id, user_profile)
 
     deleted, error = await tool_service.delete_agent_tool(agent_tool_id)
     if error:

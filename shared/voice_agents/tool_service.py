@@ -497,6 +497,77 @@ class ToolService:
             )
             return [], str(e)
 
+    @tracer.start_as_current_span("tool.get_agent_tool_by_id")
+    async def get_agent_tool_by_id(
+        self, agent_tool_id: UUID
+    ) -> tuple[Optional[AgentToolResponse], Optional[str]]:
+        """Fetch a single agent tool configuration by its ID.
+
+        Used by route handlers to resolve ``agent_tool_id`` to the parent
+        ``agent_id`` for permission checks (so the route can then load the
+        agent and verify the caller is an org/platform admin on the agent's
+        organization). Returns ``(None, None)`` if not found and ``(None,
+        error)`` on a DB failure.
+
+        Args:
+            agent_tool_id: UUID of the ``agent_tools`` row to fetch.
+
+        Returns:
+            Tuple of (AgentToolResponse or None, error message or None).
+        """
+        try:
+            response = (
+                self.supabase.table("agent_tools")
+                .select("*, tool:platform_tools(*)")
+                .eq("id", str(agent_tool_id))
+                .execute()
+            )
+
+            if not response.data:
+                return None, None
+
+            item = response.data[0]
+            tool_data = item.pop("tool") if "tool" in item else None
+
+            auth_type = tool_data.get("auth_type") if tool_data else None
+            auth_status_val = validate_token_status(
+                item.get("sensitive_config"),
+                auth_type=auth_type or "oauth2",
+            )
+            requires_auth = (
+                tool_data.get("requires_auth", False) if tool_data else False
+            )
+            connection_status_val = get_connection_status(
+                requires_auth, auth_status_val
+            )
+
+            response_dict = {
+                "id": item["id"],
+                "agent_id": item["agent_id"],
+                "tool_id": item["tool_id"],
+                "config": item.get("config"),
+                "unselected_functions": item.get("unselected_functions"),
+                "is_enabled": item.get("is_enabled", True),
+                "auth_status": auth_status_val,
+                "connection_status": connection_status_val,
+                "created_at": item["created_at"],
+                "updated_at": item["updated_at"],
+            }
+
+            agent_tool = AgentToolResponse(**response_dict)
+            if tool_data:
+                try:
+                    agent_tool.tool = PlatformTool(**tool_data)
+                except Exception:
+                    # Tool metadata is optional in the response; swallow
+                    # validation errors here so the route can still resolve
+                    # the agent_id for the permission check.
+                    pass
+            return agent_tool, None
+        except Exception as e:
+            logger.error(f"Error getting agent tool {agent_tool_id}: {e}")
+            return None, str(e)
+
     @tracer.start_as_current_span("tool.update_agent_tool")
     async def update_agent_tool(
         self, agent_tool_id: UUID, update_data: AgentToolUpdate
