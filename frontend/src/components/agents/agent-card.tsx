@@ -23,6 +23,32 @@ interface AgentCardProps {
   agent: VoiceAgent;
   organizationName?: string;
   onDelete: (agent: VoiceAgent) => void;
+  /**
+   * Whether the current user holds `agent:delete` on the current
+   * org. When false, the per-card trash icon is hidden. Defaults
+   * to `true` so pre-N1 call sites (test fixtures, anything not yet
+   * wired to the permission contract) continue to render every
+   * action. The page that mounts the card is the strict gate; the
+   * card is permissive by default. N1 browser validation surfaced
+   * this leak: a regular org member with no delete permission was
+   * seeing the trash icon and clicking it produced a no-op
+   * because the page-level `useDeleteAgent` was missing the
+   * permission context.
+   */
+  canDelete?: boolean;
+  /**
+   * Whether the current user holds `agent:update` on the current
+   * org. When false, the Edit button (list view) and Edit icon
+   * button (grid view) are hidden. Default `true` for the same
+   * backward-compat reason as `canDelete`.
+   */
+  canEdit?: boolean;
+  /**
+   * Whether the current user can configure agent tools (Tools
+   * button in list view, Configure Tools footer in grid view).
+   * Default `true` for the same backward-compat reason.
+   */
+  canConfigure?: boolean;
 }
 
 interface AgentListCardProps extends AgentCardProps {
@@ -40,6 +66,9 @@ export function AgentCard({
   organizationName,
   onDelete,
   view,
+  canDelete = true,
+  canEdit = true,
+  canConfigure = true,
 }: AgentCardFinalProps) {
   const router = useRouter();
 
@@ -98,26 +127,32 @@ export function AgentCard({
               </div>
             </div>
             <div className="flex items-center space-x-2 ml-4">
-              <Button size="sm" variant="outline" onClick={handleEdit}>
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleConfigureTools}
-              >
-                <Wrench className="h-4 w-4 mr-2" />
-                Tools
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-9 w-9 text-destructive"
-                onClick={handleDelete}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {canEdit && (
+                <Button size="sm" variant="outline" onClick={handleEdit}>
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
+              {canConfigure && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleConfigureTools}
+                >
+                  <Wrench className="h-4 w-4 mr-2" />
+                  Tools
+                </Button>
+              )}
+              {canDelete && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 text-destructive"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -148,22 +183,26 @@ export function AgentCard({
             </div>
           </div>
           <div className="flex space-x-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={handleEdit}
-            >
-              <Edit3 className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 text-destructive"
-              onClick={handleDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canEdit && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={handleEdit}
+              >
+                <Edit3 className="h-4 w-4" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-destructive"
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -192,16 +231,18 @@ export function AgentCard({
 
         <Separator className="my-4" />
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full text-xs h-8"
-          onClick={handleConfigureTools}
-        >
-          <Wrench className="h-3.5 w-3.5 mr-2" />
-          Configure Tools
-          <ChevronRight className="h-3.5 w-3.5 ml-2" />
-        </Button>
+        {canConfigure && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-xs h-8"
+            onClick={handleConfigureTools}
+          >
+            <Wrench className="h-3.5 w-3.5 mr-2" />
+            Configure Tools
+            <ChevronRight className="h-3.5 w-3.5 ml-2" />
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

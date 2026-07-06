@@ -1,7 +1,7 @@
 # 📋 Sprint Board
 
-**Last Updated:** 2026-06-23
-**Current branch:** `fix/token-refresh-race-issue`
+**Last Updated:** 2026-07-04
+**Current branch:** `main`
 **Product direction:** Voice-only — the platform focuses exclusively on phone-call
 AI agents. Chat / multi-channel agents (F3, F14) are **deprioritized** and not on
 the active roadmap.
@@ -52,8 +52,8 @@ the active roadmap.
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1 | **Platform skills status enum (single source of truth)** | Done | Replaced `is_active` + `is_deleted` booleans with a single `status VARCHAR(20)` enum (draft/active/deprecated/deleted). Dedicated transition endpoints (`deprecate`/`reactivate`/`delete`/`restore`) enforce the state machine. Migration `20260624000001`. 36 new + migrated tests, full frontend + backend suites green. |
-| 2 | **Industry-template onboarding (Phase B)** | Next | Schema + fork-injection: `organizations.industry` column + `industry_skill_templates` table; on org creation or industry change, fork the matching industry skills into the org library automatically. Separate PR after Phase 2c is reviewed. |
+| 1 | **Navigation redesign + permission contract (N1)** | In Progress | New left-nav grouping (Workspace / Org Admin / Platform Admin) with org switcher; Phone Numbers and Skills promoted to top-level routes; `requiredPermission` field on every nav item, filtered via a new `useHasPermission()` hook. Ships with the permission contract + stub: backend `GET /me/permissions` endpoint that resolves the current user's effective permissions across all orgs (Phase 1: returns coarse role-based set; Phase 2: real per-role permission resolution). TDD red→green. Supersedes the prior coarse `item.name === "Users"` filter in `dashboard-layout.tsx`. |
+| 2 | **Industry-template onboarding (Phase B)** | Next | Schema + fork-injection: `organizations.industry` column + `industry_skill_templates` table; on org creation or industry change, fork the matching industry skills into the org library automatically. Supersedes the prior "soft-delete" line item — soft-delete / show-deleted / restore is now handled by the `status` enum (draft / active / deprecated / deleted) shipped in PR #25. |
 
 ---
 
@@ -75,6 +75,8 @@ the active roadmap.
 ### Low-priority housekeeping
 - Prune merged/stale git branches (~7 fully-merged + several squash-merged remotes safe to delete) — deferred; needs per-branch confirmation.
 - Minor TODO: `backend/src/billing/routes.py:187` placeholder `billing@{slug}.example.com` email.
+- Branding mismatch: `frontend/src/components/layout/dashboard-layout.tsx:176` sidebar still says "NeuraSaaS" — every other surface (docs, sprint board, landing page) says "CogniNets". Replace with config-driven product name (`process.env.NEXT_PUBLIC_APP_NAME`).
+- `OrganizationPage` (`frontend/src/app/(dashboard)/organization/page.tsx`) is a "god page" with 4 tabs that duplicates top-level routes (Agents, Skills, Phone Numbers). Targeted for refactor in N1: collapse to a settings-only page (Profile / Members / Billing / Danger Zone), promote the other tabs to top-level routes.
 
 ---
 
@@ -89,8 +91,10 @@ the active roadmap.
 ---
 
 ## 📝 Next sprint (suggested)
-- [x] Worker scaling: Postgres-backed lease lock implemented + tested (migration `20260623000001` — run `alembic upgrade head` to apply).
-- [ ] Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
+- [x] Worker scaling: Postgres-backed lease lock implemented + tested (migration `20260623000001` — `alembic upgrade head` applied; DB head confirmed at `20260624000001`).
+- [x] Platform skills `status` enum (single source of truth) — soft-delete, restore, and show-deleted are now backed by the enum + transition endpoints (PR #25, migration `20260624000001`).
+- [ ] **Navigation redesign + permission contract (N1)** — see `docs/tw-drafts/navigation-redesign.md`. Steps: (a) backend `GET /me/permissions` endpoint (stub returning role-based set), (b) frontend `useHasPermission()` hook, (c) `nav-config.ts` with `requiredPermission` per item, (d) `OrganizationSwitcher` popover in the sidebar, (e) Phone Numbers & Skills promoted to top-level routes, (f) Org page collapsed to a settings-only page with Profile / Members / Billing / Danger Zone tabs.
+- [ ] Industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork on org create / industry change.
 - [ ] Add 1–2 more built-in skills (e.g. `new-patient-intake`, `call-handling`).
 - [ ] (Optional) prune stale branches.
 

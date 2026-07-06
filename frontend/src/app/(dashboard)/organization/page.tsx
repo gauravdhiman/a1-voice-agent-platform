@@ -20,13 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-  AnimatedTabs,
-} from "@/components/ui/tabs";
-import {
-  Plus,
   Building2,
   Users,
   Calendar,
@@ -35,11 +28,8 @@ import {
   Save,
   X,
   Crown,
-  Bot,
   Edit3,
-  Phone,
   Info,
-  Zap,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -55,15 +45,7 @@ import {
 } from "@/types/organization";
 
 import { organizationService } from "@/services/organization-service";
-import { agentService } from "@/services/agent-service";
-import { VoiceAgent } from "@/types/agent";
-import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
-import { AgentCard } from "@/components/agents/agent-card";
-import { PhoneNumberDashboard } from "@/components/phone-numbers/phone-number-dashboard";
-import { phoneNumberService } from "@/services/phone-number-service";
-import { billingService } from "@/services/billing-service";
-import { PhoneNumberWithAgent } from "@/types/phone-number";
-import { OrganizationSkillsTab } from "@/components/skills/organization-skills-tab";
+import { legacyTabRedirect } from "./legacy-tab-redirect";
 import { toast } from "sonner";
 
 // Use real services
@@ -79,15 +61,18 @@ export default function OrganizationPage() {
     useUserPermissions();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const orgId = searchParams.get("org_id");
+  // N1 follow-up #2 bug fix: the sidebar nav links to bare
+  // `/organization` (no `?org_id=`), so we fall back to the user's
+  // currentOrganization from context. The URL still wins when
+  // present (e.g. for org switching from the orgs listing).
+  const orgId =
+    searchParams.get("org_id") ?? currentOrganization?.id ?? null;
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
   const [organizationData, setOrganizationData] =
     useState<OrganizationCompleteData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [agents, setAgents] = useState<VoiceAgent[]>([]);
 
   const [editedOrg, setEditedOrg] = useState<{
     name: string;
@@ -101,15 +86,6 @@ export default function OrganizationPage() {
     google_api_key: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Agent management state
-  const [selectedAgent, setSelectedAgent] = useState<VoiceAgent | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  // Phone number state
-  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumberWithAgent[]>([]);
-  const [creditBalance, setCreditBalance] = useState(0);
-  const [phoneNumbersLoading, setPhoneNumbersLoading] = useState(false);
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -131,33 +107,11 @@ export default function OrganizationPage() {
         business_details: org.business_details || "",
         google_api_key: org.google_api_key || "",
       });
-
-      // Load agents
-      const orgAgents = await agentService.getOrgAgents(orgId);
-      setAgents(orgAgents);
     } catch (error) {
       console.error("Failed to load organization data:", error);
       toast.error("Failed to load organization data");
     } finally {
       setLoading(false);
-    }
-  }, [orgId]);
-
-  const loadPhoneNumbers = useCallback(async () => {
-    if (!orgId) return;
-    setPhoneNumbersLoading(true);
-    try {
-      const [numbersRes, balanceRes] = await Promise.all([
-        phoneNumberService.getOrganizationNumbers(orgId),
-        billingService.getCreditBalance(orgId),
-      ]);
-      setPhoneNumbers(numbersRes.items);
-      setCreditBalance(balanceRes.total_credits);
-    } catch (error) {
-      console.error("Failed to load phone numbers:", error);
-      toast.error("Failed to load phone numbers");
-    } finally {
-      setPhoneNumbersLoading(false);
     }
   }, [orgId]);
 
@@ -168,29 +122,20 @@ export default function OrganizationPage() {
     }
   }, [orgId, loadOrganizationData]);
 
-  // Sync tab state with URL
+  // Sync tab state with URL. The Phone Numbers, Skills, and AI Voice
+  // Agent tabs are now top-level routes (N1 redesign): when the URL
+  // carries one of those tabs, we redirect to the canonical route
+  // instead of rendering a tab body. `overview` (and an absent `tab`)
+  // are the only values that render this page. The decision is in
+  // `legacy-tab-redirect.ts` so the redirect contract is unit-tested
+  // independently of the page.
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "ai-agent" || tabParam === "phone-numbers" || tabParam === "skills") {
-      setActiveTab(tabParam);
-      if (tabParam === "phone-numbers" && orgId) {
-        loadPhoneNumbers();
-      }
+    const target = legacyTabRedirect(tabParam, orgId);
+    if (target) {
+      router.replace(target);
     }
-  }, [searchParams, orgId, loadPhoneNumbers]);
-
-  const handleTabChange = useCallback(
-    (value: string) => {
-      setActiveTab(value);
-      router.push(`/organization?org_id=${orgId}&tab=${value}`, {
-        scroll: false,
-      });
-      if (value === "phone-numbers") {
-        loadPhoneNumbers();
-      }
-    },
-    [router, orgId, loadPhoneNumbers],
-  );
+  }, [searchParams, orgId, router]);
 
   // Validate organization access when orgId is provided
   const {
@@ -285,32 +230,6 @@ export default function OrganizationPage() {
       });
     }
   };
-
-  const handleAddAgent = () => {
-    router.push(orgId ? `/agents/create?org_id=${orgId}` : "/agents/create");
-  };
-
-  const handleDeleteAgent = useCallback((agent: VoiceAgent) => {
-    setSelectedAgent(agent);
-    setDeleteDialogOpen(true);
-  }, []);
-
-  const handleDeleteSuccess = useCallback(
-    async (agentId: string) => {
-      try {
-        await agentService.deleteAgent(agentId);
-        toast.success("Agent deleted successfully");
-        setDeleteDialogOpen(false);
-        setSelectedAgent(null);
-        loadOrganizationData();
-      } catch (error) {
-        console.error("Failed to delete agent:", error);
-        toast.error("Failed to delete agent");
-        throw error;
-      }
-    },
-    [loadOrganizationData],
-  );
 
   // Make orgId mandatory - if not provided, redirect to organizations page
   if (!orgId) {
@@ -449,47 +368,31 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      <AnimatedTabs
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="space-y-6"
-      >
-        <TabsList className="w-full">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="ai-agent">AI Voice Agent</TabsTrigger>
-          <TabsTrigger value="skills" className="flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            Skills
-          </TabsTrigger>
-          <TabsTrigger value="phone-numbers" className="flex items-center gap-2">
-            Phone Numbers
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview">
-          <Card>
-            <CardHeader className="p-5 pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <CardTitle className="flex items-center space-x-2 text-lg">
-                    <Building2 className="h-5 w-5" />
-                    <span>Organization Information</span>
-                  </CardTitle>
-                  <CardDescription>
-                    {isEditing
-                      ? "Edit your organization details"
-                      : "Your organization details and settings"}
-                  </CardDescription>
-                </div>
-                {canUpdateOrganization && !isEditing && (
-                  <Button variant="outline" size="sm" onClick={handleEdit}>
-                    <Edit3 className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
+      {/* N1 redesign: the org page is now settings-only. Phone Numbers,
+          Skills, and AI Voice Agent moved to top-level routes. The
+          redirect logic in `legacy-tab-redirect.ts` handles the legacy
+          `?tab=...` URLs. The "Active" tab strip is gone, so this
+          page renders directly as a single card. */}
+      <Card>
+        <CardHeader className="p-5 pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <CardTitle className="flex items-center space-x-2 text-lg">
+                <Building2 className="h-5 w-5" />
+                <span>Organization Information</span>
+              </CardTitle>
+              <CardDescription>
+                Your organization details and settings
+              </CardDescription>
+            </div>
+            {canUpdateOrganization && !isEditing && (
+              <Button variant="outline" size="sm" onClick={handleEdit}>
+                <Edit3 className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
+          </div>
+        </CardHeader>
             <CardContent className="p-5 pt-0 space-y-4">
               {isEditing ? (
                 <>
@@ -763,83 +666,7 @@ During monsoon season (July-September), we have extended hours for flood-related
                 </Button>
               </CardFooter>
             )}
-          </Card>
-        </TabsContent>
-
-        {/* AI Voice Agent Tab */}
-        <TabsContent value="ai-agent">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader className="p-5 pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center space-x-2 text-lg">
-                      <Phone className="h-5 w-5" />
-                      <span>Voice Agents</span>
-                    </CardTitle>
-                    <CardDescription>
-                      Manage your AI voice agents and their phone numbers
-                    </CardDescription>
-                  </div>
-                  <Button size="sm" onClick={handleAddAgent}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Agent
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                {agents.length === 0 ? (
-                  <div className="text-center py-8 bg-muted/20 rounded-lg border-2 border-dashed">
-                    <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                    <p className="text-muted-foreground">
-                      No voice agents configured yet
-                    </p>
-                    <Button
-                      variant="link"
-                      onClick={handleAddAgent}
-                      className="mt-2"
-                    >
-                      Create your first agent
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {agents.map((agent) => (
-                      <AgentCard
-                        key={agent.id}
-                        agent={agent}
-                        view="grid"
-                        onDelete={handleDeleteAgent}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Skills Tab — Split View: list on left, content on right */}
-        <TabsContent value="skills">
-          {orgId && (
-            <OrganizationSkillsTab
-              orgId={orgId}
-              canCreate={isOrgAdmin || isPlatformAdmin}
-              canEdit={isOrgAdmin || isPlatformAdmin}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="phone-numbers">
-          <PhoneNumberDashboard
-            organizationId={orgId!}
-            phoneNumbers={phoneNumbers}
-            creditBalance={creditBalance}
-            isLoading={phoneNumbersLoading}
-            onRefresh={loadPhoneNumbers}
-          />
-        </TabsContent>
-      </AnimatedTabs>
+      </Card>
 
       {/* Edit Dialog (for fallback) */}
       {validatedOrg && (
@@ -848,16 +675,6 @@ During monsoon season (July-September), we have extended hours for flood-related
           onOpenChange={setEditDialogOpen}
           organization={validatedOrg}
           onSuccess={handleEditSuccess}
-        />
-      )}
-
-      {/* Agent Delete Dialog */}
-      {selectedAgent && (
-        <AgentDeleteDialog
-          open={deleteDialogOpen}
-          onOpenChange={setDeleteDialogOpen}
-          agent={selectedAgent}
-          onSuccess={handleDeleteSuccess}
         />
       )}
     </div>

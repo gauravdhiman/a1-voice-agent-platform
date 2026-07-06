@@ -16,7 +16,12 @@
       "Bash(cd /Users/gauravdhiman/projects/python/ai/real_projects/ai-voice-agent-platform/backend && .venv-backend/bin/pytest tests/ --tb=short -q 2>&1)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001 2>/dev/null || echo \"not_running\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000 2>/dev/null || echo \"not_running\")",
-      "Bash(cd /Users/gauravdhiman/projects/python/ai/real_projects/ai-voice-agent-platform && ./scripts/run-e2e.sh 2>&1)"
+      "Bash(cd /Users/gauravdhiman/projects/python/ai/real_projects/ai-voice-agent-platform && ./scripts/run-e2e.sh 2>&1)",
+      "Bash(awk '/^## God Nodes/,/^## /' graphify-out/GRAPH_REPORT.md)",
+      "Bash(awk '/^## Surprising Connections/,/^## /' graphify-out/GRAPH_REPORT.md)",
+      "Bash(awk '/^## Suggested Questions/,/^## /' graphify-out/GRAPH_REPORT.md)",
+      "Bash(graphify query *)",
+      "Bash(graphify explain *)"
     ]
   }
 }

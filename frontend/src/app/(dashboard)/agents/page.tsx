@@ -2,6 +2,7 @@
 
 import React, { useMemo, useCallback, useEffect } from "react";
 import { useOrganization } from "@/contexts/organization-context";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +26,35 @@ import type { VoiceAgent } from "@/types/agent";
 
 export default function AgentsPage() {
   const { organizations } = useOrganization();
+  const { isPlatformAdmin, isOrgAdmin } = useUserPermissions();
+  // Page-level permission gate for the "New Agent" CTA + per-card
+  // trash icon. Derived from the current org role the same way the
+  // /skills page derives canCreate/canEdit. A regular org member
+  // with workspace permissions only sees the agent list but no
+  // create or delete controls.
+  const canCreateAgent = isPlatformAdmin || isOrgAdmin;
+  // TODO: [Cross-org delete] The /agents page lists agents across
+  // all orgs (it has an "All Organizations" filter). A page-level
+  // canDelete derived from the user's role on the CURRENT org is
+  // not strictly correct for a non-current-org agent: an org admin
+  // viewing another org's agent may or may not be allowed to delete
+  // it (depends on the agent's organization_id + the user's role
+  // on that org). For this plan, a page-level canDelete (matching
+  // the org-scoped /skills page pattern) is good enough; the
+  // backend re-validates per-org. The proper fix is a "can delete
+  // this specific agent" check — either by restricting the listing
+  // to the current org, or by adding a per-agent permission check
+  // to the agent API. File a follow-up.
+  const canDeleteAgent = canCreateAgent;
+  // `canEdit` and `canConfigure` are gated the same way: the
+  // user must hold an admin role (org or platform) to edit or
+  // configure an agent. Granular roles with `agent:update` but no
+  // admin role would still see Edit, which matches the per-card
+  // backward-compatible default but is consistent with the
+  // /skills page pattern (page-level admin role, not per-row
+  // permission).
+  const canEditAgent = canCreateAgent;
+  const canConfigureAgent = canCreateAgent;
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -137,10 +167,12 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        <Button onClick={handleAddAgent}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Agent
-        </Button>
+        {canCreateAgent && (
+          <Button onClick={handleAddAgent}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Agent
+          </Button>
+        )}
       </div>
 
       <AnimatedTabs
@@ -210,10 +242,12 @@ export default function AgentsPage() {
                     ? "No agents match your search or filter criteria."
                     : "You haven't created any voice agents yet."}
                 </p>
-                <Button onClick={handleAddAgent}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Agent
-                </Button>
+                {canCreateAgent && (
+                  <Button onClick={handleAddAgent}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First Agent
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -225,6 +259,9 @@ export default function AgentsPage() {
                   organizationName={getOrgName(agent.organization_id)}
                   view="list"
                   onDelete={handleDeleteAgent}
+                  canDelete={canDeleteAgent}
+                  canEdit={canEditAgent}
+                  canConfigure={canConfigureAgent}
                 />
               ))}
             </div>
@@ -288,10 +325,12 @@ export default function AgentsPage() {
                     ? "No agents match your search or filter criteria."
                     : "You haven't created any voice agents yet."}
                 </p>
-                <Button onClick={handleAddAgent}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Agent
-                </Button>
+                {canCreateAgent && (
+                  <Button onClick={handleAddAgent}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First Agent
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -303,6 +342,9 @@ export default function AgentsPage() {
                   organizationName={getOrgName(agent.organization_id)}
                   view="grid"
                   onDelete={handleDeleteAgent}
+                  canDelete={canDeleteAgent}
+                  canEdit={canEditAgent}
+                  canConfigure={canConfigureAgent}
                 />
               ))}
             </div>

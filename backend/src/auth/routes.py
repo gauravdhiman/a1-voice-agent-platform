@@ -3,9 +3,10 @@ Authentication API routes.
 """
 
 import logging
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pydantic import BaseModel, Field
@@ -218,17 +219,42 @@ async def refresh_token(request: Request, body: dict[str, str]) -> AuthResponse:
 )
 @tracer.start_as_current_span("auth.routes.get_current_user")
 async def get_current_user(
-    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user)
+    org_id: Optional[UUID] = Query(
+        None,
+        description=(
+            "Organization the embedded permissions object should be scoped to. "
+            "If omitted, the resolver returns an empty permissions object."
+        ),
+    ),
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ) -> UserProfile:
     """
-    Get current user profile.
+    Get current user profile, with resolved permissions for the current org.
+
+    The `permissions` and `current_organization_id` fields are computed
+    server-side on every call from the user's roles and the requested
+    `org_id`. The contract is documented in
+    `docs/tw-drafts/navigation-redesign.md` Section 5.
 
     Requires Authorization header with Bearer token.
     """
+    from src.auth.permissions_service import resolve_permissions
+
     current_span = trace.get_current_span()
     user_id, user_profile = user_auth
 
     current_span.set_attribute("user.id", str(user_id))
+    if org_id is not None:
+        current_span.set_attribute("org.id", str(org_id))
+
+    # Resolve the permissions object for the requested org context.
+    resolved = resolve_permissions(user_profile, current_organization_id=org_id)
+    user_profile.permissions = resolved.permissions
+    user_profile.current_organization_id = resolved.current_organization_id
+
+    current_span.set_attribute(
+        "permissions.count", sum(len(v) for v in resolved.permissions.values())
+    )
     current_span.set_status(trace.Status(trace.StatusCode.OK))
 
     return user_profile

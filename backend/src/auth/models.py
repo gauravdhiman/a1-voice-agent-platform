@@ -96,6 +96,21 @@ class UserProfile(BaseModel):
     roles: list[UserRoleWithPermissions] = Field(
         default=[], description="User's roles with organization context"
     )
+    current_organization_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Organization the embedded permissions object is scoped to. "
+            "Computed server-side on every /me response."
+        ),
+    )
+    permissions: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Resource -> actions map resolved server-side for the current "
+            "org context. Wildcard is encoded as {'*': ['*']}. See "
+            "docs/tw-drafts/navigation-redesign.md for the contract."
+        ),
+    )
 
     def has_role(self, role_name: str, organization_id: Optional[str] = None) -> bool:
         """Check if user has a specific role."""

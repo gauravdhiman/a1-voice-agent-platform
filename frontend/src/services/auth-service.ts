@@ -38,13 +38,20 @@ class AuthService {
   }
 
   // Get current user profile
-  async getCurrentUser(): Promise<{
+  async getCurrentUser(orgId?: string | null): Promise<{
     success: boolean;
     error?: string;
     user?: UserProfile;
   }> {
     try {
-      const response = await apiClient.get<UserProfile>(`${this.baseUrl}/me`);
+      // Forward the current org id so the backend can resolve the
+      // permissions object for the right org context. When orgId is
+      // undefined or null, the backend returns an empty permissions map
+      // (no org context to resolve against).
+      const url = orgId
+        ? `${this.baseUrl}/me?org_id=${encodeURIComponent(orgId)}`
+        : `${this.baseUrl}/me`;
+      const response = await apiClient.get<UserProfile>(url);
 
       return {
         success: true,
