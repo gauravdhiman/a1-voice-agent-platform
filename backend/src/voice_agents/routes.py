@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
+from src.auth.dependencies import require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
@@ -35,18 +36,30 @@ class TestTokenResponse(BaseModel):
 @tracer.start_as_current_span("voice_agent.routes.create_agent")
 async def create_agent(
     agent_data: VoiceAgentCreate,
-    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+    request: Request,
+    _auth: tuple[UUID, UserProfile] = Depends(
+        require_permission(
+            "agent", "create",
+            org_id_source="body", body_field="organization_id",
+        )
+    ),
 ):
-    """Create a new voice agent."""
-    current_user_id, user_profile = user_data
+    """Create a new voice agent.
 
-    # Check if user has permission for this organization
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent_data.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to create agents for this organization",
-            )
+    Permission check is declarative via the `require_permission` factory
+    (Task #22 — Phase 5). The factory reads `organization_id` from the
+    request body and asserts the caller holds `agent:create` on that org
+    (or is platform_admin).
+
+    Args:
+        agent_data: Pydantic body for the new agent. Must include
+            `organization_id` (UUID).
+        request: The raw Starlette Request, required by the
+            `require_permission` factory to read the body for org scoping.
+        _auth: Injected auth tuple (user_id, profile). The factory does
+            the actual check; the handler doesn't need to inspect it.
+    """
+    current_user_id, user_profile = _auth
 
     # Force inactive if no phone number assigned
     if not agent_data.phone_number:
