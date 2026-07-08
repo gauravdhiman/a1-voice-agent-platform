@@ -54,6 +54,7 @@ export default function SkillsPage() {
         orgId={orgId}
         canCreate={canManage}
         canEdit={canManage}
+        basePath="/skills"
       />
     </div>
   );

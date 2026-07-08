@@ -1,6 +1,6 @@
 # 📋 Sprint Board
 
-**Last Updated:** 2026-07-04
+**Last Updated:** 2026-07-07
 **Current branch:** `main`
 **Product direction:** Voice-only — the platform focuses exclusively on phone-call
 AI agents. Chat / multi-channel agents (F3, F14) are **deprioritized** and not on
@@ -77,6 +77,22 @@ the active roadmap.
 - Minor TODO: `backend/src/billing/routes.py:187` placeholder `billing@{slug}.example.com` email.
 - Branding mismatch: `frontend/src/components/layout/dashboard-layout.tsx:176` sidebar still says "NeuraSaaS" — every other surface (docs, sprint board, landing page) says "CogniNets". Replace with config-driven product name (`process.env.NEXT_PUBLIC_APP_NAME`).
 - `OrganizationPage` (`frontend/src/app/(dashboard)/organization/page.tsx`) is a "god page" with 4 tabs that duplicates top-level routes (Agents, Skills, Phone Numbers). Targeted for refactor in N1: collapse to a settings-only page (Profile / Members / Billing / Danger Zone), promote the other tabs to top-level routes.
+
+### 🟣 Deferred / Speculative (build only when a real need appears)
+
+Not on the active roadmap. Documented so they don't get lost, but should not
+be picked up speculatively. Each has a concrete trigger condition.
+
+| Item | Trigger |
+|------|---------|
+| **Define roles & permissions** — let org admins (or platform admins) create custom roles in the UI, assign permissions to them, and assign users to those roles. Today the platform has three fixed roles (`platform_admin`, `org_admin`, `member`) with hardcoded permission sets. | A paying customer needs differentiated access for non-admin users (e.g. "this user can handle calls but not see billing"). Today, any non-admin user is `member` (read-only) — the middle ground doesn't exist. |
+| **Phase 2 RBAC real resolver** — replace the coarse role-based `GET /me/permissions` stub with a resolver that joins `user_roles → role_permissions → permissions` to compute the actual effective permission set. The data model is already in place; the `require_permission` / `require_role` factory in `backend/src/auth/dependencies.py` already calls `has_permission(...)` so it would consume the resolver's output unchanged. | The "Define roles & permissions" feature ships. The resolver is dead weight without it — every role currently maps to a fixed permission set, so a join produces the same answer as a hardcoded map. |
+
+**Why defer:** No paying customer yet, so no concrete user need. Both items
+involve product decisions (who can manage roles, how to resolve role conflicts,
+whether custom roles are org-scoped) that should be made with users in the room.
+The data model and factory infrastructure are already in place — building later
+costs the same as building now.
 
 ---
 

@@ -1,7 +1,7 @@
 # VoiceAI Platform - Feature Priority List
 
-**Last Updated:** 2026-07-04
-**Version:** 2.3
+**Last Updated:** 2026-07-07
+**Version:** 2.4
 
 > **Product Direction:** Voice-only. The platform focuses exclusively on phone-call AI agents. Chat agents (F3) and multi-channel (F14) are deprioritized — see `SPRINT-BOARD.md`.
 
@@ -58,6 +58,24 @@ Build an **AI voice agent platform** (voice-only) that combines:
 | F12 | IVR Menu System | M | Medium |
 | F13 | Campaign Management | H | High |
 | F14 | Multi-channel (WhatsApp, Discord) | M | Medium |
+
+### 🟣 Deferred / Speculative (build only when a real need appears)
+
+These items are explicitly **not on the active roadmap**. They are documented
+here so they don't get lost, but they should not be picked up speculatively.
+Each has a concrete **trigger condition** — when that condition is met, design
+and ship them as their own scoped projects.
+
+| Feature | Trigger condition |
+|---------|-------------------|
+| **Define roles & permissions (UI + custom role management)** — let org admins (or platform admins) create custom roles in the UI, assign permissions to them, and assign users to those roles. Today the platform has three fixed roles (`platform_admin`, `org_admin`, `member`) with hardcoded permission sets. | A paying customer needs differentiated access for non-admin users (e.g. "this user can handle calls but not see billing"). Today, any non-admin user is `member` (read-only) — the middle ground doesn't exist. |
+| **Phase 2 RBAC real resolver** — replace the coarse role-based `GET /me/permissions` stub with a resolver that joins `user_roles → role_permissions → permissions` to compute the actual effective permission set. The data model is already in place; the `require_permission` / `require_role` factory in `backend/src/auth/dependencies.py` already calls `has_permission(...)` so it would consume the resolver's output unchanged. | The "Define roles & permissions" feature ships. The resolver is dead weight without it — every role currently maps to a fixed permission set, so a join produces the same answer as a hardcoded map. |
+
+**Why defer:** No paying customer yet, so no concrete user need. Both items
+involve product decisions (who can manage roles, how to resolve role conflicts,
+whether custom roles are org-scoped) that should be made with users in the room,
+not speculatively. The cost of building them later is the same as building them
+now — the data model and factory infrastructure are already in place.
 
 ---
 

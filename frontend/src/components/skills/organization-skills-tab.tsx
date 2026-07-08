@@ -35,6 +35,16 @@ interface OrganizationSkillsTabProps {
   orgId: string;
   canCreate: boolean;
   canEdit: boolean;
+  /**
+   * Base path that `syncUrl` writes the editor's selection against.
+   *
+   * Defaults to `/organization` (the legacy org-page mount point). The
+   * top-level `/skills` page passes `"/skills"` so that clicking a skill
+   * in the left panel stays on `/skills` instead of forcing a route
+   * change to `/organization` — the latter was the root cause of bug #35
+   * (page flash on every skill click on `/skills`).
+   */
+  basePath?: string;
 }
 
 /** Map an OrganizationSkill to the editor's normalized EditableSkill. */
@@ -55,11 +65,17 @@ function toEditable(s: OrganizationSkill): EditableSkill {
   };
 }
 
-export function OrganizationSkillsTab({ orgId, canCreate, canEdit }: OrganizationSkillsTabProps) {
+export function OrganizationSkillsTab({ orgId, canCreate, canEdit, basePath = "/organization" }: OrganizationSkillsTabProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // URL sync: /organization?org_id=…&tab=skills&skill=<slug>&file=<path>
+  // URL sync: <basePath>?org_id=…&tab=skills&skill=<slug>&file=<path>
+  //
+  // `basePath` is configurable because this component is now mounted from
+  // two different routes: the legacy `/organization?tab=skills` tab
+  // (where `basePath` defaults to `/organization`) and the top-level
+  // `/skills` page (where the parent passes `basePath="/skills"`). In
+  // both cases the query params are the same; only the route changes.
   const syncUrl = useCallback(
     (state: { slug: string | null; filePath: string | null }) => {
       const params = new URLSearchParams();
@@ -67,9 +83,9 @@ export function OrganizationSkillsTab({ orgId, canCreate, canEdit }: Organizatio
       params.set("tab", "skills");
       if (state.slug) params.set("skill", state.slug);
       if (state.filePath) params.set("file", state.filePath);
-      router.replace(`/organization?${params.toString()}`, { scroll: false });
+      router.replace(`${basePath}?${params.toString()}`, { scroll: false });
     },
-    [orgId, router],
+    [orgId, router, basePath],
   );
 
   const initialSelection = useMemo(
