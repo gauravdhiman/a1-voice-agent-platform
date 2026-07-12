@@ -21,7 +21,7 @@ export default function SignUpPage() {
                 <span className="text-white font-bold text-xl">AI</span>
               </div>
               <span className="text-xl font-bold tracking-tight">
-                NeuraSaaS
+                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
               </span>
             </Link>
           </div>
@@ -33,7 +33,7 @@ export default function SignUpPage() {
             </h2>
             <p className="text-lg text-white/80 leading-relaxed">
               Join thousands of developers and businesses who are already using
-              NeuraSaaS to power their next-generation voice applications.
+              {" "}{process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"} to power their next-generation voice applications.
             </p>
             <div className="mt-8 flex gap-4">
               <div className="flex flex-col">
@@ -49,7 +49,7 @@ export default function SignUpPage() {
           </div>
 
           <div className="relative z-10 text-sm text-white/40">
-            &copy; {new Date().getFullYear()} NeuraSaaS Inc. All rights
+            &copy; {new Date().getFullYear()} {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"} Inc. All rights
             reserved.
           </div>
         </div>

@@ -21,7 +21,7 @@ export default function SignInPage() {
                 <span className="text-white font-bold text-xl">AI</span>
               </div>
               <span className="text-xl font-bold tracking-tight">
-                NeuraSaaS
+                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
               </span>
             </Link>
           </div>
@@ -44,7 +44,7 @@ export default function SignInPage() {
           </div>
 
           <div className="relative z-10 text-sm text-white/40">
-            &copy; {new Date().getFullYear()} NeuraSaaS Inc. All rights
+            &copy; {new Date().getFullYear()} {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"} Inc. All rights
             reserved.
           </div>
         </div>

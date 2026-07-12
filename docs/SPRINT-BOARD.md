@@ -1,6 +1,6 @@
 # 📋 Sprint Board
 
-**Last Updated:** 2026-07-07
+**Last Updated:** 2026-07-11
 **Current branch:** `main`
 **Product direction:** Voice-only — the platform focuses exclusively on phone-call
 AI agents. Chat / multi-channel agents (F3, F14) are **deprioritized** and not on
@@ -45,6 +45,7 @@ the active roadmap.
 
 ### Tooling / housekeeping
 - `.gitignore` hardened: `.agents/`, `.codex/skills/graphify/`, `.codex/hooks.json`, `graphify-out/`; `.graphifyignore` added for code-only graphify runs.
+- Branding consistency: sidebar + signin/signup pages now drive the product name from `process.env.NEXT_PUBLIC_APP_NAME` (fallback `CogniNets`), matching the rest of the app. No more hardcoded "NeuraSaaS" strings in `frontend/src/`.
 
 ---
 
@@ -52,7 +53,7 @@ the active roadmap.
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1 | **Navigation redesign + permission contract (N1)** | In Progress | New left-nav grouping (Workspace / Org Admin / Platform Admin) with org switcher; Phone Numbers and Skills promoted to top-level routes; `requiredPermission` field on every nav item, filtered via a new `useHasPermission()` hook. Ships with the permission contract + stub: backend `GET /me/permissions` endpoint that resolves the current user's effective permissions across all orgs (Phase 1: returns coarse role-based set; Phase 2: real per-role permission resolution). TDD red→green. Supersedes the prior coarse `item.name === "Users"` filter in `dashboard-layout.tsx`. |
+| 1 | **Navigation redesign + permission contract (N1)** | In Progress | New left-nav grouping (Workspace / Org Admin / Platform Admin) with org switcher; Phone Numbers and Skills promoted to top-level routes; `requiredPermission` field on every nav item, filtered via a new `useHasPermission()` hook. Ships with the permission contract + stub: backend `GET /me/permissions` endpoint that resolves the current user's effective permissions across all orgs (Phase 1: returns coarse role-based set; Phase 2: real per-role permission resolution). TDD red→green. Supersedes the prior coarse `item.name === "Users"` filter in `dashboard-layout.tsx`. **All 5 phases shipped (2026-07-11)**: page-level + component-level frontend gates, 4 backend tool_routes CRITs closed, 5 surgical auth fixes (process-invitation, member:invite typo, 3 skill IDORs, 5 dead endpoints), and the `require_permission` / `require_role` factory. Audit of every backend write endpoint in `docs/02_features/authentication_rbac/backend-endpoint-permission-audit.md`. |
 | 2 | **Industry-template onboarding (Phase B)** | Next | Schema + fork-injection: `organizations.industry` column + `industry_skill_templates` table; on org creation or industry change, fork the matching industry skills into the org library automatically. Supersedes the prior "soft-delete" line item — soft-delete / show-deleted / restore is now handled by the `status` enum (draft / active / deprecated / deleted) shipped in PR #25. |
 
 ---
@@ -75,7 +76,6 @@ the active roadmap.
 ### Low-priority housekeeping
 - Prune merged/stale git branches (~7 fully-merged + several squash-merged remotes safe to delete) — deferred; needs per-branch confirmation.
 - Minor TODO: `backend/src/billing/routes.py:187` placeholder `billing@{slug}.example.com` email.
-- Branding mismatch: `frontend/src/components/layout/dashboard-layout.tsx:176` sidebar still says "NeuraSaaS" — every other surface (docs, sprint board, landing page) says "CogniNets". Replace with config-driven product name (`process.env.NEXT_PUBLIC_APP_NAME`).
 - `OrganizationPage` (`frontend/src/app/(dashboard)/organization/page.tsx`) is a "god page" with 4 tabs that duplicates top-level routes (Agents, Skills, Phone Numbers). Targeted for refactor in N1: collapse to a settings-only page (Profile / Members / Billing / Danger Zone), promote the other tabs to top-level routes.
 
 ### 🟣 Deferred / Speculative (build only when a real need appears)
@@ -109,7 +109,7 @@ costs the same as building now.
 ## 📝 Next sprint (suggested)
 - [x] Worker scaling: Postgres-backed lease lock implemented + tested (migration `20260623000001` — `alembic upgrade head` applied; DB head confirmed at `20260624000001`).
 - [x] Platform skills `status` enum (single source of truth) — soft-delete, restore, and show-deleted are now backed by the enum + transition endpoints (PR #25, migration `20260624000001`).
-- [ ] **Navigation redesign + permission contract (N1)** — see `docs/tw-drafts/navigation-redesign.md`. Steps: (a) backend `GET /me/permissions` endpoint (stub returning role-based set), (b) frontend `useHasPermission()` hook, (c) `nav-config.ts` with `requiredPermission` per item, (d) `OrganizationSwitcher` popover in the sidebar, (e) Phone Numbers & Skills promoted to top-level routes, (f) Org page collapsed to a settings-only page with Profile / Members / Billing / Danger Zone tabs.
+- [x] **Navigation redesign + permission contract (N1)** — see `docs/tw-drafts/navigation-redesign.md`. All 5 phases shipped: (a) backend `GET /me/permissions` endpoint (role-based set), (b) frontend `useHasPermission()` hook, (c) `nav-config.ts` with `requiredPermission` per item, (d) `OrganizationSwitcher` popover in the sidebar, (e) Phone Numbers & Skills promoted to top-level routes, (f) page-level + component-level frontend gates, (g) 4 backend tool_routes CRITs closed, (h) 5 surgical auth fixes, (i) `require_permission` / `require_role` factory. Per-endpoint PASS/FIXED audit at `docs/02_features/authentication_rbac/backend-endpoint-permission-audit.md`. Org page collapse to settings-only is the remaining piece of the original N1 scope.
 - [ ] Industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork on org create / industry change.
 - [ ] Add 1–2 more built-in skills (e.g. `new-patient-intake`, `call-handling`).
 - [ ] (Optional) prune stale branches.

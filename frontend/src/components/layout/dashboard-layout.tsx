@@ -167,7 +167,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </span>
               </div>
               <span className="text-base font-bold text-sidebar-foreground tracking-tight">
-                NeuraSaaS
+                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
               </span>
             </div>
           )}

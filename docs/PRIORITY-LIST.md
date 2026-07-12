@@ -1,6 +1,6 @@
 # VoiceAI Platform - Feature Priority List
 
-**Last Updated:** 2026-07-07
+**Last Updated:** 2026-07-11
 **Version:** 2.4
 
 > **Product Direction:** Voice-only. The platform focuses exclusively on phone-call AI agents. Chat agents (F3) and multi-channel (F14) are deprioritized — see `SPRINT-BOARD.md`.
