@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
-from src.auth.dependencies import require_permission
+from src.auth.dependencies import assert_has_permission, require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
@@ -79,15 +79,17 @@ async def get_org_agents(
     """Get all agents for an organization."""
     current_user_id, user_profile = user_data
 
-    # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(org_id)
-        ) and not user_profile.has_role("regular_user", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view agents for this organization",
-            )
+    # Permission: agent:read on the org (platform_admin short-circuits via
+    # _check_access; the canonical matrix grants agent:read to every
+    # org-scoped role so this covers org_admin, regular_user, and
+    # platform_admin uniformly).
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        org_id,
+        error_message="Insufficient permissions to view agents for this organization",
+    )
 
     agents, error = await voice_agent_service.get_agents_by_organization(org_id)
     if error:
@@ -152,15 +154,16 @@ async def get_agent(
     if error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
-    # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view this agent",
-            )
+    # Permission: agent:read on the agent's org. The org id is only
+    # known after the agent is loaded, so this is the post-load pattern
+    # (assert_has_permission) rather than the factory form.
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions to view this agent",
+    )
 
     return agent
 
@@ -184,15 +187,16 @@ async def get_test_token(
     if error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
-    # Permission check - user must have access to this organization
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to test this agent",
-            )
+    # Permission: agent:read on the agent's org. The test token is a
+    # read-equivalent op (it joins a LiveKit room to hear the agent
+    # speak), so the same gate as `get_agent` applies.
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions to test this agent",
+    )
 
     # Generate test token
     token, server_url, room_name = livekit_service.generate_test_token(
@@ -232,15 +236,15 @@ async def get_agent_system_prompt(
     if error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
-    # Permission check - user must have access to this organization
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view this agent",
-            )
+    # Permission: agent:read on the agent's org (the system prompt is a
+    # derived view of the agent's config).
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions to view this agent",
+    )
 
     # Get organization data
     org_service = OrganizationService()
@@ -289,14 +293,13 @@ async def generate_markdown_from_fields(
     if error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view this agent",
-            )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions to view this agent",
+    )
 
     org_service = OrganizationService()
     org, org_error = await org_service.get_organization_by_id(agent.organization_id)
@@ -352,13 +355,14 @@ async def update_agent(
     if error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
-    # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to update this agent",
-            )
+    # Permission: agent:update on the agent's org (platform_admin short-circuits).
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "update",
+        agent.organization_id,
+        error_message="Insufficient permissions to update this agent",
+    )
 
     # Prevent activating an agent without a phone number
     if agent_data.is_active is True:
@@ -436,14 +440,13 @@ async def get_embed_config(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
     # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view this agent",
-            )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions to view this agent",
+    )
 
     # Get embed config from database
     try:
@@ -483,12 +486,13 @@ async def create_embed_config(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
     # Permission check - only org_admin or platform_admin can modify
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to modify embed configuration",
-            )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "update",
+        agent.organization_id,
+        error_message="Insufficient permissions to modify embed configuration",
+    )
 
     # Check if config already exists
     try:
@@ -550,12 +554,13 @@ async def delete_embed_config(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
     # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to delete embed configuration",
-            )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "update",
+        agent.organization_id,
+        error_message="Insufficient permissions to delete embed configuration",
+    )
 
     try:
         result = (
@@ -597,14 +602,13 @@ async def get_embed_token(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
     # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
-            )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions",
+    )
 
     # Check if agent is active
     if not agent.is_active:
@@ -685,13 +689,14 @@ async def delete_agent(
     if error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
-    # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to delete this agent",
-            )
+    # Permission: agent:delete on the agent's org (platform_admin short-circuits).
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "delete",
+        agent.organization_id,
+        error_message="Insufficient permissions to delete this agent",
+    )
 
     response, error = await voice_agent_service.delete_agent(agent_id)
     if error:

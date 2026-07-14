@@ -58,13 +58,25 @@ def _make_user_profile(
     is_platform_admin: bool = False,
     is_org_admin_on: str | None = None,
 ):
-    """Build a UserProfile mock. `is_org_admin_on` is the org_id string
-    the user holds `org_admin` on, or None for no org_admin role."""
+    """Build a UserProfile mock.
+
+    `is_org_admin_on` is the org_id string the user holds `org_admin` on
+    (and, matching the seed, ``agent:update`` / ``agent:read`` on that
+    org). Tool writes now gate on ``agent:update`` via
+    ``assert_has_permission``, not a bare role ladder.
+    """
     profile = Mock()
     profile.has_role = Mock(
         side_effect=lambda role, org_id=None: (
             (role == "platform_admin" and is_platform_admin)
             or (role == "org_admin" and org_id == is_org_admin_on)
+        )
+    )
+    profile.has_permission = Mock(
+        side_effect=lambda perm, org_id=None: (
+            is_org_admin_on is not None
+            and org_id == is_org_admin_on
+            and perm in ("agent:update", "agent:read", "agent:create", "agent:delete")
         )
     )
     return profile

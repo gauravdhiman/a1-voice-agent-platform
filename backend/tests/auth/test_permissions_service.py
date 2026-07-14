@@ -1,18 +1,24 @@
 """
 Tests for the permission resolver used by GET /me.
 
-These tests cover the contract from `docs/tw-drafts/navigation-redesign.md`:
-the resolver returns a stable map of resource -> [actions] for the current
-org, using a stub role-based resolution today (Phase 1) and a real per-role
-lookup against the role_permissions table in Phase 2.
+These tests cover the contract from
+``docs/02_features/authentication_rbac/permission-matrix.md`` (the
+canonical permission matrix) and the grants migration
+``backend/alembic/versions/20260705000001_*``.
 
-Resolution rules (Phase 1 stub):
-- platform_admin role -> {"*": ["*"]} wildcard, plus every resource full set
+The resolver returns a stable map of resource -> [actions] for the
+current org by bucketing the role-permissions of the user's roles
+on that org (Phase 1: straight join; Phase 2: a richer resolver
+when custom roles ship).
+
+Resolution rules (as-implemented, 2026-07-11):
+- platform_admin role -> {"*": ["*"]} wildcard.
 - org_admin role on the current org -> every org-scoped action
-- regular org member -> read on every org resource + write on
-  agent/phone_number/skill; NOT billing:manage, member:invite,
-  organization:update
-- user not in any org -> empty permissions
+  (read, create, update, delete on agent/phone_number/skill/
+  call_log/member/organization, plus ``billing:manage``).
+- regular org member -> READ ONLY on every org resource. No
+  writes, no invites, no billing access, no organization update.
+- user not in any org / no current org -> empty permissions.
 """
 import pytest
 from uuid import uuid4
@@ -135,12 +141,17 @@ class TestResolvePermissionsOrgAdmin:
 
     def test_org_admin_gets_full_org_scoped_set(self):
         org_id = uuid4()
+        # The migration grants org_admin the full CRUD set on every
+        # org-scoped resource plus ``billing:manage``. There is NO
+        # ``billing:subscribe`` / ``platform:admin`` grant for org_admin
+        # (see the migration's docstring for the rationale).
         org_admin_role = _role(
             "org_admin",
             [_permission(f"{r}:{a}") for r in (
                 "agent", "phone_number", "skill", "call_log",
-                "member", "billing", "organization",
-            ) for a in ("read", "write", "delete", "invite", "remove", "manage", "update")],
+                "member", "organization",
+            ) for a in ("read", "create", "update", "delete")]
+            + [_permission("billing:manage")],
         )
         profile = _profile_with_roles(
             [_user_role(org_admin_role, organization_id=org_id)]
@@ -151,17 +162,23 @@ class TestResolvePermissionsOrgAdmin:
         # All resources from the contract are present.
         for resource in (
             "agent", "phone_number", "skill", "call_log",
-            "member", "billing", "organization",
+            "member", "organization",
         ):
             assert resource in result.permissions, (
                 f"org_admin should have {resource} in permissions"
             )
-        # write/delete/invite/remove/manage/update are present
-        for action in ("write", "delete", "invite", "remove", "manage", "update"):
+        # Every CRUD action is present on at least one resource.
+        for action in ("read", "create", "update", "delete"):
             assert any(
                 action in actions
                 for actions in result.permissions.values()
             ), f"org_admin should have {action} somewhere"
+        # billing:manage is granted; billing:subscribe and
+        # platform:admin are NOT granted to org_admin.
+        assert "manage" in result.permissions.get("billing", [])
+        assert "subscribe" not in result.permissions.get("billing", [])
+        # org_admin must not have any platform:* action.
+        assert "platform" not in result.permissions
 
     def test_org_admin_role_on_different_org_does_not_apply(self):
         """An org_admin role on a different org does NOT grant the current org's perms."""
@@ -179,19 +196,22 @@ class TestResolvePermissionsOrgAdmin:
 
 
 class TestResolvePermissionsRegularMember:
-    """Regular org members get read on every resource, plus write on agent/phone_number/skill."""
+    """Regular org members get READ ONLY on every org resource.
 
-    def test_regular_member_gets_read_and_specific_writes(self):
+    The canonical permission matrix pins this: regular members see
+    ``agent:read``, ``phone_number:read``, ``skill:read``,
+    ``call_log:read``, ``member:read``, ``organization:read`` —
+    and nothing else. No writes, no billing, no invites.
+    """
+
+    def test_regular_member_gets_read_only_on_org_resources(self):
         org_id = uuid4()
         member_role = _role(
             "member",
             [
                 _permission("agent:read"),
-                _permission("agent:write"),
                 _permission("phone_number:read"),
-                _permission("phone_number:write"),
                 _permission("skill:read"),
-                _permission("skill:write"),
                 _permission("call_log:read"),
                 _permission("member:read"),
                 _permission("organization:read"),
@@ -204,17 +224,27 @@ class TestResolvePermissionsRegularMember:
         result = resolve_permissions(profile, current_organization_id=org_id)
 
         perms = result.permissions
-        assert perms.get("agent") == ["read", "write"]
-        assert perms.get("phone_number") == ["read", "write"]
-        assert perms.get("skill") == ["read", "write"]
-        assert perms.get("call_log") == ["read"]
-        assert perms.get("member") == ["read"]
-        assert perms.get("organization") == ["read"]
-        # The member role does NOT grant these:
+        # Every read action lands in the map.
+        for resource in (
+            "agent", "phone_number", "skill", "call_log",
+            "member", "organization",
+        ):
+            assert perms.get(resource) == ["read"], (
+                f"regular member should have only {resource}:read, "
+                f"got {perms.get(resource)}"
+            )
+        # Regular members get NO write, create, update, delete, or
+        # non-read actions on any resource.
+        for resource, actions in perms.items():
+            assert all(a == "read" for a in actions), (
+                f"regular member should have only :read on {resource}, "
+                f"got {actions}"
+            )
+        # The member role does NOT grant billing at all.
         assert "billing" not in perms
-        assert "delete" not in perms.get("agent", [])
-        assert "invite" not in perms.get("member", [])
-        assert "update" not in perms.get("organization", [])
+        # Defensive: platform:* actions never appear for non-platform
+        # roles (resolver never grants them on the current org).
+        assert "platform" not in perms
 
 
 class TestResolvePermissionsDefensive:

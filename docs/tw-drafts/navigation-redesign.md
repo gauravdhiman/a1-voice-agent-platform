@@ -1,9 +1,9 @@
 # Navigation Redesign + Permission Contract (N1)
 
-**Status:** In progress (TDD, red→green)
+**Status:** Shipped 2026-07-11 (all 5 phases; product split between N1 follow-ups #1–#4 and the foundational RBAC work). See `docs/tw-drafts/n1-architecture-review.md` for the as-built audit and the design-vs-implementation drift it caught.
 **Owner:** Platform
-**Sprint board:** `docs/SPRINT-BOARD.md` (next-up item #1)
-**Date:** 2026-07-04
+**Sprint board:** `docs/SPRINT-BOARD.md` (closed: was next-up item #1)
+**Date:** 2026-07-11
 
 ---
 
@@ -15,12 +15,14 @@ and platform-admin items as siblings with no separator, filters them with a
 literal `item.name === "Users"` check, and hides Phone Numbers / Skills / Org
 admin / Settings behind an avatar dropdown or inside the org page's tab strip.
 
-Today, every org member has full CRUD on agents, phone numbers, and skills —
-there is no per-resource permission gate. When the proper RBAC system lands,
-we don't want to re-plumb the nav, the layout, or the page-level guards. The
-right move is to ship the **contract** (a permission string format, a
-`/me/permissions` endpoint, and a `useHasPermission()` hook) **now** with a
-stub resolver, so the Phase 2 work is a backend change, not a refactor.
+Today, the left-nav is the only permission gate — agents, phone
+numbers, and skills are surfaced to every member, with write actions
+also visible to everyone. When the proper RBAC system lands, we
+don't want to re-plumb the nav, the layout, or the page-level
+guards. The right move is to ship the **contract** (a permission
+string format, a `/me/permissions` endpoint, and a `useHasPermission()`
+hook) **now** with a stub resolver, so the Phase 2 work is a backend
+change, not a refactor.
 
 ---
 
@@ -36,17 +38,22 @@ stub resolver, so the Phase 2 work is a backend change, not a refactor.
    `requiredPermission` field, evaluated by a `useHasPermission()` hook that
    hits a new `GET /me/permissions` endpoint. The endpoint returns a stub
    resolution today (role-based), with a real per-role resolver in Phase 2.
-5. **Zero behavior regression for current users**: an org member today still
-   sees every workspace item and every action they're used to.
+5. **Workspace read for members, write for org_admin/platform_admin**: regular
+   org members see the workspace section (Home, Agents, Phone Numbers, Skills,
+   Calls) but no write affordances. org_admin (and platform_admin) keep full
+   CRUD. This is an intentional product rule — the RBAC migration is the
+   place where the legacy "everyone can write" behavior is retired.
 
 ---
 
 ## 3. Non-goals
 
-- Building the full RBAC per-role permission resolver (Phase 2).
-- Hiding the create/edit buttons inside individual pages when the user lacks
-  write permission (Phase 2). The current contract is **visibility only** at
-  the nav level.
+- Building the full RBAC per-role permission resolver (Phase 2). The stub
+  resolver today encodes the same role→permission mapping that the canonical
+  matrix in `docs/02_features/authentication_rbac/permission-matrix.md`
+  defines; the Phase 2 work reads those rows from `role_permissions` rather
+  than the stub.
+- Per-resource permission resolution against `role_permissions` (Phase 2).
 - Removing the duplicate avatar-menu entries (Settings, Members, Billing) on
   day one. They stay for one release as a fallback; removal is a follow-up.
 
@@ -56,21 +63,35 @@ stub resolver, so the Phase 2 work is a backend change, not a refactor.
 
 Format: `<resource>:<action>` — matches the existing `UserProfile.has_permission()` API.
 
-| Resource       | Actions                       | Example strings                       |
-|----------------|-------------------------------|---------------------------------------|
-| `agent`        | `read`, `write`, `delete`     | `agent:read`, `agent:write`           |
-| `phone_number` | `read`, `write`, `delete`     | `phone_number:read`                   |
-| `skill`        | `read`, `write`, `delete`     | `skill:read`                          |
-| `call_log`     | `read`                        | `call_log:read`                       |
-| `member`       | `read`, `invite`, `remove`    | `member:invite`                       |
-| `billing`      | `manage`                      | `billing:manage`                      |
-| `organization` | `read`, `update`, `delete`    | `organization:update`                 |
-| `platform`     | `admin`                       | `platform:admin`                      |
-| `*` (wildcard) | any                           | `*` (platform admins only today)      |
+Canonical reference: `docs/02_features/authentication_rbac/permission-matrix.md`.
+The single source of truth for the resource × action matrix is the migration
+`20260705000001_extend_org_admin_and_regular_user_grants.py`; the table
+below mirrors the rows it grants.
+
+| Resource       | Actions                                              | Example strings                       |
+|----------------|------------------------------------------------------|---------------------------------------|
+| `agent`        | `read`, `create`, `update`, `delete`                 | `agent:read`, `agent:create`          |
+| `phone_number` | `read`, `create`, `update`, `delete`                 | `phone_number:read`                   |
+| `skill`        | `read`, `create`, `update`, `delete`                 | `skill:read`                          |
+| `call_log`     | `read`                                               | `call_log:read`                       |
+| `member`       | `read`, `create`, `update`, `delete`                 | `member:create`                       |
+| `billing`      | `manage`, `subscribe`                                | `billing:manage`, `billing:subscribe` |
+| `organization` | `read`, `update`, `delete`                           | `organization:update`                 |
+| `platform`     | `admin`                                              | `platform:admin`                      |
+| `*` (wildcard) | any                                                  | `*:*` (granted only to `platform_admin`)|
+
+**Reserved actions:** `write` / `invite` / `remove` are **not** valid action
+names — the contract uses REST-style `create|update|delete`. `manage`,
+`subscribe`, and `admin` are the composite actions for billing, the legacy
+billing API seed, and the platform surface respectively. The canonical
+validator lives at `frontend/src/lib/permissions.ts` and rejects any
+permission string not in the matrix; new resources or actions must be
+added to that allow-list, the migration, and the matrix doc together.
 
 The contract is **scoped to the current org** for org resources. The endpoint
-response is one flat list per org context (resolved server-side); the
-frontend hook just checks set membership.
+response is a `Record<resource, action[]>` for the current org context; the
+frontend hook just checks membership. The `*:*` wildcard (granted to
+`platform_admin` via the resolver) short-circuits every check.
 
 ---
 
@@ -78,8 +99,10 @@ frontend hook just checks set membership.
 
 ### 5.1 `GET /me/permissions`
 
-**File:** `backend/src/auth/routes.py` (extend existing `/me` route, OR add a new
-`/me/permissions` route — see open question below).
+**File:** `backend/src/auth/routes.py` (the response is embedded on
+`GET /api/v1/auth/me?org_id=<uuid>` so the user profile and the resolved
+permissions land in a single round-trip on app boot — see Open Question 1
+for the decision log).
 
 **Response (200):**
 
@@ -88,11 +111,11 @@ frontend hook just checks set membership.
   "user_id": "uuid",
   "current_organization_id": "uuid-or-null",
   "permissions": {
-    "agent": ["read", "write", "delete"],
-    "phone_number": ["read", "write", "delete"],
-    "skill": ["read", "write", "delete"],
+    "agent": ["read", "create", "update", "delete"],
+    "phone_number": ["read", "create", "update", "delete"],
+    "skill": ["read", "create", "update", "delete"],
     "call_log": ["read"],
-    "member": ["read", "invite", "remove"],
+    "member": ["read", "create", "update", "delete"],
     "billing": ["manage"],
     "organization": ["read", "update"],
     "platform": ["admin"]
@@ -100,19 +123,23 @@ frontend hook just checks set membership.
 }
 ```
 
-For a regular org member, the same shape with `member: []` and
-`billing: []` and `organization: ["read"]`.
+For a regular org member, the same shape with `member: ["read"]` and
+`billing: {}` and `organization: ["read"]` (read-only on every workspace
+resource). The canonical role → grants mapping is documented in
+`docs/02_features/authentication_rbac/permission-matrix.md` and is what the
+resolver at `backend/src/auth/permissions_service.py` returns.
 
-**Stub resolution (Phase 1):**
+**Resolver shape:**
 
-- `platform_admin` role → full `*` (encoded as the literal `"*"` entry in
-  the `platform` key — the frontend hook treats it as "all permissions").
-- `org_admin` role on the current org → every org-scoped permission.
-- Any other org member → every org-scoped **read** permission, plus
-  `agent:write`, `phone_number:write`, `skill:write` (today everyone has
-  CRUD; this preserves the current behavior exactly).
+- `platform_admin` role → `{"*": ["*"]}` (the frontend hook short-circuits
+  every check on the wildcard).
+- `org_admin` role on the current org → full CRUD on every org-scoped
+  resource plus `billing:manage`.
+- Regular org member on the current org → read-only on every workspace
+  resource. No `billing` entry. No `member:create|update|delete`.
+- No current org context (or no matching role) → `{}`.
 
-**Phase 2** replaces the stub with a lookup against the
+**Phase 2** replaces the in-code mapping with a lookup against the
 `role_permissions` table joined with the user's roles on the current org.
 
 ### 5.2 Pydantic model
@@ -125,14 +152,17 @@ For a regular org member, the same shape with `member: []` and
 
 ### 5.3 Tests (red→green)
 
-`backend/tests/test_me_permissions.py` (new file, TDD):
+`backend/tests/auth/test_me_permissions_route.py` (and
+`backend/tests/auth/test_permissions_service.py` for the resolver unit
+tests):
 
-1. Platform admin gets `platform: ["*"]` and every resource with every action.
-2. Org admin on current org gets every org-scoped action.
-3. Regular org member gets `agent:read|write|delete`, `phone_number:read|write|delete`,
-   `skill:read|write|delete`, `call_log:read`, `member:read`,
-   `organization:read`, but NOT `member:invite|remove`, NOT `billing:manage`,
-   NOT `organization:update|delete`.
+1. Platform admin gets `{"*": ["*"]}` (the wildcard that short-circuits
+   every check).
+2. Org admin on current org gets every org-scoped action including
+   `billing:manage` and full CRUD on `member`.
+3. Regular org member gets read-only on every workspace resource
+   (`agent:read`, `phone_number:read`, `skill:read`, `call_log:read`,
+   `member:read`, `organization:read`) and **no** `billing` entry.
 4. User not in any org returns empty permissions object (no org context).
 5. Unauthenticated → 401 (handled by `get_authenticated_user`).
 
@@ -288,50 +318,55 @@ organization" entry at the bottom.
 - `frontend/src/app/(dashboard)/skills/page.tsx` — renders the existing
   `OrganizationSkillsTab` component (scoped to the current org).
 
-**Write-action permission gates (follow-up, N1 follow-up #1).**
+**Write-action permission gates (N1 follow-ups #1–#4, shipped).**
 
-The N1 browser validation surfaced write-action leaks on `/agents` and
-`/skills`: the per-row delete button and the page-level "New Agent"
-/"Create Your First Agent" buttons rendered for regular members who
-lacked the underlying permission. The fix is consistent with the nav
-permission contract:
+The N1 browser validation surfaced write-action leaks on `/agents`,
+`/skills`, `/phone-numbers`, `/organization/members`, and
+`/organization/billing` for members who lacked the underlying permission.
+All five fixes shipped on the `feature/improved-navigation` branch and
+land in the same shape as the nav permission contract:
 
-- `/skills` → `<OrganizationSkillsTab canCreate={isPlatformAdmin || isOrgAdmin} canEdit={isPlatformAdmin || isOrgAdmin} />`.
-  The tab already passes `canDelete={canCreate}` to `<SkillEditor>`.
-  The editor's per-row delete button consults `canDelete` (the
-  permission gate dominates the adapter capability check) so a
-  regular member sees no delete UI. The editor's confirm dialog
-  remains `canDelete`-gated (defence in depth).
-- `/agents` → page-level `canCreateAgent = isPlatformAdmin || isOrgAdmin`.
-  The 3 "New Agent" / "Create Your First Agent" buttons are gated on
-  this flag. Every `<AgentCard>` receives `canDelete={canCreateAgent}`,
-  and the card gates its trash icon on that prop.
-- `<AgentCard>` accepts optional `canDelete?` / `canEdit?` /
-  `canConfigure?` props (default `true` for back-compat with pre-N1
-  call sites). The page is the strict gate; the card is permissive by
-  default.
+- `/agents` → page-level `canCreateAgent = isPlatformAdmin || isOrgAdmin`
+  gates the 3 "New Agent" / "Create Your First Agent" buttons. Every
+  `<AgentCard>` receives a per-agent `canDelete` / `canEdit` / `canConfigure`
+  derived from the user's role on the **agent's** org, so a non-current-org
+  agent shows no write affordances (this replaces the page-level flag the
+  draft originally described — the per-agent check is the right model and
+  was promoted in follow-up #1).
+- `/skills` → `<OrganizationSkillsTab canCreate={…} canEdit={…}>` from the
+  page. `<SkillEditor>` already consumes the flag for its per-row delete
+  button and confirm dialog. A regular member sees no create, edit, or
+  delete UI.
+- `/phone-numbers` → `<PhoneNumberDashboard canManage={isPlatformAdmin ||
+  isOrgAdmin}>` from the page. All 4 write buttons (Search & Purchase,
+  Add Phone Number, Assign, Cancel) are gated on the prop.
+- `/organization/members` → the columns factory accepts a `canManage` flag
+  and returns `null` for the Actions column when false, so a regular member
+  sees no per-row "Remove Member" dropdown.
+- `/organization/billing` and `/agents/create` → page-level `AccessDenied`
+  blocks for non-admins (and for the `/agents/create` direct-URL path).
 
-**Out of scope (follow-up tasks):**
+**Out of scope (deferred, see n1-architecture-review.md):**
 
-- **PhoneNumberDashboard write-action leak**: the dashboard is a
-  controlled component that does not currently gate its 4 write
-  buttons (Search & Purchase, Add Phone Number, Assign, Cancel) on
-  user permissions. The page shows a "read-only access" message for
-  non-admins but does not actually pass any permission props. The
-  fix is to add optional `canCreate?` / `canDelete?` props to
-  `PhoneNumberDashboard` and pass them from the page.
-- **Cross-org delete on `/agents`**: the page lists agents across
-  all orgs; a page-level `canDelete` derived from the current org
-  is wrong for non-current-org agents. For now, the simple
-  page-level flag (matching the org-scoped `/skills` pattern) is
-  acceptable because the backend re-validates per-org. The proper
-  fix is a per-agent "can I delete this" check.
-- **Backend write-endpoint audit**: the frontend permission gates
-  are a UX nicety, not a security boundary. Every write endpoint
-  must independently enforce the role/permission. Audit
-  `/agents` (POST/DELETE/PATCH), `/skills` (POST/PATCH/DELETE/file
-  CRUD), `/phone-numbers` (purchase/assign/cancel), and
-  `/platform/skills` for the matching server-side checks.
+- **PhoneNumberDashboard dashboard-mode write prop audit** — the
+  component still defaults `canCreate?` / `canDelete?` to `true` for
+  back-compat. Every new call site must pass the page's `canManage`
+  flag; the permissive default is a known tech-debt item (the audit
+  flagged it as HIGH). Tracked under Epic C cleanup.
+- **Per-agent write affordances on phone-numbers and skills** — the
+  per-agent pattern promoted for `/agents` has not been propagated to
+  the other two resource lists. Tracked under Epic C.
+- **Backend write-endpoint audit** — frontend permission gates are a
+  UX nicety, not a security boundary. The audit in
+  `docs/tw-drafts/n1-followup-2-leak-audit.md` enumerated every
+  endpoint that lacked a server-side check; fixes shipped for
+  `tool_routes` (4 CRITs), `process-invitation`, the `member:invite`
+  typo, 3 skill file/refresh IDORs, and 5 `has_permission`-without-org
+  dead endpoints. Remaining `has_role` ladders (~27 across 5 route
+  files) are tracked under task #41 / Epic C and migrate to
+  `Depends(require_permission(…))` or `assert_has_permission(…)`
+  depending on whether the org id is known at dep time or only after
+  the resource is loaded.
 
 **Route tests** (`frontend/src/app/(dashboard)/phone-numbers/__tests__/page.test.tsx`,
 `frontend/src/app/(dashboard)/skills/__tests__/page.test.tsx`,
@@ -353,11 +388,13 @@ permission contract:
 - `frontend/app/(dashboard)/organization?tab=ai-agent` →
   `frontend/app/(dashboard)/agents`.
 
-Handled in `organization/page.tsx` itself (a `useEffect` watching
-`tabParam`), or via Next.js `redirects()` in `next.config.js`. TBD in
-implementation — pick whichever the project already uses. (Check the
-existing config; if neither, use the `useEffect` approach in the page to
-keep this change self-contained.)
+The redirect **forwards deep-link query params** (everything except the
+consumed `tab`): a legacy deep link like
+`/organization?tab=skills&skill=appointment-booking&file=references/faq.md`
+lands on `/skills?org_id=…&skill=…&file=…` so the `SkillEditor` can restore
+the selected skill + file. `org_id` is always re-emitted. Implemented in
+`legacy-tab-redirect.ts` (pure helper, unit-tested) and called from
+`organization/page.tsx`'s `useEffect` watching `tabParam`.
 
 ### 6.6 `OrganizationPage` collapse
 
@@ -405,29 +442,29 @@ Remove the `ai-agent`, `skills`, and `phone-numbers` tabs. Keep:
 
 ## 8. Open questions
 
-1. **Endpoint shape**: extend `GET /me` (add a `permissions` field) or add a
-   separate `GET /me/permissions`? Pro separate: lets the frontend cache
-   permissions independently of the user profile. Pro extend: one fewer
-   network round-trip on app boot. **Recommendation:** separate endpoint —
-   permissions are queried by `useHasPermission` on every nav render, and
-   we don't want to re-fetch the entire user profile for that. Confirm
-   before implementing.
+1. ~~**Endpoint shape**: extend `GET /me` (add a `permissions` field) or add a
+   separate `GET /me/permissions`?~~ **Resolved (shipped):** the `permissions`
+   and `current_organization_id` fields are embedded on `GET /api/v1/auth/me`
+   with an `?org_id=` query param. The single round-trip on app boot won out
+   over the separate endpoint — the `useMyPermissions` hook re-uses the same
+   TanStack Query cache that the auth context already warms.
 2. **Permission check on the Org page tabs (vs redirects)**: if a user
    navigates to `?tab=phone-numbers` directly, do we (a) redirect to
    `/phone-numbers`, or (b) render the tab? **Recommendation:** redirect —
    the new top-level routes are the canonical path. Confirm before
    implementing.
-3. **TanStack Query vs simpler cache**: the existing app uses TanStack
+3. ~~**TanStack Query vs simpler cache**: the existing app uses TanStack
    Query (`useQuery`, `useMyAgents`, etc.) — confirm we should use
    `useQuery` for `useMyPermissions` and not introduce a new caching
-   pattern.
+   pattern.~~ **Resolved (shipped):** `useMyPermissions` is a `useQuery`
+   keyed by the current `orgId`, with `staleTime` of 60s and an org-switch
+   invalidation.
 
 ---
 
 ## 9. Out of scope (deferred to follow-up)
 
 - Removing the duplicate avatar-menu entries (Settings, Members, Billing).
-- Hiding create/edit buttons on individual pages when the user lacks write
-  permission (page-level guards).
 - Per-resource permission resolution against `role_permissions` (Phase 2).
 - Org page "Danger zone" (delete org) — needs backend support first.
+- URL refactor `?org_id=` → `/{resource}/{orgId}/` (task #27).

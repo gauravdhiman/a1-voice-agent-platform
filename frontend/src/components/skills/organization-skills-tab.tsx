@@ -38,11 +38,13 @@ interface OrganizationSkillsTabProps {
   /**
    * Base path that `syncUrl` writes the editor's selection against.
    *
-   * Defaults to `/organization` (the legacy org-page mount point). The
-   * top-level `/skills` page passes `"/skills"` so that clicking a skill
-   * in the left panel stays on `/skills` instead of forcing a route
-   * change to `/organization` — the latter was the root cause of bug #35
-   * (page flash on every skill click on `/skills`).
+   * Defaults to `/skills` (the first-class N1 route). Pass
+   * `"/organization"` only if the editor is ever mounted under the
+   * legacy org page again — in that case `tab=skills` is also written
+   * so the org page can redirect via `legacyTabRedirect`.
+   *
+   * Bug #35: without a configurable base path, the editor always
+   * navigated to `/organization?...` and flashed when used on `/skills`.
    */
   basePath?: string;
 }
@@ -65,22 +67,24 @@ function toEditable(s: OrganizationSkill): EditableSkill {
   };
 }
 
-export function OrganizationSkillsTab({ orgId, canCreate, canEdit, basePath = "/organization" }: OrganizationSkillsTabProps) {
+export function OrganizationSkillsTab({
+  orgId,
+  canCreate,
+  canEdit,
+  basePath = "/skills",
+}: OrganizationSkillsTabProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // URL sync: <basePath>?org_id=…&tab=skills&skill=<slug>&file=<path>
-  //
-  // `basePath` is configurable because this component is now mounted from
-  // two different routes: the legacy `/organization?tab=skills` tab
-  // (where `basePath` defaults to `/organization`) and the top-level
-  // `/skills` page (where the parent passes `basePath="/skills"`). In
-  // both cases the query params are the same; only the route changes.
+  // URL sync: <basePath>?org_id=…&skill=<slug>&file=<path>
+  // Only the legacy `/organization` mount also writes `tab=skills`.
   const syncUrl = useCallback(
     (state: { slug: string | null; filePath: string | null }) => {
       const params = new URLSearchParams();
       params.set("org_id", orgId);
-      params.set("tab", "skills");
+      if (basePath === "/organization") {
+        params.set("tab", "skills");
+      }
       if (state.slug) params.set("skill", state.slug);
       if (state.filePath) params.set("file", state.filePath);
       router.replace(`${basePath}?${params.toString()}`, { scroll: false });

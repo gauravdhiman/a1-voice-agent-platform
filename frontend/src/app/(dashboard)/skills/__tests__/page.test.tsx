@@ -80,6 +80,7 @@ describe("/skills page (N1)", () => {
 
   it("renders the OrganizationSkillsTab with the org id from the URL", () => {
     mockUseUserPermissions.mockReturnValue({
+      canManageSkills: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -108,6 +109,7 @@ describe("/skills page (N1)", () => {
       setCurrentOrganization: vi.fn(),
     });
     mockUseUserPermissions.mockReturnValue({
+      canManageSkills: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -120,6 +122,7 @@ describe("/skills page (N1)", () => {
 
   it("grants create+edit to org admins", () => {
     mockUseUserPermissions.mockReturnValue({
+      canManageSkills: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -133,6 +136,7 @@ describe("/skills page (N1)", () => {
 
   it("grants create+edit to platform admins", () => {
     mockUseUserPermissions.mockReturnValue({
+      canManageSkills: true,
       isPlatformAdmin: true,
       isOrgAdmin: false,
     });
@@ -146,6 +150,7 @@ describe("/skills page (N1)", () => {
 
   it("denies create+edit to regular members", () => {
     mockUseUserPermissions.mockReturnValue({
+      canManageSkills: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -160,6 +165,7 @@ describe("/skills page (N1)", () => {
   it("renders a 'select an organization' state when no org is in scope", () => {
     delete globalThis.__skillsSearchParams;
     mockUseUserPermissions.mockReturnValue({
+      canManageSkills: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });

@@ -27,12 +27,11 @@ import type { VoiceAgent } from "@/types/agent";
 
 export default function AgentsPage() {
   const { organizations } = useOrganization();
-  const { isPlatformAdmin, isOrgAdmin } = useUserPermissions();
+  const { canCreateAgent: canCreateOnCurrentOrg } = useUserPermissions();
   const { user } = useAuth();
-  // Page-level "New Agent" CTA still uses the current-org admin role.
-  // A regular org member with workspace permissions only sees the
-  // agent list but no create or delete controls.
-  const canCreateAgent = isPlatformAdmin || isOrgAdmin;
+  // Page-level "New Agent" CTA uses agent:create on the *current* org
+  // (from /me.permissions). Regular members have agent:read only.
+  const canCreateAgent = canCreateOnCurrentOrg;
   // Per-agent permission helper. The /agents page lists agents across
   // all orgs (it has an "All Organizations" filter), so a single
   // page-level canDelete derived from the CURRENT org would leak a

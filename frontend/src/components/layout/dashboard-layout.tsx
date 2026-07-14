@@ -333,45 +333,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItemLink>
-                {currentOrganization &&
-                  user &&
-                  (user.hasRole("platform_admin") ||
-                    user.hasRole("org_admin", currentOrganization.id)) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Organization</DropdownMenuLabel>
-                      {organizations.length > 1 && (
-                        <DropdownMenuItemLink href="/organizations">
-                          <Building2 className="mr-2 h-4 w-4" />
-                          <span>Switch Org</span>
-                        </DropdownMenuItemLink>
-                      )}
-                      {organizations.length === 1 && currentOrganization && (
-                        <>
-                          <DropdownMenuItemLink
-                            href={`/organization?org_id=${currentOrganization.id}`}
-                          >
-                            <Building2 className="mr-2 h-4 w-4" />
-                            <span>Overview</span>
-                          </DropdownMenuItemLink>
-
-                          <DropdownMenuItemLink
-                            href={`/organization/members?org_id=${currentOrganization.id}`}
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            <span>Members</span>
-                          </DropdownMenuItemLink>
-                          <DropdownMenuItemLink
-                            href={`/organization/billing?org_id=${currentOrganization.id}`}
-                          >
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            <span>Billing</span>
-                          </DropdownMenuItemLink>
-                        </>
-                      )}
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
+                {/* N1 Epic D: org admin links (Members / Billing /
+                    Organization) live in the left-nav only. The avatar
+                    menu no longer duplicates them. Multi-org users still
+                    get a "Switch Org" shortcut to /organizations. */}
+                {organizations.length > 1 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItemLink href="/organizations">
+                      <Building2 className="mr-2 h-4 w-4" />
+                      <span>Switch Org</span>
+                    </DropdownMenuItemLink>
+                  </>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="text-destructive focus:text-destructive cursor-pointer"

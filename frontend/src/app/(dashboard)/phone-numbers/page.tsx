@@ -28,7 +28,7 @@ import { toast } from "sonner";
 export default function PhoneNumbersPage() {
   const searchParams = useSearchParams();
   const { currentOrganization } = useOrganization();
-  const { isPlatformAdmin, isOrgAdmin } = useUserPermissions();
+  const { canManagePhoneNumbers } = useUserPermissions();
 
   // Prefer the URL's org_id (shareable links), fall back to the current
   // org from context (default app navigation).
@@ -72,7 +72,8 @@ export default function PhoneNumbersPage() {
     );
   }
 
-  const canManage = isPlatformAdmin || isOrgAdmin;
+  // phone_number:create|update|delete on the current org (permission-matrix).
+  const canManage = canManagePhoneNumbers;
 
   return (
     <div className="space-y-6">

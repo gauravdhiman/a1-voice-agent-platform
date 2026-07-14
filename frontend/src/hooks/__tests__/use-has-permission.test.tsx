@@ -69,7 +69,7 @@ describe("useHasPermission", () => {
       user: {
         id: "u-1",
         current_organization_id: "org-1",
-        permissions: { agent: ["read", "write"] },
+        permissions: { agent: ["read", "create"] },
         // other UserProfile fields are not exercised by this hook
         email: "",
         first_name: "",
@@ -117,7 +117,7 @@ describe("useHasPermission", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const { result } = renderHook(
-      () => useHasPermission("agent:write"),
+      () => useHasPermission("agent:create"),
       { wrapper: makeWrapper(queryClient) },
     );
 
@@ -320,7 +320,7 @@ describe("useMyPermissions", () => {
       user: {
         id: "u-1",
         current_organization_id: "org-1",
-        permissions: { agent: ["read", "write"], skill: ["read"] },
+        permissions: { agent: ["read", "create"], skill: ["read"] },
         email: "",
         first_name: "",
         last_name: "",
@@ -340,7 +340,7 @@ describe("useMyPermissions", () => {
 
     await vi.waitFor(() =>
       expect(result.current.permissions).toEqual({
-        agent: ["read", "write"],
+        agent: ["read", "create"],
         skill: ["read"],
       }),
     );

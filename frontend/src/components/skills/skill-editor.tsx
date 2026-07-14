@@ -438,9 +438,23 @@ export function SkillEditor({
     if (skill) {
       setSelectedSkill(skill);
       setExpanded(new Set([skill.id]));
-      ensureFiles(skill.id);
       // Lazily hydrate content for the restored selection too.
       ensureContent(skill).then((full) => setSelectedSkill(full));
+      // Restore the selected FILE from the URL (e.g. ?file=references/faq.md)
+      // when present. ensureFiles returns the file list, so we find the match
+      // by file_path and select it (which loads its content + re-pushes the
+      // URL). Without this, deep links to a specific file land on the skill
+      // with no file open. Guarded by `initialSelection.filePath` so the
+      // common case (no file in URL) is unchanged.
+      const filePath = initialSelection.filePath;
+      if (filePath) {
+        ensureFiles(skill.id).then((files) => {
+          const file = files.find((f) => f.file_path === filePath);
+          if (file) selectFile(skill, file);
+        });
+      } else {
+        ensureFiles(skill.id);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skills, initialSelection]);

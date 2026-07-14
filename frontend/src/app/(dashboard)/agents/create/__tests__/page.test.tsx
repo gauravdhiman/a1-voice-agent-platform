@@ -1,13 +1,11 @@
 /**
  * Tests for the /agents/create page (CRIT frontend leak — direct URL bypass).
  *
- * Contract (mirrors the N1 permission-aware-UI follow-up):
- *   - The "New Agent" button on /agents is gated on org_admin or
- *     platform_admin, but the /agents/create URL is reachable by
- *     direct navigation. Without a page-level gate, a regular org
- *     member could create an agent by typing the URL.
- *   - The page must show AccessDenied to a regular org member.
- *   - The page must render normally for an org admin or platform admin.
+ * Contract (N1 Epic B gap fix):
+ *   - Gate uses `canCreateAgent` (`agent:create` from `/me.permissions`),
+ *     not a bare isOrgAdmin / isPlatformAdmin role check.
+ *   - Direct URL navigation without the permission shows AccessDenied.
+ *   - Users with canCreateAgent see the create widget.
  */
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -66,8 +64,9 @@ describe("/agents/create page (N1 — page-level admin gate)", () => {
     });
   });
 
-  it("renders the create widget for an org admin", () => {
+  it("renders the create widget when canCreateAgent is true (org admin grants)", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -81,8 +80,9 @@ describe("/agents/create page (N1 — page-level admin gate)", () => {
     expect(screen.getByTestId("agent-create-widget")).toBeInTheDocument();
   });
 
-  it("renders the create widget for a platform admin", () => {
+  it("renders the create widget when canCreateAgent is true (platform admin)", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: true,
       isOrgAdmin: false,
     });
@@ -96,8 +96,9 @@ describe("/agents/create page (N1 — page-level admin gate)", () => {
     expect(screen.getByTestId("agent-create-widget")).toBeInTheDocument();
   });
 
-  it("shows AccessDenied for a regular org member (CRIT — direct URL bypass)", () => {
+  it("shows AccessDenied when canCreateAgent is false (CRIT — direct URL bypass)", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });

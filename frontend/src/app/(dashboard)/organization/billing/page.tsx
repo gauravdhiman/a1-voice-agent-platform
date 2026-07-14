@@ -72,13 +72,12 @@ export default function BillingPage() {
     }
   }, [validatedOrg, currentOrganization, setCurrentOrganization]);
 
-  // Page-level admin gate: only org_admin or platform_admin can
-  // manage billing (the page contains PlanSelection / CreditPurchase
-  // / SubscriptionManagement which can cancel/reactivate the
-  // org's subscription).
+  // Page-level gate: `billing:manage` OR `billing:subscribe` (and
+  // platform admin wildcard) via the useUserPermissions facade —
+  // not a bare isOrgAdmin role check, so Phase 2 custom billing
+  // managers are not blocked.
   const userPermissions = useUserPermissions();
-  const isBillingAdmin =
-    userPermissions.isPlatformAdmin || userPermissions.isOrgAdmin;
+  const isBillingAdmin = userPermissions.canManageBilling;
 
   const {
     data: billingSummary,

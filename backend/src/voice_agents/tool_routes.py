@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from opentelemetry import trace
+from src.auth.dependencies import assert_has_permission, assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
@@ -40,22 +41,16 @@ async def _assert_agent_tool_admin(
     """Verify the caller can administer the given agent_tool.
 
     Resolves ``agent_tool_id`` → ``agent_id`` → ``organization_id`` and
-    enforces that the caller is either a ``platform_admin`` (org-agnostic)
-    or an ``org_admin`` on the agent's organization. All four write
-    endpoints on the agent-tools resource (``update``, ``logout``,
-    ``api-key``, ``delete``) call this before touching the service layer.
+    enforces ``agent:update`` on that org (platform_admin short-circuits
+    inside :func:`assert_has_permission`). Tool configuration is an
+    agent-mutation, so it uses the same permission as agent update
+    rather than a bare ``org_admin`` role check.
 
-    Args:
-        agent_tool_id: UUID of the ``agent_tools`` row being mutated.
-        user_profile: The authenticated caller's profile (carries roles).
-
-    Returns:
-        The resolved ``AgentToolResponse`` so the caller can reuse it
-        without re-querying.
+    All four write endpoints on the agent-tools resource (``update``,
+    ``logout``, ``api-key``, ``delete``) call this before the service layer.
 
     Raises:
-        HTTPException: 404 if the agent_tool does not exist, 403 if the
-        caller is not a platform/org admin on the agent's organization.
+        HTTPException: 404 if missing, 403 if permission denied.
     """
     agent_tool, error = await tool_service.get_agent_tool_by_id(agent_tool_id)
     if error:
@@ -80,15 +75,13 @@ async def _assert_agent_tool_admin(
             status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
         )
 
-    org_id_str = str(agent.organization_id)
-    if not (
-        user_profile.has_role("platform_admin")
-        or user_profile.has_role("org_admin", org_id_str)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required to modify this agent tool",
-        )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "update",
+        agent.organization_id,
+        error_message="Admin role required to modify this agent tool",
+    )
 
     return agent_tool
 
@@ -104,8 +97,9 @@ async def create_platform_tool(
 ):
     """Create a new platform tool (Platform Admin only)."""
     current_user_id, user_profile = user_data
-    if not user_profile.has_role("platform_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    assert_platform_role(
+        user_profile, "platform_admin", error_message="Admin only"
+    )
 
     tool, error = await tool_service.upsert_platform_tool(tool_data)
     if error:
@@ -145,13 +139,14 @@ async def configure_agent_tool(
             status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
         )
 
-    # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to configure tools for this agent",
-            )
+    # Configuring a tool mutates agent capability → agent:update.
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "update",
+        agent.organization_id,
+        error_message="Insufficient permissions to configure tools for this agent",
+    )
 
     agent_tool, error = await tool_service.configure_agent_tool(agent_tool_data)
     if error:
@@ -175,15 +170,13 @@ async def get_agent_tools(
             status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
         )
 
-    # Permission check
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(agent.organization_id)
-        ) and not user_profile.has_role("regular_user", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view tools for this agent",
-            )
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        agent.organization_id,
+        error_message="Insufficient permissions to view tools for this agent",
+    )
 
     tools, error = await tool_service.get_agent_tools(agent_id)
     if error:

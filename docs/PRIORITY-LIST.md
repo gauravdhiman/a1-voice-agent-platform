@@ -35,7 +35,7 @@ Build an **AI voice agent platform** (voice-only) that combines:
 ### 🟡 In Progress / Next (priority order)
 | # | Feature | Effort | Impact | Status |
 |---|---------|--------|--------|--------|
-| 1 | Navigation redesign + permission contract (N1) — new left-nav grouping (Workspace / Org Admin / Platform Admin) with org switcher; Phone Numbers & Skills promoted to top-level routes; `requiredPermission` field on every nav item filtered via `useHasPermission()`. Ships with backend `GET /me/permissions` stub (role-based resolution) and the contract (`resource:action` string format, `*` wildcard for platform admins). See `docs/tw-drafts/navigation-redesign.md`. | M | High | In Progress |
+| 1 | Navigation redesign + permission contract (N1) — new left-nav grouping (Workspace / Org Admin / Platform Admin) with org switcher; Phone Numbers & Skills promoted to top-level routes; `requiredPermission` field on every nav item filtered via `useHasPermission()`. Ships with backend `GET /me/permissions` stub (role-based resolution) and the contract (`resource:action` string format, `*` wildcard for platform admins). Epics A, B, C, and D-partial are **shipped** (2026-07-11/12); only D's `?org_id=` → `/{orgId}/` URL refactor and `OrganizationSkillsTab` URL noise remain. See `docs/tw-drafts/navigation-redesign.md`. | M | High | In Progress |
 | 2 | Industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork industry skills on org create / industry change | M | High | Next |
 | 3 | Skill library continuation (`call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`) | M | High | Next |
 

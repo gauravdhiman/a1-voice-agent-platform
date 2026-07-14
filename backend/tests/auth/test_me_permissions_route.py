@@ -134,7 +134,7 @@ class TestMeEmbedsPermissions:
             "member",
             [
                 _permission("agent:read"),
-                _permission("agent:write"),
+                _permission("agent:create"),
                 _permission("phone_number:read"),
                 _permission("skill:read"),
                 _permission("call_log:read"),
@@ -153,7 +153,7 @@ class TestMeEmbedsPermissions:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["current_organization_id"] == str(org_id)
-        assert body["permissions"]["agent"] == ["read", "write"]
+        assert set(body["permissions"]["agent"]) == {"read", "create"}
         assert body["permissions"]["phone_number"] == ["read"]
         assert body["permissions"]["skill"] == ["read"]
         assert body["permissions"]["call_log"] == ["read"]

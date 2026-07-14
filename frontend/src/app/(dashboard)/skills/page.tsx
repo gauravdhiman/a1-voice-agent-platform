@@ -22,7 +22,7 @@ import { OrganizationSkillsTab } from "@/components/skills/organization-skills-t
 export default function SkillsPage() {
   const searchParams = useSearchParams();
   const { currentOrganization } = useOrganization();
-  const { isPlatformAdmin, isOrgAdmin } = useUserPermissions();
+  const { canManageSkills } = useUserPermissions();
 
   // Prefer the URL's org_id, fall back to the current org from context.
   const orgId = searchParams.get("org_id") ?? currentOrganization?.id ?? null;
@@ -37,10 +37,10 @@ export default function SkillsPage() {
     );
   }
 
-  // canCreate/canEdit require admin-level permissions. Regular members
-  // can view skills but not create or edit them. The `<SkillEditor>`
-  // enforces this with the same flags.
-  const canManage = isPlatformAdmin || isOrgAdmin;
+  // Write gates come from skill:create|update|delete on the current org
+  // (see useUserPermissions / permission-matrix). Regular members have
+  // skill:read only.
+  const canManage = canManageSkills;
 
   return (
     <div className="space-y-6">

@@ -6,6 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
+from src.auth.dependencies import (
+    assert_has_permission,
+    assert_has_role,
+    assert_platform_role,
+)
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.organization.invitation_models import Invitation, InvitationCreate
@@ -40,17 +45,11 @@ async def create_organization(
     current_span.set_attribute("organization.name", org_data.name)
 
     # Check if user has platform_admin role
-    if not user_profile.has_role("platform_admin"):
-        current_span.set_status(
-            trace.Status(
-                trace.StatusCode.ERROR,
-                "Only platform administrators can create organizations",
-            )
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform administrators can create organizations",
-        )
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform administrators can create organizations",
+    )
 
     organization, error = await organization_service.create_organization(org_data)
     if error:
@@ -139,20 +138,26 @@ async def get_organization_members(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("organization.id", str(org_id))
 
-    # Check if user has permission to view organization members
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            if not user_profile.has_permission("organization:read", str(org_id)):
-                current_span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR,
-                        "Insufficient permissions to view organization members",
-                    )
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Insufficient permissions to view organization members",
-                )
+    # Check if user has permission to view organization members.
+    # The 3-way OR is: platform_admin (org-agnostic) OR org_admin on
+    # the target org OR `organization:read` permission on the target
+    # org. The `_check_access` short-circuits on platform_admin, so
+    # we can compose the two remaining checks in a try/except chain.
+    try:
+        assert_has_role(
+            user_profile,
+            "org_admin",
+            org_id=org_id,
+            error_message="Insufficient permissions to view organization members",
+        )
+    except HTTPException:
+        assert_has_permission(
+            user_profile,
+            "organization",
+            "read",
+            org_id=org_id,
+            error_message="Insufficient permissions to view organization members",
+        )
 
     members, error = await user_role_service.get_users_by_organization(org_id)
     if error:
@@ -181,23 +186,35 @@ async def invite_member(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("organization.id", str(org_id))
 
-    # Check if user has permission to invite members
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            if not user_profile.has_permission("member:create", str(org_id)):
-                current_span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR,
-                        "Insufficient permissions to invite members",
-                    )
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={
-                        "error_code": ErrorCode.INSUFFICIENT_PERMISSIONS.value,
-                        "message": "Insufficient permissions to invite members",
-                    },
-                )
+    # Check if user has permission to invite members. The 3-way OR
+    # is: platform_admin (org-agnostic) OR org_admin on the target
+    # org OR `member:create` permission on the target org. The
+    # `_check_access` short-circuit on platform_admin keeps the
+    # call-site shape identical to a single permission check.
+    try:
+        assert_has_role(
+            user_profile,
+            "org_admin",
+            org_id=org_id,
+            error_message="Insufficient permissions to invite members",
+        )
+    except HTTPException:
+        try:
+            assert_has_permission(
+                user_profile,
+                "member",
+                "create",
+                org_id=org_id,
+                error_message="Insufficient permissions to invite members",
+            )
+        except HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error_code": ErrorCode.INSUFFICIENT_PERMISSIONS.value,
+                    "message": "Insufficient permissions to invite members",
+                },
+            )
 
     # Parse request body manually to get email
     body = await request.json()
@@ -259,20 +276,24 @@ async def get_organization(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("organization.id", str(org_id))
 
-    # Check if user has permission to view organizations
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            if not user_profile.has_permission("organization:read", str(org_id)):
-                current_span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR,
-                        "Insufficient permissions to view organizations",
-                    )
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Insufficient permissions to view organizations",
-                )
+    # Check if user has permission to view organizations. The 3-way
+    # OR is: platform_admin (org-agnostic) OR org_admin on the target
+    # org OR `organization:read` permission on the target org.
+    try:
+        assert_has_role(
+            user_profile,
+            "org_admin",
+            org_id=org_id,
+            error_message="Insufficient permissions to view organizations",
+        )
+    except HTTPException:
+        assert_has_permission(
+            user_profile,
+            "organization",
+            "read",
+            org_id=org_id,
+            error_message="Insufficient permissions to view organizations",
+        )
 
     organization, error = await organization_service.get_organization_by_id(org_id)
     if error:
@@ -333,18 +354,12 @@ async def update_organization(
     current_span.set_attribute("organization.id", str(org_id))
 
     # Check if user has platform_admin or org_admin role for this organization
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            current_span.set_status(
-                trace.Status(
-                    trace.StatusCode.ERROR,
-                    "Only platform administrators or organization administrators can update organizations",
-                )
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only platform administrators or organization administrators can update organizations",
-            )
+    assert_has_role(
+        user_profile,
+        "org_admin",
+        org_id=org_id,
+        error_message="Only platform administrators or organization administrators can update organizations",
+    )
 
     organization, error = await organization_service.update_organization(
         org_id, org_data
@@ -373,18 +388,12 @@ async def complete_onboarding(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("organization.id", str(org_id))
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            current_span.set_status(
-                trace.Status(
-                    trace.StatusCode.ERROR,
-                    "Only organization administrators can complete onboarding",
-                )
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only organization administrators can complete onboarding",
-            )
+    assert_has_role(
+        user_profile,
+        "org_admin",
+        org_id=org_id,
+        error_message="Only organization administrators can complete onboarding",
+    )
 
     organization, error = await organization_service.complete_onboarding(org_id)
     if error:
@@ -395,7 +404,16 @@ async def complete_onboarding(
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    # Seed built-in skills for the organization (idempotent)
+    # TODO: [Bug] `seed_built_in_skills(org_id)` is dead code — SkillService
+    # defines `seed_platform_skills()` (no org_id arg, platform-level only,
+    # run on app startup) but NOT `seed_built_in_skills`. The AttributeError
+    # is swallowed by this `except Exception`, so onboarding silently never
+    # seeds org skills. The platform-seeding model is "orgs fork what they
+    # need" (see skill_service.seed_platform_skills docstring), so the right
+    # fix is likely to DELETE this block (no per-org seeding is intended) or
+    # implement a real org-scoped seed if product needs it. Surfaced while
+    # adding the complete_onboarding permission tests (2026-07-13).
+    # Priority: Medium. Timeline: Next skill-seeding touch.
     try:
         from shared.voice_agents.skill_service import skill_service
         await skill_service.seed_built_in_skills(org_id)
@@ -418,17 +436,11 @@ async def delete_organization(
     current_span.set_attribute("organization.id", str(org_id))
 
     # Check if user has platform_admin role
-    if not user_profile.has_role("platform_admin"):
-        current_span.set_status(
-            trace.Status(
-                trace.StatusCode.ERROR,
-                "Only platform administrators can delete organizations",
-            )
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform administrators can delete organizations",
-        )
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform administrators can delete organizations",
+    )
 
     success, error = await organization_service.delete_organization(org_id)
     if error:

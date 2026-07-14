@@ -35,46 +35,25 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   Building2,
-  CreditCard,
   LayoutDashboard,
+  Layers,
   Phone,
   PhoneCall,
   Users,
   UsersRound,
   Wallet,
 } from "lucide-react";
+import {
+  PERMISSION_ACTIONS,
+  PERMISSION_RESOURCES,
+  type PermissionString,
+} from "@/lib/permissions";
 
-/** A permission string in the contract: `<resource>:<action>`. */
-export type PermissionString = `${string}:${string}`;
+export type { PermissionString };
+export { PERMISSION_ACTIONS, PERMISSION_RESOURCES };
 
 /** Logical nav section. Rendered in the order declared in `NAV_SECTIONS`. */
 export type NavSection = "workspace" | "org_admin" | "platform_admin";
-
-/** Resource names allowed by the permission contract. */
-export const PERMISSION_RESOURCES = [
-  "agent",
-  "phone_number",
-  "skill",
-  "call_log",
-  "member",
-  "billing",
-  "organization",
-  "platform",
-  "*",
-] as const;
-
-/** Action names allowed by the permission contract. */
-export const PERMISSION_ACTIONS = [
-  "read",
-  "write",
-  "delete",
-  "manage",
-  "admin",
-  "invite",
-  "remove",
-  "update",
-  "*",
-] as const;
 
 /** A single nav item. */
 export interface NavItem {
@@ -179,7 +158,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Platform Skills",
       href: "/platform/skills",
-      icon: CreditCard,
+      icon: Layers,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },

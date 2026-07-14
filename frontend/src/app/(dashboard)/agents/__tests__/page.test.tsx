@@ -122,6 +122,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // for the 'New Agent' button + per-card trash/Edit/Tools icons).
     // The per-agent tests override `mockHasRole` directly.
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -139,6 +140,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("renders the 'New Agent' button for an org admin", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -162,6 +164,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("renders the 'New Agent' button for a platform admin", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: true,
       isOrgAdmin: false,
     });
@@ -184,6 +187,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("does NOT render the 'New Agent' button for a regular org member", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -207,6 +211,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("does NOT render the empty-state 'Create Your First Agent' button for a regular member", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -230,6 +235,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("renders the empty-state 'Create Your First Agent' button for an org admin", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -256,6 +262,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // not rendered. This is the contract the page-level wire-up
     // enforces.
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -286,6 +293,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("org admin DOES see AgentCards with a trash icon (canDelete=true)", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -315,6 +323,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // The page is the strict gate; the AgentCard defaults to true
     // for back-compat, so the page must pass false explicitly.
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -344,6 +353,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
   it("org admin DOES see per-card Edit and Tools buttons", () => {
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -379,6 +389,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // Regular user: no admin role on any org. Even the agent in the
     // current org must not show a trash icon.
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -433,6 +444,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // must short-circuit to true regardless of the agent's org.
     mockHasRole.mockImplementation((role: string) => role === "platform_admin");
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
       isPlatformAdmin: true,
       isOrgAdmin: false,
     });
@@ -496,6 +508,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // read-only for non-admins (the detail page gates its write
     // actions per-button, not at the page level).
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
@@ -526,6 +539,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // view agents belonging to other orgs (the page lists all orgs).
     // The fix must not gate the click on org membership.
     mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });

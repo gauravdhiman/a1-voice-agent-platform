@@ -52,11 +52,18 @@ Why a factory and not a plain dependency function:
     declaratively in the route signature.
   - Adding a new source (e.g. "query", "header") only touches this file,
     not every route.
+
+Also exports :func:`check_billing_permissions` — the shared dependency
+used by `billing/routes.py` and `phone_numbers/routes.py`. It is the
+OR of three checks (platform_admin / org_admin on target org /
+`billing:subscribe` on target org) and is implemented as a thin
+wrapper over the helpers below so all three layers share the
+platform-admin short-circuit in one place.
 """
 from typing import Awaitable, Callable, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from opentelemetry import trace
 
 from src.auth.middleware import get_authenticated_user
@@ -70,6 +77,69 @@ tracer = trace.get_tracer(__name__)
 _ORG_ID_SOURCE_PATH = "path"
 _ORG_ID_SOURCE_BODY = "body"
 SUPPORTED_ORG_ID_SOURCES = frozenset({_ORG_ID_SOURCE_PATH, _ORG_ID_SOURCE_BODY})
+
+
+# --- Shared dependency: billing access ----------------------------------
+#
+# The check is the OR of four conditions (see permission-matrix.md):
+#
+#   1. `platform_admin` (org-agnostic).
+#   2. `org_admin` on the target org (the normal billing manager).
+#   3. `billing:manage` on the target org (N1 nav / UI composite).
+#   4. `billing:subscribe` on the target org (legacy API seed).
+#
+# Phone-number routes MUST NOT use this helper — they use
+# ``phone_number:*`` via :func:`assert_has_permission` so a
+# billing-only grant cannot mutate phone inventory.
+def assert_billing_access(
+    user_profile: UserProfile,
+    organization_id: UUID,
+    *,
+    error_message: Optional[str] = None,
+) -> None:
+    """Assert the caller may perform billing ops on ``organization_id``.
+
+    Raises HTTPException(403) when none of the four conditions pass.
+    Prefer this helper over try/except chains around
+    :func:`assert_has_role` / :func:`assert_has_permission` so a
+    denied check never gets re-wrapped as HTTP 500.
+    """
+    detail = (
+        error_message
+        or "Insufficient permissions for billing operations in this organization"
+    )
+    org_key = str(organization_id)
+    if user_profile.has_role("platform_admin"):
+        return
+    if user_profile.has_role("org_admin", org_key):
+        return
+    if user_profile.has_permission("billing:manage", org_key):
+        return
+    if user_profile.has_permission("billing:subscribe", org_key):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+async def check_billing_permissions(
+    organization_id: UUID, authorization: str = Header(None)
+) -> tuple[UUID, UserProfile]:
+    """Shared FastAPI dependency for billing-scoped routes.
+
+    Args:
+        organization_id: Org to scope the check to (path/query param
+            named ``organization_id`` so FastAPI injects it).
+        authorization: The ``Authorization`` header value.
+
+    Returns:
+        ``(user_id, user_profile)`` on success.
+
+    Raises:
+        HTTPException(401) if the token is missing/invalid.
+        HTTPException(403) if :func:`assert_billing_access` fails.
+    """
+    user_id, user_profile = await get_authenticated_user(authorization)
+    assert_billing_access(user_profile, organization_id)
+    return user_id, user_profile
 
 
 def _resolve_org_id(
@@ -257,6 +327,81 @@ def _make_check(
         return user_id, user_profile
 
     return dependency
+
+
+def assert_has_permission(
+    user_profile: UserProfile,
+    resource: str,
+    action: str,
+    org_id: UUID,
+    *,
+    error_message: Optional[str] = None,
+) -> None:
+    """Assert the caller holds ``<resource>:<action>`` on ``org_id``.
+
+    Use this when the org id is only known *after* loading a resource
+    (e.g. agent update/delete by ``agent_id``). Prefer
+    :func:`require_permission` when the org id is available from path
+    or body at dependency-injection time.
+
+    Platform admins always pass. Raises HTTPException(403) on failure.
+    """
+    permission_name = f"{resource}:{action}"
+    _check_access(
+        user_profile=user_profile,
+        check_kind="permission",
+        check_arg=permission_name,
+        org_id=org_id,
+        error_message=error_message
+        or f"Insufficient permission '{permission_name}' for this organization",
+    )
+
+
+def assert_has_role(
+    user_profile: UserProfile,
+    role: str,
+    org_id: UUID,
+    *,
+    error_message: Optional[str] = None,
+) -> None:
+    """Assert the caller holds ``role`` on ``org_id``.
+
+    Same post-load pattern as :func:`assert_has_permission`. Platform
+    admins always pass. Raises HTTPException(403) on failure.
+    """
+    _check_access(
+        user_profile=user_profile,
+        check_kind="role",
+        check_arg=role,
+        org_id=org_id,
+        error_message=error_message
+        or f"Insufficient role '{role}' for this organization",
+    )
+
+
+def assert_platform_role(
+    user_profile: UserProfile,
+    role: str,
+    *,
+    error_message: Optional[str] = None,
+) -> None:
+    """Assert the caller holds an org-agnostic role (e.g. ``platform_admin``).
+
+    The post-load counterpart of
+    :func:`require_role` for routes that do NOT have an org_id in
+    scope. Most platform-admin-only checks (e.g. subscription-plan
+    CRUD, org deletion, RBAC catalog reads) call this helper instead
+    of constructing a sentinel UUID just to satisfy
+    :func:`assert_has_role`'s signature.
+
+    Raises:
+        HTTPException(403) if the user does not hold ``role``.
+    """
+    if not user_profile.has_role(role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message or f"Insufficient role '{role}' for this action",
+        )
 
 
 def require_role(

@@ -131,7 +131,7 @@ export default function OrganizationPage() {
   // independently of the page.
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    const target = legacyTabRedirect(tabParam, orgId);
+    const target = legacyTabRedirect(tabParam, orgId, searchParams);
     if (target) {
       router.replace(target);
     }

@@ -7,14 +7,13 @@
  * from the `/skills` route. This is the regression test for that fix.
  *
  * Contract:
- *   - When `basePath` is not provided, the `syncUrl` callback must write to
- *     `/organization?...` (the legacy default — used when the tab is rendered
- *     inside the org page).
- *   - When `basePath` is provided (e.g. `/skills`), the `syncUrl` callback
- *     must write to that base path instead, so the editor stays on whichever
- *     page is rendering it.
- *   - In both cases, the URL written must include the org_id, the skill slug,
- *     and (when present) the file path.
+ *   - When `basePath` is not provided, the `syncUrl` callback defaults to
+ *     `/skills?...` (the first-class N1 route) and does NOT write `tab=`.
+ *   - When `basePath="/organization"` (legacy), the callback writes
+ *     `/organization?...&tab=skills` so the org page redirect still works.
+ *   - When `basePath` is provided as `/skills`, the editor stays on `/skills`
+ *     (regression for bug #35).
+ *   - In all cases, the URL includes org_id, skill slug, and optional file.
  */
 import React from "react";
 import { render } from "@testing-library/react";
@@ -97,7 +96,7 @@ describe("<OrganizationSkillsTab> basePath contract (bug #35)", () => {
     mockSearchParams = new URLSearchParams();
   });
 
-  it("defaults syncUrl to /organization?... when basePath is not provided", () => {
+  it("defaults syncUrl to /skills?... when basePath is not provided", () => {
     render(
       <OrganizationSkillsTab
         orgId="org-1"
@@ -111,8 +110,26 @@ describe("<OrganizationSkillsTab> basePath contract (bug #35)", () => {
 
     expect(mockReplace).toHaveBeenCalledTimes(1);
     const url = mockReplace.mock.calls[0][0] as string;
-    expect(url.startsWith("/organization?")).toBe(true);
+    expect(url.startsWith("/skills?")).toBe(true);
+    expect(url).not.toContain("tab=");
     expect(url).toContain("org_id=org-1");
+    expect(url).toContain("skill=foo");
+  });
+
+  it("writes tab=skills only for the legacy /organization basePath", () => {
+    render(
+      <OrganizationSkillsTab
+        orgId="org-1"
+        canCreate={true}
+        canEdit={true}
+        basePath="/organization"
+      />,
+    );
+
+    capturedSyncUrl!({ slug: "foo", filePath: null });
+
+    const url = mockReplace.mock.calls[0][0] as string;
+    expect(url.startsWith("/organization?")).toBe(true);
     expect(url).toContain("tab=skills");
     expect(url).toContain("skill=foo");
   });
@@ -136,6 +153,7 @@ describe("<OrganizationSkillsTab> basePath contract (bug #35)", () => {
     // stay on /skills. It must NOT navigate to /organization.
     expect(url.startsWith("/skills?")).toBe(true);
     expect(url.startsWith("/organization?")).toBe(false);
+    expect(url).not.toContain("tab=");
     expect(url).toContain("org_id=org-1");
     expect(url).toContain("skill=foo");
   });

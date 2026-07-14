@@ -57,4 +57,32 @@ describe("legacyTabRedirect", () => {
       "/skills?org_id=org%20with%20space",
     );
   });
+
+  it("forwards deep-link params (skill, file) through the skills redirect", () => {
+    // N1 regression guard: a deep link like
+    // /organization?tab=skills&skill=appointment-booking&file=references/faq.md
+    // must land on /skills with skill+file preserved, so the SkillEditor can
+    // restore the selected file. The `tab` param is consumed (not forwarded);
+    // org_id is always re-emitted.
+    const sp = new URLSearchParams("org_id=org-1&skill=appointment-booking&file=references/faq.md");
+    expect(legacyTabRedirect("skills", "org-1", sp)).toBe(
+      "/skills?org_id=org-1&skill=appointment-booking&file=references%2Ffaq.md",
+    );
+  });
+
+  it("does not forward the consumed `tab` param", () => {
+    const sp = new URLSearchParams("org_id=org-1&tab=skills&skill=x");
+    expect(legacyTabRedirect("skills", "org-1", sp)).toBe(
+      "/skills?org_id=org-1&skill=x",
+    );
+  });
+
+  it("forwards deep-link params even when org_id is missing from searchParams", () => {
+    // org_id comes from the page's own searchParams.get("org_id"); the helper
+    // re-emits it from the `orgId` arg so the redirect is valid.
+    const sp = new URLSearchParams("skill=x");
+    expect(legacyTabRedirect("skills", "org-1", sp)).toBe(
+      "/skills?org_id=org-1&skill=x",
+    );
+  });
 });

@@ -126,55 +126,6 @@ def _decode_jwt_verified(token: str) -> dict:
         )
 
 
-async def check_billing_permissions(
-    organization_id: UUID, authorization: str = Header(None)
-) -> tuple[UUID, UserProfile]:
-    """
-    Check billing permissions for a specific organization.
-    This is used as a FastAPI dependency for billing operations.
-
-    Args:
-        organization_id: The organization ID to check permissions for
-        authorization: The Authorization header value (Bearer token)
-
-    Returns:
-        tuple[UUID, UserProfile]: (user_id, user_profile)
-
-    Raises:
-        HTTPException: If authentication or authorization fails
-    """
-    # First, authenticate the user
-    user_id, user_profile = await get_authenticated_user(authorization)
-
-    try:
-        # Check if user has platform admin role (bypasses organization checks)
-        if user_profile.has_role("platform_admin"):
-            # Platform admins have access to everything
-            return user_id, user_profile
-
-        # Also check if user is org_admin for this organization
-        if user_profile.has_role("org_admin", str(organization_id)):
-            return user_id, user_profile
-
-        # Check if user has billing permissions for this organization
-        if user_profile.has_permission("billing:subscribe", str(organization_id)):
-            return user_id, user_profile
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions for billing operations in this organization",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("check_billing_permissions: unexpected error", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authorization error",
-        )
-
-
 async def get_current_user_id(authorization: str = Header(None)) -> UUID:
     """
     Extract the current user ID from the authorization header.

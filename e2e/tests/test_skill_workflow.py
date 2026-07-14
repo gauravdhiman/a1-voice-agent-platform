@@ -399,7 +399,9 @@ def test_skill_import_from_url_adds_skill(page: Page, base_url: str, step):
     page.get_by_text("Import from URL").first.click()
 
     step("Fill the import URL in the sheet")
-    import_input = page.locator('input#import-url, input[placeholder*="GitHub"]').first
+    # SkillEditor uses the `se-` id prefix (e.g. `se-import-url`); the old
+    # `#import-url` / placeholder selector no longer matches.
+    import_input = page.locator('input#se-import-url').first
     expect(import_input).to_be_visible(timeout=5000)
     import_input.fill("https://github.com/anthropics/skills")
 
@@ -532,7 +534,11 @@ def test_platform_skill_library_fork(page: Page, base_url: str, step):
 
     page.route(f"**/api/v1/organizations/{TEST_ORG_ID}/skills", handle_skills_list)
 
-    page.route("**/api/v1/platform/skills", lambda route: route.fulfill(
+    # `listPlatformSkills()` defaults to `statuses=["active"]`, so the
+    # adapter calls `GET /api/v1/platform/skills?statuses=active`. The glob
+    # needs a trailing `*` to intercept the query-stringed URL (Playwright
+    # route globs match the full URL incl. query).
+    page.route("**/api/v1/platform/skills*", lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=_json.dumps([MOCK_PLATFORM_SKILL]),
@@ -643,10 +649,15 @@ def test_skill_refresh_flow(page: Page, base_url: str, step):
     expect(page.get_by_text("Refresh Skill").first).to_be_visible(timeout=5000)
     expect(page.get_by_text("2026.05.03_1").first).to_be_visible()
     expect(page.get_by_text("2026.05.15_1").first).to_be_visible()
-    expect(page.get_by_text("replace all content and files").first).to_be_visible()
+    # SkillEditor dialog copy: "All content and reference files will be
+    # replaced; your customizations will be lost." (was "replace all content
+    # and files").
+    expect(page.get_by_text("reference files will be replaced").first).to_be_visible()
 
     step("Click Refresh Now to confirm")
-    page.get_by_role("button", name="Refresh Now").first.click()
+    # Button label changed from "Refresh Now" to "Refresh & overwrite".
+    page.get_by_role("button", name="Refresh & overwrite").first.click()
 
     step("Wait for success toast")
-    expect(page.get_by_text("Skill refreshed successfully").first).to_be_visible(timeout=10000)
+    # Toast changed from "Skill refreshed successfully" to "Skill refreshed".
+    expect(page.get_by_text("Skill refreshed").first).to_be_visible(timeout=10000)

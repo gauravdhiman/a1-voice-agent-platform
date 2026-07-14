@@ -7,7 +7,7 @@
  *     search param, falling back to the currentOrganization from context).
  *   - Loading and error states match the embedded version (the dashboard
  *     is a controlled component, so the page owns the fetch).
- *   - The dashboard receives `canManage={isPlatformAdmin || isOrgAdmin}`
+ *   - The dashboard receives `canManage={canManagePhoneNumbers}`
  *     — a regular member gets `canManage=false` so the per-card write
  *     buttons don't render (N1 #2 follow-up).
  */
@@ -89,6 +89,7 @@ describe("/phone-numbers page (N1)", () => {
       setCurrentOrganization: vi.fn(),
     });
     mockUseUserPermissions.mockReturnValue({
+      canManagePhoneNumbers: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -153,6 +154,7 @@ describe("/phone-numbers page (N1)", () => {
 
   it("passes canManage=true to the dashboard for an org admin (N1 #2)", async () => {
     mockUseUserPermissions.mockReturnValue({
+      canManagePhoneNumbers: true,
       isPlatformAdmin: false,
       isOrgAdmin: true,
     });
@@ -169,6 +171,7 @@ describe("/phone-numbers page (N1)", () => {
 
   it("passes canManage=true to the dashboard for a platform admin", async () => {
     mockUseUserPermissions.mockReturnValue({
+      canManagePhoneNumbers: true,
       isPlatformAdmin: true,
       isOrgAdmin: false,
     });
@@ -185,6 +188,7 @@ describe("/phone-numbers page (N1)", () => {
 
   it("passes canManage=false to the dashboard for a regular org member (N1 #2 — CRIT)", async () => {
     mockUseUserPermissions.mockReturnValue({
+      canManagePhoneNumbers: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });

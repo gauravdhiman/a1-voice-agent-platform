@@ -6,21 +6,23 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { AgentCreateWidget } from "@/components/agents/agent-create-widget";
 
 /**
- * /agents/create — page-level admin gate (CRIT frontend leak).
+ * /agents/create — page-level permission gate (CRIT frontend leak).
  *
- * The "New Agent" button on /agents is gated on org_admin or
- * platform_admin, but the /agents/create URL is reachable by direct
- * navigation. This page-level guard closes the gap.
+ * The "New Agent" button on /agents is gated on `canCreateAgent`
+ * (`agent:create` from `/me.permissions`), but the /agents/create URL
+ * is reachable by direct navigation. This page-level guard closes the
+ * gap using the same permission flag so Phase 2 custom roles with
+ * `agent:create` work without a second rewrite.
  */
 export default function CreateAgentPage() {
   const { currentOrganization } = useOrganization();
-  const { isPlatformAdmin, isOrgAdmin } = useUserPermissions();
+  const { canCreateAgent } = useUserPermissions();
 
-  if (!isPlatformAdmin && !isOrgAdmin) {
+  if (!canCreateAgent) {
     return (
       <AccessDenied
         title="Access Denied"
-        description="Only organization admins and platform admins can create agents."
+        description="You need permission to create agents in this organization."
         redirectPath="/agents"
       />
     );
