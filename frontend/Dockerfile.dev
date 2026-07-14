@@ -1,9 +1,9 @@
 # Development Dockerfile for hot reloading
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (seed for anonymous volume; refreshed at runtime)
 COPY package*.json ./
 RUN npm install
 
@@ -13,5 +13,11 @@ COPY . .
 # Expose port
 EXPOSE 3000
 
-# Start the development server
-CMD ["npm", "run", "dev"]
+# Ensure dependencies stay in sync with package.json changes.
+# The anonymous volume for /app/node_modules persists across rebuilds,
+# so without this, new deps (e.g. mermaid) added to package.json would be
+# missing at runtime, causing "Cannot find module 'mermaid'" errors.
+# Clearing .next forces a fresh Turbopack compilation after dep changes.
+# Note: /app/.next is an anonymous volume mount point, so we cannot remove
+# the directory itself (EBUSY). We clear its contents safely with find.
+CMD ["sh", "-c", "npm install && (rm -rf /app/.next 2>/dev/null; mkdir -p /app/.next; find /app/.next -mindepth 1 -delete 2>/dev/null || true); npm run dev"]
