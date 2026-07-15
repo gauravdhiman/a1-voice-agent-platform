@@ -16,6 +16,18 @@ export interface UserProfile {
   updated_at: string;
   has_organizations?: boolean;
   roles: UserRoleAssignment[];
+  /**
+   * Organization the embedded `permissions` object is scoped to.
+   * Resolved server-side on every /me call. Null when the user has
+   * no current org (or for platform-admin wildcard responses).
+   */
+  current_organization_id?: string | null;
+  /**
+   * Resource -> actions map resolved server-side. Wildcard is encoded
+   * as {"*": ["*"]} for platform admins. See
+   * docs/tw-drafts/navigation-redesign.md Section 4 for the contract.
+   */
+  permissions?: Record<string, string[]>;
 }
 
 // Supabase types (to avoid importing the entire library in types)

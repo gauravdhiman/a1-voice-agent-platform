@@ -5,17 +5,13 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
 import {
-  LayoutDashboard,
   Building2,
-  Users,
-  CreditCard,
   Settings,
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Bot,
-  Phone,
-  BookOpen,
+  Users,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -30,38 +26,30 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { NavigationLink } from "@/components/ui/navigation-link";
+import { OrganizationSwitcher } from "@/components/layout/organization-switcher";
+import {
+  ALL_NAV_ITEMS,
+  NAV_SECTIONS,
+  SECTION_ROLES,
+  type NavItem,
+  type NavSection,
+} from "@/components/layout/nav-config";
+import { useHasPermission } from "@/hooks/use-has-permission";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-const navigationItems = [
-  {
-    name: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    name: "Agents",
-    href: "/agents",
-    icon: Bot,
-  },
-  {
-    name: "Calls",
-    href: "/calls",
-    icon: Phone,
-  },
-  {
-    name: "Users",
-    href: "/users",
-    icon: Users,
-  },
-  {
-    name: "Platform Skills",
-    href: "/platform/skills",
-    icon: BookOpen,
-  },
-];
+/**
+ * Human-readable heading for each nav section. Hidden when the section
+ * is empty (no items visible to the current user).
+ */
+const SECTION_LABELS: Readonly<Record<NavSection, string>> = {
+  workspace: "Workspace",
+  org_admin: "Org Admin",
+  platform_admin: "Platform Admin",
+};
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, signOut } = useAuth();
@@ -80,16 +68,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   };
 
-  // Check if user is a platform admin
+  // Check if user is a platform admin (for the avatar-dropdown org links).
   const isPlatformAdmin = user?.hasRole("platform_admin");
 
-  // Filter navigation items based on user permissions
-  const filteredNavigationItems = navigationItems.filter((item) => {
-    if (item.name === "Users" || item.name === "Platform Skills") {
-      return isPlatformAdmin; // Only show platform-admin items to platform admins
-    }
-    return true; // Show all other items
-  });
+  // Resolve the current org role. Platform admins trump everything;
+  // otherwise the user has a per-org role on the current org.
+  const currentOrganizationRole = isPlatformAdmin
+    ? "platform_admin"
+    : currentOrganization && user
+      ? user.hasRole("org_admin", currentOrganization.id)
+        ? "org_admin"
+        : "member"
+      : null;
 
   const getInitials = (name: string) => {
     return name
@@ -122,6 +112,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     ) {
       breadcrumbs.push({ name: "Agents", href: "/agents" });
       breadcrumbs.push({ name: "Agent Details", href: null });
+    } else if (pathname.startsWith("/phone-numbers")) {
+      breadcrumbs.push({ name: "Phone Numbers", href: null });
+    } else if (pathname.startsWith("/skills")) {
+      breadcrumbs.push({ name: "Skills", href: null });
     } else if (pathname === "/users") {
       if (isPlatformAdmin) {
         breadcrumbs.push({ name: "Users", href: null });
@@ -173,7 +167,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </span>
               </div>
               <span className="text-base font-bold text-sidebar-foreground tracking-tight">
-                NeuraSaaS
+                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
               </span>
             </div>
           )}
@@ -196,37 +190,38 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </Button>
         </div>
 
+        {/* Organization switcher (N1 redesign). Sits between the header
+            and the nav so the current org context is the first thing the
+            user sees. Hidden in the collapsed state to keep the rail
+            minimal. */}
+        {!sidebarCollapsed && (
+          <div className="px-3 pt-3">
+            <OrganizationSwitcher
+              currentRole={currentOrganizationRole}
+            />
+          </div>
+        )}
+
         {/* Navigation */}
         <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          {filteredNavigationItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href === "/organizations" &&
-                pathname.startsWith("/organizations"));
-
-            return (
-              <NavigationLink
-                key={item.name}
-                href={item.href}
-                title={sidebarCollapsed ? item.name : undefined}
-                exact={item.href !== "/organizations"}
-                className={sidebarCollapsed ? "justify-center" : ""}
-              >
-                <Icon
-                  className={`h-4 w-4 flex-shrink-0 ${
-                    isActive
-                      ? "text-sidebar-primary"
-                      : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground"
-                  }`}
-                />
-                {!sidebarCollapsed && <span>{item.name}</span>}
-                {sidebarCollapsed && isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full" />
-                )}
-              </NavigationLink>
-            );
-          })}
+          <NavSectionGroup
+            section="workspace"
+            items={NAV_SECTIONS.workspace}
+            collapsed={sidebarCollapsed}
+            pathname={pathname}
+          />
+          <NavSectionGroup
+            section="org_admin"
+            items={NAV_SECTIONS.org_admin}
+            collapsed={sidebarCollapsed}
+            pathname={pathname}
+          />
+          <NavSectionGroup
+            section="platform_admin"
+            items={NAV_SECTIONS.platform_admin}
+            collapsed={sidebarCollapsed}
+            pathname={pathname}
+          />
         </div>
 
         {/* Sidebar Footer */}
@@ -303,21 +298,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* Search and Notifications - Hidden for now as they are not yet functional */}
-            {/* <div className="relative hidden md:block w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search..."
-                className="pl-9 h-9 bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary"
-              />
-            </div>
-
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-background"></span>
-            </Button> */}
-
             <ThemeToggle />
 
             <DropdownMenu>
@@ -353,45 +333,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItemLink>
-                {currentOrganization &&
-                  user &&
-                  (user.hasRole("platform_admin") ||
-                    user.hasRole("org_admin", currentOrganization.id)) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Organization</DropdownMenuLabel>
-                      {organizations.length > 1 && (
-                        <DropdownMenuItemLink href="/organizations">
-                          <Building2 className="mr-2 h-4 w-4" />
-                          <span>Switch Org</span>
-                        </DropdownMenuItemLink>
-                      )}
-                      {organizations.length === 1 && currentOrganization && (
-                        <>
-                          <DropdownMenuItemLink
-                            href={`/organization?org_id=${currentOrganization.id}`}
-                          >
-                            <Building2 className="mr-2 h-4 w-4" />
-                            <span>Overview</span>
-                          </DropdownMenuItemLink>
-
-                          <DropdownMenuItemLink
-                            href={`/organization/members?org_id=${currentOrganization.id}`}
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            <span>Members</span>
-                          </DropdownMenuItemLink>
-                          <DropdownMenuItemLink
-                            href={`/organization/billing?org_id=${currentOrganization.id}`}
-                          >
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            <span>Billing</span>
-                          </DropdownMenuItemLink>
-                        </>
-                      )}
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
+                {/* N1 Epic D: org admin links (Members / Billing /
+                    Organization) live in the left-nav only. The avatar
+                    menu no longer duplicates them. Multi-org users still
+                    get a "Switch Org" shortcut to /organizations. */}
+                {organizations.length > 1 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItemLink href="/organizations">
+                      <Building2 className="mr-2 h-4 w-4" />
+                      <span>Switch Org</span>
+                    </DropdownMenuItemLink>
+                  </>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="text-destructive focus:text-destructive cursor-pointer"
@@ -412,3 +367,112 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     </div>
   );
 }
+
+/**
+ * Renders one nav section. The section heading is hidden when the
+ * section is empty (no items visible to the current user) OR when
+ * the user lacks the section's required role (see `SECTION_ROLES` in
+ * `nav-config.ts`).
+ *
+ * The hook `useHasPermission` is called per-item via a sub-component so
+ * that React Hooks ordering stays consistent regardless of how many items
+ * the section has. Each `<NavSectionItem>` mounts only if its item passes
+ * the permission filter; that means the hook is conditional on the
+ * caller's decision, not the filter's outcome.
+ */
+function NavSectionGroup({
+  section,
+  items,
+  collapsed,
+  pathname,
+}: {
+  section: NavSection;
+  items: readonly NavItem[];
+  collapsed: boolean;
+  pathname: string;
+}) {
+  // Section-level role gate (Option C). A user with the underlying
+  // permissions but not the required role must not see the section
+  // heading or the items inside it — otherwise the nav would promise
+  // what the page denies (e.g. an org_admin holding `member:read`
+  // would see "Members" but be denied on /organization/members).
+  const requiredRole = SECTION_ROLES[section];
+  const { isPlatformAdmin, isOrgAdmin } = useUserPermissions();
+  const hasRequiredRole =
+    requiredRole === null
+      ? true
+      : requiredRole === "platform_admin"
+        ? isPlatformAdmin
+        : // org_admin section: platform_admin inherits the role
+          isOrgAdmin || isPlatformAdmin;
+
+  if (!hasRequiredRole) return null;
+
+  return (
+    <div data-testid={`nav-section-${section}`} className="space-y-1">
+      {!collapsed && (
+        <div
+          className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50"
+          aria-hidden
+        >
+          {SECTION_LABELS[section]}
+        </div>
+      )}
+      {items.map((item) => (
+        <NavSectionItem
+          key={item.name}
+          item={item}
+          collapsed={collapsed}
+          pathname={pathname}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NavSectionItem({
+  item,
+  collapsed,
+  pathname,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  pathname: string;
+}) {
+  // `useHasPermission` returns `null` while loading; we treat that as
+  // "not visible" so the user never sees items they don't actually have
+  // permission for. (Loading state is rare because the /me query is
+  // warmed at app boot.)
+  const visible = useHasPermission(item.requiredPermission);
+  if (!visible) return null;
+
+  const Icon = item.icon;
+  const isActive =
+    pathname === item.href ||
+    (!item.exact && pathname.startsWith(`${item.href}/`));
+
+  return (
+    <NavigationLink
+      href={item.href}
+      title={collapsed ? item.name : undefined}
+      exact={item.exact ?? true}
+      className={collapsed ? "justify-center" : ""}
+    >
+      <Icon
+        className={`h-4 w-4 flex-shrink-0 ${
+          isActive
+            ? "text-sidebar-primary"
+            : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground"
+        }`}
+      />
+      {!collapsed && <span>{item.name}</span>}
+      {collapsed && isActive && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full" />
+      )}
+    </NavigationLink>
+  );
+}
+
+// `ALL_NAV_ITEMS` re-exported for tests that need to assert the full
+// configured set without depending on the layout's render order.
+export { ALL_NAV_ITEMS };

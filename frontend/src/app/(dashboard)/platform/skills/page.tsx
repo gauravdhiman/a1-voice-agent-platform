@@ -37,18 +37,11 @@ export default function PlatformSkillsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Frontend authz gate. Backend enforces the same independently.
-  if (!user?.hasRole("platform_admin")) {
-    return (
-      <AccessDenied
-        title="Access Denied"
-        description="You do not have permission to access this page. Only platform administrators can manage platform skills."
-        redirectPath="/dashboard"
-      />
-    );
-  }
-
   // URL sync for platform skills: /platform/skills?skill=<slug>&file=<path>
+  // NOTE: all hooks (useCallback/useMemo below) must run before the authz
+  // early-return at the end of this function — React requires hook call order
+  // to be stable across renders (rules-of-hooks). Do not move that guard above
+  // these hooks.
   const syncUrl = useCallback(
     (state: { slug: string | null; filePath: string | null }) => {
       const params = new URLSearchParams();
@@ -159,6 +152,18 @@ export default function PlatformSkillsPage() {
       return results.map((r) => toEditable(r.skill));
     },
   }), []);
+
+  // Frontend authz gate. Backend enforces the same independently. Placed
+  // after all hooks so hook call order is stable regardless of role.
+  if (!user?.hasRole("platform_admin")) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        description="You do not have permission to access this page. Only platform administrators can manage platform skills."
+        redirectPath="/dashboard"
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 h-[calc(100vh-12rem)]">

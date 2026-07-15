@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from opentelemetry import trace
+from src.auth.dependencies import assert_has_permission, assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
@@ -54,14 +55,13 @@ async def get_organization_skills(
     """Get all skills for an organization."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role(
-            "org_admin", str(org_id)
-        ) and not user_profile.has_role("regular_user", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to view skills",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "read",
+        org_id,
+        error_message="Insufficient permissions to view skills",
+    )
 
     skills, error = await skill_service.get_organization_skills(org_id)
     if error:
@@ -85,12 +85,13 @@ async def create_skill(
     """Create a new custom skill for an organization."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to create skills",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "create",
+        org_id,
+        error_message="Insufficient permissions to create skills",
+    )
 
     # Ensure org_id matches
     skill_data.organization_id = org_id
@@ -115,12 +116,13 @@ async def update_skill(
     """Update a skill."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to update skills",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "update",
+        org_id,
+        error_message="Insufficient permissions to update skills",
+    )
 
     # Verify skill belongs to this org
     existing, err = await skill_service.get_skill_by_id(skill_id)
@@ -148,12 +150,13 @@ async def delete_skill(
     """Delete a custom skill."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to delete skills",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "delete",
+        org_id,
+        error_message="Insufficient permissions to delete skills",
+    )
 
     # Verify skill belongs to this org
     existing, err = await skill_service.get_skill_by_id(skill_id)
@@ -209,12 +212,13 @@ async def assign_skill_to_agent(
     if err or not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only platform admins or organization admins can assign skills to agents",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "update",
+        agent.organization_id,
+        error_message="Only platform admins or organization admins can assign skills to agents",
+    )
 
     success, error = await skill_service.assign_skill(agent_id, assignment.skill_id)
     if error:
@@ -240,12 +244,13 @@ async def unassign_skill_from_agent(
     if err or not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(agent.organization_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only platform admins or organization admins can unassign skills from agents",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "update",
+        agent.organization_id,
+        error_message="Only platform admins or organization admins can unassign skills from agents",
+    )
 
     success, error = await skill_service.unassign_skill(agent_id, skill_id)
     if error:
@@ -294,11 +299,11 @@ async def seed_platform_skills(
     """
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform admins can seed platform skills",
-        )
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can seed platform skills",
+    )
 
     count, error = await skill_service.seed_platform_skills()
     if error:
@@ -324,11 +329,11 @@ async def sync_platform_skills(
     """
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only platform admins can sync platform skills",
-        )
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can sync platform skills",
+    )
 
     total, error = await skill_service.sync_built_in_skills_all_orgs()
     if error:
@@ -393,12 +398,13 @@ async def create_skill_file(
     """Create a reference file within a skill. Admin only."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to create skill files",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "create",
+        org_id,
+        error_message="Insufficient permissions to create skill files",
+    )
 
     # Verify skill exists and belongs to this org
     existing, err = await skill_service.get_skill_by_id(skill_id)
@@ -428,11 +434,39 @@ async def update_skill_file(
     """Update a reference file. Admin only."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "update",
+        org_id,
+        error_message="Insufficient permissions to update skill files",
+    )
+
+    # CRIT: cross-org IDOR guard. The caller's role was checked against
+    # the path's org_id, but the file_id in the path may belong to a
+    # DIFFERENT org. Verify the file's parent skill is in `org_id`
+    # before allowing the write. platform_admin is org-agnostic and
+    # bypasses the ownership check.
+    file, file_error = await skill_service.get_skill_file(file_id)
+    if file_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=file_error
+        )
+    if file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Skill file not found"
+        )
+    is_platform_admin = user_profile.has_role("platform_admin")
+    if not is_platform_admin:
+        parent_skill, skill_error = await skill_service.get_skill_by_id(file.skill_id)
+        if skill_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=skill_error
+            )
+        if parent_skill is None or parent_skill.organization_id != org_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to update skill files",
+                detail="Skill file does not belong to this organization",
             )
 
     file, error = await skill_service.update_skill_file(file_id, file_data)
@@ -455,11 +489,36 @@ async def delete_skill_file(
     """Delete a reference file. Admin only."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "delete",
+        org_id,
+        error_message="Insufficient permissions to delete skill files",
+    )
+
+    # CRIT: cross-org IDOR guard (mirror of update_skill_file above).
+    # platform_admin bypasses the ownership check.
+    file, file_error = await skill_service.get_skill_file(file_id)
+    if file_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=file_error
+        )
+    if file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Skill file not found"
+        )
+    is_platform_admin = user_profile.has_role("platform_admin")
+    if not is_platform_admin:
+        parent_skill, skill_error = await skill_service.get_skill_by_id(file.skill_id)
+        if skill_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=skill_error
+            )
+        if parent_skill is None or parent_skill.organization_id != org_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to delete skill files",
+                detail="Skill file does not belong to this organization",
             )
 
     success, error = await skill_service.delete_skill_file(file_id)
@@ -512,12 +571,13 @@ async def import_skill_from_url(
     """
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to import skills",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "create",
+        org_id,
+        error_message="Insufficient permissions to import skills",
+    )
 
     try:
         from src.voice_agents.skill_import import SkillImporter
@@ -611,12 +671,13 @@ async def fork_platform_skill(
     """
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to fork skills",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "create",
+        org_id,
+        error_message="Insufficient permissions to fork skills",
+    )
 
     skill, error = await skill_service.fork_platform_skill(
         org_id=org_id,
@@ -641,12 +702,13 @@ async def check_skill_update(
     """Check if a forked skill has an update available from its platform source."""
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
-            )
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "read",
+        org_id,
+        error_message="Insufficient permissions",
+    )
 
     has_update, latest_version, error = await skill_service.check_update_available(skill_id)
     if error:
@@ -677,11 +739,30 @@ async def refresh_forked_skill(
     """
     current_user_id, user_profile = user_data
 
-    if not user_profile.has_role("platform_admin"):
-        if not user_profile.has_role("org_admin", str(org_id)):
+    assert_has_permission(
+        user_profile,
+        "skill",
+        "update",
+        org_id,
+        error_message="Insufficient permissions to refresh skills",
+    )
+
+    # CRIT: cross-org IDOR guard. The role check above is against the
+    # path's org_id, but the skill_id in the path may belong to a
+    # DIFFERENT org. Verify the skill is in `org_id` before allowing
+    # the refresh (which overwrites ALL content and files).
+    # platform_admin is org-agnostic and bypasses the ownership check.
+    is_platform_admin = user_profile.has_role("platform_admin")
+    if not is_platform_admin:
+        skill, skill_error = await skill_service.get_skill_by_id(skill_id)
+        if skill_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=skill_error
+            )
+        if skill is None or skill.organization_id != org_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions to refresh skills",
+                detail="Skill does not belong to this organization",
             )
 
     if not request.confirm_overwrite:

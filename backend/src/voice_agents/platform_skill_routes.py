@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from opentelemetry import trace
+from src.auth.dependencies import assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
@@ -36,11 +37,11 @@ platform_skill_router = APIRouter(prefix="/api/v1", tags=["Platform Skills"])
 
 def _require_platform_admin(user_profile: UserProfile) -> None:
     """Raise 403 if user is not a platform admin."""
-    if not user_profile.has_role("platform_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Platform admin access required",
-        )
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Platform admin access required",
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

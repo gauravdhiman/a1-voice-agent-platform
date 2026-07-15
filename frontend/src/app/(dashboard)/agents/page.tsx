@@ -2,6 +2,8 @@
 
 import React, { useMemo, useCallback, useEffect } from "react";
 import { useOrganization } from "@/contexts/organization-context";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +27,26 @@ import type { VoiceAgent } from "@/types/agent";
 
 export default function AgentsPage() {
   const { organizations } = useOrganization();
+  const { canCreateAgent: canCreateOnCurrentOrg } = useUserPermissions();
+  const { user } = useAuth();
+  // Page-level "New Agent" CTA uses agent:create on the *current* org
+  // (from /me.permissions). Regular members have agent:read only.
+  const canCreateAgent = canCreateOnCurrentOrg;
+  // Per-agent permission helper. The /agents page lists agents across
+  // all orgs (it has an "All Organizations" filter), so a single
+  // page-level canDelete derived from the CURRENT org would leak a
+  // trash icon on agents the user cannot actually delete. The right
+  // check is "can this user act on THIS specific agent?" — a
+  // platform_admin can act on any agent, and an org_admin can act
+  // on agents in their org.
+  const canActOnAgent = useCallback(
+    (agent: VoiceAgent): boolean => {
+      if (user?.hasRole("platform_admin")) return true;
+      if (user?.hasRole("org_admin", agent.organization_id)) return true;
+      return false;
+    },
+    [user],
+  );
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -137,10 +159,12 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        <Button onClick={handleAddAgent}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Agent
-        </Button>
+        {canCreateAgent && (
+          <Button onClick={handleAddAgent}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Agent
+          </Button>
+        )}
       </div>
 
       <AnimatedTabs
@@ -210,23 +234,31 @@ export default function AgentsPage() {
                     ? "No agents match your search or filter criteria."
                     : "You haven't created any voice agents yet."}
                 </p>
-                <Button onClick={handleAddAgent}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Agent
-                </Button>
+                {canCreateAgent && (
+                  <Button onClick={handleAddAgent}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First Agent
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-3">
-              {filteredAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  organizationName={getOrgName(agent.organization_id)}
-                  view="list"
-                  onDelete={handleDeleteAgent}
-                />
-              ))}
+              {filteredAgents.map((agent) => {
+                const canAct = canActOnAgent(agent);
+                return (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    organizationName={getOrgName(agent.organization_id)}
+                    view="list"
+                    onDelete={handleDeleteAgent}
+                    canDelete={canAct}
+                    canEdit={canAct}
+                    canConfigure={canAct}
+                  />
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -288,23 +320,31 @@ export default function AgentsPage() {
                     ? "No agents match your search or filter criteria."
                     : "You haven't created any voice agents yet."}
                 </p>
-                <Button onClick={handleAddAgent}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Agent
-                </Button>
+                {canCreateAgent && (
+                  <Button onClick={handleAddAgent}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First Agent
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  organizationName={getOrgName(agent.organization_id)}
-                  view="grid"
-                  onDelete={handleDeleteAgent}
-                />
-              ))}
+              {filteredAgents.map((agent) => {
+                const canAct = canActOnAgent(agent);
+                return (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    organizationName={getOrgName(agent.organization_id)}
+                    view="grid"
+                    onDelete={handleDeleteAgent}
+                    canDelete={canAct}
+                    canEdit={canAct}
+                    canConfigure={canAct}
+                  />
+                );
+              })}
             </div>
           )}
         </TabsContent>

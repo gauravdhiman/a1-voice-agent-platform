@@ -213,11 +213,25 @@ type SelectedFile = { skillId: string; filePath: string; content?: string } | nu
  * transitions render side-by-side. Previously a deprecated skill showed
  * only "reactivate" because the chained ternary hit the deprecated branch
  * first and never reached the delete fallback — that was the bug.
+ *
+ * **Permission gate**: the destructive actions (``delete``) require
+ * ``canDelete === true``. The page that mounts the editor derives
+ * ``canDelete`` from the user's role (org admin / platform admin). The
+ * adapter capability check (``adapter.deleteSkill``) is a feature
+ * detection — "can this editor talk to a delete endpoint?" — and is
+ * independent of the user's permission. The two checks are AND-ed: a
+ * regular org member mounting an org editor sees no delete UI even
+ * though the adapter has the endpoint. The N1 browser validation
+ * surfaced this leak; before this change the per-row trash icon
+ * rendered for everyone and the confirm dialog (canDelete-gated)
+ * was the only thing standing between the user and a no-op
+ * click + toast.
  */
 function availableActions(
   skill: EditableSkill,
   deleteMode: "hard" | "soft",
   adapter: SkillEditorAdapter,
+  canDelete: boolean,
 ): Array<{
   id: "restore" | "deprecate" | "reactivate" | "delete";
   title: string;
@@ -234,8 +248,12 @@ function availableActions(
   const status = skill.status ?? "active";
 
   if (status === "deleted") {
-    // Trash bin: restore is the only meaningful action.
-    if (deleteMode === "soft" && adapter.restoreSkill) {
+    // Trash bin: restore is the only meaningful action. Restore
+    // requires canDelete because soft-deleted items are owned by the
+    // same user role that would have deleted them in the first place;
+    // surfacing a restore button to a non-admin would imply they own
+    // the trash bin.
+    if (deleteMode === "soft" && canDelete && adapter.restoreSkill) {
       actions.push({
         id: "restore",
         title: "Restore skill",
@@ -265,11 +283,14 @@ function availableActions(
       iconClass: "text-emerald-400 hover:text-emerald-600",
     });
   }
-  // Delete is available on every non-deleted state when the adapter
-  // supports it. Soft-delete (platform) and hard-delete (org) both flow
-  // through the same adapter.deleteSkill; the deleteMode prop on the
-  // editor controls the confirm dialog copy + behavior.
-  if (adapter.deleteSkill) {
+  // Delete is available on every non-deleted state when BOTH the
+  // adapter supports it AND the current user holds the delete
+  // permission. The permission gate dominates: a regular org member
+  // mounting an org editor (where the adapter has deleteSkill) must
+  // see no delete UI. Soft-delete (platform) and hard-delete (org)
+  // both flow through the same adapter.deleteSkill; the deleteMode
+  // prop on the editor controls the confirm dialog copy + behavior.
+  if (canDelete && adapter.deleteSkill) {
     actions.push({
       id: "delete",
       title: "Delete skill",
@@ -417,9 +438,23 @@ export function SkillEditor({
     if (skill) {
       setSelectedSkill(skill);
       setExpanded(new Set([skill.id]));
-      ensureFiles(skill.id);
       // Lazily hydrate content for the restored selection too.
       ensureContent(skill).then((full) => setSelectedSkill(full));
+      // Restore the selected FILE from the URL (e.g. ?file=references/faq.md)
+      // when present. ensureFiles returns the file list, so we find the match
+      // by file_path and select it (which loads its content + re-pushes the
+      // URL). Without this, deep links to a specific file land on the skill
+      // with no file open. Guarded by `initialSelection.filePath` so the
+      // common case (no file in URL) is unchanged.
+      const filePath = initialSelection.filePath;
+      if (filePath) {
+        ensureFiles(skill.id).then((files) => {
+          const file = files.find((f) => f.file_path === filePath);
+          if (file) selectFile(skill, file);
+        });
+      } else {
+        ensureFiles(skill.id);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skills, initialSelection]);
@@ -864,7 +899,7 @@ export function SkillEditor({
                         )}
                       </div>
                     </div>
-                    {availableActions(skill, deleteMode, adapter).map((action) => (
+                    {availableActions(skill, deleteMode, adapter, canDelete).map((action) => (
                       <button
                         key={action.id}
                         className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"

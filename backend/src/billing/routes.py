@@ -8,7 +8,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from src.auth.middleware import check_billing_permissions, get_authenticated_user
+from src.auth.dependencies import (
+    assert_billing_access,
+    assert_platform_role,
+    check_billing_permissions,
+)
+from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.billing.models import (
     BillingHistory,
@@ -59,14 +64,15 @@ async def create_subscription_plan(
     try:
         user_id, user_profile = user_auth
 
-        # Check if user has platform admin role
-        if not user_profile.has_role("platform_admin"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User does not have permission to create subscription plans",
-            )
+        assert_platform_role(
+            user_profile,
+            "platform_admin",
+            error_message="User does not have permission to create subscription plans",
+        )
 
         return await billing_service.create_subscription_plan(plan_data)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating subscription plan: {e}")
         raise HTTPException(
@@ -99,12 +105,11 @@ async def update_subscription_plan(
     try:
         user_id, user_profile = user_auth
 
-        # Check if user has platform admin role
-        if not user_profile.has_role("platform_admin"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Platform admin access required to update subscription plans",
-            )
+        assert_platform_role(
+            user_profile,
+            "platform_admin",
+            error_message="Platform admin access required to update subscription plans",
+        )
 
         plan = await billing_service.update_subscription_plan(plan_id, plan_data)
         if not plan:
@@ -226,15 +231,17 @@ async def create_customer_portal(
         if not organization_id:
             raise HTTPException(status_code=400, detail="organization_id is required")
 
-        # Check organization access permissions
+        # Check organization access permissions. The 3-way OR is:
+        # platform_admin (org-agnostic) OR org_admin on the target
+        # org OR `billing:subscribe` permission on the target org.
+        # (Same rule as `check_billing_permissions` for path-scoped
+        # routes; here the org id is in the JSON body.)
         org_id = UUID(organization_id)
-        if not user_profile.has_role("platform_admin"):
-            if not user_profile.has_permission("billing:subscribe", str(org_id)):
-                if not user_profile.has_role("org_admin", str(org_id)):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Insufficient permissions for billing operations in this organization",
-                    )
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
         # Extract parameters from request body
         return_url = request.get("return_url")
 
@@ -322,24 +329,11 @@ async def consume_credits(
         user_id, user_profile = user_auth
 
         # Check billing permissions for the organization in the request
-        try:
-            # Check if user has platform admin role (bypasses organization checks)
-            if not user_profile.has_role("platform_admin"):
-                if not user_profile.has_permission(
-                    "billing:subscribe", str(consumption_request.organization_id)
-                ):
-                    if not user_profile.has_role(
-                        "org_admin", str(consumption_request.organization_id)
-                    ):
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Insufficient permissions for billing operations in this organization",
-                        )
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Authorization error: {str(e)}",
-            )
+        assert_billing_access(
+            user_profile,
+            consumption_request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
 
         return await billing_service.consume_credits(consumption_request)
     except HTTPException:
@@ -494,13 +488,11 @@ async def create_subscription_checkout(
 
         # Check billing permissions for this organization
         org_id = UUID(organization_id)
-        if not user_profile.has_role("platform_admin"):
-            if not user_profile.has_permission("billing:subscribe", str(org_id)):
-                if not user_profile.has_role("org_admin", str(org_id)):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Insufficient permissions for billing operations in this organization",
-                    )
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
         plan_id = request.get("plan_id")
 
         if not plan_id:
@@ -559,6 +551,8 @@ async def create_subscription_checkout(
 
         return {"session_url": checkout_session.url, "session_id": checkout_session.id}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating subscription checkout: {e}")
         raise HTTPException(status_code=500, detail="Failed to create checkout session")
@@ -584,13 +578,11 @@ async def create_credits_checkout(
 
         # Check billing permissions for this organization
         org_id = UUID(organization_id)
-        if not user_profile.has_role("platform_admin"):
-            if not user_profile.has_permission("billing:subscribe", str(org_id)):
-                if not user_profile.has_role("org_admin", str(org_id)):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Insufficient permissions for billing operations in this organization",
-                    )
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
 
         # Get the credit product
         products = await billing_service.get_credit_products()
@@ -637,6 +629,8 @@ async def create_credits_checkout(
 
         return {"session_url": checkout_session.url, "session_id": checkout_session.id}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating credits checkout: {e}")
         raise HTTPException(status_code=500, detail="Failed to create checkout session")
@@ -658,13 +652,11 @@ async def create_customer_portal_session(
 
         # Check billing permissions for this organization
         org_id = UUID(organization_id)
-        if not user_profile.has_role("platform_admin"):
-            if not user_profile.has_permission("billing:subscribe", str(org_id)):
-                if not user_profile.has_role("org_admin", str(org_id)):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Insufficient permissions for billing operations in this organization",
-                    )
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
 
         # Get organization subscription
         subscription = await billing_service.get_organization_subscription(
@@ -683,6 +675,8 @@ async def create_customer_portal_session(
 
         return {"portal_url": portal_session.url}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating customer portal session: {e}")
         raise HTTPException(status_code=500, detail="Failed to create portal session")
@@ -704,12 +698,11 @@ async def cancel_subscription(
 
         # Check billing permissions for this organization
         org_id = UUID(organization_id)
-        if not user_profile.has_role("platform_admin"):
-            if not user_profile.has_role("org_admin", str(org_id)):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Insufficient permissions for billing operations in this organization",
-                )
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
 
         # Get organization subscription
         subscription = await billing_service.get_organization_subscription(
@@ -732,6 +725,8 @@ async def cancel_subscription(
             "message": "Subscription will be cancelled at the end of the current period"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error cancelling subscription: {e}")
         raise HTTPException(status_code=500, detail="Failed to cancel subscription")
@@ -753,12 +748,11 @@ async def reactivate_subscription(
 
         # Check billing permissions for this organization
         org_id = UUID(organization_id)
-        if not user_profile.has_role("platform_admin"):
-            if not user_profile.has_role("org_admin", str(org_id)):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Insufficient permissions for billing operations in this organization",
-                )
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
 
         # Get organization subscription
         subscription = await billing_service.get_organization_subscription(
@@ -781,6 +775,8 @@ async def reactivate_subscription(
 
         return {"message": "Subscription reactivated successfully"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error reactivating subscription: {e}")
         raise HTTPException(status_code=500, detail="Failed to reactivate subscription")

@@ -1,7 +1,7 @@
 # VoiceAI Platform - Feature Priority List
 
-**Last Updated:** 2026-06-23
-**Version:** 2.2
+**Last Updated:** 2026-07-11
+**Version:** 2.4
 
 > **Product Direction:** Voice-only. The platform focuses exclusively on phone-call AI agents. Chat agents (F3) and multi-channel (F14) are deprioritized — see `SPRINT-BOARD.md`.
 
@@ -28,14 +28,16 @@ Build an **AI voice agent platform** (voice-only) that combines:
 | F1 | Built-in skill library (8 skills) | M | High | 2026-06-22 |
 | F1 | Platform Skills Management (Admin UI) | M | High | 2026-06-22 |
 | F1 | Shared `<SkillEditor>` + org skills tab migration | M | High | 2026-06-22 |
+| F1 | Platform skills `status` enum (single source of truth) — supersedes the prior soft-delete work; soft-delete / show-deleted / restore now handled via `status` enum (draft/active/deprecated/deleted) + dedicated transition endpoints | M | High | 2026-06-24 |
 | — | Worker token-refresh race condition (multi-instance lease lock) | M | High | 2026-06-23 |
 | F2 | Phone Number Management (Twilio + LiveKit) | L | High | 2026-03-15 |
 
 ### 🟡 In Progress / Next (priority order)
 | # | Feature | Effort | Impact | Status |
 |---|---------|--------|--------|--------|
-| 1 | Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore | M | High | Next — finishes platform admin CRUD |
-| 2 | Skill library continuation (`call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`) | M | High | Next |
+| 1 | Navigation redesign + permission contract (N1) — new left-nav grouping (Workspace / Org Admin / Platform Admin) with org switcher; Phone Numbers & Skills promoted to top-level routes; `requiredPermission` field on every nav item filtered via `useHasPermission()`. Ships with backend `GET /me/permissions` stub (role-based resolution) and the contract (`resource:action` string format, `*` wildcard for platform admins). Epics A, B, C, and D-partial are **shipped** (2026-07-11/12); only D's `?org_id=` → `/{orgId}/` URL refactor and `OrganizationSkillsTab` URL noise remain. See `docs/tw-drafts/navigation-redesign.md`. | M | High | In Progress |
+| 2 | Industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork industry skills on org create / industry change | M | High | Next |
+| 3 | Skill library continuation (`call-handling`, `voicemail-management`, `new-patient-intake`, `intake-qualification`, `menu-inquiry`, `order-status`, `appointment-reminders`, `feedback-collection`, `recall-campaigns`) | M | High | Next |
 
 ### ⚪ Deprioritized (Voice-Only Direction)
 | ID | Feature | Effort | Impact | Status |
@@ -56,6 +58,24 @@ Build an **AI voice agent platform** (voice-only) that combines:
 | F12 | IVR Menu System | M | Medium |
 | F13 | Campaign Management | H | High |
 | F14 | Multi-channel (WhatsApp, Discord) | M | Medium |
+
+### 🟣 Deferred / Speculative (build only when a real need appears)
+
+These items are explicitly **not on the active roadmap**. They are documented
+here so they don't get lost, but they should not be picked up speculatively.
+Each has a concrete **trigger condition** — when that condition is met, design
+and ship them as their own scoped projects.
+
+| Feature | Trigger condition |
+|---------|-------------------|
+| **Define roles & permissions (UI + custom role management)** — let org admins (or platform admins) create custom roles in the UI, assign permissions to them, and assign users to those roles. Today the platform has three fixed roles (`platform_admin`, `org_admin`, `member`) with hardcoded permission sets. | A paying customer needs differentiated access for non-admin users (e.g. "this user can handle calls but not see billing"). Today, any non-admin user is `member` (read-only) — the middle ground doesn't exist. |
+| **Phase 2 RBAC real resolver** — replace the coarse role-based `GET /me/permissions` stub with a resolver that joins `user_roles → role_permissions → permissions` to compute the actual effective permission set. The data model is already in place; the `require_permission` / `require_role` factory in `backend/src/auth/dependencies.py` already calls `has_permission(...)` so it would consume the resolver's output unchanged. | The "Define roles & permissions" feature ships. The resolver is dead weight without it — every role currently maps to a fixed permission set, so a join produces the same answer as a hardcoded map. |
+
+**Why defer:** No paying customer yet, so no concrete user need. Both items
+involve product decisions (who can manage roles, how to resolve role conflicts,
+whether custom roles are org-scoped) that should be made with users in the room,
+not speculatively. The cost of building them later is the same as building them
+now — the data model and factory infrastructure are already in place.
 
 ---
 
@@ -202,7 +222,8 @@ appointment-booking/
 - ✅ Platform Skills Management (admin UI) — `/platform/skills` with create/edit/hide-restore/files + import-from-URL.
 - ✅ Shared `<SkillEditor>` extracted; org skills tab migrated to it (org + platform share one UI).
 - ✅ Worker single-instance scaling: Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim/release_token_refresh` SQL fns). Used a row-lease via RPC instead of `pg_advisory_lock` (advisory locks need session affinity, broken by PostgREST pooling). Run `alembic upgrade head` to apply migration `20260623000001`.
-- 🎯 Platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
+- ✅ Platform skills `status` enum (single source of truth) — soft-delete / show-deleted / restore are now backed by the enum + transition endpoints. Migration `20260624000001` applied.
+- 🎯 Industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork industry skills on org create / industry change.
 
 ### Deprioritized
 - 💬 F3: Chat Agents with Memory — out of voice-only scope. PRD retained for
@@ -244,10 +265,11 @@ docs/
 ---
 
 ## Next Steps
-1. Run `alembic upgrade head` to apply the token-refresh lock migration (`20260623000001`) to your DB.
-2. Implement platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.
-3. Continue the built-in skill library (`new-patient-intake`, `call-handling`, …).
-4. (Optional) prune merged/stale git branches.
+1. ~~Run `alembic upgrade head` to apply the token-refresh lock migration (`20260623000001`) to your DB.~~ Already applied — DB head confirmed at `20260624000001`.
+2. ~~Implement platform skills soft-delete (`is_deleted`) + show-deleted filter + Restore.~~ Shipped via the `status` enum in PR #25.
+3. Implement industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork industry skills on org create / industry change.
+4. Continue the built-in skill library (`new-patient-intake`, `call-handling`, …).
+5. (Optional) prune merged/stale git branches.
 
 > Full status, ordering, and rationale live in `SPRINT-BOARD.md` (the source of
 > truth). This file is the feature backlog/spec companion.

@@ -121,3 +121,10 @@ graphify-out/
 .codex/skills/graphify/
 # Codex local hooks (machine-specific; contains absolute path to local graphify binary)
 .codex/hooks.json
+
+# AI assistant local/personal settings (machine-specific; never commit).
+# .claude/settings.json and .cursor/rules/*.mdc ARE committed (shared team policy).
+# Only the *.local.json override files are personal — they hold machine-specific
+# permission grants and absolute paths that must not be shared.
+.claude/settings.local.json
+.cursor/rules/*.local.json

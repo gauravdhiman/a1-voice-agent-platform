@@ -64,8 +64,9 @@ async def get_role(
     current_span.set_attribute("user.id", str(current_user_id))
     current_span.set_attribute("role.id", str(role_id))
 
-    # Check if user has permission to read roles
-    if not user_profile.has_permission("role:read"):
+    # Check if user is a platform administrator.
+    # The platform-wide role catalog is platform-admin-only (See Task #34.)
+    if not user_profile.has_role("platform_admin"):
         current_span.set_status(
             trace.Status(
                 trace.StatusCode.ERROR, "Insufficient permissions to view roles"
@@ -95,8 +96,8 @@ async def get_all_roles(
     current_span = trace.get_current_span()
     current_span.set_attribute("user.id", str(current_user_id))
 
-    # Check if user has permission to read roles
-    if not user_profile.has_permission("role:read"):
+    # Check if user is a platform administrator (See Task #34.)
+    if not user_profile.has_role("platform_admin"):
         current_span.set_status(
             trace.Status(
                 trace.StatusCode.ERROR, "Insufficient permissions to view roles"

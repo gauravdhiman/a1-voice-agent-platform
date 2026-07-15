@@ -664,7 +664,15 @@ class TestPhoneNumberServiceCancel:
         mock_supabase_client,
         sample_phone_number_id,
     ):
-        """Cancels phone number successfully."""
+        """Cancels phone number successfully.
+
+        Patches ``phone_number_service.twilio_service`` so the Twilio
+        release call is deterministic — the service binds the Twilio
+        client in ``__init__`` (``self.twilio_service = twilio_service``),
+        so the module-level ``mock_twilio_service`` fixture does NOT reach
+        the instance. Without this patch the test hits the real Twilio
+        API and fails with HTTP 401 when no credentials are configured.
+        """
         now = datetime.now(timezone.utc)
 
         # Create response data
@@ -718,9 +726,16 @@ class TestPhoneNumberServiceCancel:
             MagicMock(data=update_data)
         ]
 
-        result, error = await phone_number_service.cancel_number(
-            sample_phone_number_id
-        )
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+            mock_twilio.release_phone_number.return_value = True
+
+            result, error = await phone_number_service.cancel_number(
+                sample_phone_number_id
+            )
+
+            # The Twilio release was attempted for a purchased number with a sid.
+            mock_twilio.release_phone_number.assert_called_once_with("PN1234567890")
 
         assert error is None
         assert result is True

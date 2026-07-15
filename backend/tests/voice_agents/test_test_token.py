@@ -101,6 +101,7 @@ class TestTestTokenEndpoint:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))

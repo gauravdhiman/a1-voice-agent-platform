@@ -1,129 +1,143 @@
+/**
+ * Page-level permission facade over the N1 `/me.permissions` contract.
+ *
+ * Historically this hook OR'd hardcoded role checks with ad-hoc permission
+ * strings (`member:invite`, `member:manage`, `settings:*`) that were never
+ * granted by the DB seed. That made the permission branch dead code and
+ * blocked Phase 2 custom roles from driving the UI.
+ *
+ * Current contract:
+ *   - Boolean flags are derived from `useMyPermissions()` via the canonical
+ *     vocabulary in `frontend/src/lib/permissions.ts`.
+ *   - `isPlatformAdmin` / `isOrgAdmin` remain role-based (nav section gates
+ *     and cross-org card actions still need roles).
+ *   - Fail closed on error or while permissions are loading (no
+ *     `NODE_ENV === "development"` grant-all fallback).
+ *
+ * @see docs/02_features/authentication_rbac/permission-matrix.md
+ */
+"use client";
+
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
+import {
+  hasPermission,
+  useMyPermissions,
+  type PermissionString,
+} from "@/hooks/use-has-permission";
+import { P } from "@/lib/permissions";
 
-interface UserPermissions {
-  // Organization-level permissions
+export interface UserPermissions {
+  // Organization-level
   canUpdateOrganization: boolean;
   canDeleteOrganization: boolean;
   canViewOrganization: boolean;
 
-  // Member management permissions
+  // Member management
   canManageMembers: boolean;
   canViewMembers: boolean;
   canInviteMembers: boolean;
   canRemoveMembers: boolean;
 
-  // Settings and configuration
+  // Settings (mapped to organization:* — there is no settings resource)
   canUpdateSettings: boolean;
   canViewSettings: boolean;
   canManageBilling: boolean;
 
-  // Platform-level permissions
+  // Workspace write gates (current org only)
+  canCreateAgent: boolean;
+  canUpdateAgent: boolean;
+  canDeleteAgent: boolean;
+  canManageSkills: boolean;
+  canManagePhoneNumbers: boolean;
+
+  // Role flags
   isPlatformAdmin: boolean;
   isOrgAdmin: boolean;
+
+  /** True while the `/me` permissions query has no data yet. */
+  isLoading: boolean;
 }
 
+const DENIED: UserPermissions = {
+  canUpdateOrganization: false,
+  canDeleteOrganization: false,
+  canViewOrganization: false,
+  canManageMembers: false,
+  canViewMembers: false,
+  canInviteMembers: false,
+  canRemoveMembers: false,
+  canUpdateSettings: false,
+  canViewSettings: false,
+  canManageBilling: false,
+  canCreateAgent: false,
+  canUpdateAgent: false,
+  canDeleteAgent: false,
+  canManageSkills: false,
+  canManagePhoneNumbers: false,
+  isPlatformAdmin: false,
+  isOrgAdmin: false,
+  isLoading: false,
+};
+
+/**
+ * Derive boolean capability flags for the current org from the resolved
+ * permissions map and role flags.
+ */
 export function useUserPermissions(): UserPermissions {
   const { user } = useAuth();
   const { currentOrganization } = useOrganization();
+  const { permissions, isLoading } = useMyPermissions();
 
   return useMemo(() => {
     if (!user || !currentOrganization) {
-      return {
-        canUpdateOrganization: false,
-        canDeleteOrganization: false,
-        canViewOrganization: false,
-        canManageMembers: false,
-        canViewMembers: false,
-        canInviteMembers: false,
-        canRemoveMembers: false,
-        canUpdateSettings: false,
-        canViewSettings: false,
-        canManageBilling: false,
-        isPlatformAdmin: false,
-        isOrgAdmin: false,
-      };
+      return { ...DENIED, isLoading };
     }
 
-    try {
-      const isPlatformAdmin = user.hasRole("platform_admin");
-      const isOrgAdmin = user.hasRole("org_admin", currentOrganization.id);
+    const isPlatformAdmin = Boolean(user.hasRole("platform_admin"));
+    const isOrgAdmin = Boolean(
+      user.hasRole("org_admin", currentOrganization.id),
+    );
 
-      // Check role-based permissions (admin roles get all permissions)
-      const roleBasedPermissions = {
-        canUpdateOrganization: isPlatformAdmin || isOrgAdmin,
-        canDeleteOrganization: isPlatformAdmin || isOrgAdmin,
-        canViewOrganization: isPlatformAdmin || isOrgAdmin,
-        canManageMembers: isPlatformAdmin || isOrgAdmin,
-        canViewMembers: isPlatformAdmin || isOrgAdmin,
-        canInviteMembers: isPlatformAdmin || isOrgAdmin,
-        canRemoveMembers: isPlatformAdmin || isOrgAdmin,
-        canUpdateSettings: isPlatformAdmin || isOrgAdmin,
-        canViewSettings: isPlatformAdmin || isOrgAdmin,
-        canManageBilling: isPlatformAdmin || isOrgAdmin,
-        isPlatformAdmin,
-        isOrgAdmin,
-      };
+    const check = (perm: PermissionString): boolean => {
+      if (isPlatformAdmin) return true;
+      // Fail closed while loading so write CTAs do not flash on for members.
+      if (isLoading) return false;
+      return hasPermission(permissions, perm);
+    };
 
-      // Check specific permissions for more granular control
-      // This allows for roles with specific permissions rather than just admin roles
-      const specificPermissions = {
-        canUpdateOrganization:
-          user.hasPermission("organization:update", currentOrganization.id) ||
-          roleBasedPermissions.canUpdateOrganization,
-        canDeleteOrganization:
-          user.hasPermission("organization:delete", currentOrganization.id) ||
-          roleBasedPermissions.canDeleteOrganization,
-        canViewOrganization:
-          user.hasPermission("organization:read", currentOrganization.id) ||
-          roleBasedPermissions.canViewOrganization,
-        canManageMembers:
-          user.hasPermission("member:manage", currentOrganization.id) ||
-          roleBasedPermissions.canManageMembers,
-        canViewMembers:
-          user.hasPermission("member:read", currentOrganization.id) ||
-          roleBasedPermissions.canViewMembers,
-        canInviteMembers:
-          user.hasPermission("member:invite", currentOrganization.id) ||
-          roleBasedPermissions.canInviteMembers,
-        canRemoveMembers:
-          user.hasPermission("member:remove", currentOrganization.id) ||
-          roleBasedPermissions.canRemoveMembers,
-        canUpdateSettings:
-          user.hasPermission("settings:update", currentOrganization.id) ||
-          roleBasedPermissions.canUpdateSettings,
-        canViewSettings:
-          user.hasPermission("settings:read", currentOrganization.id) ||
-          roleBasedPermissions.canViewSettings,
-        canManageBilling:
-          user.hasPermission("billing:manage", currentOrganization.id) ||
-          roleBasedPermissions.canManageBilling,
-        isPlatformAdmin,
-        isOrgAdmin,
-      };
+    const canInvite = check(P.member.create);
+    const canUpdateMember = check(P.member.update);
+    const canRemove = check(P.member.delete);
 
-      return specificPermissions;
-    } catch (err) {
-      console.error("Error checking user permissions:", err);
-
-      // Environment-based fallback permissions
-      const isDevelopment = process.env.NODE_ENV === "development";
-
-      return {
-        canUpdateOrganization: isDevelopment, // Allow in dev for testing
-        canDeleteOrganization: isDevelopment, // Allow in dev for testing
-        canViewOrganization: isDevelopment, // Allow in dev for testing
-        canManageMembers: isDevelopment, // Allow in dev for testing
-        canViewMembers: isDevelopment, // Allow in dev for testing
-        canInviteMembers: isDevelopment, // Allow in dev for testing
-        canRemoveMembers: isDevelopment, // Allow in dev for testing
-        canUpdateSettings: isDevelopment, // Allow in dev for testing
-        canViewSettings: isDevelopment, // Allow in dev for testing
-        canManageBilling: isDevelopment, // Allow in dev for testing
-        isPlatformAdmin: false,
-        isOrgAdmin: false,
-      };
-    }
-  }, [user, currentOrganization]);
+    return {
+      canUpdateOrganization: check(P.organization.update),
+      canDeleteOrganization: check(P.organization.delete),
+      canViewOrganization: check(P.organization.read),
+      canManageMembers: canInvite || canUpdateMember || canRemove,
+      canViewMembers: check(P.member.read),
+      canInviteMembers: canInvite,
+      canRemoveMembers: canRemove,
+      canUpdateSettings: check(P.organization.update),
+      canViewSettings: check(P.organization.read),
+      // billing:manage (N1 nav) OR billing:subscribe (legacy API seed)
+      canManageBilling:
+        check(P.billing.manage) || check(P.billing.subscribe),
+      canCreateAgent: check(P.agent.create),
+      canUpdateAgent: check(P.agent.update),
+      canDeleteAgent: check(P.agent.delete),
+      canManageSkills:
+        check(P.skill.create) ||
+        check(P.skill.update) ||
+        check(P.skill.delete),
+      canManagePhoneNumbers:
+        check(P.phoneNumber.create) ||
+        check(P.phoneNumber.update) ||
+        check(P.phoneNumber.delete),
+      isPlatformAdmin,
+      isOrgAdmin,
+      isLoading,
+    };
+  }, [user, currentOrganization, permissions, isLoading]);
 }

@@ -21,7 +21,7 @@ import { DataTable } from "@/components/data-table/data-table";
 import { organizationMembersColumns } from "@/components/organization-members/organization-members-data-table-columns";
 import { InviteMemberDialog } from "@/components/organization-members/invite-member-dialog";
 import type { Organization } from "@/types/organization";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function MembersPageContent({
   validatedOrg,
@@ -174,7 +174,7 @@ function MembersPageContent({
         </CardHeader>
         <CardContent className="p-5 pt-0">
           <DataTable
-            columns={organizationMembersColumns}
+            columns={organizationMembersColumns(userPermissions.canManageMembers)}
             data={members}
             filterColumn="member"
             filterPlaceholder="Filter members..."
@@ -200,7 +200,11 @@ export default function OrganizationMembersPage() {
     setCurrentOrganization,
   } = useOrganization();
   const searchParams = useSearchParams();
-  const orgId = searchParams.get("org_id");
+  // Fall back to currentOrganization.id when ?org_id= is missing.
+  // The sidebar nav links to bare /organization/members (no ?org_id=),
+  // and the org admin should see the page, not "Access Denied".
+  const orgId =
+    searchParams.get("org_id") ?? currentOrganization?.id ?? null;
 
   // Validate organization access when orgId is provided
   const {
@@ -209,15 +213,21 @@ export default function OrganizationMembersPage() {
     organization: validatedOrg,
   } = useOrganizationById(orgId);
 
-  // Set the current organization based on the validated orgId parameter if provided
-  if (
-    validatedOrg &&
-    (!currentOrganization || currentOrganization.id !== validatedOrg.id)
-  ) {
-    setCurrentOrganization(validatedOrg);
-  }
+  // Set the current organization based on the validated orgId parameter if provided.
+  // Must run in an effect — calling setState during render is an
+  // anti-pattern (causes re-render loops, "Cannot update a component
+  // while rendering a different component" errors in React 18+).
+  useEffect(() => {
+    if (
+      validatedOrg &&
+      (!currentOrganization || currentOrganization.id !== validatedOrg.id)
+    ) {
+      setCurrentOrganization(validatedOrg);
+    }
+  }, [validatedOrg, currentOrganization, setCurrentOrganization]);
 
-  // Make orgId mandatory - if not provided, redirect to organizations page
+  // If no orgId is available from either URL or context, show the
+  // "Organization ID Required" page.
   if (!orgId) {
     return (
       <AccessDenied

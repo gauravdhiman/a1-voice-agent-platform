@@ -1,12 +1,25 @@
 """
 API routes for phone number management.
+
+Permission contract (see permission-matrix.md / N1 Epic C):
+
+  - List organization numbers → ``phone_number:read``
+  - Search available numbers  → authenticated (catalog is not org-scoped)
+  - Purchase                  → ``phone_number:create``
+  - Assign to agent           → ``phone_number:update``
+  - Cancel / release          → ``phone_number:delete``
+
+These routes previously used ``check_billing_permissions``, which
+allowed ``billing:subscribe`` holders to mutate phone inventory —
+a consistency gap with the frontend ``canManagePhoneNumbers`` gate.
 """
 
 import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from src.auth.middleware import check_billing_permissions, get_authenticated_user
+from src.auth.dependencies import assert_has_permission
+from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.security.rate_limiter import limiter
 
@@ -39,7 +52,8 @@ async def search_available_numbers(
     """Search for available phone numbers.
 
     Returns a list of phone numbers available for purchase from the provider.
-    Maximum 50 results per page.
+    Maximum 50 results per page. Requires authentication only (provider
+    catalog is not org-scoped); purchase still requires ``phone_number:create``.
     """
     try:
         search_request = PhoneNumberSearchRequest(
@@ -77,7 +91,7 @@ async def purchase_phone_number(
     request: Request,
     purchase_request: PhoneNumberPurchaseRequest,
     organization_id: UUID,
-    user_auth: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Purchase a phone number using credits.
 
@@ -85,7 +99,14 @@ async def purchase_phone_number(
     Credits are deducted immediately upon purchase.
     """
     try:
-        user_id, user_profile = user_auth
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "create",
+            organization_id,
+            error_message="Insufficient permissions to purchase phone numbers",
+        )
 
         result, error = await phone_number_service.purchase_number(
             organization_id=organization_id,
@@ -118,14 +139,21 @@ async def purchase_phone_number(
 @router.get("", response_model=PhoneNumberListResponse)
 async def list_organization_numbers(
     organization_id: UUID,
-    user_auth: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Get all phone numbers owned by an organization.
 
     Returns both assigned and unassigned phone numbers.
     """
     try:
-        user_id, user_profile = user_auth
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "read",
+            organization_id,
+            error_message="Insufficient permissions to view phone numbers",
+        )
 
         result, error = await phone_number_service.get_organization_numbers(
             organization_id=organization_id
@@ -154,14 +182,21 @@ async def assign_phone_number_to_agent(
     phone_number_id: UUID,
     assign_request: PhoneNumberAssignRequest,
     organization_id: UUID,
-    user_auth: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Assign a phone number to an agent.
 
     The phone number must be owned by the organization and not already assigned.
     """
     try:
-        user_id, user_profile = user_auth
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "update",
+            organization_id,
+            error_message="Insufficient permissions to assign phone numbers",
+        )
 
         result, error = await phone_number_service.assign_to_agent(
             phone_number_id=phone_number_id,
@@ -200,7 +235,7 @@ async def assign_phone_number_to_agent(
 async def cancel_phone_number(
     phone_number_id: UUID,
     organization_id: UUID,
-    user_auth: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Cancel (release) a phone number.
 
@@ -208,7 +243,14 @@ async def cancel_phone_number(
     No refund is provided for the current billing period.
     """
     try:
-        user_id, user_profile = user_auth
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "delete",
+            organization_id,
+            error_message="Insufficient permissions to cancel phone numbers",
+        )
 
         success, error = await phone_number_service.cancel_number(
             phone_number_id=phone_number_id,

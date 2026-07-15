@@ -28,6 +28,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { PlanSelection } from "@/components/billing/plan-selection";
 import { CreditPurchase } from "@/components/billing/credit-purchase";
 import { SubscriptionManagement } from "@/components/billing/subscription-management";
@@ -45,7 +46,11 @@ export default function BillingPage() {
   } = useOrganization();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const orgId = searchParams.get("org_id");
+  // Fall back to currentOrganization.id when ?org_id= is missing.
+  // The sidebar nav links to bare /organization/billing (no ?org_id=),
+  // and the org admin should see the page, not "Access Denied".
+  const orgId =
+    searchParams.get("org_id") ?? currentOrganization?.id ?? null;
 
   // Validate organization access when orgId is provided
   const {
@@ -54,13 +59,25 @@ export default function BillingPage() {
     organization: validatedOrg,
   } = useOrganizationById(orgId);
 
-  // Set the current organization based on the validated orgId parameter if provided
-  if (
-    validatedOrg &&
-    (!currentOrganization || currentOrganization.id !== validatedOrg.id)
-  ) {
-    setCurrentOrganization(validatedOrg);
-  }
+  // Set the current organization based on the validated orgId parameter if provided.
+  // Must run in an effect — calling setState during render is an
+  // anti-pattern (causes re-render loops, "Cannot update a component
+  // while rendering a different component" errors in React 18+).
+  useEffect(() => {
+    if (
+      validatedOrg &&
+      (!currentOrganization || currentOrganization.id !== validatedOrg.id)
+    ) {
+      setCurrentOrganization(validatedOrg);
+    }
+  }, [validatedOrg, currentOrganization, setCurrentOrganization]);
+
+  // Page-level gate: `billing:manage` OR `billing:subscribe` (and
+  // platform admin wildcard) via the useUserPermissions facade —
+  // not a bare isOrgAdmin role check, so Phase 2 custom billing
+  // managers are not blocked.
+  const userPermissions = useUserPermissions();
+  const isBillingAdmin = userPermissions.canManageBilling;
 
   const {
     data: billingSummary,
@@ -110,6 +127,17 @@ export default function BillingPage() {
         title="Organization ID Required"
         description="Organization ID is required to access this page. Please select an organization from the organizations page."
         redirectPath="/organizations"
+      />
+    );
+  }
+
+  // Page-level admin gate.
+  if (!isBillingAdmin) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        description="Only organization admins and platform admins can manage billing."
+        redirectPath="/dashboard"
       />
     );
   }

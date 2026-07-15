@@ -98,6 +98,7 @@ class TestSkillRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await create_skill(
@@ -207,6 +208,7 @@ class TestSkillRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await create_skill(
@@ -322,6 +324,7 @@ class TestSkillRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with patch("src.voice_agents.skill_routes.voice_agent_service") as mock_agent_svc:
             mock_agent_svc.get_agent_by_id = AsyncMock(return_value=(agent, None))
@@ -380,6 +383,7 @@ class TestSkillRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await seed_platform_skills(
@@ -399,6 +403,7 @@ class TestSkillRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await sync_platform_skills(
@@ -467,6 +472,7 @@ class TestSkillRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await fork_platform_skill(
@@ -624,6 +630,7 @@ class TestSkillFileRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await create_skill_file(
@@ -651,6 +658,7 @@ class TestSkillFileRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await update_skill_file(
@@ -676,6 +684,7 @@ class TestSkillFileRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await delete_skill_file(
@@ -701,6 +710,11 @@ class TestSkillFileRoutes:
         mock_user_profile.has_role = Mock(return_value=True)
 
         with patch("src.voice_agents.skill_routes.skill_service") as mock_service:
+            # Cross-org IDOR guard: the route now calls get_skill_file
+            # to resolve the parent skill's organization_id.
+            mock_service.get_skill_file = AsyncMock(
+                return_value=(Mock(skill_id=test_skill_id), None)
+            )
             mock_service.delete_skill_file = AsyncMock(return_value=(True, None))
 
             result = await delete_skill_file(
@@ -804,6 +818,7 @@ class TestSkillImportRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await import_skill_from_url(
@@ -871,6 +886,7 @@ class TestSkillImportRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with patch("src.voice_agents.skill_routes.voice_agent_service") as mock_agent_svc:
             mock_agent_svc.get_agent_by_id = AsyncMock(return_value=(agent, None))
@@ -929,6 +945,7 @@ class TestSkillImportRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await sync_platform_skills(
@@ -991,6 +1008,7 @@ class TestSkillFileRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await create_skill_file(
@@ -1018,6 +1036,7 @@ class TestSkillFileRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await update_skill_file(
@@ -1043,6 +1062,7 @@ class TestSkillFileRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await delete_skill_file(
@@ -1068,6 +1088,11 @@ class TestSkillFileRoutes:
         mock_user_profile.has_role = Mock(return_value=True)
 
         with patch("src.voice_agents.skill_routes.skill_service") as mock_service:
+            # Cross-org IDOR guard: the route now calls get_skill_file
+            # to resolve the parent skill's organization_id.
+            mock_service.get_skill_file = AsyncMock(
+                return_value=(Mock(skill_id=test_skill_id), None)
+            )
             mock_service.delete_skill_file = AsyncMock(return_value=(True, None))
 
             result = await delete_skill_file(
@@ -1171,6 +1196,7 @@ class TestSkillImportRoutes:
 
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=False)
+        mock_user_profile.has_permission = Mock(return_value=False)
 
         with pytest.raises(HTTPException) as exc_info:
             await import_skill_from_url(

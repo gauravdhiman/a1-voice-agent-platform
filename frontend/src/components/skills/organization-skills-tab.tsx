@@ -35,6 +35,18 @@ interface OrganizationSkillsTabProps {
   orgId: string;
   canCreate: boolean;
   canEdit: boolean;
+  /**
+   * Base path that `syncUrl` writes the editor's selection against.
+   *
+   * Defaults to `/skills` (the first-class N1 route). Pass
+   * `"/organization"` only if the editor is ever mounted under the
+   * legacy org page again — in that case `tab=skills` is also written
+   * so the org page can redirect via `legacyTabRedirect`.
+   *
+   * Bug #35: without a configurable base path, the editor always
+   * navigated to `/organization?...` and flashed when used on `/skills`.
+   */
+  basePath?: string;
 }
 
 /** Map an OrganizationSkill to the editor's normalized EditableSkill. */
@@ -55,21 +67,29 @@ function toEditable(s: OrganizationSkill): EditableSkill {
   };
 }
 
-export function OrganizationSkillsTab({ orgId, canCreate, canEdit }: OrganizationSkillsTabProps) {
+export function OrganizationSkillsTab({
+  orgId,
+  canCreate,
+  canEdit,
+  basePath = "/skills",
+}: OrganizationSkillsTabProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // URL sync: /organization?org_id=…&tab=skills&skill=<slug>&file=<path>
+  // URL sync: <basePath>?org_id=…&skill=<slug>&file=<path>
+  // Only the legacy `/organization` mount also writes `tab=skills`.
   const syncUrl = useCallback(
     (state: { slug: string | null; filePath: string | null }) => {
       const params = new URLSearchParams();
       params.set("org_id", orgId);
-      params.set("tab", "skills");
+      if (basePath === "/organization") {
+        params.set("tab", "skills");
+      }
       if (state.slug) params.set("skill", state.slug);
       if (state.filePath) params.set("file", state.filePath);
-      router.replace(`/organization?${params.toString()}`, { scroll: false });
+      router.replace(`${basePath}?${params.toString()}`, { scroll: false });
     },
-    [orgId, router],
+    [orgId, router, basePath],
   );
 
   const initialSelection = useMemo(
