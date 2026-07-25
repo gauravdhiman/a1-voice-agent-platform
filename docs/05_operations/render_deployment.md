@@ -53,7 +53,7 @@ Before deploying, gather all credentials:
 - Create production OAuth credentials at console.cloud.google.com
 - `GOOGLE_OAUTH_TOOL_CLIENT_ID`
 - `GOOGLE_OAUTH_TOOL_CLIENT_SECRET`
-- `GOOGLE_OAUTH_TOOL_REDIRECT_URI` — `https://cog-backend.onrender.com/auth/google/callback`
+- `GOOGLE_OAUTH_TOOL_REDIRECT_URI` — `https://cog-backend.onrender.com/api/v1/tools/callback`
 
 ### AI Models
 - `GEMINI_API_KEY` — from Google AI Studio
@@ -123,7 +123,7 @@ TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
 GOOGLE_OAUTH_TOOL_CLIENT_ID=...
 GOOGLE_OAUTH_TOOL_CLIENT_SECRET=...
-GOOGLE_OAUTH_TOOL_REDIRECT_URI=https://cog-backend.onrender.com/auth/google/callback
+GOOGLE_OAUTH_TOOL_REDIRECT_URI=https://cog-backend.onrender.com/api/v1/tools/callback
 JWT_SECRET_KEY=<random_32_bytes_hex>
 CORS_ORIGINS=["https://cog-frontend.onrender.com"]
 ```

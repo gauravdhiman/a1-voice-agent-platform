@@ -552,7 +552,7 @@ TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES=15  # Refresh tokens expiring within 15 minu
 # OAuth Provider Configuration
 GOOGLE_OAUTH_TOOL_CLIENT_ID=your-client-id
 GOOGLE_OAUTH_TOOL_CLIENT_SECRET=your-client-secret
-GOOGLE_OAUTH_TOOL_REDIRECT_URI=http://localhost:3000/auth/callback
+GOOGLE_OAUTH_TOOL_REDIRECT_URI=http://localhost:8000/api/v1/tools/callback
 ```
 
 **Docker Compose Configuration**:

@@ -14,15 +14,22 @@ from livekit.agents import (
     function_tool,
 )
 from livekit.agents.voice import room_io
-from livekit.plugins.google.realtime import RealtimeModel
+
+from realtime_config import build_realtime_model
 
 from shared.common.security import decrypt_data
 from shared.voice_agents.livekit_service import livekit_service
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
-from shared.voice_agents.prompt_builder import PromptBuilder
+from shared.voice_agents.prompt_builder import PromptBuilder, build_current_datetime_section
 from shared.organization.service import BaseOrganizationService
+
+# MCP integration (Phase 3a) — the parallel tool path. Only used for
+# platform_tools rows marked tool_source='mcp'; the legacy BaseTool path below
+# is unchanged. See docs/03_implementation/mcp_integration_rfc.md §1.1.
+from shared.voice_agents.tool_models import ToolSource
+from shared.voice_agents.tools.mcp import build_livekit_tools_for_agent_tool
 
 logger = logging.getLogger("voice-worker")
 
@@ -124,9 +131,125 @@ async def {func_name}({params_str}) -> Any:
     return wrapper
 
 
+async def _integrate_mcp_agent_tool(
+    agent_tool,
+    livekit_tools: list,
+    mcp_clients: list,
+    enabled_tool_names: list,
+) -> None:
+    """Route one MCP-sourced agent_tool through the remote MCP server path.
+
+    This is the Phase 3a branch extracted for testability. On success it
+    extends ``livekit_tools`` with the synthesized LiveKit tools, appends the
+    open :class:`McpClient` to ``mcp_clients`` (the caller closes these on
+    session end), and records the tool name in ``enabled_tool_names`` for the
+    prompt builder. On failure it logs and returns without raising, so a broken
+    MCP server never prevents the rest of the agent's tools (legacy or MCP)
+    from loading.
+
+    Coexists with the legacy ``BaseTool`` path — the caller only invokes this
+    for rows where ``tool.tool_source == ToolSource.MCP``. See RFC §1.1.
+
+    Args:
+        agent_tool: An enabled :class:`AgentTool` whose ``tool.tool_source`` is
+            ``MCP``.
+        livekit_tools: The per-agent LiveKit tool list to extend (in place).
+        mcp_clients: The per-agent MCP client list to append the open client to
+            (in place); the caller owns the clients' lifecycle.
+        enabled_tool_names: The per-agent enabled-tool-name list to append the
+            tool name to (for prompt building).
+    """
+    try:
+        mcp_tools, mcp_client = await build_livekit_tools_for_agent_tool(agent_tool)
+    except Exception as mcp_err:
+        logger.error(
+            f"Failed to build MCP tools for '{agent_tool.tool.name}': {mcp_err}",
+            exc_info=True,
+        )
+        return
+    livekit_tools.extend(mcp_tools)
+    mcp_clients.append(mcp_client)
+    enabled_tool_names.append(agent_tool.tool.name)
+    logger.info(f"Built {len(mcp_tools)} MCP tool(s) for: {agent_tool.tool.name}")
+
+
+def _hand_off_mcp_clients_to_session(ctx, mcp_clients: list) -> None:
+    """Hand ownership of MCP clients from the entrypoint to the live session.
+
+    The worker entrypoint returns right after ``agent_session.start()`` while the
+    LiveKit session keeps running autonomously (conversation, tool calls happen
+    after the entrypoint has returned). Each synthesized MCP tool holds a
+    reference to its :class:`McpClient`, so the clients must outlive the
+    entrypoint and be closed when the **job** ends — NOT in the entrypoint's
+    ``finally`` (which fires at return time, before any tool call). This
+    registers a shutdown callback on the ``JobContext`` to close the clients at
+    job shutdown (participant disconnect / session end), which is the real
+    session lifetime.
+
+    Args:
+        ctx: The LiveKit ``JobContext`` for this room/job.
+        mcp_clients: The per-agent MCP clients whose handlers are wired into the
+            live session's tools.
+
+    Notes:
+        - No-op when there are no MCP clients (legacy-only agents register no
+          callback).
+        - ``McpClient.close`` is idempotent, so this is safe even if cleanup also
+          runs elsewhere.
+    """
+    if not mcp_clients:
+        return
+
+    async def _close_on_shutdown(_reason: str = "") -> None:
+        for client in mcp_clients:
+            try:
+                await client.close()
+            except Exception as close_err:
+                logger.error(
+                    f"Error closing MCP client on shutdown: {close_err}",
+                    exc_info=True,
+                )
+
+    ctx.add_shutdown_callback(_close_on_shutdown)
+
+
+async def _cleanup_mcp_clients(mcp_clients: list, handed_off: bool) -> None:
+    """Close MCP clients, but only when setup failed before session handoff.
+
+    Called from the entrypoint's ``finally``. When the session successfully
+    started, ownership of the clients was handed to the job lifecycle via
+    :func:`_hand_off_mcp_clients_to_session` (``handed_off=True``); they are
+    closed later by the shutdown callback and must NOT be closed here, or every
+    synthesized tool would fail with ``RuntimeError: McpClient is closed`` at
+    call time. When setup failed before the session took ownership
+    (``handed_off=False``), the half-open clients are leaked unless we close
+    them here.
+
+    Args:
+        mcp_clients: The per-agent MCP clients.
+        handed_off: ``True`` once ``agent_session.start()`` succeeded and the
+            shutdown callback was registered; ``False`` on the error path.
+    """
+    if handed_off:
+        return
+    for client in mcp_clients:
+        try:
+            await client.close()
+        except Exception as close_err:
+            logger.error(
+                f"Error closing MCP client: {close_err}", exc_info=True
+            )
+
+
 class DynamicAgent(Agent):
     def __init__(self, instructions: str):
-        super().__init__(instructions=instructions)
+        # allow_interruptions=True is the LiveKit framework default, but we set
+        # it explicitly so a future framework default change cannot silently
+        # regress barge-in (the "agent repeats itself after the user already
+        # responded" symptom). The Gemini server side is also set to
+        # START_OF_ACTIVITY_INTERRUPTS in realtime_config — both layers honor
+        # interruption.
+        super().__init__(instructions=instructions, allow_interruptions=True)
 
     async def on_enter(self):
         logger.info(f"Agent entered: {self.session.userdata.get('agent_name')}")
@@ -144,6 +267,16 @@ async def entrypoint(ctx: JobContext):
     voice_agent = None
     agent_id = None
     room_name = ctx.room.name
+    # MCP clients opened for this session (Phase 3a). Each MCP-sourced tool's
+    # LiveKit handler holds a reference to its client, so the client must stay
+    # open for the whole session. Because the entrypoint returns right after
+    # ``agent_session.start()`` while the session runs on, the clients are handed
+    # to the job lifecycle (closed via a shutdown callback) once the session
+    # starts — NOT in the finally block, which would close them before any tool
+    # call. ``mcp_clients_handed_off`` records whether that handoff happened; the
+    # finally only closes clients when setup failed before the handoff.
+    mcp_clients: list = []
+    mcp_clients_handed_off = False
 
     try:
         logger.info(f"Room name from job: {room_name}")
@@ -211,6 +344,17 @@ async def entrypoint(ctx: JobContext):
             if not agent_tool.is_enabled or not agent_tool.tool:
                 continue
 
+            # --- MCP path (Phase 3a, coexists with legacy, RFC §1.1) --------
+            # A platform_tools row marked tool_source='mcp' is routed through a
+            # remote MCP server instead of the in-tree BaseTool registry. The
+            # legacy path below is untouched and runs for every other row.
+            if agent_tool.tool.tool_source == ToolSource.MCP:
+                await _integrate_mcp_agent_tool(
+                    agent_tool, livekit_tools, mcp_clients, enabled_tool_names
+                )
+                continue
+
+            # --- legacy path (unchanged) ------------------------------------
             tool_name = agent_tool.tool.name
             tool_config = agent_tool.config or {}
             tool_sensitive_config = agent_tool.sensitive_config or {}
@@ -350,11 +494,24 @@ async def entrypoint(ctx: JobContext):
 
         # 3c. Build enhanced system prompt
         logger.info(f"Building enhanced system prompt for agent {agent_id}")
+        # Inject a timezone-aware "now" once at session start so the model can
+        # ground "today"/"tomorrow"/"now"/business-hours (Gemini realtime has no
+        # inherent sense of the current date/time). The timezone is a platform
+        # default (AGENT_DEFAULT_TIMEZONE env var, default UTC); the business
+        # timezone itself is stated by the user in org details / skills and the
+        # model reconciles against this anchor.
+        # TODO: Future Enhancement — on long-lived sessions (>~15 min) this
+        # injected "now" drifts. Refresh via livekit_agent.update_instructions(...)
+        # on a timer or a per-turn chat_ctx system message so "now" stays accurate.
+        current_dt_section = build_current_datetime_section(
+            os.getenv("AGENT_DEFAULT_TIMEZONE", "UTC")
+        )
         org, org_error = await organization_service.get_organization_by_id(voice_agent.organization_id)
         if org_error or not org:
             logger.warning(f"Could not fetch organization details: {org_error}. Using default prompt.")
-            # Fallback to default prompt if org data unavailable
-            instructions = default_system_prompt
+            # Fallback to default prompt if org data unavailable; still prepend the
+            # current-date/time anchor so the model has a temporal reference.
+            instructions = current_dt_section + "\n\n" + default_system_prompt
             # Fallback to platform key if org not found
             org_google_api_key = None
         else:
@@ -364,6 +521,7 @@ async def entrypoint(ctx: JobContext):
                 default_rules=default_system_prompt,
                 enabled_tools=enabled_tool_names,
                 agent_skills=skill_summaries,
+                current_datetime=current_dt_section,
             )
             # Get organization's Google API key
             org_google_api_key = getattr(org, 'google_api_key', None)
@@ -395,12 +553,12 @@ async def entrypoint(ctx: JobContext):
             logger.info(f"Agent {agent_id} using platform API key (no org key configured)")
 
         # 5. Create Gemini RealtimeModel
-        model = RealtimeModel(
-            model="gemini-2.5-flash-native-audio-preview-12-2025",
-            api_key=api_key,
-            voice="Puck",
-            temperature=0.8,
-        )
+        # The realtime model tuning (thinking off, barge-in on, endpointing
+        # tuned, temperature lowered) lives in realtime_config.build_realtime_model
+        # so it is unit-tested independently of this live entrypoint. See that
+        # module's docstring for the rationale and the model-options analysis
+        # for why the 2.5 native-audio model is kept (not the 3.1 "live" preview).
+        model = build_realtime_model(api_key=api_key)
 
         # 5. Create LiveKit Agent
         # 6. Start Session
@@ -416,6 +574,14 @@ async def entrypoint(ctx: JobContext):
             ),
         )
         logger.info("Agent session started")
+
+        # The session is now live and will outlive this entrypoint (the
+        # function returns below while LiveKit drives the conversation). Hand
+        # ownership of the MCP clients to the job lifecycle so they are closed
+        # on shutdown — NOT in the finally block, which would close them before
+        # the model invokes any MCP tool (regression: "McpClient is closed").
+        _hand_off_mcp_clients_to_session(ctx, mcp_clients)
+        mcp_clients_handed_off = True
 
         # Start conversation with greeting
         await agent_session.generate_reply(
@@ -456,6 +622,16 @@ async def entrypoint(ctx: JobContext):
                     f"Error closing LiveKit room {room_name}: {cleanup_error}",
                     exc_info=True,
                 )
+
+    finally:
+        # Close MCP clients ONLY when setup failed before the session took
+        # ownership (``mcp_clients_handed_off`` is False). Once the session
+        # started, the clients are closed by the shutdown callback registered in
+        # :func:`_hand_off_mcp_clients_to_session`; closing them here would kill
+        # every MCP tool for the rest of the session ("McpClient is closed").
+        # The legacy BaseTool path has nothing to close (mcp_clients is empty).
+        # (RFC §1.1 coexistence: MCP path owns its own lifecycle.)
+        await _cleanup_mcp_clients(mcp_clients, mcp_clients_handed_off)
 
 
 if __name__ == "__main__":

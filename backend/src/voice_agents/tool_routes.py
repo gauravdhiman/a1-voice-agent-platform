@@ -186,6 +186,59 @@ async def get_agent_tools(
     return tools
 
 
+async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
+    """Resolve the OAuth ``auth_config`` dict for a tool by name.
+
+    DB-first resolution so MCP-sourced ``platform_tools`` (which have no
+    in-tree ``BaseTool`` subclass in the LiveKit registry) flow through the
+    same OAuth start/callback endpoints as legacy tools. The DB row's
+    ``auth_config`` is populated for legacy tools by
+    ``LiveKitToolRegistry.sync_with_db`` and for MCP tools by the platform
+    seed (see ``docs/03_implementation/mcp_integration_rfc.md``).
+
+    Falls back to the legacy LiveKit registry for back-compat if no DB row
+    carries ``auth_config`` (defensive — synced/seeded rows always have it).
+
+    Args:
+        tool_name: The ``platform_tools.name`` (also the legacy registry key).
+
+    Returns:
+        The ``auth_config`` dict (``provider`` / ``auth_url`` / ``token_url``
+        / ``scopes`` / ``access_type`` / ``prompt``) or ``None`` if the tool
+        is unknown to both the DB and the legacy registry. A ``None`` return
+        is treated by the callers as a 404 — a tool without an OAuth config
+        cannot start an OAuth flow.
+
+    Notes:
+        - Coexistence (RFC §1.1): the legacy registry is a *fallback*, never
+          deleted; MCP rows resolve from the DB and never touch it.
+        - ``TokenRefreshService`` reads the same ``auth_config`` column to
+          refresh tokens, so an MCP tool whose config is resolved here is
+          also auto-refreshed with no further wiring.
+    """
+    # 1. DB-first: platform_tools row by name.
+    tools, _ = await tool_service.get_platform_tools(only_active=False)
+    row = next((t for t in tools if t.name == tool_name), None)
+    if row is not None and row.auth_config:
+        cfg = row.auth_config
+        if isinstance(cfg, dict):
+            return cfg
+        # Pydantic BaseAuthConfig (legacy rows may store a model).
+        if hasattr(cfg, "model_dump"):
+            return cfg.model_dump()
+        return dict(cfg)
+
+    # 2. Legacy registry fallback (back-compat for rows lacking auth_config).
+    from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+
+    tool_class = livekit_tool_registry.get_tool_class(tool_name)
+    if tool_class is not None:
+        metadata = tool_class().metadata
+        if metadata.auth_config:
+            return metadata.auth_config
+    return None
+
+
 # OAuth Handlers
 @tool_router.get("/auth/{tool_name}")
 @tracer.start_as_current_span("tool.routes.start_oauth")
@@ -194,16 +247,17 @@ async def start_oauth(
     agent_id: UUID,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Start OAuth flow for a specific tool."""
-    from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+    """Start OAuth flow for a specific tool.
 
-    tool_class = livekit_tool_registry.get_tool_class(tool_name)
-    if not tool_class:
+    Resolves the tool's OAuth config from the ``platform_tools`` DB row first
+    (so MCP-sourced tools work), falling back to the legacy LiveKit registry.
+    Client credentials come from the ``GOOGLE_OAUTH_TOOL_*`` env vars via
+    :class:`OAuthProviderManager`; scopes / auth_url / access_type / prompt
+    come from the resolved ``auth_config``.
+    """
+    auth_config = await _resolve_tool_auth_config(tool_name)
+    if not auth_config:
         raise HTTPException(status_code=404, detail="Tool not found")
-
-    metadata = tool_class().metadata
-    if not metadata.requires_auth:
-        raise HTTPException(status_code=400, detail="Tool does not require auth")
 
     client_id = os.getenv("GOOGLE_OAUTH_TOOL_CLIENT_ID", "")
     redirect_uri = os.getenv("GOOGLE_OAUTH_TOOL_REDIRECT_URI", "")
@@ -223,23 +277,24 @@ async def start_oauth(
     state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
     # Build OAuth URL with dynamic parameters
+    scopes = auth_config.get("scopes") or []
     auth_params = {
         "client_id": quote(client_id),
         "redirect_uri": quote(redirect_uri),
         "response_type": "code",
-        "scope": quote(" ".join(metadata.auth_config["scopes"])),
+        "scope": quote(" ".join(scopes)),
         "state": quote(state),
     }
 
     # Add access_type and prompt if configured (required for refresh_token)
-    if metadata.auth_config.get("access_type"):
-        auth_params["access_type"] = quote(metadata.auth_config["access_type"])
-    if metadata.auth_config.get("prompt"):
-        auth_params["prompt"] = quote(metadata.auth_config["prompt"])
+    if auth_config.get("access_type"):
+        auth_params["access_type"] = quote(auth_config["access_type"])
+    if auth_config.get("prompt"):
+        auth_params["prompt"] = quote(auth_config["prompt"])
 
     # Construct URL
     auth_query = "&".join(f"{k}={v}" for k, v in auth_params.items())
-    auth_url = f"{metadata.auth_config['auth_url']}?{auth_query}"
+    auth_url = f"{auth_config['auth_url']}?{auth_query}"
     return {"auth_url": auth_url}
 
 
@@ -262,20 +317,17 @@ async def oauth_callback(code: str, state: str):
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid OAuth state: {str(e)}")
 
-    # 2. Get tool metadata from registry
-    from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
-
-    tool_class = livekit_tool_registry.get_tool_class(tool_name)
-    if not tool_class:
+    # 2. Resolve tool OAuth config (DB-first, legacy registry fallback) so
+    #    MCP-sourced tools flow through the same callback as legacy tools.
+    auth_config = await _resolve_tool_auth_config(tool_name)
+    if not auth_config:
         raise HTTPException(status_code=404, detail="Tool not found")
 
-    metadata = tool_class().metadata
-    
     # Get OAuth provider manager singleton
     oauth_manager = get_oauth_manager()
 
     # Extract provider and token_url using singleton manager
-    provider, token_url = oauth_manager.extract_oauth_config(metadata.auth_config)
+    provider, token_url = oauth_manager.extract_oauth_config(auth_config)
     
     if not token_url:
         raise HTTPException(

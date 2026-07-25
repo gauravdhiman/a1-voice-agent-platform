@@ -100,7 +100,7 @@ LIVEKIT_SIP_DOMAIN=<sip_domain>
 RESEND_API_KEY=<resend_api_key>
 GOOGLE_OAUTH_TOOL_CLIENT_ID=<client_id>
 GOOGLE_OAUTH_TOOL_CLIENT_SECRET=<client_secret>
-GOOGLE_OAUTH_TOOL_REDIRECT_URI=https://cog-backend.onrender.com/auth/google/callback
+GOOGLE_OAUTH_TOOL_REDIRECT_URI=https://cog-backend.onrender.com/api/v1/tools/callback
 JWT_SECRET_KEY=<generated_32_byte_hex>
 CORS_ORIGINS=["https://cog-frontend.onrender.com"]
 ```

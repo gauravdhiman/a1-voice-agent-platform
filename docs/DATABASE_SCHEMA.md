@@ -220,16 +220,23 @@ Stores voice agent configurations for each organization.
 
 System-wide tools available for integration with voice agents.
 
-| Column                | Type         | Constraints             | Description                              |
-| --------------------- | ------------ | ----------------------- | ---------------------------------------- |
-| id                    | UUID         | PRIMARY KEY             | Unique platform tool identifier          |
-| name                  | VARCHAR(100) | NOT NULL, UNIQUE        | Tool name (e.g., gmail, google_calendar) |
-| description           | TEXT         | NULLABLE                | Tool description                         |
-| config_schema         | JSONB        | NULLABLE                | JSON schema for tool configuration       |
-| tool_functions_schema | JSONB        | NULLABLE                | JSON schema for available functions      |
-| is_active             | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Tool active status                       |
-| created_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                       |
-| updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                    |
+| Column                | Type          | Constraints                       | Description                                                                 |
+| --------------------- | ------------- | --------------------------------- | --------------------------------------------------------------------------- |
+| id                    | UUID          | PRIMARY KEY                       | Unique platform tool identifier                                             |
+| name                  | VARCHAR(100)  | NOT NULL, UNIQUE                  | Tool name (e.g., gmail, google_calendar)                                    |
+| description           | TEXT          | NULLABLE                          | Tool description                                                            |
+| config_schema         | JSONB         | NULLABLE                          | JSON schema for tool configuration                                          |
+| tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
+| is_active             | BOOLEAN       | NOT NULL, DEFAULT TRUE            | Tool active status                                                          |
+| auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
+| requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
+| auth_config           | JSONB         | NULLABLE                          | Auth configuration (OAuth URLs, scopes, provider) — migration 20260111000001 |
+| tool_source           | VARCHAR(20)   | NOT NULL, DEFAULT 'legacy'        | 'legacy' (in-tree BaseTool) or 'mcp' (remote MCP server) — migration 20260715000001 |
+| mcp_server_url        | VARCHAR(1024) | NULLABLE                          | Streamable HTTP endpoint of the MCP server (tool_source='mcp' only)          |
+| mcp_server_headers    | JSONB         | NULLABLE                          | Static per-request headers (server-level auth) — tool_source='mcp' only      |
+| mcp_server_name       | VARCHAR(200)  | NULLABLE                          | Human-readable MCP server name for logging — tool_source='mcp' only          |
+| created_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Creation timestamp                                                          |
+| updated_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Last update timestamp                                                        |
 
 **Foreign Keys**: None
 **RLS**: Not enabled (system-wide tools)
@@ -1079,6 +1086,8 @@ erDiagram
 20. `20260503000001` - Add platform_skills, platform_skill_files, skill_update_logs tables. Add fork model columns (source_skill_id, source_version, is_visible) to organization_skills. Remove source_url/source_ref. Convert built_in category to custom (Phase 2c: platform skills fork/refresh model)
 21. `20260623000001` - Add `token_refresh_leases` table + `claim_token_refresh`/`release_token_refresh` SQL functions (Postgres-backed per-tool lease lock to prevent the multi-instance OAuth token-refresh race)
 22. `20260624000001` - Replace `platform_skills.is_active` + `is_deleted` booleans with a single `status VARCHAR(20)` enum (draft/active/deprecated/deleted). Adds a CHECK constraint and dedicated state-machine transitions in the service layer (deprecate/reactivate/delete/restore).
+23. `20260705000001` - Extend `org_admin` and `regular_user` RBAC grants (data migration; no schema change).
+24. `20260715000001` - Add MCP-source columns to `platform_tools` (`tool_source` default `'legacy'`, `mcp_server_url`, `mcp_server_headers`, `mcp_server_name`). Additive — existing rows default to `legacy` so the in-tree `BaseTool` path keeps working; rows marked `mcp` route through a remote MCP server over Streamable HTTP. See `docs/03_implementation/mcp_integration_rfc.md`.
 
 ---
 

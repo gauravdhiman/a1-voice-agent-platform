@@ -80,6 +80,21 @@ export interface PlatformToolFunction {
   };
 }
 
+/**
+ * Where a `PlatformTool` is served from.
+ *
+ * Mirrors the backend `ToolSource` enum in `shared/voice_agents/tool_models.py`:
+ *   - `legacy` — a hand-rolled `BaseTool` subclass resolved via the LiveKit
+ *     registry (in `shared/voice_agents/tools/base/`).
+ *   - `mcp` — a remote MCP server (Streamable HTTP) discovered at runtime by
+ *     the worker's MCP client (`shared/voice_agents/tools/mcp/`).
+ *
+ * Optional on the frontend so legacy tool payloads that predate the MCP
+ * schema extension still type-check; the backend always emits it (defaulting
+ * to `legacy`).
+ */
+export type ToolSource = "legacy" | "mcp";
+
 export interface PlatformTool {
   id: string;
   name: string;
@@ -94,6 +109,14 @@ export interface PlatformTool {
   auth_type: string | null;
   requires_auth: boolean;
   auth_config: Record<string, unknown> | null;
+  /** Origin of the tool — legacy BaseTool vs remote MCP server. */
+  tool_source?: ToolSource;
+  /** Streamable-HTTP URL of the remote MCP server (MCP tools only). */
+  mcp_server_url?: string | null;
+  /** Short label for the MCP server (MCP tools only). */
+  mcp_server_name?: string | null;
+  /** Extra HTTP headers to send to the MCP server (e.g. auth). */
+  mcp_server_headers?: Record<string, string> | null;
 }
 
 export interface AgentTool {
