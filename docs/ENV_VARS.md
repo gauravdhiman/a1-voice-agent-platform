@@ -36,7 +36,7 @@ All environment variables required for production deployment across all 4 servic
 | `RESEND_API_KEY` | Resend email API key for notification emails | resend.com → API Keys | **Yes** |
 | `GOOGLE_OAUTH_TOOL_CLIENT_ID` | Google OAuth client ID | Google Cloud Console → APIs & Services → Credentials | No |
 | `GOOGLE_OAUTH_TOOL_CLIENT_SECRET` | Google OAuth client secret | Google Cloud Console → APIs & Services → Credentials | **Yes** |
-| `GOOGLE_OAUTH_TOOL_REDIRECT_URI` | Google OAuth redirect URI | Set to `https://cog-backend.onrender.com/auth/google/callback` | No |
+| `GOOGLE_OAUTH_TOOL_REDIRECT_URI` | Google OAuth redirect URI (tool OAuth flow) | Backend `oauth_callback` handler; must match an authorized redirect URI on the GCP OAuth client. Local dev: `http://localhost:8000/api/v1/tools/callback`. Prod: `https://<backend-host>/api/v1/tools/callback`. | No |
 | `JWT_SECRET_KEY` | JWT signing secret | Generate: `openssl rand -hex 32` | **Yes** |
 | `CORS_ORIGINS` | JSON array of allowed frontend origins | Set to `["https://cog-frontend.onrender.com"]` (update for custom domain) | No |
 | `ENVIRONMENT` | Runtime environment | Set to `production` | No |
@@ -60,6 +60,7 @@ All environment variables required for production deployment across all 4 servic
 | `LIVEKIT_URL` | LiveKit WebSocket URL | cloud.livekit.io → project → Settings (starts with `wss://`) | No |
 | `LIVEKIT_SIP_DOMAIN` | LiveKit SIP domain | cloud.livekit.io → project → SIP settings | No |
 | `GEMINI_API_KEY` | Google Gemini API key | Google AI Studio → API Keys | **Yes** |
+| `AGENT_DEFAULT_TIMEZONE` | IANA timezone for the current date/time injected into agent prompts at session start (grounds "today"/"tomorrow"/"now" reasoning) | IANA tz name, e.g. `America/Phoenix` | No |
 | `ENVIRONMENT` | Runtime environment | Set to `production` | No |
 | `DEBUG` | Debug mode flag | Set to `false` | No |
 

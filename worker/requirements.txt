@@ -19,3 +19,11 @@ twilio>=9.9.0
 
 # HTML parsing for email content extraction
 beautifulsoup4>=4.12.0,<5
+
+# MCP integration (Phase 1) — remote MCP server client + reference server
+# (FastMCP). `mcp` bundles the Streamable HTTP client transport and the
+# FastMCP server. httpx is already transitively present (via livekit-agents /
+# supabase); declared explicitly here because the MCP client depends on it
+# directly. See docs/03_implementation/mcp_integration_rfc.md.
+httpx>=0.27.1,<1.0.0
+mcp>=1.28.1,<2

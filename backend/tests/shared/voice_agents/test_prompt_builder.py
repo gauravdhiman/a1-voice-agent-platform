@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from shared.organization.models import Organization
 from shared.voice_agents.models import VoiceAgent
-from shared.voice_agents.prompt_builder import PromptBuilder
+from shared.voice_agents.prompt_builder import PromptBuilder, build_current_datetime_section
 
 
 class TestPromptBuilder:
@@ -368,3 +368,118 @@ class TestPromptBuilder:
         # Should have business context with just industry
         assert "Industry: Retail" in prompt
         assert "BUSINESS CONTEXT" in prompt
+
+
+class TestCurrentDatetimeInjection:
+    """Inject a timezone-aware "now" so the model can ground today/tomorrow/now.
+
+    The Gemini realtime model has no inherent sense of the current date/time, so
+    without this it guesses (e.g. assumes the weekend / after hours). The worker
+    injects ``build_current_datetime_section(...)`` once at session start.
+    """
+
+    def test_build_current_datetime_section_includes_tz_aware_now(self):
+        # 2026-07-16 21:30 UTC == 2:30 PM America/Phoenix (MST, UTC-7, no DST in July).
+        now = datetime(2026, 7, 16, 21, 30, 0, tzinfo=timezone.utc)
+        section = build_current_datetime_section("America/Phoenix", now=now)
+
+        assert "# CURRENT DATE AND TIME" in section
+        assert "Thursday" in section
+        assert "July 16, 2026" in section
+        assert "2:30 PM" in section
+        assert "America/Phoenix" in section
+        assert "UTC-07:00" in section
+        # Guidance so the model treats this as the reference point.
+        assert "today" in section.lower()
+
+    def test_build_current_datetime_section_invalid_tz_falls_back_to_utc(self):
+        # An unknown IANA zone must NOT raise; it falls back to UTC.
+        now = datetime(2026, 7, 16, 21, 30, 0, tzinfo=timezone.utc)
+        section = build_current_datetime_section("Bogus/Zone", now=now)
+        assert "# CURRENT DATE AND TIME" in section
+        assert "UTC" in section
+        # Original bogus name must not leak through as the chosen tz.
+        assert "Bogus/Zone" not in section
+
+    def test_build_current_datetime_section_none_tz_uses_utc(self):
+        now = datetime(2026, 7, 16, 21, 30, 0, tzinfo=timezone.utc)
+        section = build_current_datetime_section(None, now=now)
+        assert "# CURRENT DATE AND TIME" in section
+        assert "UTC" in section
+
+    def test_build_system_prompt_includes_current_datetime_section_first(self):
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            persona="Sales Rep",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        dt_section = build_current_datetime_section("America/Phoenix")
+        prompt = PromptBuilder.build_system_prompt(
+            org, agent, current_datetime=dt_section
+        )
+        assert "# CURRENT DATE AND TIME" in prompt
+        # The datetime section must come BEFORE the identity section (salient anchor).
+        assert prompt.index("# CURRENT DATE AND TIME") < prompt.index("# IDENTITY AND PERSONA")
+
+    def test_build_from_markdown_includes_current_datetime_section_first(self):
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            instructions_markdown="# My Custom Instructions",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        dt_section = build_current_datetime_section("America/Phoenix")
+        prompt = PromptBuilder.build_from_markdown(
+            org, agent, agent.instructions_markdown, current_datetime=dt_section
+        )
+        assert "# CURRENT DATE AND TIME" in prompt
+        # Datetime section precedes the user's own markdown instructions.
+        assert prompt.index("# CURRENT DATE AND TIME") < prompt.index("# My Custom Instructions")
+
+    def test_build_without_current_datetime_has_no_section(self):
+        # Back-compat: omitting current_datetime leaves the prompt unchanged.
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Co",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            persona="Sales Rep",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        prompt = PromptBuilder.build_system_prompt(org, agent)
+        assert "CURRENT DATE AND TIME" not in prompt

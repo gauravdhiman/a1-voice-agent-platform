@@ -2,9 +2,15 @@
 Prompt builder service for constructing detailed system prompts for AI agents.
 """
 
+import logging
+from datetime import datetime, timezone
 from typing import List, Optional
+from zoneinfo import ZoneInfo
+
 from shared.organization.models import Organization
 from shared.voice_agents.models import VoiceAgent
+
+logger = logging.getLogger(__name__)
 
 
 # Generic system guardrails that apply to all agents
@@ -125,6 +131,7 @@ class PromptBuilder:
         default_rules: Optional[str] = None,
         enabled_tools: Optional[List[str]] = None,
         agent_skills: Optional[list] = None,
+        current_datetime: Optional[str] = None,
     ) -> str:
         """Build system prompt, auto-selecting markdown or field-based strategy.
 
@@ -139,6 +146,10 @@ class PromptBuilder:
             enabled_tools: Optional list of enabled tool names.
             agent_skills: Optional list of skill summaries (slug, name, description)
                 for progressive disclosure metadata injection.
+            current_datetime: Optional pre-built current-date/time section (from
+                :func:`build_current_datetime_section`) to prepend so the model
+                has a temporal anchor for "today"/"tomorrow"/"now". ``None`` leaves
+                the prompt unchanged (back-compat).
 
         Returns:
             Complete system prompt string.
@@ -146,10 +157,10 @@ class PromptBuilder:
         if agent.instructions_markdown:
             return PromptBuilder.build_from_markdown(
                 org, agent, agent.instructions_markdown,
-                default_rules, enabled_tools, agent_skills,
+                default_rules, enabled_tools, agent_skills, current_datetime,
             )
         return PromptBuilder.build_system_prompt(
-            org, agent, default_rules, enabled_tools, agent_skills,
+            org, agent, default_rules, enabled_tools, agent_skills, current_datetime,
         )
 
     @staticmethod
@@ -160,6 +171,7 @@ class PromptBuilder:
         default_rules: Optional[str] = None,
         enabled_tools: Optional[List[str]] = None,
         agent_skills: Optional[list] = None,
+        current_datetime: Optional[str] = None,
     ) -> str:
         """Build system prompt from user-provided markdown with template variable rendering.
 
@@ -174,6 +186,8 @@ class PromptBuilder:
             default_rules: Optional output rules to append.
             enabled_tools: Optional list of enabled tool names.
             agent_skills: Optional list of skill summaries for progressive disclosure.
+            current_datetime: Optional current-date/time section to prepend (see
+                :func:`build_current_datetime_section`).
 
         Returns:
             Complete system prompt string with rendered variables and appended guardrails.
@@ -184,7 +198,10 @@ class PromptBuilder:
             placeholder = "{{" + var_name + "}}"
             rendered = rendered.replace(placeholder, resolver(org, agent))
 
-        sections = [rendered]
+        sections: List[str] = []
+        if current_datetime:
+            sections.append(current_datetime)
+        sections.append(rendered)
 
         # Append skill metadata (progressive disclosure — names only, not content)
         skills_block = PromptBuilder._build_skills_metadata_block(agent_skills)
@@ -218,6 +235,7 @@ class PromptBuilder:
         default_rules: Optional[str] = None,
         enabled_tools: Optional[List[str]] = None,
         agent_skills: Optional[list] = None,
+        current_datetime: Optional[str] = None,
     ) -> str:
         """
         Builds a comprehensive system prompt by aggregating information from
@@ -229,11 +247,17 @@ class PromptBuilder:
             default_rules: Optional default rules to include
             enabled_tools: Optional list of enabled tool names for toolset-specific instructions
             agent_skills: Optional list of skill summaries for progressive disclosure
+            current_datetime: Optional current-date/time section to prepend (see
+                :func:`build_current_datetime_section`).
 
         Returns:
             Complete system prompt string
         """
-        sections = []
+        sections: List[str] = []
+
+        # 0. Current date/time anchor (so the model knows "today"/"now")
+        if current_datetime:
+            sections.append(current_datetime)
 
         # 1. Identity & Persona
         role = agent.persona or "a helpful AI voice assistant"
@@ -291,3 +315,73 @@ class PromptBuilder:
             sections.append(default_rules)
 
         return "\n\n".join(sections)
+
+
+def build_current_datetime_section(
+    timezone_name: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> str:
+    """Build the ``# CURRENT DATE AND TIME`` section to anchor the model in time.
+
+    The Gemini realtime model has no inherent sense of the current date/time, so
+    without this anchor it guesses when a caller asks about "today", "tomorrow",
+    "now", or business hours (observed: it assumed it was the weekend / after
+    hours). This section states the current date/time in a configured timezone so
+    the model reasons from a real reference point.
+
+    The timezone is a platform-level default (``AGENT_DEFAULT_TIMEZONE`` env var,
+    read by the worker) — the business timezone itself is NOT modeled in the DB;
+    the user states it in org details / skills, and the model reconciles against
+    this injected "now" using the tz name + UTC offset shown here.
+
+    Args:
+        timezone_name: IANA timezone name (e.g. ``"America/Phoenix"``). If
+            ``None``, empty, or invalid, falls back to UTC (a warning is logged
+            for an invalid name) — this never raises, so a misconfigured env var
+            never breaks agent startup.
+        now: The instant to render. Defaults to ``datetime.now(tz)``. Accepts a
+            fixed value so tests are deterministic.
+
+    Returns:
+        A markdown section string with a human-readable, timezone-aware current
+        timestamp (weekday, date, clock time, tz name, UTC offset) plus guidance
+        telling the model to treat it as the reference point for relative time
+        words and to reconcile with the org's stated timezone if different.
+    """
+    if timezone_name:
+        try:
+            tz = ZoneInfo(timezone_name)
+        except Exception:
+            logger.warning(
+                "build_current_datetime_section: unknown IANA timezone %r; "
+                "falling back to UTC. Set AGENT_DEFAULT_TIMEZONE to a valid IANA "
+                "name (e.g. 'America/Phoenix').",
+                timezone_name,
+            )
+            tz = ZoneInfo("UTC")
+            timezone_name = "UTC"
+    else:
+        tz = ZoneInfo("UTC")
+        timezone_name = "UTC"
+
+    instant = now if now is not None else datetime.now(tz)
+    if instant.tzinfo is None:
+        # Treat a naive `now` as being in the chosen tz so the offset is correct.
+        instant = instant.replace(tzinfo=tz)
+    else:
+        instant = instant.astimezone(tz)
+
+    # e.g. "Thursday, July 16, 2026 at 2:30 PM" and offset "UTC-07:00".
+    formatted = instant.strftime("%A, %B %-d, %Y at %-I:%M %p")
+    offset = instant.strftime("%z")  # e.g. "-0700"
+    offset_pretty = f"UTC{offset[:3]}:{offset[3:]}" if offset else "UTC+00:00"
+
+    return (
+        "# CURRENT DATE AND TIME\n\n"
+        f"It is currently {formatted} ({timezone_name}, {offset_pretty}).\n\n"
+        "Treat this as the current date and time. When the caller says \"today\", "
+        "\"tomorrow\", \"now\", \"this week\", or asks about upcoming/past events, "
+        "reason from this reference point. If the caller's or the organization's "
+        "timezone differs from the one above, reconcile using the timezone stated "
+        "in the organization's details or skills."
+    )

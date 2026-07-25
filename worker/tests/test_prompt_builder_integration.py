@@ -12,68 +12,83 @@ from uuid import UUID
 import pytest
 
 
+# ---------------------------------------------------------------------------
+# Shared sample-data fixtures.
+#
+# These were previously defined as class-scoped fixtures inside
+# TestPromptBuilderIntegration, which made them invisible to the sibling
+# TestPromptBuilderEdgeCases class (the edge-case tests errored with "fixture
+# 'sample_organization' not found"). They are plain data fixtures with no
+# reason to be class-scoped, so they live at module scope and are visible to
+# both test classes.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_organization():
+    """Sample organization data with all context fields."""
+    now = datetime.now(timezone.utc)
+    return {
+        "id": UUID("12345678-1234-5678-1234-567812345678"),
+        "name": "Acme Corporation",
+        "slug": "acme-corp",
+        "description": "Leading provider of innovative solutions",
+        "industry": "Technology",
+        "location": "123 Innovation Drive, San Francisco, CA 94105",
+        "business_details": "We provide cloud-based software solutions for enterprise clients. "
+                            "Business hours: Monday-Friday 9am-6pm PST. "
+                            "24/7 support available for premium customers. "
+                            "All our products come with a 30-day money-back guarantee.",
+        "website": "https://acme.example.com",
+        "is_active": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+@pytest.fixture
+def sample_voice_agent_full():
+    """Sample voice agent with all configuration fields."""
+    now = datetime.now(timezone.utc)
+    return {
+        "id": UUID("87654321-4321-8765-4321-876543218765"),
+        "organization_id": UUID("12345678-1234-5678-1234-567812345678"),
+        "name": "Customer Support Agent",
+        "phone_number": "+14155551234",
+        "persona": "Professional Customer Support Specialist",
+        "tone": "Professional and empathetic",
+        "mission": "Provide exceptional customer support by resolving issues quickly "
+                  "and ensuring customer satisfaction",
+        "custom_instructions": "Always verify customer identity before accessing account details. "
+                                "For billing issues, escalate to supervisor if amount exceeds $500. "
+                                "Use customer's name in responses when possible.",
+        "is_active": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+@pytest.fixture
+def sample_voice_agent_minimal():
+    """Sample voice agent with minimal configuration."""
+    now = datetime.now(timezone.utc)
+    return {
+        "id": UUID("11111111-1111-1111-1111-111111111111"),
+        "organization_id": UUID("12345678-1234-5678-1234-567812345678"),
+        "name": "Basic Agent",
+        "phone_number": "+14155555678",
+        "persona": None,
+        "tone": None,
+        "mission": None,
+        "custom_instructions": None,
+        "is_active": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 class TestPromptBuilderIntegration:
     """Test cases for PromptBuilder integration in worker."""
-
-    @pytest.fixture
-    def sample_organization(self):
-        """Sample organization data with all context fields."""
-        now = datetime.now(timezone.utc)
-        return {
-            "id": UUID("12345678-1234-5678-1234-567812345678"),
-            "name": "Acme Corporation",
-            "slug": "acme-corp",
-            "description": "Leading provider of innovative solutions",
-            "industry": "Technology",
-            "location": "123 Innovation Drive, San Francisco, CA 94105",
-            "business_details": "We provide cloud-based software solutions for enterprise clients. "
-                              "Business hours: Monday-Friday 9am-6pm PST. "
-                              "24/7 support available for premium customers. "
-                              "All our products come with a 30-day money-back guarantee.",
-            "website": "https://acme.example.com",
-            "is_active": True,
-            "created_at": now,
-            "updated_at": now,
-        }
-
-    @pytest.fixture
-    def sample_voice_agent_full(self):
-        """Sample voice agent with all configuration fields."""
-        now = datetime.now(timezone.utc)
-        return {
-            "id": UUID("87654321-4321-8765-4321-876543218765"),
-            "organization_id": UUID("12345678-1234-5678-1234-567812345678"),
-            "name": "Customer Support Agent",
-            "phone_number": "+14155551234",
-            "persona": "Professional Customer Support Specialist",
-            "tone": "Professional and empathetic",
-            "mission": "Provide exceptional customer support by resolving issues quickly "
-                      "and ensuring customer satisfaction",
-            "custom_instructions": "Always verify customer identity before accessing account details. "
-                                  "For billing issues, escalate to supervisor if amount exceeds $500. "
-                                  "Use customer's name in responses when possible.",
-            "is_active": True,
-            "created_at": now,
-            "updated_at": now,
-        }
-
-    @pytest.fixture
-    def sample_voice_agent_minimal(self):
-        """Sample voice agent with minimal configuration."""
-        now = datetime.now(timezone.utc)
-        return {
-            "id": UUID("11111111-1111-1111-1111-111111111111"),
-            "organization_id": UUID("12345678-1234-5678-1234-567812345678"),
-            "name": "Basic Agent",
-            "phone_number": "+14155555678",
-            "persona": None,
-            "tone": None,
-            "mission": None,
-            "custom_instructions": None,
-            "is_active": True,
-            "created_at": now,
-            "updated_at": now,
-        }
 
     @pytest.mark.asyncio
     async def test_prompt_generation_with_full_data(self, sample_organization, sample_voice_agent_full):
@@ -151,20 +166,32 @@ class TestPromptBuilderIntegration:
                         mock_session = AsyncMock()
                         mock_session_class.return_value = mock_session
 
-                        with patch("worker.RealtimeModel"):
+                        with patch("worker.build_realtime_model"):
                             with patch("worker.DynamicAgent") as mock_agent_class:
                                 mock_agent = MagicMock()
+                                # update_tools is awaited in the entrypoint, so it
+                                # must return an awaitable (a plain MagicMock would
+                                # raise "object MagicMock can't be used in 'await'").
+                                mock_agent.update_tools = AsyncMock()
                                 mock_agent_class.return_value = mock_agent
 
                                 # Execute entrypoint
                                 await entrypoint(mock_job_context)
 
-                                # Verify that DynamicAgent was created with default_system_prompt
-                                # (fallback when org fetch fails)
+                                # Verify that DynamicAgent was created with the
+                                # fallback instructions: the current-date/time
+                                # anchor is prepended to default_system_prompt
+                                # (org fetch failed, so no PromptBuilder context).
                                 call_args = mock_agent_class.call_args
                                 assert call_args is not None
                                 instructions = call_args.kwargs.get("instructions", call_args[1].get("instructions"))
-                                assert instructions == default_system_prompt
+                                # The datetime anchor is the first section.
+                                assert instructions.startswith("# CURRENT DATE AND TIME")
+                                # The guidance text grounds "today"/"tomorrow"/"now".
+                                assert "Treat this as the current date and time" in instructions
+                                # The default prompt is appended after the anchor.
+                                assert default_system_prompt in instructions
+                                assert instructions.endswith(default_system_prompt)
 
     @pytest.mark.asyncio
     async def test_prompt_generation_with_partial_org_data(self, sample_voice_agent_full):

@@ -118,6 +118,10 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile.dev
+    # Dev entrypoint starts the local Google Calendar REST connector (MCP server)
+    # as a co-process alongside the worker so it survives worker restarts. See
+    # worker/entrypoint.dev.sh. Prod uses Dockerfile.dev's default CMD (Path B).
+    command: ["bash", "/app/entrypoint.dev.sh", "dev"]
     volumes:
       - ./worker:/app
       - ./shared:/app/shared

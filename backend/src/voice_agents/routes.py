@@ -210,6 +210,19 @@ async def get_test_token(
             detail="LiveKit is not configured. Please contact the administrator.",
         )
 
+    # Pre-create the LiveKit room so the Cloud dispatch rule fires and the
+    # worker is invoked BEFORE the caller connects. Without this, the room is
+    # only created implicitly on participant join and the dispatch rule never
+    # fires — the caller sits in an empty room and the agent never responds.
+    # Best-effort: a LiveKit API hiccup here must not block the test call; the
+    # caller still gets a token and can fall back to implicit room creation.
+    try:
+        await livekit_service.create_room(room_name=room_name)
+    except Exception as create_err:
+        logger.warning(
+            f"Failed to pre-create LiveKit room {room_name} for test call: {create_err}"
+        )
+
     return TestTokenResponse(
         token=token,
         serverUrl=server_url,

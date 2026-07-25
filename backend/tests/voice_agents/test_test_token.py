@@ -54,6 +54,105 @@ class TestTestTokenEndpoint:
                 assert result.roomName == "test_agent_123"
 
     @pytest.mark.asyncio
+    async def test_get_test_token_pre_creates_livekit_room(self):
+        """Test call must pre-create the LiveKit room so the dispatch rule fires.
+
+        The web "Test call" flow returns a token + room name but historically did
+        NOT create the room on the LiveKit server — the room was only created
+        implicitly when the participant connected, and the LiveKit Cloud dispatch
+        rule (which fires on explicit room creation) never fired, so the worker
+        was never dispatched and the agent never responded. Pre-creating the room
+        at token-generation time makes the dispatch deterministic.
+        """
+        from src.voice_agents.routes import get_test_token
+        from shared.voice_agents.models import VoiceAgent
+
+        test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+        test_org_id = UUID("00000000-0000-0000-0000-000000000002")
+        test_user_id = UUID("00000000-0000-0000-0000-000000000003")
+
+        agent = VoiceAgent(
+            id=test_agent_id,
+            organization_id=test_org_id,
+            name="Test Agent",
+            phone_number="+1234567890",
+            persona="Support Specialist",
+            tone="Professional",
+            mission="Help customers",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+        mock_user_profile = Mock()
+        mock_user_profile.has_role = Mock(return_value=True)
+
+        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+            mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
+
+            with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
+                mock_livekit.generate_test_token = Mock(
+                    return_value=("test_token", "wss://livekit.example.com", "test_agent_123")
+                )
+                mock_livekit.create_room = AsyncMock()
+
+                await get_test_token(
+                    agent_id=test_agent_id,
+                    user_data=(test_user_id, mock_user_profile),
+                )
+
+                # The room must be pre-created on the LiveKit server so the
+                # dispatch rule fires and the worker is invoked before the
+                # caller connects.
+                mock_livekit.create_room.assert_awaited_once_with(room_name="test_agent_123")
+
+    @pytest.mark.asyncio
+    async def test_get_test_token_pre_create_room_failure_is_non_fatal(self):
+        """If room pre-creation fails, the token is still returned (best-effort).
+
+        A LiveKit API hiccup during create_room must not block the test call — the
+        caller still gets a token and can connect (implicit room creation remains
+        a fallback). The failure is logged, not raised.
+        """
+        from src.voice_agents.routes import get_test_token
+        from shared.voice_agents.models import VoiceAgent
+
+        test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+        test_org_id = UUID("00000000-0000-0000-0000-000000000002")
+        test_user_id = UUID("00000000-0000-0000-0000-000000000003")
+
+        agent = VoiceAgent(
+            id=test_agent_id,
+            organization_id=test_org_id,
+            name="Test Agent",
+            phone_number="+1234567890",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+        mock_user_profile = Mock()
+        mock_user_profile.has_role = Mock(return_value=True)
+
+        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+            mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
+
+            with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
+                mock_livekit.generate_test_token = Mock(
+                    return_value=("test_token", "wss://livekit.example.com", "test_agent_123")
+                )
+                mock_livekit.create_room = AsyncMock(side_effect=RuntimeError("boom"))
+
+                result = await get_test_token(
+                    agent_id=test_agent_id,
+                    user_data=(test_user_id, mock_user_profile),
+                )
+
+                # Token still returned despite create_room failure.
+                assert result.token == "test_token"
+                assert result.roomName == "test_agent_123"
+
+    @pytest.mark.asyncio
     async def test_get_test_token_agent_not_found(self):
         """Test test token when agent doesn't exist."""
         from src.voice_agents.routes import get_test_token
