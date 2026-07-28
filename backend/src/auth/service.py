@@ -7,7 +7,14 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from gotrue.errors import AuthApiError
+
+# The `gotrue` package was renamed to `supabase_auth` in supabase-py >= 2.20.
+# The error classes are identical; only the import path moved. Keep the
+# explicit fallback so older supabase installs (gotrue) still work.
+try:  # pragma: no cover - import shim exercised at runtime, not per-test
+    from supabase_auth.errors import AuthApiError
+except ImportError:  # pragma: no cover
+    from gotrue.errors import AuthApiError
 from opentelemetry import metrics, trace
 from src.organization.models import OrganizationCreate
 from src.rbac.roles.service import role_service

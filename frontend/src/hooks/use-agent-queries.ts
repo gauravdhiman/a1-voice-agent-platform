@@ -62,11 +62,21 @@ export function useAgentSystemPrompt(agentId: string) {
   });
 }
 
-// Get all platform tools
-export function usePlatformTools(onlyActive = true) {
+// Get platform tools visible to the caller (publish lifecycle, RFC §6.6).
+// Org users see only published rows; platform admins pass `{ includeDrafts: true }`
+// to also see draft MCP servers they are authoring. `includeDrafts` is part of the
+// query key so flipping it refetches. The org-scoped custom tier is retired, so
+// there is no per-org filter / key.
+export function usePlatformTools(
+  onlyActive = true,
+  opts?: { includeDrafts?: boolean },
+) {
   return useQuery({
-    queryKey: agentQueryKeys.platformTools(),
-    queryFn: () => agentService.getPlatformTools(onlyActive),
+    queryKey: [
+      ...agentQueryKeys.platformTools(),
+      { drafts: opts?.includeDrafts ?? false },
+    ],
+    queryFn: () => agentService.getPlatformTools(onlyActive, opts),
     staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
   });
 }
@@ -446,6 +456,98 @@ export function useDeleteAgentTool() {
     },
     onError: () => {
       toast.error("Failed to disconnect tool");
+    },
+  });
+}
+
+// Mutation: Discover tools exposed by a remote MCP server (in-memory).
+// Used by the Add MCP Server dialog's "Test connection & discover tools" button.
+export function useDiscoverMcpTools() {
+  return useMutation({
+    mutationFn: (payload: { url: string; headers?: Record<string, string> }) =>
+      agentService.discoverMcpTools(payload),
+    onError: () => {
+      toast.error("Failed to discover MCP tools");
+    },
+  });
+}
+
+// Mutation: Parse pasted mcpServers JSON into structured entries.
+export function useParseMcpServersJson() {
+  return useMutation({
+    mutationFn: (raw: string) => agentService.parseMcpServersJson(raw),
+  });
+}
+
+// Mutation: Create a platform_tools row (org-scoped custom MCP server or
+// curated catalog entry). Invalidates the platform tools list on success so
+// the new server appears in the agent tool panel immediately.
+export function useCreatePlatformTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      agentService.createPlatformTool(payload),
+    onSuccess: () => {
+      toast.success("MCP server added");
+      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+    },
+    onError: () => {
+      toast.error("Failed to add MCP server");
+    },
+  });
+}
+
+// Mutation: Publish / unpublish a platform tool (platform-admin only, RFC §6.6).
+// `published` toggles the endpoint (publish vs unpublish). Invalidates the
+// platform tools list so the card's publish state refreshes immediately.
+export function usePublishPlatformTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ toolId, published }: { toolId: string; published: boolean }) =>
+      agentService.publishPlatformTool(toolId, published),
+    onSuccess: (_data, { published }) => {
+      toast.success(published ? "MCP server published" : "MCP server unpublished");
+      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+    },
+    onError: () => {
+      toast.error("Failed to update publish state");
+    },
+  });
+}
+
+// Mutation: Update a platform tool (platform-admin only, RFC §6.6). Invalidates
+// the platform tools list so edits surface immediately.
+export function useUpdatePlatformTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ toolId, payload }: { toolId: string; payload: Record<string, unknown> }) =>
+      agentService.updatePlatformTool(toolId, payload),
+    onSuccess: () => {
+      toast.success("MCP server updated");
+      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+    },
+    onError: () => {
+      toast.error("Failed to update MCP server");
+    },
+  });
+}
+
+// Mutation: Delete a platform tool (platform-admin only, RFC §6.6). Invalidates
+// the platform tools list so the card disappears from the catalog.
+export function useDeletePlatformTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (toolId: string) => agentService.deletePlatformTool(toolId),
+    onSuccess: () => {
+      toast.success("MCP server deleted");
+      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+    },
+    onError: () => {
+      toast.error("Failed to delete MCP server");
     },
   });
 }

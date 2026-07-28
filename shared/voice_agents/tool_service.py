@@ -23,6 +23,7 @@ from .tool_models import (
     ConnectionStatus,
     PlatformTool,
     PlatformToolCreate,
+    ToolSource,
 )
 
 logger = logging.getLogger(__name__)
@@ -250,7 +251,13 @@ class ToolService:
     async def upsert_platform_tool(
         self, tool_data: PlatformToolCreate
     ) -> tuple[Optional[PlatformTool], Optional[str]]:
-        """Upsert a platform tool by name."""
+        """Upsert a platform tool by name.
+
+        Encrypts ``mcp_secret_headers_input`` (plaintext from the UI) into the
+        ``mcp_server_secret_headers`` column before persisting. The
+        ``mcp_secret_headers_input`` field itself is ``exclude=True`` on the
+        model so it is never written to the DB.
+        """
         try:
             # Check if exists
             existing = (
@@ -260,8 +267,26 @@ class ToolService:
                 .execute()
             )
 
-            # Dump model and exclude fields not in DB (none - we save all fields)
-            data_dict = tool_data.model_dump(exclude_none=True)
+            # Dump model; mcp_secret_headers_input is exclude=True so it is not
+            # in the dump. exclude_none keeps NULL organization_id out of the
+            # write so global rows stay global. ``mode="json"`` serializes
+            # UUIDs and datetimes to strings — postgrest JSON-encodes the dict,
+            # so a raw UUID object would raise
+            # "Object of type UUID is not JSON serializable".
+            data_dict = tool_data.model_dump(exclude_none=True, mode="json")
+
+            # Publish lifecycle (RFC §6.6): custom MCP servers are
+            # platform-published = GLOBAL. Force organization_id off MCP rows
+            # so a UI-created server can never become an org-scoped row (the
+            # org-scoped custom tier is retired; the column is dormant).
+            if tool_data.tool_source is ToolSource.MCP:
+                data_dict.pop("organization_id", None)
+
+            # Encrypt plaintext server-level secret headers before persisting.
+            if tool_data.mcp_secret_headers_input:
+                data_dict["mcp_server_secret_headers"] = encrypt_data(
+                    tool_data.mcp_secret_headers_input
+                )
 
             if existing.data:
                 response = (
@@ -277,26 +302,174 @@ class ToolService:
 
             if not response.data:
                 return None, "Failed to upsert platform tool"
-            return PlatformTool(**response.data[0]), None
+            return self._platform_tool_for_response(PlatformTool(**response.data[0])), None
         except Exception as e:
             logger.error(f"Error upserting platform tool: {e}")
             return None, str(e)
 
+    @staticmethod
+    def _platform_tool_for_response(tool: PlatformTool) -> PlatformTool:
+        """Strip the encrypted secret-headers blob before returning to the API.
+
+        The frontend gets only a ``mcp_secret_headers_configured`` flag, never
+        the encrypted (or decrypted) blob. The worker path
+        (``get_agent_tools_with_sensitive_config``) constructs
+        ``PlatformTool`` directly from DB rows WITHOUT this stripping, so it
+        retains the encrypted blob for the dispatch layer to decrypt.
+        """
+        tool.mcp_secret_headers_configured = bool(tool.mcp_server_secret_headers)
+        tool.mcp_server_secret_headers = None
+        return tool
+
     @tracer.start_as_current_span("tool.get_platform_tools")
     async def get_platform_tools(
-        self, only_active: bool = True
+        self,
+        only_active: bool = True,
+        include_drafts: bool = False,
     ) -> tuple[List[PlatformTool], Optional[str]]:
-        """Get all platform tools."""
+        """Get platform tools, filtered by the publish lifecycle.
+
+        Publish lifecycle (RFC §6.6): a custom MCP server is authored by a
+        platform admin as a **draft** (``is_published=False``), then
+        **published** to the global catalog (``is_published=True``). Org users
+        see only published rows (combined with ``is_active``); platform admins
+        see drafts too.
+
+        Args:
+            only_active: Filter to ``is_active=True`` rows.
+            include_drafts: When False (default — org-user listing), filter to
+                ``is_published=True``. When True, return drafts + published
+                (platform-admin management / internal lookups-by-id). The route
+                layer enforces that only platform admins may pass True.
+
+        Returns:
+            Tuple of (platform tools, error). Secret-header blobs are stripped
+            from each tool before return.
+        """
         try:
             query = self.supabase.table("platform_tools").select("*")
             if only_active:
                 query = query.eq("is_active", True)
+            if not include_drafts:
+                query = query.eq("is_published", True)
             response = query.execute()
-            tools = [PlatformTool(**item) for item in response.data]
+            tools = [
+                self._platform_tool_for_response(PlatformTool(**item))
+                for item in response.data
+            ]
             return tools, None
         except Exception as e:
             logger.error(f"Error getting platform tools: {e}")
             return [], str(e)
+
+    @tracer.start_as_current_span("tool.publish_platform_tool")
+    async def publish_platform_tool(
+        self, tool_id: UUID, published: bool
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Flip a platform tool's ``is_published`` state (publish/unpublish).
+
+        Publish-lifecycle write (RFC §6.6): the route gates this on
+        ``platform_admin``. Unpublishing hides the server from new attaches
+        (org users no longer see it in the catalog); existing ``agent_tools``
+        attachments keep working (the worker reads them by join, not via this
+        listing). ``is_active`` is untouched.
+
+        Args:
+            tool_id: The ``platform_tools`` row id.
+            published: True to publish, False to unpublish (revert to draft).
+
+        Returns:
+            Tuple of (updated PlatformTool, error). ``(None, "not found")`` if
+            the row does not exist.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .update({"is_published": published})
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(f"Error publishing platform tool {tool_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("tool.update_platform_tool")
+    async def update_platform_tool(
+        self, tool_id: UUID, tool_data: PlatformToolCreate
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Update a platform tool by id (platform-admin edit of a draft/published server).
+
+        Mirrors :meth:`upsert_platform_tool`'s encryption + org-forcing but
+        updates by ``id`` instead of upserting by name. Used by the
+        ``PUT /tools/platform/{id}`` route so a platform admin can reconfigure a
+        server (URL, headers, auth mode) after authoring.
+
+        Args:
+            tool_id: The ``platform_tools`` row id to update.
+            tool_data: The new full tool config (same shape as create).
+
+        Returns:
+            Tuple of (updated PlatformTool, error). ``(None, "not found")`` if
+            the row does not exist.
+        """
+        try:
+            data_dict = tool_data.model_dump(exclude_none=True, mode="json")
+            if tool_data.tool_source is ToolSource.MCP:
+                data_dict.pop("organization_id", None)
+            if tool_data.mcp_secret_headers_input:
+                data_dict["mcp_server_secret_headers"] = encrypt_data(
+                    tool_data.mcp_secret_headers_input
+                )
+            response = (
+                self.supabase.table("platform_tools")
+                .update(data_dict)
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(f"Error updating platform tool {tool_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("tool.delete_platform_tool")
+    async def delete_platform_tool(
+        self, tool_id: UUID
+    ) -> tuple[Optional[bool], Optional[str]]:
+        """Permanently delete a platform tool (platform-admin only).
+
+        Removes the catalog row. Existing ``agent_tools`` attachments referencing
+        the tool are left to cascade per the FK (or orphaned if no FK); the route
+        gates this on ``platform_admin``. Prefer unpublish for reversible
+        hide-from-catalog; delete is for cleanup.
+
+        Args:
+            tool_id: The ``platform_tools`` row id to delete.
+
+        Returns:
+            Tuple of (True, None) on success, ``(None, error)`` on failure.
+        """
+        try:
+            (
+                self.supabase.table("platform_tools")
+                .delete()
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            return True, None
+        except Exception as e:
+            logger.error(f"Error deleting platform tool {tool_id}: {e}")
+            return None, str(e)
 
     # Agent Tools
     @tracer.start_as_current_span("tool.configure_agent_tool")
@@ -349,7 +522,9 @@ class ToolService:
                 return None, "Failed to configure agent tool"
 
             # Fetch platform tool to get requires_auth for connection status
-            platform_tools, _ = await self.get_platform_tools(only_active=False)
+            platform_tools, _ = await self.get_platform_tools(
+                only_active=False, include_drafts=True
+            )
             platform_tool = next(
                 (t for t in platform_tools if t.id == agent_tool_data.tool_id), None
             )
@@ -435,7 +610,9 @@ class ToolService:
 
                 agent_tool = AgentToolResponse(**response_dict)
                 if tool_data:
-                    agent_tool.tool = PlatformTool(**tool_data)
+                    agent_tool.tool = self._platform_tool_for_response(
+                        PlatformTool(**tool_data)
+                    )
                 agent_tools.append(agent_tool)
 
             return agent_tools, None
@@ -557,7 +734,9 @@ class ToolService:
             agent_tool = AgentToolResponse(**response_dict)
             if tool_data:
                 try:
-                    agent_tool.tool = PlatformTool(**tool_data)
+                    agent_tool.tool = self._platform_tool_for_response(
+                        PlatformTool(**tool_data)
+                    )
                 except Exception:
                     # Tool metadata is optional in the response; swallow
                     # validation errors here so the route can still resolve
@@ -601,7 +780,9 @@ class ToolService:
 
             # Fetch platform tool to get auth_type for auth status validation
             result_data = response.data[0]
-            platform_tools, _ = await self.get_platform_tools(only_active=False)
+            platform_tools, _ = await self.get_platform_tools(
+                only_active=False, include_drafts=True
+            )
             platform_tool = next(
                 (t for t in platform_tools if t.id == result_data["tool_id"]), None
             )

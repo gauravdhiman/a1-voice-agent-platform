@@ -45,6 +45,7 @@ import {
   ToolFilters,
   ToolConfigDrawer,
   ToolFilterType,
+  AddMcpServerDialog,
 } from "@/components/tools";
 import {
   AnimatedTabs,
@@ -62,7 +63,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen, Server } from "lucide-react";
 import { MarkdownRenderer } from "@/components/markdown";
 import {
   DropdownMenu,
@@ -109,6 +110,7 @@ export default function AgentDetailPage() {
     null,
   );
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
+  const [addMcpOpen, setAddMcpOpen] = React.useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
   const [testCallOpen, setTestCallOpen] = React.useState(false);
   const [voiceTemplates, setVoiceTemplates] = React.useState<VoiceTemplate[]>([]);
@@ -154,7 +156,7 @@ export default function AgentDetailPage() {
     error: agentError,
   } = useAgent(agentId);
   const { data: platformTools = [], isLoading: toolsLoading } =
-    usePlatformTools();
+    usePlatformTools(true);
   const { data: agentTools = [], refetch: refetchAgentTools } =
     useAgentTools(agentId);
 
@@ -1171,13 +1173,27 @@ and confirm someone will call back the next business day.`}
         <TabsContent value="tools">
           <Card>
             <CardHeader className="p-5 pb-3">
-              <CardTitle className="flex items-center space-x-2 text-lg">
-                <Wrench className="h-5 w-5" />
-                <span>Tool Configuration</span>
-              </CardTitle>
-              <CardDescription>
-                Configure platform tools for {agent.name}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2 text-lg">
+                    <Wrench className="h-5 w-5" />
+                    <span>Tool Configuration</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Configure platform tools for {agent.name}
+                  </CardDescription>
+                </div>
+                {isPlatformAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddMcpOpen(true)}
+                  >
+                    <Server className="h-3.5 w-3.5 mr-1.5" />
+                    Manage MCP servers
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-5 pt-0">
               {toolsLoading ? (
@@ -1310,6 +1326,11 @@ and confirm someone will call back the next business day.`}
           toolName={selectedTool.name.replace(/_/g, " ")}
         />
       )}
+
+      <AddMcpServerDialog
+        open={addMcpOpen}
+        onOpenChange={setAddMcpOpen}
+      />
 
       <Dialog open={!!pendingTemplate} onOpenChange={(open) => !open && setPendingTemplate(null)}>
         <DialogContent className="sm:max-w-md">

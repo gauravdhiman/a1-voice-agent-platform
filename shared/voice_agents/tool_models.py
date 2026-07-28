@@ -106,6 +106,46 @@ class PlatformToolBase(BaseModel):
             "to the tool name when unset. Only used when tool_source == 'mcp'."
         ),
     )
+    mcp_server_secret_headers: Optional[str] = Field(
+        None,
+        description=(
+            "Encrypted JSON of server-level secret headers (e.g. an API key). "
+            "Encrypted at rest via Fernet; decrypted and merged with "
+            "mcp_server_headers (public) and the per-user OAuth bearer at "
+            "call time by the worker. Accept this field on create/update; "
+            "never return it in plaintext (use mcp_secret_headers_configured "
+            "in the response model). Only used when tool_source == 'mcp'."
+        ),
+    )
+    # --- publish lifecycle (platform-admin authoring) ---------------------
+    # Custom MCP servers are authored by platform admins, tested in-memory,
+    # then PUBLISHED to the global catalog. FALSE = draft (platform-admin
+    # only); TRUE = visible to all org users in the tool panel (with
+    # is_active). Retires the org-scoped custom tier (organization_id below is
+    # now dormant). See docs/03_implementation/mcp_integration_rfc.md §6.6.
+    is_published: bool = Field(
+        default=False,
+        description=(
+            "Publish state: False = draft (platform-admin-only), True = "
+            "published to the global catalog (visible to all org users). "
+            "Combined with is_active for org-user visibility. Custom MCP "
+            "servers are authored + tested by platform admins then published."
+        ),
+    )
+    # --- org scope (RETIRED — kept dormant for a future org-private tier) ---
+    # Was: org-scoped custom servers created per-tenant. The publish-lifecycle
+    # model replaces it: all custom servers are platform-published = global.
+    # The column is retained (additive, nullable) for a possible future
+    # org-private-publish tier; the org-scoped read/create code paths are
+    # removed. See docs/03_implementation/mcp_integration_rfc.md §6.6.
+    organization_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "DORMANT. Owning organization for a future org-private-publish "
+            "tier. NULL = global (platform-published) — the only mode today. "
+            "Kept for forward-compat; the org-scoped custom tier is retired."
+        ),
+    )
 
 
 class PlatformToolCreate(PlatformToolBase):
@@ -113,6 +153,19 @@ class PlatformToolCreate(PlatformToolBase):
 
     tool_functions_schema: Optional[Dict[str, Any]] = Field(
         None, description="Function schemas for LLM debugging and inspection"
+    )
+    # Plaintext secret headers from the UI, encrypted by the service into
+    # mcp_server_secret_headers before persisting. ``exclude=True`` so it is
+    # NEVER written to the DB as-is (the service handles encryption). Only
+    # meaningful for tool_source == 'mcp' custom servers.
+    mcp_secret_headers_input: Optional[Dict[str, str]] = Field(
+        None,
+        exclude=True,
+        description=(
+            "Plaintext server-level secret headers (e.g. an API key) supplied "
+            "from the UI. The service encrypts these into "
+            "mcp_server_secret_headers; this field is never persisted directly."
+        ),
     )
 
 
@@ -125,6 +178,15 @@ class PlatformTool(PlatformToolBase):
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    # Read-only flag surfaced to the frontend so the UI can show that secret
+    # headers are configured WITHOUT ever exposing the encrypted/decrypted
+    # values. The raw mcp_server_secret_headers column is set on this model by
+    # the service for internal (worker) use but must be stripped before the
+    # response leaves the API.
+    mcp_secret_headers_configured: bool = Field(
+        default=False,
+        description="Whether encrypted server-level secret headers are set.",
+    )
 
 
 class AgentToolBase(BaseModel):

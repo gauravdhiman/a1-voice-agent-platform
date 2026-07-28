@@ -1,8 +1,16 @@
 # FastAPI and core dependencies
 fastapi==0.115.6
+# Pin starlette below FastAPI 0.115.6's ceiling. The `mcp` SDK (see below) pulls
+# a newer starlette transitively (via sse-starlette), which breaks FastAPI's
+# router on startup. The backend only uses the mcp *client* transport (httpx),
+# so the starlette version is irrelevant to it — keep it FastAPI-compatible.
+starlette>=0.40.0,<0.42.0
 uvicorn[standard]==0.34.0
-pydantic[email]==2.10.5
-pydantic-settings==2.7.1
+# pydantic is loosened (not hard-pinned to 2.10.5) because the `mcp` SDK
+# (line below) requires pydantic>=2.11.0. fastapi 0.115.6 accepts pydantic<3.0.0,
+# so 2.11.x satisfies both. Mirrors the worker's pin (worker/requirements.txt).
+pydantic[email]>=2.11.0,<3
+pydantic-settings>=2.7.1,<3
 
 # HTTP client for external APIs (compatible with Supabase)
 httpx>=0.27.0,<1
@@ -67,6 +75,11 @@ twilio==9.9.0
 
 # HTML parsing for email content extraction
 beautifulsoup4>=4.12.0,<5
+
+# MCP SDK — used by the backend "discover tools" endpoint to call
+# McpClient.list_tools() on a user-configured remote MCP server before saving
+# it. Pinned to match the worker (shared/voice_agents/tools/mcp/client.py).
+mcp>=1.28.1,<2
 
 # Rate limiting to protect auth endpoints from brute force attacks
 slowapi>=0.1.9,<1

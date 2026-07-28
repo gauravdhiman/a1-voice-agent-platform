@@ -9,6 +9,7 @@ import {
   Clock,
   Loader2,
   XCircle,
+  Server,
 } from "lucide-react";
 import { AuthStatus, ConnectionStatus } from "@/types/agent";
 import { useLiveTime, formatTimeUntilExpiry } from "@/hooks/use-live-time";
@@ -18,6 +19,10 @@ export interface ToolCardProps {
     id: string;
     name: string;
     description: string | null;
+    /** Origin of the tool — rendered as an "MCP" badge when set to "mcp". */
+    tool_source?: "legacy" | "mcp";
+    /** Streamable-HTTP URL of the remote MCP server (shown under the name). */
+    mcp_server_url?: string | null;
   };
   authStatus: AuthStatus;
   tokenExpiresAt: number | null;
@@ -144,12 +149,31 @@ export function ToolCard({
             <Wrench className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-sm mb-1">
-              {tool.name.replace(/_/g, " ")}
-            </h4>
+            <div className="flex items-center gap-1.5 mb-1">
+              <h4 className="font-semibold text-sm">
+                {tool.name.replace(/_/g, " ")}
+              </h4>
+              {tool.tool_source === "mcp" && (
+                <Badge
+                  variant="outline"
+                  className="h-4 text-[9px] px-1 gap-0.5 shrink-0"
+                >
+                  <Server className="h-2.5 w-2.5" />
+                  MCP
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground line-clamp-2">
               {tool.description}
             </p>
+            {tool.tool_source === "mcp" && tool.mcp_server_url && (
+              <p
+                className="text-[10px] text-muted-foreground/70 mt-1 truncate font-mono"
+                title={tool.mcp_server_url}
+              >
+                {tool.mcp_server_url}
+              </p>
+            )}
           </div>
         </div>
 

@@ -23,6 +23,7 @@ Lifecycle — IMPORTANT:
 import logging
 from typing import Optional
 
+from shared.common.security import decrypt_data
 from shared.voice_agents.tool_models import AgentTool, ToolSource
 from shared.voice_agents.tools.mcp.client import McpClient
 from shared.voice_agents.tools.mcp.livekit_adapter import mcp_tool_to_livekit_tool
@@ -34,12 +35,32 @@ logger = logging.getLogger(__name__)
 def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
     """Build an :class:`McpServerConfig` from an MCP-sourced agent_tool.
 
-    Combines the platform_tool's ``mcp_server_*`` fields with the per-user OAuth
-    bearer taken from the agent_tool's decrypted ``sensitive_config``. The bearer
-    is injected as ``Authorization: Bearer <token>`` only when the server-level
-    headers do not already set ``Authorization`` (server-level auth wins, though
-    in practice the per-user token is the common case for vendor MCP servers
-    like Google Calendar).
+    Merges three header sources, in increasing precedence (later wins):
+
+    1. ``mcp_server_headers`` — non-secret static headers (plaintext JSONB).
+    2. ``mcp_server_secret_headers`` — encrypted server-level secret headers,
+       decrypted here via :func:`decrypt_data`. Under the publish-lifecycle
+       model (RFC §6.6) these are a **template**: a value containing the
+       ``{{KEY}}`` placeholder is filled with the **org admin's** API key from
+       the agent_tool's decrypted ``sensitive_config["api_key"]`` — never the
+       platform admin's transient test key. A literal value (no ``{{KEY}}``)
+       passes through unchanged (fixed shared header). A templated header with
+       no org key is dropped (no platform fallback) so the tool is left in an
+       "API key required" state rather than sending the bare marker.
+    3. the per-user OAuth bearer from the agent_tool's decrypted
+       ``sensitive_config`` (``access_token``), injected as
+       ``Authorization: Bearer <token>`` only when the merged headers do not
+       already set ``Authorization`` (a ``{{KEY}}``-resolved Authorization, a
+       literal Authorization, or a server-level Authorization all win; in
+       practice the per-user token is the common case for vendor MCP servers
+       like Google Calendar).
+
+    The URL itself was validated against the SSRF guard at discover/save time
+    (see :func:`shared.voice_agents.tools.mcp.security.validate_mcp_server_url`).
+    Runtime re-validation is deferred to a follow-up — it would add a per-session
+    DNS resolve and break loopback dev/test servers; save-time validation is the
+    gate. TODO: add a best-effort rebinding re-check inside McpClient before
+    connect once a non-DNS / cached-resolution variant exists.
 
     Args:
         agent_tool: An :class:`AgentTool` whose ``tool`` is a ``platform_tools``
@@ -60,12 +81,48 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
             "mcp_server_url (is it actually tool_source='mcp'?)."
         )
 
-    # Copy server-level static headers; never mutate the model in place.
+    # Decrypted per-agent sensitive config (org API key + per-user OAuth token).
+    sensitive = agent_tool.sensitive_config
+    org_api_key = (
+        sensitive.get("api_key") if isinstance(sensitive, dict) else None
+    )
+
+    # 1. Non-secret static headers (plaintext).
     headers = dict(platform_tool.mcp_server_headers or {})
 
-    # Inject the per-user OAuth bearer from decrypted sensitive_config, unless
-    # the server-level headers already specify an Authorization.
-    sensitive = agent_tool.sensitive_config
+    # 2. Encrypted server-level secret headers (template with ``{{KEY}}``
+    #    placeholder), decrypted. Publish-lifecycle model (RFC §6.6): a platform
+    #    admin authors a server whose secret headers may contain ``{{KEY}}``;
+    #    at runtime it is filled with the ORG ADMIN's API key from
+    #    ``sensitive_config["api_key"]`` — never the platform admin's transient
+    #    test key. A literal value (no ``{{KEY}}``) passes through as a fixed
+    #    shared header (optional shared-key mode, platform-admin's call). A
+    #    templated header with no org key is DROPPED (no platform fallback) so
+    #    the tool is left in an "API key required" state rather than sending the
+    #    bare ``{{KEY}}`` marker or a stale platform key.
+    if platform_tool.mcp_server_secret_headers:
+        try:
+            secret_headers = decrypt_data(platform_tool.mcp_server_secret_headers)
+            if isinstance(secret_headers, dict):
+                for k, v in secret_headers.items():
+                    value = str(v)
+                    if "{{KEY}}" in value:
+                        if org_api_key:
+                            headers[str(k)] = value.replace(
+                                "{{KEY}}", str(org_api_key)
+                            )
+                        # No org key → drop this header (no platform fallback).
+                    else:
+                        headers[str(k)] = value
+        except Exception as e:
+            logger.error(
+                "Failed to decrypt mcp_server_secret_headers for %s: %s",
+                platform_tool.name,
+                e,
+                exc_info=True,
+            )
+
+    # 3. Per-user OAuth bearer (only if no Authorization header is set yet).
     access_token = sensitive.get("access_token") if isinstance(sensitive, dict) else None
     if access_token and "Authorization" not in headers:
         headers["Authorization"] = f"Bearer {access_token}"

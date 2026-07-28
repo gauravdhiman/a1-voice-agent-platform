@@ -9,3 +9,6 @@ export type { ToolConfigDrawerProps } from "./tool-config-drawer";
 
 export { ToolDisconnectDialog } from "./tool-disconnect-dialog";
 
+export { AddMcpServerDialog } from "./add-mcp-server-dialog";
+export type { AddMcpServerDialogProps } from "./add-mcp-server-dialog";
+

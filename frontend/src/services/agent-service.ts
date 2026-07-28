@@ -8,6 +8,8 @@ import type {
   AgentTool,
   AgentToolCreate,
   AgentToolUpdate,
+  DiscoveredMcpTool,
+  ParsedMcpServersResult,
 } from "@/types/agent";
 
 class AgentService {
@@ -74,9 +76,71 @@ class AgentService {
   }
 
   // Tool Methods
-  async getPlatformTools(onlyActive = true): Promise<PlatformTool[]> {
+  /**
+   * List platform tools visible to the caller (publish lifecycle, RFC §6.6).
+   *
+   * Org users see only **published** rows by default — the global catalog they
+   * can attach to their agents. Platform admins pass `{ includeDrafts: true }`
+   * to also see draft (unpublished) MCP servers they are authoring; the
+   * backend rejects a non-platform-admin that sets it (403). The org-scoped
+   * custom tier is retired, so there is no per-org filter.
+   */
+  async getPlatformTools(
+    onlyActive = true,
+    opts?: { includeDrafts?: boolean },
+  ): Promise<PlatformTool[]> {
+    const params = new URLSearchParams({ only_active: String(onlyActive) });
+    if (opts?.includeDrafts) params.set("include_drafts", "true");
     const response = await apiClient.get<PlatformTool[]>(
-      `${this.toolBaseUrl}/platform?only_active=${onlyActive}`,
+      `${this.toolBaseUrl}/platform?${params.toString()}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Publish or unpublish a platform tool (platform-admin only, RFC §6.6).
+   * Publishing flips `is_published` to true, surfacing the server in every
+   * org's tool catalog; unpublishing hides it from new attaches (existing
+   * attachments keep working).
+   */
+  async publishPlatformTool(
+    toolId: string,
+    published: boolean,
+  ): Promise<PlatformTool> {
+    const endpoint = published ? "publish" : "unpublish";
+    const response = await apiClient.post<PlatformTool>(
+      `${this.toolBaseUrl}/platform/${toolId}/${endpoint}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Update a platform tool (platform-admin only, RFC §6.6). Used to edit a
+   * draft or published MCP server's URL, headers, or `{{KEY}}` template.
+   * Secret headers are encrypted at rest by the backend; never sent back as
+   * plaintext.
+   */
+  async updatePlatformTool(
+    toolId: string,
+    payload: Record<string, unknown>,
+  ): Promise<PlatformTool> {
+    const response = await apiClient.put<PlatformTool>(
+      `${this.toolBaseUrl}/platform/${toolId}`,
+      payload,
+    );
+    return response.data;
+  }
+
+  /**
+   * Delete a platform tool (platform-admin only, RFC §6.6). Removes the server
+   * from the catalog; existing agent attachments keep their config but the
+   * tool will fail to resolve at runtime.
+   */
+  async deletePlatformTool(
+    toolId: string,
+  ): Promise<{ deleted: boolean }> {
+    const response = await apiClient.delete<{ deleted: boolean }>(
+      `${this.toolBaseUrl}/platform/${toolId}`,
     );
     return response.data;
   }
@@ -134,6 +198,54 @@ class AgentService {
 
   async deleteAgentTool(agentToolId: string): Promise<void> {
     await apiClient.delete(`${this.toolBaseUrl}/agent/${agentToolId}`);
+  }
+
+  // MCP Server Methods
+
+  /**
+   * Discover the tools exposed by a remote MCP server (in-memory; nothing
+   * persisted). Used by the "Test connection & discover tools" button in the
+   * Add MCP Server dialog. The backend validates the URL against the SSRF guard
+   * before opening a transient McpClient.
+   */
+  async discoverMcpTools(
+    payload: { url: string; headers?: Record<string, string> },
+  ): Promise<DiscoveredMcpTool[]> {
+    const response = await apiClient.post<{ tools: DiscoveredMcpTool[] }>(
+      `${this.toolBaseUrl}/mcp/discover`,
+      payload,
+    );
+    return response.data.tools;
+  }
+
+  /**
+   * Parse a pasted `mcpServers` JSON config (Claude Desktop / VS Code format)
+   * into structured server entries, surfacing per-entry errors (e.g. rejected
+   * stdio entries). Backend is the single source of truth for parsing.
+   */
+  async parseMcpServersJson(
+    raw: string,
+  ): Promise<ParsedMcpServersResult> {
+    const response = await apiClient.post<ParsedMcpServersResult>(
+      `${this.toolBaseUrl}/mcp/parse`,
+      { raw },
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a platform_tools row (used for both curated-catalog additions by
+   * platform admins and org-scoped custom MCP servers). Secret headers are
+   * encrypted at rest by the backend; never send them back as plaintext.
+   */
+  async createPlatformTool(
+    payload: Record<string, unknown>,
+  ): Promise<PlatformTool> {
+    const response = await apiClient.post<PlatformTool>(
+      `${this.toolBaseUrl}/platform`,
+      payload,
+    );
+    return response.data;
   }
 
   // Test Token Methods
