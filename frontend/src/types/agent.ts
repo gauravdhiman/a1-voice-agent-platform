@@ -104,6 +104,13 @@ export interface PlatformTool {
     functions: PlatformToolFunction[];
   } | null;
   is_active: boolean;
+  /**
+   * Publish-lifecycle flag (RFC §6.6). `false` (draft) = platform-admin-only;
+   * `true` (published) + `is_active=true` = visible to all org users in the
+   * tool panel as a normal tool card they can attach. Platform admins author a
+   * server as a draft, test it, then publish it to the global catalog.
+   */
+  is_published?: boolean;
   created_at: string;
   updated_at: string;
   auth_type: string | null;
@@ -117,6 +124,48 @@ export interface PlatformTool {
   mcp_server_name?: string | null;
   /** Extra HTTP headers to send to the MCP server (e.g. auth). */
   mcp_server_headers?: Record<string, string> | null;
+  /**
+   * Owning organization for an MCP server.
+   * DORMANT: the org-scoped custom tier is retired (RFC §6.6) — all published
+   * MCP servers are global catalog entries (`null`), authored by platform
+   * admins. The column is kept for a future org-private-publish tier; the
+   * org-scoped read/create code paths are removed.
+   */
+  organization_id?: string | null;
+  /**
+   * Read-only flag: true when encrypted server-level secret headers are
+   * configured for this MCP server. The decrypted secret values are never
+   * returned to the frontend — this flag just drives UI affordances.
+   */
+  mcp_secret_headers_configured?: boolean;
+}
+
+/**
+ * A discovered tool from a remote MCP server (POST /tools/mcp/discover).
+ * Returned sanitized — name, description, and the JSON Schema of its input.
+ */
+export interface DiscoveredMcpTool {
+  name: string;
+  description: string | null;
+  input_schema: Record<string, unknown> | null;
+}
+
+/** Response from POST /tools/mcp/parse — parsed `mcpServers` JSON. */
+export interface ParsedMcpServer {
+  name: string;
+  url: string;
+  headers: Record<string, string>;
+}
+
+/** Per-entry parse error (e.g. a stdio entry was rejected). */
+export interface ParsedMcpServerError {
+  name: string;
+  message: string;
+}
+
+export interface ParsedMcpServersResult {
+  servers: ParsedMcpServer[];
+  errors: ParsedMcpServerError[];
 }
 
 export interface AgentTool {

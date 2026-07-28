@@ -6,7 +6,12 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
-from gotrue.errors import AuthApiError
+
+# supabase-py >= 2.20 renamed `gotrue` -> `supabase_auth`; fall back for older envs.
+try:
+    from supabase_auth.errors import AuthApiError
+except ImportError:  # pragma: no cover
+    from gotrue.errors import AuthApiError
 
 from src.auth.service import AuthService
 from src.auth.models import SignUpRequest, SignInRequest

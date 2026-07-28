@@ -5,11 +5,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { 
-  useMyAgents, 
-  useOrgAgents, 
-  useAgent, 
-  usePlatformTools, 
+import {
+  useMyAgents,
+  useOrgAgents,
+  useAgent,
+  usePlatformTools,
   useAgentTools,
   useCreateAgent,
   useUpdateAgent,
@@ -17,6 +17,9 @@ import {
   useConfigureAgentTool,
   useUpdateAgentTool,
   useDeleteAgentTool,
+  usePublishPlatformTool,
+  useUpdatePlatformTool,
+  useDeletePlatformTool,
 } from '@/hooks/use-agent-queries'
 
 // Use vi.hoisted() to define mock data that will be available when vi.mock() is hoisted
@@ -79,6 +82,9 @@ vi.mock('@/services/agent-service', () => ({
     deleteAgentTool: vi.fn().mockResolvedValue(undefined),
     startOAuth: vi.fn().mockResolvedValue({ auth_url: 'https://oauth.com/auth' }),
     logoutAgentTool: vi.fn().mockResolvedValue(undefined),
+    publishPlatformTool: vi.fn().mockResolvedValue({ ...mockPlatformTool, is_published: true }),
+    updatePlatformTool: vi.fn().mockResolvedValue(mockPlatformTool),
+    deletePlatformTool: vi.fn().mockResolvedValue({ deleted: true }),
   },
 }))
 
@@ -198,14 +204,88 @@ describe('use-agent-queries', () => {
       })
     })
 
-    it('calls agent service with default onlyActive=true', async () => {
+    it('calls agent service with default onlyActive=true and includeDrafts omitted', async () => {
       renderHook(() => usePlatformTools(), {
         wrapper: TestWrapper,
       })
 
       await waitFor(() => {
-        expect(agentService.getPlatformTools).toHaveBeenCalledWith(true)
+        expect(agentService.getPlatformTools).toHaveBeenCalledWith(
+          true,
+          undefined,
+        )
       })
+    })
+
+    it('forwards includeDrafts to the service', async () => {
+      renderHook(() => usePlatformTools(false, { includeDrafts: true }), {
+        wrapper: TestWrapper,
+      })
+
+      await waitFor(() => {
+        expect(agentService.getPlatformTools).toHaveBeenCalledWith(false, {
+          includeDrafts: true,
+        })
+      })
+    })
+  })
+
+  describe('usePublishPlatformTool', () => {
+    it('calls publishPlatformTool with the tool id + published flag', async () => {
+      const { result } = renderHook(() => usePublishPlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync({ toolId: 'tool-9', published: true })
+      })
+
+      expect(agentService.publishPlatformTool).toHaveBeenCalledWith('tool-9', true)
+    })
+
+    it('calls the unpublish path when published=false', async () => {
+      const { result } = renderHook(() => usePublishPlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync({ toolId: 'tool-9', published: false })
+      })
+
+      expect(agentService.publishPlatformTool).toHaveBeenCalledWith('tool-9', false)
+    })
+  })
+
+  describe('useUpdatePlatformTool', () => {
+    it('calls updatePlatformTool with the tool id + payload', async () => {
+      const { result } = renderHook(() => useUpdatePlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync({
+          toolId: 'tool-9',
+          payload: { name: 'renamed' },
+        })
+      })
+
+      expect(agentService.updatePlatformTool).toHaveBeenCalledWith('tool-9', {
+        name: 'renamed',
+      })
+    })
+  })
+
+  describe('useDeletePlatformTool', () => {
+    it('calls deletePlatformTool with the tool id', async () => {
+      const { result } = renderHook(() => useDeletePlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync('tool-9')
+      })
+
+      expect(agentService.deletePlatformTool).toHaveBeenCalledWith('tool-9')
     })
   })
 

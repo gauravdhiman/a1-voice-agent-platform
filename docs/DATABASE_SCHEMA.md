@@ -228,6 +228,7 @@ System-wide tools available for integration with voice agents.
 | config_schema         | JSONB         | NULLABLE                          | JSON schema for tool configuration                                          |
 | tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
 | is_active             | BOOLEAN       | NOT NULL, DEFAULT TRUE            | Tool active status                                                          |
+| is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = visible in every org's tool catalog. Backfilled TRUE for existing rows — migration 20260726000001 |
 | auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
 | requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
 | auth_config           | JSONB         | NULLABLE                          | Auth configuration (OAuth URLs, scopes, provider) — migration 20260111000001 |
@@ -235,11 +236,25 @@ System-wide tools available for integration with voice agents.
 | mcp_server_url        | VARCHAR(1024) | NULLABLE                          | Streamable HTTP endpoint of the MCP server (tool_source='mcp' only)          |
 | mcp_server_headers    | JSONB         | NULLABLE                          | Static per-request headers (server-level auth) — tool_source='mcp' only      |
 | mcp_server_name       | VARCHAR(200)  | NULLABLE                          | Human-readable MCP server name for logging — tool_source='mcp' only          |
+| organization_id       | UUID          | NULLABLE, FK → organizations.id   | DORMANT: the org-scoped custom MCP tier is retired (RFC §6.6, 2026-07-26). All published MCP servers are global catalog rows (NULL); the org-scoped read/create code paths are removed. The column is kept for a future org-private-publish tier — migration 20260725000001 |
+| mcp_server_secret_headers | TEXT      | NULLABLE                          | Fernet-encrypted JSON of server-level secret headers. Under the publish-lifecycle model this is a **template**: a value containing `{{KEY}}` is filled at runtime with the attaching org admin's API key (`agent_tools.sensitive_config["api_key"]`); a literal value (no `{{KEY}}`) passes through as a fixed shared header. Never returned to the frontend (a `mcp_secret_headers_configured` bool flag is exposed instead) — migration 20260725000001 |
 | created_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Creation timestamp                                                          |
 | updated_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Last update timestamp                                                        |
 
-**Foreign Keys**: None
-**RLS**: Not enabled (system-wide tools)
+**Foreign Keys**:
+- `organization_id` → `organizations.id` (CASCADE) — added migration 20260725000001 (dormant; MCP creates force NULL)
+
+**Indexes**:
+- `ix_platform_tools_organization_id` on `organization_id` — migration 20260725000001
+- `ix_platform_tools_is_published` on `is_published` — migration 20260726000001 (org-user catalog listing filters on it)
+
+**RLS**: Not enabled (system-wide tools). Catalog visibility is enforced at the service layer (`get_platform_tools` filters `is_published=true AND is_active=true` for org users; `include_drafts=True` for platform admins). RLS hardening is a follow-up TODO.
+
+**Visibility / publish lifecycle** (RFC §6.6):
+- `is_published=false` → **draft**: visible only to platform admins (authoring/management view).
+- `is_published=true` + `is_active=true` → **published**: a normal tool card in every org's agent tool panel; org admins attach it and supply their own API key (the `{{KEY}}` template is substituted with `agent_tools.sensitive_config["api_key"]` at runtime — no platform test-key fallback).
+- `organization_id` is **dormant** (org-scoped custom tier retired); MCP rows are forced to NULL on create.
+- Server-level secret headers (`mcp_server_secret_headers`) are encrypted at rest via Fernet (`shared/common/security.py`); the decrypted values never leave the worker dispatch path.
 
 **OAuth Configuration in `config_schema`**:
 
@@ -1088,6 +1103,8 @@ erDiagram
 22. `20260624000001` - Replace `platform_skills.is_active` + `is_deleted` booleans with a single `status VARCHAR(20)` enum (draft/active/deprecated/deleted). Adds a CHECK constraint and dedicated state-machine transitions in the service layer (deprecate/reactivate/delete/restore).
 23. `20260705000001` - Extend `org_admin` and `regular_user` RBAC grants (data migration; no schema change).
 24. `20260715000001` - Add MCP-source columns to `platform_tools` (`tool_source` default `'legacy'`, `mcp_server_url`, `mcp_server_headers`, `mcp_server_name`). Additive — existing rows default to `legacy` so the in-tree `BaseTool` path keeps working; rows marked `mcp` route through a remote MCP server over Streamable HTTP. See `docs/03_implementation/mcp_integration_rfc.md`.
+25. `20260725000001` - Add org scope + encrypted secret headers to `platform_tools`: `organization_id` (UUID NULLABLE, FK→`organizations.id` CASCADE, + index) for org-scoped custom MCP servers vs the global curated catalog, and `mcp_server_secret_headers` (TEXT NULLABLE, Fernet-encrypted JSON) for server-level API keys. Additive; existing rows (NULL org, NULL secrets) are unaffected. See `docs/03_implementation/mcp_integration_rfc.md`. (Note: the org-scoped custom tier was subsequently **retired** by 20260726000001; `organization_id` is now dormant and MCP creates force NULL.)
+26. `20260726000001` - Add `is_published BOOLEAN NOT NULL DEFAULT FALSE` + `ix_platform_tools_is_published` to `platform_tools`, and backfill `UPDATE platform_tools SET is_published = TRUE` so the live catalog is unaffected. Implements the publish lifecycle (RFC §6.6 revision 2026-07-26): platform admins author/test/publish MCP servers to the global catalog; org admins attach published servers with their own API key (`{{KEY}}` template). The org-scoped custom tier is retired (the `organization_id` column from 20260725000001 is kept dormant).
 
 ---
 

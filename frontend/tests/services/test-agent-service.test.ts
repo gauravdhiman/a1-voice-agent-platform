@@ -5,7 +5,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { agentService } from '@/services/agent-service'
 import { server } from '../mocks/server'
-import { http } from 'msw'
+import { http, HttpResponse } from 'msw'
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 import { createMockAgent, createMockPlatformTool, createMockAgentTool } from '../utils/data-factories'
 
 // Import mocked supabase to ensure it's available
@@ -130,6 +132,107 @@ describe('AgentService', () => {
     it('deleteAgentTool deletes tool', async () => {
       // Should call delete endpoint
       await expect(agentService.deleteAgentTool('agent-tool-1')).resolves.not.toThrow()
+    })
+
+    it('discoverMcpTools returns sanitized tool list', async () => {
+      const result = await agentService.discoverMcpTools({
+        url: 'https://example.com/mcp',
+      })
+      expect(Array.isArray(result)).toBe(true)
+      expect(result.length).toBeGreaterThan(0)
+      expect(result[0]).toMatchObject({
+        name: expect.any(String),
+        description: expect.any(String),
+      })
+    })
+
+    it('discoverMcpTools throws on SSRF rejection', async () => {
+      await expect(
+        agentService.discoverMcpTools({ url: 'http://127.0.0.1/mcp' }),
+      ).rejects.toThrow()
+    })
+
+    it('discoverMcpTools forwards headers in the request', async () => {
+      // Headers are sent as part of the body; the mock echoes a tools list
+      // regardless, so this just confirms no throw + result shape.
+      const result = await agentService.discoverMcpTools({
+        url: 'https://example.com/mcp',
+        headers: { Authorization: 'Bearer abc' },
+      })
+      expect(result.length).toBeGreaterThan(0)
+    })
+
+    it('parseMcpServersJson returns servers and errors', async () => {
+      const result = await agentService.parseMcpServersJson(
+        JSON.stringify({
+          mcpServers: {
+            'my-server': {
+              url: 'https://example.com/mcp',
+              headers: { 'X-Key': 'v' },
+            },
+          },
+        }),
+      )
+      expect(result.servers).toHaveLength(1)
+      expect(result.servers[0].url).toBe('https://example.com/mcp')
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('createPlatformTool returns the created platform tool', async () => {
+      const result = await agentService.createPlatformTool({
+        name: 'my-mcp',
+        tool_source: 'mcp',
+        mcp_server_url: 'https://example.com/mcp',
+        mcp_secret_headers_input: { Authorization: 'Bearer x' },
+      })
+      expect(result).toMatchObject({
+        id: 'new-mcp-tool',
+        name: 'my-mcp',
+        tool_source: 'mcp',
+        mcp_server_url: 'https://example.com/mcp',
+      })
+      // Secret headers never come back as plaintext — only a configured flag.
+      expect(result.mcp_secret_headers_configured).toBe(true)
+      expect((result as any).mcp_secret_headers_input).toBeUndefined()
+    })
+
+    it('getPlatformTools sends include_drafts when requested', async () => {
+      // Override the default handler to echo back the query params it received
+      // so we can assert the service forwards include_drafts to the backend.
+      let capturedParams = ''
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, ({ request }) => {
+          capturedParams = new URL(request.url).searchParams.toString()
+          return HttpResponse.json({ success: true, data: [] })
+        }),
+      )
+      await agentService.getPlatformTools(false, { includeDrafts: true })
+      expect(capturedParams).toContain('only_active=false')
+      expect(capturedParams).toContain('include_drafts=true')
+    })
+
+    it('publishPlatformTool posts to the publish endpoint and returns the tool', async () => {
+      const result = await agentService.publishPlatformTool('tool-9', true)
+      expect(result).toMatchObject({ id: 'tool-9', is_published: true })
+    })
+
+    it('unpublishPlatformTool posts to the unpublish endpoint and returns the tool', async () => {
+      const result = await agentService.publishPlatformTool('tool-9', false)
+      expect(result).toMatchObject({ id: 'tool-9', is_published: false })
+    })
+
+    it('updatePlatformTool PUTs to the platform endpoint and returns the tool', async () => {
+      const result = await agentService.updatePlatformTool('tool-9', {
+        name: 'renamed',
+        tool_source: 'mcp',
+        mcp_server_url: 'https://example.com/mcp',
+      } as any)
+      expect(result).toMatchObject({ id: 'tool-9', name: 'renamed' })
+    })
+
+    it('deletePlatformTool deletes the platform tool', async () => {
+      const result = await agentService.deletePlatformTool('tool-9')
+      expect(result).toMatchObject({ deleted: true })
     })
   })
 

@@ -80,6 +80,7 @@ sign-off.
 | 3a — Worker dispatch branch | ✅ Additive MCP branch in `worker.py` (`_integrate_mcp_agent_tool`), `mcp/dispatch.py` (`mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`); legacy `BaseTool`/`LiveKitToolRegistry` path unchanged; fail-soft (a broken MCP server never blocks other tools). **MCP client lifecycle (fixed 2026-07-16):** the entrypoint returns right after `agent_session.start()` while the session runs on, so clients are handed to the job lifecycle via `ctx.add_shutdown_callback` (`_hand_off_mcp_clients_to_session`) and closed on job shutdown — NOT in the entrypoint `finally`, which now only closes clients when setup failed before handoff (`_cleanup_mcp_clients`). (Earlier the `finally` closed them at return time, so every MCP tool failed with `RuntimeError: McpClient is closed` at call time.) 13 tests green (dispatch + worker branch incl. fail-soft + lifecycle). |
 | 3b — First working MCP tool (Google Calendar, in-memory) | ✅ In-memory Google Calendar MCP reference server at `shared/voice_agents/tools/mcp/reference_servers/google_calendar.py` (`list_events` / `create_event` / `get_event` / `check_availability`); full-pipeline e2e (discover → synthesize → invoke) green. Proves the platform plumbing with no third-party OAuth. |
 | 3c — Real Google Calendar MCP (remote server + DB-driven OAuth) | ✅ `Google_calendar_mcp` row repointed at Google's official remote server `https://calendarmcp.googleapis.com/mcp/v1` with `auth_type=oauth2`, `requires_auth=true`, and a real Google OAuth `auth_config` (4 scopes). `start_oauth` / `oauth_callback` in `tool_routes.py` made **DB-driven** (`_resolve_tool_auth_config`: DB-first, legacy registry fallback) so MCP-sourced tools reuse the existing OAuth endpoints; `TokenRefreshService` already reads the same `auth_config` column, so MCP tokens auto-refresh with no extra wiring. 5 new backend tests (`test_tool_oauth_mcp.py`) + 14 existing tool_routes tests green (19 total); 305 green across voice_agents + token-refresh + tool-service suites. Frontend `PlatformTool` type extended with `tool_source` / `mcp_server_url` / `mcp_server_name` / `mcp_server_headers` (3 vitest tests). End-to-end against the real Google API pending the one-time GCP client config (§6.4). |
+| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-07-26 to the publish-lifecycle model:** custom MCP authoring is now **platform-admin-only** (author → test → publish to global catalog); org admins **attach** published servers with their **own** API key (`{{KEY}}` template, org key overrides platform test key at runtime). The org-scoped custom tier is **retired**. Migration `20260726000001` adds `is_published` (backfills existing rows TRUE); `20260725000001` (encrypted secret headers) already applied. SSRF guard + `mcpServers` parser unchanged; new publish/unpublish/edit/delete endpoints + platform-admin gating on discover/parse/create; dispatch substitutes `{{KEY}}` (no platform fallback). Frontend "Manage MCP Servers" dialog (author + manage views, no catalog tab), button gated on `isPlatformAdmin`. 62 backend route/service + 18 worker dispatch + 67 frontend vitest green. |
 | 4–5 | Not started (gated per §7). |
 
 **What shipped (no legacy code touched):**
@@ -457,6 +458,204 @@ worker suite (58 tests) green; `py_compile` clean.
   Calendar's 9 tools); if a `$ref`-using server appears, resolve references
   *before* sanitizing rather than renaming the prefix (Gemini's `ref` semantics
   differ).
+
+---
+
+### 6.6 MCP authoring + publish lifecycle + org-level keys (implemented)
+
+> **Revision note (2026-07-26):** This section supersedes the earlier
+> "Configure any MCP server from the UI" design. The model was **reversed**:
+> custom MCP servers are no longer org-admin-authored and org-scoped. They are
+> **platform-admin-authored, published to a global catalog, and attached by org
+> admins with their own keys**. The org-scoped custom tier is **retired** (the
+> `organization_id` column is kept dormant for a future org-private-publish
+> tier). The decision rationale is recorded below so future readers understand
+> *why* the model changed, not just *what* changed.
+
+#### The decision (high-level requirements → design)
+
+The product serves mostly non-technical org users who cannot reliably
+configure MCP servers. Letting every org author servers (the previous model)
+produced two problems: (1) quality/correctness — orgs would misconfigure
+servers and have no one to fix them; (2) an org-isolation leak surface we had
+to harden per-endpoint. The reversal centralizes authoring with platform
+admins, who configure, **test**, then **publish** a server to the global
+catalog, where any org admin can attach it to their agents.
+
+Three roles map to three actions:
+
+| Action | Who | Gate |
+|---|---|---|
+| Author / test / publish / edit / delete an MCP server | **platform admin** | `assert_platform_role(user_profile, "platform_admin")` (org-agnostic) |
+| Attach a published server to an agent | **org admin** | existing `assert_has_permission("agent", "update", agent.organization_id)` — unchanged |
+| Read the catalog (attach-able tools) | any org user | published-only (`is_published=true AND is_active=true`) |
+
+No new `tool:*` permission resource was needed — create/publish = platform
+role; attach = existing `agent:update`. This resolves the long-deferred "WHO"
+question.
+
+#### Publish lifecycle
+
+`platform_tools.is_published BOOLEAN NOT NULL DEFAULT FALSE` (migration
+`20260726000001`, down_revision `20260725000001`). The migration **backfills
+`is_published = TRUE`** for all existing rows so the live catalog (Google
+Calendar, Gmail, CalCom, Sheets, etc.) is unaffected.
+
+- `is_published=false` → **draft**: visible only to platform admins (the
+  authoring/management view).
+- `is_published=true` + `is_active=true` → **published**: a normal tool card
+  in every org user's agent tool panel, attachable by org admins.
+- **Unpublish** hides a server from new attaches; existing `agent_tools`
+  attachments keep working (documented). **Delete** removes it.
+
+`tool_service.get_platform_tools(only_active, *, include_drafts=False)`:
+returns `is_published=true AND is_active=true` by default (the org-user
+catalog); all rows (drafts + published) when `include_drafts=True`. The
+org-scoped per-org filter is **gone** — all published servers are global.
+
+#### Org-level static keys override platform test keys (the core auth refinement)
+
+For static-key MCP servers, **the platform owns the integration (URL, header
+mapping); each org owns its keys.** This mirrors how per-user OAuth already
+works for Google Calendar. The mechanism reuses existing storage and UX —
+**no new schema for the org key**:
+
+1. **Author/test** — a platform admin writes a secret-header **template**
+   containing a `{{KEY}}` placeholder (e.g. `{"Authorization": "Bearer {{KEY}}"}`,
+   `{"X-API-Key": "{{KEY}}"}`), stored encrypted at rest in
+   `mcp_server_secret_headers` (Fernet via `shared/common/security.py`). A
+   transient **Test API key** is substituted into `{{KEY}}` for the one-shot
+   in-memory `McpClient` discover call. The test key is **never persisted**.
+2. **Publish** — stores the template (with `{{KEY}}`) encrypted, sets
+   `auth_type="api_key"`, `requires_auth=true`.
+3. **Attach** — an org admin attaches the published tool and supplies their
+   **own** API key via the existing tool-config-drawer "Configure API Key"
+   path → `POST /tools/agent/{id}/api-key` →
+   `agent_tools.sensitive_config = {"api_key": "<org-key>"}` (existing
+   endpoint, reused).
+4. **Runtime** — `shared/voice_agents/tools/mcp/dispatch.py::
+   mcp_server_config_from_agent_tool` substitutes `{{KEY}}` → the org key
+   from `sensitive_config["api_key"]` into the template. Precedence:
+   public `mcp_server_headers` → `{{KEY}}`-templated
+   `mcp_server_secret_headers` (org key) → per-user OAuth bearer (only if no
+   `Authorization` is set). **A templated header with no org key is DROPPED —
+   there is no platform-fallback**: the tool is left in an "API key required"
+   state rather than sending the bare `{{KEY}}` marker or a stale platform
+   test key. The platform test key is **never** used at runtime.
+
+Literal secret-header values (no `{{KEY}}`) pass through unchanged as fixed
+shared headers (optional shared-key mode, platform-admin's responsibility).
+
+Per-user OAuth (Google Calendar) is unchanged for native/seeded servers.
+
+#### UI
+
+The "Manage MCP Servers" button (was "Add MCP server") is visible only to
+platform admins (`isPlatformAdmin` from `useUserPermissions()`). The dialog is
+**authoring + management only** — the "From catalog" tab is **dropped**
+(published servers already render as normal `ToolCard`s in the main tool
+panel for everyone, with the MCP badge; org admins attach via the existing
+card connect flow and supply their key via the existing drawer). The dialog
+has two views:
+
+- **Author**: auth-mode select (No auth / Static API key), Name, URL, public
+  Headers (JSON), `{{KEY}}` secret-header template + transient Test API key
+  (api-key mode only), `mcpServers` JSON paste + parse, "Test & discover",
+  "Save draft" (`is_published=false`) / "Publish" (`is_published=true`).
+- **Manage**: drafts + published list with Draft/Published badges and
+  publish/unpublish/delete actions.
+
+#### Accepted `mcpServers` JSON format (unchanged)
+
+Parsed by the backend (single source of truth):
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer ..." }
+    }
+  }
+}
+```
+
+A bare single-server object is also accepted. Entries with `command`/`args`
+(**stdio**) are rejected with a per-entry error — arbitrary subprocess
+execution is not supported in a hosted multi-tenant SaaS. Only `url`/`headers`
+(HTTP Streamable transport) entries are accepted. If multiple servers are
+pasted, the first is used (v1).
+
+#### Security model
+
+- **SSRF guard** (`shared/voice_agents/tools/mcp/security.py::validate_mcp_server_url`):
+  https-only (plain http to loopback gated by `MCP_ALLOW_LOCAL_URLS` for
+  dev/test); blocks private/loopback/link-local/metadata IPs (127/8, 10/8,
+  172.16/12, 192.168/16, 169.254.169.254, ::1, fc00/7). Enforced at discover
+  time and save time. Runtime re-validation is deferred (TODO in
+  `dispatch.py`) — it would add a per-session DNS resolve and break loopback
+  dev/test servers; save-time validation is the gate.
+- **Authoring is platform-admin-only** (`assert_platform_role`) on every
+  authoring endpoint: `POST /tools/platform` (create), `POST /tools/platform/{id}/publish`
+  + `/unpublish`, `PUT /tools/platform/{id}` (edit), `DELETE /tools/platform/{id}`,
+  `POST /tools/mcp/discover`, `POST /tools/mcp/parse`. Org admins and regular
+  users get 403. This also **fixes the prior over-restriction** where
+  discover/parse gated on the unset `current_organization_id` and org admins
+  got a spurious 403 — that path is removed.
+- **MCP rows are global** — `tool_service.upsert_platform_tool` forces
+  `organization_id = None` for `tool_source='mcp'` (the payload org is
+  ignored). The org-scoped custom code paths are removed; the column is kept
+  dormant. UUID serialization uses `model_dump(exclude_none=True, mode="json")`.
+- **Read-side visibility** — `GET /tools/platform` takes `include_drafts: bool
+  = Query(False)`; a non-platform-admin passing `include_drafts=true` is
+  rejected (403). Org users always get published-only.
+- **Server-level secrets encrypted at rest** — `mcp_server_secret_headers`
+  holds the encrypted `{{KEY}}` template; decrypted values never return to the
+  frontend (only a `mcp_secret_headers_configured: bool` flag).
+- **No RLS policy in v1** (service-layer `is_published` filter; RLS hardening
+  is a follow-up TODO).
+
+#### Backend endpoints (`tool_routes.py`)
+
+- `POST /api/v1/tools/mcp/discover` — platform-admin only; body `{url, headers}`;
+  validates URL, opens a one-shot `McpClient`, returns sanitized
+  `[{name, description, input_schema}]`. In-memory only. 502 on connect failure.
+- `POST /api/v1/tools/mcp/parse` — platform-admin only; body `{raw}`; returns
+  `{servers, errors}` (per-entry stdio/malformed errors).
+- `POST /api/v1/tools/platform` (create) — platform-admin only; accepts MCP
+  fields + `mcp_secret_headers_input` (plaintext template input, encrypted at
+  rest, never persisted as plaintext) + `is_published` (draft vs publish);
+  forces `organization_id = NULL`.
+- `POST /api/v1/tools/platform/{id}/publish` + `/unpublish` — platform-admin
+  only; flips `is_published` (404 if not found).
+- `PUT /api/v1/tools/platform/{id}` (edit) — platform-admin only; validates
+  MCP URL.
+- `DELETE /api/v1/tools/platform/{id}` — platform-admin only.
+- `GET /api/v1/tools/platform` — `include_drafts` query; published-only for
+  org users, drafts+published for platform admins with `include_drafts=true`.
+
+#### Auth modes supported in v1
+
+No-auth, static-API-key (per-org, `{{KEY}}` template), and per-user OAuth
+(existing flow, for native/seeded servers like Google Calendar where we hold
+the OAuth config). **Per-user OAuth authoring for custom remote servers is
+Phase B** — v1 custom authoring is No-auth + Static-API-key only; the native
+Google Calendar connector already demonstrates per-user OAuth end-to-end and
+the existing `start_oauth`/`oauth_callback` reads `auth_config` from the row.
+**Server-side OAuth** (the platform does the OAuth dance with the MCP server)
+is on the back burner.
+
+#### Deferred / out of scope
+
+Per-user OAuth authoring for custom servers (Phase B), server-side OAuth,
+stdio servers, and a future org-private-publish tier (the dormant
+`organization_id` column).
+
+#### Build note
+
+The backend image already bakes `mcp` in (the earlier `pydantic>=2.11.0,<3`
+loosening + `supabase_auth` rename are unchanged). No `requirements.txt` change
+in this revision, so a `./start.sh restart dev` suffices (no image rebuild).
 
 ---
 

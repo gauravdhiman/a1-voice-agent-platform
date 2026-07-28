@@ -108,6 +108,180 @@ class TestMcpServerConfigFromAgentTool:
 
         assert config.name == "Google_calendar_mcp"
 
+    def test_merges_encrypted_secret_headers(self):
+        """Encrypted server-level secret headers are decrypted and merged in,
+        without clobbering the public static headers (secret wins on conflict)."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(
+            mcp_server_headers={"X-Public": "pub"},
+            mcp_server_secret_headers="encrypted-blob",
+        )
+        agent_tool = _agent_tool(pt)
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"X-Secret": "secret-value", "X-Public": "override"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["X-Public"] == "override"  # secret wins
+        assert config.headers["X-Secret"] == "secret-value"
+
+    def test_secret_headers_decryption_failure_is_skipped(self):
+        """A decryption failure must not crash dispatch — log and skip secrets."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(
+            mcp_server_headers={"X-Public": "pub"},
+            mcp_server_secret_headers="garbage",
+        )
+        agent_tool = _agent_tool(pt)
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            side_effect=Exception("bad key"),
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        # Public headers survive; no secret headers added.
+        assert config.headers == {"X-Public": "pub"}
+
+    def test_secret_headers_with_bearer_no_authorization_conflict(self):
+        """Secret headers + per-user bearer: bearer added only if no
+        Authorization is already present (server-level auth wins)."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(mcp_server_secret_headers="encrypted-blob")
+        agent_tool = _agent_tool(pt, sensitive_config={"access_token": "user-tok"})
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"X-Secret": "s"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        # No Authorization in secret headers → bearer injected.
+        assert config.headers["Authorization"] == "Bearer user-tok"
+        assert config.headers["X-Secret"] == "s"
+
+
+class TestMcpServerConfigKeyTemplate:
+    """``{{KEY}}`` template substitution — the org-level API-key override.
+
+    The publish-lifecycle model (RFC §6.6): a platform admin authors an MCP
+    server whose server-level secret headers are a *template* with a
+    ``{{KEY}}`` placeholder (e.g. ``{"Authorization": "Bearer {{KEY}}"}``).
+    At runtime the placeholder is filled with the **org admin's** API key from
+    ``agent_tool.sensitive_config["api_key"]`` — never the platform admin's
+    transient test key. Literal values (no ``{{KEY}}``) pass through as fixed
+    shared headers.
+    """
+
+    def test_template_substituted_with_org_api_key(self):
+        """A ``{{KEY}}`` placeholder is filled with the org's API key."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(mcp_server_secret_headers="encrypted-blob")
+        agent_tool = _agent_tool(
+            pt, sensitive_config={"api_key": "org-key-123"}
+        )
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"Authorization": "Bearer {{KEY}}"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["Authorization"] == "Bearer org-key-123"
+
+    def test_template_skipped_without_org_key_no_platform_fallback(self):
+        """A ``{{KEY}}`` placeholder with NO org key is dropped — the literal
+        ``{{KEY}}`` is never sent, and the platform test key is never used at
+        runtime (there is no fallback). The tool is simply in an
+        'API key required' state."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(
+            mcp_server_headers={"X-Public": "pub"},
+            mcp_server_secret_headers="encrypted-blob",
+        )
+        agent_tool = _agent_tool(pt, sensitive_config={})  # no api_key
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"X-API-Key": "{{KEY}}"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        # Public header survives; the templated header is dropped entirely.
+        assert config.headers == {"X-Public": "pub"}
+        assert "X-API-Key" not in config.headers
+
+    def test_literal_secret_header_passes_through_unchanged(self):
+        """A secret header value with no ``{{KEY}}`` is used verbatim (the
+        optional shared/fixed-key mode — platform admin's responsibility)."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(mcp_server_secret_headers="encrypted-blob")
+        agent_tool = _agent_tool(pt)
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"X-Fixed": "shared-literal"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["X-Fixed"] == "shared-literal"
+
+    def test_template_and_literal_coexist_in_same_secret_headers(self):
+        """A mix of templated and literal secret headers resolves each
+        independently — the org key fills ``{{KEY}}`` only in its own header."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(mcp_server_secret_headers="encrypted-blob")
+        agent_tool = _agent_tool(
+            pt, sensitive_config={"api_key": "org-key"}
+        )
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"X-Fixed": "lit", "X-Api-Key": "{{KEY}}"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["X-Fixed"] == "lit"
+        assert config.headers["X-Api-Key"] == "org-key"
+
+    def test_template_authorization_suppresses_oauth_bearer(self):
+        """When a ``{{KEY}}`` template resolves to an Authorization header, the
+        per-user OAuth bearer is NOT injected (the org key wins; bearer only
+        added when no Authorization is set)."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(mcp_server_secret_headers="encrypted-blob")
+        # Both an org api_key and an OAuth access_token present — the template
+        # Authorization must win over the OAuth bearer.
+        agent_tool = _agent_tool(
+            pt,
+            sensitive_config={"api_key": "org-key", "access_token": "user-tok"},
+        )
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"Authorization": "Bearer {{KEY}}"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["Authorization"] == "Bearer org-key"
+
+    def test_template_only_substitutes_placeholder_not_full_value(self):
+        """Only the ``{{KEY}}`` marker is replaced; surrounding text is
+        preserved (e.g. a custom prefix or suffix)."""
+        from unittest.mock import patch
+
+        pt = _mcp_platform_tool(mcp_server_secret_headers="encrypted-blob")
+        agent_tool = _agent_tool(pt, sensitive_config={"api_key": "K"})
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.decrypt_data",
+            return_value={"X-Token": "Token {{KEY}} suffix"},
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["X-Token"] == "Token K suffix"
+
 
 class TestBuildMcpLivekitTools:
     """build_mcp_livekit_tools discovers, filters, and synthesizes LiveKit tools."""

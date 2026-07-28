@@ -145,6 +145,97 @@ export const handlers = [
     })
   }),
 
+  // MCP server endpoints
+  http.post(`${API_BASE_URL}/api/v1/tools/mcp/discover`, async ({ request }) => {
+    const body = (await request.json()) as { url: string; headers?: Record<string, string> }
+    // Simulate SSRF rejection for private/loopback URLs.
+    if (body.url.includes('127.0.0.1') || body.url.includes('localhost')) {
+      return HttpResponse.json({ detail: 'Blocked by SSRF guard' }, { status: 400 })
+    }
+    return HttpResponse.json({
+      tools: [
+        { name: 'add', description: 'Add two numbers', input_schema: null },
+        { name: 'multiply', description: 'Multiply two numbers', input_schema: null },
+      ],
+    })
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/tools/mcp/parse`, async ({ request }) => {
+    const body = (await request.json()) as { raw: string }
+    let parsed: { url?: string; headers?: Record<string, string>; command?: string }
+    let serverName = 'parsed-server'
+    try {
+      const outer = JSON.parse(body.raw)
+      // Accept {"mcpServers": {...}} or a bare server object.
+      const isBare = !outer.mcpServers
+      const serversMap =
+        outer.mcpServers && typeof outer.mcpServers === 'object'
+          ? outer.mcpServers
+          : { _bare: outer }
+      const firstKey = Object.keys(serversMap)[0]
+      if (!isBare && firstKey !== '_bare') serverName = firstKey
+      parsed = serversMap[firstKey] || {}
+    } catch {
+      return HttpResponse.json({ servers: [], errors: [{ name: '', message: 'Malformed JSON' }] })
+    }
+    if (parsed.command && !parsed.url) {
+      return HttpResponse.json({
+        servers: [],
+        errors: [{ name: '', message: 'stdio servers are not supported' }],
+      })
+    }
+    return HttpResponse.json({
+      servers: [{ name: serverName, url: parsed.url || '', headers: parsed.headers || {} }],
+      errors: [],
+    })
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/tools/platform`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, any>
+    return HttpResponse.json(
+      createMockPlatformTool({
+        id: 'new-mcp-tool',
+        name: body.name || 'new_mcp_server',
+        tool_source: 'mcp',
+        mcp_server_url: body.mcp_server_url || null,
+        mcp_server_name: body.mcp_server_name || null,
+        organization_id: body.organization_id ?? null,
+        is_published: body.is_published ?? false,
+        mcp_secret_headers_configured: !!body.mcp_secret_headers_input,
+      }),
+    )
+  }),
+
+  // MCP publish lifecycle (RFC §6.6) — platform-admin only on the backend.
+  http.post(`${API_BASE_URL}/api/v1/tools/platform/:toolId/publish`, ({ params }) => {
+    return HttpResponse.json(
+      createMockPlatformTool({ id: params.toolId as string, is_published: true }),
+    )
+  }),
+
+  http.post(`${API_BASE_URL}/api/v1/tools/platform/:toolId/unpublish`, ({ params }) => {
+    return HttpResponse.json(
+      createMockPlatformTool({ id: params.toolId as string, is_published: false }),
+    )
+  }),
+
+  http.put(`${API_BASE_URL}/api/v1/tools/platform/:toolId`, async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, any>
+    return HttpResponse.json(
+      createMockPlatformTool({
+        id: params.toolId as string,
+        name: body.name || 'updated_mcp_server',
+        mcp_server_url: body.mcp_server_url || null,
+        is_published: body.is_published ?? false,
+        mcp_secret_headers_configured: !!body.mcp_secret_headers_input,
+      }),
+    )
+  }),
+
+  http.delete(`${API_BASE_URL}/api/v1/tools/platform/:toolId`, () => {
+    return HttpResponse.json({ deleted: true })
+  }),
+
   // Organization endpoints
   http.get(`${API_BASE_URL}/api/v1/organizations`, () => {
     return HttpResponse.json({

@@ -11,8 +11,9 @@ from typing import List
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from opentelemetry import trace
+from pydantic import BaseModel, Field
 from src.auth.dependencies import assert_has_permission, assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -24,15 +25,43 @@ from shared.voice_agents.tool_models import (
     AgentToolResponse,
     PlatformTool,
     PlatformToolCreate,
+    ToolSource,
 )
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.oauth_provider_utils import (
     get_oauth_manager,
 )
+from shared.voice_agents.tools.mcp.client import McpClient
+from shared.voice_agents.tools.mcp.models import McpServerConfig
+from shared.voice_agents.tools.mcp.security import (
+    parse_mcp_servers_json,
+    validate_mcp_server_url,
+)
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 tool_router = APIRouter(prefix="/api/v1/tools", tags=["Tools"])
+
+
+# --- MCP configure-from-UI request models ---------------------------------
+# Lightweight payloads for the "Add MCP server" flow. Discover and parse are
+# in-memory (nothing persisted); create reuses PlatformToolCreate.
+class McpDiscoverRequest(BaseModel):
+    """In-memory discover request: test a remote MCP server's tools.
+
+    Attributes:
+        url: Streamable HTTP endpoint of the MCP server to probe.
+        headers: Static headers (e.g. an API key) to send on the probe.
+    """
+
+    url: str
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+class McpParseRequest(BaseModel):
+    """Raw pasted ``mcpServers`` JSON config to parse into server configs."""
+
+    raw: str
 
 
 async def _assert_agent_tool_admin(
@@ -86,7 +115,7 @@ async def _assert_agent_tool_admin(
     return agent_tool
 
 
-# Platform Tools (Admin only for write operations)
+# Platform Tools (platform-admin only for authoring/publish; org admins attach)
 @tool_router.post(
     "/platform", response_model=PlatformTool, status_code=status.HTTP_201_CREATED
 )
@@ -95,11 +124,43 @@ async def create_platform_tool(
     tool_data: PlatformToolCreate,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Create a new platform tool (Platform Admin only)."""
+    """Create or update a platform tool (platform-admin authoring).
+
+    Publish lifecycle (RFC §6.6): custom MCP servers are authored by
+    **platform admins** only. A server is created as a **draft**
+    (``is_published=False``) unless the payload sets ``is_published=True``
+    (publish-on-create). Once published it appears in the global catalog for
+    org admins to attach. The org-scoped custom tier is retired — MCP rows are
+    always global (``organization_id`` forced off in the service); the
+    ``organization_id`` payload field is ignored for MCP rows.
+
+    For ``tool_source == 'mcp'`` rows the MCP server URL is validated against
+    the SSRF guard (``validate_mcp_server_url``); stdio servers are rejected
+    upstream by the parser and never reach here.
+
+    Org admins attach published servers to their agents via ``POST /tools/agent``
+    (gated on ``agent:update``); they do NOT author. Discover/parse are also
+    platform-admin-only (probing a remote server is an authoring action).
+    """
     current_user_id, user_profile = user_data
+
+    # Authoring is platform-admin only.
     assert_platform_role(
-        user_profile, "platform_admin", error_message="Admin only"
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can author MCP servers",
     )
+
+    # Validate the MCP server URL for MCP-sourced rows (SSRF + scheme guard).
+    if tool_data.tool_source is ToolSource.MCP:
+        if not tool_data.mcp_server_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MCP server URL is required for MCP tools",
+            )
+        ok, reason = validate_mcp_server_url(tool_data.mcp_server_url)
+        if not ok:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
     tool, error = await tool_service.upsert_platform_tool(tool_data)
     if error:
@@ -107,14 +168,250 @@ async def create_platform_tool(
     return tool
 
 
+@tool_router.post(
+    "/platform/{tool_id}/publish", response_model=PlatformTool
+)
+@tracer.start_as_current_span("tool.routes.publish_platform_tool")
+async def publish_platform_tool(
+    tool_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Publish a platform tool to the global catalog (platform-admin only).
+
+    Flips ``is_published=True``; the server becomes visible to all org users
+    in the tool panel. Existing attachments are unaffected.
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can publish MCP servers",
+    )
+    tool, error = await tool_service.publish_platform_tool(tool_id, True)
+    if error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if error == "Platform tool not found"
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=error,
+        )
+    return tool
+
+
+@tool_router.post(
+    "/platform/{tool_id}/unpublish", response_model=PlatformTool
+)
+@tracer.start_as_current_span("tool.routes.unpublish_platform_tool")
+async def unpublish_platform_tool(
+    tool_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Unpublish a platform tool — revert to draft (platform-admin only).
+
+    Hides the server from new attaches (org users no longer see it). Existing
+    ``agent_tools`` attachments keep working (the worker reads them by join).
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can unpublish MCP servers",
+    )
+    tool, error = await tool_service.publish_platform_tool(tool_id, False)
+    if error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if error == "Platform tool not found"
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=error,
+        )
+    return tool
+
+
+@tool_router.put("/platform/{tool_id}", response_model=PlatformTool)
+@tracer.start_as_current_span("tool.routes.update_platform_tool")
+async def update_platform_tool(
+    tool_id: UUID,
+    tool_data: PlatformToolCreate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Edit a platform tool by id (platform-admin only).
+
+    Reconfigure an authored server (URL, headers, auth mode). Mirrors create's
+    encryption + org-forcing but updates by ``id`` instead of upserting by name.
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can edit MCP servers",
+    )
+    if tool_data.tool_source is ToolSource.MCP:
+        if not tool_data.mcp_server_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MCP server URL is required for MCP tools",
+            )
+        ok, reason = validate_mcp_server_url(tool_data.mcp_server_url)
+        if not ok:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+    tool, error = await tool_service.update_platform_tool(tool_id, tool_data)
+    if error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if error == "Platform tool not found"
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=error,
+        )
+    return tool
+
+
+@tool_router.delete("/platform/{tool_id}")
+@tracer.start_as_current_span("tool.routes.delete_platform_tool")
+async def delete_platform_tool(
+    tool_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Delete a platform tool from the catalog (platform-admin only).
+
+    Prefer :func:`unpublish_platform_tool` for a reversible hide-from-catalog;
+    delete is for permanent cleanup.
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can delete MCP servers",
+    )
+    deleted, error = await tool_service.delete_platform_tool(tool_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Platform tool not found"
+        )
+    return {"id": str(tool_id), "deleted": True}
+
+
+@tool_router.post("/mcp/discover")
+@tracer.start_as_current_span("tool.routes.discover_mcp_tools")
+async def discover_mcp_tools(
+    request: McpDiscoverRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Discover the tools a remote MCP server exposes (in-memory probe).
+
+    Validates the URL (SSRF guard), opens a one-shot :class:`McpClient`, calls
+    ``list_tools()``, and returns the sanitized tool definitions so the UI can
+    preview what the agent will get before saving. Nothing is persisted.
+
+    Gate: platform admin only (probing a remote server is an authoring action,
+    RFC §6.6). Org admins attach already-published servers; they do not author.
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can discover MCP tools",
+    )
+
+    ok, reason = validate_mcp_server_url(request.url)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+
+    config = McpServerConfig(url=request.url, headers=request.headers or {})
+    client = McpClient(config)
+    try:
+        tool_defs = await client.list_tools()
+    except Exception as e:
+        logger.warning(f"MCP discover failed for {request.url}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach MCP server: {e}",
+        )
+    finally:
+        await client.close()
+
+    return {
+        "tools": [
+            {
+                "name": td.name,
+                "description": td.description,
+                "input_schema": td.input_schema,
+            }
+            for td in tool_defs
+        ]
+    }
+
+
+@tool_router.post("/mcp/parse")
+@tracer.start_as_current_span("tool.routes.parse_mcp_servers")
+async def parse_mcp_servers(
+    request: McpParseRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Parse a pasted ``mcpServers`` JSON config into server configs + errors.
+
+    The authoritative parser lives in
+    :func:`shared.voice_agents.tools.mcp.security.parse_mcp_servers_json` so the
+    frontend has a single source of truth (no duplicated TS parser). Returns
+    valid HTTP server configs and per-entry errors (e.g. rejected stdio
+    entries) for the UI to render.
+
+    Gate: platform admin only (authoring action, RFC §6.6).
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can parse MCP config",
+    )
+
+    result = parse_mcp_servers_json(request.raw)
+    return {
+        "servers": [s.model_dump() for s in result.servers],
+        "errors": [e.model_dump() for e in result.errors],
+    }
+
+
 @tool_router.get("/platform", response_model=List[PlatformTool])
 @tracer.start_as_current_span("tool.routes.get_platform_tools")
 async def get_platform_tools(
     only_active: bool = True,
+    include_drafts: bool = Query(default=False),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Get all platform tools."""
-    tools, error = await tool_service.get_platform_tools(only_active)
+    """Get platform tools visible to the caller (publish lifecycle, RFC §6.6).
+
+    Org users see only **published** rows (``is_published=True`` + ``is_active``)
+    — the global catalog they can attach to their agents. Platform admins may
+    pass ``include_drafts=true`` to also see drafts (the authoring/management
+    view). A non-platform-admin passing ``include_drafts=true`` is rejected
+    (403) — drafts are platform-admin-only.
+
+    The org-scoped custom tier is retired; all published servers are global, so
+    there is no per-org filter. The worker reads attached tools by join (not
+    via this listing), so it is unaffected.
+    """
+    current_user_id, user_profile = user_data
+
+    if include_drafts:
+        assert_platform_role(
+            user_profile,
+            "platform_admin",
+            error_message="Only platform admins can view draft MCP servers",
+        )
+
+    tools, error = await tool_service.get_platform_tools(
+        only_active,
+        include_drafts=include_drafts,
+    )
     if error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
@@ -217,7 +514,7 @@ async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
           also auto-refreshed with no further wiring.
     """
     # 1. DB-first: platform_tools row by name.
-    tools, _ = await tool_service.get_platform_tools(only_active=False)
+    tools, _ = await tool_service.get_platform_tools(only_active=False, include_drafts=True)
     row = next((t for t in tools if t.name == tool_name), None)
     if row is not None and row.auth_config:
         cfg = row.auth_config
@@ -413,7 +710,7 @@ async def oauth_callback(code: str, state: str):
         )  # Default 1 hour
 
     # 6. Get tool_id from DB
-    tools, _ = await tool_service.get_platform_tools(only_active=False)
+    tools, _ = await tool_service.get_platform_tools(only_active=False, include_drafts=True)
     tool_id = next((t.id for t in tools if t.name == tool_name), None)
 
     if not tool_id:
