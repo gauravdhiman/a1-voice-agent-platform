@@ -10,6 +10,7 @@ import {
   Loader2,
   XCircle,
   Server,
+  EyeOff,
 } from "lucide-react";
 import { AuthStatus, ConnectionStatus } from "@/types/agent";
 import { useLiveTime, formatTimeUntilExpiry } from "@/hooks/use-live-time";
@@ -32,6 +33,15 @@ export interface ToolCardProps {
   onClick: () => void;
   disabled?: boolean;
   className?: string;
+  /**
+   * True when this tool is connected to the agent but no longer published in
+   * the platform catalog (`platform_tools.is_published = false`). The worker
+   * still loads it for the agent (it joins `agent_tools`, not `is_published`),
+   * so the agent keeps the tool at runtime — this flag surfaces that state in
+   * the UI so the org admin knows the tool is mapped but unavailable to new
+   * agents. Renders an amber "Unpublished" pill + an inline note. RFC §6.6.
+   */
+  isUnpublished?: boolean;
 }
 
 export function ToolCard({
@@ -44,6 +54,7 @@ export function ToolCard({
   onClick,
   disabled = false,
   className,
+  isUnpublished = false,
 }: ToolCardProps) {
   const currentTime = useLiveTime();
 
@@ -162,6 +173,15 @@ export function ToolCard({
                   MCP
                 </Badge>
               )}
+              {isUnpublished && (
+                <Badge
+                  variant="outline"
+                  className="h-4 text-[9px] px-1 gap-0.5 shrink-0 border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:bg-amber-950/40"
+                >
+                  <EyeOff className="h-2.5 w-2.5" />
+                  Unpublished
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground line-clamp-2">
               {tool.description}
@@ -172,6 +192,12 @@ export function ToolCard({
                 title={tool.mcp_server_url}
               >
                 {tool.mcp_server_url}
+              </p>
+            )}
+            {isUnpublished && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-1">
+                <EyeOff className="h-3 w-3 shrink-0" />
+                No longer in the catalog — still mapped to this agent.
               </p>
             )}
           </div>

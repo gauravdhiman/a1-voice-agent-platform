@@ -24,6 +24,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  EyeOff,
 } from "lucide-react";
 import { AuthStatus, PlatformTool, AgentTool } from "@/types/agent";
 import { DeleteButton } from "@/components/ui/delete-button";
@@ -233,6 +234,20 @@ export function ToolConfigDrawer({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+          {tool.is_published === false && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+              <EyeOff className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                <p className="font-medium">Unpublished — still mapped to this agent</p>
+                <p>
+                  This tool was unpublished from the platform catalog, so new
+                  agents can no longer add it. This agent keeps using it until
+                  you disconnect it here.
+                </p>
+              </div>
+            </div>
+          )}
+
           {isOAuth && (
             <div className={cn(
               "flex items-center justify-between gap-4 p-4 rounded-lg border",

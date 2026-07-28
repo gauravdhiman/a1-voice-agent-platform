@@ -19,11 +19,12 @@ from livekit.agents import ToolError
 
 from shared.voice_agents.tools.mcp.client import McpClient
 from shared.voice_agents.tools.mcp.livekit_adapter import (
+    _accepted_params,
     _build_raw_schema,
     _make_mcp_handler,
     mcp_tool_to_livekit_tool,
 )
-from shared.voice_agents.tools.mcp.models import McpToolDef
+from shared.voice_agents.tools.mcp.models import McpToolDef, McpToolResult
 
 
 # A representative ``add`` tool definition, mirroring what the reference
@@ -233,3 +234,121 @@ class TestMcpToolToLiveKitTool:
             result = await handler({"a": 7, "b": 8})
 
         assert result.strip() == "15"
+
+
+class _FakeMcpClient:
+    """Stand-in :class:`McpClient` returning a canned ``call_tool`` result.
+
+    Lets us assert handler error-shaping with no network/real-server
+    dependency: the handler only needs ``await client.call_tool(name, args)``
+    to return a :class:`McpToolResult`.
+    """
+
+    def __init__(self, result: McpToolResult) -> None:
+        self._result = result
+        self.last_name: str | None = None
+        self.last_args: dict | None = None
+
+    async def call_tool(self, name: str, arguments: dict | None) -> McpToolResult:
+        self.last_name = name
+        self.last_args = arguments
+        return self._result
+
+
+class TestAcceptedParams:
+    """``_accepted_params`` extracts the tool's parameter names from inputSchema.
+
+    These names are threaded into the handler so a server-reported argument
+    error can name what the tool DOES accept, letting the model self-correct.
+    """
+
+    def test_lists_properties_keys(self):
+        schema = {"type": "object", "properties": {"repoName": {}, "question": {}}, "required": ["repoName"]}
+        assert _accepted_params(schema) == ["repoName", "question"]
+
+    def test_empty_when_no_properties(self):
+        assert _accepted_params({"type": "object"}) == []
+        assert _accepted_params({}) == []
+        assert _accepted_params(None) == []
+
+    def test_ignores_non_dict_properties(self):
+        # A malformed schema where ``properties`` is not a dict yields [].
+        assert _accepted_params({"properties": ["a", "b"]}) == []
+
+
+class TestHandlerActionableError:
+    """On a server-reported argument error the ToolError must name the tool's
+    accepted parameters so the model can self-correct on retry.
+
+    Real-world failure (DeepWiki, ``https://mcp.deepwiki.com/mcp``): the model
+    called ``read_wiki_contents`` with ``{repoName, question}``, but the tool
+    only accepts ``repoName``. DeepWiki's server-side pydantic model
+    (``extra='forbid'``) rejected ``question`` with a cryptic
+    ``unexpected_keyword_argument`` string. Without an accepted-args hint the
+    model gave up and reported the error to the user instead of retrying with
+    the correct tool (``ask_question``) / arguments. The accepted-params suffix
+    gives the model what it needs to recover.
+    """
+
+    async def test_error_message_lists_accepted_params(self):
+        result = McpToolResult(
+            content=[
+                {
+                    "type": "text",
+                    "text": "1 validation error for call[read_wiki_contents]\nunexpected_keyword_argument",
+                }
+            ],
+            is_error=True,
+        )
+        handler = _make_mcp_handler(
+            _FakeMcpClient(result), "read_wiki_contents", accepted_params=["repoName"]
+        )
+        with pytest.raises(ToolError) as exc:
+            await handler({"repoName": "AGNO/AGNO", "question": "how do teams work?"})
+        msg = str(exc.value)
+        # The raw server error is preserved.
+        assert "unexpected_keyword_argument" in msg
+        # The accepted-args hint is appended so the model can self-correct.
+        assert "repoName" in msg
+        assert "accepted arguments" in msg
+
+    async def test_no_accepted_params_keeps_legacy_message(self):
+        # accepted_params=None (the default for call sites that don't pass it)
+        # preserves the legacy behaviour: surface the raw server error with no
+        # augmentation, so existing call sites are unchanged.
+        result = McpToolResult(content=[{"type": "text", "text": "boom"}], is_error=True)
+        handler = _make_mcp_handler(_FakeMcpClient(result), "add")
+        with pytest.raises(ToolError) as exc:
+            await handler({"a": 1})
+        msg = str(exc.value)
+        assert "boom" in msg
+        assert "accepted arguments" not in msg
+
+    async def test_error_with_no_server_text_still_names_accepted_params(self):
+        # Some servers return is_error with no text payload; the fallback
+        # message must still carry the accepted-args hint.
+        result = McpToolResult(content=[], is_error=True)
+        handler = _make_mcp_handler(
+            _FakeMcpClient(result), "read_wiki_contents", accepted_params=["repoName"]
+        )
+        with pytest.raises(ToolError) as exc:
+            await handler({"repoName": "x", "question": "y"})
+        msg = str(exc.value)
+        assert "read_wiki_contents" in msg
+        assert "repoName" in msg
+
+    async def test_tool_threads_accepted_params_from_schema(self, mcp_server_config):
+        """``mcp_tool_to_livekit_tool`` extracts accepted params from the tool's
+        schema and wires them into the handler — so a live server error surfaces
+        them end-to-end (no caller has to pass ``accepted_params`` manually).
+        """
+        async with McpClient(mcp_server_config) as client:
+            tool = mcp_tool_to_livekit_tool(client, _add_tool_def())
+            handler = tool.__wrapped__
+            with pytest.raises(ToolError) as exc:
+                await handler({"a": "not-a-number", "b": 1})
+        msg = str(exc.value)
+        assert "accepted arguments" in msg
+        # The ``add`` tool's two params are surfaced.
+        assert "a" in msg
+        assert "b" in msg

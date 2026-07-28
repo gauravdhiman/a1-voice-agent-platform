@@ -80,7 +80,7 @@ sign-off.
 | 3a — Worker dispatch branch | ✅ Additive MCP branch in `worker.py` (`_integrate_mcp_agent_tool`), `mcp/dispatch.py` (`mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`); legacy `BaseTool`/`LiveKitToolRegistry` path unchanged; fail-soft (a broken MCP server never blocks other tools). **MCP client lifecycle (fixed 2026-07-16):** the entrypoint returns right after `agent_session.start()` while the session runs on, so clients are handed to the job lifecycle via `ctx.add_shutdown_callback` (`_hand_off_mcp_clients_to_session`) and closed on job shutdown — NOT in the entrypoint `finally`, which now only closes clients when setup failed before handoff (`_cleanup_mcp_clients`). (Earlier the `finally` closed them at return time, so every MCP tool failed with `RuntimeError: McpClient is closed` at call time.) 13 tests green (dispatch + worker branch incl. fail-soft + lifecycle). |
 | 3b — First working MCP tool (Google Calendar, in-memory) | ✅ In-memory Google Calendar MCP reference server at `shared/voice_agents/tools/mcp/reference_servers/google_calendar.py` (`list_events` / `create_event` / `get_event` / `check_availability`); full-pipeline e2e (discover → synthesize → invoke) green. Proves the platform plumbing with no third-party OAuth. |
 | 3c — Real Google Calendar MCP (remote server + DB-driven OAuth) | ✅ `Google_calendar_mcp` row repointed at Google's official remote server `https://calendarmcp.googleapis.com/mcp/v1` with `auth_type=oauth2`, `requires_auth=true`, and a real Google OAuth `auth_config` (4 scopes). `start_oauth` / `oauth_callback` in `tool_routes.py` made **DB-driven** (`_resolve_tool_auth_config`: DB-first, legacy registry fallback) so MCP-sourced tools reuse the existing OAuth endpoints; `TokenRefreshService` already reads the same `auth_config` column, so MCP tokens auto-refresh with no extra wiring. 5 new backend tests (`test_tool_oauth_mcp.py`) + 14 existing tool_routes tests green (19 total); 305 green across voice_agents + token-refresh + tool-service suites. Frontend `PlatformTool` type extended with `tool_source` / `mcp_server_url` / `mcp_server_name` / `mcp_server_headers` (3 vitest tests). End-to-end against the real Google API pending the one-time GCP client config (§6.4). |
-| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-07-26 to the publish-lifecycle model:** custom MCP authoring is now **platform-admin-only** (author → test → publish to global catalog); org admins **attach** published servers with their **own** API key (`{{KEY}}` template, org key overrides platform test key at runtime). The org-scoped custom tier is **retired**. Migration `20260726000001` adds `is_published` (backfills existing rows TRUE); `20260725000001` (encrypted secret headers) already applied. SSRF guard + `mcpServers` parser unchanged; new publish/unpublish/edit/delete endpoints + platform-admin gating on discover/parse/create; dispatch substitutes `{{KEY}}` (no platform fallback). Frontend "Manage MCP Servers" dialog (author + manage views, no catalog tab), button gated on `isPlatformAdmin`. 62 backend route/service + 18 worker dispatch + 67 frontend vitest green. |
+| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-07-26 to the publish-lifecycle model:** custom MCP authoring is now **platform-admin-only** (author → test → publish to global catalog); org admins **attach** published servers with their **own** API key (`{{KEY}}` template, org key overrides platform test key at runtime). The org-scoped custom tier is **retired**. Migration `20260726000001` adds `is_published` (backfills existing rows TRUE); `20260725000001` (encrypted secret headers) already applied. SSRF guard + `mcpServers` parser unchanged; new publish/unpublish/edit/delete endpoints + platform-admin gating on discover/parse/create; dispatch substitutes `{{KEY}}` (no platform fallback). Frontend `/platform/tools` nav page (parallel to `/platform/skills`) rendering an inline `<PlatformToolsManager>` (Configure MCP server + Manage existing tools views, no catalog tab); platform-admin-gated. 62 backend route/service + 18 worker dispatch + 67 frontend vitest green. |
 | 4–5 | Not started (gated per §7). |
 
 **What shipped (no legacy code touched):**
@@ -506,7 +506,11 @@ Calendar, Gmail, CalCom, Sheets, etc.) is unaffected.
 - `is_published=true` + `is_active=true` → **published**: a normal tool card
   in every org user's agent tool panel, attachable by org admins.
 - **Unpublish** hides a server from new attaches; existing `agent_tools`
-  attachments keep working (documented). **Delete** removes it.
+  attachments keep working (documented) — the worker loads an agent's tools by
+  joining `agent_tools` → `platform_tools` with **no `is_published` filter**, so
+  unpublish is safe and reversible. The Manage view surfaces the usage count
+  (an info toast) so the admin learns unpublish ≠ "remove from agents".
+- **Delete** is a guarded, audited hard-delete — see §6.6 *Delete guardrails*.
 
 `tool_service.get_platform_tools(only_active, *, include_drafts=False)`:
 returns `is_published=true AND is_active=true` by default (the org-user
@@ -550,20 +554,169 @@ Per-user OAuth (Google Calendar) is unchanged for native/seeded servers.
 
 #### UI
 
-The "Manage MCP Servers" button (was "Add MCP server") is visible only to
-platform admins (`isPlatformAdmin` from `useUserPermissions()`). The dialog is
-**authoring + management only** — the "From catalog" tab is **dropped**
-(published servers already render as normal `ToolCard`s in the main tool
-panel for everyone, with the MCP badge; org admins attach via the existing
-card connect flow and supply their key via the existing drawer). The dialog
-has two views:
+The platform-admin catalog surface lives on a dedicated **`/platform/tools`**
+page (parallel to `/platform/skills`), registered as a "Platform Tools" item
+in the `platform_admin` section of `nav-config.ts` (`requiredPermission:
+"platform:admin"`). The page renders an inline `<PlatformToolsManager>` —
+**authoring + management only**, no "From catalog" tab (published servers
+already render as normal `ToolCard`s in the main tool panel for everyone,
+with the MCP badge; org admins attach via the existing card connect flow and
+supply their key via the existing drawer).
 
-- **Author**: auth-mode select (No auth / Static API key), Name, URL, public
-  Headers (JSON), `{{KEY}}` secret-header template + transient Test API key
-  (api-key mode only), `mcpServers` JSON paste + parse, "Test & discover",
-  "Save draft" (`is_published=false`) / "Publish" (`is_published=true`).
-- **Manage**: drafts + published list with Draft/Published badges and
+This surface was previously a Sheet dialog opened by a "Manage MCP servers"
+button on every agent's Tools tab. That conflated a global, platform-admin
+concern (catalog authoring/publishing) with a per-agent, org-admin concern
+(attaching a published tool). It now has its own nav page; the agent Tools
+tab keeps only the attachment UI (published-tool cards + connect drawer),
+unchanged for org/regular admins. The page H1 is "Platform Tools" because the
+**Manage existing tools** view lists *every* platform tool (legacy
+code-backed + authored MCP), not just MCP servers. The manager has two views,
+toggled inline (no Sheet/drawer). **Manage existing tools is the first toggle
+and the default active view** (`initialView` defaults to `manage`) — the page
+lands the admin on the tool list; authoring a new server is opt-in via the
+second toggle:
+
+- **Manage existing tools** (internal state `manage`, default): drafts +
+  published list (native + MCP) with Draft/Published badges and
   publish/unpublish/delete actions.
+- **Configure MCP server** (internal state `author`): auth-mode select
+  (No auth / Static API key), Name, URL, public Headers (JSON), `{{KEY}}`
+  secret-header template + transient Test API key (api-key mode only),
+  `mcpServers` JSON paste + parse, "Test & discover", "Save draft"
+  (`is_published=false`) / "Publish" (`is_published=true`). On a successful
+  save the inline form resets so the admin can author another (the dialog
+  predecessor closed itself on save; an inline panel has no dialog to close).
+  The "Save draft" / "Publish" buttons are `w-full sm:w-auto` so they sit
+  side-by-side at `sm+` (two `w-full` buttons in a `sm:flex-row` row overflow
+  horizontally — they used to render outside the panel).
+  - **Mandatory fields are marked**: Name and Server URL (the save guard) carry
+    a red `*`; optional fields (Public headers, Description) do not.
+  - **Publish is gated on a successful "Test & discover"**: the Publish button
+    stays disabled (`canPublish = discoveredTools.length > 0`) until the admin
+    runs "Test connection & discover tools" and at least one tool is found,
+    with an inline hint "Run Test connection & discover tools before
+    publishing so the tool list is captured." Publishing without discover left
+    the agent tool-config drawer empty (`tool_functions_schema` null → no tool
+    list on the published card). Save draft remains allowed without discover
+    (drafts aren't shown to org users, so an empty tool list is fine for a
+    work-in-progress draft). A defense-in-depth guard in `handleSave` rejects a
+    publish with zero discovered tools even if the button is bypassed.
+
+#### Delete guardrails (implemented 2026-07-28)
+
+A platform admin can strip a tool from *other orgs'* agents with a delete, so the
+delete action is gated behind three layers (defense-in-depth — the backend
+enforces the guard even if the frontend is bypassed):
+
+1. **Type-to-confirm for every delete.** The Manage view's MCP delete button opens
+   the shared `DeleteConfirmationDialog` (keyword `"Delete"`, exact match) — the
+   same pattern used for agent / org deletes. This applies **even when the tool is
+   not in use**, so an accidental click on an unused server still requires
+   deliberate confirmation. Implemented in
+   `frontend/src/components/tools/mcp-tool-delete-dialog.tsx`, a thin wrapper that
+   pre-fetches usage (`usePlatformToolUsage`) and turns it into the dialog's
+   `warnings` list.
+2. **In-use block + audited force-override.** The dialog pre-fetches usage; when
+   the tool is in use the shared dialog's `warnings` carry the summary lines
+   (`Every agent listed below loses this tool on their next call` + `This action
+   cannot be undone`) and an `extraContent` slot renders the affected agents as
+   **links** to each agent's Tools tab (`/agents/{agentId}?tab=tools` — the agent
+   page reads `?tab=tools` on mount) so the platform admin can navigate directly
+   to review an agent before force-deleting. Confirm sends `force = count > 0`.
+   The backend (`tool_service.delete_platform_tool`) refuses an in-use delete
+   with `in_use` (route → **409** with `{error, count, agents[]}`) unless
+   `force=true`, in which case it explicitly deletes the `agent_tools` rows first
+   (so the detached agent count/ids are logged) then the `platform_tools` row.
+   The force path is audited via a structured `logger.info` (actor, tool id/name,
+   detached agent count + ids) + OpenTelemetry span attributes. There is **no
+   `audit_logs` table today** — a durable queryable audit trail is a follow-up.
+3. **Legacy (code-backed) tools are not hard-deletable.** The backend refuses with
+   **400** (`legacy_tools_cannot_be_deleted`) and steers the admin to unpublish;
+   the Manage view renders **no Delete button** for `tool_source === "legacy"`.
+   Hard-deleting a legacy row is partly futile — `LiveKitToolRegistry.sync_with_db`
+   re-seeds it (upsert by name) on every worker startup.
+
+`GET /api/v1/tools/platform/{id}/usage` (platform-admin) returns the agents using a
+tool; it backs both the delete-confirm warnings and the unpublish info toast.
+
+> **Unpublish** is intentionally **not** gated — it is safe and reversible
+> (existing attachments keep the tool); the UI only surfaces the usage count
+> informationally so the admin understands the difference from delete.
+
+#### Unpublished-but-connected tools surface in the agent Tools tab (implemented 2026-07-28)
+
+Unpublish hides a tool from **new** attaches (the published-only catalog) but
+does **not** strip it from agents already using it — the worker loads an agent's
+tools by joining `agent_tools` → `platform_tools` with **no `is_published`
+filter**, so the agent keeps the tool at runtime. Before this change the Tools
+tab UI hid that reality: the card vanished from the grid on unpublish even
+though the agent still used it, leaving the org admin with no visibility into
+the still-mapped tool.
+
+The Tools tab now merges the published catalog with the agent's
+connected-but-unpublished tools (`buildAgentToolsDisplay` in
+`frontend/src/components/tools/tools-display.ts`, consumed by the agent detail
+page). Those tools render **inline in the existing grid** (no separate section;
+the All / Connected / Not connected pills are unchanged) with a distinct visual
+treatment so they read as different from normal connected cards:
+
+- An amber **"Unpublished"** pill next to the tool name (mirroring the MCP pill
+  on `ToolCard`), plus an inline amber note — *"No longer in the catalog — still
+  mapped to this agent."*
+- The `tool-config-drawer` shows an amber **"Unpublished — still mapped to this
+  agent"** banner at the top while editing/disconnecting, reinforcing that the
+  tool is mapped but no longer attachable by new agents.
+
+Rules:
+
+- **Connected + unpublished** → rendered inline, flagged `isUnpublished`
+  (the card pill + note, the drawer banner).
+- **Not mapped + unpublished** → never in `agent_tools`, so never rendered
+  (unchanged behavior — the catalog already hides it).
+- Editing/disconnecting still works on the `agent_tool` row regardless of
+  publish state; the drawer's Disconnect is the way to remove an unpublished
+  tool from an agent.
+
+No backend change: `get_agent_tools` already joins `platform_tools(*)` and sets
+`agent_tool.tool` (including `is_published`), so `useAgentTools` carries
+`agentTool.tool.is_published` — the merge is purely frontend.
+
+#### Tool list for the agent drawer + runtime error shaping (implemented 2026-07-28)
+
+Two follow-ups to the publish lifecycle that close the gap between custom MCP
+tool cards and native tool cards:
+
+- **Persist the discovered tool list at author time.** The Author view's "Test
+  & discover" button probes the server and renders the tool list in-memory;
+  `buildSavePayload` now maps those discovered tools into
+  `platform_tools.tool_functions_schema = {functions: [{name, description,
+  parameters: input_schema}]}` on save/publish. The agent `tool-config-drawer`
+  reads `tool.tool_functions_schema.functions` to render each tool with an
+  enable/disable `Switch` (parity with native tool cards). The worker still
+  re-discovers tools **live** via `tools/list` at call time and filters by
+  `agent_tools.unselected_functions` — the stored schema is display-only, but
+  must be present for the drawer to show anything. Omitted when no tools were
+  discovered (the drawer then shows no list, as before).
+- **Publish-time self-heal.** `publish_platform_tool` best-effort backfills
+  `tool_functions_schema` via a live `tools/list` when an MCP row is published
+  with a null schema (rows authored before the authoring-dialog fix, or
+  published without discovering). `{{KEY}}`-templated secret headers are
+  **dropped** at backfill time (no org API key exists in the platform-admin
+  publish context — same rule as runtime dispatch). Discovery failure is
+  **non-fatal**: the row keeps its existing (null) schema and the publish
+  still succeeds. Unpublish never triggers discovery. This is the path that
+  backfills existing catalog rows (e.g. DeepWiki) on next publish.
+- **Actionable runtime errors.** `mcp_tool_to_livekit_tool` threads the tool's
+  accepted parameter names (from `inputSchema.properties`) into the LiveKit
+  handler. When the MCP server rejects a call (`is_error`), the `ToolError`
+  text is suffixed with `— accepted arguments: <names>` so the model can
+  self-correct on retry (drop an unsupported arg, or switch to a different
+  tool) instead of surfacing a cryptic server-side validation string. Real-
+  world motivation: the model called DeepWiki's `read_wiki_contents` (which
+  accepts only `repoName`) with an extra `question`; DeepWiki's server-side
+  pydantic model (`extra='forbid'`) rejected it with a bare
+  `unexpected_keyword_argument`, and the model gave up. The accepted-args hint
+  lets it recover.
 
 #### Accepted `mcpServers` JSON format (unchanged)
 
@@ -630,7 +783,17 @@ pasted, the first is used (v1).
   only; flips `is_published` (404 if not found).
 - `PUT /api/v1/tools/platform/{id}` (edit) — platform-admin only; validates
   MCP URL.
-- `DELETE /api/v1/tools/platform/{id}` — platform-admin only.
+- `DELETE /api/v1/tools/platform/{id}` — platform-admin only. Guarded:
+  `?force=true` cascade-detaches `agent_tools` then removes the row; without
+  `force`, an MCP tool referenced by any agent returns **409 `in_use`** with
+  `{error, count, agents[]}`; a legacy (code-backed) tool is refused with
+  **400** (steer to unpublish — it is re-seeded by the worker on startup, so a
+  hard-delete is partly futile). The force path is audited (structured log +
+  OpenTelemetry span attrs: `tool.force_delete`, `tool.detached_agent_count`).
+- `GET /api/v1/tools/platform/{id}/usage` — platform-admin only; returns
+  `{count, agents: [{agent_id, agent_name, organization_id}]}` — the agents
+  currently using a tool. Powers the delete-confirm dialog warnings and the
+  unpublish info banner.
 - `GET /api/v1/tools/platform` — `include_drafts` query; published-only for
   org users, drafts+published for platform admins with `include_drafts=true`.
 

@@ -899,7 +899,9 @@ class TestPlatformToolPublishLifecycle:
                 tool_id=TEST_TOOL_ID, user_data=(TEST_USER_ID, profile)
             )
 
-            mock_ts.delete_platform_tool.assert_awaited_once_with(TEST_TOOL_ID)
+            mock_ts.delete_platform_tool.assert_awaited_once_with(
+                TEST_TOOL_ID, force=False
+            )
             assert result["deleted"] is True
 
     @pytest.mark.asyncio
@@ -1017,3 +1019,178 @@ class TestGetPlatformToolsVisibility:
                 )
             assert exc_info.value.status_code == 403
             mock_ts.get_platform_tools.assert_not_called()
+
+
+class TestPlatformToolDeleteGuardrails:
+    """Delete-guardrail + usage contract for platform tools (RFC §6.6).
+
+    Contract:
+      - GET /platform/{tool_id}/usage → 200 {count, agents} for platform_admin;
+        403 for anyone else.
+      - DELETE /platform/{tool_id} with an in-use MCP tool → 409 {error: in_use,
+        count, agents} (the admin must confirm + force).
+      - DELETE ?force=true on an in-use tool → 200 and an audit log entry
+        naming the detached agents.
+      - DELETE of a native (code-backed) tool → 400 (steer to unpublish).
+      - DELETE of a missing tool → 404.
+      - Non-platform-admin → 403 before any service call.
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_usage_returns_agents_for_platform_admin(self):
+        from src.voice_agents.tool_routes import get_platform_tool_usage
+
+        profile = _make_user_profile(is_platform_admin=True)
+        agents = [
+            {"agent_id": str(TEST_AGENT_ID), "agent_name": "Alex",
+             "organization_id": str(TEST_ORG_ID)},
+        ]
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tool_usage = AsyncMock(return_value=(agents, None))
+
+            result = await get_platform_tool_usage(
+                tool_id=TEST_TOOL_ID,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result == {"count": 1, "agents": agents}
+
+    @pytest.mark.asyncio
+    async def test_get_usage_forbidden_for_non_platform_admin(self):
+        from src.voice_agents.tool_routes import get_platform_tool_usage
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tool_usage = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await get_platform_tool_usage(
+                    tool_id=TEST_TOOL_ID,
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 403
+            mock_ts.get_platform_tool_usage.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_in_use_returns_409_with_agents(self):
+        from src.voice_agents.tool_routes import delete_platform_tool
+
+        profile = _make_user_profile(is_platform_admin=True)
+        agents = [
+            {"agent_id": str(TEST_AGENT_ID), "agent_name": "Alex",
+             "organization_id": str(TEST_ORG_ID)},
+        ]
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tool_usage = AsyncMock(return_value=(agents, None))
+            mock_ts.delete_platform_tool = AsyncMock(return_value=(None, "in_use"))
+
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_platform_tool(
+                    tool_id=TEST_TOOL_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 409
+            assert exc_info.value.detail["error"] == "in_use"
+            assert exc_info.value.detail["count"] == 1
+            assert exc_info.value.detail["agents"] == agents
+            # The tool row was NOT deleted.
+            mock_ts.delete_platform_tool.assert_awaited_once_with(
+                TEST_TOOL_ID, force=False
+            )
+
+    @pytest.mark.asyncio
+    async def test_delete_force_succeeds_and_audits(self, caplog):
+        import logging
+
+        from src.voice_agents.tool_routes import delete_platform_tool
+
+        profile = _make_user_profile(is_platform_admin=True)
+        agents = [
+            {"agent_id": str(TEST_AGENT_ID), "agent_name": "Alex",
+             "organization_id": str(TEST_ORG_ID)},
+        ]
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tool_usage = AsyncMock(return_value=(agents, None))
+            mock_ts.delete_platform_tool = AsyncMock(return_value=(True, None))
+
+            with caplog.at_level(logging.INFO, logger="src.voice_agents.tool_routes"):
+                result = await delete_platform_tool(
+                    tool_id=TEST_TOOL_ID,
+                    force=True,
+                    user_data=(TEST_USER_ID, profile),
+                )
+
+        assert result == {"id": str(TEST_TOOL_ID), "deleted": True}
+        # Usage was fetched up front so the audit can name the detached agents.
+        mock_ts.get_platform_tool_usage.assert_awaited_once()
+        mock_ts.delete_platform_tool.assert_awaited_once_with(
+            TEST_TOOL_ID, force=True
+        )
+        # An audit log entry recording the force-delete + detached agent.
+        audit = [r for r in caplog.records if "force" in r.getMessage().lower()]
+        assert audit, "expected a force-delete audit log entry"
+        assert any("Alex" in r.getMessage() or str(TEST_AGENT_ID) in r.getMessage()
+                   for r in audit)
+
+    @pytest.mark.asyncio
+    async def test_delete_legacy_tool_returns_400(self):
+        from src.voice_agents.tool_routes import delete_platform_tool
+
+        profile = _make_user_profile(is_platform_admin=True)
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tool_usage = AsyncMock()
+            mock_ts.delete_platform_tool = AsyncMock(
+                return_value=(None, "legacy_tools_cannot_be_deleted")
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_platform_tool(
+                    tool_id=TEST_TOOL_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 400
+            # No usage fetch is needed for the legacy refusal (not force, not in_use).
+            mock_ts.get_platform_tool_usage.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_unknown_tool_returns_404(self):
+        from src.voice_agents.tool_routes import delete_platform_tool
+
+        profile = _make_user_profile(is_platform_admin=True)
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tool_usage = AsyncMock()
+            mock_ts.delete_platform_tool = AsyncMock(
+                return_value=(None, "Platform tool not found")
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_platform_tool(
+                    tool_id=TEST_TOOL_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 404
+            mock_ts.get_platform_tool_usage.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_forbidden_for_non_platform_admin(self):
+        from src.voice_agents.tool_routes import delete_platform_tool
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.delete_platform_tool = AsyncMock()
+            mock_ts.get_platform_tool_usage = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_platform_tool(
+                    tool_id=TEST_TOOL_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 403
+            mock_ts.delete_platform_tool.assert_not_called()
+            mock_ts.get_platform_tool_usage.assert_not_called()

@@ -20,6 +20,8 @@ export const agentQueryKeys = {
   systemPrompt: (id: string) =>
     [...agentQueryKeys.all, id, "system-prompt"] as const,
   platformTools: () => ["tools", "platform"] as const,
+  platformToolUsage: (toolId: string) =>
+    ["tools", "platform", toolId, "usage"] as const,
   agentTools: (agentId: string) => ["tools", "agent", agentId] as const,
 };
 
@@ -501,6 +503,15 @@ export function useCreatePlatformTool() {
 // Mutation: Publish / unpublish a platform tool (platform-admin only, RFC §6.6).
 // `published` toggles the endpoint (publish vs unpublish). Invalidates the
 // platform tools list so the card's publish state refreshes immediately.
+//
+// Also invalidates every agent's `agent_tools` query: an unpublish flips
+// `is_published` on the joined `platform_tools` row, and the agent Tools tab
+// merges connected-but-unpublished tools from that response (see
+// `buildAgentToolsDisplay`). Without this invalidation an agent page open in
+// the background would keep the stale `is_published=true` and the
+// unpublished-but-connected card wouldn't surface until a manual reload.
+// The partial key `["tools", "agent"]` matches all per-agent agent-tools
+// queries regardless of agent id.
 export function usePublishPlatformTool() {
   const queryClient = useQueryClient();
 
@@ -510,6 +521,7 @@ export function usePublishPlatformTool() {
     onSuccess: (_data, { published }) => {
       toast.success(published ? "MCP server published" : "MCP server unpublished");
       queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+      queryClient.invalidateQueries({ queryKey: ["tools", "agent"] });
     },
     onError: () => {
       toast.error("Failed to update publish state");
@@ -537,18 +549,41 @@ export function useUpdatePlatformTool() {
 
 // Mutation: Delete a platform tool (platform-admin only, RFC §6.6). Invalidates
 // the platform tools list so the card disappears from the catalog.
+//
+// `force` is required to delete an MCP tool that is in use (the backend
+// returns 409 `in_use` otherwise). The delete-confirm dialog pre-fetches
+// usage via `usePlatformToolUsage` and passes `force = count > 0` after a
+// type-to-confirm, so the 409 path is a backend safety net against races.
 export function useDeletePlatformTool() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (toolId: string) => agentService.deletePlatformTool(toolId),
+    mutationFn: ({ toolId, force = false }: { toolId: string; force?: boolean }) =>
+      agentService.deletePlatformTool(toolId, force),
     onSuccess: () => {
       toast.success("MCP server deleted");
       queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+      // A force-delete cascade-detaches the tool from every using agent, so each
+      // agent's Tools tab must refetch to drop the card. Partial key matches all
+      // per-agent agent-tools queries.
+      queryClient.invalidateQueries({ queryKey: ["tools", "agent"] });
     },
     onError: () => {
       toast.error("Failed to delete MCP server");
     },
+  });
+}
+
+// Query: agents currently using a platform tool (platform-admin only, RFC §6.6).
+// Powers the delete-confirm dialog's "used by N agents" warning list and the
+// unpublish info banner. `enabled` lets the caller gate the fetch (e.g. only
+// when the delete dialog opens).
+export function usePlatformToolUsage(toolId: string, enabled = true) {
+  return useQuery({
+    queryKey: agentQueryKeys.platformToolUsage(toolId),
+    queryFn: () => agentService.getPlatformToolUsage(toolId),
+    enabled: !!toolId && enabled,
+    staleTime: 0, // always refetch when the dialog opens — usage can change fast
   });
 }
 

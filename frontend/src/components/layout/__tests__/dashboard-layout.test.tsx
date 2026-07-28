@@ -23,7 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Override the global next/navigation mock (in tests/setup.ts) to add the
 // usePathname hook used by the dashboard layout. The global mock only
 // exposes useRouter, useSearchParams, useParams; usePathname is needed
-// for the active-link highlight in the sidebar.
+// for the active-link highlight in the sidebar AND the breadcrumb header.
+// `mockUsePathname` is hoisted so the vi.mock factory (also hoisted) can
+// reference it; tests override the return value to exercise other routes.
+const mockUsePathname = vi.hoisted(() => vi.fn(() => "/dashboard"));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -31,7 +34,7 @@ vi.mock("next/navigation", () => ({
     prefetch: vi.fn(),
     back: vi.fn(),
   }),
-  usePathname: () => "/dashboard",
+  usePathname: () => mockUsePathname(),
   useSearchParams: () => ({
     get: vi.fn().mockReturnValue(null),
   }),
@@ -128,6 +131,9 @@ function defaultOrg(orgId = "org-1") {
 describe("DashboardLayout - permission-aware nav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset the pathname to the default route; individual breadcrumb tests
+    // override this to exercise other routes.
+    mockUsePathname.mockReturnValue("/dashboard");
     mockUseAuth.mockReturnValue({
       user: defaultUser(),
       isAuthenticated: true,
@@ -470,5 +476,67 @@ describe("DashboardLayout - permission-aware nav", () => {
 
     const main = screen.getByRole("main");
     expect(within(main).getByTestId("page-content")).toBeInTheDocument();
+  });
+
+  describe("breadcrumb header", () => {
+    // The breadcrumb region doubles as the page header title. Each platform-
+    // admin route must resolve to its own title (not fall through to the
+    // "Dashboard" default). `/platform/skills` already resolves; the
+    // `/platform/tools` nav item was added without a breadcrumb case, so it
+    // fell through to "Dashboard".
+    function renderAsPlatformAdmin() {
+      mockUseAuth.mockReturnValue({
+        user: { ...defaultUser(), hasRole: (r: string) => r === "platform_admin" },
+        isAuthenticated: true,
+        signOut: vi.fn().mockResolvedValue({ error: null }),
+      });
+      mockUseOrganization.mockReturnValue({
+        organizations: [defaultOrg()],
+        currentOrganization: defaultOrg(),
+      });
+      mockUseMyPermissions.mockReturnValue({
+        permissions: { "*": ["*"] },
+        isLoading: false,
+        currentOrganizationId: null,
+      });
+      mockUseUserPermissions.mockReturnValue({
+        isPlatformAdmin: true,
+        isOrgAdmin: false,
+        canUpdateOrganization: true,
+        canDeleteOrganization: true,
+        canViewOrganization: true,
+        canManageMembers: true,
+        canViewMembers: true,
+        canInviteMembers: true,
+        canRemoveMembers: true,
+        canUpdateSettings: true,
+        canViewSettings: true,
+        canManageBilling: true,
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      render(
+        <DashboardLayout>
+          <div />
+        </DashboardLayout>,
+        { wrapper: makeWrapper(queryClient) },
+      );
+    }
+
+    it("shows 'Platform Skills' for /platform/skills (parity baseline)", () => {
+      mockUsePathname.mockReturnValue("/platform/skills");
+      renderAsPlatformAdmin();
+      const breadcrumb = screen.getByRole("navigation", { name: /breadcrumb/i });
+      expect(within(breadcrumb).getByText("Platform Skills")).toBeInTheDocument();
+    });
+
+    it("shows 'Platform Tools' for /platform/tools (not 'Dashboard')", () => {
+      mockUsePathname.mockReturnValue("/platform/tools");
+      renderAsPlatformAdmin();
+      const breadcrumb = screen.getByRole("navigation", { name: /breadcrumb/i });
+      expect(within(breadcrumb).getByText("Platform Tools")).toBeInTheDocument();
+      expect(within(breadcrumb).queryByText("Dashboard")).not.toBeInTheDocument();
+    });
   });
 });
