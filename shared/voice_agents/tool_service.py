@@ -374,6 +374,16 @@ class ToolService:
         attachments keep working (the worker reads them by join, not via this
         listing). ``is_active`` is untouched.
 
+        When *publishing* an MCP row whose ``tool_functions_schema`` is still
+        null, best-effort discover the server's tools live and backfill the
+        column so the agent tool-config drawer can render the tool list with
+        enable/disable toggles (parity with native tool cards). The authoring
+        dialog already persists this at create time from its test-key
+        discovery, so the backfill only fires for rows authored before that
+        fix or published without discovering. Discovery failure is non-fatal:
+        the row keeps its existing (null) schema and the publish still
+        succeeds. Unpublish never triggers discovery.
+
         Args:
             tool_id: The ``platform_tools`` row id.
             published: True to publish, False to unpublish (revert to draft).
@@ -391,13 +401,128 @@ class ToolService:
             )
             if not response.data:
                 return None, "Platform tool not found"
+            row = response.data[0]
+
+            # Best-effort backfill of the tool list when publishing an MCP row
+            # that never had its tool_functions_schema populated.
+            if (
+                published
+                and row.get("tool_source") == "mcp"
+                and not row.get("tool_functions_schema")
+                and row.get("mcp_server_url")
+            ):
+                schema = await self._discover_functions_schema(row)
+                if schema:
+                    backfill = (
+                        self.supabase.table("platform_tools")
+                        .update({"tool_functions_schema": schema})
+                        .eq("id", str(tool_id))
+                        .execute()
+                    )
+                    if backfill.data:
+                        row = backfill.data[0]
+                    else:
+                        # Persist succeeded server-side even if the RETURNING
+                        # row was empty; surface the schema we just wrote.
+                        row = dict(row)
+                        row["tool_functions_schema"] = schema
+
             return (
-                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                self._platform_tool_for_response(PlatformTool(**row)),
                 None,
             )
         except Exception as e:
             logger.error(f"Error publishing platform tool {tool_id}: {e}")
             return None, str(e)
+
+    async def _discover_functions_schema(
+        self, row: dict
+    ) -> Optional[dict]:
+        """Best-effort live discovery of a platform tool's exposed tools.
+
+        Builds the MCP server config from the row (public headers + decrypted
+        literal secret headers, DROPPING any ``{{KEY}}``-templated header since
+        no org API key exists in the platform-admin publish context), opens a
+        one-shot :class:`McpClient`, calls ``list_tools()``, and maps the
+        results to the ``tool_functions_schema`` shape the agent tool-config
+        drawer renders (``{functions: [{name, description, parameters}]}``).
+
+        Used by :meth:`publish_platform_tool` to backfill the tool list for
+        catalog rows that were authored before the authoring dialog persisted
+        ``tool_functions_schema`` (or published without discovering).
+
+        Args:
+            row: A raw ``platform_tools`` row dict (must include
+                ``mcp_server_url``; optionally ``mcp_server_headers`` and the
+                encrypted ``mcp_server_secret_headers`` blob).
+
+        Returns:
+            The ``{functions: [...]}`` schema dict, or ``None`` if discovery
+            failed (transport error, decryption error, no URL). ``None`` is
+            non-fatal — the caller leaves the existing (null) schema in place.
+        """
+        # Function-level import: keeps the MCP SDK / client out of import-time
+        # for every process that pulls in tool_service, and avoids any circular
+        # coupling. Not a shadow of a top-level import.
+        from shared.voice_agents.tools.mcp.client import McpClient
+        from shared.voice_agents.tools.mcp.models import McpServerConfig
+
+        url = row.get("mcp_server_url")
+        if not url:
+            return None
+
+        # 1. Public (plaintext) static headers.
+        headers: dict[str, str] = dict(row.get("mcp_server_headers") or {})
+        # 2. Encrypted server-level secret headers. Literal values pass through;
+        #    {{KEY}}-templated headers are DROPPED (no org key at platform-publish
+        #    time — mirrors dispatch.py's runtime rule, RFC §6.6).
+        secret_blob = row.get("mcp_server_secret_headers")
+        if secret_blob:
+            try:
+                secret = decrypt_data(secret_blob)
+                if isinstance(secret, dict):
+                    for k, v in secret.items():
+                        value = str(v)
+                        if "{{KEY}}" in value:
+                            continue
+                        headers[str(k)] = value
+            except Exception as e:
+                logger.error(
+                    "Failed to decrypt mcp_server_secret_headers for backfill of "
+                    "%s: %s",
+                    row.get("name"),
+                    e,
+                    exc_info=True,
+                )
+
+        config = McpServerConfig(
+            url=url,
+            name=row.get("mcp_server_name") or row.get("name"),
+            headers=headers,
+        )
+        client = McpClient(config)
+        try:
+            tool_defs = await client.list_tools()
+        except Exception as e:
+            logger.warning(
+                "Publish-time MCP discover failed for %s: %s",
+                row.get("name"),
+                e,
+            )
+            return None
+        finally:
+            await client.close()
+
+        return {
+            "functions": [
+                {
+                    "name": td.name,
+                    "description": td.description,
+                    "parameters": td.input_schema or {},
+                }
+                for td in tool_defs
+            ]
+        }
 
     @tracer.start_as_current_span("tool.update_platform_tool")
     async def update_platform_tool(
@@ -442,24 +567,144 @@ class ToolService:
             logger.error(f"Error updating platform tool {tool_id}: {e}")
             return None, str(e)
 
+    @tracer.start_as_current_span("tool.get_platform_tool_usage")
+    async def get_platform_tool_usage(
+        self, tool_id: UUID
+    ) -> tuple[Optional[List[dict]], Optional[str]]:
+        """List the agents currently using a platform tool.
+
+        Joins ``agent_tools`` to ``voice_agents`` so the caller (platform admin
+        delete/unpublish flows) can show which agents reference the tool and, on
+        a forced delete, audit exactly which agents were detached. Used by:
+
+        - The ``DELETE /platform/{tool_id}`` route to build the ``in_use`` 409
+          body (the list of affected agents) and the force-delete audit entry.
+        - The unpublish UI banner ("N agents use this; they keep it") — purely
+          informational, since unpublish does not affect existing attachments.
+
+        Args:
+            tool_id: The ``platform_tools`` row id.
+
+        Returns:
+            A tuple of (agents, error). ``agents`` is a list of dicts::
+
+                {"agent_id": str, "agent_name": str|None, "organization_id": str|None}
+
+            Empty list if no agent uses the tool. ``(None, error)`` on failure.
+        """
+        try:
+            response = (
+                self.supabase.table("agent_tools")
+                .select("agent_id,voice_agents(name,organization_id)")
+                .eq("tool_id", str(tool_id))
+                .execute()
+            )
+            rows = response.data or []
+            agents: List[dict] = []
+            for row in rows:
+                va = row.get("voice_agents") or {}
+                agents.append(
+                    {
+                        "agent_id": row.get("agent_id"),
+                        "agent_name": va.get("name"),
+                        "organization_id": va.get("organization_id"),
+                    }
+                )
+            return agents, None
+        except Exception as e:
+            logger.error(f"Error fetching usage for platform tool {tool_id}: {e}")
+            return None, str(e)
+
     @tracer.start_as_current_span("tool.delete_platform_tool")
     async def delete_platform_tool(
-        self, tool_id: UUID
+        self, tool_id: UUID, *, force: bool = False
     ) -> tuple[Optional[bool], Optional[str]]:
         """Permanently delete a platform tool (platform-admin only).
 
-        Removes the catalog row. Existing ``agent_tools`` attachments referencing
-        the tool are left to cascade per the FK (or orphaned if no FK); the route
-        gates this on ``platform_admin``. Prefer unpublish for reversible
-        hide-from-catalog; delete is for cleanup.
+        Guardrails (RFC §6.6):
+
+        - **Legacy (code-backed) tools are never hard-deleted.** They are
+          in-tree ``BaseTool`` subclasses re-seeded by
+          ``LiveKitToolRegistry.sync_with_db`` on every worker startup, so
+          deleting the row is partly futile (it reappears as a draft). Return
+          ``"legacy_tools_cannot_be_deleted"``; the caller steers the admin
+          to unpublish instead.
+        - **An MCP tool referenced by any ``agent_tools`` row cannot be
+          deleted without ``force``.** Return ``"in_use"``; the caller
+          surfaces the affected agents so the admin can confirm. Without this
+          guard, a platform admin could silently strip a capability from agents
+          owned by other orgs on their next call.
+        - **With ``force=True``**, the ``agent_tools`` rows are detached
+          *explicitly first* (so the action is auditable — the route logs the
+          detached agent ids) and only then is the ``platform_tools`` row
+          removed. The explicit detach is also a defense-in-depth backstop for
+          the ``ON DELETE CASCADE`` FK (``agent_tools.tool_id →
+          platform_tools.id``) documented in ``docs/DATABASE_SCHEMA.md``.
+        - **Unpublish** (``publish_platform_tool(..., False)``) is the
+          reversible alternative — existing attachments keep working because
+          the worker reads tools by join, not via the catalog listing.
+
+        The route gates this on ``platform_admin`` and writes the audit log on
+        a successful force-delete; this method only enforces the data-level
+        guardrails so the API stays safe even if the frontend is bypassed.
 
         Args:
             tool_id: The ``platform_tools`` row id to delete.
+            force: When ``True``, allow deleting an MCP tool that is in use,
+                explicitly cascade-detaching its ``agent_tools`` rows first.
+                Has no effect for native tools (always refused) or for tools
+                not in use (delete proceeds regardless).
 
         Returns:
-            Tuple of (True, None) on success, ``(None, error)`` on failure.
+            Tuple of ``(True, None)`` on success, or ``(None, error)`` where
+            ``error`` is one of:
+
+            - ``"Platform tool not found"`` — the row does not exist.
+            - ``"legacy_tools_cannot_be_deleted"`` — the row is a legacy
+              (code-backed) tool; steer to unpublish.
+            - ``"in_use"`` — the tool is referenced by agent_tools and
+              ``force`` was not set.
+            - Any supabase exception message on transport failure.
         """
         try:
+            # 1. Fetch the row to determine tool_source. Native tools are
+            # code-backed and re-seeded on worker startup — refuse hard-delete.
+            fetch = (
+                self.supabase.table("platform_tools")
+                .select("tool_source")
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not fetch.data:
+                return None, "Platform tool not found"
+            tool_source = (fetch.data[0] or {}).get("tool_source")
+            if tool_source == "legacy":
+                # Legacy tools are code-backed (in-tree BaseTool subclasses) and
+                # re-seeded by LiveKitToolRegistry.sync_with_db on every worker
+                # startup — hard-deleting the row is futile (it reappears as a
+                # draft). Steer the admin to unpublish instead.
+                return None, "legacy_tools_cannot_be_deleted"
+
+            # 2. Cross-check agent_tools usage. Without force, refuse to delete
+            # a tool still attached to agents (the route returns the list of
+            # affected agents in the 409 body it fetched separately).
+            usage, usage_error = await self.get_platform_tool_usage(tool_id)
+            if usage_error:
+                return None, usage_error
+            agent_count = len(usage or [])
+            if agent_count > 0 and not force:
+                return None, "in_use"
+
+            # 3. Force or not-in-use: detach agent_tools explicitly first (so
+            # the route can audit which agents lost the tool), then delete the
+            # platform_tools row.
+            if agent_count > 0:
+                (
+                    self.supabase.table("agent_tools")
+                    .delete()
+                    .eq("tool_id", str(tool_id))
+                    .execute()
+                )
             (
                 self.supabase.table("platform_tools")
                 .delete()

@@ -234,6 +234,24 @@ describe('AgentService', () => {
       const result = await agentService.deletePlatformTool('tool-9')
       expect(result).toMatchObject({ deleted: true })
     })
+
+    it('deletePlatformTool sends ?force=true when force is set', async () => {
+      let calledUrl = ''
+      server.use(
+        http.delete(`${API_BASE_URL}/api/v1/tools/platform/:toolId`, ({ request }) => {
+          calledUrl = request.url
+          return HttpResponse.json({ deleted: true })
+        }),
+      )
+      const result = await agentService.deletePlatformTool('tool-9', true)
+      expect(result).toMatchObject({ deleted: true })
+      expect(calledUrl).toContain('force=true')
+    })
+
+    it('getPlatformToolUsage returns count + agents', async () => {
+      const result = await agentService.getPlatformToolUsage('tool-9')
+      expect(result).toMatchObject({ count: expect.any(Number), agents: expect.any(Array) })
+    })
   })
 
   describe('Test Token Methods', () => {

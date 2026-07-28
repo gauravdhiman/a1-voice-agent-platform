@@ -236,6 +236,17 @@ export const handlers = [
     return HttpResponse.json({ deleted: true })
   }),
 
+  // Platform tool usage (RFC §6.6 delete guardrails) — agents using a tool.
+  http.get(`${API_BASE_URL}/api/v1/tools/platform/:toolId/usage`, () => {
+    return HttpResponse.json({
+      count: 2,
+      agents: [
+        { agent_id: 'agent-1', agent_name: 'Alex', organization_id: 'org-1' },
+        { agent_id: 'agent-2', agent_name: 'Sam', organization_id: 'org-1' },
+      ],
+    })
+  }),
+
   // Organization endpoints
   http.get(`${API_BASE_URL}/api/v1/organizations`, () => {
     return HttpResponse.json({

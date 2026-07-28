@@ -141,6 +141,29 @@ export interface PlatformTool {
 }
 
 /**
+ * One agent currently using a platform tool (RFC §6.6 delete guardrails).
+ *
+ * Surfaced by `GET /api/v1/tools/platform/{toolId}/usage` so the platform-admin
+ * delete-confirm dialog can list which agents reference the tool (and, on a
+ * forced delete, which agents will lose it on their next call) and the
+ * unpublish flow can show an informational "N agents use this" banner.
+ *
+ * `agent_name` / `organization_id` may be null if the joined voice_agents row
+ * is missing or the column is unset.
+ */
+export interface PlatformToolUsageAgent {
+  agent_id: string;
+  agent_name: string | null;
+  organization_id: string | null;
+}
+
+/** Result of `GET /api/v1/tools/platform/{toolId}/usage`. */
+export interface PlatformToolUsage {
+  count: number;
+  agents: PlatformToolUsageAgent[];
+}
+
+/**
  * A discovered tool from a remote MCP server (POST /tools/mcp/discover).
  * Returned sanitized — name, description, and the JSON Schema of its input.
  */

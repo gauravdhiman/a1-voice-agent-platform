@@ -42,6 +42,7 @@ import {
   Users,
   UsersRound,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import {
   PERMISSION_ACTIONS,
@@ -159,6 +160,13 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       name: "Platform Skills",
       href: "/platform/skills",
       icon: Layers,
+      requiredPermission: "platform:admin",
+      section: "platform_admin",
+    },
+    {
+      name: "Platform Tools",
+      href: "/platform/tools",
+      icon: Wrench,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },

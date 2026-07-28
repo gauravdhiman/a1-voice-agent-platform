@@ -45,8 +45,8 @@ import {
   ToolFilters,
   ToolConfigDrawer,
   ToolFilterType,
-  AddMcpServerDialog,
 } from "@/components/tools";
+import { buildAgentToolsDisplay } from "@/components/tools/tools-display";
 import {
   AnimatedTabs,
   TabsList,
@@ -63,7 +63,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen, Server } from "lucide-react";
+import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
 import { MarkdownRenderer } from "@/components/markdown";
 import {
   DropdownMenu,
@@ -110,7 +110,6 @@ export default function AgentDetailPage() {
     null,
   );
   const [toolDrawerOpen, setToolDrawerOpen] = React.useState(false);
-  const [addMcpOpen, setAddMcpOpen] = React.useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
   const [testCallOpen, setTestCallOpen] = React.useState(false);
   const [voiceTemplates, setVoiceTemplates] = React.useState<VoiceTemplate[]>([]);
@@ -506,8 +505,24 @@ export default function AgentDetailPage() {
     refetchAgentTools();
   }, [refetchAgentTools]);
 
+  // Connected tools whose platform tool is unpublished (RFC §6.6). The worker
+  // loads an agent's tools by joining `agent_tools` -> `platform_tools` without
+  // filtering on `is_published`, so the agent keeps these at runtime even after
+  // the platform admin unpublishes them. The catalog (`usePlatformTools`) only
+  // returns published rows, so without this merge the card would vanish from the
+  // Tools tab even though the agent still uses it. Here we surface those tools
+  // inline in the grid, flagged `isUnpublished` so the card renders an amber
+  // "Unpublished" pill + note. Unpublished AND not mapped -> not in
+  // `localAgentTools` -> never rendered (unchanged behavior). Logic lives in
+  // `buildAgentToolsDisplay` so it's unit-tested in isolation (the full page is
+  // too heavy to mount for a pure merge).
+  const { allTools, unpublishedConnectedIds } = React.useMemo(
+    () => buildAgentToolsDisplay(platformTools, localAgentTools),
+    [platformTools, localAgentTools],
+  );
+
   const getFilteredTools = useCallback(() => {
-    let filtered = platformTools;
+    let filtered = allTools;
 
     if (toolSearchQuery) {
       const query = toolSearchQuery.toLowerCase();
@@ -530,7 +545,7 @@ export default function AgentDetailPage() {
     }
 
     return filtered;
-  }, [platformTools, toolSearchQuery, toolFilterType, localAgentTools]);
+  }, [allTools, toolSearchQuery, toolFilterType, localAgentTools]);
 
   const filteredTools = getFilteredTools();
 
@@ -1173,26 +1188,14 @@ and confirm someone will call back the next business day.`}
         <TabsContent value="tools">
           <Card>
             <CardHeader className="p-5 pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center space-x-2 text-lg">
-                    <Wrench className="h-5 w-5" />
-                    <span>Tool Configuration</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Configure platform tools for {agent.name}
-                  </CardDescription>
-                </div>
-                {isPlatformAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAddMcpOpen(true)}
-                  >
-                    <Server className="h-3.5 w-3.5 mr-1.5" />
-                    Manage MCP servers
-                  </Button>
-                )}
+              <div>
+                <CardTitle className="flex items-center space-x-2 text-lg">
+                  <Wrench className="h-5 w-5" />
+                  <span>Tool Configuration</span>
+                </CardTitle>
+                <CardDescription>
+                  Configure platform tools for {agent.name}
+                </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="p-5 pt-0">
@@ -1203,7 +1206,7 @@ and confirm someone will call back the next business day.`}
                     Loading tools...
                   </p>
                 </div>
-              ) : platformTools.length === 0 ? (
+              ) : allTools.length === 0 ? (
                 <div className="text-center py-12 bg-muted/20 rounded-lg">
                   <Wrench className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
                   <p className="text-muted-foreground">
@@ -1229,7 +1232,7 @@ and confirm someone will call back the next business day.`}
                     onSearchChange={setToolSearchQuery}
                     filterType={toolFilterType}
                     onFilterChange={setToolFilterType}
-                    totalCount={platformTools.length}
+                    totalCount={allTools.length}
                     filteredCount={filteredTools.length}
                   />
 
@@ -1261,6 +1264,7 @@ and confirm someone will call back the next business day.`}
                             isConnecting={connectingToolId === tool.id}
                             onClick={() => handleToolCardClick(tool)}
                             disabled={!canEdit}
+                            isUnpublished={unpublishedConnectedIds.has(tool.id)}
                           />
                         );
                       })}
@@ -1326,11 +1330,6 @@ and confirm someone will call back the next business day.`}
           toolName={selectedTool.name.replace(/_/g, " ")}
         />
       )}
-
-      <AddMcpServerDialog
-        open={addMcpOpen}
-        onOpenChange={setAddMcpOpen}
-      />
 
       <Dialog open={!!pendingTemplate} onOpenChange={(open) => !open && setPendingTemplate(null)}>
         <DialogContent className="sm:max-w-md">

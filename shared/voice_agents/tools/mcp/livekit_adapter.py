@@ -27,7 +27,7 @@ Design notes:
       ``docs/03_implementation/mcp_integration_rfc.md`` §1.1 (coexistence).
 """
 import json
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional
 
 from livekit.agents import ToolError, function_tool
 
@@ -209,7 +209,41 @@ def _build_raw_schema(tool_def: McpToolDef) -> dict[str, Any]:
     }
 
 
-def _make_mcp_handler(client: McpClient, tool_name: str) -> McpToolHandler:
+def _accepted_params(input_schema: Any) -> list[str]:
+    """Return the tool's accepted parameter names from its ``inputSchema``.
+
+    These are threaded into the handler so a server-reported argument error can
+    name what the tool DOES accept, letting the model self-correct on retry
+    (drop an unsupported arg, or switch to a different tool) instead of giving
+    up and surfacing a cryptic validation string to the user.
+
+    Real-world motivation: DeepWiki's ``read_wiki_contents`` accepts only
+    ``repoName``; the model called it with an extra ``question`` and the server
+    rejected the call with a bare ``unexpected_keyword_argument``. Surfacing
+    ``accepted arguments: repoName`` lets the model drop ``question`` (or reach
+    for ``ask_question``) on the next turn rather than reporting failure.
+
+    Args:
+        input_schema: The MCP server's ``inputSchema`` for a tool (a JSON Schema
+            dict, or ``None``/empty when the server declares no arguments).
+
+    Returns:
+        The ordered list of property names declared under ``properties``.
+        Empty when the schema is missing or has no ``properties`` object.
+    """
+    if not isinstance(input_schema, dict):
+        return []
+    properties = input_schema.get("properties")
+    if not isinstance(properties, dict):
+        return []
+    return list(properties.keys())
+
+
+def _make_mcp_handler(
+    client: McpClient,
+    tool_name: str,
+    accepted_params: Optional[list[str]] = None,
+) -> McpToolHandler:
     """Build the async handler that forwards a LiveKit call to the MCP server.
 
     Args:
@@ -217,12 +251,19 @@ def _make_mcp_handler(client: McpClient, tool_name: str) -> McpToolHandler:
             owns the client's lifecycle (typically via ``async with``); the
             handler does not open or close it.
         tool_name: The MCP tool name to invoke on each call.
+        accepted_params: The tool's accepted parameter names (from
+            :func:`_accepted_params`). When provided, a server-reported error
+            is augmented with ``accepted arguments: <names>`` so the model can
+            self-correct on retry. ``None`` (default) preserves the legacy
+            behaviour — surface the raw server error unchanged — so call sites
+            that do not pass params are unaffected.
 
     Returns:
         An async callable ``handler(raw_arguments: dict) -> str`` suitable for
         LiveKit's ``RawFunctionTool``. On success it returns the tool's text
         content. On a server-reported error it raises :class:`ToolError` carrying
-        the error text (or a generic message when the server returned none).
+        the error text (or a generic message when the server returned none),
+        optionally suffixed with the accepted-arguments hint.
         Non-text or empty content falls back to a JSON dump so the model always
         receives something it can reason over.
     """
@@ -238,11 +279,20 @@ def _make_mcp_handler(client: McpClient, tool_name: str) -> McpToolHandler:
             The tool's text content as a string.
 
         Raises:
-            ToolError: If the MCP server reports the call as an error.
+            ToolError: If the MCP server reports the call as an error. When
+                ``accepted_params`` is provided the message is suffixed with the
+                tool's accepted argument names so the model can self-correct.
         """
         result = await client.call_tool(tool_name, raw_arguments)
         if result.is_error:
-            raise ToolError(result.text or f"MCP tool '{tool_name}' returned an error")
+            base = result.text or f"MCP tool '{tool_name}' returned an error"
+            if accepted_params is not None:
+                # Surface the tool's accepted arguments so the model can recover
+                # (drop an unsupported arg, or pick a different tool) instead of
+                # reporting a cryptic server-side validation string to the user.
+                params_str = ", ".join(accepted_params) or "none"
+                raise ToolError(f"{base} — accepted arguments: {params_str}")
+            raise ToolError(base)
         text = result.text
         if text:
             return text
@@ -261,6 +311,10 @@ def mcp_tool_to_livekit_tool(client: McpClient, tool_def: McpToolDef):
     legacy ``BaseTool``-derived tools (the two are compatible; coexistence per
     RFC §1.1).
 
+    The tool's accepted parameter names are extracted from its ``inputSchema``
+    and threaded into the handler so a server-reported argument error names what
+    the tool accepts — letting the model self-correct on retry.
+
     Args:
         client: The :class:`McpClient` the handler will use to reach the server.
             The caller owns its lifecycle.
@@ -271,5 +325,6 @@ def mcp_tool_to_livekit_tool(client: McpClient, tool_def: McpToolDef):
         whose handler forwards calls to the MCP server via ``client``.
     """
     raw_schema = _build_raw_schema(tool_def)
-    handler = _make_mcp_handler(client, tool_def.name)
+    accepted_params = _accepted_params(tool_def.input_schema)
+    handler = _make_mcp_handler(client, tool_def.name, accepted_params=accepted_params)
     return function_tool(raw_schema=raw_schema)(handler)

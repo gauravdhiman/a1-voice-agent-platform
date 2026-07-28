@@ -5,6 +5,7 @@ import type {
   VoiceAgentCreate,
   VoiceAgentUpdate,
   PlatformTool,
+  PlatformToolUsage,
   AgentTool,
   AgentToolCreate,
   AgentToolUpdate,
@@ -132,15 +133,41 @@ class AgentService {
   }
 
   /**
-   * Delete a platform tool (platform-admin only, RFC §6.6). Removes the server
-   * from the catalog; existing agent attachments keep their config but the
-   * tool will fail to resolve at runtime.
+   * Delete a platform tool (platform-admin only, RFC §6.6).
+   *
+   * Guardrails: a legacy (code-backed) tool is refused with 400 (steer to
+   * unpublish); an MCP tool referenced by any agent is refused with 409
+   * `in_use` unless `force` is set. With `force`, the backend cascade-detaches
+   * the agent_tools rows first (audited) and removes the catalog row.
+   *
+   * The UI pre-fetches usage via `getPlatformToolUsage` and passes
+   * `force = count > 0` after a type-to-confirm dialog, so the 409 path is a
+   * backend safety net against races / direct API calls.
+   *
+   * @param toolId  Platform tool id to delete.
+   * @param force   When true, sends `?force=true` to allow an in-use delete.
    */
   async deletePlatformTool(
     toolId: string,
+    force = false,
   ): Promise<{ deleted: boolean }> {
+    const query = force ? "?force=true" : "";
     const response = await apiClient.delete<{ deleted: boolean }>(
-      `${this.toolBaseUrl}/platform/${toolId}`,
+      `${this.toolBaseUrl}/platform/${toolId}${query}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * List the agents currently using a platform tool (platform-admin only,
+   * RFC §6.6). Powers the delete-confirm dialog's "used by N agents" warning
+   * list and the unpublish info banner. Returns `{ count, agents[] }`.
+   */
+  async getPlatformToolUsage(
+    toolId: string,
+  ): Promise<PlatformToolUsage> {
+    const response = await apiClient.get<PlatformToolUsage>(
+      `${this.toolBaseUrl}/platform/${toolId}/usage`,
     );
     return response.data;
   }

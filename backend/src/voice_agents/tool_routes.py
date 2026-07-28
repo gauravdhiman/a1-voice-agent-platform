@@ -272,13 +272,52 @@ async def update_platform_tool(
     return tool
 
 
+@tool_router.get("/platform/{tool_id}/usage")
+@tracer.start_as_current_span("tool.routes.get_platform_tool_usage")
+async def get_platform_tool_usage(
+    tool_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """List the agents currently using a platform tool (platform-admin only).
+
+    Powers the delete-confirm dialog's "used by N agents" warning list and the
+    unpublish info banner. Returns ``{"count": int, "agents": [...]}`` where
+    each agent is ``{agent_id, agent_name, organization_id}``.
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can view platform tool usage",
+    )
+    agents, error = await tool_service.get_platform_tool_usage(tool_id)
+    if error:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+    return {"count": len(agents or []), "agents": agents or []}
+
+
 @tool_router.delete("/platform/{tool_id}")
 @tracer.start_as_current_span("tool.routes.delete_platform_tool")
 async def delete_platform_tool(
     tool_id: UUID,
+    force: bool = False,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Delete a platform tool from the catalog (platform-admin only).
+
+    Query param ``force=true`` allows deleting an MCP tool that is in use;
+    the service then cascade-detaches its agent_tools rows first (audited
+    below). Required for in-use tools.
+
+    Guardrails (RFC §6.6):
+
+    - **Legacy (code-backed) tools are never hard-deleted** (re-seeded on
+      worker startup) → ``400``; steer to :func:`unpublish_platform_tool`.
+    - **An MCP tool referenced by any agent** → ``409 in_use`` with the list
+      of affected agents. The admin confirms via the type-to-confirm dialog
+      and re-issues with ``?force=true``.
+    - **``force=true``** cascade-detaches the agent_tools rows (audited below)
+      and removes the platform_tools row.
 
     Prefer :func:`unpublish_platform_tool` for a reversible hide-from-catalog;
     delete is for permanent cleanup.
@@ -289,13 +328,80 @@ async def delete_platform_tool(
         "platform_admin",
         error_message="Only platform admins can delete MCP servers",
     )
-    deleted, error = await tool_service.delete_platform_tool(tool_id)
+
+    # When forcing, fetch the usage up front so the audit entry can name the
+    # agents being detached (the service detaches them internally). For the
+    # non-force path we only need the list if the service reports in_use.
+    usage_for_audit: list = []
+    if force:
+        usage, usage_error = await tool_service.get_platform_tool_usage(tool_id)
+        if usage_error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=usage_error
+            )
+        usage_for_audit = usage or []
+
+    deleted, error = await tool_service.delete_platform_tool(tool_id, force=force)
+
+    if error == "in_use":
+        # Build the 409 body listing the affected agents (fetch if we didn't
+        # already for the force path).
+        if not usage_for_audit:
+            usage, _ = await tool_service.get_platform_tool_usage(tool_id)
+            usage_for_audit = usage or []
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "in_use",
+                "count": len(usage_for_audit),
+                "agents": usage_for_audit,
+                "message": (
+                    "This tool is used by agents. Confirm in the dialog to "
+                    "force-delete and detach it from all of them."
+                ),
+            },
+        )
+    if error == "legacy_tools_cannot_be_deleted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This tool is code-backed (a built-in tool) and is re-seeded on "
+                "worker startup, so it cannot be hard-deleted. Unpublish it "
+                "instead to hide it from the catalog."
+            ),
+        )
+    if error == "Platform tool not found":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Platform tool not found"
         )
+
+    # Audit a force-delete: the actor, the tool, and the agents that just lost
+    # the capability on their next call. No audit table exists yet — this is a
+    # structured application log + OTEL span attributes (durable trail tracked
+    # as a follow-up; see docs/03_implementation/mcp_integration_rfc.md).
+    if force and usage_for_audit:
+        span = trace.get_current_span()
+        span.set_attribute("tool.force_delete", True)
+        span.set_attribute("tool.deleted_id", str(tool_id))
+        span.set_attribute("tool.detached_agent_count", len(usage_for_audit))
+        span.set_attribute(
+            "tool.detached_agent_ids",
+            [a.get("agent_id") for a in usage_for_audit],
+        )
+        logger.info(
+            "platform_admin force-deleted platform tool %s; detached %d agent(s): %s",
+            str(tool_id),
+            len(usage_for_audit),
+            ", ".join(
+                f"{a.get('agent_name') or a.get('agent_id')} ({a.get('agent_id')})"
+                for a in usage_for_audit
+            ),
+        )
+
     return {"id": str(tool_id), "deleted": True}
 
 

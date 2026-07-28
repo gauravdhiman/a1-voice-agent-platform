@@ -20,6 +20,7 @@ import {
   usePublishPlatformTool,
   useUpdatePlatformTool,
   useDeletePlatformTool,
+  usePlatformToolUsage,
 } from '@/hooks/use-agent-queries'
 
 // Use vi.hoisted() to define mock data that will be available when vi.mock() is hoisted
@@ -85,6 +86,10 @@ vi.mock('@/services/agent-service', () => ({
     publishPlatformTool: vi.fn().mockResolvedValue({ ...mockPlatformTool, is_published: true }),
     updatePlatformTool: vi.fn().mockResolvedValue(mockPlatformTool),
     deletePlatformTool: vi.fn().mockResolvedValue({ deleted: true }),
+    getPlatformToolUsage: vi.fn().mockResolvedValue({ count: 2, agents: [
+      { agent_id: 'agent-1', agent_name: 'Alex', organization_id: 'org-1' },
+      { agent_id: 'agent-2', agent_name: 'Sam', organization_id: 'org-1' },
+    ] }),
   },
 }))
 
@@ -254,6 +259,26 @@ describe('use-agent-queries', () => {
 
       expect(agentService.publishPlatformTool).toHaveBeenCalledWith('tool-9', false)
     })
+
+    it('invalidates the per-agent agent-tools queries so a connected-but-unpublished tool surfaces without a manual reload', async () => {
+      // RFC §6.6: unpublish flips is_published on the joined platform tool; the
+      // agent Tools tab merges connected-but-unpublished tools from the
+      // agent-tools response. Without invalidating that query an open agent
+      // page keeps stale is_published=true and the card never appears.
+      const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+      const { result } = renderHook(() => usePublishPlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync({ toolId: 'tool-9', published: false })
+      })
+
+      const keys = spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))
+      expect(keys).toContain(JSON.stringify(['tools', 'platform']))
+      expect(keys).toContain(JSON.stringify(['tools', 'agent']))
+      spy.mockRestore()
+    })
   })
 
   describe('useUpdatePlatformTool', () => {
@@ -276,16 +301,58 @@ describe('use-agent-queries', () => {
   })
 
   describe('useDeletePlatformTool', () => {
-    it('calls deletePlatformTool with the tool id', async () => {
+    it('calls deletePlatformTool with the tool id + force flag', async () => {
       const { result } = renderHook(() => useDeletePlatformTool(), {
         wrapper: TestWrapper,
       })
 
       await act(async () => {
-        await result.current.mutateAsync('tool-9')
+        await result.current.mutateAsync({ toolId: 'tool-9', force: true })
       })
 
-      expect(agentService.deletePlatformTool).toHaveBeenCalledWith('tool-9')
+      expect(agentService.deletePlatformTool).toHaveBeenCalledWith('tool-9', true)
+    })
+
+    it('defaults force to false when only the tool id is passed', async () => {
+      const { result } = renderHook(() => useDeletePlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync({ toolId: 'tool-9' })
+      })
+
+      expect(agentService.deletePlatformTool).toHaveBeenCalledWith('tool-9', false)
+    })
+
+    it('invalidates the per-agent agent-tools queries (force-delete cascade-detaches)', async () => {
+      const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+      const { result } = renderHook(() => useDeletePlatformTool(), {
+        wrapper: TestWrapper,
+      })
+
+      await act(async () => {
+        await result.current.mutateAsync({ toolId: 'tool-9', force: true })
+      })
+
+      const keys = spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))
+      expect(keys).toContain(JSON.stringify(['tools', 'platform']))
+      expect(keys).toContain(JSON.stringify(['tools', 'agent']))
+      spy.mockRestore()
+    })
+  })
+
+  describe('usePlatformToolUsage', () => {
+    it('fetches usage for the given tool id', async () => {
+      const { result } = renderHook(() => usePlatformToolUsage('tool-9'), {
+        wrapper: TestWrapper,
+      })
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+      expect(agentService.getPlatformToolUsage).toHaveBeenCalledWith('tool-9')
+      expect(result.current.data?.count).toBe(2)
+      expect(result.current.data?.agents).toHaveLength(2)
     })
   })
 

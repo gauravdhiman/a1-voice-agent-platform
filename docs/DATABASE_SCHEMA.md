@@ -298,6 +298,21 @@ Junction table mapping voice agents to platform tools with configuration.
 **Unique Constraint**: `(agent_id, tool_id)` named `uq_agent_tool`
 **Real-time**: Enabled
 
+**Delete guardrails (RFC §6.6)**: the `tool_id → platform_tools.id (CASCADE)` FK
+means a `platform_tools` delete silently strips the tool from every using agent on
+its next call (graceful degradation — the LLM just no longer sees the tool). The
+service layer (`tool_service.delete_platform_tool`) gates this so the CASCADE is
+never hit by accident:
+
+- A **legacy** (`tool_source = "legacy"`) tool is refused (400) — it is code-backed
+  and re-seeded by the worker on startup; admins unpublish instead.
+- An **MCP** tool referenced by any `agent_tools` row is refused (409 `in_use`,
+  body `{error, count, agents[]}`) unless `force=true`, in which case the
+  `agent_tools` rows are deleted explicitly first (count + agent ids audited via
+  structured log + OpenTelemetry span attrs), then the `platform_tools` row.
+- The platform admin UI pre-fetches usage (`GET /tools/platform/{id}/usage`) and
+  type-to-confirms before sending `force = count > 0`.
+
 **OAuth Token Storage in `sensitive_config`**:
 
 ```json

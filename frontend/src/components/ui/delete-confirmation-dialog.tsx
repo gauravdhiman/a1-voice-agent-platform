@@ -20,6 +20,13 @@ interface DeleteConfirmationDialogProps {
   itemType: string;
   warnings: string[];
   onDelete: () => void;
+  /**
+   * Optional rich content rendered below the warnings box (e.g. a list of
+   * affected agents with navigation links). Kept separate from `warnings`
+   * (which stays plain strings rendered as a red bulleted list) so the shared
+   * dialog stays text-only for non-link callers (RBAC deletes).
+   */
+  extraContent?: React.ReactNode;
 }
 
 export function DeleteConfirmationDialog({
@@ -29,6 +36,7 @@ export function DeleteConfirmationDialog({
   itemType,
   warnings,
   onDelete,
+  extraContent,
 }: DeleteConfirmationDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +109,10 @@ export function DeleteConfirmationDialog({
                 </div>
               </div>
             </div>
+          )}
+
+          {extraContent && (
+            <div className="text-sm text-foreground">{extraContent}</div>
           )}
 
           <div className="space-y-2">
