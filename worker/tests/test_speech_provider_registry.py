@@ -466,3 +466,74 @@ class TestPipelineLiveKitInferenceAndCerebrasDispatch:
                 STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
                 api_keys={},
             )
+
+    def test_inference_stage_injects_livekit_key_from_api_keys(self, monkeypatch):
+        """Phase 3: when api_keys carries a nested 'livekit' {api_key, api_secret},
+        the Inference builder is called with those kwargs (tenant BYO LiveKit key
+        for Inference — injected by the per-org key_resolver)."""
+        import speech_providers.registry as registry
+        from speech_providers.registry import build_session_components
+
+        captured: dict = {}
+
+        def fake_inference_stt(config=None, **kwargs):
+            captured["stt_kwargs"] = kwargs
+            return object()
+
+        monkeypatch.setitem(
+            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS, "stt", fake_inference_stt
+        )
+        monkeypatch.setitem(
+            registry.LLM_BUILDERS, "openai", lambda api_key, config=None: object()
+        )
+        monkeypatch.setitem(
+            registry.TTS_BUILDERS, "cartesia", lambda api_key, config=None: object()
+        )
+
+        cfg = PipelineSpeechConfig(
+            stt=STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
+            llm=LLMStageConfig(provider="openai"),
+            tts=TTSStageConfig(provider="cartesia"),
+        )
+        build_session_components(
+            cfg,
+            api_keys={
+                "openai": "O",
+                "cartesia": "C",
+                "livekit": {"api_key": "tenant-lk", "api_secret": "tenant-lks"},
+            },
+        )
+        assert captured["stt_kwargs"]["api_key"] == "tenant-lk"
+        assert captured["stt_kwargs"]["api_secret"] == "tenant-lks"
+
+    def test_inference_stage_falls_back_to_none_when_livekit_absent(self, monkeypatch):
+        """Phase 3: when api_keys has no 'livekit' entry, the Inference builder is
+        called with api_key=None / api_secret=None — it then falls back to the
+        platform LIVEKIT_API_KEY/LIVEKIT_API_SECRET env (Phase 2b behavior)."""
+        import speech_providers.registry as registry
+        from speech_providers.registry import build_session_components
+
+        captured: dict = {}
+
+        def fake_inference_stt(config=None, **kwargs):
+            captured["stt_kwargs"] = kwargs
+            return object()
+
+        monkeypatch.setitem(
+            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS, "stt", fake_inference_stt
+        )
+        monkeypatch.setitem(
+            registry.LLM_BUILDERS, "openai", lambda api_key, config=None: object()
+        )
+        monkeypatch.setitem(
+            registry.TTS_BUILDERS, "cartesia", lambda api_key, config=None: object()
+        )
+
+        cfg = PipelineSpeechConfig(
+            stt=STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
+            llm=LLMStageConfig(provider="openai"),
+            tts=TTSStageConfig(provider="cartesia"),
+        )
+        build_session_components(cfg, api_keys={"openai": "O", "cartesia": "C"})
+        assert captured["stt_kwargs"]["api_key"] is None
+        assert captured["stt_kwargs"]["api_secret"] is None

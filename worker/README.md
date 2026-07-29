@@ -182,19 +182,31 @@ greeting) is shared and engine-agnostic.
   entry; adding an Inference stage = one builder + one `LIVEKIT_INFERENCE_STAGE_BUILDERS`
   entry.
 - `shared/voice_agents/speech_config.py` — Pydantic discriminated-union config
-  (`RealtimeSpeechConfig` / `PipelineSpeechConfig`) stored as JSONB.
+  (`RealtimeSpeechConfig` / `PipelineSpeechConfig`); stored as the `config` JSONB
+  on a **preset** row (`pipeline_presets.config`), not directly on the agent.
+- `shared/voice_agents/preset_service.py` + `preset_models.py` — platform-admin
+  preset catalog (Phase 3). The worker fetches a preset **live on every call** by
+  `voice_agent.preset_id` (no versioning); `preset_id=None` → realtime default.
+- `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3). Builds
+  the `api_keys` map from the agent's `speech_config` + the org's encrypted
+  `provider_credentials` blob + platform env, with the `use_platform_credits`
+  toggle. Injects `livekit: {api_key, api_secret}` only when an Inference stage
+  is used; omits providers with no resolvable key.
 - `src/realtime_config.py` — backward-compat shim re-exporting the realtime
   builder under its old names.
 
-> **Phases 2–2b are behavior-neutral for live calls.** `worker.py` still builds
-> the realtime default session; the pipeline branch (direct + Inference + Cerebras
-> + mixed) is exercised by unit tests + a no-network container smoke. Loading a
-> pipeline `speech_config` from the DB column + the per-provider `key_resolver`
-> is Phase 3. Direct provider keys (`DEEPGRAM_API_KEY` / `OPENAI_API_KEY` /
-> `CARTESIA_API_KEY`) are read from the environment; Inference stages read the
-> LiveKit key (`LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`) from the environment
-> (Phase 2b — the platform key; Phase 3 will inject a per-org LiveKit key);
-> Silero VAD is local and needs no key.
+> **Phase 3 is live-fetch + key resolution; live calls are unchanged for legacy
+> agents.** `worker.py` loads the preset's `speech_config` from
+> `voice_agent.preset_id` (graceful-degrade to `default_realtime_config()` on a
+> missing/unparseable preset), then `resolve_api_keys()` produces the `api_keys`
+> map and `build_agent_session()` builds the session. Legacy agents
+> (`preset_id=None`) get the realtime default, unchanged. Direct provider keys
+> come from the org's encrypted `provider_credentials` blob (fallback
+> `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` env); Inference
+> stages get `api_keys["livekit"]` (org BYO, fallback `LIVEKIT_API_KEY` /
+> `LIVEKIT_API_SECRET` env) and the registry injects `api_key`/`api_secret` into
+> the Inference builders; Silero VAD is local and needs no key. The Phase 3
+> migration is reviewed but **not run** — awaits owner approval.
 
 ## 📁 Project Structure
 

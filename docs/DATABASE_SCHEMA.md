@@ -57,6 +57,7 @@ Stores tenant organization information. Each organization represents a separate 
 | industry         | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                    |
 | location         | VARCHAR(255) | NULLABLE                | Physical address or location                                                |
 | business_details | TEXT         | NULLABLE                | Comprehensive business context for AI agents (hours, services, policies...) |
+| provider_credentials | TEXT     | NULLABLE                | Fernet-encrypted JSON of all per-org provider keys via `encrypt_data`/`decrypt_data` (`shared/common/security.py`): `{google, deepgram, openai, cartesia, cerebras, livekit: {api_key, api_secret}}` (only the set keys present). The worker's `key_resolver` decrypts this to build the `api_keys` map for the speech-provider factory. Replaces the legacy plaintext `google_api_key` as the source of truth (that column is retained but unused; dropped in a follow-up migration). Backfilled from `google_api_key` — migration 20260729000001 |
 | created_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                                          |
 | updated_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                                                       |
 
@@ -206,11 +207,16 @@ Stores voice agent configurations for each organization.
 | custom_instructions | TEXT         | NULLABLE                        | Agent-specific context (policies, USPs, FAQs, protocols) |
 | instructions_markdown | TEXT       | NULLABLE                        | Full agent instructions in markdown (replaces field-based prompt building when set). Supports template variables: `{{org.name}}`, `{{org.industry}}`, `{{org.location}}`, `{{org.business_details}}`, `{{agent.name}}` |
 | use_platform_credits | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Use platform credits instead of org API key |
+| preset_id         | UUID         | NULLABLE, FK → pipeline_presets.id | Voice-engine preset reference. The worker loads this preset **live on every call** (no versioning — admin edits take effect on the next call). NULL = legacy agent → `default_realtime_config()` (realtime default, unchanged) — migration 20260729000001 |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
 
-**Foreign Keys**: `organization_id` → `organizations.id` (CASCADE)
+**Foreign Keys**:
+- `organization_id` → `organizations.id` (CASCADE)
+- `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the realtime default)
+
+**Indexes**: `ix_voice_agents_preset_id` on `preset_id` — migration 20260729000001
 **RLS**: Enabled
 **Real-time**: Enabled
 
@@ -269,6 +275,33 @@ System-wide tools available for integration with voice agents.
   }
 }
 ```
+
+---
+
+### pipeline_presets
+
+Global, platform-admin-managed catalog of named voice-engine **presets** (Phase 3 of the modular voice engine — see `docs/01_architecture/voice_engine_pipeline_design.md`). Mirrors the `platform_tools` catalog pattern: no RLS, `is_published` lifecycle, `(result, error)` service contract, `assert_platform_role("platform_admin")` gating on CRUD.
+
+| Column        | Type         | Constraints                  | Description                                                                 |
+| ------------- | ------------ | ---------------------------- | --------------------------------------------------------------------------- |
+| id            | UUID         | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique preset identifier                                          |
+| name          | VARCHAR(100) | NOT NULL, UNIQUE             | Preset name (upsert key)                                                    |
+| description   | TEXT         | NULLABLE                     | Preset description                                                          |
+| preset_type   | VARCHAR(20)  | NOT NULL                     | Denormalized from `config.engine_mode` on every write (`realtime`\|`pipeline`). Filter column for listings; the service keeps it in sync — **never set by hand**. |
+| config        | JSONB        | NOT NULL                     | Validated `SpeechConfig` (realtime or pipeline discriminated union — `shared/voice_agents/speech_config.py`). Carries **no secrets** (keys come from `organizations.provider_credentials`). |
+| is_published  | BOOLEAN      | NOT NULL, DEFAULT FALSE      | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE = visible to all org users for assignment. |
+| created_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Creation timestamp                                                          |
+| updated_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Last update timestamp                                                       |
+
+**Foreign Keys**: None (referenced *by* `voice_agents.preset_id`)
+**Indexes**: `ix_pipeline_presets_is_published` on `is_published` — migration 20260729000001
+**RLS**: Not enabled (global platform catalog). Visibility is enforced at the service layer (`get_presets` filters `is_published=true` for org users; `include_drafts=True` for platform admins). RLS hardening is a follow-up TODO.
+
+**No versioning**: the worker fetches the preset row live on every call (`preset_service.get_preset_by_id`), so an admin's edit to a preset takes effect on the next call. The agent stores only `preset_id` (FK) — no `preset_version`, no snapshot.
+
+**Preset types**: only `realtime` and `pipeline`. A "mixed" preset is just a `pipeline` preset where some stages use LiveKit Inference (`provider == "livekit_inference"`) and some use direct providers (deepgram/openai/cartesia/cerebras) — each stage dispatches on its own `provider`.
+
+**RBAC**: preset CRUD = `platform_admin`; assigning a preset to an agent = existing `agent:update` (org admin, validated in the agent routes — must exist + be published).
 
 ---
 
@@ -770,6 +803,7 @@ erDiagram
         varchar industry
         varchar location
         text business_details
+        text provider_credentials
         timestamptz created_at
         timestamptz updated_at
     }
@@ -784,6 +818,18 @@ erDiagram
         text mission
         text custom_instructions
         boolean is_active
+        uuid preset_id
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    pipeline_presets {
+        uuid id
+        varchar name
+        text description
+        varchar preset_type
+        jsonb config
+        boolean is_published
         timestamptz created_at
         timestamptz updated_at
     }
@@ -1051,6 +1097,7 @@ erDiagram
     }
 
     organizations ||--o{ voice_agents : "has many"
+    pipeline_presets ||--o{ voice_agents : "references (SET NULL on delete)"
     voice_agents ||--o{ agent_tools : "has many"
     voice_agents ||--o| agent_embed_configs : "has one"
     platform_tools ||--o{ agent_tools : "used by"
@@ -1120,6 +1167,7 @@ erDiagram
 24. `20260715000001` - Add MCP-source columns to `platform_tools` (`tool_source` default `'legacy'`, `mcp_server_url`, `mcp_server_headers`, `mcp_server_name`). Additive — existing rows default to `legacy` so the in-tree `BaseTool` path keeps working; rows marked `mcp` route through a remote MCP server over Streamable HTTP. See `docs/03_implementation/mcp_integration_rfc.md`.
 25. `20260725000001` - Add org scope + encrypted secret headers to `platform_tools`: `organization_id` (UUID NULLABLE, FK→`organizations.id` CASCADE, + index) for org-scoped custom MCP servers vs the global curated catalog, and `mcp_server_secret_headers` (TEXT NULLABLE, Fernet-encrypted JSON) for server-level API keys. Additive; existing rows (NULL org, NULL secrets) are unaffected. See `docs/03_implementation/mcp_integration_rfc.md`. (Note: the org-scoped custom tier was subsequently **retired** by 20260726000001; `organization_id` is now dormant and MCP creates force NULL.)
 26. `20260726000001` - Add `is_published BOOLEAN NOT NULL DEFAULT FALSE` + `ix_platform_tools_is_published` to `platform_tools`, and backfill `UPDATE platform_tools SET is_published = TRUE` so the live catalog is unaffected. Implements the publish lifecycle (RFC §6.6 revision 2026-07-26): platform admins author/test/publish MCP servers to the global catalog; org admins attach published servers with their own API key (`{{KEY}}` template). The org-scoped custom tier is retired (the `organization_id` column from 20260725000001 is kept dormant).
+27. `20260729000001` - Phase 3 of the modular voice engine. Add the `pipeline_presets` table (global platform-admin catalog, no RLS, `is_published` lifecycle, `preset_type` derived from `config.engine_mode`), `voice_agents.preset_id` (NULLABLE FK→`pipeline_presets.id` ON DELETE SET NULL + `ix_voice_agents_preset_id`), and `organizations.provider_credentials` (TEXT NULLABLE, Fernet-encrypted JSON of all per-org provider keys via `encrypt_data`). Backfill existing plaintext `google_api_key` into `provider_credentials['google']`; the `google_api_key` column is retained but no longer the source of truth (dropped in a follow-up migration). No versioning — the worker fetches the preset row live each call. See `docs/01_architecture/voice_engine_pipeline_design.md`.
 
 ---
 
@@ -1305,6 +1353,8 @@ Key indexes have been created for:
 - frequently queried columns (status, is_active, event_key)
 - Timestamp columns (created_at, expires_at)
 - Unique constraints (email, token, stripe_subscription_id)
+- Catalog publish lifecycle: `ix_platform_tools_is_published`, `ix_pipeline_presets_is_published` (org-user listing filters on `is_published=true`)
+- `ix_voice_agents_preset_id` (preset→agent usage join for the delete `in_use` guardrail)
 
 ### Query Patterns
 

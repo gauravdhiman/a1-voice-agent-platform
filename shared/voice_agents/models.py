@@ -14,11 +14,17 @@ class VoiceAgentBase(BaseModel):
     """Base model for Voice Agent."""
 
     name: str = Field(..., min_length=1, max_length=100, description="Agent name")
-    phone_number: Optional[str] = Field(None, max_length=20, description="Twilio phone number")
+    phone_number: Optional[str] = Field(
+        None, max_length=20, description="Twilio phone number"
+    )
     is_active: bool = Field(default=True, description="Whether the agent is active")
     persona: Optional[str] = Field(None, description="Agent persona or role")
-    tone: Optional[str] = Field(None, description="Communication tone (e.g., professional, friendly)")
-    mission: Optional[str] = Field(None, description="Specific goals or mission for this agent")
+    tone: Optional[str] = Field(
+        None, description="Communication tone (e.g., professional, friendly)"
+    )
+    mission: Optional[str] = Field(
+        None, description="Specific goals or mission for this agent"
+    )
     use_platform_credits: bool = Field(
         default=False,
         description="""
@@ -71,6 +77,16 @@ class VoiceAgentBase(BaseModel):
         regardless of whether markdown instructions are used.
         """,
     )
+    preset_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "FK to pipeline_presets.id. The worker loads this preset live each "
+            "call to pick the voice engine (realtime or pipeline) + per-stage "
+            "models. NULL = legacy agent -> realtime default config. Assignment "
+            "is validated (preset must exist and be published) by the agent "
+            "CRUD routes."
+        ),
+    )
 
     @field_validator("phone_number")
     @classmethod
@@ -108,8 +124,12 @@ class VoiceAgentUpdate(BaseModel):
     )
     is_active: Optional[bool] = Field(None, description="Whether the agent is active")
     persona: Optional[str] = Field(None, description="Agent persona or role")
-    tone: Optional[str] = Field(None, description="Communication tone (e.g., professional, friendly)")
-    mission: Optional[str] = Field(None, description="Specific goals or mission for this agent")
+    tone: Optional[str] = Field(
+        None, description="Communication tone (e.g., professional, friendly)"
+    )
+    mission: Optional[str] = Field(
+        None, description="Specific goals or mission for this agent"
+    )
     use_platform_credits: Optional[bool] = Field(
         None,
         description="""
@@ -139,6 +159,14 @@ class VoiceAgentUpdate(BaseModel):
     instructions_markdown: Optional[str] = Field(
         None,
         description="Full agent instructions in markdown format.",
+    )
+    preset_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "FK to pipeline_presets.id. If set, the preset must exist and be "
+            "published (validated by the route). NULL clears the preset (agent "
+            "falls back to the realtime default)."
+        ),
     )
 
 

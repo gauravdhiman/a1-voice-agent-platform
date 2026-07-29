@@ -1,0 +1,350 @@
+"""Tests for the platform-admin preset API routes (Phase 3).
+
+Mirrors the platform-skill route tests: the route handler is invoked directly
+with a mock UserProfile (``has_role`` controls platform_admin), the preset
+service is patched with AsyncMock, and we assert 403 for non-admins on the
+admin-only endpoints plus the success / 404 / 409 paths.
+"""
+
+from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+from uuid import UUID
+
+import pytest
+from fastapi import HTTPException
+
+from shared.voice_agents.preset_models import Preset, PresetType
+
+TEST_USER_ID = UUID("00000000-0000-0000-0000-000000000003")
+TEST_PRESET_ID = UUID("00000000-0000-0000-0000-000000000110")
+
+
+def _profile(is_admin: bool) -> Mock:
+    """Build a mock UserProfile whose has_role reports platform_admin or not."""
+    p = Mock()
+    p.has_role = Mock(return_value=is_admin)
+    return p
+
+
+def _preset(
+    is_published: bool = True,
+    preset_type: PresetType = PresetType.REALTIME,
+    name="Default Realtime",
+) -> Preset:
+    return Preset(
+        id=TEST_PRESET_ID,
+        name=name,
+        preset_type=preset_type,
+        config=(
+            {"engine_mode": "realtime"}
+            if preset_type is PresetType.REALTIME
+            else {
+                "engine_mode": "pipeline",
+                "stt": {"provider": "deepgram"},
+                "llm": {"provider": "openai"},
+                "tts": {"provider": "cartesia"},
+            }
+        ),
+        is_published=is_published,
+        created_at=datetime(2026, 7, 29),
+        updated_at=datetime(2026, 7, 29),
+    )
+
+
+class TestPresetRoutesAuthz:
+    """Authorization + success-path tests for the preset routes."""
+
+    @pytest.mark.asyncio
+    async def test_create_preset_requires_platform_admin(self):
+        """Create/upsert is 403 for non-admins."""
+        from src.voice_agents.preset_routes import create_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await create_preset(
+                preset_data=Mock(),
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_create_preset_succeeds_for_admin(self):
+        """Admin create returns the upserted preset (201 via route decorator)."""
+        from src.voice_agents.preset_routes import create_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.upsert_preset = AsyncMock(return_value=(_preset(), None))
+            # PresetCreate with a realtime config.
+            from shared.voice_agents.preset_models import PresetCreate
+
+            body = PresetCreate(
+                name="Default Realtime", config={"engine_mode": "realtime"}
+            )
+            result = await create_preset(
+                preset_data=body,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result.name == "Default Realtime"
+
+    @pytest.mark.asyncio
+    async def test_create_preset_validation_error_returns_400(self):
+        """A service validation error surfaces as 400."""
+        from src.voice_agents.preset_routes import create_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.upsert_preset = AsyncMock(
+                return_value=(None, "Invalid speech config: boom")
+            )
+            from shared.voice_agents.preset_models import PresetCreate
+
+            body = PresetCreate(name="X", config={"engine_mode": "realtime"})
+            with pytest.raises(HTTPException) as exc_info:
+                await create_preset(
+                    preset_data=body,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_preset_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import update_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await update_preset(
+                preset_id=TEST_PRESET_ID,
+                preset_data=Mock(),
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_update_preset_not_found_returns_404(self):
+        from shared.voice_agents.preset_models import PresetUpdate
+        from src.voice_agents.preset_routes import update_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.update_preset = AsyncMock(
+                return_value=(None, "Preset not found")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await update_preset(
+                    preset_id=TEST_PRESET_ID,
+                    preset_data=PresetUpdate(name="Renamed"),
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_publish_preset_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import publish_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await publish_preset(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_publish_preset_succeeds_for_admin(self):
+        from src.voice_agents.preset_routes import publish_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.publish_preset = AsyncMock(
+                return_value=(_preset(is_published=True), None)
+            )
+            result = await publish_preset(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result.is_published is True
+        mock_service.publish_preset.assert_awaited_once_with(TEST_PRESET_ID, True)
+
+    @pytest.mark.asyncio
+    async def test_unpublish_preset_succeeds_for_admin(self):
+        from src.voice_agents.preset_routes import unpublish_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.publish_preset = AsyncMock(
+                return_value=(_preset(is_published=False), None)
+            )
+            result = await unpublish_preset(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result.is_published is False
+        mock_service.publish_preset.assert_awaited_once_with(TEST_PRESET_ID, False)
+
+    @pytest.mark.asyncio
+    async def test_get_preset_usage_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import get_preset_usage
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_preset_usage(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_preset_usage_returns_count_and_agents(self):
+        from src.voice_agents.preset_routes import get_preset_usage
+
+        agents = [
+            {"id": str(UUID("00000000-0000-0000-0000-000000000001")), "name": "A"}
+        ]
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_preset_usage = AsyncMock(return_value=(agents, None))
+            result = await get_preset_usage(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result == {"count": 1, "agents": agents}
+
+    @pytest.mark.asyncio
+    async def test_delete_preset_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import delete_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await delete_preset(
+                preset_id=TEST_PRESET_ID,
+                force=False,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_delete_preset_in_use_returns_409(self):
+        from src.voice_agents.preset_routes import delete_preset
+
+        agents = [{"id": "x", "name": "A", "organization_id": "o"}]
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.delete_preset = AsyncMock(return_value=(None, "in_use"))
+            mock_service.get_preset_usage = AsyncMock(return_value=(agents, None))
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_preset(
+                    preset_id=TEST_PRESET_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["error"] == "in_use"
+        assert exc_info.value.detail["agents"] == agents
+
+    @pytest.mark.asyncio
+    async def test_delete_preset_not_found_returns_404(self):
+        from src.voice_agents.preset_routes import delete_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.delete_preset = AsyncMock(
+                return_value=(None, "Preset not found")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_preset(
+                    preset_id=TEST_PRESET_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_preset_force_succeeds(self):
+        from src.voice_agents.preset_routes import delete_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.delete_preset = AsyncMock(return_value=(True, None))
+            result = await delete_preset(
+                preset_id=TEST_PRESET_ID,
+                force=True,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result is None  # 204 No Content
+        mock_service.delete_preset.assert_awaited_once_with(TEST_PRESET_ID, force=True)
+
+    @pytest.mark.asyncio
+    async def test_list_presets_published_only_for_non_admin(self):
+        """Default list is open to non-admins (published-only)."""
+        from src.voice_agents.preset_routes import list_presets
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_presets = AsyncMock(return_value=([_preset()], None))
+            result = await list_presets(
+                preset_type=None,
+                include_drafts=False,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert len(result) == 1
+        called = mock_service.get_presets.call_args
+        assert called.kwargs["only_published"] is True
+        assert called.kwargs["include_drafts"] is False
+
+    @pytest.mark.asyncio
+    async def test_list_presets_include_drafts_requires_admin(self):
+        """include_drafts=True is 403 for non-admins."""
+        from src.voice_agents.preset_routes import list_presets
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_presets(
+                preset_type=None,
+                include_drafts=True,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_list_presets_include_drafts_succeeds_for_admin(self):
+        from src.voice_agents.preset_routes import list_presets
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_presets = AsyncMock(
+                return_value=([_preset(is_published=False)], None)
+            )
+            result = await list_presets(
+                preset_type=None,
+                include_drafts=True,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert len(result) == 1
+        called = mock_service.get_presets.call_args
+        assert called.kwargs["include_drafts"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_preset_published_open_to_any_authed(self):
+        from src.voice_agents.preset_routes import get_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_preset_by_id = AsyncMock(
+                return_value=(_preset(is_published=True), None)
+            )
+            result = await get_preset(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert result.is_published is True
+
+    @pytest.mark.asyncio
+    async def test_get_preset_draft_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import get_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_preset_by_id = AsyncMock(
+                return_value=(_preset(is_published=False), None)
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await get_preset(
+                    preset_id=TEST_PRESET_ID,
+                    user_data=(TEST_USER_ID, _profile(is_admin=False)),
+                )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_preset_not_found_returns_404(self):
+        from src.voice_agents.preset_routes import get_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_preset_by_id = AsyncMock(return_value=(None, None))
+            with pytest.raises(HTTPException) as exc_info:
+                await get_preset(
+                    preset_id=TEST_PRESET_ID,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 404

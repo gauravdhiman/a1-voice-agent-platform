@@ -59,6 +59,9 @@ class VoiceAgentService:
                         "mission": agent_data.mission,
                         "custom_instructions": agent_data.custom_instructions,
                         "instructions_markdown": agent_data.instructions_markdown,
+                        "preset_id": (
+                            str(agent_data.preset_id) if agent_data.preset_id else None
+                        ),
                     }
                 )
                 .execute()

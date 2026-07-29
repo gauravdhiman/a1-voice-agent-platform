@@ -69,6 +69,9 @@ shared/
 │   ├── livekit_service.py  # LiveKit room creation
 │   ├── models.py           # Voice agent data models
 │   ├── speech_config.py   # Per-agent speech engine config (realtime vs pipeline; discriminated union)
+│   ├── preset_models.py   # Platform-admin preset Pydantic models (Phase 3)
+│   ├── preset_service.py  # Platform-admin preset catalog CRUD (Phase 3; mirrors tool_service)
+│   ├── key_resolver.py    # Per-org provider key resolver: SpeechConfig + encrypted provider_credentials -> api_keys (Phase 3)
 │   ├── tools/             # Tool implementation framework
 │   │   ├── base/
 │   │   │   ├── base_tool.py            # Base class for tools

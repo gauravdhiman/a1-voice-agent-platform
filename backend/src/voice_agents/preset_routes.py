@@ -1,0 +1,264 @@
+"""Platform-admin API routes for managing voice-engine presets (Phase 3).
+
+A **preset** is a named, platform-admin-managed voice-engine configuration (see
+:mod:`shared.voice_agents.preset_models`). Presets are a global catalog with no
+RLS, mirroring the platform-tools / platform-skills catalogs. RBAC:
+
+- Preset **CRUD** (create/upsert, update, publish/unpublish, usage, delete) is
+  ``platform_admin`` only.
+- **Listing / fetch** of published presets is available to any authenticated
+  user (org admins pick a preset when configuring an agent). Drafts are
+  platform-admin only: ``include_drafts=True`` and viewing a draft preset both
+  require ``platform_admin``.
+- **Assigning** a preset to an agent is gated by the existing ``agent:update``
+  permission in the agent routes (validated there via ``preset_service``).
+
+No versioning: the worker fetches the preset row live on every call, so an
+admin's edit takes effect on the next call. Presets carry no secrets.
+"""
+
+import logging
+from typing import List, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from opentelemetry import trace
+
+from shared.voice_agents.preset_models import (
+    Preset,
+    PresetCreate,
+    PresetType,
+    PresetUpdate,
+)
+from shared.voice_agents.preset_service import preset_service
+from src.auth.dependencies import assert_platform_role
+from src.auth.middleware import get_authenticated_user
+from src.auth.models import UserProfile
+
+logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
+
+preset_router = APIRouter(prefix="/api/v1/presets", tags=["Voice Presets"])
+
+
+def _require_platform_admin(user_profile: UserProfile) -> None:
+    """Raise 403 if the user is not a platform admin."""
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Platform admin access required",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Preset CRUD (platform admin only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@preset_router.post("/", response_model=Preset, status_code=status.HTTP_201_CREATED)
+@tracer.start_as_current_span("preset.routes.create")
+async def create_preset(
+    preset_data: PresetCreate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Create or replace a preset by name (platform admin only).
+
+    Upsert by ``name``: if a preset with the same name exists it is fully
+    replaced. The new preset starts as a draft (``is_published=False``) unless
+    the body sets otherwise; publish it via ``POST /{id}/publish``.
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.upsert_preset(preset_data)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return preset
+
+
+@preset_router.put("/{preset_id}", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.update")
+async def update_preset(
+    preset_id: UUID,
+    preset_data: PresetUpdate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Partially update a preset (platform admin only)."""
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.update_preset(preset_id, preset_data)
+    if error:
+        if error == "Preset not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return preset
+
+
+@preset_router.post("/{preset_id}/publish", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.publish")
+async def publish_preset(
+    preset_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Publish a draft preset to the global catalog (platform admin only)."""
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.publish_preset(preset_id, True)
+    if error:
+        if error == "Preset not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return preset
+
+
+@preset_router.post("/{preset_id}/unpublish", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.unpublish")
+async def unpublish_preset(
+    preset_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Revert a published preset to draft (platform admin only).
+
+    Unpublishing hides the preset from new assignments; agents already using it
+    keep working (the worker reads the preset by id, not via the listing).
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.publish_preset(preset_id, False)
+    if error:
+        if error == "Preset not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return preset
+
+
+@preset_router.get("/{preset_id}/usage")
+@tracer.start_as_current_span("preset.routes.usage")
+async def get_preset_usage(
+    preset_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> dict:
+    """List the agents currently referencing a preset (platform admin only).
+
+    Used by the delete flow's 409 ``in_use`` body and the unpublish banner.
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    usage, error = await preset_service.get_preset_usage(preset_id)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    return {"count": len(usage), "agents": usage}
+
+
+@preset_router.delete("/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
+@tracer.start_as_current_span("preset.routes.delete")
+async def delete_preset(
+    preset_id: UUID,
+    force: bool = Query(
+        False,
+        description=(
+            "Allow deleting a preset that is in use. Without force, a preset "
+            "referenced by any agent returns 409 with the affected agent list "
+            "(the FK ON DELETE SET NULL would drop them to the realtime "
+            "default); force acknowledges that and proceeds."
+        ),
+    ),
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> None:
+    """Permanently delete a preset (platform admin only)."""
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    success, error = await preset_service.delete_preset(preset_id, force=force)
+    if error:
+        if error == "Preset not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+        if error == "in_use":
+            usage, _ = await preset_service.get_preset_usage(preset_id)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "in_use",
+                    "message": (
+                        "Preset is assigned to agents. Reassign them or "
+                        "retry with ?force=true to detach them (they fall "
+                        "back to the realtime default)."
+                    ),
+                    "agents": usage,
+                },
+            )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Preset listing / fetch (published = any authed; drafts = platform admin)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@preset_router.get("/", response_model=List[Preset])
+@tracer.start_as_current_span("preset.routes.list")
+async def list_presets(
+    preset_type: Optional[PresetType] = Query(
+        None, description="Filter by preset type (realtime|pipeline)."
+    ),
+    include_drafts: bool = Query(
+        False,
+        description=(
+            "Include draft (unpublished) presets. Platform admin only — a "
+            "non-admin passing true gets 403."
+        ),
+    ),
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> List[Preset]:
+    """List presets.
+
+    By default returns only published presets (the org-admin assignment list).
+    ``include_drafts=True`` returns drafts too and requires ``platform_admin``.
+    """
+    current_user_id, user_profile = user_data
+    if include_drafts:
+        _require_platform_admin(user_profile)
+
+    presets, error = await preset_service.get_presets(
+        only_published=not include_drafts,
+        preset_type=preset_type,
+        include_drafts=include_drafts,
+    )
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    return presets
+
+
+@preset_router.get("/{preset_id}", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.get")
+async def get_preset(
+    preset_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Fetch a single preset by id.
+
+    Published presets are visible to any authenticated user. Draft presets are
+    platform-admin only — a non-admin fetching a draft gets 403.
+    """
+    current_user_id, user_profile = user_data
+
+    preset, error = await preset_service.get_preset_by_id(preset_id)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    if preset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Preset not found"
+        )
+    if not preset.is_published:
+        _require_platform_admin(user_profile)
+    return preset

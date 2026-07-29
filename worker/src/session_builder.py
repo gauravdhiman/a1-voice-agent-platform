@@ -34,7 +34,7 @@ from shared.voice_agents.speech_config import PipelineSpeechConfig, RealtimeSpee
 
 def build_agent_session(
     speech_config: Union[RealtimeSpeechConfig, PipelineSpeechConfig],
-    api_keys: dict[str, str],
+    api_keys: dict[str, Any],
     userdata: dict[str, Any],
 ) -> AgentSession:
     """Build a LiveKit AgentSession for the given speech config.

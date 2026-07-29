@@ -14,16 +14,6 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from src.auth.routes import auth_router
-from src.billing.routes import router as billing_router
-from src.notifications.routes import router as notification_router
-from src.organization.routes import organization_router
-from src.phone_numbers.routes import router as phone_number_router
-from src.rbac.routes import rbac_router
-from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
-from src.call_logs import call_logs_router
-from src.voice_agents import agent_router, embed_router, platform_skill_router, skill_router, tool_router, voice_router
-from src.voice_templates import voice_templates_router
 
 from shared.config import settings, supabase_config
 
@@ -34,6 +24,24 @@ from shared.config.opentelemetry import (
     logging_level,
     setup_manual_opentelemetry,
 )
+from src.auth.routes import auth_router
+from src.billing.routes import router as billing_router
+from src.call_logs import call_logs_router
+from src.notifications.routes import router as notification_router
+from src.organization.routes import organization_router
+from src.phone_numbers.routes import router as phone_number_router
+from src.rbac.routes import rbac_router
+from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
+from src.voice_agents import (
+    agent_router,
+    embed_router,
+    platform_skill_router,
+    preset_router,
+    skill_router,
+    tool_router,
+    voice_router,
+)
+from src.voice_templates import voice_templates_router
 
 # Configure logging to ensure it outputs to stdout with proper formatting
 # The OpenTelemetry logging handler is added in the setup_manual_opentelemetry function
@@ -143,6 +151,9 @@ def create_app() -> FastAPI:
     app.include_router(skill_router)
     app.include_router(platform_skill_router)
 
+    # Include voice-engine preset routes (platform admin CRUD + published listing)
+    app.include_router(preset_router)
+
     # Include embed routes (public, no auth required)
     app.include_router(embed_router)
 
@@ -189,9 +200,7 @@ async def lifespan(app: FastAPI):
         )
 
     from shared.voice_agents.tool_service import ToolService
-    from shared.voice_agents.tools.base.registry_livekit import (
-        livekit_tool_registry,
-    )
+    from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
     from src.services.token_refresh_service import (
         start_token_refresh_service,
         stop_token_refresh_service,

@@ -133,14 +133,16 @@ the concrete type when constructing the ``AgentSession``."""
 
 def build_session_components(
     speech_config: Union[RealtimeSpeechConfig, PipelineSpeechConfig],
-    api_keys: dict[str, str],
+    api_keys: dict[str, Any],
 ) -> SessionComponents:
     """Build the LiveKit session components for a speech config.
 
     Args:
         speech_config: The agent's speech config (realtime or pipeline).
         api_keys: Per-provider API key map, e.g. ``{"google": "<key>"}``. The
-            realtime branch requires a ``"google"`` entry.
+            realtime branch requires a ``"google"`` entry. Pipeline entries are
+            strings; the ``"livekit"`` entry (only present when an Inference
+            stage is used) is a nested ``{"api_key", "api_secret"}`` dict.
 
     Returns:
         RealtimeComponents for a realtime config; PipelineComponents for a
@@ -183,7 +185,7 @@ def _build_keyed_stage(
     stage_name: str,
     stage_config: StageConfig,
     builders: dict[str, Callable[..., Any]],
-    api_keys: dict[str, str],
+    api_keys: dict[str, Any],
 ) -> Any:
     """Dispatch a keyed stage (STT/LLM/TTS) to its provider builder.
 
@@ -296,22 +298,25 @@ def _build_pipeline_turn_detection(
 def _build_livekit_inference_stage(
     stage_name: str,
     stage_config: StageConfig,
-    api_keys: dict[str, str],
+    api_keys: dict[str, Any],
 ) -> Any:
     """Dispatch an Inference stage (``provider == "livekit_inference"``) to its builder.
 
     LiveKit Inference uses a single LiveKit Cloud auth across all Inference
     stages, so it bypasses the keyed ``*_BUILDERS`` path and its per-provider
-    key guard. The builder resolves the LiveKit key itself (env in Phase 2b;
-    Phase 3's per-org ``key_resolver`` will inject a tenant's key via the
-    builder's ``api_key`` / ``api_secret`` kwargs).
+    key guard. The tenant's per-org LiveKit key is injected via the builder's
+    ``api_key`` / ``api_secret`` kwargs (populated by the Phase 3
+    ``key_resolver`` into ``api_keys["livekit"]``). When no ``livekit`` entry is
+    present (an org without a LiveKit key, or ``use_platform_credits``), both
+    kwargs are ``None`` and the builder falls back to the platform
+    ``LIVEKIT_API_KEY`` / ``LIVEKIT_API_SECRET`` env vars — preserving the
+    Phase 2b behavior.
 
     Args:
         stage_name: One of ``"stt"`` / ``"llm"`` / ``"tts"``.
         stage_config: The stage's config (carries ``provider``/``model``/``params``).
-        api_keys: Per-provider API key map. Unused in Phase 2b (Inference reads
-            the LiveKit key from the env); reserved for the Phase 3 per-org
-            key_resolver.
+        api_keys: Per-provider API key map. Only the ``"livekit"`` entry
+            (a ``{"api_key", "api_secret"}`` dict) is read here.
 
     Returns:
         The constructed LiveKit Inference plugin for the stage.
@@ -326,23 +331,26 @@ def _build_livekit_inference_stage(
             f"LiveKit Inference does not support stage {stage_name!r}; "
             f"supported stages: {sorted(LIVEKIT_INFERENCE_STAGE_BUILDERS.keys())}"
         )
-    # TODO: [Phase 3] Inject the tenant's per-org LiveKit key for Inference
-    # here once the key_resolver populates api_keys["livekit"]:
-    #   lk = api_keys.get("livekit") or {}
-    #   builder(stage_config, api_key=lk.get("api_key"), api_secret=lk.get("api_secret"))
+    # Phase 3: inject the tenant's per-org LiveKit key for Inference. The
+    # key_resolver populates api_keys["livekit"] = {"api_key", "api_secret"}
+    # only when the preset uses an Inference stage. When absent, both are None
+    # and the builder falls back to the platform env (Phase 2b behavior).
     # Rationale: the platform's LiveKit plan limits won't scale to all tenants'
     # calls, so a tenant can bring its own LiveKit key for Inference (mirrors
-    # the Google-key BYO / use_platform_credits pattern). Phase 2b uses the
-    # platform key from the env until that resolver lands.
-    _ = api_keys  # reserved for Phase 3 (see TODO above)
-    return builder(stage_config)
+    # the Google-key BYO / use_platform_credits pattern).
+    lk = api_keys.get("livekit") or {}
+    return builder(
+        stage_config,
+        api_key=lk.get("api_key"),
+        api_secret=lk.get("api_secret"),
+    )
 
 
 def _build_keyed_or_livekit_inference_stage(
     stage_name: str,
     stage_config: StageConfig,
     builders: dict[str, Callable[..., Any]],
-    api_keys: dict[str, str],
+    api_keys: dict[str, Any],
 ) -> Any:
     """Dispatch a pipeline stage, choosing the Inference or keyed path.
 
@@ -366,7 +374,7 @@ def _build_keyed_or_livekit_inference_stage(
 
 def _build_pipeline_components(
     speech_config: PipelineSpeechConfig,
-    api_keys: dict[str, str],
+    api_keys: dict[str, Any],
 ) -> PipelineComponents:
     """Assemble PipelineComponents from a pipeline speech config.
 

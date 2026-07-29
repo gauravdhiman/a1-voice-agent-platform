@@ -56,9 +56,37 @@ A Pydantic discriminated union on `engine_mode`:
   dict, so adding a provider never needs a schema migration.
 - `parse_speech_config(None)` → default realtime config (backward compatibility).
 
-Stored as a single JSONB column `voice_agents.speech_config` (Phase 3 Alembic
-migration). JSONB + discriminated union = adding a provider/tunable is a code
-change, not a migration.
+A `SpeechConfig` is stored as the `config` JSONB column on a **preset** row
+(`pipeline_presets.config` — Phase 3 Alembic migration `20260729000001`), not
+directly on the agent. An agent references a preset via `voice_agents.preset_id`
+(FK); the worker loads the preset row live on every call and parses its `config`
+(no versioning — admin edits take effect on the next call). JSONB + discriminated
+union = adding a provider/tunable is a code change, not a migration.
+
+### `shared/voice_agents/preset_models.py` + `preset_service.py` — preset catalog (Phase 3)
+
+Platform-admin-managed named presets mirroring the `platform_tools` catalog
+pattern: no RLS, `is_published` lifecycle, `(result, error)` service contract,
+`assert_platform_role("platform_admin")` gating. `PresetType` is
+`realtime`|`pipeline`, **derived from `config.engine_mode` on every write** by
+the service (denormalized filter column, never hand-set; `extra="forbid"` on the
+Pydantic models rejects a hand-set `preset_type`). The worker fetches a preset by
+id (`get_preset_by_id`) — drafts and published both resolve; assignment
+validation (in the agent routes) enforces `is_published`. Deleting an in-use
+preset returns `"in_use"` (route → 409 with the agent list); `?force=true` proceeds
+and the `voice_agents.preset_id` FK `ON DELETE SET NULL` drops agents back to the
+realtime default. Presets carry **no secrets**.
+
+### `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3)
+
+`resolve_api_keys(speech_config, org, use_platform_credits)` → the `api_keys` map
+the factory expects. Reads all per-org provider keys from one Fernet-encrypted
+`organizations.provider_credentials` blob (via `decrypt_data`), with platform env
+fallback and the `use_platform_credits` toggle. **Only the providers the config
+needs appear**; missing providers are omitted (the registry's guard fails fast).
+`livekit: {api_key, api_secret}` is injected **only when an Inference stage is
+used**. The registry's `_build_livekit_inference_stage` passes those to the
+Inference builders (env fallback when both `None`).
 
 ### `worker/src/speech_providers/` — provider factory (the modular core)
 
@@ -183,15 +211,24 @@ for the core capability.
   platform LiveKit key from the env in Phase 2b; the `api_key`/`api_secret`
   builder kwargs are the Phase 3 per-org injection seam. 100% coverage on new
   modules; behavior-neutral (worker still uses the realtime default).
-- **Phase 3** — platform-admin-managed **pipeline presets** (table +
-  Alembic migration adding `voice_agents.speech_config` JSONB); backend CRUD +
-  RBAC; per-org **key resolver** (LiveKit key+secret as a first-class org
-  credential for Inference, plus direct-provider keys, `use_platform_credits`);
-  agents reference a preset (reference + versioning). Two preset types only:
-  `{realtime, pipeline}` — a "mixed" preset is just a pipeline where some stages
-  use Inference and some use direct providers.
-- **Phase 4** — frontend agent config UI (engine mode + per-stage model pickers);
-  RBAC gating on who can switch engines.
+- **Phase 3 (done)** — platform-admin-managed **pipeline presets**: the
+  `pipeline_presets` catalog table + `voice_agents.preset_id` FK + encrypted
+  `organizations.provider_credentials` blob (Alembic migration
+  `20260729000001`, reviewed but **not run** — awaits owner approval). Backend
+  CRUD + RBAC (`preset_routes.py`, platform_admin) + agent assignment validation
+  (must exist + be published). Per-org **key resolver** (`key_resolver.py`): all
+  keys in one encrypted blob, `livekit` injected only for Inference stages,
+  missing providers omitted, `use_platform_credits` toggle. **No versioning** —
+  the worker fetches the preset row live each call; admin edits take effect on
+  the next call. Two preset types only: `{realtime, pipeline}` — a "mixed" preset
+  is just a pipeline where some stages use Inference and some use direct
+  providers. 100% coverage on the new shared modules; 95 backend + 45 worker
+  Phase-3 tests green; no-network container smoke confirms the key-resolution →
+  Inference-injection seam. No frontend in this phase (no browser validation) —
+  legacy agents (`preset_id=None`) are unchanged.
+- **Phase 4** — frontend preset picker + platform-admin preset management UI +
+  per-provider org-credentials UI (fold `engine_mode` into one "voice profile"
+  picker); RBAC gating on who can switch engines.
 - **Phase 5** — latency hardening (borrowed from HF `speech-to-speech`) + the
   explicit turn-detector builder.
 
@@ -222,9 +259,38 @@ for the core capability.
   key guards, unsupported-provider / unsupported-vad / non-`None`-turn-detection
   `NotImplementedError`s, always-on default Silero VAD, `TypeError` guard;
   Inference special-path dispatch (no per-stage key guard), Cerebras keyed
-  dispatch + missing-key guard, mixed Inference+direct pipeline.
+  dispatch + missing-key guard, mixed Inference+direct pipeline, **Phase 3
+  Inference `api_key`/`api_secret` injection from `api_keys["livekit"]`** +
+  env fallback when `livekit` absent.
 - `worker/tests/test_session_builder.py` — realtime + pipeline session assembly,
   userdata forwarding, `vad`/`turn_detection` omission vs forwarding,
   unknown-component `TypeError` guard.
 - `worker/tests/test_realtime_config.py` — (pre-existing) default tuning via the
   backward-compat shim.
+
+### Phase 3 tests (presets + key resolver + org credentials)
+
+- `backend/tests/shared/voice_agents/test_preset_models.py` — `config`
+  discriminated-union validation (realtime vs pipeline), `preset_type` not
+  hand-set (`extra="forbid"`).
+- `backend/tests/shared/voice_agents/test_preset_service.py` — upsert derives
+  `preset_type`; publish flip; list `only_published`/`include_drafts`; usage
+  join; delete `in_use` guard + `force`; `(result, error)` shape; all
+  failure/exception/not-found branches (100% coverage).
+- `backend/tests/shared/voice_agents/test_key_resolver.py` — realtime →
+  `{"google"}`; pipeline direct-only → no `livekit`; Inference stage → `livekit`
+  present; `use_platform_credits` forces env; org key wins; missing → omitted;
+  `livekit` nested dict shape; google from decrypted blob not plaintext column;
+  unsupported-config `TypeError`; empty org blob (100% coverage).
+- `backend/tests/voice_agents/test_preset_routes.py` — 403 for non-admin on
+  create/publish/unpublish/usage/delete + `include_drafts`; 201/200 success for
+  platform_admin; list published-only vs drafts; 409 `in_use` with agent list;
+  404 not found; draft fetch 403 for non-admin.
+- `backend/tests/voice_agents/test_agent_routes.py::TestAgentPresetAssignment` —
+  create/update with `preset_id` validates published; draft → 400; missing → 400;
+  lookup error → 400; `preset_id=None` and omitted-`preset_id` skip validation.
+- `backend/tests/organization/test_org_credentials.py` — writing `google_api_key`
+  stores encrypted `provider_credentials["google"]` + clears plaintext column;
+  empty key clears; `provider_credentials_input` merged; invalid key rejected;
+  read path resolves from decrypted blob / plaintext fallback / decrypt-failure
+  fallback; `_merge_provider_credentials` preserve/clear/empty/decrypt-failure.
