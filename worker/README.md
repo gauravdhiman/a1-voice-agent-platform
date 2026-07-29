@@ -148,13 +148,43 @@ Located in `shared/voice_agents/tools/base/registry_livekit.py`
 - Maintains mapping of tool names to classes
 - Provides metadata for LLM integration
 
+#### 5. Voice Engine (realtime + pipeline)
+
+The worker supports two configurable conversation engines per agent, selected by
+the agent's `speech_config` (see
+[`docs/02_core_systems/voice_engine.md`](../docs/02_core_systems/voice_engine.md)):
+
+- **realtime** — end-to-end Google Gemini native-audio model (STT+LLM+TTS in one).
+- **pipeline** — modular STT → LLM → TTS cascade, each stage swappable (Phase 2).
+
+The two engines diverge at a **single seam** — `src/session_builder.py`'s
+`build_agent_session()` — which constructs the LiveKit `AgentSession` the right
+way for the engine. Everything else (room dispatch, prompt building, tools/MCP,
+greeting) is shared and engine-agnostic.
+
+- `src/speech_providers/` — provider factory package. `realtime/provider.py`
+  builds the `RealtimeModel`; `registry.py` maps a `SpeechConfig` to session
+  components (`RealtimeComponents` / `PipelineComponents`). Adding a provider =
+  one builder + one factory branch.
+- `shared/voice_agents/speech_config.py` — Pydantic discriminated-union config
+  (`RealtimeSpeechConfig` / `PipelineSpeechConfig`) stored as JSONB.
+- `src/realtime_config.py` — backward-compat shim re-exporting the realtime
+  builder under its old names.
+
 ## 📁 Project Structure
 
 ```
 worker/
 ├── src/
 │   ├── worker.py              # Main entry point and tool wrapping
-│   └── default_system_prompt.py  # Default system prompt template
+│   ├── session_builder.py     # Voice-engine seam: builds AgentSession (realtime/pipeline)
+│   ├── realtime_config.py     # Backward-compat shim -> speech_providers.realtime
+│   ├── default_system_prompt.py  # Default system prompt template
+│   ├── speech_providers/      # Provider factory package (realtime today; stt/llm/tts in Phase 2)
+│   │   ├── registry.py        # build_session_components() dispatch
+│   │   └── realtime/provider.py  # Google RealtimeModel builder + tuning
+│   └── tools/                 # Worker-side tool helpers (skill tools)
+├── tests/                     # pytest suite (run inside the worker dev container)
 ├── .docs/
 │   └── livekit_tool_wrapping_architecture.md  # Tool wrapping details
 ├── test_livekit_wrapping.py  # Test file for wrapper approaches

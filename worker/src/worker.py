@@ -7,7 +7,6 @@ from default_system_prompt import default_system_prompt
 from livekit.agents import (
     Agent,
     AgentServer,
-    AgentSession,
     JobContext,
     RunContext,
     cli,
@@ -15,11 +14,12 @@ from livekit.agents import (
 )
 from livekit.agents.voice import room_io
 
-from realtime_config import build_realtime_model
+from session_builder import build_agent_session
 
 from shared.common.security import decrypt_data
 from shared.voice_agents.livekit_service import livekit_service
 from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.speech_config import default_realtime_config
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
 from shared.voice_agents.prompt_builder import PromptBuilder, build_current_datetime_section
@@ -247,7 +247,7 @@ class DynamicAgent(Agent):
         # it explicitly so a future framework default change cannot silently
         # regress barge-in (the "agent repeats itself after the user already
         # responded" symptom). The Gemini server side is also set to
-        # START_OF_ACTIVITY_INTERRUPTS in realtime_config — both layers honor
+        # START_OF_ACTIVITY_INTERRUPTS in speech_providers.realtime.provider — both layers honor
         # interruption.
         super().__init__(instructions=instructions, allow_interruptions=True)
 
@@ -552,18 +552,27 @@ async def entrypoint(ctx: JobContext):
             api_key = os.getenv("GEMINI_API_KEY")
             logger.info(f"Agent {agent_id} using platform API key (no org key configured)")
 
-        # 5. Create Gemini RealtimeModel
-        # The realtime model tuning (thinking off, barge-in on, endpointing
-        # tuned, temperature lowered) lives in realtime_config.build_realtime_model
-        # so it is unit-tested independently of this live entrypoint. See that
-        # module's docstring for the rationale and the model-options analysis
-        # for why the 2.5 native-audio model is kept (not the 3.1 "live" preview).
-        model = build_realtime_model(api_key=api_key)
-
-        # 5. Create LiveKit Agent
-        # 6. Start Session
-        agent_session = AgentSession(
-            llm=model, userdata={"agent_id": agent_id, "agent_name": voice_agent.name}
+        # 5. Build the LiveKit AgentSession via the speech-engine seam.
+        # session_builder dispatches on engine_mode (realtime today; the modular
+        # STT->LLM->TTS pipeline arrives in Phase 2) and constructs the
+        # AgentSession the right way for the engine. The realtime model tuning
+        # (thinking off, barge-in on, endpointing tuned, temperature lowered)
+        # lives in speech_providers.realtime.provider so it is unit-tested
+        # independently of this live entrypoint — see that module's docstring for
+        # the rationale and the model-options analysis for why the 2.5
+        # native-audio model is kept (not the 3.1 "live" preview).
+        #
+        # TODO: Phase 3 — load speech_config from voice_agent.speech_config (the
+        # new JSONB column) instead of the default realtime config, so each agent
+        # can pick its engine and per-stage models. The api_keys map will be
+        # assembled by a dedicated key_resolver that resolves per-provider
+        # org-vs-platform keys (extending the Google-only resolution above).
+        speech_config = default_realtime_config()
+        api_keys = {"google": api_key}
+        agent_session = build_agent_session(
+            speech_config=speech_config,
+            api_keys=api_keys,
+            userdata={"agent_id": agent_id, "agent_name": voice_agent.name},
         )
 
         await agent_session.start(

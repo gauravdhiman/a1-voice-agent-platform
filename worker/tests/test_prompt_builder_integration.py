@@ -161,37 +161,41 @@ class TestPromptBuilderIntegration:
                         return_value=([], None)
                     )
 
-                    # Mock AgentSession and other LiveKit components
-                    with patch("worker.AgentSession") as mock_session_class:
+                    # Mock the speech-engine seam. The Phase 1 refactor replaced
+                    # the entrypoint's direct AgentSession + build_realtime_model
+                    # calls with a single build_agent_session call, so that is the
+                    # patch target now. Returning an AsyncMock session lets the
+                    # entrypoint run (start / generate_reply) without real LiveKit
+                    # plumbing.
+                    with patch("worker.build_agent_session") as mock_build_session:
                         mock_session = AsyncMock()
-                        mock_session_class.return_value = mock_session
+                        mock_build_session.return_value = mock_session
 
-                        with patch("worker.build_realtime_model"):
-                            with patch("worker.DynamicAgent") as mock_agent_class:
-                                mock_agent = MagicMock()
-                                # update_tools is awaited in the entrypoint, so it
-                                # must return an awaitable (a plain MagicMock would
-                                # raise "object MagicMock can't be used in 'await'").
-                                mock_agent.update_tools = AsyncMock()
-                                mock_agent_class.return_value = mock_agent
+                        with patch("worker.DynamicAgent") as mock_agent_class:
+                            mock_agent = MagicMock()
+                            # update_tools is awaited in the entrypoint, so it
+                            # must return an awaitable (a plain MagicMock would
+                            # raise "object MagicMock can't be used in 'await'").
+                            mock_agent.update_tools = AsyncMock()
+                            mock_agent_class.return_value = mock_agent
 
-                                # Execute entrypoint
-                                await entrypoint(mock_job_context)
+                            # Execute entrypoint
+                            await entrypoint(mock_job_context)
 
-                                # Verify that DynamicAgent was created with the
-                                # fallback instructions: the current-date/time
-                                # anchor is prepended to default_system_prompt
-                                # (org fetch failed, so no PromptBuilder context).
-                                call_args = mock_agent_class.call_args
-                                assert call_args is not None
-                                instructions = call_args.kwargs.get("instructions", call_args[1].get("instructions"))
-                                # The datetime anchor is the first section.
-                                assert instructions.startswith("# CURRENT DATE AND TIME")
-                                # The guidance text grounds "today"/"tomorrow"/"now".
-                                assert "Treat this as the current date and time" in instructions
-                                # The default prompt is appended after the anchor.
-                                assert default_system_prompt in instructions
-                                assert instructions.endswith(default_system_prompt)
+                            # Verify that DynamicAgent was created with the
+                            # fallback instructions: the current-date/time
+                            # anchor is prepended to default_system_prompt
+                            # (org fetch failed, so no PromptBuilder context).
+                            call_args = mock_agent_class.call_args
+                            assert call_args is not None
+                            instructions = call_args.kwargs.get("instructions", call_args[1].get("instructions"))
+                            # The datetime anchor is the first section.
+                            assert instructions.startswith("# CURRENT DATE AND TIME")
+                            # The guidance text grounds "today"/"tomorrow"/"now".
+                            assert "Treat this as the current date and time" in instructions
+                            # The default prompt is appended after the anchor.
+                            assert default_system_prompt in instructions
+                            assert instructions.endswith(default_system_prompt)
 
     @pytest.mark.asyncio
     async def test_prompt_generation_with_partial_org_data(self, sample_voice_agent_full):

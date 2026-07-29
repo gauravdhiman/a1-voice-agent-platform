@@ -28,6 +28,7 @@ Understanding how the system works.
 - **[Frontend Architecture](01_architecture/frontend_architecture.md)** - Frontend structure and design
 - **[Backend Architecture](01_architecture/backend_architecture.md)** - Backend structure and design
 - **[Twilio Call Flow](01_architecture/twilio_call_flow.md)** - Incoming call handling architecture
+- **[Voice Engine: End-to-End + Pipeline Design](01_architecture/voice_engine_pipeline_design.md)** - High-level design (Mermaid) for supporting realtime + modular STT→LLM→TTS pipeline engines per agent
 
 ### Database
 
@@ -48,6 +49,7 @@ Comprehensive documentation organized by feature.
 7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 9. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
+10. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
 
 ### Multi-Tenancy & RBAC
 
