@@ -160,3 +160,14 @@ class Organization(OrganizationBase):
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    provider_credentials_status: Optional[Dict[str, bool]] = Field(
+        default=None,
+        description=(
+            "Per-provider 'is a key configured?' map (booleans only — never the "
+            "decrypted values), derived from the encrypted provider_credentials "
+            "blob on read: {google, deepgram, openai, cartesia, cerebras, "
+            "livekit}. Surfaced so the org-settings UI can show "
+            "Configured/Not-configured pills per provider without exposing "
+            "secrets to the frontend. Read-only; not an input field."
+        ),
+    )

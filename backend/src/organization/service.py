@@ -15,12 +15,10 @@ from shared.common.security import decrypt_data, encrypt_data
 from shared.organization.service import BaseOrganizationService
 from src.notifications.models import SendNotificationRequest
 from src.notifications.service import notification_service
-from src.organization.invitation_models import (
-    Invitation,
-    InvitationCreate,
-    InvitationStatus,
-)
-from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
+from src.organization.invitation_models import (Invitation, InvitationCreate,
+                                                InvitationStatus)
+from src.organization.models import (Organization, OrganizationCreate,
+                                     OrganizationUpdate)
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
@@ -59,21 +57,31 @@ class OrganizationService(BaseOrganizationService):
         migrated. The encrypted blob is also attached to the model so the worker
         path (which decrypts it itself) and any internal caller can read it.
 
+        Also derives ``provider_credentials_status`` — a per-provider
+        "configured?" boolean map (never the decrypted values) — so the
+        org-settings UI can show Configured/Not-configured pills per provider
+        without exposing secrets to the frontend.
+
         Args:
             org_dict: A raw row from the ``organizations`` table.
 
         Returns:
             An :class:`Organization` with ``google_api_key`` populated from the
-            decrypted blob (so the existing org-settings UI form still works)
-            and ``provider_credentials`` carrying the opaque encrypted blob.
+            decrypted blob (so the existing org-settings UI form still works),
+            ``provider_credentials`` carrying the opaque encrypted blob, and
+            ``provider_credentials_status`` carrying the per-provider boolean
+            map.
         """
         provider_credentials = org_dict.get("provider_credentials")
         google_api_key = org_dict.get("google_api_key")
+        creds: dict = {}
         if provider_credentials:
             try:
-                creds = decrypt_data(provider_credentials)
-                if isinstance(creds, dict) and creds.get("google"):
-                    google_api_key = creds["google"]
+                decrypted = decrypt_data(provider_credentials)
+                if isinstance(decrypted, dict):
+                    creds = decrypted
+                    if creds.get("google"):
+                        google_api_key = creds["google"]
             except Exception as e:
                 logger.error(
                     "Failed to decrypt provider_credentials for org %s: %s",
@@ -81,6 +89,20 @@ class OrganizationService(BaseOrganizationService):
                     e,
                     exc_info=True,
                 )
+        # Per-provider "configured?" booleans. `google` is True when resolvable
+        # from the blob OR the legacy plaintext column fallback; the string
+        # providers are True when present in the decrypted blob; `livekit` is
+        # True only when its nested dict carries an api_key.
+        livekit_creds = creds.get("livekit")
+        provider_credentials_status = {
+            "google": bool(google_api_key),
+            "deepgram": bool(creds.get("deepgram")),
+            "openai": bool(creds.get("openai")),
+            "cartesia": bool(creds.get("cartesia")),
+            "cerebras": bool(creds.get("cerebras")),
+            "livekit": isinstance(livekit_creds, dict)
+            and bool(livekit_creds.get("api_key")),
+        }
         return Organization(
             id=org_dict["id"],
             name=org_dict["name"],
@@ -93,6 +115,7 @@ class OrganizationService(BaseOrganizationService):
             business_details=org_dict.get("business_details"),
             google_api_key=google_api_key,
             provider_credentials=provider_credentials,
+            provider_credentials_status=provider_credentials_status,
             onboarding_completed=org_dict.get("onboarding_completed", False),
             created_at=org_dict["created_at"],
             updated_at=org_dict["updated_at"],

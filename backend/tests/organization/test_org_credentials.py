@@ -302,3 +302,100 @@ class TestMergeProviderCredentials:
             )
         # Existing blob undecryptable → start fresh, only the new key remains.
         mock_enc.assert_called_once_with({"google": "G1"})
+
+
+class TestProviderCredentialsStatus:
+    """_organization_from_dict surfaces a per-provider "configured?" status map.
+
+    The map (booleans only — never the decrypted values) lets the org-settings
+    UI show Configured/Not-configured pills per provider without exposing
+    secrets to the frontend.
+    """
+
+    EXPECTED_KEYS = {"google", "deepgram", "openai", "cartesia", "cerebras", "livekit"}
+
+    def test_status_from_blob_with_multiple_providers(self):
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {
+                "google": "G1",
+                "openai": "sk-xxx",
+                "livekit": {"api_key": "lk", "api_secret": "lks"},
+            }
+            org = OrganizationService._organization_from_dict(
+                _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
+            )
+        assert set(org.provider_credentials_status.keys()) == self.EXPECTED_KEYS
+        status = org.provider_credentials_status
+        assert status["google"] is True
+        assert status["openai"] is True
+        assert status["livekit"] is True
+        assert status["deepgram"] is False
+        assert status["cartesia"] is False
+        assert status["cerebras"] is False
+
+    def test_status_google_true_via_plaintext_fallback(self):
+        """Un-migrated row: google configured via the legacy plaintext column."""
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            org = OrganizationService._organization_from_dict(
+                _row(uuid4(), provider_credentials=None, google_api_key="PLAINTEXT_KEY")
+            )
+        assert org.provider_credentials_status["google"] is True
+        # No blob → all other providers False; decrypt never called.
+        assert org.provider_credentials_status["openai"] is False
+        assert org.provider_credentials_status["livekit"] is False
+        mock_dec.assert_not_called()
+
+    def test_status_all_false_when_nothing_configured(self):
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {}
+            org = OrganizationService._organization_from_dict(
+                _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
+            )
+        assert set(org.provider_credentials_status.keys()) == self.EXPECTED_KEYS
+        assert all(v is False for v in org.provider_credentials_status.values())
+
+    def test_status_google_false_when_blob_has_no_google(self):
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {"deepgram": "D1"}
+            org = OrganizationService._organization_from_dict(
+                _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
+            )
+        assert org.provider_credentials_status["google"] is False
+        assert org.provider_credentials_status["deepgram"] is True
+
+    def test_status_livekit_false_when_api_key_missing(self):
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {"livekit": {"api_secret": "lks"}}  # no api_key
+            org = OrganizationService._organization_from_dict(
+                _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
+            )
+        assert org.provider_credentials_status["livekit"] is False
+
+    def test_status_decrypt_failure_falls_back_to_plaintext_google(self):
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.side_effect = Exception("bad key")
+            org = OrganizationService._organization_from_dict(
+                _row(
+                    uuid4(),
+                    provider_credentials="CORRUPT_BLOB",
+                    google_api_key="PLAINTEXT_KEY",
+                )
+            )
+        # Graceful: google resolvable via plaintext fallback; others False.
+        assert org.provider_credentials_status["google"] is True
+        assert org.provider_credentials_status["openai"] is False
+        assert org.provider_credentials_status["livekit"] is False
+
+    def test_status_never_exposes_decrypted_values(self):
+        """The status map contains only booleans — no secret strings leak."""
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {
+                "google": "SECRET_G",
+                "openai": "SECRET_O",
+                "livekit": {"api_key": "SECRET_LK", "api_secret": "x"},
+            }
+            org = OrganizationService._organization_from_dict(
+                _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
+            )
+        for value in org.provider_credentials_status.values():
+            assert isinstance(value, bool)

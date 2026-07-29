@@ -148,11 +148,12 @@ describe("nav-config", () => {
     expect(names).toContain("Organization");
   });
 
-  it("platform_admin section contains All Users, Platform Skills and Platform Tools", () => {
+  it("platform_admin section contains All Users, Platform Skills, Platform Tools and Voice Presets", () => {
     const names = NAV_SECTIONS.platform_admin.map((i) => i.name);
     expect(names).toContain("All Users");
     expect(names).toContain("Platform Skills");
     expect(names).toContain("Platform Tools");
+    expect(names).toContain("Voice Presets");
   });
 
   it("SECTION_ROLES maps every nav section to a role or null", () => {

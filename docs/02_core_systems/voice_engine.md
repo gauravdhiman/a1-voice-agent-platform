@@ -214,7 +214,7 @@ for the core capability.
 - **Phase 3 (done)** — platform-admin-managed **pipeline presets**: the
   `pipeline_presets` catalog table + `voice_agents.preset_id` FK + encrypted
   `organizations.provider_credentials` blob (Alembic migration
-  `20260729000001`, reviewed but **not run** — awaits owner approval). Backend
+  `20260729000001`, reviewed and **run**). Backend
   CRUD + RBAC (`preset_routes.py`, platform_admin) + agent assignment validation
   (must exist + be published). Per-org **key resolver** (`key_resolver.py`): all
   keys in one encrypted blob, `livekit` injected only for Inference stages,
@@ -226,9 +226,47 @@ for the core capability.
   Phase-3 tests green; no-network container smoke confirms the key-resolution →
   Inference-injection seam. No frontend in this phase (no browser validation) —
   legacy agents (`preset_id=None`) are unchanged.
-- **Phase 4** — frontend preset picker + platform-admin preset management UI +
+- **Phase 4 (done)** — frontend preset picker + platform-admin preset management UI +
   per-provider org-credentials UI (fold `engine_mode` into one "voice profile"
-  picker); RBAC gating on who can switch engines.
+  picker); RBAC gating on who can switch engines. Three workstreams all landed and
+  browser-validated:
+  - **(A) Platform-admin preset management** — `/platform/presets` page (gated on
+    `user.hasRole("platform_admin")`, `AccessDenied` otherwise) +
+    `PlatformPresetsManager` two-view inline toggle (manage list / author form)
+    mirroring `/platform/tools`. Authoring a preset uses `PresetConfigForm`, which
+    emits **exactly** the `speech_config.py` discriminated-union shape
+    (`extra="forbid"` on the server, so no stray keys). Publish allowed once a
+    valid config is authored; backend 400 (invalid config) shown inline. A nav
+    entry (`SlidersHorizontal`, `requiredPermission: "platform:admin"`) was added
+    under the `platform_admin` section.
+  - **(B) Agent preset picker** — reusable `PresetPicker` single-select used by
+    both the create widget and the agent detail page. Lists **published** presets
+    only from `usePresets()` plus a "Default (Gemini Realtime)" option →
+    `preset_id = null`. Shows preset name + description + a subtle Realtime/Pipeline
+    type badge — the org user **never sees** `engine_mode` / STT / LLM / TTS stage
+    fields. Empty state when no preset is published. The agent interfaces gained
+    `preset_id` (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate` optional).
+    `null` clears (realtime default); omitted on create preserves the default.
+  - **(C) Per-provider org-credentials UI** — dedicated "Voice Provider
+    Credentials" Card on `/organization` with its own Save button (separate from
+    the main org form, avoiding the empty-string-clears-everything footgun).
+    `type="password"` inputs per provider (google/deepgram/openai/cartesia/cerebras
+    + livekit `{api_key, api_secret}`); save sends `provider_credentials_input`
+    with **only touched fields** (non-empty string to set, `null` to explicitly
+    clear, omitted to preserve). Read view shows green-dot "Configured" / gray
+    "Not configured" pills driven by the backend-derived
+    `provider_credentials_status` map (booleans only — never decrypted values).
+    Gated on `canUpdateOrganization` + the page-level platform/org-admin check.
+  - **Backend (C support):** `organization/service.py` computes
+    `provider_credentials_status` from the decrypted blob on read and attaches it
+    to the org response (no decrypted values exposed); surfaced as a read-only
+    field on `Organization` (`shared/organization/models.py`).
+  Validation: `tsc --noEmit` clean on source; full vitest suite green (532 tests);
+  backend org-credentials tests green (20); browser smoke (create/publish/edit/
+  unpublish/delete + 409 `in_use` dialog, picker prefill + clear cycle, org-cred
+  set/clear pills, non-platform-admin denied) all pass. Throwaway smoke agent
+  deleted; the two presets authored during validation are kept as starter catalog
+  content (owner decision).
 - **Phase 5** — latency hardening (borrowed from HF `speech-to-speech`) + the
   explicit turn-detector builder.
 

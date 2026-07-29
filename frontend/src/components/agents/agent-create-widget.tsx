@@ -23,10 +23,12 @@ import {
 } from "@/components/ui/form";
 import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
+import { usePresets } from "@/hooks/use-preset-queries";
 import { voiceTemplateService } from "@/services/voice-template-service";
 import { toast } from "sonner";
 import type { VoiceAgentCreate } from "@/types/agent";
 import type { VoiceTemplate } from "@/types/voice-template";
+import { PresetPicker } from "@/components/agents/preset-picker";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
@@ -44,6 +46,10 @@ const formSchema = z.object({
   mission: z.string().min(1, "Mission is required"),
   custom_instructions: z.string().optional(),
   is_active: z.boolean(),
+  // Voice-engine preset (Phase 4). null = realtime default (Gemini). Optional
+  // UUID when a published preset is chosen. Never an empty string — the backend
+  // UUID validator would 400, so the picker emits `null` for the default.
+  preset_id: z.string().uuid().optional().nullable(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -246,6 +252,9 @@ export function AgentCreateWidget() {
   const searchParams = useSearchParams();
   const { organizations, currentOrganization } = useOrganization();
   const createAgentMutation = useCreateAgent();
+  // Published presets — used to resolve the chosen preset's name in the review
+  // stage. The picker itself fetches this via usePresets() internally too.
+  const { data: presets = [] } = usePresets();
   const [currentStage, setCurrentStage] = useState<Stage>("template");
 
   const form = useForm<FormData>({
@@ -259,6 +268,7 @@ export function AgentCreateWidget() {
       mission: "",
       custom_instructions: "",
       is_active: true,
+      preset_id: null,
     },
   });
 
@@ -516,6 +526,25 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
           </FormItem>
         )}
       />
+
+      {/* Voice profile (Phase 4). Optional — null = realtime default. The
+          picker emits null for the default so the backend never sees "" (which
+          would fail UUID validation). */}
+      <FormField
+        control={form.control}
+        name="preset_id"
+        render={({ field }) => (
+          <FormItem>
+            <FormControl>
+              <PresetPicker
+                value={field.value ?? null}
+                onChange={field.onChange}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 
@@ -590,6 +619,13 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
       (o) => o.id === values.organization_id,
     )?.name;
 
+    // Resolve the chosen preset's name for the review summary. null/unknown ->
+    // the realtime default label.
+    const presetName = values.preset_id
+      ? (presets.find((p) => p.id === values.preset_id)?.name ??
+        "Selected profile")
+      : "Default (Gemini Realtime)";
+
     return (
       <div className="space-y-6">
         <div>
@@ -643,6 +679,12 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
                 <p className="text-sm mt-1 text-muted-foreground line-clamp-2">
                   {values.mission || "Not set"}
                 </p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Voice Profile
+                </span>
+                <p className="font-medium mt-1">{presetName}</p>
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">

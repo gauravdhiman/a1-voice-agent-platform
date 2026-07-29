@@ -30,6 +30,7 @@ import {
   Crown,
   Edit3,
   Info,
+  KeyRound,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -86,6 +87,27 @@ export default function OrganizationPage() {
     google_api_key: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Voice provider credentials (Phase 4) — a SEPARATE form from the main org
+  // card, with its own Save. Decrypted values are never returned by the API, so
+  // the inputs are always blank on load; the user types a value to SET or
+  // clears a field to CLEAR. `providerCredsTouched` records which fields the
+  // user actually edited so the save sends ONLY touched keys (the backend
+  // preserves omitted keys and drops `None`) — this avoids the
+  // empty-string-clears-everything footgun the main org form has.
+  const [providerCreds, setProviderCreds] = useState({
+    google: "",
+    deepgram: "",
+    openai: "",
+    cartesia: "",
+    cerebras: "",
+    livekit_api_key: "",
+    livekit_api_secret: "",
+  });
+  const [providerCredsTouched, setProviderCredsTouched] = useState<
+    Record<string, boolean>
+  >({});
+  const [providerCredsSaving, setProviderCredsSaving] = useState(false);
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -229,6 +251,85 @@ export default function OrganizationPage() {
         google_api_key: org.google_api_key || "",
       });
     }
+  };
+
+  /**
+   * Save ONLY the touched voice-provider credentials.
+   *
+   * Builds `provider_credentials_input` with touched keys only: a non-empty
+   * value SETS, an empty touched value CLEARS (`null`), and an untouched key is
+   * OMITTED (the backend preserves it). LiveKit is sent as
+   * `{api_key, api_secret}` when either field was touched — both empty clears
+   * it (`null`). Nothing is sent if no field was touched.
+   */
+  const handleSaveProviderCreds = async () => {
+    if (!orgId) return;
+    const input: Record<
+      string,
+      string | { api_key: string; api_secret: string } | null
+    > = {};
+    const simpleKeys = [
+      "google",
+      "deepgram",
+      "openai",
+      "cartesia",
+      "cerebras",
+    ] as const;
+    for (const key of simpleKeys) {
+      if (providerCredsTouched[key]) {
+        const val = providerCreds[key].trim();
+        input[key] = val ? val : null;
+      }
+    }
+    if (providerCredsTouched.livekit) {
+      const apiKey = providerCreds.livekit_api_key.trim();
+      const apiSecret = providerCreds.livekit_api_secret.trim();
+      input.livekit = apiKey || apiSecret ? { api_key: apiKey, api_secret: apiSecret } : null;
+    }
+    if (Object.keys(input).length === 0) {
+      toast.info("No provider credentials changed.");
+      return;
+    }
+    setProviderCredsSaving(true);
+    try {
+      const response = await organizationService.updateOrganization(orgId, {
+        provider_credentials_input: input,
+      });
+      setOrganizationData({ organization: response as OrganizationEnhanced });
+      // Reset the draft + touched flags (decrypted values never come back, so
+      // inputs go blank again — the status pills reflect the new state).
+      setProviderCreds({
+        google: "",
+        deepgram: "",
+        openai: "",
+        cartesia: "",
+        cerebras: "",
+        livekit_api_key: "",
+        livekit_api_secret: "",
+      });
+      setProviderCredsTouched({});
+      toast.success("Voice provider credentials saved");
+    } catch (error: unknown) {
+      console.error("Failed to save provider credentials:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === "object" &&
+              error !== null &&
+              "detail" in error
+            ? (error as { detail: string }).detail
+            : "Failed to save provider credentials";
+      toast.error(errorMessage);
+    } finally {
+      setProviderCredsSaving(false);
+    }
+  };
+
+  /** Mark a provider-creds field touched on edit (drives the "send only touched" rule). */
+  const markProviderCredTouched = (key: string) => {
+    setProviderCredsTouched((prev) =>
+      prev[key] ? prev : { ...prev, [key]: true },
+    );
   };
 
   // Make orgId mandatory - if not provided, redirect to organizations page
@@ -668,6 +769,173 @@ During monsoon season (July-September), we have extended hours for flood-related
             )}
       </Card>
 
+      {/* Voice provider credentials (Phase 4). A DEDICATED card with its own
+          Save — separate from the main org form so the empty-string-clears-
+          everything footgun can't wipe all keys at once. Feeds the encrypted
+          provider_credentials blob the worker's per-org key resolver reads. */}
+      <Card>
+        <CardHeader className="p-5 pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center space-x-2 text-lg">
+              <KeyRound className="h-5 w-5 text-muted-foreground" />
+              <span>Voice Provider Credentials</span>
+            </CardTitle>
+          </div>
+          <CardDescription>
+            Per-provider API keys for the modular voice engine (Deepgram, OpenAI,
+            Cartesia, Cerebras, LiveKit). Encrypted at rest; decrypted values are
+            never shown. Enter a value to set it, clear the field to remove it.
+            Untouched fields are left unchanged on save.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-5 pt-0 space-y-5">
+          {/* Status pills (read-only; derived from provider_credentials_status). */}
+          <div className="flex flex-wrap gap-3">
+            {(
+              [
+                "google",
+                "deepgram",
+                "openai",
+                "cartesia",
+                "cerebras",
+                "livekit",
+              ] as const
+            ).map((key) => {
+              const configured = Boolean(
+                organizationData?.organization?.provider_credentials_status?.[
+                  key
+                ],
+              );
+              return (
+                <div
+                  key={key}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      configured ? "bg-green-500" : "bg-gray-400"
+                    }`}
+                  />
+                  <span className="capitalize text-muted-foreground">
+                    {key}
+                  </span>
+                  <span
+                    className={
+                      configured
+                        ? "text-green-600 font-medium"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {configured ? "Configured" : "Not configured"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Editable inputs (gated by canUpdateOrganization). */}
+          {canUpdateOrganization ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <ProviderCredInput
+                  label="Google API key"
+                  value={providerCreds.google}
+                  onChange={(v) => {
+                    setProviderCreds({ ...providerCreds, google: v });
+                    markProviderCredTouched("google");
+                  }}
+                  placeholder="Enter to set; clear to remove"
+                />
+                <ProviderCredInput
+                  label="Deepgram API key"
+                  value={providerCreds.deepgram}
+                  onChange={(v) => {
+                    setProviderCreds({ ...providerCreds, deepgram: v });
+                    markProviderCredTouched("deepgram");
+                  }}
+                  placeholder="Enter to set; clear to remove"
+                />
+                <ProviderCredInput
+                  label="OpenAI API key"
+                  value={providerCreds.openai}
+                  onChange={(v) => {
+                    setProviderCreds({ ...providerCreds, openai: v });
+                    markProviderCredTouched("openai");
+                  }}
+                  placeholder="Enter to set; clear to remove"
+                />
+                <ProviderCredInput
+                  label="Cartesia API key"
+                  value={providerCreds.cartesia}
+                  onChange={(v) => {
+                    setProviderCreds({ ...providerCreds, cartesia: v });
+                    markProviderCredTouched("cartesia");
+                  }}
+                  placeholder="Enter to set; clear to remove"
+                />
+                <ProviderCredInput
+                  label="Cerebras API key"
+                  value={providerCreds.cerebras}
+                  onChange={(v) => {
+                    setProviderCreds({ ...providerCreds, cerebras: v });
+                    markProviderCredTouched("cerebras");
+                  }}
+                  placeholder="Enter to set; clear to remove"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">LiveKit</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ProviderCredInput
+                    label="LiveKit API key"
+                    value={providerCreds.livekit_api_key}
+                    onChange={(v) => {
+                      setProviderCreds({
+                        ...providerCreds,
+                        livekit_api_key: v,
+                      });
+                      markProviderCredTouched("livekit");
+                    }}
+                    placeholder="API key"
+                  />
+                  <ProviderCredInput
+                    label="LiveKit API secret"
+                    value={providerCreds.livekit_api_secret}
+                    onChange={(v) => {
+                      setProviderCreds({
+                        ...providerCreds,
+                        livekit_api_secret: v,
+                      });
+                      markProviderCredTouched("livekit");
+                    }}
+                    placeholder="API secret"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              You do not have permission to update provider credentials.
+            </p>
+          )}
+        </CardContent>
+        {canUpdateOrganization && (
+          <CardFooter className="flex justify-end space-x-2 p-5 border-t bg-muted/20">
+            <Button
+              size="sm"
+              onClick={handleSaveProviderCreds}
+              disabled={providerCredsSaving}
+              className="flex items-center space-x-2"
+            >
+              <Save className="h-4 w-4" />
+              <span>
+                {providerCredsSaving ? "Saving..." : "Save Credentials"}
+              </span>
+            </Button>
+          </CardFooter>
+        )}
+      </Card>
+
       {/* Edit Dialog (for fallback) */}
       {validatedOrg && (
         <OrganizationEditDialog
@@ -677,6 +945,37 @@ During monsoon season (July-September), we have extended hours for flood-related
           onSuccess={handleEditSuccess}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * A single password-type provider-credential input with a label.
+ *
+ * Used by the "Voice Provider Credentials" card. `type="password"` so typed
+ * keys are masked. The parent tracks touched state separately (see
+ * `markProviderCredTouched`) so only edited fields are sent on save.
+ */
+function ProviderCredInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium">{label}</Label>
+      <Input
+        type="password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }

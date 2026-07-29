@@ -65,6 +65,14 @@ Stores tenant organization information. Each organization represents a separate 
 **RLS**: Enabled
 **Indexes**: Unique on `name`, `slug`
 
+**Derived (not a column):** `provider_credentials_status` — a per-provider
+boolean map (`{google, deepgram, openai, cartesia, cerebras, livekit}`) computed
+in `backend/src/organization/service.py` from the decrypted
+`provider_credentials` blob on the org GET path and attached to the response
+(Phase 4). It is **not** a database column — booleans only, never decrypted
+values. Drives the Configured/Not-configured pills on the org-settings page. The
+`livekit` boolean is true when the livekit blob entry has an `api_key`.
+
 ---
 
 ### roles

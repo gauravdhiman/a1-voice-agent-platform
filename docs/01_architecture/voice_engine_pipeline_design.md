@@ -1,23 +1,32 @@
 # Voice Engine: End-to-End + Pipeline Design (High-Level)
 
-> Status: **Phases 1–3 complete** (Phases 1–2b behavior-neutral; Phase 3 makes the
-> pipeline usable by agents). Phase 1 added the config models, `speech_providers/`
-> package with the realtime provider behind a factory, the `session_builder` seam,
-> and wired the worker through. Phase 2 wired the pipeline branch: per-stage
-> LiveKit-native cloud providers (Silero VAD + Deepgram STT + OpenAI LLM +
-> Cartesia TTS) behind a table-driven factory, with `turn_detection` deferred to
-> Phase 5. Phase 2b added LiveKit **Inference** (STT/LLM/TTS through a single
-> LiveKit Cloud auth, special dispatch path) and **Cerebras** (direct
-> OpenAI-compatible LLM, keyed path), so a pipeline can mix Inference and direct
-> stages per stage. **Phase 3** added platform-admin-managed **presets**
-> (`pipeline_presets` catalog), per-agent `preset_id` (live fetch, no versioning),
-> and a per-org **key resolver** backed by one encrypted
-> `organizations.provider_credentials` blob. 100% coverage on the new shared
-> modules; 95 backend + 45 worker Phase-3 tests green; no-network container smoke
-> confirms the full key-resolution → Inference-injection seam. Live calls are
-> unchanged for legacy agents (`preset_id=None` → realtime default). Phases 4–5
-> pending. **The Phase 3 migration is reviewed but not yet run — awaits owner
-> approval.**
+> Status: **Phases 1–4 complete** (Phases 1–2b behavior-neutral; Phase 3 makes the
+> pipeline usable by agents; Phase 4 makes it usable end-to-end through the UI).
+> Phase 1 added the config models, `speech_providers/` package with the realtime
+> provider behind a factory, the `session_builder` seam, and wired the worker
+> through. Phase 2 wired the pipeline branch: per-stage LiveKit-native cloud
+> providers (Silero VAD + Deepgram STT + OpenAI LLM + Cartesia TTS) behind a
+> table-driven factory, with `turn_detection` deferred to Phase 5. Phase 2b added
+> LiveKit **Inference** (STT/LLM/TTS through a single LiveKit Cloud auth, special
+> dispatch path) and **Cerebras** (direct OpenAI-compatible LLM, keyed path), so a
+> pipeline can mix Inference and direct stages per stage. **Phase 3** added
+> platform-admin-managed **presets** (`pipeline_presets` catalog), per-agent
+> `preset_id` (live fetch, no versioning), and a per-org **key resolver** backed by
+> one encrypted `organizations.provider_credentials` blob. **Phase 4** added the
+> platform-admin preset management page (`/platform/presets`), the agent preset
+> picker (a "voice profile" select that hides `engine_mode`/STT/LLM/TTS from org
+> users), and the per-provider org-credentials UI (with a backend-derived
+> `provider_credentials_status` boolean map). 100% coverage on the new shared
+> modules; 95 backend + 45 worker Phase-3 tests green; full frontend vitest suite
+> (532 tests) + org-credentials backend tests (20) green; no-network container
+> smoke confirms the full key-resolution → Inference-injection seam; browser smoke
+> validates the full create/publish/edit/unpublish/delete + picker + org-cred flow.
+> Live calls are unchanged for legacy agents (`preset_id=None` → realtime default).
+> **Phase 5 pending** (latency hardening). **The Phase 3 migration
+> (`20260729000001`) has been run** (`alembic upgrade head` in the backend
+> container) — the `pipeline_presets` table + `voice_agents.preset_id` FK +
+> `organizations.provider_credentials` blob exist, and two starter presets are
+> seeded.
 >
 > **Preset direction (locked in, landed in Phase 3):** configuration is exposed to
 > org admins/users as **platform-admin-managed presets**, not a raw per-stage
@@ -322,8 +331,8 @@ flowchart TD
         Routes["API routes for speech_config"]
         Migration["alembic migration: add voice_agents.speech_config"]
     end
-    subgraph frontend["frontend/ (later)"]
-        UI["Agent voice-engine config UI"]
+    subgraph frontend["frontend/ (Phase 4 done)"]
+        UI["Platform-admin preset mgmt + agent preset picker + org-creds UI"]
     end
     W --> SB --> SP
     W --> KR
@@ -398,13 +407,49 @@ flowchart TD
   assignment validation (must exist + be published) + org-credential write/read
   (encrypt into the blob, clear the plaintext column). 100% coverage on
   `key_resolver`/`preset_models`/`preset_service`; no frontend in this phase (no
-  browser validation). **✅ Done.** Migration reviewed but **not run** — awaits
-  owner approval (`alembic upgrade head` in the backend container).
+  browser validation). **✅ Done.** Migration reviewed and **run** (`alembic
+  upgrade head` in the backend container).
 - **P4 UI & RBAC:** Frontend preset picker + platform-admin preset management UI +
   per-provider org-credentials UI (fold `engine_mode` into one "voice profile"
   picker; user never sees engine mode / STT/LLM/TTS). RBAC gating on who can switch
   engines/configure stages (deferred decision — wiring point only). E2E + browser
-  validation.
+  validation. **✅ Done** — three workstreams landed:
+  - **(A) `/platform/presets`** platform-admin management page (`useAuth()` gate on
+    `platform_admin`, `AccessDenied` otherwise) + `PlatformPresetsManager` two-view
+    inline toggle (manage list / author form) mirroring `/platform/tools`. The
+    `PresetConfigForm` authoring sub-form emits **exactly** the `speech_config.py`
+    discriminated-union shape (server `extra="forbid"` rejects stray keys): a
+    `realtime | pipeline` type selector, realtime defaults reproduced from
+    `speech_config.py` (model/voice/temperature/endpointing), and pipeline
+    `stt`/`llm`/`tts` (+ optional `vad`) stage blocks (provider `<select>` + optional
+    `model` + optional `params` JSON). `turn_detection` is omitted (Phase 5). Nav
+    entry added under `platform_admin` (`SlidersHorizontal`).
+  - **(B) Agent preset picker** — reusable `PresetPicker` single-select used by the
+    create widget and the agent detail page; lists **published** presets from
+    `usePresets()` plus a "Default (Gemini Realtime)" option → `preset_id = null`.
+    Shows preset name + description + a subtle Realtime/Pipeline type badge — org
+    users **never see** `engine_mode`/STT/LLM/TTS stage fields. Agent interfaces
+    gained `preset_id` (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate`
+    optional; `null` clears, omitted preserves).
+  - **(C) Per-provider org-credentials UI** — dedicated "Voice Provider Credentials"
+    Card on `/organization` with its own Save button (separate from the main org
+    form to avoid the empty-string-clears footgun): `type="password"` inputs per
+    provider (google/deepgram/openai/cartesia/cerebras + livekit
+    `{api_key, api_secret}`); save sends `provider_credentials_input` with **only
+    touched fields** (non-empty string to set, `null` to clear, omitted to
+    preserve). Read view shows Configured/Not-configured pills driven by the
+    backend-derived `provider_credentials_status` map (booleans only — never
+    decrypted values). Gated on `canUpdateOrganization` + platform/org-admin check.
+  - **Backend (C support):** `organization/service.py` computes
+    `provider_credentials_status` from the decrypted blob on read and attaches it
+    to the org response (no decrypted values exposed); surfaced read-only on
+    `Organization` (`shared/organization/models.py`).
+  Validation: `tsc --noEmit` clean; full vitest suite (532 tests) green; backend
+  org-credentials tests (20) green; browser smoke (create/publish/edit/unpublish/
+  delete + 409 `in_use` dialog, picker prefill + clear cycle, org-cred set/clear
+  pills, non-platform-admin denied) all pass. Throwaway smoke agent deleted; the
+  two presets authored during validation are kept as starter catalog content
+  (owner decision).
 - **P5 Latency hardening (v2):** SpeculativeTurnTracker, CancelScope cross-stage stale
   drop, sentence-batched LLM→TTS, TTS leading-silence trim, ChatContext compaction,
   model warmup. Benchmarks before/after.
