@@ -64,32 +64,84 @@ class TestBuildAgentSession:
         )
         assert session._llm._opts.voice == "Charon"
 
-    def test_pipeline_session_raises_not_implemented(self):
-        """Phase 1 does not build pipeline sessions yet — explicit failure so a
-        pipeline config can't silently degrade to realtime. Phase 2 wires it."""
+    def test_pipeline_session_assembles_stt_llm_tts_and_vad(self):
+        """Phase 2: a {deepgram, openai, cartesia} pipeline config must produce
+        an AgentSession with the per-stage plugins set on _stt/_llm/_tts and an
+        explicit Silero VAD on _vad (registry always builds one even when
+        config.vad is None). Construction opens no network, so fake keys are
+        safe. userdata must be forwarded."""
+        from livekit.plugins import cartesia, deepgram, openai, silero
         from session_builder import build_agent_session
 
-        with pytest.raises(NotImplementedError):
-            build_agent_session(speech_config=_pipeline_cfg(), api_keys={}, userdata={})
+        session = build_agent_session(
+            speech_config=_pipeline_cfg(),
+            api_keys={"deepgram": "fake", "openai": "fake", "cartesia": "fake"},
+            userdata={"agent_id": "a1", "agent_name": "Test Agent"},
+        )
+        assert isinstance(session, AgentSession)
+        assert isinstance(session._stt, deepgram.STT)
+        assert isinstance(session._llm, openai.LLM)
+        assert isinstance(session._tts, cartesia.TTS)
+        # Explicit standalone Silero VAD (not the bundled inference default).
+        assert isinstance(session._vad, silero.VAD)
+        assert session.userdata == {"agent_id": "a1", "agent_name": "Test Agent"}
 
-    def test_pipeline_components_raise_not_implemented(self, monkeypatch):
-        """Even if the registry handed back PipelineComponents (Phase 2 will),
-        the session builder must refuse to assemble a pipeline session until
-        Phase 2 wires it — guarded independently of the registry's own check."""
+    def test_pipeline_session_omits_none_vad_and_turn_detection(self, monkeypatch):
+        """When the registry returns PipelineComponents with vad=None and
+        turn_detection=None, the builder must OMIT them (not pass None) —
+        vad=None opts out of VAD entirely; turn_detection has no valid None.
+        The session must still construct with the stage plugins set."""
+        import session_builder as sb
+        from livekit.plugins import cartesia, deepgram, openai
+        from speech_providers.registry import PipelineComponents
+
+        comps = PipelineComponents(
+            stt=deepgram.STT(api_key="fake"),
+            llm=openai.LLM(api_key="fake"),
+            tts=cartesia.TTS(api_key="fake"),
+            vad=None,
+            turn_detection=None,
+        )
+        monkeypatch.setattr(sb, "build_session_components", lambda *_a, **_k: comps)
+
+        session = sb.build_agent_session(
+            speech_config=_pipeline_cfg(), api_keys={}, userdata={}
+        )
+        assert isinstance(session, AgentSession)
+        assert isinstance(session._stt, deepgram.STT)
+        assert isinstance(session._llm, openai.LLM)
+        assert isinstance(session._tts, cartesia.TTS)
+        # vad omitted -> AgentSession applies its own default VAD (not None).
+        assert session._vad is not None
+
+    def test_pipeline_session_forwards_non_none_turn_detection(self, monkeypatch):
+        """When PipelineComponents.turn_detection is non-None, the builder must
+        pass it through to AgentSession (the None-omission path is covered
+        separately). Uses a fake AgentSession so the test does not depend on
+        AgentSession accepting an arbitrary turn-detection object."""
         import session_builder as sb
         from speech_providers.registry import PipelineComponents
 
+        td_sentinel = object()
+        recorded: dict = {}
+
+        class FakeSession:
+            def __init__(self, **kwargs):
+                recorded.update(kwargs)
+
+        monkeypatch.setattr(sb, "AgentSession", FakeSession)
         monkeypatch.setattr(
             sb,
             "build_session_components",
             lambda *_a, **_k: PipelineComponents(
-                stt=object(), llm=object(), tts=object()
+                stt=object(), llm=object(), tts=object(), turn_detection=td_sentinel
             ),
         )
-        with pytest.raises(NotImplementedError):
-            sb.build_agent_session(
-                speech_config=_pipeline_cfg(), api_keys={}, userdata={}
-            )
+
+        sb.build_agent_session(speech_config=_pipeline_cfg(), api_keys={}, userdata={})
+        assert recorded["turn_detection"] is td_sentinel
+        # vad=None -> omitted (not passed as None).
+        assert "vad" not in recorded
 
     def test_unknown_components_raise_type_error(self, monkeypatch):
         """A future component variant the builder does not know about must fail

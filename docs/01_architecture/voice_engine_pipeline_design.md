@@ -1,11 +1,30 @@
 # Voice Engine: End-to-End + Pipeline Design (High-Level)
 
-> Status: **Phase 1 complete** (behavior-neutral refactor — config models,
-> `speech_providers/` package with realtime provider behind a factory,
-> `session_builder` seam, worker wired through; 100% coverage on new modules;
-> existing realtime tests green). Phases 2–5 pending.
+> Status: **Phases 1–2b complete** (behavior-neutral). Phase 1 added the config
+> models, `speech_providers/` package with the realtime provider behind a
+> factory, the `session_builder` seam, and wired the worker through. Phase 2
+> wired the pipeline branch: per-stage LiveKit-native cloud providers (Silero
+> VAD + Deepgram STT + OpenAI LLM + Cartesia TTS) behind a table-driven factory,
+> with `turn_detection` deferred to Phase 5. Phase 2b added LiveKit **Inference**
+> (STT/LLM/TTS through a single LiveKit Cloud auth, special dispatch path) and
+> **Cerebras** (direct OpenAI-compatible LLM, keyed path), so a pipeline can mix
+> Inference and direct stages per stage. 100% coverage on new modules; full
+> worker suite (340 tests) green; worker boots and registers all five plugins.
+> Live calls are unchanged — `worker.py` still builds the realtime default
+> session. Phases 3–5 pending.
 >
-> Implementation doc (Phase 1 details, component reference, tests):
+> **Preset direction (locked in, lands in Phase 3):** configuration is exposed to
+> org admins/users as **platform-admin-managed presets**, not a raw per-stage
+> provider+model picker. Two preset types only — `{realtime, pipeline}` — a
+> "mixed" preset is just a pipeline where some stages use Inference and some use
+> direct providers (no third type). Agents **reference** a preset by id +
+> version (admin publishes new versions; agents migrate explicitly). For
+> LiveKit Inference, a tenant can **bring its own LiveKit key** (org-level,
+> Inference-only for now) instead of consuming the platform's LiveKit plan —
+> mirrors the existing Google-key BYO / `use_platform_credits` pattern; a future
+> path migrates LiveKit rooms/sessions to tenant keys.
+>
+> Implementation doc (component reference, per-stage builders, tests):
 > [`02_core_systems/voice_engine.md`](../02_core_systems/voice_engine.md)
 >
 > Goal: support **two configurable conversation engines** per agent — the existing
@@ -94,10 +113,10 @@ flowchart LR
     subgraph PL["Pipeline mode (new)"]
         direction TB
         PUser["User audio"] --> VAD["VAD<br/>silero"]
-        VAD --> STT["STT<br/>Deepgram / OpenAI / parakeet"]
+        VAD --> STT["STT<br/>Deepgram (direct) / Inference (deepgram·assemblyai·…) / parakeet"]
         STT --> TD["Turn detector<br/>endpointing + barge-in"]
-        TD --> LLM["LLM<br/>OpenAI / Anthropic / Groq·Cerebras / Google"]
-        LLM --> TTS["TTS<br/>Cartesia / ElevenLabs / OpenAI"]
+        TD --> LLM["LLM<br/>OpenAI (direct) / Cerebras (direct) / Inference (gemma·…) / Anthropic / Google"]
+        LLM --> TTS["TTS<br/>Cartesia (direct) / Inference (cartesia·elevenlabs·…) / OpenAI"]
         TTS --> POut["Audio out (streamed chunks)"]
         LLM -.-> PTools["function tools + ChatContext"]
     end
@@ -204,14 +223,23 @@ Today: only `org.google_api_key` vs platform `GEMINI_API_KEY`, toggled by
 semantics. New provider keys live alongside `google_api_key` on `organizations`
 (or a small `org_provider_credentials` table if encryption/rotation needs grow).
 
+LiveKit **Inference** is the one special case: a single LiveKit Cloud auth
+(`api_key` + `api_secret`) authenticates *all* Inference stages in a pipeline, so
+the resolver returns it under a dedicated `livekit` entry (a first-class org
+credential) rather than one key per Inference stage. Rationale: the platform's
+LiveKit plan limits won't scale to all tenants' calls, so a tenant can bring its
+own LiveKit key for **Inference only** (Phase 3); a future path migrates LiveKit
+rooms/sessions to tenant keys. Direct providers (Deepgram/OpenAI/Cartesias/
+Cerebras) each keep their own per-org / platform key.
+
 ```mermaid
 flowchart TD
     Agent["VoiceAgent.speech_config"] --> Resolver["key_resolver.resolve(org, agent, providers_needed)"]
-    Org["organizations.<provider>_api_key"] --> Resolver
-    Plat["platform env: OPENAI_API_KEY, DEEPGRAM_API_KEY, CARTESIA_API_KEY, ..."] --> Resolver
+    Org["organizations.<provider>_api_key + livekit key/secret"] --> Resolver
+    Plat["platform env: OPENAI_API_KEY, DEEPGRAM_API_KEY, CARTESIA_API_KEY, LIVEKIT_API_KEY/SECRET, ..."] --> Resolver
     Credits["agent.use_platform_credits"] --> Resolver
-    Resolver --> Map["{openai: ..., deepgram: ..., cartesia: ...}"]
-    Map --> Factories["stage factories"]
+    Resolver --> Map["{openai: ..., deepgram: ..., cartesia: ..., cerebras: ..., livekit: {api_key, api_secret}}"]
+    Map --> Factories["stage factories (inference stages read livekit; direct stages read their own)"]
 ```
 
 ---
@@ -302,10 +330,42 @@ flowchart TD
 - **P2 Pipeline engine:** Add `stt/`, `llm/`, `tts/`, `vad/`, `turn_detection/`
   factories + ≥1 provider each (e.g. Deepgram STT, OpenAI LLM, Cartesia TTS, Silero
   VAD). `session_builder` branches on `engine_mode`. Install the LiveKit plugin
-  packages. Unit + integration tests with mocked plugins.
-- **P3 Config & keys:** Alembic migration adding `voice_agents.speech_config` (JSONB,
-  nullable, defaults to realtime). Pydantic discriminated-union validation. Per-provider
-  key resolver. Backend CRUD + validation tests.
+  packages. Unit + integration tests with mocked plugins. **✅ Done** — per-stage
+  builders in `worker/src/speech_providers/{stt,llm,tts,vad}/`
+  (Deepgram `nova-3`, OpenAI `gpt-4.1`, Cartesia `sonic-3`, Silero VAD via the
+  offline `VAD.load` classmethod), table-driven dispatch + per-provider key
+  guards in `registry.py`, conditional `vad`/`turn_detection` assembly in
+  `session_builder.py`, env scaffolding (`DEEPGRAM_API_KEY` / `OPENAI_API_KEY` /
+  `CARTESIA_API_KEY` in `.env.example` + `docker-compose.dev.yml`). The registry
+  always builds an explicit standalone Silero VAD for the pipeline (even when
+  `config.vad` is `None`) to keep it off the bundled `livekit.agents.inference`
+  VAD / missing-Pillow path (deferred bug #7). `turn_detection` is deferred to
+  Phase 5 (non-`None` config raises `NotImplementedError`). 100% coverage on the
+  new modules; behavior-neutral (worker still uses the realtime default).
+- **P2b Inference + Cerebras:** Add LiveKit **Inference** as a dispatchable
+  provider for STT/LLM/TTS (single LiveKit Cloud auth via `api_key`+`api_secret`,
+  special dispatch path in `registry.py` bypassing the per-provider key guard)
+  and **Cerebras** as a direct LLM (`openai.LLM.with_cerebras`, keyed path). A
+  pipeline may mix Inference and direct stages per stage (the "mixed preset"
+  direction — still just a pipeline). **✅ Done** —
+  `worker/src/speech_providers/{stt,llm,tts}/livekit_inference.py` +
+  `worker/src/speech_providers/llm/cerebras.py`; Inference reads the platform
+  LiveKit key from the env (Phase 2b), with `api_key`/`api_secret` builder kwargs
+  as the Phase 3 per-org injection seam; Inference has no implicit default model
+  (raises `ValueError`) and splits `params` into top-level kwargs vs
+  `extra_kwargs` (LLM `temperature`, STT `keywords`, etc. are not top-level).
+  100% coverage on the new modules; behavior-neutral (worker still uses the
+  realtime default).
+- **P3 Presets, config & keys:** Platform-admin-managed **pipeline presets**
+  (Alembic migration adding `voice_agents.speech_config` JSONB, nullable,
+  defaults realtime). Two preset types only — `{realtime, pipeline}`; a "mixed"
+  preset is just a pipeline mixing Inference + direct stages. Agents reference a
+  preset (id + version; admin publishes new versions; agents migrate explicitly).
+  Pydantic discriminated-union validation. Per-provider **key resolver**: LiveKit
+  key+secret as a first-class org credential for Inference (org-level, BYO, with a
+  forward path to tenant LiveKit rooms/sessions), plus direct-provider keys, with
+  the `use_platform_credits` toggle. Backend CRUD + RBAC + validation tests.
+  Never run the migration without owner approval.
 - **P4 UI & RBAC:** Frontend agent config UI (engine mode + per-stage model pickers).
   RBAC gating on who can switch engines/configure stages (deferred decision — wiring
   point only). E2E + browser validation.

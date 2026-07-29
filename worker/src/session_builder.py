@@ -57,8 +57,9 @@ def build_agent_session(
     Raises:
         ValueError: If a required provider key is missing (propagated from
             :func:`build_session_components`).
-        NotImplementedError: If a pipeline config is given (Phase 2 wires the
-            pipeline session assembly).
+        NotImplementedError: If a pipeline config names an unsupported provider
+            or sets a non-``None`` ``turn_detection`` (propagated from
+            :func:`build_session_components`).
 
     Example:
         ```python
@@ -78,11 +79,25 @@ def build_agent_session(
         return AgentSession(llm=components.llm, userdata=userdata)
 
     if isinstance(components, PipelineComponents):
-        # Phase 2: assemble the pipeline session from the per-stage plugins.
-        # Raised now so a pipeline config can't silently degrade to realtime.
-        raise NotImplementedError(
-            "Pipeline engine session assembly is not implemented yet (Phase 2)."
-        )
+        # Assemble the pipeline session from the per-stage plugins. ``vad`` and
+        # ``turn_detection`` are passed only when not None: ``vad=None`` opts
+        # out of VAD entirely (LiveKit applies its default), and
+        # ``turn_detection`` has no valid None (it must be omitted, not passed)
+        # — Phase 2 leaves it unset so LiveKit's default VAD-based turn
+        # detection applies. The registry always builds an explicit Silero VAD
+        # for the pipeline, so ``components.vad`` is non-None in practice; the
+        # guard is here for robustness / direct PipelineComponents callers.
+        kwargs: dict[str, Any] = {
+            "stt": components.stt,
+            "llm": components.llm,
+            "tts": components.tts,
+            "userdata": userdata,
+        }
+        if components.vad is not None:
+            kwargs["vad"] = components.vad
+        if components.turn_detection is not None:
+            kwargs["turn_detection"] = components.turn_detection
+        return AgentSession(**kwargs)
 
     # Defensive: the components union is closed, but guard against a future
     # variant so this fails loudly rather than returning an unconfigured session.

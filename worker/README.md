@@ -155,7 +155,12 @@ the agent's `speech_config` (see
 [`docs/02_core_systems/voice_engine.md`](../docs/02_core_systems/voice_engine.md)):
 
 - **realtime** — end-to-end Google Gemini native-audio model (STT+LLM+TTS in one).
-- **pipeline** — modular STT → LLM → TTS cascade, each stage swappable (Phase 2).
+- **pipeline** — modular STT → LLM → TTS cascade, each stage swappable. Per-stage
+  providers are wired: Silero VAD + Deepgram STT + OpenAI LLM + Cartesia TTS
+  (Phase 2, direct LiveKit-native plugins), plus LiveKit **Inference** for
+  STT/LLM/TTS and **Cerebras** for LLM (Phase 2b). A pipeline may **mix** Inference
+  and direct stages per stage (e.g. Inference STT + Cerebras LLM + Inference TTS).
+  Local/self-hosted adapters can be added later as an extra provider per stage.
 
 The two engines diverge at a **single seam** — `src/session_builder.py`'s
 `build_agent_session()` — which constructs the LiveKit `AgentSession` the right
@@ -163,13 +168,33 @@ way for the engine. Everything else (room dispatch, prompt building, tools/MCP,
 greeting) is shared and engine-agnostic.
 
 - `src/speech_providers/` — provider factory package. `realtime/provider.py`
-  builds the `RealtimeModel`; `registry.py` maps a `SpeechConfig` to session
-  components (`RealtimeComponents` / `PipelineComponents`). Adding a provider =
-  one builder + one factory branch.
+  builds the `RealtimeModel`; `stt/deepgram.py`, `llm/openai.py`,
+  `tts/cartesia.py`, `vad/silero.py` build the per-stage **direct** pipeline
+  plugins; `stt/livekit_inference.py`, `llm/livekit_inference.py`, `tts/livekit_inference.py` build the
+  **LiveKit Inference** stages (single LiveKit Cloud auth), and
+  `llm/cerebras.py` builds the **Cerebras** direct LLM. `registry.py` maps a
+  `SpeechConfig` to session components (`RealtimeComponents` /
+  `PipelineComponents`): direct stages dispatch through per-stage tables
+  (`STT_BUILDERS` / `LLM_BUILDERS` / `TTS_BUILDERS` / `VAD_BUILDERS`) with
+  per-provider key guards; Inference stages (`provider == "livekit_inference"`) take a
+  special path (`LIVEKIT_INFERENCE_STAGE_BUILDERS`) that uses the shared LiveKit key
+  instead of a per-stage key. Adding a direct provider = one builder + one table
+  entry; adding an Inference stage = one builder + one `LIVEKIT_INFERENCE_STAGE_BUILDERS`
+  entry.
 - `shared/voice_agents/speech_config.py` — Pydantic discriminated-union config
   (`RealtimeSpeechConfig` / `PipelineSpeechConfig`) stored as JSONB.
 - `src/realtime_config.py` — backward-compat shim re-exporting the realtime
   builder under its old names.
+
+> **Phases 2–2b are behavior-neutral for live calls.** `worker.py` still builds
+> the realtime default session; the pipeline branch (direct + Inference + Cerebras
+> + mixed) is exercised by unit tests + a no-network container smoke. Loading a
+> pipeline `speech_config` from the DB column + the per-provider `key_resolver`
+> is Phase 3. Direct provider keys (`DEEPGRAM_API_KEY` / `OPENAI_API_KEY` /
+> `CARTESIA_API_KEY`) are read from the environment; Inference stages read the
+> LiveKit key (`LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`) from the environment
+> (Phase 2b — the platform key; Phase 3 will inject a per-org LiveKit key);
+> Silero VAD is local and needs no key.
 
 ## 📁 Project Structure
 
@@ -180,9 +205,18 @@ worker/
 │   ├── session_builder.py     # Voice-engine seam: builds AgentSession (realtime/pipeline)
 │   ├── realtime_config.py     # Backward-compat shim -> speech_providers.realtime
 │   ├── default_system_prompt.py  # Default system prompt template
-│   ├── speech_providers/      # Provider factory package (realtime today; stt/llm/tts in Phase 2)
-│   │   ├── registry.py        # build_session_components() dispatch
-│   │   └── realtime/provider.py  # Google RealtimeModel builder + tuning
+│   ├── speech_providers/      # Provider factory package (realtime + pipeline stages)
+│   │   ├── registry.py        # build_session_components() dispatch + per-stage tables
+│   │   ├── realtime/provider.py  # Google RealtimeModel builder + tuning
+│   │   ├── stt/deepgram.py    # Deepgram STT builder (direct, nova-3)
+│   │   ├── stt/livekit_inference.py    # LiveKit Inference STT builder (single LK auth)
+│   │   ├── llm/openai.py      # OpenAI LLM builder (direct, gpt-4.1)
+│   │   ├── llm/cerebras.py    # Cerebras LLM builder (direct, with_cerebras)
+│   │   ├── llm/livekit_inference.py    # LiveKit Inference LLM builder (single LK auth)
+│   │   ├── tts/cartesia.py    # Cartesia TTS builder (direct, sonic-3)
+│   │   ├── tts/livekit_inference.py    # LiveKit Inference TTS builder (single LK auth)
+│   │   ├── vad/silero.py      # Silero VAD builder (offline VAD.load)
+│   │   └── turn_detection/    # Phase 5 stub (default VAD turn detection for now)
 │   └── tools/                 # Worker-side tool helpers (skill tools)
 ├── tests/                     # pytest suite (run inside the worker dev container)
 ├── .docs/
