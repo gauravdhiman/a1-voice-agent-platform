@@ -24,12 +24,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from opentelemetry import trace
 
-from shared.voice_agents.preset_models import (
-    Preset,
-    PresetCreate,
-    PresetType,
-    PresetUpdate,
-)
+from shared.voice_agents.preset_models import (Preset, PresetCreate,
+                                               PresetType, PresetUpdate)
 from shared.voice_agents.preset_service import preset_service
 from src.auth.dependencies import assert_platform_role
 from src.auth.middleware import get_authenticated_user
@@ -72,6 +68,73 @@ async def create_preset(
 
     preset, error = await preset_service.upsert_preset(preset_data)
     if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return preset
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# System default preset (platform admin only)
+#
+# A single ``is_default=True`` row is the fallback config an agent uses when it
+# has no preset selected (``preset_id`` NULL). It is seeded by the migration
+# (not publishable, not deletable) and editable only via these endpoints. These
+# routes are declared BEFORE any ``/{preset_id}`` route so the literal ``default``
+# segment does not match the UUID path param.
+#
+# The PUT body is the raw ``SpeechConfig`` dict itself (realtime or pipeline
+# discriminated union); the service re-validates it via ``parse_speech_config``
+# and re-derives ``preset_type``. Only ``config`` (and the derived
+# ``preset_type``) are written — the default row's name/``is_published``/
+# ``is_default`` stay fixed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@preset_router.get("/default", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.get_default")
+async def get_default_preset(
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Fetch the system default preset (platform admin only).
+
+    The default is the fallback config an agent uses when it has no preset
+    selected. It is not published and never appears in the org-admin picker.
+    Returns 404 if no default row is designated (the worker then falls back to
+    the hardcoded realtime default).
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.get_default_preset()
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    if preset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Default preset not found"
+        )
+    return preset
+
+
+@preset_router.put("/default", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.update_default")
+async def update_default_preset(
+    config: dict,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Replace the system default preset's ``config`` (platform admin only).
+
+    Only ``config`` and the derived ``preset_type`` are written; the row's
+    ``name``/``is_published``/``is_default`` stay fixed. Returns 400 on an
+    invalid config, 404 if no default row exists.
+    """
+    current_user_id, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.update_default_preset(config)
+    if error:
+        if error == "Default not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return preset
 

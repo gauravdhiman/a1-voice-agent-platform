@@ -181,7 +181,8 @@ def resolve_api_keys(
 
     Args:
         speech_config: The validated SpeechConfig (realtime or pipeline) loaded
-            from the agent's preset (or the realtime default for legacy agents).
+            from the agent's preset, or the System Default preset row for legacy
+            agents (``preset_id`` NULL).
         org: The organization the agent belongs to (must expose
             ``provider_credentials``), or ``None``.
         use_platform_credits: When True, always use platform env vars and ignore

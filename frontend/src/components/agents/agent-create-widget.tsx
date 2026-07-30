@@ -24,6 +24,7 @@ import {
 import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
 import { usePresets } from "@/hooks/use-preset-queries";
+import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
 import { voiceTemplateService } from "@/services/voice-template-service";
 import { toast } from "sonner";
 import type { VoiceAgentCreate } from "@/types/agent";
@@ -46,7 +47,7 @@ const formSchema = z.object({
   mission: z.string().min(1, "Mission is required"),
   custom_instructions: z.string().optional(),
   is_active: z.boolean(),
-  // Voice-engine preset (Phase 4). null = realtime default (Gemini). Optional
+  // Voice-engine preset (Phase 4). null = system default. Optional
   // UUID when a published preset is chosen. Never an empty string — the backend
   // UUID validator would 400, so the picker emits `null` for the default.
   preset_id: z.string().uuid().optional().nullable(),
@@ -527,7 +528,7 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
         )}
       />
 
-      {/* Voice profile (Phase 4). Optional — null = realtime default. The
+      {/* Voice profile (Phase 4). Optional — null = system default. The
           picker emits null for the default so the backend never sees "" (which
           would fail UUID validation). */}
       <FormField
@@ -620,11 +621,13 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
     )?.name;
 
     // Resolve the chosen preset's name for the review summary. null/unknown ->
-    // the realtime default label.
+    // DEFAULT_PRESET_DISPLAY (the same "System Default" label the platform admin
+    // sees on /platform/presets and the picker shows; the underlying engine is
+    // not surfaced here).
     const presetName = values.preset_id
       ? (presets.find((p) => p.id === values.preset_id)?.name ??
         "Selected profile")
-      : "Default (Gemini Realtime)";
+      : DEFAULT_PRESET_DISPLAY.name;
 
     return (
       <div className="space-y-6">

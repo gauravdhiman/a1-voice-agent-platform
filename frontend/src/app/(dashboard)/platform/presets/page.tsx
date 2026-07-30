@@ -12,7 +12,7 @@
  * Published presets surface in every org admin's agent picker ("voice
  * profile") — the org user picks by name + description only and never sees
  * `engine_mode` / STT / LLM / TTS. An agent with no preset chosen falls back
- * to the realtime default (`preset_id = null`).
+ * to the system default voice profile (`preset_id = null`).
  *
  * Frontend authz gate. The backend independently enforces `platform_admin` on
  * every write endpoint (create/update/publish/delete) and on draft reads, so a

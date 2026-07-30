@@ -30,7 +30,7 @@ import type { Preset, PresetUsageAgent } from "@/types/preset";
  * assignment (or a direct API call): the error surfaces in the dialog so the
  * admin can retry with the now-visible usage warnings. A force-delete sets
  * `voice_agents.preset_id` to NULL via the FK, so every affected agent falls
- * back to the realtime default on its next call.
+ * back to the system default voice profile on its next call.
  */
 export interface PresetDeleteDialogProps {
   open: boolean;
@@ -89,11 +89,11 @@ export function PresetDeleteDialog({
   // Summary lines only — the agent names live in `extraContent` as links so the
   // admin can jump straight to an agent's Properties tab to review before
   // deleting. A force-delete detaches the preset (preset_id -> NULL via the FK),
-  // so each listed agent falls back to the realtime default on its next call.
+  // so each listed agent falls back to the system default on its next call.
   const warnings: string[] =
     count > 0
       ? [
-          "Every agent listed below falls back to the default (Gemini Realtime) voice on its next call.",
+          "Every agent listed below falls back to the system default voice profile on its next call.",
           "This action cannot be undone.",
         ]
       : [];

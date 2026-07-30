@@ -4,15 +4,12 @@ Covers the ``config`` discriminated-union validation (realtime vs pipeline) and
 that ``preset_type`` is NOT accepted as input on create/update (it is derived by
 the service from ``config.engine_mode``).
 """
+
 import pytest
 from pydantic import ValidationError
 
-from shared.voice_agents.preset_models import (
-    Preset,
-    PresetCreate,
-    PresetType,
-    PresetUpdate,
-)
+from shared.voice_agents.preset_models import (Preset, PresetCreate,
+                                               PresetType, PresetUpdate)
 
 
 class TestPresetModels:
@@ -81,8 +78,8 @@ class TestPresetModels:
 
     def test_preset_response_carries_preset_type(self):
         """The Preset response model requires preset_type (set by the service)."""
-        from uuid import uuid4
         from datetime import datetime, timezone
+        from uuid import uuid4
 
         preset = Preset(
             id=uuid4(),
@@ -94,3 +91,39 @@ class TestPresetModels:
             updated_at=datetime.now(timezone.utc),
         )
         assert preset.preset_type is PresetType.REALTIME
+
+    def test_preset_response_carries_is_default(self):
+        """The Preset response model exposes is_default (defaults to False).
+
+        is_default is a response-only field (the system-default row carries
+        True); it is NOT an input on PresetCreate/PresetUpdate. extra="forbid"
+        on those models rejects a hand-set is_default.
+        """
+        from datetime import datetime, timezone
+        from uuid import uuid4
+
+        preset = Preset(
+            id=uuid4(),
+            name="System Default",
+            preset_type=PresetType.REALTIME,
+            config={"engine_mode": "realtime"},
+            is_published=False,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        # Defaults to False when the DB omits it / on a normal preset.
+        assert preset.is_default is False
+
+    def test_create_rejects_is_default(self):
+        """is_default is not an input field on PresetCreate (extra='forbid')."""
+        with pytest.raises(ValidationError):
+            PresetCreate(
+                name="X",
+                config={"engine_mode": "realtime"},
+                is_default=True,  # type: ignore[call-arg]
+            )
+
+    def test_update_rejects_is_default(self):
+        """is_default is not an input field on PresetUpdate (extra='forbid')."""
+        with pytest.raises(ValidationError):
+            PresetUpdate(is_default=True)  # type: ignore[call-arg]

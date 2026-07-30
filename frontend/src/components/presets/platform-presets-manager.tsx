@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, SlidersHorizontal, Upload, Pencil, Trash2 } from "lucide-react";
 import type { Preset } from "@/types/preset";
+import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
 import {
   usePresets,
   useCreatePreset,
   useUpdatePreset,
   usePublishPreset,
+  useUpdateDefaultPreset,
 } from "@/hooks/use-preset-queries";
 import { PresetConfigForm } from "@/components/presets/preset-config-form";
 import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
@@ -57,8 +59,12 @@ export function PlatformPresetsManager({
   const [view, setView] = React.useState<View>(initialView);
 
   // Author form state. `editingId` is null for a fresh create and set to the
-  // preset id when editing an existing row (drives POST vs PUT).
+  // preset id when editing an existing row (drives POST vs PUT). `editingDefault`
+  // is true when editing the system-default row — that path saves via
+  // `useUpdateDefaultPreset` (config only; name/is_published stay fixed) and
+  // never goes through the normal create/update mutations.
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingDefault, setEditingDefault] = React.useState(false);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   // Config captured from <PresetConfigForm/> onChange. `seedConfig` is the
@@ -79,6 +85,7 @@ export function PlatformPresetsManager({
   const createMutation = useCreatePreset();
   const updateMutation = useUpdatePreset();
   const publishMutation = usePublishPreset();
+  const updateDefaultMutation = useUpdateDefaultPreset();
   // Platform-admin-only surface: list drafts + published for the manage view.
   const { data: presets = [] } = usePresets({ includeDrafts: true });
 
@@ -86,6 +93,7 @@ export function PlatformPresetsManager({
   // a successful save (an inline panel has no dialog to close, so it resets).
   const resetForm = React.useCallback(() => {
     setEditingId(null);
+    setEditingDefault(false);
     setName("");
     setDescription("");
     setSeedConfig(null);
@@ -103,6 +111,7 @@ export function PlatformPresetsManager({
   /** Enter author mode seeded from an existing preset (edit → PUT). */
   const startEdit = React.useCallback((preset: Preset) => {
     setEditingId(preset.id);
+    setEditingDefault(false);
     setName(preset.name);
     setDescription(preset.description ?? "");
     setSeedConfig(preset.config);
@@ -111,6 +120,48 @@ export function PlatformPresetsManager({
     setInlineError(null);
     setView("author");
   }, []);
+
+  /**
+   * Enter author mode seeded from the system default preset. The default is
+   * edited via `useUpdateDefaultPreset` (config only); its name is fixed
+   * ("System Default") and it is never publishable/deletable, so the author
+   * form is read-only on name/description and shows a single "Save config"
+   * button instead of Save draft / Publish.
+   */
+  const startEditDefault = React.useCallback((preset: Preset) => {
+    setEditingId(preset.id);
+    setEditingDefault(true);
+    setName(preset.name);
+    setDescription(preset.description ?? "");
+    setSeedConfig(preset.config);
+    setConfig(preset.config);
+    setConfigValid(true);
+    setInlineError(null);
+    setView("author");
+  }, []);
+
+  /**
+   * Save the system default's `config` (config-only write; name/is_published/
+   * is_default stay fixed on the backend). Distinct from `handleSave` so the
+   * default never goes through the create/update/publish paths.
+   */
+  const handleSaveDefault = async () => {
+    setInlineError(null);
+    if (!configValid || !config) {
+      setInlineError("Fix the invalid params JSON before saving.");
+      return;
+    }
+    try {
+      await updateDefaultMutation.mutateAsync(config);
+      resetForm();
+      setView("manage");
+    } catch (e) {
+      // Backend 400 (invalid SpeechConfig) or 404 (no default row) detail.
+      setInlineError(
+        e instanceof Error ? e.message : "Failed to update system default.",
+      );
+    }
+  };
 
   const handleSave = async (isPublished: boolean) => {
     setInlineError(null);
@@ -170,9 +221,21 @@ export function PlatformPresetsManager({
   const isBusy =
     createMutation.isPending ||
     updateMutation.isPending ||
-    publishMutation.isPending;
+    publishMutation.isPending ||
+    updateDefaultMutation.isPending;
 
   const canSubmit = name.trim().length > 0 && configValid;
+
+  // Manage list: pin the system-default row to the top (it is the fallback
+  // every agent with no preset uses); keep the API order for the rest. Stable
+  // sort so the default is first without shuffling authored presets.
+  const sortedPresets = React.useMemo(
+    () =>
+      [...presets].sort((a, b) =>
+        a.is_default === b.is_default ? 0 : a.is_default ? -1 : 1,
+      ),
+    [presets],
+  );
 
   return (
     <div className="space-y-6">
@@ -202,19 +265,31 @@ export function PlatformPresetsManager({
           )}
           onClick={startCreate}
         >
-          {editingId && view === "author" ? "Editing preset" : "Author preset"}
+          {editingId && view === "author"
+            ? editingDefault
+              ? "Editing system default"
+              : "Editing preset"
+            : "Author preset"}
         </button>
       </div>
 
       {view === "author" ? (
         <div className="space-y-5">
-          {editingId && (
+          {editingDefault ? (
+            <p className="text-xs text-muted-foreground">
+              Editing the <span className="font-medium">System Default</span> —
+              the fallback voice profile used when an agent has no voice profile
+              selected. Only the config is editable; the name stays fixed and
+              the default is never publishable or deletable. Changes take effect
+              on each agent&apos;s next call.
+            </p>
+          ) : editingId ? (
             <p className="text-xs text-muted-foreground">
               Editing <span className="font-medium">{name}</span>. Save draft or
               publish to apply changes (takes effect on each agent&apos;s next
               call).
             </p>
-          )}
+          ) : null}
           <div className="space-y-3">
             <div className="space-y-1">
               <Label
@@ -229,23 +304,27 @@ export function PlatformPresetsManager({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Realtime (Gemini) default"
                 className="h-9 text-sm"
+                disabled={editingDefault}
+                readOnly={editingDefault}
               />
             </div>
-            <div className="space-y-1">
-              <Label
-                htmlFor="preset-description"
-                className="text-xs uppercase text-muted-foreground"
-              >
-                Description (optional — shown to org admins in the picker)
-              </Label>
-              <Input
-                id="preset-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What this voice profile is for"
-                className="h-9 text-sm"
-              />
-            </div>
+            {!editingDefault && (
+              <div className="space-y-1">
+                <Label
+                  htmlFor="preset-description"
+                  className="text-xs uppercase text-muted-foreground"
+                >
+                  Description (optional — shown to org admins in the picker)
+                </Label>
+                <Input
+                  id="preset-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="What this voice profile is for"
+                  className="h-9 text-sm"
+                />
+              </div>
+            )}
           </div>
 
           {/* The SpeechConfig authoring sub-form. `key` forces a fresh mount
@@ -266,35 +345,54 @@ export function PlatformPresetsManager({
             </div>
           )}
 
-          {/* Inline footer. Buttons are w-full on mobile, auto-width side-by-side
-              at sm+ so they never overflow the panel. */}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              onClick={() => handleSave(false)}
-              disabled={!canSubmit || isBusy}
-              variant="outline"
-              className="w-full sm:w-auto"
-            >
-              {createMutation.isPending || updateMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4 mr-2" />
-              )}
-              Save draft
-            </Button>
-            <Button
-              onClick={() => handleSave(true)}
-              disabled={!canSubmit || isBusy}
-              className="w-full sm:w-auto"
-            >
-              {createMutation.isPending || updateMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4 mr-2" />
-              )}
-              Publish
-            </Button>
-          </div>
+          {editingDefault ? (
+            // Default: config-only write via useUpdateDefaultPreset. No
+            // Save-draft/Publish — the default is never publishable.
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                onClick={handleSaveDefault}
+                disabled={!configValid || !config || isBusy}
+                className="w-full sm:w-auto"
+              >
+                {updateDefaultMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <SlidersHorizontal className="h-4 w-4 mr-2" />
+                )}
+                Save config
+              </Button>
+            </div>
+          ) : (
+            // Inline footer. Buttons are w-full on mobile, auto-width side-by-side
+            // at sm+ so they never overflow the panel.
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                onClick={() => handleSave(false)}
+                disabled={!canSubmit || isBusy}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                {createMutation.isPending || updateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                Save draft
+              </Button>
+              <Button
+                onClick={() => handleSave(true)}
+                disabled={!canSubmit || isBusy}
+                className="w-full sm:w-auto"
+              >
+                {createMutation.isPending || updateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                Publish
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         // Manage view: drafts + published, with publish/unpublish/edit/delete.
@@ -313,67 +411,108 @@ export function PlatformPresetsManager({
             </div>
           ) : (
             <div className="space-y-2">
-              {presets.map((preset) => (
-                <div
-                  key={preset.id}
-                  className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/20"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-medium">{preset.name}</span>
-                      <Badge variant="secondary" className="h-5 text-[10px]">
-                        {preset.preset_type === "realtime"
-                          ? "Realtime"
-                          : "Pipeline"}
-                      </Badge>
-                      <Badge
-                        variant={preset.is_published ? "default" : "outline"}
-                        className="h-5 text-[10px]"
-                      >
-                        {preset.is_published ? "Published" : "Draft"}
-                      </Badge>
-                    </div>
-                    {preset.description && (
+              {sortedPresets.map((preset) =>
+                preset.is_default ? (
+                  // The system-default row — the fallback every agent with no
+                  // preset uses. Immutable except its config: not publishable,
+                  // not deletable, name fixed. Only "Edit config" is exposed,
+                  // which seeds the author form and saves via the default path.
+                  <div
+                    key={preset.id}
+                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-medium">
+                          {DEFAULT_PRESET_DISPLAY.name}
+                        </span>
+                        <Badge variant="default" className="h-5 text-[10px]">
+                          Default
+                        </Badge>
+                        <Badge variant="secondary" className="h-5 text-[10px]">
+                          {preset.preset_type === "realtime"
+                            ? "Realtime"
+                            : "Pipeline"}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground line-clamp-2">
-                        {preset.description}
+                        {DEFAULT_PRESET_DISPLAY.description}
                       </p>
-                    )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startEditDefault(preset)}
+                        disabled={isBusy}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        Edit config
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handlePublishToggle(preset)}
-                      disabled={isBusy}
-                    >
-                      {preset.is_published ? "Unpublish" : (
-                        <>
-                          <Upload className="h-3.5 w-3.5 mr-1" />
-                          Publish
-                        </>
+                ) : (
+                  <div
+                    key={preset.id}
+                    className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/20"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-medium">{preset.name}</span>
+                        <Badge variant="secondary" className="h-5 text-[10px]">
+                          {preset.preset_type === "realtime"
+                            ? "Realtime"
+                            : "Pipeline"}
+                        </Badge>
+                        <Badge
+                          variant={preset.is_published ? "default" : "outline"}
+                          className="h-5 text-[10px]"
+                        >
+                          {preset.is_published ? "Published" : "Draft"}
+                        </Badge>
+                      </div>
+                      {preset.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {preset.description}
+                        </p>
                       )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => startEdit(preset)}
-                      disabled={isBusy}
-                      aria-label="Edit"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDelete(preset)}
-                      disabled={isBusy}
-                      aria-label="Delete"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePublishToggle(preset)}
+                        disabled={isBusy}
+                      >
+                        {preset.is_published ? "Unpublish" : (
+                          <>
+                            <Upload className="h-3.5 w-3.5 mr-1" />
+                            Publish
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => startEdit(preset)}
+                        disabled={isBusy}
+                        aria-label="Edit"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(preset)}
+                        disabled={isBusy}
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
         </div>

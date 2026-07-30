@@ -42,6 +42,13 @@ class PresetType(str, Enum):
     PIPELINE = "pipeline"
 
 
+# Reserved name for the single system-default preset row (see ``Preset.is_default``).
+# The upsert path rejects this name so admins cannot clobber the default row by
+# authoring a preset with the same name; the default is managed via its own
+# config-editor endpoint.
+RESERVED_DEFAULT_NAME = "System Default"
+
+
 class PresetBase(BaseModel):
     """Base model for a voice-engine preset.
 
@@ -119,6 +126,16 @@ class Preset(PresetBase):
         id: Preset ID.
         preset_type: Denormalized from ``config.engine_mode``; set by the
             service on every write, never accepted as input.
+        is_default: True only for the single **system-default** preset row —
+            the fallback config an agent uses when it has no preset selected
+            (``preset_id`` NULL, e.g. a legacy agent or one whose preset was
+            deleted). Seeded by the migration with today's realtime config; the
+            platform admin edits its ``config`` via a dedicated endpoint (it is
+            NOT publishable/deletable, and never appears in the org-admin picker
+            because it is not published). This is a **response-only** field: it
+            is not accepted on ``PresetCreate``/``PresetUpdate`` (``extra=
+            "forbid"`` rejects a hand-set value); the service sets it only on the
+            seeded default row.
         created_at: Creation timestamp.
         updated_at: Last update timestamp.
     """
@@ -126,6 +143,14 @@ class Preset(PresetBase):
     id: UUID = Field(..., description="Preset ID")
     preset_type: PresetType = Field(
         ..., description="Engine mode (realtime|pipeline); derived from config."
+    )
+    is_default: bool = Field(
+        default=False,
+        description=(
+            "True only for the single system-default preset row (the fallback "
+            "config for an agent with no preset selected). Response-only; never "
+            "accepted as input."
+        ),
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
@@ -157,4 +182,5 @@ __all__ = [
     "Preset",
     "PresetUsage",
     "PresetUsageAgent",
+    "RESERVED_DEFAULT_NAME",
 ]

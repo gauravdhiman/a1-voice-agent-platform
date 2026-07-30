@@ -24,6 +24,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 
 // `vi.mock` is hoisted above the module body, so we use `vi.hoisted` to
 // share state between the mock factories and the test cases.
@@ -279,5 +280,112 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     await waitFor(() => {
       expect(screen.getByText(/access denied/i)).toBeInTheDocument();
     });
+  });
+
+  it("renders the Organization Info + API Credentials tabs and defaults to info", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Acme").length).toBeGreaterThan(0);
+    });
+
+    // Both tabs are present.
+    expect(
+      screen.getByRole("tab", { name: /organization info/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /api credentials/i }),
+    ).toBeInTheDocument();
+
+    // Info tab is active by default: its card title is in the document and the
+    // credentials card title is not.
+    expect(screen.getByText(/Organization Information/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Third-party API Credentials/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches to the API Credentials tab on click and pushes ?tab=credentials", async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Acme").length).toBeGreaterThan(0);
+    });
+
+    // Credentials card title is NOT visible while the info tab is active.
+    expect(
+      screen.queryByText(/Third-party API Credentials/i),
+    ).not.toBeInTheDocument();
+
+    // userEvent simulates the full pointer + focus + click sequence; Radix
+    // TabsTrigger activates on mouseDown (button 0) and on focus.
+    await user.click(screen.getByRole("tab", { name: /api credentials/i }));
+
+    // The credentials card title becomes visible (credentials TabsContent mounts).
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Third-party API Credentials/i),
+      ).toBeInTheDocument();
+    });
+    // The info card title is no longer mounted (Radix unmounts inactive content).
+    expect(
+      screen.queryByText(/Organization Information/i),
+    ).not.toBeInTheDocument();
+
+    // The tab switch persists to ?tab=credentials.
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.stringContaining("tab=credentials"),
+      expect.objectContaining({ scroll: false }),
+    );
+  });
+
+  it("does not surface a Google API Key field on the Organization Info tab (google is managed in the API Credentials tab)", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Acme").length).toBeGreaterThan(0);
+    });
+
+    // The Info tab is active by default (read mode). It must NOT show a Google
+    // API Key field — google keys are configured exclusively under the
+    // "API Credentials" tab now. The credentials TabsContent is unmounted while
+    // the info tab is active, so this query targets the info card only.
+    expect(screen.queryByText("Google API Key")).not.toBeInTheDocument();
+    // And no Google API key <input> on the info tab either.
+    expect(
+      screen.queryByRole("textbox", { name: /google api key/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deep-links to the credentials tab when ?tab=credentials is in the URL", async () => {
+    globalThis.__orgPageSearchParams = "org_id=org-1&tab=credentials";
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    // The credentials card title renders (info card title does not).
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Third-party API Credentials/i),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(/Organization Information/i),
+    ).not.toBeInTheDocument();
   });
 });

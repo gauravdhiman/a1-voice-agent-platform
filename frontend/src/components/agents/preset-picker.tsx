@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { usePresets } from "@/hooks/use-preset-queries";
+import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
 import type { Preset } from "@/types/preset";
 
 /**
@@ -12,12 +13,15 @@ import type { Preset } from "@/types/preset";
  *
  * Used by both the agent create widget and the agent detail Properties tab. The
  * org admin picks one published preset (a "voice profile") for the agent, or
- * "Default (Gemini Realtime)" to clear the assignment (`preset_id = null`).
+ * the system-default fallback to clear the assignment (`preset_id = null`).
  *
- * Locked UX decision: the end user NEVER sees `engine_mode` / STT / LLM / TTS
- * here — only preset name + description + a **subtle** type badge
- * ("Realtime"/"Pipeline"). The engine + stage detail is a platform-admin
- * concern, authored on `/platform/presets`.
+ * The `preset_id = null` option is labeled with `DEFAULT_PRESET_DISPLAY` — the
+ * SAME name + description the platform admin sees for the "System Default" row
+ * on `/platform/presets` — so the two surfaces can't drift. It deliberately
+ * shows NO type badge: the system default's underlying engine is a
+ * platform-admin concern (the admin sets it on `/platform/presets`), so the
+ * picker must not leak it. "System Default" is the backend reserved name, so it
+ * can never collide with a published preset name in this list.
  *
  * Controlled: `value` is the current `preset_id` (or `null`); `onChange` fires
  * with the new `preset_id` (preset id or `null` for the default). Lists only
@@ -30,7 +34,7 @@ import type { Preset } from "@/types/preset";
  * ```
  */
 export interface PresetPickerProps {
-  /** Currently selected preset id, or `null` for the realtime default. */
+  /** Currently selected preset id, or `null` for the system default. */
   value: string | null;
   /** Fired with the new preset id (or `null` when the default is chosen). */
   onChange: (presetId: string | null) => void;
@@ -55,9 +59,9 @@ export function PresetPicker({
       <div className="space-y-1">
         <p className="text-sm font-medium">Voice profile</p>
         <p className="text-xs text-muted-foreground">
-          Pick a published voice profile for this agent, or use the default
-          (Google Gemini realtime). Only the name + description are shown — the
-          engine + stage configuration is managed by platform admins.
+          Pick a published voice profile for this agent, or use the system
+          default. Only the name + description are shown — the engine + stage
+          configuration is managed by platform admins.
         </p>
       </div>
 
@@ -67,13 +71,17 @@ export function PresetPicker({
         </div>
       ) : (
         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-          {/* Default option -> preset_id = null (realtime default). */}
+          {/* System-default fallback -> preset_id = null. Labeled with
+              DEFAULT_PRESET_DISPLAY so it matches the platform-admin Voice
+              Presets page exactly. No type badge: the default's underlying
+              engine is a platform-admin concern (set on /platform/presets), so
+              the picker does not leak it. "System Default" is the backend
+              reserved name, so it can't collide with a published preset. */}
           <PresetOption
             selected={value === null}
             onSelect={() => onChange(null)}
-            name="Default (Gemini Realtime)"
-            description="End-to-end Google Gemini native-audio model."
-            typeBadge="Realtime"
+            name={DEFAULT_PRESET_DISPLAY.name}
+            description={DEFAULT_PRESET_DISPLAY.description}
             disabled={disabled}
           />
           {presets.length === 0 ? (
@@ -81,7 +89,7 @@ export function PresetPicker({
               <SlidersHorizontal className="h-6 w-6 text-muted-foreground mx-auto mb-1 opacity-50" />
               <p className="text-xs text-muted-foreground">
                 No voice profiles published yet — this agent will use the
-                default.
+                system default.
               </p>
             </div>
           ) : (
@@ -116,7 +124,9 @@ function PresetOption({
   onSelect: () => void;
   name: string;
   description?: string;
-  typeBadge: "Realtime" | "Pipeline";
+  /** Optional engine badge. Omitted for the system-default fallback option so
+   * the picker does not leak the system default's underlying engine. */
+  typeBadge?: "Realtime" | "Pipeline";
   disabled?: boolean;
 }) {
   return (
@@ -146,9 +156,11 @@ function PresetOption({
     >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium text-sm text-foreground">{name}</span>
-        <Badge variant="secondary" className="text-[10px] h-5">
-          {typeBadge}
-        </Badge>
+        {typeBadge && (
+          <Badge variant="secondary" className="text-[10px] h-5">
+            {typeBadge}
+          </Badge>
+        )}
         {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
       </div>
       {description && (

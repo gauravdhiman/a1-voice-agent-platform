@@ -55,6 +55,38 @@ class PresetService {
   }
 
   /**
+   * Fetch the system default preset (platform-admin only).
+   *
+   * The default is the fallback config an agent uses when it has no preset
+   * selected (`preset_id` null). It is not published and never appears in the
+   * org-admin picker. Returns 404 if no default row is designated (the worker
+   * then falls back to the hardcoded realtime default).
+   */
+  async getDefaultPreset(): Promise<Preset> {
+    const response = await apiClient.get<Preset>(`${this.baseUrl}/default`);
+    return response.data;
+  }
+
+  /**
+   * Replace the system default preset's `config` (platform-admin only).
+   *
+   * The request body is the raw `SpeechConfig` dict (realtime or pipeline); the
+   * backend re-validates it and re-derives `preset_type`. Only `config` (and the
+   * derived `preset_type`) are written — the default row's `name` /
+   * `is_published` / `is_default` stay fixed (it is never publishable or
+   * deletable). Returns 400 on an invalid config, 404 if no default row exists.
+   */
+  async updateDefaultPreset(
+    config: Record<string, unknown>,
+  ): Promise<Preset> {
+    const response = await apiClient.put<Preset>(
+      `${this.baseUrl}/default`,
+      config,
+    );
+    return response.data;
+  }
+
+  /**
    * Create or replace a preset by name (upsert). The new preset starts as a
    * draft unless `is_published` is set in the body; publish it via
    * `publishPreset`. The backend validates the `config` discriminated union
@@ -96,7 +128,7 @@ class PresetService {
    *
    * Guardrail: a preset referenced by any agent is refused with 409 `in_use`
    * unless `force` is set. With `force`, the `voice_agents.preset_id` FK
-   * `ON DELETE SET NULL` drops referencing agents back to the realtime default.
+   * `ON DELETE SET NULL` drops referencing agents back to the system default.
    * The UI pre-fetches usage via `getPresetUsage` and passes `force = count > 0`
    * after a type-to-confirm dialog, so the 409 path is a backend safety net.
    */

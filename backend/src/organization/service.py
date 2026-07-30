@@ -15,10 +15,12 @@ from shared.common.security import decrypt_data, encrypt_data
 from shared.organization.service import BaseOrganizationService
 from src.notifications.models import SendNotificationRequest
 from src.notifications.service import notification_service
-from src.organization.invitation_models import (Invitation, InvitationCreate,
-                                                InvitationStatus)
-from src.organization.models import (Organization, OrganizationCreate,
-                                     OrganizationUpdate)
+from src.organization.invitation_models import (
+    Invitation,
+    InvitationCreate,
+    InvitationStatus,
+)
+from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
@@ -405,6 +407,33 @@ class OrganizationService(BaseOrganizationService):
                 # Merge per-provider inputs (e.g. {"openai": "...",
                 # "livekit": {"api_key": "...", "api_secret": "..."}}). A None
                 # value clears that provider.
+                #
+                # Google is now managed exclusively on the "API Credentials"
+                # tab (the Organization Info tab's Google field was removed), so
+                # a google key arrives here via ``provider_credentials_input``.
+                # Validate it exactly like the legacy ``google_api_key`` field
+                # so the credentials-tab path can't bypass the check. A None /
+                # empty value clears the google entry (no validation needed).
+                google_input = org_data.provider_credentials_input.get("google")
+                if google_input is not None and google_input.strip() != "":
+                    is_valid, validation_error = await self.validate_google_api_key(
+                        google_input
+                    )
+                    if not is_valid:
+                        current_span.set_status(
+                            trace.Status(
+                                trace.StatusCode.ERROR,
+                                f"Invalid Google API key: {validation_error}",
+                            )
+                        )
+                        organization_errors_counter.add(
+                            1,
+                            {
+                                "operation": "update_organization",
+                                "error": "invalid_google_api_key",
+                            },
+                        )
+                        return None, f"Invalid Google API key: {validation_error}"
                 cred_updates.update(org_data.provider_credentials_input)
 
             if cred_updates:

@@ -30,6 +30,7 @@ def _preset(
     is_published: bool = True,
     preset_type: PresetType = PresetType.REALTIME,
     name="Default Realtime",
+    is_default: bool = False,
 ) -> Preset:
     return Preset(
         id=TEST_PRESET_ID,
@@ -46,6 +47,7 @@ def _preset(
             }
         ),
         is_published=is_published,
+        is_default=is_default,
         created_at=datetime(2026, 7, 29),
         updated_at=datetime(2026, 7, 29),
     )
@@ -348,3 +350,159 @@ class TestPresetRoutesAuthz:
                     user_data=(TEST_USER_ID, _profile(is_admin=True)),
                 )
         assert exc_info.value.status_code == 404
+
+
+class TestPresetDefaultRoutes:
+    """System-default preset routes (GET/PUT /default) + default-row guards."""
+
+    @pytest.mark.asyncio
+    async def test_get_default_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import get_default_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_default_preset(user_data=(TEST_USER_ID, _profile(is_admin=False)))
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_default_succeeds_for_admin(self):
+        from src.voice_agents.preset_routes import get_default_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_default_preset = AsyncMock(
+                return_value=(
+                    _preset(is_default=True, is_published=False, name="System Default"),
+                    None,
+                )
+            )
+            result = await get_default_preset(
+                user_data=(TEST_USER_ID, _profile(is_admin=True))
+            )
+        assert result.is_default is True
+        assert result.name == "System Default"
+
+    @pytest.mark.asyncio
+    async def test_get_default_not_found_returns_404(self):
+        from src.voice_agents.preset_routes import get_default_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.get_default_preset = AsyncMock(return_value=(None, None))
+            with pytest.raises(HTTPException) as exc_info:
+                await get_default_preset(
+                    user_data=(TEST_USER_ID, _profile(is_admin=True))
+                )
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_default_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import update_default_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await update_default_preset(
+                config={"engine_mode": "realtime"},
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_update_default_succeeds_for_admin(self):
+        from src.voice_agents.preset_routes import update_default_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.update_default_preset = AsyncMock(
+                return_value=(
+                    _preset(is_default=True, is_published=False, name="System Default"),
+                    None,
+                )
+            )
+            result = await update_default_preset(
+                config={"engine_mode": "realtime"},
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result.is_default is True
+        mock_service.update_default_preset.assert_awaited_once_with(
+            {"engine_mode": "realtime"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_default_invalid_config_returns_400(self):
+        from src.voice_agents.preset_routes import update_default_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.update_default_preset = AsyncMock(
+                return_value=(None, "Invalid speech config: boom")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await update_default_preset(
+                    config={"engine_mode": "pipeline"},
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_default_not_found_returns_404(self):
+        from src.voice_agents.preset_routes import update_default_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.update_default_preset = AsyncMock(
+                return_value=(None, "Default not found")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await update_default_preset(
+                    config={"engine_mode": "realtime"},
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_publish_preset_default_row_returns_400(self):
+        """Publishing the system default is rejected (service guard) -> 400."""
+        from src.voice_agents.preset_routes import publish_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.publish_preset = AsyncMock(
+                return_value=(None, "The system default preset is not publishable")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await publish_preset(
+                    preset_id=TEST_PRESET_ID,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_delete_preset_default_row_returns_400(self):
+        """Deleting the system default is rejected (service guard) -> 400."""
+        from src.voice_agents.preset_routes import delete_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.delete_preset = AsyncMock(
+                return_value=(None, "The system default preset cannot be deleted")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_preset(
+                    preset_id=TEST_PRESET_ID,
+                    force=False,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_preset_default_row_returns_400(self):
+        """The generic update path refuses the system default -> 400."""
+        from shared.voice_agents.preset_models import PresetUpdate
+        from src.voice_agents.preset_routes import update_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.update_preset = AsyncMock(
+                return_value=(
+                    None,
+                    "The system default preset is managed via its own config editor",
+                )
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await update_preset(
+                    preset_id=TEST_PRESET_ID,
+                    preset_data=PresetUpdate(name="X"),
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400

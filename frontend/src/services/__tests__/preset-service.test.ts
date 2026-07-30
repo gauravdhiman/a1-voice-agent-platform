@@ -32,6 +32,19 @@ const PRESET: Preset = {
   config: { engine_mode: "realtime", provider: "google" },
   is_published: true,
   preset_type: "realtime",
+  is_default: false,
+  created_at: "2026-07-29T00:00:00Z",
+  updated_at: "2026-07-29T00:00:00Z",
+};
+
+const DEFAULT_PRESET: Preset = {
+  id: "p-default",
+  name: "System Default",
+  description: "The fallback voice profile.",
+  config: { engine_mode: "realtime", provider: "google" },
+  is_published: false,
+  preset_type: "realtime",
+  is_default: true,
   created_at: "2026-07-29T00:00:00Z",
   updated_at: "2026-07-29T00:00:00Z",
 };
@@ -68,6 +81,22 @@ describe("presetService", () => {
     const out = await presetService.getPreset("p-1");
     expect(apiClient.get).toHaveBeenCalledWith("/api/v1/presets/p-1");
     expect(out).toEqual(PRESET);
+  });
+
+  it("getDefaultPreset: GET /default", async () => {
+    apiClient.get.mockResolvedValue(resp(DEFAULT_PRESET));
+    const out = await presetService.getDefaultPreset();
+    expect(apiClient.get).toHaveBeenCalledWith("/api/v1/presets/default");
+    expect(out).toEqual(DEFAULT_PRESET);
+  });
+
+  it("updateDefaultPreset: PUT /default with the raw config as the body", async () => {
+    apiClient.put.mockResolvedValue(resp(DEFAULT_PRESET));
+    const config = { engine_mode: "pipeline", stt: { provider: "deepgram" }, llm: { provider: "openai" }, tts: { provider: "cartesia" } };
+    const out = await presetService.updateDefaultPreset(config);
+    // The body is the raw SpeechConfig dict itself (not wrapped in {config}).
+    expect(apiClient.put).toHaveBeenCalledWith("/api/v1/presets/default", config);
+    expect(out).toEqual(DEFAULT_PRESET);
   });
 
   it("createPreset: POST / with body", async () => {

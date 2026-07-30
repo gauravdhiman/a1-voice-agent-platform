@@ -21,7 +21,9 @@
 > (532 tests) + org-credentials backend tests (20) green; no-network container
 > smoke confirms the full key-resolution → Inference-injection seam; browser smoke
 > validates the full create/publish/edit/unpublish/delete + picker + org-cred flow.
-> Live calls are unchanged for legacy agents (`preset_id=None` → realtime default).
+> Live calls are unchanged for legacy agents (`preset_id=None` → the **System Default**
+> preset row — Phase 4 follow-up, migration `20260729000002`; `default_realtime_config()`
+> is now only the ultimate hardcoded safety net).
 > **Phase 5 pending** (latency hardening). **The Phase 3 migration
 > (`20260729000001`) has been run** (`alembic upgrade head` in the backend
 > container) — the `pipeline_presets` table + `voice_agents.preset_id` FK +
@@ -426,12 +428,14 @@ flowchart TD
     entry added under `platform_admin` (`SlidersHorizontal`).
   - **(B) Agent preset picker** — reusable `PresetPicker` single-select used by the
     create widget and the agent detail page; lists **published** presets from
-    `usePresets()` plus a "Default (Gemini Realtime)" option → `preset_id = null`.
-    Shows preset name + description + a subtle Realtime/Pipeline type badge — org
-    users **never see** `engine_mode`/STT/LLM/TTS stage fields. Agent interfaces
-    gained `preset_id` (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate`
-    optional; `null` clears, omitted preserves).
-  - **(C) Per-provider org-credentials UI** — dedicated "Voice Provider Credentials"
+    `usePresets()` plus a generic **"Default"** option → `preset_id = null`
+    (resolves to the System Default row — the underlying model is not revealed to
+    the org user). Shows preset name + description + a subtle Realtime/Pipeline
+    type badge (the "Default" option carries no badge) — org users **never see**
+    `engine_mode`/STT/LLM/TTS stage fields. Agent interfaces gained `preset_id`
+    (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate` optional; `null`
+    clears → System Default, omitted preserves).
+  - **(C) Per-provider org-credentials UI** — dedicated "Third-party API Credentials"
     Card on `/organization` with its own Save button (separate from the main org
     form to avoid the empty-string-clears footgun): `type="password"` inputs per
     provider (google/deepgram/openai/cartesia/cerebras + livekit
@@ -450,6 +454,57 @@ flowchart TD
   pills, non-platform-admin denied) all pass. Throwaway smoke agent deleted; the
   two presets authored during validation are kept as starter catalog content
   (owner decision).
+- **P4 follow-ups (done)** — two enhancements to the Phase 4 surface:
+  - **System default voice profile.** The Phase 4 fallback for an agent with
+    `preset_id=null` was a hardcoded `default_realtime_config()` in the worker —
+    invisible/unmanageable, shown in the picker as a hardcoded "Default (Gemini
+    Realtime)" option. Promoted to a dedicated, always-present, admin-only,
+    non-published **"System Default"** row: `pipeline_presets.is_default=true`
+    with a **partial unique index** `ux_pipeline_presets_is_default`
+    (`WHERE is_default = true`, at-most-one default), migration
+    `20260729000002`, seeded with today's Gemini-realtime config so out-of-box
+    behavior is identical. The platform admin edits only its `config` via
+    `GET`/`PUT /api/v1/presets/default` (config-only; the service re-validates
+    the `SpeechConfig` and re-derives `preset_type`); the service guards make it
+    non-publishable and non-deletable, and `upsert_preset` rejects the reserved
+    name `"System Default"`. The worker's null-resolution (`_resolve_speech_config`
+    in `worker/src/worker.py`) now reads this row via
+    `preset_service.get_default_preset` and keeps `default_realtime_config()`
+    only as the ultimate safety net (missing/unparseable default → hardcoded
+    fallback). The org-admin picker's hardcoded option became a generic
+    **"Default" → null**. **✅ Done** — 82 backend + 8 worker + 39 frontend
+    tests green; browser-validated (System Default row pinned to top with a
+    "Default" badge, config edit/save round-trip, picker "Default" option).
+    - **Follow-up: aligned default messaging.** The picker's default option now
+      shows the **same** name + description as the platform-admin Voice Presets
+      page — **"System Default"** / "Used when an agent has no voice profile
+      selected." — via a single shared `DEFAULT_PRESET_DISPLAY` constant
+      (`frontend/src/types/preset.ts`) used by both the picker
+      (`preset-picker.tsx`) and the platform page (`platform-presets-manager.tsx`),
+      so the two surfaces can't drift. The default option carries no type badge
+      (the underlying engine is a platform-admin concern). `"System Default"` is
+      the backend reserved name, so it can't collide with a published preset in
+      the picker. **✅ Done** — picker + type vitest green; browser-validated
+      (picker radio "System Default …" matches the platform page exactly).
+  - **Organization page tabs.** `/organization` refactored from two stacked Cards
+    into a tabbed layout ("Organization Info" / "API Credentials") using the
+    existing `AnimatedTabs` primitive, with `?tab=info|credentials` deep-linking
+    (mirrors the agent-detail `?tab=` idiom; legacy `?tab=phone-numbers|skills|ai-agent`
+    still redirect via `legacy-tab-redirect.ts`). The credentials Card renamed
+    "Voice Provider Credentials" → **"Third-party API Credentials"**. No logic
+    change to the save / cred-status flow. **✅ Done** — org page + legacy-redirect
+    vitest green; browser-validated (tab switch + `?tab=` deep-link both ways).
+    - **Follow-up: Google key moved off the Info tab.** The Google API key field
+      was removed from the "Organization Info" tab (edit + read views); google is
+      managed **exclusively** on the "API Credentials" tab. The Info tab no longer
+      sends `google_api_key` on save. The backend `update_organization` now
+      validates a google key arriving via `provider_credentials_input` (the
+      credentials-tab path) exactly like the legacy `google_api_key` field —
+      invalid keys are rejected before any write (`Invalid Google API key: …`).
+      **✅ Done** — org-credentials backend tests green (+2); browser-validated
+      (Info tab has no Google field in read or edit mode; credentials tab still
+      has it; an invalid google key submitted from the credentials tab is
+      rejected with a toast and writes nothing).
 - **P5 Latency hardening (v2):** SpeculativeTurnTracker, CancelScope cross-stage stale
   drop, sentence-batched LLM→TTS, TTS leading-silence trim, ChatContext compaction,
   model warmup. Benchmarks before/after.

@@ -199,6 +199,84 @@ class TestOrgProviderCredentialsWrite:
         # No update call was issued.
         mock_supabase_client.table.return_value.update.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_google_via_provider_credentials_input_is_validated_and_stored(
+        self, organization_service, mock_supabase_client
+    ):
+        """A google key supplied via `provider_credentials_input` (the API
+        Credentials tab path, now that the Info-tab Google field is gone) is
+        validated exactly like the legacy `google_api_key` field, then merged
+        into the encrypted blob."""
+        org_id = uuid4()
+
+        existing_resp = MagicMock()
+        existing_resp.data = [{"provider_credentials": "OLD_BLOB"}]
+        updated_resp = MagicMock()
+        updated_resp.data = [
+            _row(org_id, provider_credentials="NEW_BLOB", google_api_key=None)
+        ]
+
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.side_effect = [existing_resp, updated_resp]
+
+        organization_service.validate_google_api_key = AsyncMock(
+            return_value=(True, None)
+        )
+        captured = {}
+
+        def fake_enc(creds):
+            captured["creds"] = dict(creds)
+            return "NEW_BLOB"
+
+        with patch(
+            "src.organization.service.encrypt_data", side_effect=fake_enc
+        ), patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {"openai": "sk-old"}
+
+            result, error = await organization_service.update_organization(
+                org_id,
+                OrganizationUpdate(
+                    provider_credentials_input={"google": "GEM_VIA_CRED"}
+                ),
+            )
+
+        assert error is None
+        assert result is not None
+        # Validation ran against the google value from provider_credentials_input.
+        organization_service.validate_google_api_key.assert_called_once_with(
+            "GEM_VIA_CRED"
+        )
+        # google merged into the blob alongside the preserved openai key.
+        assert captured["creds"] == {"openai": "sk-old", "google": "GEM_VIA_CRED"}
+        # The legacy plaintext column is cleared (secret lives only in the blob).
+        update_call = table_mock.update.call_args
+        assert update_call.args[0]["google_api_key"] is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_google_via_provider_credentials_input_returns_error(
+        self, organization_service, mock_supabase_client
+    ):
+        """An invalid google key supplied via `provider_credentials_input` is
+        rejected before any write — same guard as the legacy field."""
+        org_id = uuid4()
+
+        organization_service.validate_google_api_key = AsyncMock(
+            return_value=(False, "key rejected")
+        )
+
+        with patch("src.organization.service.encrypt_data") as mock_enc:
+            result, error = await organization_service.update_organization(
+                org_id,
+                OrganizationUpdate(
+                    provider_credentials_input={"google": "BAD_VIA_CRED"}
+                ),
+            )
+
+        assert result is None
+        assert "Invalid Google API key" in error
+        mock_enc.assert_not_called()
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
 
 class TestOrgProviderCredentialsRead:
     """_organization_from_dict resolves the Google key from the blob."""

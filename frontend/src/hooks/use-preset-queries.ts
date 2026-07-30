@@ -28,6 +28,7 @@ export const presetQueryKeys = {
     ] as const,
   detail: (id: string) => [...presetQueryKeys.all, id] as const,
   usage: (id: string) => [...presetQueryKeys.all, id, "usage"] as const,
+  default: () => [...presetQueryKeys.all, "default"] as const,
 };
 
 /**
@@ -52,6 +53,21 @@ export function usePreset(presetId: string, enabled = true) {
     queryKey: presetQueryKeys.detail(presetId),
     queryFn: () => presetService.getPreset(presetId),
     enabled: !!presetId && enabled,
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Fetch the system default preset (platform-admin only). The default is the
+ * fallback config an agent uses when it has no preset selected; it is not
+ * published and never appears in the org-admin picker. The manage view already
+ * receives the default row via `usePresets({ includeDrafts: true })` (it is a
+ * draft), so this hook is the dedicated fetch for a focused default editor.
+ */
+export function useDefaultPreset() {
+  return useQuery({
+    queryKey: presetQueryKeys.default(),
+    queryFn: () => presetService.getDefaultPreset(),
     staleTime: 30 * 1000,
   });
 }
@@ -91,6 +107,25 @@ export function useUpdatePreset() {
     },
     onError: () => {
       toast.error("Failed to update preset");
+    },
+  });
+}
+
+// Mutation: Replace the system default preset's `config` (platform-admin only).
+// Only `config` (and the derived `preset_type`) are written; the default row's
+// name/is_published/is_default stay fixed. Invalidates the preset list + the
+// dedicated default query so the manage view's default row refreshes.
+export function useUpdateDefaultPreset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (config: Record<string, unknown>) =>
+      presetService.updateDefaultPreset(config),
+    onSuccess: () => {
+      toast.success("System default updated");
+      queryClient.invalidateQueries({ queryKey: presetQueryKeys.all });
+    },
+    onError: () => {
+      toast.error("Failed to update system default");
     },
   });
 }

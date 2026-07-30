@@ -30,6 +30,24 @@
 export type PresetType = "realtime" | "pipeline";
 
 /**
+ * Display name + description for the **system default** fallback, shared by the
+ * platform-admin Voice Presets page and the agent `PresetPicker` so the two
+ * surfaces can't drift (the owner requirement: the picker must show the same
+ * name/description the platform admin sees on `/platform/presets`).
+ *
+ * `"System Default"` is the backend reserved name (`upsert_preset` rejects it),
+ * so it can never collide with a published preset name in the picker. The
+ * description matches the seeded default row's display on the platform page.
+ * The underlying engine (realtime/pipeline) is deliberately NOT surfaced here —
+ * the picker shows no type badge for the default so it doesn't leak the engine
+ * the platform admin set.
+ */
+export const DEFAULT_PRESET_DISPLAY = {
+  name: "System Default",
+  description: "Used when an agent has no voice profile selected.",
+} as const;
+
+/**
  * A platform-admin-managed voice-engine preset (API response shape).
  *
  * `preset_type` is derived from `config.engine_mode` by the backend on every
@@ -45,6 +63,15 @@ export interface Preset {
   is_published: boolean;
   /** Derived from `config.engine_mode` by the backend; never an input field. */
   preset_type: PresetType;
+  /**
+   * True only for the single **system default** preset row — the fallback
+   * config an agent uses when it has no preset selected (`preset_id` null).
+   * Response-only; the backend sets it only on the seeded default row and
+   * rejects a hand-set value (`extra="forbid"`). The default is not
+   * publishable/deletable; the platform admin edits its `config` via
+   * `presetService.getDefaultPreset` / `updateDefaultPreset`.
+   */
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 }

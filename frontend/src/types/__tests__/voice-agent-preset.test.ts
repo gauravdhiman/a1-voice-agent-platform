@@ -3,7 +3,7 @@
  * interfaces (Phase 4).
  *
  * Contract: the backend `VoiceAgent` response (`shared/voice_agents/models.py`)
- * carries `preset_id` (FK to `pipeline_presets.id`, NULL = realtime default),
+ * carries `preset_id` (FK to `pipeline_presets.id`, NULL = system default),
  * and the create/update models accept it. The frontend must surface it so the
  * agent picker can prefill + clear the assignment. These tests pin the presence
  * and shape of `preset_id` on `VoiceAgent` / `VoiceAgentCreate` /
@@ -60,7 +60,7 @@ describe("VoiceAgent preset_id field", () => {
     expect(agent.preset_id).toBe("p-1");
   });
 
-  it("an agent with no preset carries preset_id = null (realtime default)", () => {
+  it("an agent with no preset carries preset_id = null (system default fallback)", () => {
     const agent: VoiceAgent = {
       id: "a2",
       organization_id: "o1",

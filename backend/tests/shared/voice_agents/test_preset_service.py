@@ -13,12 +13,8 @@ from uuid import uuid4
 
 import pytest
 
-from shared.voice_agents.preset_models import (
-    Preset,
-    PresetCreate,
-    PresetType,
-    PresetUpdate,
-)
+from shared.voice_agents.preset_models import (Preset, PresetCreate,
+                                               PresetType, PresetUpdate)
 from shared.voice_agents.preset_service import PresetService
 
 
@@ -54,7 +50,13 @@ def _pipeline_create() -> PresetCreate:
     )
 
 
-def _row(preset_type: PresetType, *, is_published: bool = True, name="P"):
+def _row(
+    preset_type: PresetType,
+    *,
+    is_published: bool = True,
+    name="P",
+    is_default: bool = False
+):
     return {
         "id": str(uuid4()),
         "name": name,
@@ -71,6 +73,7 @@ def _row(preset_type: PresetType, *, is_published: bool = True, name="P"):
             }
         ),
         "is_published": is_published,
+        "is_default": is_default,
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-01T00:00:00Z",
     }
@@ -479,3 +482,154 @@ class TestPresetServiceErrorBranches:
         result, error = await preset_service.upsert_preset(data)
         assert error is None
         assert result is not None
+
+
+class TestPresetServiceDefault:
+    """System-default preset: get/update + guards on CRUD methods."""
+
+    async def test_get_default_preset_found(self, preset_service, mock_supabase_client):
+        """get_default_preset returns the single is_default=True row."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[_row(PresetType.REALTIME, is_default=True, name="System Default")]
+        )
+        result, error = await preset_service.get_default_preset()
+        assert error is None
+        assert result is not None
+        assert result.is_default is True
+        # Query filters on is_default=True.
+        mock_supabase_client.table.return_value.eq.assert_any_call("is_default", True)
+
+    async def test_get_default_preset_not_found(
+        self, preset_service, mock_supabase_client
+    ):
+        """No default row -> (None, None) (worker falls back to hardcoded)."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+        result, error = await preset_service.get_default_preset()
+        assert error is None
+        assert result is None
+
+    async def test_get_default_preset_supabase_exception(
+        self, preset_service, mock_supabase_client
+    ):
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "boom"
+        )
+        result, error = await preset_service.get_default_preset()
+        assert result is None
+        assert "boom" in error
+
+    async def test_update_default_preset_updates_config(
+        self, preset_service, mock_supabase_client
+    ):
+        """update_default_preset writes config+preset_type on the default row only."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[_row(PresetType.PIPELINE, is_default=True, name="System Default")]
+        )
+        new_config = {
+            "engine_mode": "pipeline",
+            "stt": {"provider": "deepgram"},
+            "llm": {"provider": "openai"},
+            "tts": {"provider": "cartesia"},
+        }
+        result, error = await preset_service.update_default_preset(new_config)
+        assert error is None
+        assert result is not None
+        assert result.is_default is True
+        # The update payload is config + derived preset_type, scoped to is_default=True.
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0]["config"] == new_config
+        assert update_call.args[0]["preset_type"] == "pipeline"
+        mock_supabase_client.table.return_value.eq.assert_any_call("is_default", True)
+
+    async def test_update_default_preset_invalid_config(
+        self, preset_service, mock_supabase_client
+    ):
+        """A bad config is rejected before touching the DB."""
+        result, error = await preset_service.update_default_preset(
+            {"engine_mode": "pipeline"}  # missing stt/llm/tts
+        )
+        assert result is None
+        assert error is not None
+        mock_supabase_client.table.assert_not_called()
+
+    async def test_update_default_preset_not_found(
+        self, preset_service, mock_supabase_client
+    ):
+        """No is_default row -> (None, 'Default not found')."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+        result, error = await preset_service.update_default_preset(
+            {"engine_mode": "realtime"}
+        )
+        assert result is None
+        assert error == "Default not found"
+
+    async def test_update_default_preset_supabase_exception(
+        self, preset_service, mock_supabase_client
+    ):
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "boom"
+        )
+        result, error = await preset_service.update_default_preset(
+            {"engine_mode": "realtime"}
+        )
+        assert result is None
+        assert "boom" in error
+
+    async def test_upsert_rejects_reserved_default_name(
+        self, preset_service, mock_supabase_client
+    ):
+        """Authoring a preset named 'System Default' is rejected (reserved)."""
+        from shared.voice_agents.preset_models import RESERVED_DEFAULT_NAME
+
+        data = PresetCreate(
+            name=RESERVED_DEFAULT_NAME, config={"engine_mode": "realtime"}
+        )
+        result, error = await preset_service.upsert_preset(data)
+        assert result is None
+        assert error is not None
+        assert "reserved" in error.lower()
+        mock_supabase_client.table.assert_not_called()
+
+    async def test_update_preset_rejects_default_row(
+        self, preset_service, mock_supabase_client
+    ):
+        """The generic update path refuses the system-default row."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(uuid4()), "is_default": True}]
+        )
+        result, error = await preset_service.update_preset(
+            uuid4(), PresetUpdate(name="X")
+        )
+        assert result is None
+        assert error is not None
+        # The generic update was NOT issued (only the guard fetch ran).
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
+    async def test_publish_preset_rejects_default_row(
+        self, preset_service, mock_supabase_client
+    ):
+        """Publishing the system-default row is rejected (it is not publishable)."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(uuid4()), "is_default": True}]
+        )
+        result, error = await preset_service.publish_preset(uuid4(), True)
+        assert result is None
+        assert error is not None
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
+    async def test_delete_preset_rejects_default_row(
+        self, preset_service, mock_supabase_client
+    ):
+        """Deleting the system-default row is rejected."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(uuid4()), "is_default": True}]
+        )
+        result, error = await preset_service.delete_preset(uuid4())
+        assert result is None
+        assert error is not None
+        # No delete issued, and no usage/delete beyond the existence fetch.
+        mock_supabase_client.table.return_value.delete.assert_not_called()

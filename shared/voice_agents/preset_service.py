@@ -37,12 +37,9 @@ from pydantic import ValidationError
 from supabase import Client
 
 from shared.config import supabase_config
-from shared.voice_agents.preset_models import (
-    Preset,
-    PresetCreate,
-    PresetType,
-    PresetUpdate,
-)
+from shared.voice_agents.preset_models import (RESERVED_DEFAULT_NAME, Preset,
+                                               PresetCreate, PresetType,
+                                               PresetUpdate)
 from shared.voice_agents.speech_config import parse_speech_config
 
 logger = logging.getLogger(__name__)
@@ -117,6 +114,12 @@ class PresetService:
         if err:
             return None, err
 
+        # Guard: the reserved name belongs to the single system-default row,
+        # managed via its own config editor — reject authoring a preset that
+        # would clobber it by name.
+        if data.name == RESERVED_DEFAULT_NAME:
+            return None, f"'{RESERVED_DEFAULT_NAME}' is a reserved preset name"
+
         try:
             existing = (
                 self.supabase.table("pipeline_presets")
@@ -175,6 +178,23 @@ class PresetService:
             data_dict["preset_type"] = preset_type.value
 
         try:
+            # Guard: the system-default row is edited only via
+            # :meth:`update_default_preset` (its config editor); the generic
+            # update path refuses it so name/is_published/is_default stay fixed.
+            existing = (
+                self.supabase.table("pipeline_presets")
+                .select("id,is_default")
+                .eq("id", str(preset_id))
+                .limit(1)
+                .execute()
+            )
+            if not existing.data:
+                return None, "Preset not found"
+            if existing.data[0].get("is_default"):
+                return None, (
+                    "The system default preset is managed via its own config editor"
+                )
+
             response = (
                 self.supabase.table("pipeline_presets")
                 .update(data_dict)
@@ -186,6 +206,76 @@ class PresetService:
             return Preset(**response.data[0]), None
         except Exception as e:
             logger.error(f"Error updating preset {preset_id}: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("preset.get_default_preset")
+    async def get_default_preset(self) -> tuple[Optional[Preset], Optional[str]]:
+        """Fetch the single system-default preset row (``is_default=True``).
+
+        The default is the fallback config an agent uses when it has no preset
+        selected (``preset_id`` NULL — a legacy agent, or one whose preset was
+        deleted via the FK ``ON DELETE SET NULL``). It is seeded by the
+        migration with today's realtime config and is editable via
+        :meth:`update_default_preset`. It is NOT published and never appears in
+        the org-admin picker.
+
+        Returns:
+            ``(Preset, None)`` if the default row exists, ``(None, None)`` if
+            none is designated (the worker then falls back to the hardcoded
+            ``default_realtime_config()``), or ``(None, error)`` on a Supabase
+            error. A missing default is NOT an error.
+        """
+        try:
+            response = (
+                self.supabase.table("pipeline_presets")
+                .select("*")
+                .eq("is_default", True)
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None, None
+            return Preset(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error getting default preset: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("preset.update_default_preset")
+    async def update_default_preset(
+        self, config: dict
+    ) -> tuple[Optional[Preset], Optional[str]]:
+        """Replace the system-default preset's ``config`` (platform admin only).
+
+        Only ``config`` and the derived ``preset_type`` are written; the row's
+        ``name``/``is_published``/``is_default`` stay fixed (it is always the
+        admin-only, non-published fallback). The config is re-validated via
+        :func:`parse_speech_config` and ``preset_type`` is re-derived from its
+        ``engine_mode`` before persisting.
+
+        Args:
+            config: A raw ``SpeechConfig`` dict (realtime or pipeline
+                discriminated union).
+
+        Returns:
+            ``(Preset, None)`` on success, or ``(None, error)`` where error is a
+            validation message, ``"Default not found"`` (no ``is_default`` row),
+            or a Supabase error message.
+        """
+        preset_type, err = self._derive_preset_type(config)
+        if err:
+            return None, err
+        try:
+            response = (
+                self.supabase.table("pipeline_presets")
+                .update({"config": config, "preset_type": preset_type.value})
+                .eq("is_default", True)
+                .execute()
+            )
+            if not response.data:
+                return None, "Default not found"
+            return Preset(**response.data[0]), None
+        except Exception as e:
+            logger.error(f"Error updating default preset: {e}", exc_info=True)
             return None, str(e)
 
     @tracer.start_as_current_span("preset.get_presets")
@@ -274,6 +364,21 @@ class PresetService:
             found"`` if the row is missing).
         """
         try:
+            # Guard: the system-default row is not publishable — it is the
+            # admin-only fallback (never shown in the org-admin picker, which
+            # lists published presets only).
+            existing = (
+                self.supabase.table("pipeline_presets")
+                .select("id,is_default")
+                .eq("id", str(preset_id))
+                .limit(1)
+                .execute()
+            )
+            if not existing.data:
+                return None, "Preset not found"
+            if existing.data[0].get("is_default"):
+                return None, "The system default preset is not publishable"
+
             response = (
                 self.supabase.table("pipeline_presets")
                 .update({"is_published": published})
@@ -325,7 +430,7 @@ class PresetService:
         ``force`` — return ``"in_use"`` so the route can surface the affected
         agents in a 409 body. With ``force=True`` (or when unused), the
         ``voice_agents.preset_id`` FK ``ON DELETE SET NULL`` detaches
-        referencing agents (they fall back to the realtime default) and the
+        referencing agents (they fall back to the System Default preset row) and the
         preset row is removed.
 
         Args:
@@ -339,12 +444,14 @@ class PresetService:
         try:
             exists = (
                 self.supabase.table("pipeline_presets")
-                .select("id")
+                .select("id,is_default")
                 .eq("id", str(preset_id))
                 .execute()
             )
             if not exists.data:
                 return None, "Preset not found"
+            if exists.data[0].get("is_default"):
+                return None, "The system default preset cannot be deleted"
 
             usage, usage_error = await self.get_preset_usage(preset_id)
             if usage_error:

@@ -75,7 +75,22 @@ id (`get_preset_by_id`) — drafts and published both resolve; assignment
 validation (in the agent routes) enforces `is_published`. Deleting an in-use
 preset returns `"in_use"` (route → 409 with the agent list); `?force=true` proceeds
 and the `voice_agents.preset_id` FK `ON DELETE SET NULL` drops agents back to the
-realtime default. Presets carry **no secrets**.
+**System Default** preset row (Phase 4). Presets carry **no secrets**.
+
+**System default (Phase 4, migration `20260729000002`).** The catalog always
+contains one `is_default=true` row (`name='System Default'`, `is_published=false`,
+seeded with `default_realtime_config()`). It is the fallback an agent uses when
+`preset_id` is NULL (legacy agent, or one whose preset was deleted). It replaces
+the previously-hardcoded `default_realtime_config()` worker fallback — now a real,
+editable row. Platform-admin-managed via dedicated `GET`/`PUT /api/v1/presets/default`
+routes (config-only writes; the service re-validates the `SpeechConfig` and
+re-derives `preset_type`). The service guards make it **non-publishable and
+non-deletable** (immutable except its `config`); `upsert_preset` rejects the
+reserved name `"System Default"`. It never appears in the org-admin picker — the
+picker lists published presets plus a generic **"Default" → `null`** option (does
+not reveal the underlying model). A **partial unique index**
+`ux_pipeline_presets_is_default` (`WHERE is_default = true`) enforces at most one
+default row.
 
 ### `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3)
 
@@ -241,13 +256,15 @@ for the core capability.
     under the `platform_admin` section.
   - **(B) Agent preset picker** — reusable `PresetPicker` single-select used by
     both the create widget and the agent detail page. Lists **published** presets
-    only from `usePresets()` plus a "Default (Gemini Realtime)" option →
-    `preset_id = null`. Shows preset name + description + a subtle Realtime/Pipeline
-    type badge — the org user **never sees** `engine_mode` / STT / LLM / TTS stage
-    fields. Empty state when no preset is published. The agent interfaces gained
-    `preset_id` (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate` optional).
-    `null` clears (realtime default); omitted on create preserves the default.
-  - **(C) Per-provider org-credentials UI** — dedicated "Voice Provider
+    only from `usePresets()` plus a generic **"Default"** option →
+    `preset_id = null` (the org user never sees the underlying model — it resolves
+    to the System Default). Shows preset name + description + a subtle
+    Realtime/Pipeline type badge (the "Default" option carries no badge) — the org
+    user **never sees** `engine_mode` / STT / LLM / TTS stage fields. Empty state
+    when no preset is published. The agent interfaces gained `preset_id`
+    (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate` optional). `null`
+    clears (→ System Default); omitted on create preserves the default.
+  - **(C) Per-provider org-credentials UI** — dedicated "Third-party API
     Credentials" Card on `/organization` with its own Save button (separate from
     the main org form, avoiding the empty-string-clears-everything footgun).
     `type="password"` inputs per provider (google/deepgram/openai/cartesia/cerebras
@@ -267,6 +284,47 @@ for the core capability.
   set/clear pills, non-platform-admin denied) all pass. Throwaway smoke agent
   deleted; the two presets authored during validation are kept as starter catalog
   content (owner decision).
+- **Phase 4 follow-ups (done)** — two enhancements to the Phase 4 surface:
+  - **System default voice profile.** The Phase 4 fallback for an agent with
+    `preset_id=null` was a hardcoded `default_realtime_config()` in the worker —
+    invisible/unmanageable, and shown in the picker as a hardcoded "Default (Gemini
+    Realtime)" option. Promoted to a dedicated, always-present, admin-only,
+    non-published **"System Default"** row (`pipeline_presets.is_default=true`,
+    partial unique index `ux_pipeline_presets_is_default`, migration
+    `20260729000002`, seeded with today's Gemini-realtime config so out-of-box
+    behavior is identical). The platform admin edits only its `config` via
+    `GET`/`PUT /api/v1/presets/default`; the service guards make it non-publishable
+    and non-deletable. The worker's null resolution now reads this row
+    (`preset_service.get_default_preset`) and keeps `default_realtime_config()`
+    only as the ultimate safety net (missing/unparseable default). The org-admin
+    picker's hardcoded option became a generic **"Default" → null** (no underlying
+    model revealed). 82 backend + 8 worker + 39 frontend tests green.
+    - **Follow-up: aligned default messaging.** The picker's default option now
+      shows the **same** name + description as the platform-admin Voice Presets
+      page — **"System Default"** / "Used when an agent has no voice profile
+      selected." — via a single shared `DEFAULT_PRESET_DISPLAY` constant
+      (`frontend/src/types/preset.ts`) used by both the picker
+      (`preset-picker.tsx`) and the platform page (`platform-presets-manager.tsx`),
+      so the two surfaces can't drift. The default option still carries no type
+      badge (the underlying engine is a platform-admin concern). `"System Default"`
+      is the backend reserved name (`upsert_preset` rejects it), so it can't
+      collide with a published preset in the picker.
+  - **Organization page tabs.** `/organization` refactored from two stacked Cards
+    into a tabbed layout ("Organization Info" / "API Credentials") using the
+    existing `AnimatedTabs` primitive, with `?tab=info|credentials` deep-linking
+    (mirrors the agent-detail `?tab=` idiom; legacy `?tab=phone-numbers|skills|`
+    `ai-agent` still redirect). The credentials Card renamed "Voice Provider
+    Credentials" → **"Third-party API Credentials"**. No logic change to the
+    save/cred-status flow.
+    - **Follow-up: Google key moved off the Info tab.** The Google API key field
+      was removed from the "Organization Info" tab (edit + read views); google is
+      now managed **exclusively** on the "API Credentials" tab. The Info tab no
+      longer sends `google_api_key` on save. The backend `update_organization`
+      now validates a google key arriving via `provider_credentials_input`
+      (the credentials-tab path) exactly like the legacy `google_api_key`
+      field — invalid keys are rejected before any write (`Invalid Google API
+      key: …`). The legacy `google_api_key` write path is retained for any
+      other caller but the frontend no longer uses it.
 - **Phase 5** — latency hardening (borrowed from HF `speech-to-speech`) + the
   explicit turn-detector builder.
 
@@ -332,3 +390,29 @@ for the core capability.
   empty key clears; `provider_credentials_input` merged; invalid key rejected;
   read path resolves from decrypted blob / plaintext fallback / decrypt-failure
   fallback; `_merge_provider_credentials` preserve/clear/empty/decrypt-failure.
+
+### Phase 4 follow-up tests (system default + org tabs)
+
+- `backend/tests/shared/voice_agents/test_preset_models.py` — `Preset` carries
+  `is_default`; `PresetCreate`/`PresetUpdate` reject a hand-set `is_default`
+  (`extra="forbid"`).
+- `backend/tests/shared/voice_agents/test_preset_service.py::TestPresetServiceDefault` —
+  `get_default_preset` (flagged row / None); `update_default_preset` re-validates the
+  config, re-derives `preset_type`, keeps `is_default`/`is_published` fixed;
+  invalid config → error; guards (`upsert` rejects the reserved name;
+  `update`/`publish`/`delete` reject the default row).
+- `backend/tests/voice_agents/test_preset_routes.py::TestPresetDefaultRoutes` —
+  `GET`/`PUT /presets/default` 403 for non-admin, 200/404 for platform_admin;
+  invalid config → 400; publish/delete/generic-update on the default row → 400.
+- `worker/tests/test_preset_resolution.py` — `_resolve_speech_config`: explicit
+  preset loaded / missing / error / unparseable → hardcoded fallback; no preset →
+  System Default row (pipeline) / no-default → hardcoded / default-error →
+  hardcoded / default-unparseable → hardcoded.
+- `frontend/src/services/__tests__/preset-service.test.ts` — `getDefaultPreset` /
+  `updateDefaultPreset` (raw config body); `Preset` fixture carries `is_default`.
+- `frontend/src/types/__tests__/voice-agent-preset.test.ts` — `preset_id` doc
+  contract updated (`null` = system default, the admin-designated fallback).
+- `frontend/src/app/(dashboard)/organization/__tests__/page.test.tsx` — tab
+  presence + default-info, switch → `?tab=credentials`, deep-link `?tab=credentials`.
+- `frontend/src/app/(dashboard)/organization/__tests__/legacy-tab-redirect.test.ts`
+  — `info`/`credentials` → `null` (in-page tabs, no redirect).

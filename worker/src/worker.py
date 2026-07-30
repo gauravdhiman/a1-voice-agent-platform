@@ -246,6 +246,84 @@ async def _cleanup_mcp_clients(mcp_clients: list, handed_off: bool) -> None:
             logger.error(f"Error closing MCP client: {close_err}", exc_info=True)
 
 
+async def _resolve_speech_config(voice_agent, agent_id: str):
+    """Resolve the ``SpeechConfig`` for a call from the agent's preset.
+
+    Phase 4 fallback chain (a misconfigured preset/default never breaks a live
+    call — graceful degrade, loud log):
+
+    - explicit ``preset_id``, loadable + parseable -> that preset's config;
+    - explicit ``preset_id`` whose row is missing (deleted), unparseable, or
+      fails to load -> the hardcoded realtime default;
+    - no ``preset_id`` -> the **system default preset** (the single
+      ``is_default`` row the platform admin manages), if present and parseable,
+      else the hardcoded realtime default. The seeded default keeps out-of-box
+      behavior identical to the pre-Phase-4 hardcoded realtime fallback.
+
+    The worker loads the chosen preset **live on every call** (no versioning),
+    so an admin's edit takes effect on the next call. See
+    :mod:`shared.voice_agents.preset_service` (``get_preset_by_id``,
+    ``get_default_preset``).
+
+    Args:
+        voice_agent: The voice-agent row (must expose ``preset_id``; may be
+            ``None`` for a legacy agent or one whose preset was deleted via the
+            FK ``ON DELETE SET NULL``).
+        agent_id: The agent id, for log lines.
+
+    Returns:
+        A concrete ``SpeechConfig`` (realtime or pipeline); always the
+        hardcoded realtime default on any failure in the chain.
+    """
+    preset_id = getattr(voice_agent, "preset_id", None)
+
+    if preset_id:
+        preset, preset_error = await preset_service.get_preset_by_id(preset_id)
+        if preset_error:
+            logger.error(
+                f"Agent {agent_id}: error loading preset {preset_id}: "
+                f"{preset_error}; falling back to realtime default."
+            )
+            return default_realtime_config()
+        if preset is None:
+            logger.error(
+                f"Agent {agent_id}: preset {preset_id} not found "
+                "(deleted?); falling back to realtime default."
+            )
+            return default_realtime_config()
+        try:
+            return parse_speech_config(preset.config)
+        except Exception as cfg_err:
+            logger.error(
+                f"Agent {agent_id}: preset {preset_id} has an "
+                f"unparseable config ({cfg_err}); falling back to "
+                f"realtime default."
+            )
+            return default_realtime_config()
+
+    # No explicit preset: use the admin-designated system default preset row,
+    # if present and parseable; otherwise the hardcoded realtime default.
+    default_preset, default_error = await preset_service.get_default_preset()
+    if default_error:
+        logger.error(
+            f"Agent {agent_id}: error loading the system default preset: "
+            f"{default_error}; falling back to realtime default."
+        )
+        return default_realtime_config()
+    if default_preset is None:
+        # No default row designated (the migration seeds one, so this is a
+        # degraded/empty-DB state) -> keep the hardcoded realtime default.
+        return default_realtime_config()
+    try:
+        return parse_speech_config(default_preset.config)
+    except Exception as cfg_err:
+        logger.error(
+            f"Agent {agent_id}: system default preset has an unparseable "
+            f"config ({cfg_err}); falling back to realtime default."
+        )
+        return default_realtime_config()
+
+
 class DynamicAgent(Agent):
     def __init__(self, instructions: str):
         # allow_interruptions=True is the LiveKit framework default, but we set
@@ -551,13 +629,15 @@ async def entrypoint(ctx: JobContext):
 
         # 4. Resolve the speech config + per-provider API keys for this call.
         #
-        # Phase 3: the agent's voice engine is chosen by its preset
+        # Phase 4: the agent's voice engine is chosen by its preset
         # (``voice_agent.preset_id``). The worker loads that preset **live on
         # every call** — no versioning — so a platform admin's preset edits take
-        # effect on the next call. A legacy agent (``preset_id`` is None, or the
-        # preset row is missing/unparseable) falls back to the realtime default
-        # config (today's behavior), so a misconfigured preset never breaks a
-        # live realtime call (graceful degrade, loud log).
+        # effect on the next call. A legacy agent (``preset_id`` is None) uses
+        # the admin-designated **system default preset** (the ``is_default``
+        # row); a missing/unparseable preset (explicit or default) falls back to
+        # the hardcoded realtime default, so a misconfigured preset never breaks
+        # a live realtime call (graceful degrade, loud log). The resolution
+        # chain is extracted to :func:`_resolve_speech_config` for unit testing.
         #
         # ``api_keys`` is assembled by the per-org key_resolver, which pairs the
         # preset's SpeechConfig with the org's encrypted provider_credentials
@@ -567,30 +647,7 @@ async def entrypoint(ctx: JobContext):
         # provider, including a nested ``livekit: {api_key, api_secret}`` entry
         # injected only when the preset uses a LiveKit Inference stage.
         use_platform_credits = getattr(voice_agent, "use_platform_credits", False)
-        preset_id = getattr(voice_agent, "preset_id", None)
-        speech_config = default_realtime_config()
-        if preset_id:
-            preset, preset_error = await preset_service.get_preset_by_id(preset_id)
-            if preset_error:
-                logger.error(
-                    f"Agent {agent_id}: error loading preset {preset_id}: "
-                    f"{preset_error}; falling back to realtime default."
-                )
-            elif preset is None:
-                logger.error(
-                    f"Agent {agent_id}: preset {preset_id} not found "
-                    "(deleted?); falling back to realtime default."
-                )
-            else:
-                try:
-                    speech_config = parse_speech_config(preset.config)
-                except Exception as cfg_err:
-                    logger.error(
-                        f"Agent {agent_id}: preset {preset_id} has an "
-                        f"unparseable config ({cfg_err}); falling back to "
-                        f"realtime default."
-                    )
-                    speech_config = default_realtime_config()
+        speech_config = await _resolve_speech_config(voice_agent, agent_id)
 
         api_keys = resolve_api_keys(
             speech_config, org=org, use_platform_credits=use_platform_credits

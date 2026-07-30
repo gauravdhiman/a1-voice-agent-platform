@@ -186,7 +186,10 @@ greeting) is shared and engine-agnostic.
   on a **preset** row (`pipeline_presets.config`), not directly on the agent.
 - `shared/voice_agents/preset_service.py` + `preset_models.py` — platform-admin
   preset catalog (Phase 3). The worker fetches a preset **live on every call** by
-  `voice_agent.preset_id` (no versioning); `preset_id=None` → realtime default.
+  `voice_agent.preset_id` (no versioning); `preset_id=None` → the **System Default**
+  preset row (`pipeline_presets.is_default=true`) via
+  `preset_service.get_default_preset` — the hardcoded `default_realtime_config()`
+  is only the ultimate safety net (Phase 4 follow-up, `_resolve_speech_config`).
 - `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3). Builds
   the `api_keys` map from the agent's `speech_config` + the org's encrypted
   `provider_credentials` blob + platform env, with the `use_platform_credits`
@@ -200,7 +203,9 @@ greeting) is shared and engine-agnostic.
 > `voice_agent.preset_id` (graceful-degrade to `default_realtime_config()` on a
 > missing/unparseable preset), then `resolve_api_keys()` produces the `api_keys`
 > map and `build_agent_session()` builds the session. Legacy agents
-> (`preset_id=None`) get the realtime default, unchanged. Direct provider keys
+> (`preset_id=None`) resolve to the **System Default** preset row
+> (`preset_service.get_default_preset`); the hardcoded `default_realtime_config()`
+> fires only if that row is missing/unparseable. Direct provider keys
 > come from the org's encrypted `provider_credentials` blob (fallback
 > `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` env); Inference
 > stages get `api_keys["livekit"]` (org BYO, fallback `LIVEKIT_API_KEY` /

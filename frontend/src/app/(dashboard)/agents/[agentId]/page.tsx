@@ -899,7 +899,7 @@ and confirm someone will call back the next business day.`}
                 </div>
               )}
 
-              {/* Voice profile (Phase 4). Optional — null = realtime default.
+              {/* Voice profile (Phase 4). Optional — null = system default.
                   Read-only for non-editors; canEdit users pick/clear and save. */}
               <div className="mt-6">
                 <PresetPicker

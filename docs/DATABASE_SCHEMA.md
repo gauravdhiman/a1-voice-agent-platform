@@ -215,14 +215,14 @@ Stores voice agent configurations for each organization.
 | custom_instructions | TEXT         | NULLABLE                        | Agent-specific context (policies, USPs, FAQs, protocols) |
 | instructions_markdown | TEXT       | NULLABLE                        | Full agent instructions in markdown (replaces field-based prompt building when set). Supports template variables: `{{org.name}}`, `{{org.industry}}`, `{{org.location}}`, `{{org.business_details}}`, `{{agent.name}}` |
 | use_platform_credits | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Use platform credits instead of org API key |
-| preset_id         | UUID         | NULLABLE, FK → pipeline_presets.id | Voice-engine preset reference. The worker loads this preset **live on every call** (no versioning — admin edits take effect on the next call). NULL = legacy agent → `default_realtime_config()` (realtime default, unchanged) — migration 20260729000001 |
+| preset_id         | UUID         | NULLABLE, FK → pipeline_presets.id | Voice-engine preset reference. The worker loads this preset **live on every call** (no versioning — admin edits take effect on the next call). NULL = legacy agent, or one whose preset was deleted via the FK `ON DELETE SET NULL` → resolves to the **System Default** preset row (`pipeline_presets.is_default=true`, migration 20260729000002); if that row is missing/unparseable the worker falls back to the hardcoded `default_realtime_config()`. Migrations 20260729000001 (column) + 20260729000002 (system default) |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
 
 **Foreign Keys**:
 - `organization_id` → `organizations.id` (CASCADE)
-- `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the realtime default)
+- `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the System Default preset row — migration 20260729000002)
 
 **Indexes**: `ix_voice_agents_preset_id` on `preset_id` — migration 20260729000001
 **RLS**: Enabled
@@ -298,14 +298,20 @@ Global, platform-admin-managed catalog of named voice-engine **presets** (Phase 
 | preset_type   | VARCHAR(20)  | NOT NULL                     | Denormalized from `config.engine_mode` on every write (`realtime`\|`pipeline`). Filter column for listings; the service keeps it in sync — **never set by hand**. |
 | config        | JSONB        | NOT NULL                     | Validated `SpeechConfig` (realtime or pipeline discriminated union — `shared/voice_agents/speech_config.py`). Carries **no secrets** (keys come from `organizations.provider_credentials`). |
 | is_published  | BOOLEAN      | NOT NULL, DEFAULT FALSE      | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE = visible to all org users for assignment. |
+| is_default   | BOOLEAN      | NOT NULL, DEFAULT FALSE      | TRUE only on the single **system-default** row — the fallback config an agent uses when `preset_id` is NULL (Phase 4). Response-only; the service sets it only on this seeded row and **never** accepts it as input (`PresetCreate`/`PresetUpdate` use `extra="forbid"`). |
 | created_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Creation timestamp                                                          |
 | updated_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Last update timestamp                                                       |
 
 **Foreign Keys**: None (referenced *by* `voice_agents.preset_id`)
-**Indexes**: `ix_pipeline_presets_is_published` on `is_published` — migration 20260729000001
+**Indexes**:
+- `ix_pipeline_presets_is_published` on `is_published` — migration 20260729000001
+- `ux_pipeline_presets_is_default` UNIQUE PARTIAL on `is_default` WHERE `is_default = true` — migration 20260729000002. Enforces **at most one** system-default row (a partial unique index; the many `is_default=false` rows are unconstrained).
+
 **RLS**: Not enabled (global platform catalog). Visibility is enforced at the service layer (`get_presets` filters `is_published=true` for org users; `include_drafts=True` for platform admins). RLS hardening is a follow-up TODO.
 
-**No versioning**: the worker fetches the preset row live on every call (`preset_service.get_preset_by_id`), so an admin's edit to a preset takes effect on the next call. The agent stores only `preset_id` (FK) — no `preset_version`, no snapshot.
+**System default row** (Phase 4, migration 20260729000002): the catalog always contains one `is_default=true` row (`name='System Default'`, `is_published=false`, `preset_type='realtime'`, `config = default_realtime_config().model_dump()`). It is the fallback an agent uses when `preset_id` is NULL (legacy agent, or one whose preset was deleted via the FK `ON DELETE SET NULL`). Platform-admin-managed via dedicated endpoints `GET`/`PUT /api/v1/presets/default` (config-only writes; `name`/`is_published`/`is_default` stay fixed). The service guards make it **non-publishable and non-deletable** (immutable except its `config`). It never appears in the org-admin picker (the picker lists published presets only and renders a generic "Default" → null option). Before Phase 4 this fallback was a hardcoded `default_realtime_config()` in the worker — invisible and unmanageable.
+
+**No versioning**: the worker fetches the preset row live on every call (`preset_service.get_preset_by_id` for an explicit preset, `preset_service.get_default_preset` for the `preset_id` NULL case), so an admin's edit to a preset takes effect on the next call. The agent stores only `preset_id` (FK) — no `preset_version`, no snapshot.
 
 **Preset types**: only `realtime` and `pipeline`. A "mixed" preset is just a `pipeline` preset where some stages use LiveKit Inference (`provider == "livekit_inference"`) and some use direct providers (deepgram/openai/cartesia/cerebras) — each stage dispatches on its own `provider`.
 
@@ -838,6 +844,7 @@ erDiagram
         varchar preset_type
         jsonb config
         boolean is_published
+        boolean is_default
         timestamptz created_at
         timestamptz updated_at
     }
@@ -1176,6 +1183,7 @@ erDiagram
 25. `20260725000001` - Add org scope + encrypted secret headers to `platform_tools`: `organization_id` (UUID NULLABLE, FK→`organizations.id` CASCADE, + index) for org-scoped custom MCP servers vs the global curated catalog, and `mcp_server_secret_headers` (TEXT NULLABLE, Fernet-encrypted JSON) for server-level API keys. Additive; existing rows (NULL org, NULL secrets) are unaffected. See `docs/03_implementation/mcp_integration_rfc.md`. (Note: the org-scoped custom tier was subsequently **retired** by 20260726000001; `organization_id` is now dormant and MCP creates force NULL.)
 26. `20260726000001` - Add `is_published BOOLEAN NOT NULL DEFAULT FALSE` + `ix_platform_tools_is_published` to `platform_tools`, and backfill `UPDATE platform_tools SET is_published = TRUE` so the live catalog is unaffected. Implements the publish lifecycle (RFC §6.6 revision 2026-07-26): platform admins author/test/publish MCP servers to the global catalog; org admins attach published servers with their own API key (`{{KEY}}` template). The org-scoped custom tier is retired (the `organization_id` column from 20260725000001 is kept dormant).
 27. `20260729000001` - Phase 3 of the modular voice engine. Add the `pipeline_presets` table (global platform-admin catalog, no RLS, `is_published` lifecycle, `preset_type` derived from `config.engine_mode`), `voice_agents.preset_id` (NULLABLE FK→`pipeline_presets.id` ON DELETE SET NULL + `ix_voice_agents_preset_id`), and `organizations.provider_credentials` (TEXT NULLABLE, Fernet-encrypted JSON of all per-org provider keys via `encrypt_data`). Backfill existing plaintext `google_api_key` into `provider_credentials['google']`; the `google_api_key` column is retained but no longer the source of truth (dropped in a follow-up migration). No versioning — the worker fetches the preset row live each call. See `docs/01_architecture/voice_engine_pipeline_design.md`.
+28. `20260729000002` - Phase 4 of the modular voice engine. Promotes the previously-hardcoded realtime fallback into a **managed system default preset**: add `pipeline_presets.is_default` (BOOLEAN NOT NULL DEFAULT FALSE) + a **partial unique index** `ux_pipeline_presets_is_default` on `is_default` WHERE `is_default = true` (at-most-one default row), and **seed** the single system-default row (`name='System Default'`, `is_default=true`, `is_published=false`, `preset_type='realtime'`, `config = default_realtime_config().model_dump()`) so out-of-box behavior is identical. Additive (column + index + one seeded row). The default is platform-admin-managed via `GET`/`PUT /api/v1/presets/default` (config-only); the service guards make it non-publishable and non-deletable. The worker's `preset_id`-NULL resolution now reads this row (`preset_service.get_default_preset`) instead of the hardcoded fallback (kept as the ultimate safety net). See `docs/01_architecture/voice_engine_pipeline_design.md`.
 
 ---
 
@@ -1363,6 +1371,7 @@ Key indexes have been created for:
 - Unique constraints (email, token, stripe_subscription_id)
 - Catalog publish lifecycle: `ix_platform_tools_is_published`, `ix_pipeline_presets_is_published` (org-user listing filters on `is_published=true`)
 - `ix_voice_agents_preset_id` (preset→agent usage join for the delete `in_use` guardrail)
+- `ux_pipeline_presets_is_default` — partial UNIQUE index enforcing at most one system-default preset row (Phase 4, migration 20260729000002)
 
 ### Query Patterns
 
