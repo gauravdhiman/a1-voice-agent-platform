@@ -376,10 +376,14 @@ async def entrypoint(ctx: JobContext):
                 parts = room_name.split("_")
                 test_agent_id = parts[1]
                 logger.info(f"Test room detected, agent ID: {test_agent_id}")
-            elif room_name.startswith("embed_"):
+            elif room_name.startswith("embed_") or room_name.startswith("public_"):
                 parts = room_name.split("_")
                 test_agent_id = parts[1]
-                logger.info(f"Embed room detected, agent ID: {test_agent_id}")
+                logger.info(
+                    "Browser room detected (%s), agent ID: %s",
+                    room_name.split("_", 1)[0],
+                    test_agent_id,
+                )
             else:
                 # 1. Extract phone number from room name
                 # Room name format: call_NUMBER_random

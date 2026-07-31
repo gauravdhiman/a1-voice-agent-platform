@@ -187,6 +187,30 @@ class VoiceAgentService:
             logger.error(f"Error getting agents for user {user_id}: {e}", exc_info=True)
             return [], str(e)
 
+    @tracer.start_as_current_span("voice_agent.get_public_page_agents")
+    async def get_public_page_agents(
+        self, organization_id: UUID
+    ) -> tuple[list[VoiceAgent], Optional[str]]:
+        """List agents published on the organization's public page."""
+        try:
+            response = (
+                self.supabase.table("voice_agents")
+                .select("*")
+                .eq("organization_id", str(organization_id))
+                .eq("is_published_on_public_page", True)
+                .eq("is_active", True)
+                .execute()
+            )
+            return [VoiceAgent(**item) for item in response.data], None
+        except Exception as e:
+            logger.error(
+                "Error getting public page agents for org %s: %s",
+                organization_id,
+                e,
+                exc_info=True,
+            )
+            return [], str(e)
+
     @tracer.start_as_current_span("voice_agent.update_agent")
     async def update_agent(
         self, agent_id: UUID, agent_data: VoiceAgentUpdate

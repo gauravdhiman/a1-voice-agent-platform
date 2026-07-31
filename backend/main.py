@@ -28,6 +28,7 @@ from src.auth.routes import auth_router
 from src.billing.routes import router as billing_router
 from src.call_logs import call_logs_router
 from src.notifications.routes import router as notification_router
+from src.organization.public_routes import public_org_router
 from src.organization.routes import organization_router
 from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
@@ -156,6 +157,7 @@ def create_app() -> FastAPI:
 
     # Include embed routes (public, no auth required)
     app.include_router(embed_router)
+    app.include_router(public_org_router)
 
     # Include voice templates routes
     app.include_router(voice_templates_router)

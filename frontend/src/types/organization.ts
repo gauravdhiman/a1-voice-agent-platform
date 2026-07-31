@@ -24,6 +24,10 @@ export interface Organization {
    * `livekit` boolean is true when the livekit blob has an `api_key`.
    */
   provider_credentials_status?: Record<string, boolean>;
+  /** When true, `/o/{slug}` is available to visitors. */
+  public_page_enabled?: boolean;
+  /** When true, visitors must enter a passphrase before listing agents. */
+  public_page_passphrase_enabled?: boolean;
 }
 
 // Enhanced Organization interface with business details field
@@ -77,6 +81,10 @@ export interface OrganizationUpdate {
     string,
     string | { api_key: string; api_secret: string } | null
   >;
+  public_page_enabled?: boolean;
+  public_page_passphrase_enabled?: boolean;
+  /** Write-only: set or rotate the public page passphrase (never returned). */
+  public_page_passphrase?: string;
 }
 
 // Minimal organization interface for utility functions

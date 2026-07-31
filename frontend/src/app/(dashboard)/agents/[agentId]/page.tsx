@@ -146,6 +146,7 @@ export default function AgentDetailPage() {
     mission: string;
     custom_instructions: string;
     is_active: boolean;
+    is_published_on_public_page: boolean;
     use_platform_credits: boolean;
     instructions_markdown: string;
     preset_id: string | null;
@@ -157,6 +158,7 @@ export default function AgentDetailPage() {
     mission: "",
     custom_instructions: "",
     is_active: true,
+    is_published_on_public_page: false,
     use_platform_credits: false,
     instructions_markdown: "",
     preset_id: null,
@@ -317,6 +319,7 @@ export default function AgentDetailPage() {
         mission: agent.mission || "",
         custom_instructions: agent.custom_instructions || "",
         is_active: agent.is_active,
+        is_published_on_public_page: agent.is_published_on_public_page ?? false,
         use_platform_credits: agent.use_platform_credits || false,
         instructions_markdown: agent.instructions_markdown || "",
         preset_id: agent.preset_id ?? null,
@@ -880,6 +883,38 @@ and confirm someone will call back the next business day.`}
                     A phone number must be configured before the agent can be activated.
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="public-page-publish"
+                    checked={agentForm.is_published_on_public_page}
+                    onCheckedChange={(checked) => {
+                      if (checked && !agentForm.is_active) {
+                        toast.warning(
+                          "Only active agents can be published on the public organization page.",
+                        );
+                        return;
+                      }
+                      setAgentForm({
+                        ...agentForm,
+                        is_published_on_public_page: checked === true,
+                      });
+                    }}
+                    disabled={!canEdit}
+                  />
+                  <Label
+                    htmlFor="public-page-publish"
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Publish on public organization page
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, visitors at your org public URL can start a voice
+                  call with this agent. This is separate from the active status.
+                </p>
               </div>
 
               {/* API Key Configuration */}

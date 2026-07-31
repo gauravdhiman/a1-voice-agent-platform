@@ -28,6 +28,8 @@ export interface VoiceAgent {
   custom_instructions: string | null;
   voice_settings: Record<string, unknown> | null;
   is_active: boolean;
+  /** Explicit publish flag for the org public page at `/o/{slug}`. */
+  is_published_on_public_page?: boolean;
   use_platform_credits: boolean;
   instructions_markdown: string | null;
   /**
@@ -71,6 +73,7 @@ export interface VoiceAgentUpdate {
   mission?: string | null;
   custom_instructions?: string | null;
   is_active?: boolean;
+  is_published_on_public_page?: boolean;
   use_platform_credits?: boolean;
   instructions_markdown?: string | null;
   /** Voice-engine preset id; `null` clears it (falls back to the system default). */

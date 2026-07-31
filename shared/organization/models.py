@@ -75,6 +75,20 @@ class OrganizationBase(BaseModel):
             "values to the frontend."
         ),
     )
+    public_page_enabled: bool = Field(
+        default=False,
+        description=(
+            "When true, the organization has a public showcase page at "
+            "/o/{slug} listing agents published for public calls."
+        ),
+    )
+    public_page_passphrase_enabled: bool = Field(
+        default=False,
+        description=(
+            "When true, visitors must supply the org passphrase before viewing "
+            "published agents on the public page."
+        ),
+    )
 
 
 class OrganizationCreate(OrganizationBase):
@@ -147,6 +161,22 @@ class OrganizationUpdate(BaseModel):
             "provider_credentials; this field is NEVER persisted directly. The "
             "legacy google_api_key field is still accepted and routed into "
             "provider_credentials['google'] for back-compat with the existing UI."
+        ),
+    )
+    public_page_enabled: Optional[bool] = Field(
+        None,
+        description="Enable the public organization showcase page at /o/{slug}.",
+    )
+    public_page_passphrase_enabled: Optional[bool] = Field(
+        None,
+        description="Require a passphrase before visitors can view public agents.",
+    )
+    public_page_passphrase: Optional[str] = Field(
+        None,
+        exclude=True,
+        description=(
+            "Plaintext passphrase to set or rotate. Empty string clears the "
+            "passphrase hash. Never returned on read."
         ),
     )
 
