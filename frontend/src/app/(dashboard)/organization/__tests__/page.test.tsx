@@ -388,4 +388,43 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
       screen.queryByText(/Organization Information/i),
     ).not.toBeInTheDocument();
   });
+
+  it("shows Remove key for configured providers on the credentials tab", async () => {
+    globalThis.__orgPageSearchParams = "org_id=org-1&tab=credentials";
+    mocks.mockOrgsById["org-1"] = {
+      ...FIXTURE_ORG,
+      provider_credentials_status: { deepgram: true, openai: false },
+    } as typeof FIXTURE_ORG & {
+      provider_credentials_status: Record<string, boolean>;
+    };
+    mockUseOrganizationById.mockImplementation((orgId: string | null) => ({
+      isValid: orgId === "org-1",
+      loading: false,
+      error: null,
+      organization:
+        orgId === "org-1"
+          ? mocks.mockOrgsById["org-1"]
+          : null,
+    }));
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Third-party API Credentials/i),
+      ).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText("Configured").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: /remove key/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /add api key/i }).length,
+    ).toBeGreaterThan(0);
+  });
 });

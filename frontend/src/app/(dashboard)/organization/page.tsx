@@ -7,6 +7,7 @@ import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
+import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,8 +37,12 @@ import {
   Crown,
   Edit3,
   Info,
-  KeyRound,
 } from "lucide-react";
+import {
+  buildProviderCredentialsInput,
+  PROVIDER_LABELS,
+  ProviderCredentialKey,
+} from "@/lib/provider-credentials-input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -113,6 +118,8 @@ export default function OrganizationPage() {
     Record<string, boolean>
   >({});
   const [providerCredsSaving, setProviderCredsSaving] = useState(false);
+  const [removingProviderCred, setRemovingProviderCred] =
+    useState<ProviderCredentialKey | null>(null);
 
   // Org page tab state ("info" | "credentials"). Synced to `?tab=` so the two
   // cards are deep-linkable. Legacy `?tab=` values (phone-numbers/skills/
@@ -293,30 +300,25 @@ export default function OrganizationPage() {
    * `{api_key, api_secret}` when either field was touched — both empty clears
    * it (`null`). Nothing is sent if no field was touched.
    */
+  const resetProviderCredDraft = () => {
+    setProviderCreds({
+      google: "",
+      deepgram: "",
+      openai: "",
+      cartesia: "",
+      cerebras: "",
+      livekit_api_key: "",
+      livekit_api_secret: "",
+    });
+    setProviderCredsTouched({});
+  };
+
   const handleSaveProviderCreds = async () => {
     if (!orgId) return;
-    const input: Record<
-      string,
-      string | { api_key: string; api_secret: string } | null
-    > = {};
-    const simpleKeys = [
-      "google",
-      "deepgram",
-      "openai",
-      "cartesia",
-      "cerebras",
-    ] as const;
-    for (const key of simpleKeys) {
-      if (providerCredsTouched[key]) {
-        const val = providerCreds[key].trim();
-        input[key] = val ? val : null;
-      }
-    }
-    if (providerCredsTouched.livekit) {
-      const apiKey = providerCreds.livekit_api_key.trim();
-      const apiSecret = providerCreds.livekit_api_secret.trim();
-      input.livekit = apiKey || apiSecret ? { api_key: apiKey, api_secret: apiSecret } : null;
-    }
+    const input = buildProviderCredentialsInput(
+      providerCreds,
+      providerCredsTouched,
+    );
     if (Object.keys(input).length === 0) {
       toast.info("No provider credentials changed.");
       return;
@@ -327,18 +329,7 @@ export default function OrganizationPage() {
         provider_credentials_input: input,
       });
       setOrganizationData({ organization: response as OrganizationEnhanced });
-      // Reset the draft + touched flags (decrypted values never come back, so
-      // inputs go blank again — the status pills reflect the new state).
-      setProviderCreds({
-        google: "",
-        deepgram: "",
-        openai: "",
-        cartesia: "",
-        cerebras: "",
-        livekit_api_key: "",
-        livekit_api_secret: "",
-      });
-      setProviderCredsTouched({});
+      resetProviderCredDraft();
       toast.success("Voice provider credentials saved");
     } catch (error: unknown) {
       console.error("Failed to save provider credentials:", error);
@@ -361,6 +352,54 @@ export default function OrganizationPage() {
     setProviderCredsTouched((prev) =>
       prev[key] ? prev : { ...prev, [key]: true },
     );
+  };
+
+  const clearProviderCredTouched = (key: string) => {
+    setProviderCredsTouched((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  /**
+   * Remove a single provider credential immediately (sends `null` for that key).
+   */
+  const handleRemoveProviderCred = async (key: ProviderCredentialKey) => {
+    if (!orgId) return;
+    setRemovingProviderCred(key);
+    try {
+      const response = await organizationService.updateOrganization(orgId, {
+        provider_credentials_input: { [key]: null },
+      });
+      setOrganizationData({ organization: response as OrganizationEnhanced });
+      if (key === "livekit") {
+        setProviderCreds((prev) => ({
+          ...prev,
+          livekit_api_key: "",
+          livekit_api_secret: "",
+        }));
+        clearProviderCredTouched("livekit");
+      } else {
+        setProviderCreds((prev) => ({ ...prev, [key]: "" }));
+        clearProviderCredTouched(key);
+      }
+      toast.success(`${PROVIDER_LABELS[key]} credentials removed`);
+    } catch (error: unknown) {
+      console.error("Failed to remove provider credentials:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === "object" &&
+              error !== null &&
+              "detail" in error
+            ? (error as { detail: string }).detail
+            : "Failed to remove provider credentials";
+      toast.error(errorMessage);
+    } finally {
+      setRemovingProviderCred(null);
+    }
   };
 
   // Make orgId mandatory - if not provided, redirect to organizations page
@@ -780,168 +819,21 @@ During monsoon season (July-September), we have extended hours for flood-related
             wipe all keys at once. Feeds the encrypted provider_credentials
             blob the worker's per-org key resolver reads. */}
         <TabsContent value="credentials">
-      <Card>
-        <CardHeader className="p-5 pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center space-x-2 text-lg">
-              <KeyRound className="h-5 w-5 text-muted-foreground" />
-              <span>Third-party API Credentials</span>
-            </CardTitle>
-          </div>
-          <CardDescription>
-            Per-provider API keys for the modular voice engine (Deepgram, OpenAI,
-            Cartesia, Cerebras, LiveKit). Encrypted at rest; decrypted values are
-            never shown. Enter a value to set it, clear the field to remove it.
-            Untouched fields are left unchanged on save.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-5 pt-0 space-y-5">
-          {/* Status pills (read-only; derived from provider_credentials_status). */}
-          <div className="flex flex-wrap gap-3">
-            {(
-              [
-                "google",
-                "deepgram",
-                "openai",
-                "cartesia",
-                "cerebras",
-                "livekit",
-              ] as const
-            ).map((key) => {
-              const configured = Boolean(
-                organizationData?.organization?.provider_credentials_status?.[
-                  key
-                ],
-              );
-              return (
-                <div
-                  key={key}
-                  className="flex items-center gap-1.5 text-xs"
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      configured ? "bg-green-500" : "bg-gray-400"
-                    }`}
-                  />
-                  <span className="capitalize text-muted-foreground">
-                    {key}
-                  </span>
-                  <span
-                    className={
-                      configured
-                        ? "text-green-600 font-medium"
-                        : "text-muted-foreground"
-                    }
-                  >
-                    {configured ? "Configured" : "Not configured"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Editable inputs (gated by canUpdateOrganization). */}
-          {canUpdateOrganization ? (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <ProviderCredInput
-                  label="Google API key"
-                  value={providerCreds.google}
-                  onChange={(v) => {
-                    setProviderCreds({ ...providerCreds, google: v });
-                    markProviderCredTouched("google");
-                  }}
-                  placeholder="Enter to set; clear to remove"
-                />
-                <ProviderCredInput
-                  label="Deepgram API key"
-                  value={providerCreds.deepgram}
-                  onChange={(v) => {
-                    setProviderCreds({ ...providerCreds, deepgram: v });
-                    markProviderCredTouched("deepgram");
-                  }}
-                  placeholder="Enter to set; clear to remove"
-                />
-                <ProviderCredInput
-                  label="OpenAI API key"
-                  value={providerCreds.openai}
-                  onChange={(v) => {
-                    setProviderCreds({ ...providerCreds, openai: v });
-                    markProviderCredTouched("openai");
-                  }}
-                  placeholder="Enter to set; clear to remove"
-                />
-                <ProviderCredInput
-                  label="Cartesia API key"
-                  value={providerCreds.cartesia}
-                  onChange={(v) => {
-                    setProviderCreds({ ...providerCreds, cartesia: v });
-                    markProviderCredTouched("cartesia");
-                  }}
-                  placeholder="Enter to set; clear to remove"
-                />
-                <ProviderCredInput
-                  label="Cerebras API key"
-                  value={providerCreds.cerebras}
-                  onChange={(v) => {
-                    setProviderCreds({ ...providerCreds, cerebras: v });
-                    markProviderCredTouched("cerebras");
-                  }}
-                  placeholder="Enter to set; clear to remove"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">LiveKit</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <ProviderCredInput
-                    label="LiveKit API key"
-                    value={providerCreds.livekit_api_key}
-                    onChange={(v) => {
-                      setProviderCreds({
-                        ...providerCreds,
-                        livekit_api_key: v,
-                      });
-                      markProviderCredTouched("livekit");
-                    }}
-                    placeholder="API key"
-                  />
-                  <ProviderCredInput
-                    label="LiveKit API secret"
-                    value={providerCreds.livekit_api_secret}
-                    onChange={(v) => {
-                      setProviderCreds({
-                        ...providerCreds,
-                        livekit_api_secret: v,
-                      });
-                      markProviderCredTouched("livekit");
-                    }}
-                    placeholder="API secret"
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              You do not have permission to update provider credentials.
-            </p>
-          )}
-        </CardContent>
-        {canUpdateOrganization && (
-          <CardFooter className="flex justify-end space-x-2 p-5 border-t bg-muted/20">
-            <Button
-              size="sm"
-              onClick={handleSaveProviderCreds}
-              disabled={providerCredsSaving}
-              className="flex items-center space-x-2"
-            >
-              <Save className="h-4 w-4" />
-              <span>
-                {providerCredsSaving ? "Saving..." : "Save Credentials"}
-              </span>
-            </Button>
-          </CardFooter>
-        )}
-      </Card>
+          <ProviderCredentialsCard
+            status={
+              organizationData?.organization?.provider_credentials_status
+            }
+            draft={providerCreds}
+            onDraftChange={setProviderCreds}
+            touched={providerCredsTouched}
+            onMarkTouched={markProviderCredTouched}
+            onClearTouched={clearProviderCredTouched}
+            onSave={handleSaveProviderCreds}
+            onRemoveProvider={handleRemoveProviderCred}
+            saving={providerCredsSaving}
+            removingProvider={removingProviderCred}
+            canUpdate={canUpdateOrganization}
+          />
         </TabsContent>
       </AnimatedTabs>
 
@@ -954,37 +846,6 @@ During monsoon season (July-September), we have extended hours for flood-related
           onSuccess={handleEditSuccess}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * A single password-type provider-credential input with a label.
- *
- * Used by the "Third-party API Credentials" card. `type="password"` so typed
- * keys are masked. The parent tracks touched state separately (see
- * `markProviderCredTouched`) so only edited fields are sent on save.
- */
-function ProviderCredInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">{label}</Label>
-      <Input
-        type="password"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
     </div>
   );
 }
