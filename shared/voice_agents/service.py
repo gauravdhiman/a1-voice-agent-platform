@@ -226,6 +226,12 @@ class VoiceAgentService:
             if not update_data:
                 return await self.get_agent_by_id(agent_id)
 
+            # Inactive agents must not remain listed on the public org page.
+            # Clearing publish here closes the activate→publish→deactivate loophole
+            # where a deactivated agent would otherwise stay publicly callable.
+            if update_data.get("is_active") is False:
+                update_data["is_published_on_public_page"] = False
+
             response = (
                 self.supabase.table("voice_agents")
                 .update(update_data)

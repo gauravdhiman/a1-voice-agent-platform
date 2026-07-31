@@ -866,7 +866,15 @@ and confirm someone will call back the next business day.`}
                         );
                         return;
                       }
-                      setAgentForm({ ...agentForm, is_active: checked === true });
+                      // Deactivating also unpublishes — inactive agents must not
+                      // remain listed on the public organization page.
+                      setAgentForm({
+                        ...agentForm,
+                        is_active: checked === true,
+                        ...(checked
+                          ? {}
+                          : { is_published_on_public_page: false }),
+                      });
                     }}
                     disabled={!canEdit}
                   />
@@ -902,7 +910,7 @@ and confirm someone will call back the next business day.`}
                         is_published_on_public_page: checked === true,
                       });
                     }}
-                    disabled={!canEdit}
+                    disabled={!canEdit || !agentForm.is_active}
                   />
                   <Label
                     htmlFor="public-page-publish"
@@ -913,7 +921,8 @@ and confirm someone will call back the next business day.`}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   When enabled, visitors at your org public URL can start a voice
-                  call with this agent. This is separate from the active status.
+                  call with this agent. Requires the agent to be active;
+                  deactivating an agent also removes it from the public page.
                 </p>
               </div>
 

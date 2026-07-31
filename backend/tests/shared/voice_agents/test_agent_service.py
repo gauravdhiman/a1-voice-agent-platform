@@ -105,3 +105,58 @@ class TestUpdateAgentSerialization:
         update_data = table_mock.update.call_args.args[0]
         assert update_data["preset_id"] is None
         json.dumps(update_data)
+
+
+class TestUpdateAgentPublicPagePublish:
+    """Deactivating an agent must also unpublish it from the public page."""
+
+    @pytest.mark.asyncio
+    async def test_deactivating_agent_clears_public_page_publish(
+        self, agent_service, mock_supabase_client
+    ):
+        """Setting is_active=False must also set is_published_on_public_page=False.
+
+        Prevents the loophole where a user activates + publishes, then deactivates
+        while leaving the agent published on the org public page.
+        """
+        agent_id = uuid4()
+        org_id = uuid4()
+        row = _agent_row(agent_id, org_id)
+        row["is_active"] = False
+        row["is_published_on_public_page"] = False
+
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.return_value = MagicMock(data=[row])
+
+        result, error = await agent_service.update_agent(
+            agent_id, VoiceAgentUpdate(is_active=False)
+        )
+
+        assert error is None
+        assert result is not None
+        update_data = table_mock.update.call_args.args[0]
+        assert update_data["is_active"] is False
+        assert update_data["is_published_on_public_page"] is False
+
+    @pytest.mark.asyncio
+    async def test_activating_agent_does_not_force_public_page_publish(
+        self, agent_service, mock_supabase_client
+    ):
+        """Setting is_active=True alone must not touch public-page publish."""
+        agent_id = uuid4()
+        org_id = uuid4()
+
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.return_value = MagicMock(
+            data=[_agent_row(agent_id, org_id)]
+        )
+
+        result, error = await agent_service.update_agent(
+            agent_id, VoiceAgentUpdate(is_active=True)
+        )
+
+        assert error is None
+        assert result is not None
+        update_data = table_mock.update.call_args.args[0]
+        assert update_data["is_active"] is True
+        assert "is_published_on_public_page" not in update_data

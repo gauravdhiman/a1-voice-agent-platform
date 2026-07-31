@@ -182,8 +182,9 @@ class VoiceAgentUpdate(BaseModel):
         None,
         description=(
             "When true, the agent appears on the organization's public page "
-            "(/o/{slug}) and can receive visitor voice calls. Distinct from "
-            "is_active and embed configuration."
+            "(/o/{slug}) and can receive visitor voice calls. Requires the "
+            "agent to be active; deactivating an agent clears this flag. "
+            "Distinct from embed configuration."
         ),
     )
 
