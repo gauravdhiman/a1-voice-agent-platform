@@ -1321,11 +1321,18 @@ export function SkillEditor({
       {/* Platform library browser (org only) */}
       {showImportFromPlatformLibrary && (
         <Sheet open={browsePlatformOpen} onOpenChange={setBrowsePlatformOpen}>
-          <SheetContent className="w-full sm:max-w-xl">
-            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+          {/* flex flex-col + overflow-hidden so the list body can scroll
+              inside the full-height sheet (same pattern as tool-config /
+              phone-number drawers). Without flex-col, flex-1 overflow-y-auto
+              on the body has no height constraint and the list is clipped. */}
+          <SheetContent className="flex flex-col overflow-hidden w-full sm:max-w-xl">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
               <SheetTitle className="flex items-center gap-2"><Library className="h-5 w-5" /> Platform Skill Library</SheetTitle>
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div
+              data-testid="platform-skill-library-list"
+              className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4"
+            >
               {loadingPlatform ? (
                 <div className="flex items-center py-8 justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : platformSkills.length === 0 ? (
