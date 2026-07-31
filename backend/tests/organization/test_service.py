@@ -254,6 +254,37 @@ class TestOrganizationService:
         assert result.description == "A test organization"  # Unchanged
 
     @pytest.mark.asyncio
+    async def test_update_organization_rejects_invalid_slug(
+        self, organization_service, sample_org_id
+    ):
+        """Slug updates must pass format validation."""
+        result, error = await organization_service.update_organization(
+            sample_org_id, OrganizationUpdate(slug="api")
+        )
+
+        assert result is None
+        assert error is not None
+        assert "reserved" in error.lower()
+
+    @pytest.mark.asyncio
+    async def test_update_organization_rejects_taken_slug(
+        self, organization_service, mock_supabase_client, sample_org_id
+    ):
+        """Slug updates must be unique across organizations."""
+        taken_response = MagicMock()
+        taken_response.data = [{"id": str(uuid4())}]
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.neq.return_value.limit.return_value.execute.return_value = (
+            taken_response
+        )
+
+        result, error = await organization_service.update_organization(
+            sample_org_id, OrganizationUpdate(slug="acme")
+        )
+
+        assert result is None
+        assert error == "Slug 'acme' is already taken"
+
+    @pytest.mark.asyncio
     async def test_delete_organization_success(
         self,
         organization_service,

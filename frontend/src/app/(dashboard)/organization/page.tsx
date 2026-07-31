@@ -8,6 +8,13 @@ import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
 import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
+import { PublicPageSettingsCard } from "@/components/organizations/public-page-settings-card";
+import {
+  normalizeOrganizationSlug,
+  publicOrgPagePath,
+  suggestOrganizationSlugFromName,
+  validateOrganizationSlug,
+} from "@/lib/organization-slug";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -125,7 +132,7 @@ export default function OrganizationPage() {
   // cards are deep-linkable. Legacy `?tab=` values (phone-numbers/skills/
   // ai-agent) are redirected to their top-level routes by `legacyTabRedirect`
   // above; `info`/`credentials` fall through (no redirect) and set the tab.
-  const [activeTab, setActiveTab] = useState<"info" | "credentials">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "credentials" | "public">("info");
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -183,7 +190,7 @@ export default function OrganizationPage() {
   // agent-detail `?tab=` idiom.
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "info" || tabParam === "credentials") {
+    if (tabParam === "info" || tabParam === "credentials" || tabParam === "public") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -192,7 +199,7 @@ export default function OrganizationPage() {
   // active params) so the deep link stays valid.
   const handleTabChange = useCallback(
     (value: string) => {
-      setActiveTab(value as "info" | "credentials");
+      setActiveTab(value as "info" | "credentials" | "public");
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", value);
       router.push(`/organization?${params.toString()}`, { scroll: false });
@@ -235,6 +242,13 @@ export default function OrganizationPage() {
   const handleSave = async () => {
     if (!orgId || !editedOrg || !organizationData) return;
 
+    const normalizedSlug = normalizeOrganizationSlug(editedOrg.slug);
+    const slugError = validateOrganizationSlug(normalizedSlug);
+    if (slugError) {
+      toast.error(slugError);
+      return;
+    }
+
     // Store original data for rollback if needed
     const originalData = { ...organizationData };
 
@@ -244,7 +258,7 @@ export default function OrganizationPage() {
         name: editedOrg.name,
         description: editedOrg.description,
         website: editedOrg.website,
-        slug: editedOrg.slug,
+        slug: normalizedSlug,
         is_active: editedOrg.is_active,
         industry: editedOrg.industry,
         location: editedOrg.location,
@@ -552,6 +566,7 @@ export default function OrganizationPage() {
         <TabsList className="w-full">
           <TabsTrigger value="info">Organization Info</TabsTrigger>
           <TabsTrigger value="credentials">API Credentials</TabsTrigger>
+          <TabsTrigger value="public">Public Page</TabsTrigger>
         </TabsList>
 
         {/* Organization Info tab */}
@@ -664,19 +679,66 @@ export default function OrganizationPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="slug">Slug</Label>
-                    <Input
-                      id="slug"
-                      value={editedOrg?.slug || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({ ...editedOrg, slug: e.target.value })
-                      }
-                      placeholder="organization-slug"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Used in URLs and API calls
-                    </p>
+                    <Label htmlFor="slug">Organization slug</Label>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border bg-muted/30 px-3 py-2">
+                        <span className="shrink-0 text-sm text-muted-foreground">
+                          /o/
+                        </span>
+                        <Input
+                          id="slug"
+                          value={editedOrg?.slug || ""}
+                          onChange={(e) =>
+                            editedOrg &&
+                            setEditedOrg({ ...editedOrg, slug: e.target.value })
+                          }
+                          placeholder="acme-support"
+                          className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                          spellCheck={false}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (!editedOrg) return;
+                          const suggested = suggestOrganizationSlugFromName(
+                            editedOrg.name,
+                          );
+                          if (suggested) {
+                            setEditedOrg({ ...editedOrg, slug: suggested });
+                          }
+                        }}
+                      >
+                        Suggest from name
+                      </Button>
+                    </div>
+                    {editedOrg?.slug ? (
+                      validateOrganizationSlug(
+                        normalizeOrganizationSlug(editedOrg.slug),
+                      ) ? (
+                        <p className="text-xs text-destructive">
+                          {validateOrganizationSlug(
+                            normalizeOrganizationSlug(editedOrg.slug),
+                          )}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Public page URL:{" "}
+                          <span className="font-mono">
+                            {publicOrgPagePath(
+                              normalizeOrganizationSlug(editedOrg.slug),
+                            )}
+                          </span>
+                          . Must be unique across all organizations.
+                        </p>
+                      )
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Used for your public page and API identifiers.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -773,6 +835,12 @@ During monsoon season (July-September), we have extended hours for flood-related
                     <p className="text-foreground font-mono">
                       {displayOrg.slug}
                     </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Public page:{" "}
+                      <span className="font-mono">
+                        {publicOrgPagePath(displayOrg.slug)}
+                      </span>
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
@@ -834,6 +902,16 @@ During monsoon season (July-September), we have extended hours for flood-related
             removingProvider={removingProviderCred}
             canUpdate={canUpdateOrganization}
           />
+        </TabsContent>
+
+        <TabsContent value="public">
+          {organizationData?.organization ? (
+            <PublicPageSettingsCard
+              organization={organizationData.organization}
+              canEdit={canUpdateOrganization}
+              onUpdated={loadOrganizationData}
+            />
+          ) : null}
         </TabsContent>
       </AnimatedTabs>
 

@@ -119,6 +119,10 @@ class OrganizationService(BaseOrganizationService):
             provider_credentials=provider_credentials,
             provider_credentials_status=provider_credentials_status,
             onboarding_completed=org_dict.get("onboarding_completed", False),
+            public_page_enabled=bool(org_dict.get("public_page_enabled", False)),
+            public_page_passphrase_enabled=bool(
+                org_dict.get("public_page_passphrase_enabled", False)
+            ),
             created_at=org_dict["created_at"],
             updated_at=org_dict["updated_at"],
         )
@@ -333,6 +337,22 @@ class OrganizationService(BaseOrganizationService):
             )
             return [], str(e)
 
+    async def _is_organization_slug_taken(
+        self, slug: str, exclude_org_id: UUID
+    ) -> tuple[bool, str]:
+        """Return whether ``slug`` is already used by another organization."""
+        response = (
+            self.supabase.table("organizations")
+            .select("id")
+            .eq("slug", slug)
+            .neq("id", str(exclude_org_id))
+            .limit(1)
+            .execute()
+        )
+        if response.data:
+            return True, f"Slug '{slug}' is already taken"
+        return False, ""
+
     @tracer.start_as_current_span("organization.update_organization")
     async def update_organization(
         self, org_id: UUID, org_data: OrganizationUpdate
@@ -351,7 +371,21 @@ class OrganizationService(BaseOrganizationService):
             if org_data.description is not None:
                 update_data["description"] = org_data.description
             if org_data.slug is not None:
-                update_data["slug"] = org_data.slug
+                from shared.organization.slug_utils import (
+                    normalize_organization_slug,
+                    validate_organization_slug,
+                )
+
+                normalized = normalize_organization_slug(org_data.slug)
+                is_valid, validation_error = validate_organization_slug(normalized)
+                if not is_valid:
+                    return None, validation_error
+                taken, taken_error = await self._is_organization_slug_taken(
+                    normalized, org_id
+                )
+                if taken:
+                    return None, taken_error
+                update_data["slug"] = normalized
             if org_data.website is not None:
                 update_data["website"] = org_data.website
             # is_active is intentionally excluded from frontend updates for safety
@@ -454,6 +488,28 @@ class OrganizationService(BaseOrganizationService):
                 # legacy plaintext column (retained for rollback safety, dropped
                 # in a follow-up migration once the encrypted path is verified).
                 update_data["google_api_key"] = None
+
+            if org_data.public_page_enabled is not None:
+                update_data["public_page_enabled"] = org_data.public_page_enabled
+            if org_data.public_page_passphrase_enabled is not None:
+                update_data["public_page_passphrase_enabled"] = (
+                    org_data.public_page_passphrase_enabled
+                )
+                if not org_data.public_page_passphrase_enabled:
+                    update_data["public_page_passphrase_hash"] = None
+
+            if org_data.public_page_passphrase is not None:
+                from shared.organization.public_page_security import (
+                    hash_public_page_passphrase,
+                )
+
+                if org_data.public_page_passphrase.strip() == "":
+                    update_data["public_page_passphrase_hash"] = None
+                else:
+                    update_data["public_page_passphrase_hash"] = (
+                        hash_public_page_passphrase(org_data.public_page_passphrase)
+                    )
+                    update_data["public_page_passphrase_enabled"] = True
 
             if not update_data:
                 return await self.get_organization_by_id(org_id)

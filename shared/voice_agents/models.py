@@ -90,6 +90,13 @@ class VoiceAgentBase(BaseModel):
             "CRUD routes."
         ),
     )
+    is_published_on_public_page: bool = Field(
+        default=False,
+        description=(
+            "When true, the agent is listed on the organization's public page "
+            "and accepts visitor voice calls."
+        ),
+    )
 
     @field_validator("phone_number")
     @classmethod
@@ -169,6 +176,15 @@ class VoiceAgentUpdate(BaseModel):
             "FK to pipeline_presets.id. If set, the preset must exist and be "
             "published (validated by the route). NULL clears the preset (agent "
             "falls back to the System Default preset row)."
+        ),
+    )
+    is_published_on_public_page: Optional[bool] = Field(
+        None,
+        description=(
+            "When true, the agent appears on the organization's public page "
+            "(/o/{slug}) and can receive visitor voice calls. Requires the "
+            "agent to be active; deactivating an agent clears this flag. "
+            "Distinct from embed configuration."
         ),
     )
 

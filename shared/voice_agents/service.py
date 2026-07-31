@@ -187,6 +187,30 @@ class VoiceAgentService:
             logger.error(f"Error getting agents for user {user_id}: {e}", exc_info=True)
             return [], str(e)
 
+    @tracer.start_as_current_span("voice_agent.get_public_page_agents")
+    async def get_public_page_agents(
+        self, organization_id: UUID
+    ) -> tuple[list[VoiceAgent], Optional[str]]:
+        """List agents published on the organization's public page."""
+        try:
+            response = (
+                self.supabase.table("voice_agents")
+                .select("*")
+                .eq("organization_id", str(organization_id))
+                .eq("is_published_on_public_page", True)
+                .eq("is_active", True)
+                .execute()
+            )
+            return [VoiceAgent(**item) for item in response.data], None
+        except Exception as e:
+            logger.error(
+                "Error getting public page agents for org %s: %s",
+                organization_id,
+                e,
+                exc_info=True,
+            )
+            return [], str(e)
+
     @tracer.start_as_current_span("voice_agent.update_agent")
     async def update_agent(
         self, agent_id: UUID, agent_data: VoiceAgentUpdate
@@ -201,6 +225,12 @@ class VoiceAgentService:
             update_data = agent_data.model_dump(exclude_unset=True, mode="json")
             if not update_data:
                 return await self.get_agent_by_id(agent_id)
+
+            # Inactive agents must not remain listed on the public org page.
+            # Clearing publish here closes the activate→publish→deactivate loophole
+            # where a deactivated agent would otherwise stay publicly callable.
+            if update_data.get("is_active") is False:
+                update_data["is_published_on_public_page"] = False
 
             response = (
                 self.supabase.table("voice_agents")
