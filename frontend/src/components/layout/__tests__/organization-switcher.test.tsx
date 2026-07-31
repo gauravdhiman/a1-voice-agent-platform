@@ -5,19 +5,34 @@
  *   - Renders the current org name.
  *   - Renders the current org role badge (when one is provided).
  *   - Clicking the trigger opens a popover listing every org the user
- *     belongs to, with a "Switch" action per row.
+ *     belongs to; clicking a non-current row switches orgs.
  *   - The popover renders a "Create organization" entry at the bottom.
- *   - The switcher hides itself when the user has no orgs (the avatar
- *     dropdown handles that case).
+ *   - The switcher hides itself when the user has no orgs.
  */
 import React from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+  }),
+}));
+
 // radix popover relies on portal positioning; stub it to render inline.
 vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Popover: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open?: boolean;
+  }) => <>{children}</>,
   PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
@@ -108,8 +123,7 @@ describe("OrganizationSwitcher", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("lists every org the user belongs to in the popover content", async () => {
-    const user = userEvent.setup();
+  it("lists every org the user belongs to in the popover content", () => {
     mockUseOrganization.mockReturnValue({
       organizations: [ORG_A, ORG_B],
       currentOrganization: ORG_A,
@@ -139,7 +153,7 @@ describe("OrganizationSwitcher", () => {
     ).toBeInTheDocument();
   });
 
-  it("clicking the 'Switch' action on a row calls setCurrentOrganization", async () => {
+  it("clicking another org row calls setCurrentOrganization and navigates home", async () => {
     const user = userEvent.setup();
     mockUseOrganization.mockReturnValue({
       organizations: [ORG_A, ORG_B],
@@ -149,21 +163,16 @@ describe("OrganizationSwitcher", () => {
 
     render(<OrganizationSwitcher currentRole="org_admin" />);
 
-    // Find the row for ORG_B and click its switch action.
+    // Clicking the org name/row (not a separate tiny button) must switch.
     const popover = screen.getByTestId("popover-content");
-    const rowB = within(popover).getByText("Beta").closest("[data-row]");
-    if (!rowB) {
-      throw new Error("expected the ORG_B row to be wrapped in [data-row]");
-    }
-    const switchButton = within(rowB as HTMLElement).getByRole("button", {
-      name: /switch/i,
-    });
-    await user.click(switchButton);
+    const rowB = within(popover).getByRole("option", { name: /beta/i });
+    await user.click(rowB);
 
     expect(mockSetCurrentOrganization).toHaveBeenCalledWith(ORG_B);
+    expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("marks the current org row as active (no Switch button on it)", () => {
+  it("marks the current org row as active (disabled, no switch action)", () => {
     mockUseOrganization.mockReturnValue({
       organizations: [ORG_A, ORG_B],
       currentOrganization: ORG_A,
@@ -173,14 +182,26 @@ describe("OrganizationSwitcher", () => {
     render(<OrganizationSwitcher currentRole="org_admin" />);
 
     const popover = screen.getByTestId("popover-content");
-    const rowA = within(popover).getByText("Acme").closest("[data-row]");
-    if (!rowA) {
-      throw new Error("expected the ORG_A row to be wrapped in [data-row]");
-    }
-    // The active row is the current org; it should not offer a Switch
-    // action (you can't switch to the org you're already on).
-    expect(
-      within(rowA as HTMLElement).queryByRole("button", { name: /switch/i }),
-    ).not.toBeInTheDocument();
+    const rowA = within(popover).getByRole("option", { name: /acme/i });
+    expect(rowA).toBeDisabled();
+    expect(rowA).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("does not call setCurrentOrganization when clicking the current org", async () => {
+    const user = userEvent.setup();
+    mockUseOrganization.mockReturnValue({
+      organizations: [ORG_A, ORG_B],
+      currentOrganization: ORG_A,
+      setCurrentOrganization: mockSetCurrentOrganization,
+    });
+
+    render(<OrganizationSwitcher currentRole="org_admin" />);
+
+    const popover = screen.getByTestId("popover-content");
+    const rowA = within(popover).getByRole("option", { name: /acme/i });
+    await user.click(rowA);
+
+    expect(mockSetCurrentOrganization).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
