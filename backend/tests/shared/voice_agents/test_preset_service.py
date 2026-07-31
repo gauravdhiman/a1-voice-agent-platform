@@ -651,7 +651,7 @@ class TestBuildPresetCatalog:
 
         with patch(
             "shared.voice_agents.key_resolver.is_preset_ready",
-            side_effect=lambda cfg, o, use_platform_credits=False: (
+            side_effect=lambda cfg, o, use_platform_credits=False, **_: (
                 cfg.engine_mode == "realtime"
             ),
         ):
@@ -670,3 +670,29 @@ class TestBuildPresetCatalog:
         dumped = catalog.presets[0].model_dump()
         assert "config" not in dumped
         assert "preset_type" not in dumped
+
+    def test_build_catalog_system_default_always_ready(self):
+        """System default (preset_id=null) is always ready for org UX."""
+        from types import SimpleNamespace
+
+        from shared.voice_agents.preset_service import PresetService
+
+        published = Preset(**_row(PresetType.PIPELINE, name="Professional Voice"))
+        default = Preset(
+            **_row(PresetType.REALTIME, name="System Default", is_default=True)
+        )
+        org = SimpleNamespace(provider_credentials=None)
+
+        with patch(
+            "shared.voice_agents.key_resolver.is_preset_ready",
+            return_value=False,
+        ):
+            catalog = PresetService.build_preset_catalog(
+                [published],
+                default,
+                org,
+                credentials_self_service=True,
+            )
+
+        assert catalog.default_is_ready is True
+        assert catalog.presets[0].is_ready is False

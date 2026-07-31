@@ -120,17 +120,48 @@ describe("PresetPicker", () => {
     expect(screen.queryByText(/OpenAI/i)).not.toBeInTheDocument();
   });
 
-  it("shows contact-admin copy when credentials are not self-service", () => {
+  it("does not show setup callout for system default even when API reports not ready", () => {
     mockUsePresetCatalog.mockReturnValue({
       data: makeCatalog({
         default_is_ready: false,
-        credentials_self_service: false,
+        credentials_self_service: true,
       }),
       isLoading: false,
     });
 
     render(
       <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
+    );
+
+    expect(
+      screen.queryByText(/not set up for your organization yet/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+  });
+
+  it("shows contact-admin copy when credentials are not self-service", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog({
+        presets: [
+          {
+            id: "p-managed",
+            name: "Managed Profile",
+            description: null,
+            is_ready: false,
+          },
+        ],
+        default_is_ready: true,
+        credentials_self_service: false,
+      }),
+      isLoading: false,
+    });
+
+    render(
+      <PresetPicker
+        organizationId={ORG_ID}
+        value="p-managed"
+        onChange={() => {}}
+      />,
     );
 
     expect(

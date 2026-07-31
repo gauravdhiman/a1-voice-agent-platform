@@ -165,6 +165,8 @@ async def get_preset_catalog(
     Returns display metadata and org-scoped readiness flags only — no
     ``config``, ``preset_type``, or provider names. Includes
     ``default_is_ready`` for the system-default fallback (``preset_id=null``).
+    Always ``true`` — the fallback is platform-managed; org credential setup
+    applies only to published presets.
     """
     current_user_id, user_profile = user_data
 

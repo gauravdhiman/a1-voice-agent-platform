@@ -487,7 +487,10 @@ class PresetService:
 
         Args:
             presets: Published preset rows from :meth:`get_presets`.
-            default_preset: The system-default row (for ``default_is_ready``).
+            default_preset: The system-default row (unused for readiness; kept
+                for API symmetry and future metadata). ``default_is_ready`` is
+                always ``True`` because org admins do not configure credentials
+                for the platform-managed fallback.
             org: Organization object for credential resolution, or ``None``.
             use_platform_credits: Per-agent billing toggle (platform keys only).
             credentials_self_service: Whether org admins may self-configure keys.
@@ -508,17 +511,19 @@ class PresetService:
                     name=preset.name,
                     description=preset.description,
                     is_ready=is_preset_ready(
-                        cfg, org, use_platform_credits=use_platform_credits
+                        cfg,
+                        org,
+                        use_platform_credits=use_platform_credits,
+                        org_credentials_only=True,
                     ),
                 )
             )
 
-        default_ready = False
-        if default_preset is not None:
-            default_cfg = parse_speech_config(default_preset.config)
-            default_ready = is_preset_ready(
-                default_cfg, org, use_platform_credits=use_platform_credits
-            )
+        default_ready = True
+        # The system-default fallback (preset_id=null) is platform-managed. Org
+        # admins never configure credentials for it — the worker resolves keys
+        # via platform env / platform credits. Readiness checks apply only to
+        # published presets in ``items`` above.
 
         return PresetCatalogResponse(
             presets=items,

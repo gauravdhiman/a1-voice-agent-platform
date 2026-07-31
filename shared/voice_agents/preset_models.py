@@ -190,9 +190,10 @@ class PresetCatalogItem(BaseModel):
     is_ready: bool = Field(
         ...,
         description=(
-            "True when all credentials required by this profile are resolvable "
-            "for the requesting organization (org keys, platform env fallback, "
-            "or use_platform_credits)."
+            "True when all credentials required by this profile are configured "
+            "for the requesting organization (org provider_credentials or legacy "
+            "google_api_key). Platform env fallbacks are ignored unless "
+            "use_platform_credits is true on the catalog request."
         ),
     )
 
@@ -207,8 +208,8 @@ class PresetCatalogResponse(BaseModel):
     default_is_ready: bool = Field(
         ...,
         description=(
-            "True when the system-default fallback profile (preset_id=null) is "
-            "ready for the requesting organization."
+            "Always true: the system-default fallback (preset_id=null) is "
+            "platform-managed and does not require org credential setup."
         ),
     )
     credentials_self_service: bool = Field(

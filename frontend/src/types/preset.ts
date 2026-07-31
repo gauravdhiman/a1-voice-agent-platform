@@ -128,8 +128,9 @@ export interface PresetCatalogItem {
 /**
  * Org-facing catalog response from `GET /api/v1/presets/catalog`.
  *
- * Includes readiness for published profiles and the system-default fallback
- * (`preset_id = null`). `credentials_self_service` drives generic setup copy
+ * Includes readiness for published platform-defined profiles.
+ * ``default_is_ready`` is always true (system default is platform-managed).
+ * `credentials_self_service` drives generic setup copy
  * (self-serve vs contact platform admin).
  */
 export interface PresetCatalogResponse {

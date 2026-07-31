@@ -88,6 +88,40 @@ class TestIsPresetReady:
         clean_env.setenv("GEMINI_API_KEY", "platform-g")
         assert is_preset_ready(_realtime(), org, use_platform_credits=False) is True
 
+    def test_realtime_not_ready_for_org_catalog_when_only_platform_env(
+        self, patch_decrypt, clean_env
+    ):
+        """Org-facing catalog must not treat platform env as org setup."""
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+        clean_env.setenv("GEMINI_API_KEY", "platform-g")
+        assert (
+            is_preset_ready(
+                _realtime(),
+                org,
+                use_platform_credits=False,
+                org_credentials_only=True,
+            )
+            is False
+        )
+
+    def test_realtime_ready_for_org_catalog_with_legacy_google_column(
+        self, patch_decrypt, clean_env
+    ):
+        org = SimpleNamespace(
+            provider_credentials=None,
+            google_api_key="legacy-google-key",
+        )
+        assert (
+            is_preset_ready(
+                _realtime(),
+                org,
+                use_platform_credits=False,
+                org_credentials_only=True,
+            )
+            is True
+        )
+
     def test_pipeline_ready_when_all_stage_keys_present(
         self, patch_decrypt, clean_env
     ):

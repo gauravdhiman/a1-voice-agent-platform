@@ -113,24 +113,35 @@ def _org_credentials(org: Optional[Any]) -> dict[str, Any]:
     """
     if org is None:
         return {}
+    creds: dict[str, Any] = {}
     blob = getattr(org, "provider_credentials", None)
-    if not blob:
-        return {}
-    try:
-        creds = decrypt_data(blob)
-    except Exception as e:  # pragma: no cover - defensive, logged
-        logger.error(
-            "Failed to decrypt provider_credentials for org %s: %s",
-            getattr(org, "id", "<unknown>"),
-            e,
-            exc_info=True,
-        )
-        return {}
-    return creds if isinstance(creds, dict) else {}
+    if blob:
+        try:
+            decrypted = decrypt_data(blob)
+            if isinstance(decrypted, dict):
+                creds = decrypted
+        except Exception as e:  # pragma: no cover - defensive, logged
+            logger.error(
+                "Failed to decrypt provider_credentials for org %s: %s",
+                getattr(org, "id", "<unknown>"),
+                e,
+                exc_info=True,
+            )
+    # Legacy plaintext column fallback (pre–Phase 3 rows). Matches
+    # ``OrganizationService._organization_from_dict`` so org-facing readiness
+    # aligns with the credentials UI status pills.
+    if not creds.get("google"):
+        legacy_google = getattr(org, "google_api_key", None)
+        if legacy_google:
+            creds = {**creds, "google": legacy_google}
+    return creds
 
 
 def _resolve_livekit(
-    creds: dict[str, Any], use_platform_credits: bool
+    creds: dict[str, Any],
+    use_platform_credits: bool,
+    *,
+    allow_platform_fallback: bool = True,
 ) -> Optional[dict[str, str]]:
     """Resolve the nested ``{api_key, api_secret}`` LiveKit credential.
 
@@ -154,14 +165,15 @@ def _resolve_livekit(
                 val = org_lk.get(sub)
                 if val:
                     resolved[sub] = str(val)
-    if not resolved.get("api_key"):
-        env_k = os.environ.get("LIVEKIT_API_KEY")
-        if env_k:
-            resolved["api_key"] = env_k
-    if not resolved.get("api_secret"):
-        env_s = os.environ.get("LIVEKIT_API_SECRET")
-        if env_s:
-            resolved["api_secret"] = env_s
+    if allow_platform_fallback:
+        if not resolved.get("api_key"):
+            env_k = os.environ.get("LIVEKIT_API_KEY")
+            if env_k:
+                resolved["api_key"] = env_k
+        if not resolved.get("api_secret"):
+            env_s = os.environ.get("LIVEKIT_API_SECRET")
+            if env_s:
+                resolved["api_secret"] = env_s
     if resolved.get("api_key") or resolved.get("api_secret"):
         return resolved
     return None
@@ -171,6 +183,8 @@ def resolve_api_keys(
     speech_config: SpeechConfig,
     org: Optional[Any] = None,
     use_platform_credits: bool = False,
+    *,
+    allow_platform_fallback: bool = True,
 ) -> dict[str, Any]:
     """Build the per-provider ``api_keys`` map for a speech config + org.
 
@@ -187,6 +201,10 @@ def resolve_api_keys(
             ``provider_credentials``), or ``None``.
         use_platform_credits: When True, always use platform env vars and ignore
             the org's own credentials (mirrors the existing per-agent toggle).
+        allow_platform_fallback: When False, omit a provider unless the org (or
+            ``use_platform_credits`` platform env) supplies it. Used by the
+            org-facing preset catalog so admins are prompted to configure their
+            own keys even when the platform env has fallbacks for worker calls.
 
     Returns:
         The ``api_keys`` map. String providers map to their key string;
@@ -200,14 +218,18 @@ def resolve_api_keys(
 
     for provider in needed:
         if provider == _LIVEKIT_KEY:
-            resolved = _resolve_livekit(creds, use_platform_credits)
+            resolved = _resolve_livekit(
+                creds,
+                use_platform_credits,
+                allow_platform_fallback=allow_platform_fallback,
+            )
             if resolved is not None:
                 api_keys[_LIVEKIT_KEY] = resolved
             continue
         value: Optional[str] = None
         if not use_platform_credits:
             value = creds.get(provider)
-        if not value:
+        if not value and allow_platform_fallback:
             env_name = _PLATFORM_ENV.get(provider)
             if env_name:
                 value = os.environ.get(env_name)
@@ -221,6 +243,8 @@ def is_preset_ready(
     speech_config: SpeechConfig,
     org: Optional[Any] = None,
     use_platform_credits: bool = False,
+    *,
+    org_credentials_only: bool = False,
 ) -> bool:
     """Return whether a preset's required providers are all resolvable for an org.
 
@@ -236,6 +260,11 @@ def is_preset_ready(
         org: Organization object exposing ``provider_credentials``, or ``None``.
         use_platform_credits: When True, org credentials are ignored (platform
             env vars only), mirroring per-agent billing toggle behavior.
+        org_credentials_only: When True (org-facing catalog), ignore platform
+            env fallbacks unless ``use_platform_credits`` is also True. Ensures
+            realtime presets surface "setup required" when the org has not
+            configured Google even if ``GEMINI_API_KEY`` exists in the worker
+            environment.
 
     Returns:
         ``True`` if calls using this preset would resolve all required keys;
@@ -244,7 +273,14 @@ def is_preset_ready(
     needed = _providers_needed(speech_config)
     if not needed:
         return True
-    api_keys = resolve_api_keys(speech_config, org, use_platform_credits)
+    api_keys = resolve_api_keys(
+        speech_config,
+        org,
+        use_platform_credits,
+        allow_platform_fallback=(
+            not org_credentials_only or use_platform_credits
+        ),
+    )
     for provider in needed:
         if provider not in api_keys:
             return False

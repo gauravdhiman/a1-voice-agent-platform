@@ -19,9 +19,10 @@ import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
  * The `preset_id = null` option uses `DEFAULT_PRESET_DISPLAY` (matches the
  * platform-admin "System Default" row label) with no engine badge.
  *
- * When a not-ready profile is selected, a generic setup callout appears (no
- * provider names). Org admins with self-service credentials get a link to
- * Organization → API Credentials; managed orgs are told to contact platform admin.
+ * When a not-ready **published** profile is selected, a generic setup callout
+ * appears (no provider names). The system default (preset_id=null) is always
+ * treated as Ready — it is platform-managed and never requires org credential
+ * setup.
  *
  * @example
  * ```tsx
@@ -60,13 +61,15 @@ export function PresetPicker({
   });
 
   const presets = catalog?.presets ?? [];
-  const defaultIsReady = catalog?.default_is_ready ?? true;
+  const defaultIsReady = true;
   const credentialsSelfService = catalog?.credentials_self_service ?? true;
 
   const selectedIsReady = React.useMemo(() => {
-    if (value === null) return defaultIsReady;
-    return presets.find((p) => p.id === value)?.is_ready ?? true;
-  }, [value, defaultIsReady, presets]);
+    if (value === null) return true;
+    const preset = presets.find((p) => p.id === value);
+    if (!preset) return false;
+    return preset.is_ready;
+  }, [value, presets]);
 
   const showSetupCallout = !selectedIsReady && !isLoading;
 
@@ -142,16 +145,22 @@ export function useSelectedPresetReadiness(
 
   if (isLoading || !catalog) {
     return {
-      isReady: true,
+      isReady: presetId === null,
       isLoading,
       credentialsSelfService: true,
     };
   }
 
+  if (presetId === null) {
+    return {
+      isReady: true,
+      isLoading: false,
+      credentialsSelfService: catalog.credentials_self_service,
+    };
+  }
+
   const isReady =
-    presetId === null
-      ? catalog.default_is_ready
-      : (catalog.presets.find((p) => p.id === presetId)?.is_ready ?? true);
+    catalog.presets.find((p) => p.id === presetId)?.is_ready ?? false;
 
   return {
     isReady,
