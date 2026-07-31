@@ -193,7 +193,12 @@ class VoiceAgentService:
     ) -> tuple[Optional[VoiceAgent], Optional[str]]:
         """Update a voice agent."""
         try:
-            update_data = agent_data.model_dump(exclude_unset=True)
+            # `mode="json"` coerces non-JSON-native fields (e.g. preset_id
+            # UUID -> str) so the payload is serializable by Postgrest's stdlib
+            # json encoder. Without it, a preset_id UUID raises
+            # "Object of type UUID is not JSON serializable" on the Supabase
+            # update (HTTP 400).
+            update_data = agent_data.model_dump(exclude_unset=True, mode="json")
             if not update_data:
                 return await self.get_agent_by_id(agent_id)
 
