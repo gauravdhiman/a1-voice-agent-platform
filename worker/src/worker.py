@@ -7,28 +7,35 @@ from default_system_prompt import default_system_prompt
 from livekit.agents import (
     Agent,
     AgentServer,
-    AgentSession,
     JobContext,
     RunContext,
     cli,
     function_tool,
 )
 from livekit.agents.voice import room_io
-
-from realtime_config import build_realtime_model
+from session_builder import build_agent_session
 
 from shared.common.security import decrypt_data
-from shared.voice_agents.livekit_service import livekit_service
-from shared.voice_agents.service import voice_agent_service
-from shared.voice_agents.tool_service import tool_service
-from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
-from shared.voice_agents.prompt_builder import PromptBuilder, build_current_datetime_section
 from shared.organization.service import BaseOrganizationService
+from shared.voice_agents.key_resolver import resolve_api_keys
+from shared.voice_agents.livekit_service import livekit_service
+from shared.voice_agents.preset_service import preset_service
+from shared.voice_agents.prompt_builder import (
+    PromptBuilder,
+    build_current_datetime_section,
+)
+from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.speech_config import (
+    default_realtime_config,
+    parse_speech_config,
+)
 
 # MCP integration (Phase 3a) — the parallel tool path. Only used for
 # platform_tools rows marked tool_source='mcp'; the legacy BaseTool path below
 # is unchanged. See docs/03_implementation/mcp_integration_rfc.md §1.1.
 from shared.voice_agents.tool_models import ToolSource
+from shared.voice_agents.tool_service import tool_service
+from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
 from shared.voice_agents.tools.mcp import build_livekit_tools_for_agent_tool
 
 logger = logging.getLogger("voice-worker")
@@ -236,9 +243,85 @@ async def _cleanup_mcp_clients(mcp_clients: list, handed_off: bool) -> None:
         try:
             await client.close()
         except Exception as close_err:
+            logger.error(f"Error closing MCP client: {close_err}", exc_info=True)
+
+
+async def _resolve_speech_config(voice_agent, agent_id: str):
+    """Resolve the ``SpeechConfig`` for a call from the agent's preset.
+
+    Phase 4 fallback chain (a misconfigured preset/default never breaks a live
+    call — graceful degrade, loud log):
+
+    - explicit ``preset_id``, loadable + parseable -> that preset's config;
+    - explicit ``preset_id`` whose row is missing (deleted), unparseable, or
+      fails to load -> the hardcoded realtime default;
+    - no ``preset_id`` -> the **system default preset** (the single
+      ``is_default`` row the platform admin manages), if present and parseable,
+      else the hardcoded realtime default. The seeded default keeps out-of-box
+      behavior identical to the pre-Phase-4 hardcoded realtime fallback.
+
+    The worker loads the chosen preset **live on every call** (no versioning),
+    so an admin's edit takes effect on the next call. See
+    :mod:`shared.voice_agents.preset_service` (``get_preset_by_id``,
+    ``get_default_preset``).
+
+    Args:
+        voice_agent: The voice-agent row (must expose ``preset_id``; may be
+            ``None`` for a legacy agent or one whose preset was deleted via the
+            FK ``ON DELETE SET NULL``).
+        agent_id: The agent id, for log lines.
+
+    Returns:
+        A concrete ``SpeechConfig`` (realtime or pipeline); always the
+        hardcoded realtime default on any failure in the chain.
+    """
+    preset_id = getattr(voice_agent, "preset_id", None)
+
+    if preset_id:
+        preset, preset_error = await preset_service.get_preset_by_id(preset_id)
+        if preset_error:
             logger.error(
-                f"Error closing MCP client: {close_err}", exc_info=True
+                f"Agent {agent_id}: error loading preset {preset_id}: "
+                f"{preset_error}; falling back to realtime default."
             )
+            return default_realtime_config()
+        if preset is None:
+            logger.error(
+                f"Agent {agent_id}: preset {preset_id} not found "
+                "(deleted?); falling back to realtime default."
+            )
+            return default_realtime_config()
+        try:
+            return parse_speech_config(preset.config)
+        except Exception as cfg_err:
+            logger.error(
+                f"Agent {agent_id}: preset {preset_id} has an "
+                f"unparseable config ({cfg_err}); falling back to "
+                f"realtime default."
+            )
+            return default_realtime_config()
+
+    # No explicit preset: use the admin-designated system default preset row,
+    # if present and parseable; otherwise the hardcoded realtime default.
+    default_preset, default_error = await preset_service.get_default_preset()
+    if default_error:
+        logger.error(
+            f"Agent {agent_id}: error loading the system default preset: "
+            f"{default_error}; falling back to realtime default."
+        )
+        return default_realtime_config()
+    if default_preset is None:
+        # No default row designated (the migration seeds one, so this is a
+        # degraded/empty-DB state) -> keep the hardcoded realtime default.
+        return default_realtime_config()
+    try:
+        return parse_speech_config(default_preset.config)
+    except Exception as cfg_err:
+        logger.error(
+            f"Agent {agent_id}: system default preset has an unparseable "
+            f"config ({cfg_err}); falling back to realtime default."
+        )
+        return default_realtime_config()
 
 
 class DynamicAgent(Agent):
@@ -247,7 +330,7 @@ class DynamicAgent(Agent):
         # it explicitly so a future framework default change cannot silently
         # regress barge-in (the "agent repeats itself after the user already
         # responded" symptom). The Gemini server side is also set to
-        # START_OF_ACTIVITY_INTERRUPTS in realtime_config — both layers honor
+        # START_OF_ACTIVITY_INTERRUPTS in speech_providers.realtime.provider — both layers honor
         # interruption.
         super().__init__(instructions=instructions, allow_interruptions=True)
 
@@ -304,20 +387,22 @@ async def entrypoint(ctx: JobContext):
                 phone_number = parts[1]
                 logger.info(f"Extracted phone number: {phone_number}")
         except (IndexError, AttributeError) as e:
-            logger.error(
-                f"Failed to extract room metadata from '{room_name}': {e}"
-            )
+            logger.error(f"Failed to extract room metadata from '{room_name}': {e}")
             return
 
         # 2. Fetch agent by ID (test room) or phone number (phone call)
         if test_agent_id:
-            voice_agent, error = await voice_agent_service.get_agent_by_id(test_agent_id)
+            voice_agent, error = await voice_agent_service.get_agent_by_id(
+                test_agent_id
+            )
             if error or not voice_agent:
                 logger.error(f"Failed to fetch agent for ID {test_agent_id}: {error}")
                 return
             logger.info(f"Found agent: {voice_agent.name} (ID: {test_agent_id})")
         else:
-            voice_agent, error = await voice_agent_service.get_agent_by_phone(phone_number)
+            voice_agent, error = await voice_agent_service.get_agent_by_phone(
+                phone_number
+            )
             if error or not voice_agent:
                 logger.error(f"Failed to fetch agent for phone {phone_number}: {error}")
                 return
@@ -436,9 +521,7 @@ async def entrypoint(ctx: JobContext):
                 # Create wrapper function
                 # The key insight: create a simple wrapper with explicit parameters
                 # that match the original function (excluding 'self')
-                wrapper = _create_tool_wrapper(
-                    bound_method, func_name, sig, type_hints
-                )
+                wrapper = _create_tool_wrapper(bound_method, func_name, sig, type_hints)
 
                 # Set wrapper metadata
                 wrapper.__name__ = func_name
@@ -455,8 +538,12 @@ async def entrypoint(ctx: JobContext):
                 logger.info(f"Built function_tool for: {func_name}")
 
         # 3b. Fetch agent skills for progressive disclosure
+        from src.tools.skill_tool import (
+            create_load_skill_function,
+            create_load_skill_reference_function,
+        )
+
         from shared.voice_agents.skill_service import skill_service
-        from src.tools.skill_tool import create_load_skill_function, create_load_skill_reference_function
 
         skill_summaries, skill_error = await skill_service.get_agent_skill_summaries(
             voice_agent.id
@@ -465,7 +552,9 @@ async def entrypoint(ctx: JobContext):
             logger.warning(f"Could not fetch agent skills: {skill_error}")
             skill_summaries = []
         else:
-            logger.info(f"Fetched {len(skill_summaries)} skill summaries for agent {agent_id}")
+            logger.info(
+                f"Fetched {len(skill_summaries)} skill summaries for agent {agent_id}"
+            )
 
         # Register load_skill tool if agent has skills
         if skill_summaries:
@@ -506,14 +595,19 @@ async def entrypoint(ctx: JobContext):
         current_dt_section = build_current_datetime_section(
             os.getenv("AGENT_DEFAULT_TIMEZONE", "UTC")
         )
-        org, org_error = await organization_service.get_organization_by_id(voice_agent.organization_id)
+        org, org_error = await organization_service.get_organization_by_id(
+            voice_agent.organization_id
+        )
         if org_error or not org:
-            logger.warning(f"Could not fetch organization details: {org_error}. Using default prompt.")
+            logger.warning(
+                f"Could not fetch organization details: {org_error}. Using default prompt."
+            )
             # Fallback to default prompt if org data unavailable; still prepend the
             # current-date/time anchor so the model has a temporal reference.
             instructions = current_dt_section + "\n\n" + default_system_prompt
-            # Fallback to platform key if org not found
-            org_google_api_key = None
+            # ``org`` stays None — the key resolver falls back to platform env
+            # vars for every provider (no org BYO keys available).
+            org = None
         else:
             instructions = PromptBuilder.build(
                 org=org,
@@ -523,9 +617,7 @@ async def entrypoint(ctx: JobContext):
                 agent_skills=skill_summaries,
                 current_datetime=current_dt_section,
             )
-            # Get organization's Google API key
-            org_google_api_key = getattr(org, 'google_api_key', None)
-        
+
         logger.debug(f"Enhanced instructions built (length: {len(instructions)})")
 
         livekit_agent = DynamicAgent(
@@ -535,35 +627,49 @@ async def entrypoint(ctx: JobContext):
         await livekit_agent.update_tools(livekit_tools)
         logger.info(f"Updated agent with {len(livekit_tools)} tools")
 
-        # 4. Determine which API key to use
-        # Priority: 
-        # 1. If agent.use_platform_credits is True -> use platform key
-        # 2. If org has google_api_key -> use org key
-        # 3. Otherwise -> use platform key (fallback)
-        use_platform_credits = getattr(voice_agent, 'use_platform_credits', False)
-        
-        if use_platform_credits:
-            api_key = os.getenv("GEMINI_API_KEY")
-            logger.info(f"Agent {agent_id} configured to use platform API key")
-        elif org_google_api_key:
-            api_key = org_google_api_key
-            logger.info(f"Agent {agent_id} using organization API key")
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
-            logger.info(f"Agent {agent_id} using platform API key (no org key configured)")
+        # 4. Resolve the speech config + per-provider API keys for this call.
+        #
+        # Phase 4: the agent's voice engine is chosen by its preset
+        # (``voice_agent.preset_id``). The worker loads that preset **live on
+        # every call** — no versioning — so a platform admin's preset edits take
+        # effect on the next call. A legacy agent (``preset_id`` is None) uses
+        # the admin-designated **system default preset** (the ``is_default``
+        # row); a missing/unparseable preset (explicit or default) falls back to
+        # the hardcoded realtime default, so a misconfigured preset never breaks
+        # a live realtime call (graceful degrade, loud log). The resolution
+        # chain is extracted to :func:`_resolve_speech_config` for unit testing.
+        #
+        # ``api_keys`` is assembled by the per-org key_resolver, which pairs the
+        # preset's SpeechConfig with the org's encrypted provider_credentials
+        # blob (BYO keys) and the platform env vars, honoring
+        # ``use_platform_credits``. This generalizes the old Google-only
+        # resolution (org google key vs platform GEMINI_API_KEY) to every
+        # provider, including a nested ``livekit: {api_key, api_secret}`` entry
+        # injected only when the preset uses a LiveKit Inference stage.
+        use_platform_credits = getattr(voice_agent, "use_platform_credits", False)
+        speech_config = await _resolve_speech_config(voice_agent, agent_id)
 
-        # 5. Create Gemini RealtimeModel
-        # The realtime model tuning (thinking off, barge-in on, endpointing
-        # tuned, temperature lowered) lives in realtime_config.build_realtime_model
-        # so it is unit-tested independently of this live entrypoint. See that
-        # module's docstring for the rationale and the model-options analysis
-        # for why the 2.5 native-audio model is kept (not the 3.1 "live" preview).
-        model = build_realtime_model(api_key=api_key)
+        api_keys = resolve_api_keys(
+            speech_config, org=org, use_platform_credits=use_platform_credits
+        )
+        logger.info(
+            f"Agent {agent_id}: engine={speech_config.engine_mode.value} "
+            f"api_keys={sorted(api_keys.keys())} "
+            f"use_platform_credits={use_platform_credits}"
+        )
 
-        # 5. Create LiveKit Agent
-        # 6. Start Session
-        agent_session = AgentSession(
-            llm=model, userdata={"agent_id": agent_id, "agent_name": voice_agent.name}
+        # 5. Build the LiveKit AgentSession via the speech-engine seam.
+        # session_builder dispatches on engine_mode and constructs the
+        # AgentSession the right way for the engine. The realtime model tuning
+        # (thinking off, barge-in on, endpointing tuned, temperature lowered)
+        # lives in speech_providers.realtime.provider so it is unit-tested
+        # independently of this live entrypoint — see that module's docstring for
+        # the rationale and the model-options analysis for why the 2.5
+        # native-audio model is kept (not the 3.1 "live" preview).
+        agent_session = build_agent_session(
+            speech_config=speech_config,
+            api_keys=api_keys,
+            userdata={"agent_id": agent_id, "agent_name": voice_agent.name},
         )
 
         await agent_session.start(

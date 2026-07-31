@@ -23,10 +23,13 @@ import {
 } from "@/components/ui/form";
 import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
+import { usePresetCatalog } from "@/hooks/use-preset-queries";
+import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
 import { voiceTemplateService } from "@/services/voice-template-service";
 import { toast } from "sonner";
 import type { VoiceAgentCreate } from "@/types/agent";
 import type { VoiceTemplate } from "@/types/voice-template";
+import { PresetPicker } from "@/components/agents/preset-picker";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
@@ -44,6 +47,10 @@ const formSchema = z.object({
   mission: z.string().min(1, "Mission is required"),
   custom_instructions: z.string().optional(),
   is_active: z.boolean(),
+  // Voice-engine preset (Phase 4). null = system default. Optional
+  // UUID when a published preset is chosen. Never an empty string — the backend
+  // UUID validator would 400, so the picker emits `null` for the default.
+  preset_id: z.string().uuid().optional().nullable(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -259,7 +266,13 @@ export function AgentCreateWidget() {
       mission: "",
       custom_instructions: "",
       is_active: true,
+      preset_id: null,
     },
+  });
+
+  const watchedOrgId = form.watch("organization_id");
+  const { data: presetCatalog } = usePresetCatalog({
+    organizationId: watchedOrgId || null,
   });
 
   useEffect(() => {
@@ -516,6 +529,32 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
           </FormItem>
         )}
       />
+
+      {/* Voice profile (Phase 4). Optional — null = system default. The
+          picker emits null for the default so the backend never sees "" (which
+          would fail UUID validation). */}
+      <FormField
+        control={form.control}
+        name="preset_id"
+        render={({ field }) => (
+          <FormItem>
+            <FormControl>
+              {watchedOrgId ? (
+                <PresetPicker
+                  organizationId={watchedOrgId}
+                  value={field.value ?? null}
+                  onChange={field.onChange}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Select an organization above to choose a voice profile.
+                </p>
+              )}
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 
@@ -590,6 +629,15 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
       (o) => o.id === values.organization_id,
     )?.name;
 
+    // Resolve the chosen preset's name for the review summary. null/unknown ->
+    // DEFAULT_PRESET_DISPLAY (the same "System Default" label the platform admin
+    // sees on /platform/presets and the picker shows; the underlying engine is
+    // not surfaced here).
+    const presetName = values.preset_id
+      ? (presetCatalog?.presets.find((p) => p.id === values.preset_id)?.name ??
+        "Selected profile")
+      : DEFAULT_PRESET_DISPLAY.name;
+
     return (
       <div className="space-y-6">
         <div>
@@ -643,6 +691,12 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
                 <p className="text-sm mt-1 text-muted-foreground line-clamp-2">
                   {values.mission || "Not set"}
                 </p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Voice Profile
+                </span>
+                <p className="font-medium mt-1">{presetName}</p>
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">

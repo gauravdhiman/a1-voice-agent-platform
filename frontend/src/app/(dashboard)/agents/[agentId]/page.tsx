@@ -27,6 +27,8 @@ import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { TestCallModal } from "@/components/agents/test-call-modal";
 import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
+import { PresetPicker, useSelectedPresetReadiness } from "@/components/agents/preset-picker";
+import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -136,7 +138,18 @@ export default function AgentDetailPage() {
     React.useState<ToolFilterType>("all");
 
   // Agent form state
-  const [agentForm, setAgentForm] = React.useState({
+  const [agentForm, setAgentForm] = React.useState<{
+    name: string;
+    phone_number: string;
+    persona: string;
+    tone: string;
+    mission: string;
+    custom_instructions: string;
+    is_active: boolean;
+    use_platform_credits: boolean;
+    instructions_markdown: string;
+    preset_id: string | null;
+  }>({
     name: "",
     phone_number: "",
     persona: "",
@@ -146,6 +159,7 @@ export default function AgentDetailPage() {
     is_active: true,
     use_platform_credits: false,
     instructions_markdown: "",
+    preset_id: null,
   });
 
   // Fetch data using React Query
@@ -174,6 +188,16 @@ export default function AgentDetailPage() {
   const logoutAgentToolMutation = useLogoutAgentTool();
   const deleteAgentToolMutation = useDeleteAgentTool();
   const configureAgentToolMutation = useConfigureAgentTool();
+
+  const {
+    isReady: voiceProfileReady,
+    isLoading: voiceProfileReadinessLoading,
+    credentialsSelfService,
+  } = useSelectedPresetReadiness(
+    agent?.organization_id,
+    agentForm.preset_id,
+    agentForm.use_platform_credits,
+  );
 
   // Load organization when agent data is available
   React.useEffect(() => {
@@ -295,6 +319,7 @@ export default function AgentDetailPage() {
         is_active: agent.is_active,
         use_platform_credits: agent.use_platform_credits || false,
         instructions_markdown: agent.instructions_markdown || "",
+        preset_id: agent.preset_id ?? null,
       });
     }
   }, [agent]);
@@ -603,6 +628,12 @@ export default function AgentDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => setTestCallOpen(true)}
+                disabled={!voiceProfileReady && !voiceProfileReadinessLoading}
+                title={
+                  !voiceProfileReady && !voiceProfileReadinessLoading
+                    ? "Configure the voice profile before testing calls"
+                    : undefined
+                }
               >
                 <Phone className="h-4 w-4 mr-2" />
                 Test Agent
@@ -615,6 +646,13 @@ export default function AgentDetailPage() {
           )}
         </div>
       </div>
+
+      {!voiceProfileReady && !voiceProfileReadinessLoading && agent && (
+        <PresetSetupCallout
+          credentialsSelfService={credentialsSelfService}
+          organizationId={agent.organization_id}
+        />
+      )}
 
       <AnimatedTabs
         value={activeTab}
@@ -884,6 +922,20 @@ and confirm someone will call back the next business day.`}
                   </Link>
                 </div>
               )}
+
+              {/* Voice profile (Phase 4). Optional — null = system default.
+                  Read-only for non-editors; canEdit users pick/clear and save. */}
+              <div className="mt-6">
+                <PresetPicker
+                  organizationId={agent.organization_id}
+                  usePlatformCredits={agentForm.use_platform_credits}
+                  value={agentForm.preset_id}
+                  onChange={(presetId) =>
+                    setAgentForm({ ...agentForm, preset_id: presetId })
+                  }
+                  disabled={!canEdit}
+                />
+              </div>
 
               {canEdit && (
                 <div className="flex space-x-2 pt-4">

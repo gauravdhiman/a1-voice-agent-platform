@@ -148,13 +148,94 @@ Located in `shared/voice_agents/tools/base/registry_livekit.py`
 - Maintains mapping of tool names to classes
 - Provides metadata for LLM integration
 
+#### 5. Voice Engine (realtime + pipeline)
+
+The worker supports two configurable conversation engines per agent, selected by
+the agent's `speech_config` (see
+[`docs/02_core_systems/voice_engine.md`](../docs/02_core_systems/voice_engine.md)):
+
+- **realtime** — end-to-end Google Gemini native-audio model (STT+LLM+TTS in one).
+- **pipeline** — modular STT → LLM → TTS cascade, each stage swappable. Per-stage
+  providers are wired: Silero VAD + Deepgram STT + OpenAI LLM + Cartesia TTS
+  (Phase 2, direct LiveKit-native plugins), plus LiveKit **Inference** for
+  STT/LLM/TTS and **Cerebras** for LLM (Phase 2b). A pipeline may **mix** Inference
+  and direct stages per stage (e.g. Inference STT + Cerebras LLM + Inference TTS).
+  Local/self-hosted adapters can be added later as an extra provider per stage.
+
+The two engines diverge at a **single seam** — `src/session_builder.py`'s
+`build_agent_session()` — which constructs the LiveKit `AgentSession` the right
+way for the engine. Everything else (room dispatch, prompt building, tools/MCP,
+greeting) is shared and engine-agnostic.
+
+- `src/speech_providers/` — provider factory package. `realtime/provider.py`
+  builds the `RealtimeModel`; `stt/deepgram.py`, `llm/openai.py`,
+  `tts/cartesia.py`, `vad/silero.py` build the per-stage **direct** pipeline
+  plugins; `stt/livekit_inference.py`, `llm/livekit_inference.py`, `tts/livekit_inference.py` build the
+  **LiveKit Inference** stages (single LiveKit Cloud auth), and
+  `llm/cerebras.py` builds the **Cerebras** direct LLM. `registry.py` maps a
+  `SpeechConfig` to session components (`RealtimeComponents` /
+  `PipelineComponents`): direct stages dispatch through per-stage tables
+  (`STT_BUILDERS` / `LLM_BUILDERS` / `TTS_BUILDERS` / `VAD_BUILDERS`) with
+  per-provider key guards; Inference stages (`provider == "livekit_inference"`) take a
+  special path (`LIVEKIT_INFERENCE_STAGE_BUILDERS`) that uses the shared LiveKit key
+  instead of a per-stage key. Adding a direct provider = one builder + one table
+  entry; adding an Inference stage = one builder + one `LIVEKIT_INFERENCE_STAGE_BUILDERS`
+  entry.
+- `shared/voice_agents/speech_config.py` — Pydantic discriminated-union config
+  (`RealtimeSpeechConfig` / `PipelineSpeechConfig`); stored as the `config` JSONB
+  on a **preset** row (`pipeline_presets.config`), not directly on the agent.
+- `shared/voice_agents/preset_service.py` + `preset_models.py` — platform-admin
+  preset catalog (Phase 3). The worker fetches a preset **live on every call** by
+  `voice_agent.preset_id` (no versioning); `preset_id=None` → the **System Default**
+  preset row (`pipeline_presets.is_default=true`) via
+  `preset_service.get_default_preset` — the hardcoded `default_realtime_config()`
+  is only the ultimate safety net (Phase 4 follow-up, `_resolve_speech_config`).
+- `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3). Builds
+  the `api_keys` map from the agent's `speech_config` + the org's encrypted
+  `provider_credentials` blob + platform env, with the `use_platform_credits`
+  toggle. Injects `livekit: {api_key, api_secret}` only when an Inference stage
+  is used; omits providers with no resolvable key.
+- `src/realtime_config.py` — backward-compat shim re-exporting the realtime
+  builder under its old names.
+
+> **Phase 3 is live-fetch + key resolution; live calls are unchanged for legacy
+> agents.** `worker.py` loads the preset's `speech_config` from
+> `voice_agent.preset_id` (graceful-degrade to `default_realtime_config()` on a
+> missing/unparseable preset), then `resolve_api_keys()` produces the `api_keys`
+> map and `build_agent_session()` builds the session. Legacy agents
+> (`preset_id=None`) resolve to the **System Default** preset row
+> (`preset_service.get_default_preset`); the hardcoded `default_realtime_config()`
+> fires only if that row is missing/unparseable. Direct provider keys
+> come from the org's encrypted `provider_credentials` blob (fallback
+> `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` env); Inference
+> stages get `api_keys["livekit"]` (org BYO, fallback `LIVEKIT_API_KEY` /
+> `LIVEKIT_API_SECRET` env) and the registry injects `api_key`/`api_secret` into
+> the Inference builders; Silero VAD is local and needs no key. The Phase 3
+> migration is reviewed but **not run** — awaits owner approval.
+
 ## 📁 Project Structure
 
 ```
 worker/
 ├── src/
 │   ├── worker.py              # Main entry point and tool wrapping
-│   └── default_system_prompt.py  # Default system prompt template
+│   ├── session_builder.py     # Voice-engine seam: builds AgentSession (realtime/pipeline)
+│   ├── realtime_config.py     # Backward-compat shim -> speech_providers.realtime
+│   ├── default_system_prompt.py  # Default system prompt template
+│   ├── speech_providers/      # Provider factory package (realtime + pipeline stages)
+│   │   ├── registry.py        # build_session_components() dispatch + per-stage tables
+│   │   ├── realtime/provider.py  # Google RealtimeModel builder + tuning
+│   │   ├── stt/deepgram.py    # Deepgram STT builder (direct, nova-3)
+│   │   ├── stt/livekit_inference.py    # LiveKit Inference STT builder (single LK auth)
+│   │   ├── llm/openai.py      # OpenAI LLM builder (direct, gpt-4.1)
+│   │   ├── llm/cerebras.py    # Cerebras LLM builder (direct, with_cerebras)
+│   │   ├── llm/livekit_inference.py    # LiveKit Inference LLM builder (single LK auth)
+│   │   ├── tts/cartesia.py    # Cartesia TTS builder (direct, sonic-3)
+│   │   ├── tts/livekit_inference.py    # LiveKit Inference TTS builder (single LK auth)
+│   │   ├── vad/silero.py      # Silero VAD builder (offline VAD.load)
+│   │   └── turn_detection/    # Phase 5 stub (default VAD turn detection for now)
+│   └── tools/                 # Worker-side tool helpers (skill tools)
+├── tests/                     # pytest suite (run inside the worker dev container)
 ├── .docs/
 │   └── livekit_tool_wrapping_architecture.md  # Tool wrapping details
 ├── test_livekit_wrapping.py  # Test file for wrapper approaches

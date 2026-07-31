@@ -138,6 +138,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       } else {
         breadcrumbs.push({ name: "Dashboard", href: null });
       }
+    } else if (pathname === "/platform/presets") {
+      // Mirror /platform/tools: platform admins see the route's own title;
+      // anyone else sees the generic "Dashboard" fallback. The page itself
+      // independently gates on the platform_admin role via <AccessDenied>.
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Voice Presets", href: null });
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
     } else if (pathname === "/organization/billing") {
       const orgHref = orgId ? `/organization?org_id=${orgId}` : "/organization";
       breadcrumbs.push({ name: "Organization", href: orgHref });

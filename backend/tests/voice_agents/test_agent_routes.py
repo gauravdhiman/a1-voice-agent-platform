@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
 import pytest
+from fastapi import HTTPException
 from opentelemetry import trace
 from starlette.requests import Request
 
@@ -17,9 +18,9 @@ class TestAgentRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_system_prompt_success(self):
         """Test successful retrieval of generated system prompt."""
-        from src.voice_agents.routes import get_agent_system_prompt
-        from shared.voice_agents.models import VoiceAgent
         from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+        from src.voice_agents.routes import get_agent_system_prompt
 
         # Create test data
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
@@ -62,9 +63,13 @@ class TestAgentRoutes:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             # Mock OrganizationService
-            with patch("src.voice_agents.routes.OrganizationService") as mock_org_service_class:
+            with patch(
+                "src.voice_agents.routes.OrganizationService"
+            ) as mock_org_service_class:
                 mock_org_service = Mock()
-                mock_org_service.get_organization_by_id = AsyncMock(return_value=(org, None))
+                mock_org_service.get_organization_by_id = AsyncMock(
+                    return_value=(org, None)
+                )
                 mock_org_service_class.return_value = mock_org_service
 
                 # Call the endpoint
@@ -84,8 +89,9 @@ class TestAgentRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_system_prompt_agent_not_found(self):
         """Test system prompt retrieval when agent doesn't exist."""
-        from src.voice_agents.routes import get_agent_system_prompt
         from fastapi import HTTPException
+
+        from src.voice_agents.routes import get_agent_system_prompt
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_user_id = UUID("00000000-0000-0000-0000-000000000003")
@@ -110,9 +116,10 @@ class TestAgentRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_system_prompt_permission_denied(self):
         """Test system prompt retrieval without proper permissions."""
-        from src.voice_agents.routes import get_agent_system_prompt
         from fastapi import HTTPException
+
         from shared.voice_agents.models import VoiceAgent
+        from src.voice_agents.routes import get_agent_system_prompt
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_org_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -148,9 +155,10 @@ class TestAgentRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_system_prompt_org_not_found(self):
         """Test system prompt retrieval when organization doesn't exist."""
-        from src.voice_agents.routes import get_agent_system_prompt
         from fastapi import HTTPException
+
         from shared.voice_agents.models import VoiceAgent
+        from src.voice_agents.routes import get_agent_system_prompt
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_org_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -172,7 +180,9 @@ class TestAgentRoutes:
         with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with patch("src.voice_agents.routes.OrganizationService") as mock_org_service_class:
+            with patch(
+                "src.voice_agents.routes.OrganizationService"
+            ) as mock_org_service_class:
                 mock_org_service = Mock()
                 mock_org_service.get_organization_by_id = AsyncMock(
                     return_value=(None, "Organization not found")
@@ -191,9 +201,9 @@ class TestAgentRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_system_prompt_uses_markdown_when_set(self):
         """Test system prompt uses instructions_markdown when available."""
-        from src.voice_agents.routes import get_agent_system_prompt
-        from shared.voice_agents.models import VoiceAgent
         from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+        from src.voice_agents.routes import get_agent_system_prompt
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_org_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -225,9 +235,13 @@ class TestAgentRoutes:
         with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with patch("src.voice_agents.routes.OrganizationService") as mock_org_service_class:
+            with patch(
+                "src.voice_agents.routes.OrganizationService"
+            ) as mock_org_service_class:
                 mock_org_service = Mock()
-                mock_org_service.get_organization_by_id = AsyncMock(return_value=(org, None))
+                mock_org_service.get_organization_by_id = AsyncMock(
+                    return_value=(org, None)
+                )
                 mock_org_service_class.return_value = mock_org_service
 
                 result = await get_agent_system_prompt(
@@ -246,9 +260,9 @@ class TestAgentRoutes:
     @pytest.mark.asyncio
     async def test_generate_markdown_from_fields(self):
         """Test generate-markdown endpoint converts fields to markdown."""
-        from src.voice_agents.routes import generate_markdown_from_fields
-        from shared.voice_agents.models import VoiceAgent
         from shared.organization.models import Organization
+        from shared.voice_agents.models import VoiceAgent
+        from src.voice_agents.routes import generate_markdown_from_fields
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_org_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -285,9 +299,13 @@ class TestAgentRoutes:
         with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with patch("src.voice_agents.routes.OrganizationService") as mock_org_service_class:
+            with patch(
+                "src.voice_agents.routes.OrganizationService"
+            ) as mock_org_service_class:
                 mock_org_service = Mock()
-                mock_org_service.get_organization_by_id = AsyncMock(return_value=(org, None))
+                mock_org_service.get_organization_by_id = AsyncMock(
+                    return_value=(org, None)
+                )
                 mock_org_service_class.return_value = mock_org_service
 
                 result = await generate_markdown_from_fields(
@@ -391,16 +409,17 @@ class TestCreateAgentDeclarativePermission:
 
     @pytest.mark.asyncio
     async def test_platform_admin_allowed(self):
-        from src.voice_agents.routes import create_agent
         from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
 
         profile = _agent_profile(is_platform_admin=True)
         body = _agent_create_body(CREATE_AGENT_TEST_ORG)
         request = _make_post_request(body)
         agent_data = VoiceAgentCreate(**body)
 
-        with patch("src.auth.dependencies.get_authenticated_user") as mock_auth, \
-             patch("src.voice_agents.routes.voice_agent_service") as mock_svc:
+        with patch("src.auth.dependencies.get_authenticated_user") as mock_auth, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
             mock_auth.return_value = (CREATE_AGENT_TEST_USER, profile)
             created = VoiceAgent(
                 id=UUID("00000000-0000-0000-0000-0000000000d4"),
@@ -427,16 +446,17 @@ class TestCreateAgentDeclarativePermission:
 
     @pytest.mark.asyncio
     async def test_org_admin_on_body_org_allowed(self):
-        from src.voice_agents.routes import create_agent
         from shared.voice_agents.models import VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
 
         profile = _agent_profile(is_org_admin_on=str(CREATE_AGENT_TEST_ORG))
         body = _agent_create_body(CREATE_AGENT_TEST_ORG)
         request = _make_post_request(body)
         agent_data = VoiceAgentCreate(**body)
 
-        with patch("src.auth.dependencies.get_authenticated_user") as mock_auth, \
-             patch("src.voice_agents.routes.voice_agent_service") as mock_svc:
+        with patch("src.auth.dependencies.get_authenticated_user") as mock_auth, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
             mock_auth.return_value = (CREATE_AGENT_TEST_USER, profile)
             created = Mock()
             created.id = UUID("00000000-0000-0000-0000-0000000000d4")
@@ -458,8 +478,9 @@ class TestCreateAgentDeclarativePermission:
         `require_permission` factory actually runs."""
         from fastapi import APIRouter, Depends, FastAPI
         from fastapi.testclient import TestClient
-        from src.voice_agents.routes import create_agent
+
         from src.auth.dependencies import require_permission
+        from src.voice_agents.routes import create_agent
 
         profile = _agent_profile(is_org_admin_on=str(CREATE_AGENT_OTHER_ORG))
 
@@ -475,16 +496,22 @@ class TestCreateAgentDeclarativePermission:
         async def _handler(
             agent_data: VoiceAgentCreate,
             request: Request,
-            _auth=Depends(require_permission(
-                "agent", "create",
-                org_id_source="body", body_field="organization_id",
-            )),
+            _auth=Depends(
+                require_permission(
+                    "agent",
+                    "create",
+                    org_id_source="body",
+                    body_field="organization_id",
+                )
+            ),
         ):
             # Forward to the real create_agent body, with the resolved
             # _auth tuple. The real route's own _auth default is unused
             # because we pass _auth explicitly here.
             return await real_create_agent(
-                agent_data=agent_data, request=request, _auth=_auth,
+                agent_data=agent_data,
+                request=request,
+                _auth=_auth,
             )
 
         router = APIRouter()
@@ -496,6 +523,7 @@ class TestCreateAgentDeclarativePermission:
             return (CREATE_AGENT_TEST_USER, profile)
 
         from src.auth.dependencies import get_authenticated_user as dep_get_auth
+
         app.dependency_overrides[dep_get_auth] = _override_auth
 
         client = TestClient(app)
@@ -512,8 +540,9 @@ class TestCreateAgentDeclarativePermission:
         """Regular user → 403 via TestClient + dependency_overrides."""
         from fastapi import APIRouter, Depends, FastAPI
         from fastapi.testclient import TestClient
-        from src.voice_agents.routes import create_agent as real_create_agent
+
         from src.auth.dependencies import require_permission
+        from src.voice_agents.routes import create_agent as real_create_agent
 
         profile = _agent_profile()  # no admin anywhere
 
@@ -523,13 +552,19 @@ class TestCreateAgentDeclarativePermission:
         async def _handler(
             agent_data: VoiceAgentCreate,
             request: Request,
-            _auth=Depends(require_permission(
-                "agent", "create",
-                org_id_source="body", body_field="organization_id",
-            )),
+            _auth=Depends(
+                require_permission(
+                    "agent",
+                    "create",
+                    org_id_source="body",
+                    body_field="organization_id",
+                )
+            ),
         ):
             return await real_create_agent(
-                agent_data=agent_data, request=request, _auth=_auth,
+                agent_data=agent_data,
+                request=request,
+                _auth=_auth,
             )
 
         router = APIRouter()
@@ -541,6 +576,7 @@ class TestCreateAgentDeclarativePermission:
             return (CREATE_AGENT_TEST_USER, profile)
 
         from src.auth.dependencies import get_authenticated_user as dep_get_auth
+
         app.dependency_overrides[dep_get_auth] = _override_auth
 
         client = TestClient(app)
@@ -551,3 +587,316 @@ class TestCreateAgentDeclarativePermission:
             headers={"authorization": "Bearer mock-jwt-token"},
         )
         assert response.status_code == 403, response.text
+
+
+# ---------------------------------------------------------------------------
+# Preset assignment validation on create/update (Phase 3).
+# ---------------------------------------------------------------------------
+
+PRESET_ASSIGN_ORG = UUID("00000000-0000-0000-0000-0000000000a1")
+PRESET_ASSIGN_USER = UUID("00000000-0000-0000-0000-0000000000c3")
+PRESET_ASSIGN_AGENT = UUID("00000000-0000-0000-0000-0000000000d4")
+PUBLISHED_PRESET_ID = UUID("00000000-0000-0000-0000-000000000110")
+DRAFT_PRESET_ID = UUID("00000000-0000-0000-0000-000000000111")
+
+
+def _preset_assign_profile() -> Mock:
+    """Platform-admin profile so agent:create / agent:update pass."""
+    return _agent_profile(is_platform_admin=True)
+
+
+def _published_preset_mock() -> Mock:
+    p = Mock()
+    p.id = PUBLISHED_PRESET_ID
+    p.name = "Default Realtime"
+    p.is_published = True
+    return p
+
+
+def _draft_preset_mock() -> Mock:
+    p = Mock()
+    p.id = DRAFT_PRESET_ID
+    p.name = "WIP Pipeline"
+    p.is_published = False
+    return p
+
+
+def _existing_agent_mock() -> Mock:
+    a = Mock()
+    a.id = PRESET_ASSIGN_AGENT
+    a.organization_id = PRESET_ASSIGN_ORG
+    a.phone_number = "+15555550100"
+    return a
+
+
+class TestAgentPresetAssignment:
+    """create_agent / update_agent validate the preset_id assignment."""
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_published_preset_succeeds(self):
+        from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(PRESET_ASSIGN_ORG)
+        body["preset_id"] = str(PUBLISHED_PRESET_ID)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_preset.get_preset_by_id = AsyncMock(
+                return_value=(_published_preset_mock(), None)
+            )
+            created = VoiceAgent(
+                id=PRESET_ASSIGN_AGENT,
+                organization_id=PRESET_ASSIGN_ORG,
+                name=body["name"],
+                phone_number=body["phone_number"],
+                persona=body["persona"],
+                tone=body["tone"],
+                mission=body["mission"],
+                custom_instructions=None,
+                is_active=True,
+                preset_id=PUBLISHED_PRESET_ID,
+                created_at="2026-07-29T00:00:00",
+                updated_at="2026-07-29T00:00:00",
+            )
+            mock_svc.create_agent = AsyncMock(return_value=(created, None))
+
+            result = await create_agent(
+                agent_data=agent_data,
+                request=request,
+                _auth=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+            )
+        assert result.preset_id == PUBLISHED_PRESET_ID
+        mock_preset.get_preset_by_id.assert_awaited_once_with(PUBLISHED_PRESET_ID)
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_draft_preset_returns_400(self):
+        from shared.voice_agents.models import VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(PRESET_ASSIGN_ORG)
+        body["preset_id"] = str(DRAFT_PRESET_ID)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_preset.get_preset_by_id = AsyncMock(
+                return_value=(_draft_preset_mock(), None)
+            )
+            mock_svc.create_agent = AsyncMock(return_value=(Mock(), None))
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_agent(
+                    agent_data=agent_data,
+                    request=request,
+                    _auth=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+                )
+        assert exc_info.value.status_code == 400
+        assert "not published" in exc_info.value.detail
+        mock_svc.create_agent.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_missing_preset_returns_400(self):
+        from shared.voice_agents.models import VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(PRESET_ASSIGN_ORG)
+        body["preset_id"] = str(PUBLISHED_PRESET_ID)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            # get_preset_by_id returns (None, None) → not found.
+            mock_preset.get_preset_by_id = AsyncMock(return_value=(None, None))
+            mock_svc.create_agent = AsyncMock(return_value=(Mock(), None))
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_agent(
+                    agent_data=agent_data,
+                    request=request,
+                    _auth=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+                )
+        assert exc_info.value.status_code == 400
+        assert "not found" in exc_info.value.detail
+        mock_svc.create_agent.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_preset_lookup_error_returns_400(self):
+        from shared.voice_agents.models import VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(PRESET_ASSIGN_ORG)
+        body["preset_id"] = str(PUBLISHED_PRESET_ID)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_preset.get_preset_by_id = AsyncMock(return_value=(None, "DB timeout"))
+            mock_svc.create_agent = AsyncMock(return_value=(Mock(), None))
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_agent(
+                    agent_data=agent_data,
+                    request=request,
+                    _auth=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+                )
+        assert exc_info.value.status_code == 400
+        assert "Could not validate preset" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_create_agent_without_preset_skips_validation(self):
+        """preset_id=None (legacy) must not call the preset service."""
+        from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(PRESET_ASSIGN_ORG)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_preset.get_preset_by_id = AsyncMock(return_value=(None, None))
+            created = VoiceAgent(
+                id=PRESET_ASSIGN_AGENT,
+                organization_id=PRESET_ASSIGN_ORG,
+                name=body["name"],
+                phone_number=body["phone_number"],
+                persona=body["persona"],
+                tone=body["tone"],
+                mission=body["mission"],
+                custom_instructions=None,
+                is_active=True,
+                created_at="2026-07-29T00:00:00",
+                updated_at="2026-07-29T00:00:00",
+            )
+            mock_svc.create_agent = AsyncMock(return_value=(created, None))
+
+            result = await create_agent(
+                agent_data=agent_data,
+                request=request,
+                _auth=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+            )
+        assert result is not None
+        mock_preset.get_preset_by_id.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_agent_with_published_preset_succeeds(self):
+        from shared.voice_agents.models import VoiceAgentUpdate
+        from src.voice_agents.routes import update_agent
+
+        update_body = VoiceAgentUpdate(preset_id=PUBLISHED_PRESET_ID)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_svc.get_agent_by_id = AsyncMock(
+                return_value=(_existing_agent_mock(), None)
+            )
+            mock_preset.get_preset_by_id = AsyncMock(
+                return_value=(_published_preset_mock(), None)
+            )
+            updated = _existing_agent_mock()
+            updated.preset_id = PUBLISHED_PRESET_ID
+            mock_svc.update_agent = AsyncMock(return_value=(updated, None))
+
+            result = await update_agent(
+                agent_id=PRESET_ASSIGN_AGENT,
+                agent_data=update_body,
+                user_data=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+            )
+        assert result.preset_id == PUBLISHED_PRESET_ID
+        mock_svc.update_agent.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_update_agent_with_draft_preset_returns_400(self):
+        from shared.voice_agents.models import VoiceAgentUpdate
+        from src.voice_agents.routes import update_agent
+
+        update_body = VoiceAgentUpdate(preset_id=DRAFT_PRESET_ID)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_svc.get_agent_by_id = AsyncMock(
+                return_value=(_existing_agent_mock(), None)
+            )
+            mock_preset.get_preset_by_id = AsyncMock(
+                return_value=(_draft_preset_mock(), None)
+            )
+            mock_svc.update_agent = AsyncMock(return_value=(Mock(), None))
+
+            with pytest.raises(HTTPException) as exc_info:
+                await update_agent(
+                    agent_id=PRESET_ASSIGN_AGENT,
+                    agent_data=update_body,
+                    user_data=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+                )
+        assert exc_info.value.status_code == 400
+        assert "not published" in exc_info.value.detail
+        mock_svc.update_agent.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_agent_omitting_preset_skips_validation(self):
+        """When preset_id is not in model_fields_set, validation is skipped."""
+        from shared.voice_agents.models import VoiceAgentUpdate
+        from src.voice_agents.routes import update_agent
+
+        # Only updating the name — preset_id unset.
+        update_body = VoiceAgentUpdate(name="Renamed Agent")
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_svc.get_agent_by_id = AsyncMock(
+                return_value=(_existing_agent_mock(), None)
+            )
+            mock_preset.get_preset_by_id = AsyncMock(return_value=(None, None))
+            updated = _existing_agent_mock()
+            updated.name = "Renamed Agent"
+            mock_svc.update_agent = AsyncMock(return_value=(updated, None))
+
+            result = await update_agent(
+                agent_id=PRESET_ASSIGN_AGENT,
+                agent_data=update_body,
+                user_data=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+            )
+        assert result is not None
+        mock_preset.get_preset_by_id.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_agent_clearing_preset_to_none_succeeds(self):
+        """Explicitly setting preset_id=None clears the preset (valid)."""
+        from shared.voice_agents.models import VoiceAgentUpdate
+        from src.voice_agents.routes import update_agent
+
+        update_body = VoiceAgentUpdate(preset_id=None)
+
+        with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_svc.get_agent_by_id = AsyncMock(
+                return_value=(_existing_agent_mock(), None)
+            )
+            mock_preset.get_preset_by_id = AsyncMock(return_value=(None, None))
+            updated = _existing_agent_mock()
+            updated.preset_id = None
+            mock_svc.update_agent = AsyncMock(return_value=(updated, None))
+
+            result = await update_agent(
+                agent_id=PRESET_ASSIGN_AGENT,
+                agent_data=update_body,
+                user_data=(PRESET_ASSIGN_USER, _preset_assign_profile()),
+            )
+        assert result is not None
+        # None is always valid — preset service must not be consulted.
+        mock_preset.get_preset_by_id.assert_not_awaited()

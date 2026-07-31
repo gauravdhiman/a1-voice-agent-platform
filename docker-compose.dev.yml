@@ -138,6 +138,12 @@ services:
       - LIVEKIT_SIP_DOMAIN=${LIVEKIT_SIP_DOMAIN}
       # Gemini Configuration
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Phase 2 pipeline provider keys (modular STT/LLM/TTS cascade).
+      # Silero VAD is local (no key). Real values come from .env; absent keys
+      # are fine until an agent is configured for the pipeline engine (Phase 3).
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CARTESIA_API_KEY=${CARTESIA_API_KEY:-}
       # Opentelemetry Configuration
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=voice-worker-dev

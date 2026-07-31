@@ -51,6 +51,17 @@ describe("legacyTabRedirect", () => {
     expect(legacyTabRedirect("phone-numbers", null)).toBeNull();
   });
 
+  it("does NOT redirect for the info tab (renders the org page)", () => {
+    // `?tab=info` selects the Organization Info tab in-page — not a legacy
+    // top-level route, so no redirect.
+    expect(legacyTabRedirect("info", "org-1")).toBeNull();
+  });
+
+  it("does NOT redirect for the credentials tab (renders the org page)", () => {
+    // `?tab=credentials` selects the Third-party API Credentials tab in-page.
+    expect(legacyTabRedirect("credentials", "org-1")).toBeNull();
+  });
+
   it("encodes the org id in the redirect URL", () => {
     // org ids can contain unusual characters; the URL must be safe.
     expect(legacyTabRedirect("skills", "org with space")).toBe(

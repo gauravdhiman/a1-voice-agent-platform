@@ -30,6 +30,17 @@ export interface VoiceAgent {
   is_active: boolean;
   use_platform_credits: boolean;
   instructions_markdown: string | null;
+  /**
+   * Voice-engine preset referenced by this agent (Phase 4). `null` = use the
+   * system default voice profile (the admin-designated fallback on
+   * `/platform/presets`; the worker falls back to the hardcoded realtime config
+   * only if the default row is missing/unparseable). The worker fetches the
+   * preset row live on every call. Set via the agent picker ("voice profile");
+   * the org user picks by preset name + description only and never sees
+   * engine/stage
+   * detail. May be `null` for agents created before presets shipped.
+   */
+  preset_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -47,6 +58,8 @@ export interface VoiceAgentCreate {
   is_active?: boolean;
   use_platform_credits?: boolean;
   instructions_markdown?: string | null;
+  /** Voice-engine preset id; `null` = system default. */
+  preset_id?: string | null;
 }
 
 export interface VoiceAgentUpdate {
@@ -60,6 +73,8 @@ export interface VoiceAgentUpdate {
   is_active?: boolean;
   use_platform_credits?: boolean;
   instructions_markdown?: string | null;
+  /** Voice-engine preset id; `null` clears it (falls back to the system default). */
+  preset_id?: string | null;
 }
 
 export interface PlatformToolFunction {

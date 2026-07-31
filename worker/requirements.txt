@@ -17,6 +17,17 @@ livekit-agents>=1.3.10,<2
 livekit-plugins-google>=1.3.10,<2
 twilio>=9.9.0
 
+# Phase 2 pipeline engine providers (modular STT -> LLM -> TTS cascade).
+# Pinned to the same release line as livekit-agents / livekit-plugins-google.
+# Silero VAD is local/on-device (onnxruntime, no API key); the other three are
+# cloud providers keyed by DEEPGRAM_API_KEY / OPENAI_API_KEY / CARTESIA_API_KEY.
+# See docs/02_core_systems/voice_engine.md and the per-stage factory in
+# worker/src/speech_providers/{stt,llm,tts,vad}/.
+livekit-plugins-silero>=1.3.10,<2
+livekit-plugins-deepgram>=1.3.10,<2
+livekit-plugins-openai>=1.3.10,<2
+livekit-plugins-cartesia>=1.3.10,<2
+
 # HTML parsing for email content extraction
 beautifulsoup4>=4.12.0,<5
 

@@ -19,6 +19,11 @@ os.environ["LIVEKIT_API_KEY"] = "test-api-key"
 os.environ["LIVEKIT_API_SECRET"] = "test-api-secret"
 os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/test"
 os.environ["DEBUG"] = "false"
+# Phase 2 pipeline provider keys (fake — builders only construct plugins, no
+# network is opened until AgentSession.start, so fake keys are safe in tests).
+os.environ["DEEPGRAM_API_KEY"] = "test-deepgram-key"
+os.environ["OPENAI_API_KEY"] = "test-openai-key"
+os.environ["CARTESIA_API_KEY"] = "test-cartesia-key"
 
 
 @pytest.fixture

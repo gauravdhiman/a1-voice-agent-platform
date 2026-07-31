@@ -9,6 +9,10 @@ from typing import Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
+
+from shared.common.errors import ErrorCode
+from shared.common.security import decrypt_data, encrypt_data
+from shared.organization.service import BaseOrganizationService
 from src.notifications.models import SendNotificationRequest
 from src.notifications.service import notification_service
 from src.organization.invitation_models import (
@@ -20,9 +24,6 @@ from src.organization.models import Organization, OrganizationCreate, Organizati
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
-
-from shared.common.errors import ErrorCode
-from shared.organization.service import BaseOrganizationService
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,124 @@ organization_errors_counter = meter.create_counter(
 
 class OrganizationService(BaseOrganizationService):
     """Service for handling organization operations."""
+
+    # ------------------------------------------------------------------
+    # Provider-credentials blob helpers (Phase 3)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _organization_from_dict(org_dict: dict) -> Organization:
+        """Build an :class:`Organization` from a raw Supabase row.
+
+        Resolves the Google API key from the encrypted ``provider_credentials``
+        blob (the source of truth as of Phase 3), falling back to the legacy
+        plaintext ``google_api_key`` column for rows that have not yet been
+        migrated. The encrypted blob is also attached to the model so the worker
+        path (which decrypts it itself) and any internal caller can read it.
+
+        Also derives ``provider_credentials_status`` — a per-provider
+        "configured?" boolean map (never the decrypted values) — so the
+        org-settings UI can show Configured/Not-configured pills per provider
+        without exposing secrets to the frontend.
+
+        Args:
+            org_dict: A raw row from the ``organizations`` table.
+
+        Returns:
+            An :class:`Organization` with ``google_api_key`` populated from the
+            decrypted blob (so the existing org-settings UI form still works),
+            ``provider_credentials`` carrying the opaque encrypted blob, and
+            ``provider_credentials_status`` carrying the per-provider boolean
+            map.
+        """
+        provider_credentials = org_dict.get("provider_credentials")
+        google_api_key = org_dict.get("google_api_key")
+        creds: dict = {}
+        if provider_credentials:
+            try:
+                decrypted = decrypt_data(provider_credentials)
+                if isinstance(decrypted, dict):
+                    creds = decrypted
+                    if creds.get("google"):
+                        google_api_key = creds["google"]
+            except Exception as e:
+                logger.error(
+                    "Failed to decrypt provider_credentials for org %s: %s",
+                    org_dict.get("id"),
+                    e,
+                    exc_info=True,
+                )
+        # Per-provider "configured?" booleans. `google` is True when resolvable
+        # from the blob OR the legacy plaintext column fallback; the string
+        # providers are True when present in the decrypted blob; `livekit` is
+        # True only when its nested dict carries an api_key.
+        livekit_creds = creds.get("livekit")
+        provider_credentials_status = {
+            "google": bool(google_api_key),
+            "deepgram": bool(creds.get("deepgram")),
+            "openai": bool(creds.get("openai")),
+            "cartesia": bool(creds.get("cartesia")),
+            "cerebras": bool(creds.get("cerebras")),
+            "livekit": isinstance(livekit_creds, dict)
+            and bool(livekit_creds.get("api_key")),
+        }
+        return Organization(
+            id=org_dict["id"],
+            name=org_dict["name"],
+            description=org_dict["description"],
+            slug=org_dict["slug"],
+            website=org_dict.get("website"),
+            is_active=org_dict["is_active"],
+            industry=org_dict.get("industry"),
+            location=org_dict.get("location"),
+            business_details=org_dict.get("business_details"),
+            google_api_key=google_api_key,
+            provider_credentials=provider_credentials,
+            provider_credentials_status=provider_credentials_status,
+            onboarding_completed=org_dict.get("onboarding_completed", False),
+            created_at=org_dict["created_at"],
+            updated_at=org_dict["updated_at"],
+        )
+
+    @staticmethod
+    def _merge_provider_credentials(
+        existing_blob: Optional[str], updates: dict
+    ) -> Optional[str]:
+        """Merge provider-credential updates into the encrypted blob.
+
+        Decrypts the existing blob (if any), applies ``updates`` (where a
+        ``None`` value clears that provider), drops cleared keys, and re-encrypts.
+        Returns ``None`` when no providers remain (so the column can be set to
+        NULL).
+
+        Args:
+            existing_blob: The current encrypted ``provider_credentials`` value
+                (or ``None``).
+            updates: A dict of provider -> value (string or nested dict) to
+                merge; a ``None`` value clears that provider.
+
+        Returns:
+            The new encrypted blob, or ``None`` if no providers remain.
+        """
+        creds: dict = {}
+        if existing_blob:
+            try:
+                decrypted = decrypt_data(existing_blob)
+                if isinstance(decrypted, dict):
+                    creds = dict(decrypted)
+            except Exception as e:
+                logger.error(
+                    "Failed to decrypt existing provider_credentials for merge: %s",
+                    e,
+                    exc_info=True,
+                )
+        for provider, value in updates.items():
+            if value is None:
+                creds.pop(provider, None)
+            else:
+                creds[provider] = value
+        if not creds:
+            return None
+        return encrypt_data(creds)
 
     @tracer.start_as_current_span("organization.create_organization")
     async def create_organization(
@@ -86,21 +205,7 @@ class OrganizationService(BaseOrganizationService):
                 return None, "Failed to create organization"
 
             org_dict = response.data[0]
-            organization = Organization(
-                id=org_dict["id"],
-                name=org_dict["name"],
-                description=org_dict["description"],
-                slug=org_dict["slug"],
-                website=org_dict.get("website"),
-                is_active=org_dict["is_active"],
-                industry=org_dict.get("industry"),
-                location=org_dict.get("location"),
-                business_details=org_dict.get("business_details"),
-                google_api_key=org_dict.get("google_api_key"),
-                onboarding_completed=org_dict.get("onboarding_completed", False),
-                created_at=org_dict["created_at"],
-                updated_at=org_dict["updated_at"],
-            )
+            organization = self._organization_from_dict(org_dict)
             current_span.set_attribute("organization.id", str(organization.id))
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return organization, None
@@ -145,21 +250,7 @@ class OrganizationService(BaseOrganizationService):
                 return None, "Organization not found"
 
             org_dict = response.data[0]
-            organization = Organization(
-                id=org_dict["id"],
-                name=org_dict["name"],
-                description=org_dict["description"],
-                slug=org_dict["slug"],
-                website=org_dict.get("website"),
-                is_active=org_dict["is_active"],
-                industry=org_dict.get("industry"),
-                location=org_dict.get("location"),
-                business_details=org_dict.get("business_details"),
-                google_api_key=org_dict.get("google_api_key"),
-                onboarding_completed=org_dict.get("onboarding_completed", False),
-                created_at=org_dict["created_at"],
-                updated_at=org_dict["updated_at"],
-            )
+            organization = self._organization_from_dict(org_dict)
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return organization, None
 
@@ -204,20 +295,7 @@ class OrganizationService(BaseOrganizationService):
                 return None, "Organization not found"
 
             org_dict = response.data[0]
-            organization = Organization(
-                id=org_dict["id"],
-                name=org_dict["name"],
-                description=org_dict["description"],
-                slug=org_dict["slug"],
-                website=org_dict.get("website"),
-                is_active=org_dict["is_active"],
-                industry=org_dict.get("industry"),
-                location=org_dict.get("location"),
-                business_details=org_dict.get("business_details"),
-                onboarding_completed=org_dict.get("onboarding_completed", False),
-                created_at=org_dict["created_at"],
-                updated_at=org_dict["updated_at"],
-            )
+            organization = self._organization_from_dict(org_dict)
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return organization, None
 
@@ -242,23 +320,7 @@ class OrganizationService(BaseOrganizationService):
 
             organizations = []
             for org_dict in response.data:
-                organizations.append(
-                    Organization(
-                        id=org_dict["id"],
-                        name=org_dict["name"],
-                        description=org_dict["description"],
-                        slug=org_dict["slug"],
-                        website=org_dict.get("website"),
-                        is_active=org_dict["is_active"],
-                        industry=org_dict.get("industry"),
-                        location=org_dict.get("location"),
-                        business_details=org_dict.get("business_details"),
-                        google_api_key=org_dict.get("google_api_key"),
-                        onboarding_completed=org_dict.get("onboarding_completed", False),
-                        created_at=org_dict["created_at"],
-                        updated_at=org_dict["updated_at"],
-                    )
-                )
+                organizations.append(self._organization_from_dict(org_dict))
 
             return organizations, None
 
@@ -301,13 +363,25 @@ class OrganizationService(BaseOrganizationService):
             if org_data.business_details is not None:
                 update_data["business_details"] = org_data.business_details
 
-            # Handle Google API key - validate non-empty, clear if empty, skip if not provided
-            logger.info(f"Google API key update check: value='{org_data.google_api_key}', is_none={org_data.google_api_key is None}, is_empty={org_data.google_api_key == '' if org_data.google_api_key is not None else 'N/A'}")
-            
-            # Validate Google API key if provided (non-empty)
-            if org_data.google_api_key is not None and org_data.google_api_key.strip() != "":
-                is_valid, validation_error = await self.validate_google_api_key(org_data.google_api_key)
-                is_valid, validation_error = await self.validate_google_api_key(org_data.google_api_key)
+            # ── Provider credentials (Phase 3) ──────────────────────────────
+            # All per-org provider keys now live in one Fernet-encrypted
+            # ``provider_credentials`` JSON blob. The legacy plaintext
+            # ``google_api_key`` column is no longer the source of truth: a
+            # Google key supplied here is validated, then encrypted into
+            # ``provider_credentials["google"]`` (merged with any existing
+            # providers), and the plaintext column is cleared so the secret
+            # exists only in encrypted form. ``provider_credentials_input``
+            # carries the other providers (deepgram/openai/cartesia/cerebras/
+            # livekit) the same way. An empty ``google_api_key`` clears the
+            # google entry from the blob.
+            cred_updates: dict = {}
+            if (
+                org_data.google_api_key is not None
+                and org_data.google_api_key.strip() != ""
+            ):
+                is_valid, validation_error = await self.validate_google_api_key(
+                    org_data.google_api_key
+                )
                 if not is_valid:
                     current_span.set_status(
                         trace.Status(
@@ -323,13 +397,63 @@ class OrganizationService(BaseOrganizationService):
                         },
                     )
                     return None, f"Invalid Google API key: {validation_error}"
-                update_data["google_api_key"] = org_data.google_api_key
+                cred_updates["google"] = org_data.google_api_key
             elif org_data.google_api_key is not None:
-                # Empty string means clear the API key
-                logger.info(f"Clearing Google API key - setting to None")
+                # Empty string means clear the Google key from the blob.
+                logger.info("Clearing Google API key from provider_credentials")
+                cred_updates["google"] = None
+
+            if org_data.provider_credentials_input:
+                # Merge per-provider inputs (e.g. {"openai": "...",
+                # "livekit": {"api_key": "...", "api_secret": "..."}}). A None
+                # value clears that provider.
+                #
+                # Google is now managed exclusively on the "API Credentials"
+                # tab (the Organization Info tab's Google field was removed), so
+                # a google key arrives here via ``provider_credentials_input``.
+                # Validate it exactly like the legacy ``google_api_key`` field
+                # so the credentials-tab path can't bypass the check. A None /
+                # empty value clears the google entry (no validation needed).
+                google_input = org_data.provider_credentials_input.get("google")
+                if google_input is not None and google_input.strip() != "":
+                    is_valid, validation_error = await self.validate_google_api_key(
+                        google_input
+                    )
+                    if not is_valid:
+                        current_span.set_status(
+                            trace.Status(
+                                trace.StatusCode.ERROR,
+                                f"Invalid Google API key: {validation_error}",
+                            )
+                        )
+                        organization_errors_counter.add(
+                            1,
+                            {
+                                "operation": "update_organization",
+                                "error": "invalid_google_api_key",
+                            },
+                        )
+                        return None, f"Invalid Google API key: {validation_error}"
+                cred_updates.update(org_data.provider_credentials_input)
+
+            if cred_updates:
+                # Fetch the existing blob to merge (preserves other providers).
+                existing = (
+                    self.supabase.table("organizations")
+                    .select("provider_credentials")
+                    .eq("id", str(org_id))
+                    .limit(1)
+                    .execute()
+                )
+                existing_blob = None
+                if existing.data:
+                    existing_blob = existing.data[0].get("provider_credentials")
+                new_blob = self._merge_provider_credentials(existing_blob, cred_updates)
+                update_data["provider_credentials"] = new_blob
+                # The secret now lives only in the encrypted blob; clear the
+                # legacy plaintext column (retained for rollback safety, dropped
+                # in a follow-up migration once the encrypted path is verified).
                 update_data["google_api_key"] = None
-            else:
-                logger.info("Google API key not included in update request - keeping existing value")
 
             if not update_data:
                 return await self.get_organization_by_id(org_id)
@@ -359,21 +483,7 @@ class OrganizationService(BaseOrganizationService):
                 return None, "Organization not found or update failed"
 
             org_dict = response.data[0]
-            organization = Organization(
-                id=org_dict["id"],
-                name=org_dict["name"],
-                description=org_dict["description"],
-                slug=org_dict["slug"],
-                website=org_dict.get("website"),
-                is_active=org_dict["is_active"],
-                industry=org_dict.get("industry"),
-                location=org_dict.get("location"),
-                business_details=org_dict.get("business_details"),
-                google_api_key=org_dict.get("google_api_key"),
-                onboarding_completed=org_dict.get("onboarding_completed", False),
-                created_at=org_dict["created_at"],
-                updated_at=org_dict["updated_at"],
-            )
+            organization = self._organization_from_dict(org_dict)
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return organization, None
 
@@ -405,7 +515,9 @@ class OrganizationService(BaseOrganizationService):
             )
 
             if not response.data:
-                logger.error(f"Organization not found for onboarding completion: {org_id}")
+                logger.error(
+                    f"Organization not found for onboarding completion: {org_id}"
+                )
                 current_span.set_status(
                     trace.Status(trace.StatusCode.ERROR, "Organization not found")
                 )
@@ -415,21 +527,7 @@ class OrganizationService(BaseOrganizationService):
                 return None, "Organization not found"
 
             org_dict = response.data[0]
-            organization = Organization(
-                id=org_dict["id"],
-                name=org_dict["name"],
-                description=org_dict["description"],
-                slug=org_dict["slug"],
-                website=org_dict.get("website"),
-                is_active=org_dict["is_active"],
-                industry=org_dict.get("industry"),
-                location=org_dict.get("location"),
-                business_details=org_dict.get("business_details"),
-                google_api_key=org_dict.get("google_api_key"),
-                onboarding_completed=org_dict.get("onboarding_completed", False),
-                created_at=org_dict["created_at"],
-                updated_at=org_dict["updated_at"],
-            )
+            organization = self._organization_from_dict(org_dict)
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return organization, None
 
@@ -798,32 +896,30 @@ class OrganizationService(BaseOrganizationService):
             return None, str(e)
 
     @tracer.start_as_current_span("organization.validate_google_api_key")
-    async def validate_google_api_key(
-        self, api_key: str
-    ) -> tuple[bool, Optional[str]]:
+    async def validate_google_api_key(self, api_key: str) -> tuple[bool, Optional[str]]:
         """Validate a Google API key by making a test request.
-        
+
         Args:
             api_key: The Google API key to validate
-            
+
         Returns:
             tuple of (is_valid, error_message)
         """
         import httpx
-        
+
         organization_operations_counter.add(1, {"operation": "validate_google_api_key"})
-        
+
         current_span = trace.get_current_span()
         current_span.set_attribute("api_key_present", bool(api_key))
-        
+
         try:
             # Test the API key by calling Google's models endpoint
             # This is a lightweight call that validates the key
             url = f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
-            
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url)
-                
+
                 if response.status_code == 200:
                     current_span.set_status(trace.Status(trace.StatusCode.OK))
                     logger.info("Google API key validated successfully")
@@ -847,9 +943,14 @@ class OrganizationService(BaseOrganizationService):
                     current_span.set_status(
                         trace.Status(trace.StatusCode.ERROR, error_msg)
                     )
-                    logger.warning(f"Google API key validation unexpected status: {response.status_code}")
-                    return False, f"Validation failed with status {response.status_code}"
-                    
+                    logger.warning(
+                        f"Google API key validation unexpected status: {response.status_code}"
+                    )
+                    return (
+                        False,
+                        f"Validation failed with status {response.status_code}",
+                    )
+
         except httpx.TimeoutException:
             error_msg = "Validation request timed out"
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))

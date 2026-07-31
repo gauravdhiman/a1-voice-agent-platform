@@ -3,7 +3,7 @@ Pydantic models for Organization functionality shared across backend and worker.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -57,11 +57,23 @@ class OrganizationBase(BaseModel):
         None,
         description="""
         Organization's own Google API key for voice agents.
-        
+
         If set, voice agents can use this API key instead of the platform key,
         allowing billing to go directly to the organization's Google Cloud project.
         The key is stored encrypted and decrypted only when needed.
         """,
+    )
+    provider_credentials: Optional[str] = Field(
+        None,
+        description=(
+            "Fernet-encrypted JSON blob of all per-org provider keys via "
+            "encrypt_data/decrypt_data: {google, deepgram, openai, cartesia, "
+            "cerebras, livekit: {api_key, api_secret}} (only the set keys "
+            "present). Source of truth for the worker's key resolver; the "
+            "legacy plaintext google_api_key column is retained but unused. "
+            "Returned as the opaque encrypted string; never expose decrypted "
+            "values to the frontend."
+        ),
     )
 
 
@@ -124,6 +136,19 @@ class OrganizationUpdate(BaseModel):
         allowing billing to go directly to the organization's Google Cloud project.
         """,
     )
+    provider_credentials_input: Optional[Dict[str, Any]] = Field(
+        None,
+        exclude=True,
+        description=(
+            "Plaintext per-org provider credentials supplied from the UI, e.g. "
+            "{'google': '...', 'openai': '...', 'livekit': {'api_key': '...', "
+            "'api_secret': '...'}}. The service merges this with any existing "
+            "decrypted credentials and re-encrypts the whole blob into "
+            "provider_credentials; this field is NEVER persisted directly. The "
+            "legacy google_api_key field is still accepted and routed into "
+            "provider_credentials['google'] for back-compat with the existing UI."
+        ),
+    )
 
 
 class Organization(OrganizationBase):
@@ -135,3 +160,14 @@ class Organization(OrganizationBase):
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    provider_credentials_status: Optional[Dict[str, bool]] = Field(
+        default=None,
+        description=(
+            "Per-provider 'is a key configured?' map (booleans only — never the "
+            "decrypted values), derived from the encrypted provider_credentials "
+            "blob on read: {google, deepgram, openai, cartesia, cerebras, "
+            "livekit}. Surfaced so the org-settings UI can show "
+            "Configured/Not-configured pills per provider without exposing "
+            "secrets to the frontend. Read-only; not an input field."
+        ),
+    )

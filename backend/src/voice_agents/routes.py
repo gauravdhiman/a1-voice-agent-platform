@@ -9,14 +9,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
+
+from shared.voice_agents.livekit_service import livekit_service
+from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
+from shared.voice_agents.preset_service import preset_service
+from shared.voice_agents.prompt_builder import PromptBuilder
+from shared.voice_agents.service import voice_agent_service
 from src.auth.dependencies import assert_has_permission, require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
-
-from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
-from shared.voice_agents.prompt_builder import PromptBuilder
-from shared.voice_agents.service import voice_agent_service
-from shared.voice_agents.livekit_service import livekit_service
 from src.organization.service import OrganizationService
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,33 @@ class TestTokenResponse(BaseModel):
     roomName: str
 
 
+async def _validate_preset_assignment(preset_id: Optional[UUID]) -> Optional[str]:
+    """Validate that ``preset_id`` may be assigned to an agent.
+
+    A preset referenced by an agent must exist and be **published** — assigning a
+    draft would let an org admin pin an unfinished platform-admin authoring
+    state. Returns an error string (suitable for a 400 response) on failure, or
+    ``None`` if the assignment is valid. ``preset_id is None`` (clearing the
+    preset / legacy agent) is always valid.
+
+    Args:
+        preset_id: The preset id to validate, or ``None``.
+
+    Returns:
+        ``None`` if valid, else an error message.
+    """
+    if preset_id is None:
+        return None
+    preset, err = await preset_service.get_preset_by_id(preset_id)
+    if err:
+        return f"Could not validate preset: {err}"
+    if preset is None:
+        return f"Preset {preset_id} not found"
+    if not preset.is_published:
+        return f"Preset '{preset.name}' is not published; only published presets can be assigned to agents"
+    return None
+
+
 @agent_router.post("/", response_model=VoiceAgent, status_code=status.HTTP_201_CREATED)
 @tracer.start_as_current_span("voice_agent.routes.create_agent")
 async def create_agent(
@@ -39,8 +67,10 @@ async def create_agent(
     request: Request,
     _auth: tuple[UUID, UserProfile] = Depends(
         require_permission(
-            "agent", "create",
-            org_id_source="body", body_field="organization_id",
+            "agent",
+            "create",
+            org_id_source="body",
+            body_field="organization_id",
         )
     ),
 ):
@@ -64,6 +94,13 @@ async def create_agent(
     # Force inactive if no phone number assigned
     if not agent_data.phone_number:
         agent_data.is_active = False
+
+    # Validate the preset assignment (must exist + be published) before creating.
+    preset_error = await _validate_preset_assignment(agent_data.preset_id)
+    if preset_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=preset_error
+        )
 
     agent, error = await voice_agent_service.create_agent(agent_data)
     if error:
@@ -237,7 +274,7 @@ async def get_agent_system_prompt(
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Get the generated system prompt for an agent.
-    
+
     This endpoint generates the system prompt on-demand by combining
     organization context and agent configuration. The prompt is not stored
     but derived from the current state of the agent and organization.
@@ -262,7 +299,7 @@ async def get_agent_system_prompt(
     # Get organization data
     org_service = OrganizationService()
     org, org_error = await org_service.get_organization_by_id(agent.organization_id)
-    
+
     if org_error or not org:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -278,11 +315,9 @@ async def get_agent_system_prompt(
 - Use tools when appropriate to complete tasks
 - Never share sensitive information
 """
-    
+
     system_prompt = PromptBuilder.build(
-        org=org,
-        agent=agent,
-        default_rules=default_rules
+        org=org, agent=agent, default_rules=default_rules
     )
 
     return system_prompt
@@ -380,11 +415,25 @@ async def update_agent(
     # Prevent activating an agent without a phone number
     if agent_data.is_active is True:
         # Check the phone number that will be effective after update
-        effective_phone = agent_data.phone_number if agent_data.phone_number is not None else agent.phone_number
+        effective_phone = (
+            agent_data.phone_number
+            if agent_data.phone_number is not None
+            else agent.phone_number
+        )
         if not effective_phone:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot activate an agent without a phone number. Please assign a phone number first.",
+            )
+
+    # Validate the preset assignment when it is being changed. ``preset_id`` is
+    # Optional on VoiceAgentUpdate; only validate when explicitly supplied
+    # (exclude_unset semantics) so omitting the field never trips validation.
+    if "preset_id" in agent_data.model_fields_set:
+        preset_error = await _validate_preset_assignment(agent_data.preset_id)
+        if preset_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=preset_error
             )
 
     updated_agent, error = await voice_agent_service.update_agent(agent_id, agent_data)
@@ -438,7 +487,9 @@ class EmbedTokenResponse(BaseModel):
     room_name: str
 
 
-@agent_router.get("/{agent_id}/embed-config", response_model=Optional[EmbedConfigResponse])
+@agent_router.get(
+    "/{agent_id}/embed-config", response_model=Optional[EmbedConfigResponse]
+)
 @tracer.start_as_current_span("voice_agent.routes.get_embed_config")
 async def get_embed_config(
     agent_id: UUID,

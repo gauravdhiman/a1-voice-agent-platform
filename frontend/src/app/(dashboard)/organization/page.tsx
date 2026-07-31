@@ -7,6 +7,7 @@ import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
+import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,6 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AnimatedTabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +38,11 @@ import {
   Edit3,
   Info,
 } from "lucide-react";
+import {
+  buildProviderCredentialsInput,
+  PROVIDER_LABELS,
+  ProviderCredentialKey,
+} from "@/lib/provider-credentials-input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,9 +95,37 @@ export default function OrganizationPage() {
     industry: string;
     location: string;
     business_details: string;
-    google_api_key: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Voice provider credentials (Phase 4) — a SEPARATE form from the main org
+  // card, with its own Save. Decrypted values are never returned by the API, so
+  // the inputs are always blank on load; the user types a value to SET or
+  // clears a field to CLEAR. `providerCredsTouched` records which fields the
+  // user actually edited so the save sends ONLY touched keys (the backend
+  // preserves omitted keys and drops `None`) — this avoids the
+  // empty-string-clears-everything footgun the main org form has.
+  const [providerCreds, setProviderCreds] = useState({
+    google: "",
+    deepgram: "",
+    openai: "",
+    cartesia: "",
+    cerebras: "",
+    livekit_api_key: "",
+    livekit_api_secret: "",
+  });
+  const [providerCredsTouched, setProviderCredsTouched] = useState<
+    Record<string, boolean>
+  >({});
+  const [providerCredsSaving, setProviderCredsSaving] = useState(false);
+  const [removingProviderCred, setRemovingProviderCred] =
+    useState<ProviderCredentialKey | null>(null);
+
+  // Org page tab state ("info" | "credentials"). Synced to `?tab=` so the two
+  // cards are deep-linkable. Legacy `?tab=` values (phone-numbers/skills/
+  // ai-agent) are redirected to their top-level routes by `legacyTabRedirect`
+  // above; `info`/`credentials` fall through (no redirect) and set the tab.
+  const [activeTab, setActiveTab] = useState<"info" | "credentials">("info");
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -105,7 +145,6 @@ export default function OrganizationPage() {
         industry: org.industry || "",
         location: org.location || "",
         business_details: org.business_details || "",
-        google_api_key: org.google_api_key || "",
       });
     } catch (error) {
       console.error("Failed to load organization data:", error);
@@ -136,6 +175,30 @@ export default function OrganizationPage() {
       router.replace(target);
     }
   }, [searchParams, orgId, router]);
+
+  // Sync the org-page tab ("info" | "credentials") from `?tab=`. Legacy values
+  // are redirected above; only an explicit `info`/`credentials` flips the tab —
+  // an absent or unknown `tab` leaves the current tab alone (the useState
+  // default is "info", and tab switches drive `handleTabChange`). Mirrors the
+  // agent-detail `?tab=` idiom.
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "info" || tabParam === "credentials") {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  // Switch tab and persist it to `?tab=`, preserving `org_id` (and any other
+  // active params) so the deep link stays valid.
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setActiveTab(value as "info" | "credentials");
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", value);
+      router.push(`/organization?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   // Validate organization access when orgId is provided
   const {
@@ -186,8 +249,6 @@ export default function OrganizationPage() {
         industry: editedOrg.industry,
         location: editedOrg.location,
         business_details: editedOrg.business_details,
-        // Send empty string to clear, or the actual value. Don't default to null.
-        google_api_key: editedOrg.google_api_key,
       });
 
       // Only update UI after successful save
@@ -226,8 +287,118 @@ export default function OrganizationPage() {
         industry: org.industry || "",
         location: org.location || "",
         business_details: org.business_details || "",
-        google_api_key: org.google_api_key || "",
       });
+    }
+  };
+
+  /**
+   * Save ONLY the touched voice-provider credentials.
+   *
+   * Builds `provider_credentials_input` with touched keys only: a non-empty
+   * value SETS, an empty touched value CLEARS (`null`), and an untouched key is
+   * OMITTED (the backend preserves it). LiveKit is sent as
+   * `{api_key, api_secret}` when either field was touched — both empty clears
+   * it (`null`). Nothing is sent if no field was touched.
+   */
+  const resetProviderCredDraft = () => {
+    setProviderCreds({
+      google: "",
+      deepgram: "",
+      openai: "",
+      cartesia: "",
+      cerebras: "",
+      livekit_api_key: "",
+      livekit_api_secret: "",
+    });
+    setProviderCredsTouched({});
+  };
+
+  const handleSaveProviderCreds = async () => {
+    if (!orgId) return;
+    const input = buildProviderCredentialsInput(
+      providerCreds,
+      providerCredsTouched,
+    );
+    if (Object.keys(input).length === 0) {
+      toast.info("No provider credentials changed.");
+      return;
+    }
+    setProviderCredsSaving(true);
+    try {
+      const response = await organizationService.updateOrganization(orgId, {
+        provider_credentials_input: input,
+      });
+      setOrganizationData({ organization: response as OrganizationEnhanced });
+      resetProviderCredDraft();
+      toast.success("Voice provider credentials saved");
+    } catch (error: unknown) {
+      console.error("Failed to save provider credentials:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === "object" &&
+              error !== null &&
+              "detail" in error
+            ? (error as { detail: string }).detail
+            : "Failed to save provider credentials";
+      toast.error(errorMessage);
+    } finally {
+      setProviderCredsSaving(false);
+    }
+  };
+
+  /** Mark a provider-creds field touched on edit (drives the "send only touched" rule). */
+  const markProviderCredTouched = (key: string) => {
+    setProviderCredsTouched((prev) =>
+      prev[key] ? prev : { ...prev, [key]: true },
+    );
+  };
+
+  const clearProviderCredTouched = (key: string) => {
+    setProviderCredsTouched((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  /**
+   * Remove a single provider credential immediately (sends `null` for that key).
+   */
+  const handleRemoveProviderCred = async (key: ProviderCredentialKey) => {
+    if (!orgId) return;
+    setRemovingProviderCred(key);
+    try {
+      const response = await organizationService.updateOrganization(orgId, {
+        provider_credentials_input: { [key]: null },
+      });
+      setOrganizationData({ organization: response as OrganizationEnhanced });
+      if (key === "livekit") {
+        setProviderCreds((prev) => ({
+          ...prev,
+          livekit_api_key: "",
+          livekit_api_secret: "",
+        }));
+        clearProviderCredTouched("livekit");
+      } else {
+        setProviderCreds((prev) => ({ ...prev, [key]: "" }));
+        clearProviderCredTouched(key);
+      }
+      toast.success(`${PROVIDER_LABELS[key]} credentials removed`);
+    } catch (error: unknown) {
+      console.error("Failed to remove provider credentials:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === "object" &&
+              error !== null &&
+              "detail" in error
+            ? (error as { detail: string }).detail
+            : "Failed to remove provider credentials";
+      toast.error(errorMessage);
+    } finally {
+      setRemovingProviderCred(null);
     }
   };
 
@@ -368,11 +539,23 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      {/* N1 redesign: the org page is now settings-only. Phone Numbers,
-          Skills, and AI Voice Agent moved to top-level routes. The
-          redirect logic in `legacy-tab-redirect.ts` handles the legacy
-          `?tab=...` URLs. The "Active" tab strip is gone, so this
-          page renders directly as a single card. */}
+      {/* N1 redesign: the org page is settings-only. Phone Numbers, Skills,
+          and AI Voice Agent moved to top-level routes; `legacy-tab-redirect.ts`
+          handles the legacy `?tab=...` URLs. The two remaining settings cards
+          (Organization Info + Third-party API Credentials) are organized into
+          a tabbed layout synced to `?tab=info|credentials`. */}
+      <AnimatedTabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="space-y-6"
+      >
+        <TabsList className="w-full">
+          <TabsTrigger value="info">Organization Info</TabsTrigger>
+          <TabsTrigger value="credentials">API Credentials</TabsTrigger>
+        </TabsList>
+
+        {/* Organization Info tab */}
+        <TabsContent value="info">
       <Card>
         <CardHeader className="p-5 pb-3">
           <div className="flex items-center justify-between">
@@ -529,29 +712,6 @@ During monsoon season (July-September), we have extended hours for flood-related
                       className="min-h-[200px]"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="google_api_key">
-                      Google API Key
-                    </Label>
-                    <Input
-                      id="google_api_key"
-                      type="password"
-                      value={editedOrg?.google_api_key || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({
-                          ...editedOrg,
-                          google_api_key: e.target.value,
-                        })
-                      }
-                      placeholder="Enter your Google API key (leave empty to use platform key)"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      If set, voice agents will use this API key instead of the platform key.
-                      This allows billing to go directly to your Google Cloud project.
-                    </p>
-                  </div>
                 </>
               ) : (
                 <>
@@ -623,23 +783,6 @@ During monsoon season (July-September), we have extended hours for flood-related
                         "No business context provided"}
                     </p>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Google API Key
-                    </label>
-                    <p className="text-foreground">
-                      {displayOrg.google_api_key ? (
-                        <span className="text-green-600 flex items-center gap-2">
-                          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                          Configured
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Not configured (using platform key)
-                        </span>
-                      )}
-                    </p>
-                  </div>
                 </>
               )}
             </CardContent>
@@ -667,6 +810,32 @@ During monsoon season (July-September), we have extended hours for flood-related
               </CardFooter>
             )}
       </Card>
+        </TabsContent>
+
+        {/* Third-party API Credentials tab — per-provider API keys for the
+            modular voice engine (Deepgram, OpenAI, Cartesia, Cerebras,
+            LiveKit). A DEDICATED card with its own Save — separate from the
+            main org form so the empty-string-clears-everything footgun can't
+            wipe all keys at once. Feeds the encrypted provider_credentials
+            blob the worker's per-org key resolver reads. */}
+        <TabsContent value="credentials">
+          <ProviderCredentialsCard
+            status={
+              organizationData?.organization?.provider_credentials_status
+            }
+            draft={providerCreds}
+            onDraftChange={setProviderCreds}
+            touched={providerCredsTouched}
+            onMarkTouched={markProviderCredTouched}
+            onClearTouched={clearProviderCredTouched}
+            onSave={handleSaveProviderCreds}
+            onRemoveProvider={handleRemoveProviderCred}
+            saving={providerCredsSaving}
+            removingProvider={removingProviderCred}
+            canUpdate={canUpdateOrganization}
+          />
+        </TabsContent>
+      </AnimatedTabs>
 
       {/* Edit Dialog (for fallback) */}
       {validatedOrg && (
