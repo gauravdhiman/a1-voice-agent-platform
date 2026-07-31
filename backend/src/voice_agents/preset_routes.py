@@ -24,12 +24,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from opentelemetry import trace
 
-from shared.voice_agents.preset_models import (Preset, PresetCreate,
-                                               PresetType, PresetUpdate)
+from shared.voice_agents.preset_models import (Preset, PresetCatalogResponse,
+                                               PresetCreate, PresetType,
+                                               PresetUpdate)
 from shared.voice_agents.preset_service import preset_service
 from src.auth.dependencies import assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
+from src.organization.service import organization_service
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -137,6 +139,73 @@ async def update_default_preset(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return preset
+
+
+@preset_router.get("/catalog", response_model=PresetCatalogResponse)
+@tracer.start_as_current_span("preset.routes.catalog")
+async def get_preset_catalog(
+    organization_id: UUID = Query(
+        ...,
+        description=(
+            "Organization whose credential readiness should be evaluated. "
+            "Required so the catalog can report is_ready per voice profile."
+        ),
+    ),
+    use_platform_credits: bool = Query(
+        False,
+        description=(
+            "When true, readiness ignores org credentials and checks platform "
+            "env fallback only (mirrors the per-agent billing toggle)."
+        ),
+    ),
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> PresetCatalogResponse:
+    """List published voice profiles for org admins (white-label catalog).
+
+    Returns display metadata and org-scoped readiness flags only — no
+    ``config``, ``preset_type``, or provider names. Includes
+    ``default_is_ready`` for the system-default fallback (``preset_id=null``).
+    """
+    current_user_id, user_profile = user_data
+
+    org, org_error = await organization_service.get_organization_by_id(
+        organization_id
+    )
+    if org_error:
+        if org_error == "Organization not found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=org_error
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=org_error
+        )
+
+    presets, presets_error = await preset_service.get_presets(only_published=True)
+    if presets_error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=presets_error
+        )
+
+    default_preset, default_error = await preset_service.get_default_preset()
+    if default_error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=default_error
+        )
+
+    # Transitional: org admins with organization update permission can self-
+    # configure credentials. TODO: drive from org.credentials_self_service when
+    # managed white-label mode lands (platform admin only provisioning).
+    credentials_self_service = user_profile.has_permission(
+        "organization:update", str(organization_id)
+    ) or user_profile.has_role("platform_admin")
+
+    return preset_service.build_preset_catalog(
+        presets or [],
+        default_preset,
+        org,
+        use_platform_credits=use_platform_credits,
+        credentials_self_service=credentials_self_service,
+    )
 
 
 @preset_router.put("/{preset_id}", response_model=Preset)

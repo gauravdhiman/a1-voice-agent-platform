@@ -110,3 +110,30 @@ export interface PresetUsage {
   count: number;
   agents: PresetUsageAgent[];
 }
+
+/**
+ * Org-facing voice profile entry (white-label catalog).
+ *
+ * Mirrors backend `PresetCatalogItem` — no `config`, `preset_type`, or provider
+ * names. Readiness is org-scoped and computed server-side.
+ */
+export interface PresetCatalogItem {
+  id: string;
+  name: string;
+  description: string | null;
+  /** True when this profile is fully configured for the requesting org. */
+  is_ready: boolean;
+}
+
+/**
+ * Org-facing catalog response from `GET /api/v1/presets/catalog`.
+ *
+ * Includes readiness for published profiles and the system-default fallback
+ * (`preset_id = null`). `credentials_self_service` drives generic setup copy
+ * (self-serve vs contact platform admin).
+ */
+export interface PresetCatalogResponse {
+  presets: PresetCatalogItem[];
+  default_is_ready: boolean;
+  credentials_self_service: boolean;
+}

@@ -40,6 +40,28 @@ class TestCartesiaTtsConfig:
         assert "model" not in kwargs
         assert kwargs == {"voice": "v1"}
 
+    def test_config_dedicated_voice_field_takes_precedence_over_params(self):
+        """TTSStageConfig.voice wins over params['voice'] when both are set."""
+        from speech_providers.tts import build_cartesia_tts_config
+
+        kwargs = build_cartesia_tts_config(
+            TTSStageConfig(
+                provider="cartesia",
+                voice="field-voice",
+                params={"voice": "params-voice", "language": "en"},
+            )
+        )
+        assert kwargs["voice"] == "field-voice"
+        assert kwargs["language"] == "en"
+
+    def test_config_dedicated_voice_field_without_params(self):
+        from speech_providers.tts import build_cartesia_tts_config
+
+        kwargs = build_cartesia_tts_config(
+            TTSStageConfig(provider="cartesia", voice="uuid-123")
+        )
+        assert kwargs == {"voice": "uuid-123"}
+
     def test_config_default_is_empty(self):
         from speech_providers.tts import build_cartesia_tts_config
 

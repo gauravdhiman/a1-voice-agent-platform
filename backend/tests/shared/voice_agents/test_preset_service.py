@@ -633,3 +633,40 @@ class TestPresetServiceDefault:
         assert error is not None
         # No delete issued, and no usage/delete beyond the existence fetch.
         mock_supabase_client.table.return_value.delete.assert_not_called()
+
+
+class TestBuildPresetCatalog:
+    """White-label catalog builder (org-facing readiness, no config leak)."""
+
+    def test_build_catalog_omits_config_and_includes_readiness(self):
+        from types import SimpleNamespace
+
+        from shared.voice_agents.preset_service import PresetService
+
+        published = Preset(**_row(PresetType.PIPELINE, name="Professional Voice"))
+        default = Preset(
+            **_row(PresetType.REALTIME, name="System Default", is_default=True)
+        )
+        org = SimpleNamespace(provider_credentials="enc")
+
+        with patch(
+            "shared.voice_agents.key_resolver.is_preset_ready",
+            side_effect=lambda cfg, o, use_platform_credits=False: (
+                cfg.engine_mode == "realtime"
+            ),
+        ):
+            catalog = PresetService.build_preset_catalog(
+                [published],
+                default,
+                org,
+                credentials_self_service=True,
+            )
+
+        assert catalog.default_is_ready is True
+        assert len(catalog.presets) == 1
+        assert catalog.presets[0].name == "Professional Voice"
+        assert catalog.presets[0].is_ready is False
+        assert catalog.credentials_self_service is True
+        dumped = catalog.presets[0].model_dump()
+        assert "config" not in dumped
+        assert "preset_type" not in dumped

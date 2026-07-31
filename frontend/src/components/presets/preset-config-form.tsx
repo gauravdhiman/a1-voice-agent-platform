@@ -36,6 +36,7 @@ import {
   type PipelineFormState,
   type RealtimeFormState,
   type StageFormState,
+  type TtsStageFormState,
 } from "@/lib/preset-config";
 
 interface PresetConfigFormProps {
@@ -108,6 +109,80 @@ function StageEditor({
           value={stage.paramsText}
           onChange={(e) => onChange({ ...stage, paramsText: e.target.value })}
           placeholder='{"language": "en-US"}'
+        />
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** TTS stage editor with a dedicated voice field (Cartesia UUID, Inference voice, etc.). */
+function TtsStageEditor({
+  stage,
+  providers,
+  label,
+  onChange,
+}: {
+  stage: TtsStageFormState;
+  providers: readonly string[];
+  label: string;
+  onChange: (next: TtsStageFormState) => void;
+}) {
+  const { error } = parseParams(stage.paramsText);
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Provider</Label>
+          <select
+            className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+            value={stage.provider}
+            onChange={(e) => onChange({ ...stage, provider: e.target.value })}
+          >
+            {providers.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Model <span className="text-muted-foreground">(blank = default)</span>
+          </Label>
+          <Input
+            value={stage.model}
+            onChange={(e) => onChange({ ...stage, model: e.target.value })}
+            placeholder="provider default"
+          />
+        </div>
+        <div className="space-y-1 col-span-2">
+          <Label className="text-xs">
+            Voice{" "}
+            <span className="text-muted-foreground">
+              (id, name, or UUID — blank = provider default)
+            </span>
+          </Label>
+          <Input
+            value={stage.voice}
+            onChange={(e) => onChange({ ...stage, voice: e.target.value })}
+            placeholder="e.g. Cartesia voice UUID or Inference voice id"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">
+          Params <span className="text-muted-foreground">(JSON object — language, speed, …)</span>
+        </Label>
+        <Textarea
+          className="font-mono text-xs"
+          rows={2}
+          value={stage.paramsText}
+          onChange={(e) => onChange({ ...stage, paramsText: e.target.value })}
+          placeholder='{"language": "en", "speed": 1.0}'
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
@@ -273,7 +348,7 @@ export function PresetConfigForm({
             providers={STAGE_PROVIDERS.llm}
             onChange={(llm) => setPipeline({ ...pipeline, llm })}
           />
-          <StageEditor
+          <TtsStageEditor
             label="TTS (text-to-speech)"
             stage={pipeline.tts}
             providers={STAGE_PROVIDERS.tts}

@@ -56,10 +56,19 @@ export interface StageFormState {
   paramsText: string;
 }
 
+/** TTS stage form state — adds a first-class voice field (not buried in params). */
+export interface TtsStageFormState extends StageFormState {
+  /**
+   * TTS voice id, name, or UUID. Blank = omit (provider default voice applies).
+   * Maps to `TTSStageConfig.voice` on the backend.
+   */
+  voice: string;
+}
+
 export interface PipelineFormState {
   stt: StageFormState;
   llm: StageFormState;
-  tts: StageFormState;
+  tts: TtsStageFormState;
   /** When null, the VAD stage is omitted entirely (backend default). */
   vad: StageFormState | null;
 }
@@ -85,10 +94,16 @@ export function defaultPipelineForm(): PipelineFormState {
     model: "",
     paramsText: "",
   });
+  const blankTtsStage = (provider: string): TtsStageFormState => ({
+    provider,
+    model: "",
+    voice: "",
+    paramsText: "",
+  });
   return {
     stt: blankStage("deepgram"),
     llm: blankStage("openai"),
-    tts: blankStage("cartesia"),
+    tts: blankTtsStage("cartesia"),
     vad: null,
   };
 }
@@ -131,6 +146,30 @@ export function buildStage(stage: StageFormState): Record<string, unknown> {
   return out;
 }
 
+/**
+ * Build a TTS stage config (`{provider, model?, voice?, params}`).
+ *
+ * The dedicated ``voice`` field takes precedence over ``params.voice`` — any
+ * ``voice`` key in the params JSON is stripped on emit so the backend never
+ * sees duplicate sources.
+ */
+export function buildTtsStage(stage: TtsStageFormState): Record<string, unknown> {
+  const { params } = parseParams(stage.paramsText);
+  const cleanParams = { ...params };
+  delete cleanParams.voice;
+  const out: Record<string, unknown> = {
+    provider: stage.provider,
+    params: cleanParams,
+  };
+  if (stage.model.trim() !== "") {
+    out.model = stage.model.trim();
+  }
+  if (stage.voice.trim() !== "") {
+    out.voice = stage.voice.trim();
+  }
+  return out;
+}
+
 /** Coerce a numeric string to a number, falling back to the default on blank. */
 function toNumber(value: string, fallback: number): number {
   const n = Number(value);
@@ -169,7 +208,7 @@ export function buildPipelineConfig(
     engine_mode: "pipeline",
     stt: buildStage(s.stt),
     llm: buildStage(s.llm),
-    tts: buildStage(s.tts),
+    tts: buildTtsStage(s.tts),
   };
   if (s.vad) {
     out.vad = buildStage(s.vad);
@@ -232,9 +271,34 @@ export function formStateFromConfig(
             : "",
       };
     };
+    const toTtsStage = (key: string): TtsStageFormState => {
+      const raw = c[key] as Record<string, unknown> | undefined;
+      if (!raw || typeof raw !== "object") {
+        return { provider: "", model: "", voice: "", paramsText: "" };
+      }
+      let voice = typeof raw.voice === "string" ? raw.voice : "";
+      let paramsObj: Record<string, unknown> = {};
+      if (raw.params && typeof raw.params === "object" && !Array.isArray(raw.params)) {
+        paramsObj = { ...(raw.params as Record<string, unknown>) };
+      }
+      // Legacy configs may store voice only inside params — hoist to the field.
+      if (!voice && typeof paramsObj.voice === "string") {
+        voice = paramsObj.voice;
+        delete paramsObj.voice;
+      }
+      return {
+        provider: typeof raw.provider === "string" ? raw.provider : "",
+        model: typeof raw.model === "string" ? raw.model : "",
+        voice,
+        paramsText:
+          Object.keys(paramsObj).length > 0
+            ? JSON.stringify(paramsObj, null, 2)
+            : "",
+      };
+    };
     pipeline.stt = toStage("stt");
     pipeline.llm = toStage("llm");
-    pipeline.tts = toStage("tts");
+    pipeline.tts = toTtsStage("tts");
     const vadRaw = c.vad as Record<string, unknown> | null | undefined;
     if (vadRaw && typeof vadRaw === "object") {
       pipeline.vad = {

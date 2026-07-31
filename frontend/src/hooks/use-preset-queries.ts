@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { presetService } from "@/services/preset-service";
 import type {
   Preset,
+  PresetCatalogResponse,
   PresetCreate,
   PresetUpdate,
   PresetType,
@@ -29,6 +30,15 @@ export const presetQueryKeys = {
   detail: (id: string) => [...presetQueryKeys.all, id] as const,
   usage: (id: string) => [...presetQueryKeys.all, id, "usage"] as const,
   default: () => [...presetQueryKeys.all, "default"] as const,
+  catalog: (opts: { organizationId: string; usePlatformCredits?: boolean }) =>
+    [
+      ...presetQueryKeys.all,
+      "catalog",
+      {
+        org: opts.organizationId,
+        credits: opts.usePlatformCredits ?? false,
+      },
+    ] as const,
 };
 
 /**
@@ -44,6 +54,32 @@ export function usePresets(opts?: {
     queryKey: presetQueryKeys.list(opts),
     queryFn: () => presetService.listPresets(opts),
     staleTime: 5 * 60 * 1000, // 5 minutes — presets change rarely
+  });
+}
+
+/**
+ * Org-facing white-label voice profile catalog with per-org readiness flags.
+ *
+ * Used by `PresetPicker` on agent create/detail. Requires `organizationId`;
+ * pass `usePlatformCredits` when mirroring the agent's billing toggle.
+ */
+export function usePresetCatalog(opts: {
+  organizationId: string | null | undefined;
+  usePlatformCredits?: boolean;
+}) {
+  const orgId = opts.organizationId ?? "";
+  return useQuery({
+    queryKey: presetQueryKeys.catalog({
+      organizationId: orgId,
+      usePlatformCredits: opts.usePlatformCredits,
+    }),
+    queryFn: () =>
+      presetService.getPresetCatalog({
+        organizationId: orgId,
+        usePlatformCredits: opts.usePlatformCredits,
+      }),
+    enabled: !!orgId,
+    staleTime: 60 * 1000,
   });
 }
 

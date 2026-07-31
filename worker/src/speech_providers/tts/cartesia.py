@@ -45,6 +45,8 @@ def build_cartesia_tts_config(
     if cfg.model is not None:
         kwargs["model"] = cfg.model
     kwargs.update(cfg.params)
+    if cfg.voice is not None:
+        kwargs["voice"] = cfg.voice
     return kwargs
 
 

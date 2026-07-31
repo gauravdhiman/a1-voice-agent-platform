@@ -2,6 +2,7 @@
 import { apiClient } from "@/lib/api/client";
 import type {
   Preset,
+  PresetCatalogResponse,
   PresetCreate,
   PresetUpdate,
   PresetUsage,
@@ -44,6 +45,29 @@ class PresetService {
     const query = params.toString();
     const response = await apiClient.get<Preset[]>(
       `${this.baseUrl}/${query ? `?${query}` : ""}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Fetch the org-facing white-label voice profile catalog with readiness flags.
+   *
+   * Returns display metadata only (no `config` or engine/provider details).
+   * Pass `organizationId` and optionally `usePlatformCredits` (mirrors the
+   * per-agent billing toggle) so the backend can compute `is_ready` per profile.
+   */
+  async getPresetCatalog(opts: {
+    organizationId: string;
+    usePlatformCredits?: boolean;
+  }): Promise<PresetCatalogResponse> {
+    const params = new URLSearchParams({
+      organization_id: opts.organizationId,
+    });
+    if (opts.usePlatformCredits) {
+      params.set("use_platform_credits", "true");
+    }
+    const response = await apiClient.get<PresetCatalogResponse>(
+      `${this.baseUrl}/catalog?${params.toString()}`,
     );
     return response.data;
   }

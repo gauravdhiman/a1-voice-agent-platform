@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/form";
 import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
-import { usePresets } from "@/hooks/use-preset-queries";
+import { usePresetCatalog } from "@/hooks/use-preset-queries";
 import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
 import { voiceTemplateService } from "@/services/voice-template-service";
 import { toast } from "sonner";
@@ -253,9 +253,6 @@ export function AgentCreateWidget() {
   const searchParams = useSearchParams();
   const { organizations, currentOrganization } = useOrganization();
   const createAgentMutation = useCreateAgent();
-  // Published presets — used to resolve the chosen preset's name in the review
-  // stage. The picker itself fetches this via usePresets() internally too.
-  const { data: presets = [] } = usePresets();
   const [currentStage, setCurrentStage] = useState<Stage>("template");
 
   const form = useForm<FormData>({
@@ -271,6 +268,11 @@ export function AgentCreateWidget() {
       is_active: true,
       preset_id: null,
     },
+  });
+
+  const watchedOrgId = form.watch("organization_id");
+  const { data: presetCatalog } = usePresetCatalog({
+    organizationId: watchedOrgId || null,
   });
 
   useEffect(() => {
@@ -537,10 +539,17 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
         render={({ field }) => (
           <FormItem>
             <FormControl>
-              <PresetPicker
-                value={field.value ?? null}
-                onChange={field.onChange}
-              />
+              {watchedOrgId ? (
+                <PresetPicker
+                  organizationId={watchedOrgId}
+                  value={field.value ?? null}
+                  onChange={field.onChange}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Select an organization above to choose a voice profile.
+                </p>
+              )}
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -625,7 +634,7 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
     // sees on /platform/presets and the picker shows; the underlying engine is
     // not surfaced here).
     const presetName = values.preset_id
-      ? (presets.find((p) => p.id === values.preset_id)?.name ??
+      ? (presetCatalog?.presets.find((p) => p.id === values.preset_id)?.name ??
         "Selected profile")
       : DEFAULT_PRESET_DISPLAY.name;
 

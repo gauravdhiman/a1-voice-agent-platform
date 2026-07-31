@@ -2,57 +2,73 @@
 
 import * as React from "react";
 import { Loader2, CheckCircle2, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { usePresets } from "@/hooks/use-preset-queries";
+import { usePresetCatalog } from "@/hooks/use-preset-queries";
 import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
-import type { Preset } from "@/types/preset";
+import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 
 /**
- * PresetPicker — reusable single-select "Voice profile" picker.
+ * PresetPicker — reusable single-select "Voice profile" picker (white-label).
  *
- * Used by both the agent create widget and the agent detail Properties tab. The
- * org admin picks one published preset (a "voice profile") for the agent, or
- * the system-default fallback to clear the assignment (`preset_id = null`).
+ * Org admins see published voice profiles by **name + description + readiness
+ * status** only. Engine mode, pipeline stages, and provider names are never
+ * shown. Readiness (`Ready` / `Setup required`) is computed server-side per org.
  *
- * The `preset_id = null` option is labeled with `DEFAULT_PRESET_DISPLAY` — the
- * SAME name + description the platform admin sees for the "System Default" row
- * on `/platform/presets` — so the two surfaces can't drift. It deliberately
- * shows NO type badge: the system default's underlying engine is a
- * platform-admin concern (the admin sets it on `/platform/presets`), so the
- * picker must not leak it. "System Default" is the backend reserved name, so it
- * can never collide with a published preset name in this list.
+ * The `preset_id = null` option uses `DEFAULT_PRESET_DISPLAY` (matches the
+ * platform-admin "System Default" row label) with no engine badge.
  *
- * Controlled: `value` is the current `preset_id` (or `null`); `onChange` fires
- * with the new `preset_id` (preset id or `null` for the default). Lists only
- * **published** presets (`usePresets()` with no `includeDrafts`) — the agent
- * picker catalog is the published surface; drafts are platform-admin-only.
+ * When a not-ready profile is selected, a generic setup callout appears (no
+ * provider names). Org admins with self-service credentials get a link to
+ * Organization → API Credentials; managed orgs are told to contact platform admin.
  *
  * @example
  * ```tsx
- * <PresetPicker value={agentForm.preset_id} onChange={(id) => setAgentForm({ ...agentForm, preset_id: id })} />
+ * <PresetPicker
+ *   organizationId={agent.organization_id}
+ *   usePlatformCredits={agentForm.use_platform_credits}
+ *   value={agentForm.preset_id}
+ *   onChange={(id) => setAgentForm({ ...agentForm, preset_id: id })}
+ * />
  * ```
  */
 export interface PresetPickerProps {
+  /** Owning organization — required for org-scoped readiness from the catalog API. */
+  organizationId: string;
+  /** Mirrors the agent's "Use plan credits" toggle when evaluating readiness. */
+  usePlatformCredits?: boolean;
   /** Currently selected preset id, or `null` for the system default. */
   value: string | null;
   /** Fired with the new preset id (or `null` when the default is chosen). */
   onChange: (presetId: string | null) => void;
-  /** Optional extra className for the wrapper. */
   className?: string;
-  /** When true, the options render read-only (no selection). */
   disabled?: boolean;
 }
 
 export function PresetPicker({
+  organizationId,
+  usePlatformCredits = false,
   value,
   onChange,
   className,
   disabled = false,
 }: PresetPickerProps) {
-  // Published-only — drafts are not selectable by org users. The backend
-  // independently rejects a draft preset_id on agent create/update.
-  const { data: presets = [], isLoading } = usePresets();
+  const { data: catalog, isLoading } = usePresetCatalog({
+    organizationId,
+    usePlatformCredits,
+  });
+
+  const presets = catalog?.presets ?? [];
+  const defaultIsReady = catalog?.default_is_ready ?? true;
+  const credentialsSelfService = catalog?.credentials_self_service ?? true;
+
+  const selectedIsReady = React.useMemo(() => {
+    if (value === null) return defaultIsReady;
+    return presets.find((p) => p.id === value)?.is_ready ?? true;
+  }, [value, defaultIsReady, presets]);
+
+  const showSetupCallout = !selectedIsReady && !isLoading;
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -60,8 +76,8 @@ export function PresetPicker({
         <p className="text-sm font-medium">Voice profile</p>
         <p className="text-xs text-muted-foreground">
           Pick a published voice profile for this agent, or use the system
-          default. Only the name + description are shown — the engine + stage
-          configuration is managed by platform admins.
+          default. Profiles marked Ready are fully configured for your
+          organization.
         </p>
       </div>
 
@@ -71,25 +87,20 @@ export function PresetPicker({
         </div>
       ) : (
         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-          {/* System-default fallback -> preset_id = null. Labeled with
-              DEFAULT_PRESET_DISPLAY so it matches the platform-admin Voice
-              Presets page exactly. No type badge: the default's underlying
-              engine is a platform-admin concern (set on /platform/presets), so
-              the picker does not leak it. "System Default" is the backend
-              reserved name, so it can't collide with a published preset. */}
           <PresetOption
             selected={value === null}
             onSelect={() => onChange(null)}
             name={DEFAULT_PRESET_DISPLAY.name}
             description={DEFAULT_PRESET_DISPLAY.description}
+            isReady={defaultIsReady}
             disabled={disabled}
           />
           {presets.length === 0 ? (
             <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
               <SlidersHorizontal className="h-6 w-6 text-muted-foreground mx-auto mb-1 opacity-50" />
               <p className="text-xs text-muted-foreground">
-                No voice profiles published yet — this agent will use the
-                system default.
+                No voice profiles published yet — this agent will use the system
+                default.
               </p>
             </div>
           ) : (
@@ -100,33 +111,69 @@ export function PresetPicker({
                 onSelect={() => onChange(preset.id)}
                 name={preset.name}
                 description={preset.description ?? undefined}
-                typeBadge={preset.preset_type === "realtime" ? "Realtime" : "Pipeline"}
+                isReady={preset.is_ready}
                 disabled={disabled}
               />
             ))
           )}
         </div>
       )}
+
+      {showSetupCallout && (
+        <PresetSetupCallout
+          credentialsSelfService={credentialsSelfService}
+          organizationId={organizationId}
+        />
+      )}
     </div>
   );
 }
 
-/** A single selectable row in the picker (default option or a preset). */
+/** Exported helper: is the current selection ready (for agent-level banners). */
+export function useSelectedPresetReadiness(
+  organizationId: string | null | undefined,
+  presetId: string | null,
+  usePlatformCredits = false,
+): { isReady: boolean; isLoading: boolean; credentialsSelfService: boolean } {
+  const { data: catalog, isLoading } = usePresetCatalog({
+    organizationId,
+    usePlatformCredits,
+  });
+
+  if (isLoading || !catalog) {
+    return {
+      isReady: true,
+      isLoading,
+      credentialsSelfService: true,
+    };
+  }
+
+  const isReady =
+    presetId === null
+      ? catalog.default_is_ready
+      : (catalog.presets.find((p) => p.id === presetId)?.is_ready ?? true);
+
+  return {
+    isReady,
+    isLoading,
+    credentialsSelfService: catalog.credentials_self_service,
+  };
+}
+
+/** A single selectable row in the picker (default option or a catalog item). */
 function PresetOption({
   selected,
   onSelect,
   name,
   description,
-  typeBadge,
+  isReady,
   disabled = false,
 }: {
   selected: boolean;
   onSelect: () => void;
   name: string;
   description?: string;
-  /** Optional engine badge. Omitted for the system-default fallback option so
-   * the picker does not leak the system default's underlying engine. */
-  typeBadge?: "Realtime" | "Pipeline";
+  isReady: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -156,11 +203,17 @@ function PresetOption({
     >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium text-sm text-foreground">{name}</span>
-        {typeBadge && (
-          <Badge variant="secondary" className="text-[10px] h-5">
-            {typeBadge}
-          </Badge>
-        )}
+        <Badge
+          variant={isReady ? "secondary" : "outline"}
+          className={cn(
+            "text-[10px] h-5",
+            isReady
+              ? "text-green-700 border-green-200 bg-green-50 dark:text-green-300 dark:border-green-900 dark:bg-green-950/40"
+              : "text-amber-700 border-amber-200 bg-amber-50 dark:text-amber-300 dark:border-amber-900 dark:bg-amber-950/40",
+          )}
+        >
+          {isReady ? "Ready" : "Setup required"}
+        </Badge>
         {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
       </div>
       {description && (

@@ -1,12 +1,9 @@
 /**
- * Render tests for `PresetPicker` (Phase 4 follow-up).
+ * Render tests for `PresetPicker` (white-label catalog + readiness).
  *
- * Contract (owner requirement): the `preset_id = null` fallback option must
- * show the **same name + description** as the platform-admin Voice Presets page
- * (`DEFAULT_PRESET_DISPLAY` — "System Default" / "Used when an agent has no
- * voice profile selected."), with NO type badge (don't leak the underlying
- * engine). Published presets render below it, each with a Realtime/Pipeline
- * badge. Selecting the default fires `onChange(null)`.
+ * Contract: org admins see name + description + Ready/Setup required badges only
+ * (no Realtime/Pipeline or provider names). Selecting a not-ready profile shows
+ * generic setup guidance without naming underlying providers.
  */
 import * as React from "react";
 import { render, screen } from "@testing-library/react";
@@ -14,25 +11,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { PresetPicker } from "@/components/agents/preset-picker";
 import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
-import type { Preset } from "@/types/preset";
+import type { PresetCatalogResponse } from "@/types/preset";
 
-const mockUsePresets = vi.fn();
+const mockUsePresetCatalog = vi.fn();
 
 vi.mock("@/hooks/use-preset-queries", () => ({
-  usePresets: (...args: unknown[]) => mockUsePresets(...args),
+  usePresetCatalog: (...args: unknown[]) => mockUsePresetCatalog(...args),
 }));
 
-function makePreset(over: Partial<Preset> = {}): Preset {
+const ORG_ID = "org-1";
+
+function makeCatalog(
+  over: Partial<PresetCatalogResponse> = {},
+): PresetCatalogResponse {
   return {
-    id: "p-1",
-    name: "Pipeline (Deepgram+OpenAI+Cartesia)",
-    description: "Modular STT/LLM/TTS cascade preset.",
-    config: {},
-    is_published: true,
-    preset_type: "pipeline",
-    is_default: false,
-    created_at: "2026-07-29T00:00:00Z",
-    updated_at: "2026-07-29T00:00:00Z",
+    presets: [],
+    default_is_ready: true,
+    credentials_self_service: true,
     ...over,
   };
 }
@@ -42,60 +37,122 @@ describe("PresetPicker", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the system-default fallback option with the platform-page name + description and no type badge", () => {
-    mockUsePresets.mockReturnValue({ data: [], isLoading: false });
+  it("renders the system-default option with shared display name and readiness badge", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog({ default_is_ready: true }),
+      isLoading: false,
+    });
 
-    render(<PresetPicker value={null} onChange={() => {}} />);
+    render(
+      <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
+    );
 
-    // Name + description match the platform page (shared constant).
     expect(screen.getByText(DEFAULT_PRESET_DISPLAY.name)).toBeInTheDocument();
     expect(
       screen.getByText(DEFAULT_PRESET_DISPLAY.description),
     ).toBeInTheDocument();
-
-    // The default option carries no Realtime/Pipeline badge — the underlying
-    // engine is a platform-admin concern, not shown to org users.
     expect(screen.queryByText("Realtime")).not.toBeInTheDocument();
     expect(screen.queryByText("Pipeline")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders published presets below the default, each with a type badge", () => {
-    mockUsePresets.mockReturnValue({
-      data: [
-        makePreset({
-          id: "p-pipe",
-          name: "Pipeline (Deepgram+OpenAI+Cartesia)",
-          preset_type: "pipeline",
-        }),
-        makePreset({
-          id: "p-rt",
-          name: "Realtime (Gemini) default",
-          preset_type: "realtime",
-        }),
-      ],
+  it("renders published profiles with Ready or Setup required badges (no engine badges)", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog({
+        presets: [
+          {
+            id: "p-ready",
+            name: "Professional Voice",
+            description: "Warm tone for support.",
+            is_ready: true,
+          },
+          {
+            id: "p-setup",
+            name: "Enterprise Voice",
+            description: "Low latency.",
+            is_ready: false,
+          },
+        ],
+      }),
       isLoading: false,
     });
 
-    render(<PresetPicker value={null} onChange={() => {}} />);
+    render(
+      <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
+    );
 
-    expect(screen.getByText("Pipeline (Deepgram+OpenAI+Cartesia)")).toBeInTheDocument();
-    expect(screen.getByText("Realtime (Gemini) default")).toBeInTheDocument();
-    // Both published presets carry their type badge.
-    const badges = screen.getAllByText("Pipeline");
-    expect(badges.length).toBe(1); // the preset's badge
-    expect(screen.getByText("Realtime")).toBeInTheDocument();
+    expect(screen.getByText("Professional Voice")).toBeInTheDocument();
+    expect(screen.getByText("Enterprise Voice")).toBeInTheDocument();
+    expect(screen.getByText("Setup required")).toBeInTheDocument();
+    expect(screen.queryByText("Pipeline")).not.toBeInTheDocument();
+    expect(screen.queryByText("Realtime")).not.toBeInTheDocument();
+  });
+
+  it("shows generic setup callout when a not-ready profile is selected", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog({
+        presets: [
+          {
+            id: "p-setup",
+            name: "Enterprise Voice",
+            description: null,
+            is_ready: false,
+          },
+        ],
+        credentials_self_service: true,
+      }),
+      isLoading: false,
+    });
+
+    render(
+      <PresetPicker
+        organizationId={ORG_ID}
+        value="p-setup"
+        onChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText(/not set up for your organization yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Open API Credentials/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Deepgram/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/OpenAI/i)).not.toBeInTheDocument();
+  });
+
+  it("shows contact-admin copy when credentials are not self-service", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog({
+        default_is_ready: false,
+        credentials_self_service: false,
+      }),
+      isLoading: false,
+    });
+
+    render(
+      <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
+    );
+
+    expect(
+      screen.getByText(/contact your platform administrator/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Open API Credentials/i)).not.toBeInTheDocument();
   });
 
   it("fires onChange(null) when the system-default option is selected", () => {
-    mockUsePresets.mockReturnValue({ data: [], isLoading: false });
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog(),
+      isLoading: false,
+    });
     const onChange = vi.fn();
 
-    render(<PresetPicker value={null} onChange={onChange} />);
-
-    // The default option row is a radio labeled with its name.
-    const defaultOption = screen.getByText(DEFAULT_PRESET_DISPLAY.name).closest(
-      "[role='radio']",
+    render(
+      <PresetPicker organizationId={ORG_ID} value="p-1" onChange={onChange} />,
     );
+
+    const defaultOption = screen
+      .getByText(DEFAULT_PRESET_DISPLAY.name)
+      .closest("[role='radio']");
     expect(defaultOption).not.toBeNull();
     (defaultOption as HTMLElement).click();
     expect(onChange).toHaveBeenCalledWith(null);

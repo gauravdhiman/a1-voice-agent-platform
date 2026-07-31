@@ -38,6 +38,8 @@ from supabase import Client
 
 from shared.config import supabase_config
 from shared.voice_agents.preset_models import (RESERVED_DEFAULT_NAME, Preset,
+                                               PresetCatalogItem,
+                                               PresetCatalogResponse,
                                                PresetCreate, PresetType,
                                                PresetUpdate)
 from shared.voice_agents.speech_config import parse_speech_config
@@ -467,6 +469,62 @@ class PresetService:
         except Exception as e:
             logger.error(f"Error deleting preset {preset_id}: {e}", exc_info=True)
             return None, str(e)
+
+    @staticmethod
+    def build_preset_catalog(
+        presets: List[Preset],
+        default_preset: Optional[Preset],
+        org: Optional[object],
+        *,
+        use_platform_credits: bool = False,
+        credentials_self_service: bool = True,
+    ) -> PresetCatalogResponse:
+        """Build the org-facing white-label preset catalog with readiness flags.
+
+        Maps published presets to :class:`PresetCatalogItem` rows (no config or
+        engine metadata). Readiness is computed server-side via
+        :func:`shared.voice_agents.key_resolver.is_preset_ready`.
+
+        Args:
+            presets: Published preset rows from :meth:`get_presets`.
+            default_preset: The system-default row (for ``default_is_ready``).
+            org: Organization object for credential resolution, or ``None``.
+            use_platform_credits: Per-agent billing toggle (platform keys only).
+            credentials_self_service: Whether org admins may self-configure keys.
+
+        Returns:
+            A :class:`PresetCatalogResponse` for the org-admin picker.
+        """
+        from shared.voice_agents.key_resolver import is_preset_ready
+
+        items: list[PresetCatalogItem] = []
+        for preset in presets:
+            if preset.is_default:
+                continue
+            cfg = parse_speech_config(preset.config)
+            items.append(
+                PresetCatalogItem(
+                    id=preset.id,
+                    name=preset.name,
+                    description=preset.description,
+                    is_ready=is_preset_ready(
+                        cfg, org, use_platform_credits=use_platform_credits
+                    ),
+                )
+            )
+
+        default_ready = False
+        if default_preset is not None:
+            default_cfg = parse_speech_config(default_preset.config)
+            default_ready = is_preset_ready(
+                default_cfg, org, use_platform_credits=use_platform_credits
+            )
+
+        return PresetCatalogResponse(
+            presets=items,
+            default_is_ready=default_ready,
+            credentials_self_service=credentials_self_service,
+        )
 
 
 # Module-level singleton (mirrors tool_service.tool_service).

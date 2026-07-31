@@ -217,4 +217,46 @@ def resolve_api_keys(
     return api_keys
 
 
-__all__ = ["resolve_api_keys"]
+def is_preset_ready(
+    speech_config: SpeechConfig,
+    org: Optional[Any] = None,
+    use_platform_credits: bool = False,
+) -> bool:
+    """Return whether a preset's required providers are all resolvable for an org.
+
+    Uses the same resolution path as :func:`resolve_api_keys` but returns a
+    single boolean suitable for org-facing catalog APIs (no provider names
+    exposed). A preset is **ready** when every provider in
+    ``_providers_needed(speech_config)`` appears in the resolved ``api_keys`` map
+    with a usable value. LiveKit Inference stages require both ``api_key`` and
+    ``api_secret``.
+
+    Args:
+        speech_config: Validated realtime or pipeline config from a preset row.
+        org: Organization object exposing ``provider_credentials``, or ``None``.
+        use_platform_credits: When True, org credentials are ignored (platform
+            env vars only), mirroring per-agent billing toggle behavior.
+
+    Returns:
+        ``True`` if calls using this preset would resolve all required keys;
+        ``False`` otherwise.
+    """
+    needed = _providers_needed(speech_config)
+    if not needed:
+        return True
+    api_keys = resolve_api_keys(speech_config, org, use_platform_credits)
+    for provider in needed:
+        if provider not in api_keys:
+            return False
+        if provider == _LIVEKIT_KEY:
+            lk = api_keys.get(_LIVEKIT_KEY)
+            if not isinstance(lk, dict):
+                return False
+            if not lk.get("api_key") or not lk.get("api_secret"):
+                return False
+        elif not api_keys.get(provider):
+            return False
+    return True
+
+
+__all__ = ["resolve_api_keys", "is_preset_ready"]

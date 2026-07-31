@@ -506,3 +506,77 @@ class TestPresetDefaultRoutes:
                     user_data=(TEST_USER_ID, _profile(is_admin=True)),
                 )
         assert exc_info.value.status_code == 400
+
+
+class TestPresetCatalogRoute:
+    """Org-facing white-label catalog endpoint."""
+
+    TEST_ORG_ID = UUID("00000000-0000-0000-0000-000000000020")
+
+    @pytest.mark.asyncio
+    async def test_catalog_returns_readiness_without_config_leak(self):
+        from shared.voice_agents.preset_models import PresetCatalogResponse
+        from src.voice_agents.preset_routes import get_preset_catalog
+
+        profile = _profile(is_admin=False)
+        profile.has_permission = Mock(return_value=True)
+
+        mock_org = Mock()
+        catalog = PresetCatalogResponse(
+            presets=[
+                {
+                    "id": TEST_PRESET_ID,
+                    "name": "Professional Voice",
+                    "description": "Warm tone",
+                    "is_ready": False,
+                }
+            ],
+            default_is_ready=True,
+            credentials_self_service=True,
+        )
+
+        with patch(
+            "src.voice_agents.preset_routes.organization_service"
+        ) as mock_org_svc, patch(
+            "src.voice_agents.preset_routes.preset_service"
+        ) as mock_preset_svc:
+            mock_org_svc.get_organization_by_id = AsyncMock(
+                return_value=(mock_org, None)
+            )
+            mock_preset_svc.get_presets = AsyncMock(
+                return_value=([_preset(name="Professional Voice")], None)
+            )
+            mock_preset_svc.get_default_preset = AsyncMock(
+                return_value=(_preset(name="System Default", is_default=True), None)
+            )
+            mock_preset_svc.build_preset_catalog = Mock(return_value=catalog)
+
+            result = await get_preset_catalog(
+                organization_id=self.TEST_ORG_ID,
+                use_platform_credits=False,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result.default_is_ready is True
+        assert len(result.presets) == 1
+        assert result.presets[0].name == "Professional Voice"
+        assert result.presets[0].is_ready is False
+        assert "config" not in result.presets[0].model_dump()
+
+    @pytest.mark.asyncio
+    async def test_catalog_org_not_found_returns_404(self):
+        from src.voice_agents.preset_routes import get_preset_catalog
+
+        with patch(
+            "src.voice_agents.preset_routes.organization_service"
+        ) as mock_org_svc:
+            mock_org_svc.get_organization_by_id = AsyncMock(
+                return_value=(None, "Organization not found")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await get_preset_catalog(
+                    organization_id=self.TEST_ORG_ID,
+                    use_platform_credits=False,
+                    user_data=(TEST_USER_ID, _profile(is_admin=False)),
+                )
+        assert exc_info.value.status_code == 404

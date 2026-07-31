@@ -68,6 +68,8 @@ def build_livekit_inference_tts_config(
             kwargs[key] = value
         else:
             extra[key] = value
+    if cfg.voice is not None:
+        kwargs["voice"] = cfg.voice
     if extra:
         kwargs["extra_kwargs"] = extra
     return kwargs

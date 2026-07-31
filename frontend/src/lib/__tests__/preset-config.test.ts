@@ -13,6 +13,7 @@ import {
   buildRealtimeConfig,
   buildSpeechConfig,
   buildStage,
+  buildTtsStage,
   defaultPipelineForm,
   defaultRealtimeForm,
   formStateFromConfig,
@@ -73,6 +74,48 @@ describe("buildStage", () => {
       paramsText: "",
     });
     expect(stage.provider).toBe("livekit_inference");
+  });
+});
+
+describe("buildTtsStage", () => {
+  it("emits voice as a top-level field when set", () => {
+    const stage = buildTtsStage({
+      provider: "cartesia",
+      model: "sonic-3",
+      voice: "voice-uuid-abc",
+      paramsText: '{"language":"en"}',
+    });
+    expect(stage).toEqual({
+      provider: "cartesia",
+      model: "sonic-3",
+      voice: "voice-uuid-abc",
+      params: { language: "en" },
+    });
+  });
+
+  it("omits voice when blank and strips voice from params JSON", () => {
+    const stage = buildTtsStage({
+      provider: "cartesia",
+      model: "",
+      voice: "",
+      paramsText: '{"voice":"legacy-in-params","speed":1.1}',
+    });
+    expect(stage).toEqual({
+      provider: "cartesia",
+      params: { speed: 1.1 },
+    });
+    expect("voice" in stage).toBe(false);
+  });
+
+  it("dedicated voice field wins over params.voice on emit", () => {
+    const stage = buildTtsStage({
+      provider: "livekit_inference",
+      model: "cartesia/sonic-3",
+      voice: "field-voice",
+      paramsText: '{"voice":"params-voice","speed":1.0}',
+    });
+    expect(stage.voice).toBe("field-voice");
+    expect(stage.params).toEqual({ speed: 1.0 });
   });
 });
 
@@ -163,7 +206,12 @@ describe("buildPipelineConfig", () => {
     const form = defaultPipelineForm();
     form.stt = { provider: "livekit_inference", model: "deepgram-nova-3", paramsText: "" };
     form.llm = { provider: "cerebras", model: "llama-4-scout-17b-16e-instruct", paramsText: "" };
-    form.tts = { provider: "livekit_inference", model: "cartesia-sonic", paramsText: "" };
+    form.tts = {
+      provider: "livekit_inference",
+      model: "cartesia-sonic",
+      voice: "",
+      paramsText: "",
+    };
     const cfg = buildPipelineConfig(form);
     expect(cfg.stt).toEqual({
       provider: "livekit_inference",
@@ -229,6 +277,31 @@ describe("formStateFromConfig (edit prefill)", () => {
     expect(pipeline.llm.model).toBe("gpt-4.1");
     expect(pipeline.vad).not.toBeNull();
     expect(pipeline.vad?.provider).toBe("silero");
+  });
+
+  it("round-trips a pipeline config with tts voice", () => {
+    const form = defaultPipelineForm();
+    form.tts.voice = "voice-uuid-123";
+    form.tts.paramsText = '{"language":"en"}';
+    const cfg = buildPipelineConfig(form);
+    const { pipeline } = formStateFromConfig(cfg);
+    expect(pipeline.tts.voice).toBe("voice-uuid-123");
+    expect(pipeline.tts.paramsText).toContain('"language": "en"');
+  });
+
+  it("hoists legacy params.voice into the tts voice field on prefill", () => {
+    const { pipeline } = formStateFromConfig({
+      engine_mode: "pipeline",
+      stt: { provider: "deepgram", params: {} },
+      llm: { provider: "openai", params: {} },
+      tts: {
+        provider: "cartesia",
+        params: { voice: "legacy-uuid", speed: 1.0 },
+      },
+    });
+    expect(pipeline.tts.voice).toBe("legacy-uuid");
+    expect(pipeline.tts.paramsText).toContain('"speed": 1');
+    expect(pipeline.tts.paramsText).not.toContain("legacy-uuid");
   });
 
   it("falls back to defaults for null/unknown config", () => {

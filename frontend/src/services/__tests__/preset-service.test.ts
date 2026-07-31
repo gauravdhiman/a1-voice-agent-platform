@@ -76,6 +76,30 @@ describe("presetService", () => {
     );
   });
 
+  it("getPresetCatalog: GET /catalog with organization_id and use_platform_credits", async () => {
+    const catalog = {
+      presets: [
+        {
+          id: "p-1",
+          name: "Professional Voice",
+          description: null,
+          is_ready: true,
+        },
+      ],
+      default_is_ready: true,
+      credentials_self_service: true,
+    };
+    apiClient.get.mockResolvedValue(resp(catalog));
+    const out = await presetService.getPresetCatalog({
+      organizationId: "org-1",
+      usePlatformCredits: true,
+    });
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/presets/catalog?organization_id=org-1&use_platform_credits=true",
+    );
+    expect(out).toEqual(catalog);
+  });
+
   it("getPreset: GET /{id}", async () => {
     apiClient.get.mockResolvedValue(resp(PRESET));
     const out = await presetService.getPreset("p-1");

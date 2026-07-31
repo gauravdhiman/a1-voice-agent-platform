@@ -174,6 +174,53 @@ class PresetUsage(BaseModel):
     )
 
 
+class PresetCatalogItem(BaseModel):
+    """Org-facing voice profile entry (white-label catalog; no engine/config leak).
+
+    Org admins see only the display name, description, and whether the profile
+    is ready for their organization. Underlying providers and ``SpeechConfig``
+    are intentionally omitted.
+    """
+
+    id: UUID = Field(..., description="Preset ID")
+    name: str = Field(..., description="Display name of the voice profile")
+    description: Optional[str] = Field(
+        None, description="Human-readable description for org admins"
+    )
+    is_ready: bool = Field(
+        ...,
+        description=(
+            "True when all credentials required by this profile are resolvable "
+            "for the requesting organization (org keys, platform env fallback, "
+            "or use_platform_credits)."
+        ),
+    )
+
+
+class PresetCatalogResponse(BaseModel):
+    """Org-facing catalog of published voice profiles with readiness metadata."""
+
+    presets: list[PresetCatalogItem] = Field(
+        default_factory=list,
+        description="Published voice profiles available for agent assignment.",
+    )
+    default_is_ready: bool = Field(
+        ...,
+        description=(
+            "True when the system-default fallback profile (preset_id=null) is "
+            "ready for the requesting organization."
+        ),
+    )
+    credentials_self_service: bool = Field(
+        default=True,
+        description=(
+            "When True, org admins may configure API credentials themselves "
+            "(transitional self-serve mode). When False, only the platform "
+            "admin provisions credentials (managed white-label mode)."
+        ),
+    )
+
+
 __all__ = [
     "PresetType",
     "PresetBase",
@@ -182,5 +229,7 @@ __all__ = [
     "Preset",
     "PresetUsage",
     "PresetUsageAgent",
+    "PresetCatalogItem",
+    "PresetCatalogResponse",
     "RESERVED_DEFAULT_NAME",
 ]

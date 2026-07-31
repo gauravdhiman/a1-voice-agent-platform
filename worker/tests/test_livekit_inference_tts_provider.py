@@ -48,6 +48,19 @@ class TestLiveKitInferenceTtsConfig:
         assert kwargs == {"model": "cartesia/sonic-3"}
         assert "extra_kwargs" not in kwargs
 
+    def test_config_dedicated_voice_field_takes_precedence(self):
+        from speech_providers.tts import build_livekit_inference_tts_config
+
+        cfg = TTSStageConfig(
+            provider="livekit_inference",
+            model="cartesia/sonic-3",
+            voice="field-voice",
+            params={"voice": "params-voice", "speed": 1.1},
+        )
+        kwargs = build_livekit_inference_tts_config(cfg)
+        assert kwargs["voice"] == "field-voice"
+        assert kwargs["extra_kwargs"] == {"speed": 1.1}
+
 
 class TestLiveKitInferenceTtsBuild:
     """Tests for build_livekit_inference_tts (constructs the real plugin, no network)."""

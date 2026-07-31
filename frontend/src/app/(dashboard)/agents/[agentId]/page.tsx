@@ -27,7 +27,8 @@ import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { TestCallModal } from "@/components/agents/test-call-modal";
 import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
-import { PresetPicker } from "@/components/agents/preset-picker";
+import { PresetPicker, useSelectedPresetReadiness } from "@/components/agents/preset-picker";
+import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -187,6 +188,16 @@ export default function AgentDetailPage() {
   const logoutAgentToolMutation = useLogoutAgentTool();
   const deleteAgentToolMutation = useDeleteAgentTool();
   const configureAgentToolMutation = useConfigureAgentTool();
+
+  const {
+    isReady: voiceProfileReady,
+    isLoading: voiceProfileReadinessLoading,
+    credentialsSelfService,
+  } = useSelectedPresetReadiness(
+    agent?.organization_id,
+    agentForm.preset_id,
+    agentForm.use_platform_credits,
+  );
 
   // Load organization when agent data is available
   React.useEffect(() => {
@@ -617,6 +628,12 @@ export default function AgentDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => setTestCallOpen(true)}
+                disabled={!voiceProfileReady && !voiceProfileReadinessLoading}
+                title={
+                  !voiceProfileReady && !voiceProfileReadinessLoading
+                    ? "Configure the voice profile before testing calls"
+                    : undefined
+                }
               >
                 <Phone className="h-4 w-4 mr-2" />
                 Test Agent
@@ -629,6 +646,13 @@ export default function AgentDetailPage() {
           )}
         </div>
       </div>
+
+      {!voiceProfileReady && !voiceProfileReadinessLoading && agent && (
+        <PresetSetupCallout
+          credentialsSelfService={credentialsSelfService}
+          organizationId={agent.organization_id}
+        />
+      )}
 
       <AnimatedTabs
         value={activeTab}
@@ -903,6 +927,8 @@ and confirm someone will call back the next business day.`}
                   Read-only for non-editors; canEdit users pick/clear and save. */}
               <div className="mt-6">
                 <PresetPicker
+                  organizationId={agent.organization_id}
+                  usePlatformCredits={agentForm.use_platform_credits}
                   value={agentForm.preset_id}
                   onChange={(presetId) =>
                     setAgentForm({ ...agentForm, preset_id: presetId })

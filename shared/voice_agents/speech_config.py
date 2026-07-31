@@ -101,7 +101,22 @@ class LLMStageConfig(StageConfig):
 
 
 class TTSStageConfig(StageConfig):
-    """Text-to-speech stage config (e.g. Cartesia, ElevenLabs, OpenAI)."""
+    """Text-to-speech stage config (e.g. Cartesia, ElevenLabs, OpenAI).
+
+    Attributes:
+        voice: Optional TTS voice id, name, or UUID (provider-specific). When
+            set, forwarded as a top-level plugin kwarg and takes precedence over
+            ``params["voice"]`` for backward compatibility with configs that
+            stored voice inside ``params``.
+    """
+
+    voice: Optional[str] = Field(
+        None,
+        description=(
+            "TTS voice id, name, or UUID (provider-specific). Omitted when "
+            "blank so the provider default applies."
+        ),
+    )
 
 
 class VADConfig(StageConfig):

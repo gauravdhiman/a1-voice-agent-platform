@@ -121,9 +121,19 @@ class TestPipelineSpeechConfig:
         cfg = TTSStageConfig(
             provider="cartesia",
             model="sonic-2",
-            params={"voice": "feminine", "speed": 1.1},
+            params={"speed": 1.1},
+            voice="voice-uuid-abc",
         )
-        assert cfg.params == {"voice": "feminine", "speed": 1.1}
+        assert cfg.voice == "voice-uuid-abc"
+        assert cfg.params == {"speed": 1.1}
+
+    def test_tts_stage_config_voice_field_optional(self):
+        """TTS voice is an optional first-class field on TTSStageConfig."""
+        from shared.voice_agents.speech_config import TTSStageConfig
+
+        cfg = TTSStageConfig(provider="cartesia", voice="my-voice-id")
+        assert cfg.voice == "my-voice-id"
+        assert cfg.params == {}
 
 
 class TestSpeechConfigDiscriminatedUnion:
