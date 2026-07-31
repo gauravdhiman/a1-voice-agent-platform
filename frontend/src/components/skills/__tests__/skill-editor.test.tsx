@@ -361,3 +361,133 @@ describe("SkillEditor - platform skill library sheet scrolling", () => {
     expect(screen.getByText("Platform Skill 12")).toBeInTheDocument();
   });
 });
+
+describe("SkillEditor - create custom skill sheet", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  it("opens a right sheet with name/description/slug only (no SKILL.md textarea)", async () => {
+    const user = userEvent.setup();
+    const adapter = makeAdapter();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <SkillEditor
+        mode="organization"
+        adapter={adapter}
+        canCreate={true}
+        canEdit={true}
+        canDelete={true}
+      />,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Fixture Skill")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /create custom skill/i }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: /create custom skill/i }),
+    ).toBeInTheDocument();
+
+    expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^description$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^slug$/i)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/content \(skill\.md/i),
+    ).not.toBeInTheDocument();
+
+    const sheet = screen.getByTestId("create-skill-sheet");
+    expect(sheet.className).toMatch(/flex/);
+    expect(sheet.className).toMatch(/flex-col/);
+  });
+
+  it("auto-fills slug from name and creates with starter SKILL.md, then selects the skill in edit mode", async () => {
+    const user = userEvent.setup();
+    const created: EditableSkill = {
+      ...FIXTURE_SKILL,
+      id: "skill-new",
+      slug: "appointment-booking",
+      name: "Appointment Booking",
+      description: "Books appointments",
+      content:
+        "# Appointment Booking\n\n## When to use\n\n\n## Instructions\n\n",
+    };
+    const createSkill = vi.fn().mockResolvedValue(created);
+    const adapter = makeAdapter({
+      createSkill,
+      loadSkills: vi
+        .fn()
+        .mockResolvedValueOnce([FIXTURE_SKILL])
+        .mockResolvedValue([FIXTURE_SKILL, created]),
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <SkillEditor
+        mode="organization"
+        adapter={adapter}
+        canCreate={true}
+        canEdit={true}
+        canDelete={true}
+      />,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Fixture Skill")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /create custom skill/i }),
+    );
+
+    await user.type(screen.getByLabelText(/^name$/i), "Appointment Booking");
+    await user.type(
+      screen.getByLabelText(/^description$/i),
+      "Books appointments",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^slug$/i)).toHaveValue(
+        "appointment-booking",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /create skill/i }));
+
+    await waitFor(() => {
+      expect(createSkill).toHaveBeenCalledTimes(1);
+    });
+
+    expect(createSkill).toHaveBeenCalledWith({
+      slug: "appointment-booking",
+      name: "Appointment Booking",
+      description: "Books appointments",
+      content:
+        "# Appointment Booking\n\n## When to use\n\n\n## Instructions\n\n",
+    });
+
+    // Main editor should land on the new skill in edit mode (SKILL.md textarea).
+    await waitFor(() => {
+      expect(screen.getByText("Editing SKILL.md")).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue("Appointment Booking")).toBeInTheDocument();
+  });
+});

@@ -406,26 +406,16 @@ sequenceDiagram
     participant API as Backend API
     participant DB as Database
 
-    OrgAdmin->>UI: Click "+ Create Skill"
-    UI->>UI: Show creation options modal
-    OrgAdmin->>UI: Select "Create from Scratch"
-    UI->>UI: Show skill builder form
-
-    OrgAdmin->>UI: Fill name, slug, description
-    OrgAdmin->>UI: Write SKILL.md content
-    OrgAdmin->>UI: Click "+ Add Reference File"
-    UI->>UI: Show add file drawer
-    OrgAdmin->>UI: Fill file path, kind, content
-    OrgAdmin->>UI: Click "Add File"
-    UI->>UI: Add file to skill builder
-
-    OrgAdmin->>UI: Click "Create Skill"
-    UI->>API: POST /api/v1/organizations/{org_id}/skills
-    API->>DB: Create organization_skills record<br/>(source_skill_id=null, category=custom)
-    API->>DB: Create organization_skill_files
+    OrgAdmin->>UI: Click "Add" then "Create Custom Skill"
+    UI->>UI: Open create skill right sheet
+    OrgAdmin->>UI: Fill name, description, slug
+    OrgAdmin->>UI: Click "Create skill"
+    UI->>API: POST /api/v1/organizations/{org_id}/skills<br/>(starter SKILL.md content)
+    API->>DB: Create organization_skills record<br/>(source_skill_id=null)
     DB-->>API: Confirm creation
     API-->>UI: Return new org skill
-    UI->>UI: Refresh skills list
+    UI->>UI: Close sheet, select skill, open SKILL.md editor
+    OrgAdmin->>UI: Edit SKILL.md / add reference files in main editor
     UI->>OrgAdmin: Show success toast
 ```
 
