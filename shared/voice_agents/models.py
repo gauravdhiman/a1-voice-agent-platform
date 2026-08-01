@@ -10,6 +10,35 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 
+def normalize_phone_number(value: Optional[str]) -> Optional[str]:
+    """Normalize whitespace and validate an optional E.164 phone number.
+
+    Args:
+        value: Phone number entered by a user or received from an API client.
+
+    Returns:
+        Canonical E.164 value with all whitespace removed, or ``None`` for an
+        empty optional phone number.
+
+    Raises:
+        ValueError: If the normalized value is not a valid E.164 number.
+    """
+    if value is None or value == "":
+        return None
+
+    value = re.sub(r"\s+", "", value)
+    if value == "":
+        return None
+
+    if not re.match(r"^\+[1-9]\d{7,14}$", value):
+        raise ValueError(
+            "Phone number must be in E.164 format "
+            "with at least 8 digits "
+            "(e.g., +14155551234 or +441632960000)"
+        )
+    return value
+
+
 class VoiceAgentBase(BaseModel):
     """Base model for Voice Agent."""
 
@@ -98,21 +127,11 @@ class VoiceAgentBase(BaseModel):
         ),
     )
 
-    @field_validator("phone_number")
+    @field_validator("phone_number", mode="before")
     @classmethod
     def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
-        """Validate E.164 phone number format."""
-        if v is None or v == "":
-            return None
-        # E.164 format requires country code (1-3 digits) + subscriber number
-        # Minimum 8 characters total (including +) for valid international numbers
-        if not re.match(r"^\+[1-9]\d{7,14}$", v):
-            raise ValueError(
-                "Phone number must be in E.164 format "
-                "with at least 8 digits "
-                "(e.g., +14155551234 or +441632960000)"
-            )
-        return v
+        """Normalize spacing and validate the canonical E.164 format."""
+        return normalize_phone_number(v)
 
 
 class VoiceAgentCreate(VoiceAgentBase):
@@ -132,6 +151,13 @@ class VoiceAgentUpdate(BaseModel):
     phone_number: Optional[str] = Field(
         None, max_length=20, description="Twilio phone number"
     )
+
+    @field_validator("phone_number", mode="before")
+    @classmethod
+    def normalize_update_phone_number(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize and validate phone numbers when an agent is edited."""
+        return normalize_phone_number(v)
+
     is_active: Optional[bool] = Field(None, description="Whether the agent is active")
     persona: Optional[str] = Field(None, description="Agent persona or role")
     tone: Optional[str] = Field(
