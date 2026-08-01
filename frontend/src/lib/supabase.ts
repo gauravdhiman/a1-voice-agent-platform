@@ -14,8 +14,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Create and export Supabase client (will handle missing config gracefully)
-export const supabase = createClient(
+/**
+ * Shared Supabase browser client.
+ *
+ * Realtime uses a Web Worker for heartbeats so background tabs are less likely
+ * to silently drop the WebSocket (browser timer throttling). heartbeatCallback
+ * explicitly reconnects if the heartbeat still reports disconnected.
+ */
+// Let creates assign into a const binding via a mutable holder for the callback.
+const supabaseHolder: {
+  client: ReturnType<typeof createClient> | null;
+} = { client: null };
+
+supabaseHolder.client = createClient(
   supabaseUrl || "https://placeholder.supabase.co",
   supabaseAnonKey || "placeholder-key",
   {
@@ -23,11 +34,20 @@ export const supabase = createClient(
       autoRefreshToken: true, // Auto-refresh tokens before expiry (network call)
       persistSession: true, // Store session in localStorage for fast restoration
       detectSessionInUrl: true, // Handle OAuth redirect callbacks
-      // storageKey: 'supabase.auth.token', // Default localStorage key
-      // storage: window.localStorage,       // Default storage mechanism
+    },
+    realtime: {
+      // Keep heartbeats off the main thread so idle/background tabs stay alive longer
+      worker: true,
+      heartbeatCallback: (status) => {
+        if (status === "disconnected" && supabaseHolder.client) {
+          supabaseHolder.client.realtime.connect();
+        }
+      },
     },
   },
 );
+
+export const supabase = supabaseHolder.client;
 
 /**
  * Resend verification email for a user

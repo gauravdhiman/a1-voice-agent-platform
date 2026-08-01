@@ -189,6 +189,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSession(session);
       setIsInitialized(true);
 
+      // Keep Realtime's JWT in sync after refresh/sign-in. Without this, idle
+      // postgres_changes channels often hit CHANNEL_ERROR with an expired token.
+      if (
+        (_event === "TOKEN_REFRESHED" || _event === "SIGNED_IN") &&
+        session?.access_token
+      ) {
+        void supabase.realtime.setAuth(session.access_token);
+      }
+
       // Log auth state changes with OpenTelemetry logger
       logInfo("Auth state changed", {
         event: _event,

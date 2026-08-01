@@ -8,7 +8,8 @@
  * Key Features:
  * - Subscribes to Supabase Realtime for database table changes
  * - Automatically invalidates React Query cache when changes occur
- * - Handles subscription errors and reconnection
+ * - Reconnects after CHANNEL_ERROR / TIMED_OUT (idle JWT / WebSocket drops)
+ * - Refreshes the Realtime auth token before (re)subscribe
  * - Manages channel lifecycle (subscribe/unsubscribe)
  * - Filters updates by agent_id to prevent unnecessary cache invalidation
  *
@@ -39,6 +40,63 @@
 import { useQueryClient } from '@tanstack/react-query'
 
 import { supabase } from './supabase'
+
+/** Base delay (ms) before the first realtime reconnect attempt. */
+const REALTIME_RECONNECT_BASE_MS = 1000
+
+/** Cap for exponential backoff between reconnect attempts. */
+const REALTIME_RECONNECT_MAX_MS = 30_000
+
+/**
+ * Whether a Supabase channel status should trigger a resubscribe.
+ *
+ * CHANNEL_ERROR and TIMED_OUT are the statuses seen after idle JWT expiry
+ * or silent WebSocket disconnect. CLOSED is intentional (unsubscribe).
+ *
+ * @param status - Status string from channel.subscribe callback
+ * @returns True when the service should tear down and resubscribe
+ */
+export function shouldReconnectRealtimeChannel(status: string): boolean {
+  return status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'
+}
+
+/**
+ * Exponential backoff delay for realtime reconnect attempts.
+ *
+ * @param attempt - 1-based attempt number
+ * @param baseMs - Delay for attempt 1
+ * @param maxMs - Maximum delay cap
+ * @returns Delay in milliseconds
+ */
+export function realtimeReconnectDelayMs(
+  attempt: number,
+  baseMs: number = REALTIME_RECONNECT_BASE_MS,
+  maxMs: number = REALTIME_RECONNECT_MAX_MS
+): number {
+  const safeAttempt = Math.max(1, attempt)
+  return Math.min(baseMs * 2 ** (safeAttempt - 1), maxMs)
+}
+
+/**
+ * Push the current Supabase session JWT into the Realtime client.
+ *
+ * Needed so postgres_changes (RLS) and reconnects use a non-expired token
+ * after TOKEN_REFRESHED or after an idle CHANNEL_ERROR.
+ *
+ * @returns Access token that was applied, or null if no session
+ */
+export async function syncRealtimeAuth(): Promise<string | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session?.access_token) {
+    return null
+  }
+
+  await supabase.realtime.setAuth(session.access_token)
+  return session.access_token
+}
 
 /**
  * Real-time subscription configuration options.
@@ -102,58 +160,84 @@ export interface DatabaseChangePayload {
 class RealtimeService {
   private readonly queryClient: ReturnType<typeof useQueryClient>
   private readonly channels: Map<string, ReturnType<typeof supabase.channel>>
+  private readonly optionsById: Map<string, RealtimeOptions>
+  private readonly reconnectAttempts: Map<string, number>
+  private readonly reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
+  private readonly intentionalClose: Set<string>
+  /** Prevents CLOSED-from-removeChannel from double-scheduling reconnect */
+  private readonly reconnecting: Set<string>
 
   // Mapping of database table names to query key prefixes for invalidation
   private readonly tableToQueryKeyMap: Record<string, string[]> = {
     agent_tools: ['tools'],
-    voice_agents: ['agents'],  // Database table is voice_agents, query keys use 'agents'
+    voice_agents: ['agents'], // Database table is voice_agents, query keys use 'agents'
     platform_tools: ['tools'],
   }
 
   constructor(queryClient: ReturnType<typeof useQueryClient>) {
     this.queryClient = queryClient
     this.channels = new Map()
+    this.optionsById = new Map()
+    this.reconnectAttempts = new Map()
+    this.reconnectTimers = new Map()
+    this.intentionalClose = new Set()
+    this.reconnecting = new Set()
   }
 
   /**
    * Subscribe to Supabase Realtime for database changes.
    *
+   * Starts the channel asynchronously after syncing the auth token so
+   * RLS-backed postgres_changes bindings use a valid JWT. Returns the
+   * existing channel if one is already tracked for subscriptionId.
+   *
    * @param options - Subscription configuration
-   * @returns Supabase channel for this subscription
-   *
- * @example
- * ```typescript
- * const realtime = new RealtimeService(queryClient)
- *
- * const channel = realtime.subscribe({
- *   subscriptionId: 'agent-123',
- *   tables: ['agent_tools', 'voice_agents'],
- *   filter: { column: 'agent_id', value: '123' },
- *   onUpdate: (payload) => console.log('Update:', payload),
- * })
- * ```
-   *
-   * @notes
-   * - Creates channel if doesn't exist
-   * - Reuses existing channel for same subscriptionId
-   * - Configures filter to reduce unnecessary notifications
-   * - Sets up event handlers for INSERT, UPDATE, DELETE
+   * @returns Existing channel if present; otherwise null while connect starts
    */
-   subscribe(options: RealtimeOptions): ReturnType<typeof supabase.channel> {
-    const { subscriptionId, tables, filter, eventType = '*' } = options
+  subscribe(options: RealtimeOptions): ReturnType<typeof supabase.channel> | null {
+    const { subscriptionId } = options
 
-    // Check if channel already exists for this subscription
+    this.optionsById.set(subscriptionId, options)
+    this.intentionalClose.delete(subscriptionId)
+
+    // Reuse live channel for the same subscription id
     if (this.channels.has(subscriptionId)) {
       return this.channels.get(subscriptionId)!
     }
 
-    // Build channel name based on subscription ID
-    const channelName = `realtime:${subscriptionId}`
+    void this.startChannel(options)
+    return this.channels.get(subscriptionId) ?? null
+  }
 
-    // Create Supabase Realtime channel
+  /**
+   * Create the Supabase channel, attach postgres_changes listeners, and subscribe.
+   *
+   * @param options - Subscription configuration (must match optionsById)
+   */
+  private async startChannel(options: RealtimeOptions): Promise<void> {
+    const { subscriptionId, tables, filter, eventType = '*' } = options
+
+    // Bail if unsubscribed while awaiting auth, or a channel was created meanwhile
+    if (this.intentionalClose.has(subscriptionId) || this.channels.has(subscriptionId)) {
+      return
+    }
+
+    try {
+      await syncRealtimeAuth()
+    } catch (error) {
+      console.warn(
+        `Unable to sync realtime auth before subscribe:${subscriptionId}`,
+        error
+      )
+    }
+
+    if (this.intentionalClose.has(subscriptionId) || this.channels.has(subscriptionId)) {
+      return
+    }
+
+    const channelName = `realtime:${subscriptionId}`
     const channel = supabase.channel(channelName)
 
-    // Subscribe to each table
     tables.forEach((table) => {
       channel.on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,82 +247,127 @@ class RealtimeService {
           event: eventType as any,
           schema: 'public',
           table: table,
-          ...(filter ? { filter: `(${filter.column})=eq.${filter.value}` } : {}),
+          ...(filter ? { filter: `${filter.column}=eq.${filter.value}` } : {}),
         },
-        (payload: DatabaseChangePayload) => this.handleDatabaseChange(payload, options),
+        (payload: DatabaseChangePayload) => this.handleDatabaseChange(payload, options)
       )
     })
 
-    // Subscribe to channel
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log(`Subscribed to realtime:${subscriptionId}`)
-      } else if (status === 'CHANNEL_ERROR') {
-        console.error(`Failed to subscribe to realtime:${subscriptionId}`)
-      }
-    })
-
-    // Store channel for reuse
     this.channels.set(subscriptionId, channel)
 
-    return channel
+    channel.subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        this.reconnectAttempts.set(subscriptionId, 0)
+        console.log(`Subscribed to realtime:${subscriptionId}`)
+        return
+      }
+
+      if (shouldReconnectRealtimeChannel(status)) {
+        // Recoverable: warn only — console.error triggers Next.js / React overlays
+        console.warn(
+          `Failed to subscribe to realtime:${subscriptionId}`,
+          status,
+          err ?? undefined
+        )
+        this.scheduleReconnect(subscriptionId)
+        return
+      }
+
+      if (status === 'CLOSED' && !this.intentionalClose.has(subscriptionId)) {
+        console.warn(`Realtime channel closed unexpectedly:${subscriptionId}`)
+        this.scheduleReconnect(subscriptionId)
+      }
+    })
+  }
+
+  /**
+   * Tear down the current channel (if any) and schedule a resubscribe.
+   *
+   * @param subscriptionId - Subscription to reconnect
+   */
+  private scheduleReconnect(subscriptionId: string): void {
+    if (this.intentionalClose.has(subscriptionId)) {
+      return
+    }
+
+    if (
+      this.reconnectTimers.has(subscriptionId) ||
+      this.reconnecting.has(subscriptionId)
+    ) {
+      return
+    }
+
+    const options = this.optionsById.get(subscriptionId)
+    if (!options) {
+      return
+    }
+
+    this.reconnecting.add(subscriptionId)
+
+    const existing = this.channels.get(subscriptionId)
+    if (existing) {
+      supabase.removeChannel(existing)
+      this.channels.delete(subscriptionId)
+    }
+
+    const attempt = (this.reconnectAttempts.get(subscriptionId) ?? 0) + 1
+    this.reconnectAttempts.set(subscriptionId, attempt)
+    const delayMs = realtimeReconnectDelayMs(attempt)
+
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(subscriptionId)
+      this.reconnecting.delete(subscriptionId)
+      if (this.intentionalClose.has(subscriptionId)) {
+        return
+      }
+      void this.startChannel(options)
+    }, delayMs)
+
+    this.reconnectTimers.set(subscriptionId, timer)
   }
 
   /**
    * Unsubscribe from Supabase Realtime.
    *
    * @param subscriptionId - Unique identifier of subscription to unsubscribe
-   *
-   * @example
-   * ```typescript
-   * const realtime = new RealtimeService(queryClient)
-   * realtime.unsubscribe('agent-123')
-   * ```
-   *
-   * @notes
-   * - Removes channel from internal map
-   * - Unsubscribes from Supabase
-   * - Handles case where channel doesn't exist gracefully
    */
   unsubscribe(subscriptionId: string): void {
-    const channel = this.channels.get(subscriptionId)
+    this.intentionalClose.add(subscriptionId)
+    this.optionsById.delete(subscriptionId)
+    this.reconnectAttempts.delete(subscriptionId)
+    this.reconnecting.delete(subscriptionId)
 
+    const timer = this.reconnectTimers.get(subscriptionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.reconnectTimers.delete(subscriptionId)
+    }
+
+    const channel = this.channels.get(subscriptionId)
     if (!channel) {
-      console.warn(`No active subscription found for ${subscriptionId}`)
       return
     }
 
-    // Unsubscribe from Supabase
     supabase.removeChannel(channel)
-
-    // Remove from internal map
     this.channels.delete(subscriptionId)
-
     console.log(`Unsubscribed from realtime:${subscriptionId}`)
   }
 
   /**
    * Unsubscribe from all active subscriptions.
-   *
-   * @example
-   * ```typescript
-   * const realtime = new RealtimeService(queryClient)
-   * realtime.unsubscribeAll()
-   * ```
-   *
-   * @notes
-   * - Iterates through all channels
-   * - Unsubscribes each channel
-   * - Clears internal channel map
-   * - Useful for cleanup on component unmount
    */
   unsubscribeAll(): void {
-    this.channels.forEach((channel, subscriptionId) => {
-      supabase.removeChannel(channel)
-      console.log(`Unsubscribed from realtime:${subscriptionId}`)
-    })
+    const ids = Array.from(this.optionsById.keys())
+    ids.forEach((subscriptionId) => this.unsubscribe(subscriptionId))
 
+    // Also clear any orphan channels
+    this.channels.forEach((channel, subscriptionId) => {
+      this.intentionalClose.add(subscriptionId)
+      supabase.removeChannel(channel)
+    })
     this.channels.clear()
+    this.reconnectTimers.forEach((timer) => clearTimeout(timer))
+    this.reconnectTimers.clear()
   }
 
   /**
@@ -246,26 +375,18 @@ class RealtimeService {
    *
    * @param payload - Database change payload
    * @param options - Original subscription options
-   *
-   * @notes
-   * - Validates payload structure
-   * - Determines which cache to invalidate based on table
-   * - Calls appropriate callback (onInsert, onUpdate, onDelete)
-   * - Logs errors for debugging
    */
   private handleDatabaseChange(
     payload: DatabaseChangePayload,
     options: RealtimeOptions
   ): void {
     try {
-      // Log change for debugging
       console.log('Database change detected:', {
         table: payload.table,
         eventType: payload.eventType,
         timestamp: payload.timestamp,
       })
 
-      // Call appropriate callback based on event type
       if (payload.eventType === 'INSERT' && options.onInsert) {
         options.onInsert(payload)
       } else if (payload.eventType === 'UPDATE' && options.onUpdate) {
@@ -274,7 +395,6 @@ class RealtimeService {
         options.onDelete(payload)
       }
 
-      // Invalidate React Query cache for affected table
       this.invalidateQuery(payload.table)
     } catch (error) {
       console.error('Error handling database change:', error)
@@ -285,76 +405,30 @@ class RealtimeService {
    * Invalidate React Query cache for a specific table.
    *
    * @param table - Database table name
-   *
-   * @example
-   * ```typescript
-   * // Invalidate all agent_tools queries
-   * realtime.invalidateQuery('agent_tools')
-   *
-   * // Invalidate specific agent's tools
-   * realtime.invalidateQuery('agent_tools', 'agent-123')
-   * ```
-   *
-   * @notes
-   * - Uses React Query's invalidateQueries method
-   * - Maps database table names to frontend query key patterns
-   * - Automatically triggers refetch for affected components
    */
   private invalidateQuery(table: string): void {
-    // Get the query key patterns for this table
     const queryKeyPatterns = this.tableToQueryKeyMap[table] || [table]
 
-    // Invalidate queries that match the patterns
     this.queryClient.invalidateQueries({
       predicate: (query) => {
         const queryKey = query.queryKey
         if (typeof queryKey === 'string') {
-          return queryKeyPatterns.some(pattern => (queryKey as string).includes(pattern))
+          return queryKeyPatterns.some((pattern) =>
+            (queryKey as string).includes(pattern)
+          )
         }
         if (Array.isArray(queryKey)) {
-          return queryKeyPatterns.some(pattern => queryKey.some((key: unknown) => key === pattern))
+          return queryKeyPatterns.some((pattern) =>
+            queryKey.some((key: unknown) => key === pattern)
+          )
         }
         return false
       },
     })
 
-    console.log(`Invalidated queries for table: ${table} (patterns: ${queryKeyPatterns.join(', ')})`)
-  }
-
-  /**
-   * Invalidate React Query cache for specific records.
-   *
-   * @param table - Database table name
-   * @param recordId - Record ID to filter by
-   *
-   * @example
-   * ```typescript
-   * // Invalidate only queries for specific agent
-   * realtime.invalidateQueryForRecord('agent_tools', 'agent-123')
-   * ```
-   *
-   * @notes
-   * - More precise than invalidating all queries for a table
-   * - Reduces unnecessary refetches
-   * - Useful for multi-tenant applications
-   */
-  private invalidateQueryForRecord(table: string, recordId: string): void {
-    // Invalidate queries that include both table and record ID
-    this.queryClient.invalidateQueries({
-      predicate: (query) => {
-        const queryKey = query.queryKey
-        if (typeof queryKey === 'string') {
-          const key = queryKey as string
-          return key === table || key.includes(recordId)
-        }
-        if (Array.isArray(queryKey)) {
-          return queryKey.some((key: unknown) => key === table) || queryKey.some((key: unknown) => key === recordId)
-        }
-        return false
-      },
-    })
-
-    console.log(`Invalidated queries for ${table}:${recordId}`)
+    console.log(
+      `Invalidated queries for table: ${table} (patterns: ${queryKeyPatterns.join(', ')})`
+    )
   }
 }
 
@@ -366,24 +440,6 @@ let realtimeServiceInstance: RealtimeService | null = null
  *
  * @param queryClient - React Query client for cache invalidation
  * @returns Realtime service instance
- *
- * @example
- * ```typescript
- * import { useQueryClient } from '@tanstack/react-query'
- *
- * function MyComponent() {
- *   const queryClient = useQueryClient()
- *   const realtime = getRealtimeService(queryClient)
- *
- *   // Subscribe to changes
- *   realtime.subscribe({ ... })
- * }
- * ```
- *
- * @notes
- * - Singleton pattern ensures one instance across app
- * - Must be called before using service
- * - Can be called multiple times safely
  */
 export function getRealtimeService(
   queryClient: ReturnType<typeof useQueryClient>
@@ -399,18 +455,12 @@ export function getRealtimeService(
 /**
  * Reset the global real-time service instance.
  *
- * @example
- * ```typescript
- * // Reset service (useful for testing or after logout)
- * resetRealtimeService()
- * ```
- *
- * @notes
- * - Useful for testing or after user logout
- * - Clears all subscriptions and channels
- * - Next call to getRealtimeService creates fresh instance
+ * Clears reconnect timers and channels when an instance exists.
  */
 export function resetRealtimeService(): void {
+  if (realtimeServiceInstance) {
+    realtimeServiceInstance.unsubscribeAll()
+  }
   realtimeServiceInstance = null
   console.log('Real-time service reset')
 }

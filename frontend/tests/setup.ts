@@ -26,6 +26,18 @@ vi.mock('@/lib/supabase', () => ({
       }),
       signInWithPassword: vi.fn(),
       signOut: vi.fn(),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      })),
+    },
+    channel: vi.fn(() => ({
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+    })),
+    removeChannel: vi.fn(),
+    realtime: {
+      setAuth: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn(),
     },
     from: vi.fn(),
   },
@@ -83,12 +95,6 @@ vi.mock('next/navigation', () => ({
     get: vi.fn(),
   }),
   useParams: () => ({}),
-}))
-
-// Mock Supabase Realtime
-vi.mock('@/lib/realtime', () => ({
-  subscribeToTable: vi.fn(),
-  unsubscribeFromTable: vi.fn(),
 }))
 
 // Mock Stripe
