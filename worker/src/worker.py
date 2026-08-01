@@ -18,7 +18,7 @@ from session_builder import build_agent_session
 from shared.common.security import decrypt_data
 from shared.organization.service import BaseOrganizationService
 from shared.voice_agents.key_resolver import resolve_api_keys
-from shared.voice_agents.livekit_service import livekit_service
+from shared.voice_agents.livekit_service import AGENT_DISPATCH_NAME, livekit_service
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import (
     PromptBuilder,
@@ -338,7 +338,7 @@ class DynamicAgent(Agent):
         logger.info(f"Agent entered: {self.session.userdata.get('agent_name')}")
 
 
-@server.rtc_session()
+@server.rtc_session(agent_name=AGENT_DISPATCH_NAME)
 async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room {ctx.room.name}")
     await ctx.connect()

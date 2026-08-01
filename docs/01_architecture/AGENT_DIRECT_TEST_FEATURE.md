@@ -20,8 +20,18 @@ Caller → Twilio → Webhook → TwiML → LiveKit (SIP) → Worker → Agent
 
 ### Web-Based Test Flow
 ```
-User clicks "Test Agent" → Backend generates LiveKit token → Browser connects to LiveKit → Worker joins → Agent responds
+User clicks "Test Agent"
+  → Backend generates LiveKit token
+  → Backend creates LiveKit room
+  → Backend explicitly dispatches named `voice-agent` worker
+  → Browser connects to LiveKit
+  → Worker joins → Agent responds
 ```
+
+> **Important:** The worker is explicitly named `voice-agent` via
+> `@server.rtc_session(agent_name="voice-agent")`. This disables the default
+> unnamed automatic dispatch behavior. The test-token endpoint dispatches that
+> named worker explicitly after creating the room.
 
 ## Implementation
 
