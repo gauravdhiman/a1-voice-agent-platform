@@ -62,6 +62,11 @@ Comprehensive documentation organized by feature.
 1. **[Billing Overview](02_features/billing/overview.md)** - Stripe integration and credit management
 2. **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
 3. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
+### 05_operations/ - Operations
+
+1. **[Deploy branch — parked (LiveKit cloud)](05_operations/DEPLOY_BRANCH_PARKED.md)** - Steps 0–5 done; step 6 (worker) and step 7 (webhooks) pending (branch `deploy/branch-to-deploy`)
+2. **[GCP + OCI deploy runbook](DEPLOY_GCP_OCI.md)** - Scripts and commands for Cloud Run + LiveKit worker
+3. **[Render deploy](DEPLOY.md)** - Alternative 4-service Render.com deployment
 4. **[Stripe Management](05_operations/stripe_management.md)** - CLI tool for managing Stripe products
 
 ### Phone Numbers
@@ -228,6 +233,8 @@ When adding new features:
 ### August 2026
 
 - ✅ **Voice transport (Phases 1–3):** Pipecat WebSocket is the only transport — browser `/ws`, Twilio `/twilio`, Gemini Realtime, modular speech pipeline, shared tools, MCP, and skills. See **[ADR](01_architecture/ADR_VOICE_WS_PIPECAT.md)** and **[Phase 3](03_implementation/voice_ws_phase3.md)**.
+- ⏸️ **Cloud deploy parked** on `deploy/branch-to-deploy` — steps 0–5 complete (GCP, DNS, Supabase auth, migrations); **step 6** (worker) blocked on OCI capacity; **step 7** (webhooks) not started. See **[Deploy branch — parked](05_operations/DEPLOY_BRANCH_PARKED.md)**.
+- ✅ GCP Artifact Registry + Cloud Run deploy scripts; Alembic monorepo path fix for production migrations
 
 ### January 2026
 

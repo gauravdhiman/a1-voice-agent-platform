@@ -10,6 +10,7 @@ __pycache__/
 .env.*
 .env.*.local
 .env.bk*
+.env copy*
 .env.local
 .idea/
 .installed.cfg

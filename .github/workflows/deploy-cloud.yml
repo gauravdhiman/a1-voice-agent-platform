@@ -1,0 +1,71 @@
+name: Deploy Cloud (main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: project-bb848762-18cb-4cd6-858
+  GCP_REGION: us-central1
+
+jobs:
+  deploy-gcp:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Write .env.cloud from GitHub secret
+        run: printf '%s\n' "${{ secrets.ENV_CLOUD }}" > .env.cloud
+
+      - name: Deploy backend and frontend to Cloud Run
+        run: |
+          chmod +x scripts/deploy/gcp-deploy.sh
+          ./scripts/deploy/gcp-deploy.sh
+
+  deploy-oci-worker:
+    runs-on: ubuntu-latest
+    needs: deploy-gcp
+    if: ${{ secrets.OCI_SSH_HOST != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write worker env file
+        run: |
+          printf '%s\n' "${{ secrets.ENV_CLOUD }}" > .env.cloud
+          python3 scripts/deploy/gcp-env-from-cloud.py worker --env-file .env.cloud > .env.worker
+
+      - name: Sync worker compose + env to OCI VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.OCI_SSH_HOST }}
+          username: ${{ secrets.OCI_SSH_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          source: "deploy/oci/docker-compose.worker.yml,.env.worker"
+          target: "cognients-worker"
+
+      - name: Restart worker container on OCI VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.OCI_SSH_HOST }}
+          username: ${{ secrets.OCI_SSH_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/cognients-worker
+            mv cognients-worker/.env.worker .env.worker 2>/dev/null || true
+            mv cognients-worker/deploy/oci/docker-compose.worker.yml docker-compose.worker.yml 2>/dev/null || true
+            export WORKER_IMAGE=us-central1-docker.pkg.dev/project-bb848762-18cb-4cd6-858/cognients/worker:latest
+            docker pull "$WORKER_IMAGE"
+            docker compose -f docker-compose.worker.yml up -d --remove-orphans

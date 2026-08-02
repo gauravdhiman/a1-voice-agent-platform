@@ -1,0 +1,32 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_IMAGE}
+      - -f
+      - frontend/Dockerfile
+      - --build-arg
+      - NEXT_PUBLIC_API_URL=${_NEXT_PUBLIC_API_URL}
+      - --build-arg
+      - NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
+      - --build-arg
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - --build-arg
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+      - --build-arg
+      - NEXT_PUBLIC_LIVEKIT_URL=${_NEXT_PUBLIC_LIVEKIT_URL}
+      - --build-arg
+      - NEXT_PUBLIC_OTEL_ENABLED=false
+      - --build-arg
+      - NEXT_PUBLIC_OTEL_SERVICE_NAME=cognients-frontend
+      - frontend
+images:
+  - ${_IMAGE}
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/project-bb848762-18cb-4cd6-858/cognients/frontend:latest
+  _NEXT_PUBLIC_API_URL: https://ai-studio-api.cognients.com
+  _NEXT_PUBLIC_SUPABASE_URL: placeholder
+  _NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+  _NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: placeholder
+  _NEXT_PUBLIC_LIVEKIT_URL: placeholder
