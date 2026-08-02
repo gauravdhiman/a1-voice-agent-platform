@@ -596,7 +596,6 @@ async def import_skill_from_url(
                 name=pkg.name,
                 description=pkg.description,
                 content=pkg.content,
-                category="custom",
             )
 
             skill, error = await skill_service.create_skill(skill_data)

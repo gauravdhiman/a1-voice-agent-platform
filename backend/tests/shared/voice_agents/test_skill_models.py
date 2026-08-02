@@ -64,7 +64,6 @@ class TestSkillCreateModel:
             slug="appointment-booking",
             description="Handle scheduling",
             content="# Appointment Booking\n\n## Procedure\n...",
-            category="custom",
             version="1.0.0",
             author="Test Author",
         )

@@ -28,6 +28,21 @@ class TestPhoneNumberValidation:
         agent = VoiceAgentBase(name="Test", phone_number="+441632960000")
         assert agent.phone_number == "+441632960000"
 
+    def test_phone_number_with_spaces_is_normalized_to_e164(self):
+        """Allow human-formatted spaces while storing canonical E.164."""
+        agent = VoiceAgentBase(name="Test", phone_number="+1 480 745 2168")
+        assert agent.phone_number == "+14807452168"
+
+    def test_phone_number_with_leading_and_repeated_whitespace_is_normalized(self):
+        """Normalize tabs, newlines, and repeated whitespace before constraints."""
+        agent = VoiceAgentBase(name="Test", phone_number=" \t+1  480\n745 2168 ")
+        assert agent.phone_number == "+14807452168"
+
+    def test_update_phone_number_with_spaces_is_normalized_to_e164(self):
+        """Apply the same canonicalization when editing an existing agent."""
+        update = VoiceAgentUpdate(phone_number="+1 480 745 2168")
+        assert update.phone_number == "+14807452168"
+
     def test_none_phone_number_allowed(self):
         """Test None phone number is allowed (agent without phone)."""
         agent = VoiceAgentBase(name="Test", phone_number=None)

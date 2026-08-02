@@ -23,6 +23,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // next/navigation is mocked globally in tests/setup.ts, but
@@ -287,5 +288,206 @@ describe("SkillEditor - per-row delete action permission gate", () => {
       );
       expect(destructive.length).toBe(0);
     }
+  });
+});
+
+describe("SkillEditor - platform skill library sheet scrolling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Radix dropdown/sheet need a constructible ResizeObserver for floating-ui.
+    global.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  it("renders the platform library list in a scrollable flex body", async () => {
+    const user = userEvent.setup();
+    const platformSkills = Array.from({ length: 12 }, (_, i) => ({
+      id: `ps-${i}`,
+      name: `Platform Skill ${i + 1}`,
+      slug: `platform-skill-${i + 1}`,
+      description: `Description for platform skill ${i + 1}`,
+    }));
+    const adapter = makeAdapter({
+      loadPlatformSkillsForFork: vi.fn().mockResolvedValue(platformSkills),
+      forkPlatformSkill: vi.fn(),
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <SkillEditor
+        mode="organization"
+        adapter={adapter}
+        canCreate={true}
+        canEdit={true}
+        canDelete={true}
+        showImportFromPlatformLibrary
+      />,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Fixture Skill")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    await user.click(
+      await screen.findByRole("menuitem", {
+        name: /create from platform library/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Platform Skill Library")).toBeInTheDocument();
+    });
+
+    const list = screen.getByTestId("platform-skill-library-list");
+    expect(list.className).toMatch(/overflow-y-auto/);
+    expect(list.className).toMatch(/flex-1/);
+    expect(list.className).toMatch(/min-h-0/);
+
+    // SheetContent must be a column flex container so flex-1 can constrain
+    // the list height; otherwise overflow-y-auto never engages.
+    const sheet = list.parentElement;
+    expect(sheet).not.toBeNull();
+    expect(sheet?.className).toMatch(/flex/);
+    expect(sheet?.className).toMatch(/flex-col/);
+
+    expect(screen.getByText("Platform Skill 1")).toBeInTheDocument();
+    expect(screen.getByText("Platform Skill 12")).toBeInTheDocument();
+  });
+});
+
+describe("SkillEditor - create custom skill sheet", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  it("opens a right sheet with name/description/slug only (no SKILL.md textarea)", async () => {
+    const user = userEvent.setup();
+    const adapter = makeAdapter();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <SkillEditor
+        mode="organization"
+        adapter={adapter}
+        canCreate={true}
+        canEdit={true}
+        canDelete={true}
+      />,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Fixture Skill")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /create custom skill/i }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: /create custom skill/i }),
+    ).toBeInTheDocument();
+
+    expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^description$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^slug$/i)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/content \(skill\.md/i),
+    ).not.toBeInTheDocument();
+
+    const sheet = screen.getByTestId("create-skill-sheet");
+    expect(sheet.className).toMatch(/flex/);
+    expect(sheet.className).toMatch(/flex-col/);
+  });
+
+  it("auto-fills slug from name and creates with starter SKILL.md, then selects the skill in edit mode", async () => {
+    const user = userEvent.setup();
+    const created: EditableSkill = {
+      ...FIXTURE_SKILL,
+      id: "skill-new",
+      slug: "appointment-booking",
+      name: "Appointment Booking",
+      description: "Books appointments",
+      content:
+        "# Appointment Booking\n\n## When to use\n\n\n## Instructions\n\n",
+    };
+    const createSkill = vi.fn().mockResolvedValue(created);
+    const adapter = makeAdapter({
+      createSkill,
+      loadSkills: vi
+        .fn()
+        .mockResolvedValueOnce([FIXTURE_SKILL])
+        .mockResolvedValue([FIXTURE_SKILL, created]),
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <SkillEditor
+        mode="organization"
+        adapter={adapter}
+        canCreate={true}
+        canEdit={true}
+        canDelete={true}
+      />,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Fixture Skill")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /create custom skill/i }),
+    );
+
+    await user.type(screen.getByLabelText(/^name$/i), "Appointment Booking");
+    await user.type(
+      screen.getByLabelText(/^description$/i),
+      "Books appointments",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^slug$/i)).toHaveValue(
+        "appointment-booking",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /create skill/i }));
+
+    await waitFor(() => {
+      expect(createSkill).toHaveBeenCalledTimes(1);
+    });
+
+    expect(createSkill).toHaveBeenCalledWith({
+      slug: "appointment-booking",
+      name: "Appointment Booking",
+      description: "Books appointments",
+      content:
+        "# Appointment Booking\n\n## When to use\n\n\n## Instructions\n\n",
+    });
+
+    // Main editor should land on the new skill in edit mode (SKILL.md textarea).
+    await waitFor(() => {
+      expect(screen.getByText("Editing SKILL.md")).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue("Appointment Booking")).toBeInTheDocument();
   });
 });

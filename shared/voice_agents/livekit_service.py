@@ -10,6 +10,8 @@ from shared.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+AGENT_DISPATCH_NAME = "voice-agent"
+
 
 class LiveKitService:
     def __init__(self) -> None:
@@ -24,13 +26,61 @@ class LiveKitService:
         return api.LiveKitAPI(self.url, self.api_key, self.api_secret)
 
     async def create_room(self, room_name: str, empty_timeout: int = 300) -> api.Room:
-        """Create a LiveKit room."""
+        """Create a LiveKit room.
+
+        Args:
+            room_name: Unique room name to create.
+            empty_timeout: Seconds before an empty room is closed.
+
+        Returns:
+            The created LiveKit ``Room`` proto.
+        """
         lkapi = self.get_api_client()
         try:
             room = await lkapi.room.create_room(
                 api.CreateRoomRequest(name=room_name, empty_timeout=empty_timeout)
             )
             return room
+        finally:
+            await lkapi.aclose()
+
+    async def create_agent_dispatch(
+        self, room_name: str, agent_name: str = AGENT_DISPATCH_NAME
+    ) -> api.AgentDispatch:
+        """Explicitly dispatch a worker agent into an existing LiveKit room.
+
+        Relying on LiveKit Cloud automatic dispatch rules after ``create_room``
+        is unreliable for browser test/embed rooms — the room can be created
+        successfully while the worker never receives a job, leaving the caller
+        in a silent room. Calling ``agent_dispatch.create_dispatch`` makes
+        worker assignment deterministic.
+
+        Args:
+            room_name: Name of an existing LiveKit room.
+            agent_name: Named agent to dispatch. Defaults to the platform's
+                single named voice worker.
+
+        Returns:
+            The created ``AgentDispatch`` proto.
+
+        Raises:
+            Exception: Propagates LiveKit API errors to the caller.
+        """
+        lkapi = self.get_api_client()
+        try:
+            dispatch = await lkapi.agent_dispatch.create_dispatch(
+                api.CreateAgentDispatchRequest(
+                    agent_name=agent_name,
+                    room=room_name,
+                )
+            )
+            logger.info(
+                "Created agent dispatch for room %s (agent_name=%r, id=%s)",
+                room_name,
+                agent_name,
+                getattr(dispatch, "id", None),
+            )
+            return dispatch
         finally:
             await lkapi.aclose()
 

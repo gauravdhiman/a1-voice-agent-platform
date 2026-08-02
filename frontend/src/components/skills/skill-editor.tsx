@@ -76,6 +76,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  buildStarterSkillMarkdown,
+  suggestSkillSlugFromName,
+} from "@/lib/skill-create";
 
 // ─── Unified types the editor works on ────────────────────────────────────
 
@@ -350,9 +354,11 @@ export function SkillEditor({
   const [showDeleted, setShowDeleted] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
-  // create dialog
+  // create sheet — metadata only; SKILL.md is seeded and edited in the main panel
   const [createOpen, setCreateOpen] = useState(false);
-  const [newSkill, setNewSkill] = useState<SkillCreateInput>({ slug: "", name: "", description: "", content: "" });
+  const [newSkill, setNewSkill] = useState({ slug: "", name: "", description: "" });
+  /** When true, name changes no longer overwrite the slug (user edited slug). */
+  const [createSlugTouched, setCreateSlugTouched] = useState(false);
   const [creatingSkill, setCreatingSkill] = useState(false);
 
   // import sheet
@@ -593,27 +599,50 @@ export function SkillEditor({
   };
 
   // ─── create ───
+  const openCreateSheet = () => {
+    setNewSkill({ slug: "", name: "", description: "" });
+    setCreateSlugTouched(false);
+    setCreateOpen(true);
+  };
+
   const submitCreate = async () => {
-    if (!newSkill.name.trim() || !newSkill.content.trim() || !newSkill.slug.trim()) {
-      toast.error("Slug, name, and content are required");
+    if (!newSkill.name.trim() || !newSkill.slug.trim()) {
+      toast.error("Name and slug are required");
       return;
     }
+    const name = newSkill.name.trim();
+    const slug = newSkill.slug.trim();
+    const description = newSkill.description.trim() || null;
+    const content = buildStarterSkillMarkdown(name);
     setCreatingSkill(true);
     try {
       const created = await adapter.createSkill({
-        slug: newSkill.slug.trim(),
-        name: newSkill.name.trim(),
-        description: newSkill.description?.trim() || null,
-        content: newSkill.content,
+        slug,
+        name,
+        description,
+        content,
       });
       toast.success("Skill created");
       setCreateOpen(false);
-      setNewSkill({ slug: "", name: "", description: "", content: "" });
+      setNewSkill({ slug: "", name: "", description: "" });
+      setCreateSlugTouched(false);
       await reload();
       setSelectedSkill(created);
+      setSelectedFile(null);
       setExpanded(new Set([created.id]));
       ensureFiles(created.id);
       pushUrl(created.slug);
+      // Hand the user straight into the main editor so they can flesh out
+      // SKILL.md and add reference files — same path as editing any skill.
+      if (canEdit) {
+        setEditSkillData({
+          name: created.name,
+          description: created.description ?? "",
+          content: created.content,
+        });
+        setEditingSkill(true);
+        setEditingFile(false);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create skill");
     } finally {
@@ -795,12 +824,7 @@ export function SkillEditor({
                       Create from Platform Library
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setNewSkill({ slug: "", name: "", description: "", content: "" });
-                      setCreateOpen(true);
-                    }}
-                  >
+                  <DropdownMenuItem onClick={openCreateSheet}>
                     <Plus className="h-4 w-4 mr-2" />
                     Create {isOrg ? "Custom Skill" : "Skill"}
                   </DropdownMenuItem>
@@ -1184,45 +1208,94 @@ export function SkillEditor({
         )}
       </div>
 
-      {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{isOrg ? "Create Custom Skill" : "New Platform Skill"}</DialogTitle>
-            <DialogDescription>
+      {/* Create sheet — metadata only; content is written in the main editor */}
+      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+        <SheetContent
+          data-testid="create-skill-sheet"
+          className="flex flex-col overflow-hidden w-full sm:max-w-xl"
+        >
+          <SheetHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
+            <SheetTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              {isOrg ? "Create Custom Skill" : "New Platform Skill"}
+            </SheetTitle>
+            <SheetDescription>
               {isOrg
-                ? "Create a custom skill for this organization. Slug must be lowercase kebab-case and unique within the org."
-                : "Create a new built-in platform skill template available to all organizations. Slug must be lowercase kebab-case and globally unique. The slug is fixed after creation (used for seeding)."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="se-new-slug">Slug</Label>
-                <Input id="se-new-slug" value={newSkill.slug} onChange={(e) => setNewSkill((s) => ({ ...s, slug: e.target.value }))} placeholder="appointment-booking" className="font-mono" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="se-new-name">Name</Label>
-                <Input id="se-new-name" value={newSkill.name} onChange={(e) => setNewSkill((s) => ({ ...s, name: e.target.value }))} placeholder="Appointment Booking" />
-              </div>
+                ? "Enter a name, description, and slug. We'll create a starter SKILL.md and open it in the editor so you can finish writing and add reference files."
+                : "Enter a name, description, and slug. We'll create a starter SKILL.md and open it in the editor. The slug is fixed after creation (used for seeding)."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="se-new-name">Name</Label>
+              <Input
+                id="se-new-name"
+                value={newSkill.name}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setNewSkill((s) => ({
+                    ...s,
+                    name,
+                    slug: createSlugTouched ? s.slug : suggestSkillSlugFromName(name),
+                  }));
+                }}
+                placeholder="Appointment Booking"
+                disabled={creatingSkill}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="se-new-desc">Description</Label>
-              <Input id="se-new-desc" value={newSkill.description ?? ""} onChange={(e) => setNewSkill((s) => ({ ...s, description: e.target.value }))} placeholder="Short description for skill selection UI" />
+              <Input
+                id="se-new-desc"
+                value={newSkill.description}
+                onChange={(e) =>
+                  setNewSkill((s) => ({ ...s, description: e.target.value }))
+                }
+                placeholder="Short description for skill selection UI"
+                disabled={creatingSkill}
+              />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="se-new-content">Content (SKILL.md, markdown)</Label>
-              <Textarea id="se-new-content" value={newSkill.content} onChange={(e) => setNewSkill((s) => ({ ...s, content: e.target.value }))} placeholder="# Skill name&#10;&#10;## When to use&#10;..." className="min-h-[280px] font-mono text-xs" />
+              <Label htmlFor="se-new-slug">Slug</Label>
+              <Input
+                id="se-new-slug"
+                value={newSkill.slug}
+                onChange={(e) => {
+                  setCreateSlugTouched(true);
+                  setNewSkill((s) => ({ ...s, slug: e.target.value }));
+                }}
+                placeholder="appointment-booking"
+                className="font-mono"
+                disabled={creatingSkill}
+              />
+              <p className="text-xs text-muted-foreground">
+                Lowercase kebab-case
+                {isOrg
+                  ? ", unique within this organization."
+                  : ", globally unique. Cannot be changed later."}
+              </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button disabled={creatingSkill} onClick={submitCreate}>
-              {creatingSkill && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create skill
+          <div className="shrink-0 px-6 py-4 border-t flex justify-between gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={creatingSkill}
+            >
+              Cancel
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button
+              disabled={
+                creatingSkill || !newSkill.name.trim() || !newSkill.slug.trim()
+              }
+              onClick={submitCreate}
+            >
+              {creatingSkill && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create skill
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Import sheet — layout matches the org skills import drawer */}
       <Sheet open={importOpen} onOpenChange={setImportOpen}>
@@ -1321,11 +1394,18 @@ export function SkillEditor({
       {/* Platform library browser (org only) */}
       {showImportFromPlatformLibrary && (
         <Sheet open={browsePlatformOpen} onOpenChange={setBrowsePlatformOpen}>
-          <SheetContent className="w-full sm:max-w-xl">
-            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+          {/* flex flex-col + overflow-hidden so the list body can scroll
+              inside the full-height sheet (same pattern as tool-config /
+              phone-number drawers). Without flex-col, flex-1 overflow-y-auto
+              on the body has no height constraint and the list is clipped. */}
+          <SheetContent className="flex flex-col overflow-hidden w-full sm:max-w-xl">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
               <SheetTitle className="flex items-center gap-2"><Library className="h-5 w-5" /> Platform Skill Library</SheetTitle>
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div
+              data-testid="platform-skill-library-list"
+              className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4"
+            >
               {loadingPlatform ? (
                 <div className="flex items-center py-8 justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : platformSkills.length === 0 ? (

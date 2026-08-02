@@ -146,6 +146,9 @@ class SkillService:
                     f"('{existing.data[0]['name']}'). Delete the existing skill first or use a different slug."
                 )
 
+            # Org skills are always category='custom' under the platform fork
+            # model. OrganizationSkillCreate no longer exposes category /
+            # source_url / source_ref — those were removed with Phase 2c.
             response = (
                 self.supabase.table("organization_skills")
                 .insert(
@@ -155,13 +158,18 @@ class SkillService:
                         "name": skill_data.name,
                         "description": skill_data.description,
                         "content": skill_data.content,
-                        "category": skill_data.category,
+                        "category": "custom",
                         "is_active": skill_data.is_active,
                         "version": skill_data.version,
                         "author": skill_data.author,
                         "content_hash": _compute_content_hash(skill_data.content),
-                        "source_url": skill_data.source_url,
-                        "source_ref": skill_data.source_ref,
+                        "source_skill_id": (
+                            str(skill_data.source_skill_id)
+                            if skill_data.source_skill_id
+                            else None
+                        ),
+                        "source_version": skill_data.source_version,
+                        "is_visible": skill_data.is_visible,
                     }
                 )
                 .execute()

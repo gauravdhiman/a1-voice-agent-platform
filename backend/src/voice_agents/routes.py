@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
 
-from shared.voice_agents.livekit_service import livekit_service
+from shared.voice_agents.livekit_service import AGENT_DISPATCH_NAME, livekit_service
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
@@ -247,17 +247,22 @@ async def get_test_token(
             detail="LiveKit is not configured. Please contact the administrator.",
         )
 
-    # Pre-create the LiveKit room so the Cloud dispatch rule fires and the
-    # worker is invoked BEFORE the caller connects. Without this, the room is
-    # only created implicitly on participant join and the dispatch rule never
-    # fires — the caller sits in an empty room and the agent never responds.
+    # Pre-create the LiveKit room AND explicitly dispatch the worker.
+    # Room creation alone is not enough: LiveKit Cloud automatic dispatch
+    # rules frequently do not fire for web test rooms, so the worker never
+    # receives a job and the caller sits in a silent room. Explicit
+    # agent_dispatch.create_dispatch is what actually starts the agent.
     # Best-effort: a LiveKit API hiccup here must not block the test call; the
     # caller still gets a token and can fall back to implicit room creation.
     try:
         await livekit_service.create_room(room_name=room_name)
+        await livekit_service.create_agent_dispatch(
+            room_name=room_name,
+            agent_name=AGENT_DISPATCH_NAME,
+        )
     except Exception as create_err:
         logger.warning(
-            f"Failed to pre-create LiveKit room {room_name} for test call: {create_err}"
+            f"Failed to pre-create/dispatch LiveKit room {room_name} for test call: {create_err}"
         )
 
     return TestTokenResponse(

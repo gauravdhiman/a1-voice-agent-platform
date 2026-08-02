@@ -5,13 +5,10 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
 import {
-  Building2,
   Settings,
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Users,
-  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -53,7 +50,7 @@ const SECTION_LABELS: Readonly<Record<NavSection, string>> = {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, signOut } = useAuth();
-  const { organizations, currentOrganization } = useOrganization();
+  const { currentOrganization } = useOrganization();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -352,19 +349,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItemLink>
-                {/* N1 Epic D: org admin links (Members / Billing /
-                    Organization) live in the left-nav only. The avatar
-                    menu no longer duplicates them. Multi-org users still
-                    get a "Switch Org" shortcut to /organizations. */}
-                {organizations.length > 1 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItemLink href="/organizations">
-                      <Building2 className="mr-2 h-4 w-4" />
-                      <span>Switch Org</span>
-                    </DropdownMenuItemLink>
-                  </>
-                )}
+                {/* Org switching lives in the left-nav OrganizationSwitcher.
+                    Org admin links (Members / Billing / Organization) also
+                    live in the left-nav only — the avatar menu stays
+                    profile/settings/sign-out. */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleSignOut}
