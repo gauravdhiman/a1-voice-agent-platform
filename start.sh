@@ -181,8 +181,10 @@ start_worker_dev() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" up -d worker-dev
-    echo -e "${GREEN}Development worker started successfully!${NC}"
+    # Active voice path is voice-ws-dev (Pipecat). LiveKit worker uses profile livekit.
+    docker compose -f "$COMPOSE_FILE_DEV" up -d voice-ws-dev
+    echo -e "${GREEN}Development voice-ws worker started successfully!${NC}"
+    echo -e "${YELLOW}Tip: LiveKit worker → docker compose -f docker-compose.dev.yml --profile livekit up -d worker-dev${NC}"
 }
 
 # Function to start production worker

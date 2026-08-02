@@ -775,6 +775,14 @@ After implementing any fix or new feature, you MUST:
 
 Never use `from X import Y` inside a function if `Y` is already imported at the top of the file. In Python, a local import makes the name local to the **entire function** — even lines before the import statement. This causes `UnboundLocalError` on earlier references. If you need a conditional import, use a different variable name or import the module instead (`import X; X.Y`).
 
+### Voice transport (Pipecat vs LiveKit)
+
+- Default active path is **`VOICE_TRANSPORT=pipecat`** with the new **`voice-ws/`** container (WebSocket + Gemini Realtime).
+- Leave the LiveKit **`worker/`** package in place for rollback; do not delete it. Start it with compose profile `livekit` when `VOICE_TRANSPORT=livekit`.
+- Browser test calls use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` when transport is pipecat.
+- Session auth is a short-lived `voice_ws_session` JWT (`shared/voice_agents/voice_session_service.py`), signed with `JWT_SECRET_KEY` shared by backend and voice-ws.
+- Docs: `docs/01_architecture/ADR_VOICE_WS_PIPECAT.md`, `docs/03_implementation/voice_ws_phase1.md`.
+
 ### Frontend: Tailwind CSS v4
 
 This project uses **Tailwind CSS v4**, which has a fundamentally different configuration system from v3:

@@ -132,7 +132,7 @@ class Settings(BaseSettings):
         default=False, description="OTLP logs insecure mode"
     )
 
-    # LiveKit Settings
+    # LiveKit Settings (legacy path when voice_transport=livekit)
     livekit_url: Optional[str] = Field(
         default=None,
         description="LiveKit server URL (e.g., wss://your-livekit-server.com)",
@@ -140,6 +140,17 @@ class Settings(BaseSettings):
     livekit_api_key: Optional[str] = Field(default=None, description="LiveKit API key")
     livekit_api_secret: Optional[str] = Field(
         default=None, description="LiveKit API secret"
+    )
+
+    # Voice transport: pipecat (WebSocket worker) or livekit (legacy worker)
+    voice_transport: str = Field(
+        default="pipecat",
+        description="Active voice media transport: 'pipecat' or 'livekit'",
+    )
+    # Browser-reachable WebSocket base for voice-ws (no path; /ws is appended)
+    voice_ws_public_url: str = Field(
+        default="ws://localhost:7860",
+        description="Public WebSocket base URL for the voice-ws service",
     )
 
     # Token Refresh Service Settings

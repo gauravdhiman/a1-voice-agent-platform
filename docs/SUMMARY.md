@@ -225,6 +225,10 @@ When adding new features:
 
 ## 🔄 Recent Updates
 
+### August 2026
+
+- 🚧 **Voice transport migration (Phase 1):** Pipecat WebSocket + Gemini Realtime via new `voice-ws/` container; LiveKit worker off by default (`VOICE_TRANSPORT=pipecat`). See **[ADR](01_architecture/ADR_VOICE_WS_PIPECAT.md)** and **[Phase 1 notes](03_implementation/voice_ws_phase1.md)**.
+
 ### January 2026
 
 - ✅ **Reorganized documentation** into feature-based structure

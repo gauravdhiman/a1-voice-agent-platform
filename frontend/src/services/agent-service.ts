@@ -275,16 +275,37 @@ class AgentService {
     return response.data;
   }
 
-  // Test Token Methods
-  async getTestToken(
-    agentId: string,
-  ): Promise<{ token: string; serverUrl: string; roomName: string }> {
+  /**
+   * Bootstrap a browser test call.
+   *
+   * Backend returns either a Pipecat WebSocket session (`transport=pipecat`)
+   * or a legacy LiveKit room token (`transport=livekit`).
+   */
+  async getTestToken(agentId: string): Promise<{
+    transport: "pipecat" | "livekit";
+    token: string;
+    serverUrl?: string | null;
+    roomName?: string | null;
+    wsUrl?: string | null;
+    sessionId?: string | null;
+  }> {
     const response = await apiClient.post<{
+      transport?: "pipecat" | "livekit";
       token: string;
-      serverUrl: string;
-      roomName: string;
+      serverUrl?: string | null;
+      roomName?: string | null;
+      wsUrl?: string | null;
+      sessionId?: string | null;
     }>(`${this.agentBaseUrl}/${agentId}/test-token`);
-    return response.data;
+    const data = response.data;
+    return {
+      transport: data.transport ?? "livekit",
+      token: data.token,
+      serverUrl: data.serverUrl,
+      roomName: data.roomName,
+      wsUrl: data.wsUrl,
+      sessionId: data.sessionId,
+    };
   }
 
   // Embed Configuration Methods

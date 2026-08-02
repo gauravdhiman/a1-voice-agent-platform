@@ -14,6 +14,8 @@ class TestTestTokenEndpoint:
     async def test_get_test_token_success(self):
         """Test successful test token generation."""
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
@@ -36,7 +38,7 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
@@ -66,6 +68,8 @@ class TestTestTokenEndpoint:
         Cloud: room-only create → no job; create + dispatch → job received).
         """
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
@@ -88,7 +92,7 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
@@ -118,6 +122,8 @@ class TestTestTokenEndpoint:
         a fallback). The failure is logged, not raised.
         """
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
@@ -137,7 +143,7 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
@@ -162,6 +168,8 @@ class TestTestTokenEndpoint:
     async def test_get_test_token_agent_not_found(self):
         """Test test token when agent doesn't exist."""
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from fastapi import HTTPException
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
@@ -170,7 +178,7 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(
                 return_value=(None, "Agent not found")
             )
@@ -187,6 +195,8 @@ class TestTestTokenEndpoint:
     async def test_get_test_token_permission_denied(self):
         """Test test token without proper permissions."""
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from fastapi import HTTPException
         from shared.voice_agents.models import VoiceAgent
 
@@ -208,7 +218,7 @@ class TestTestTokenEndpoint:
         mock_user_profile.has_role = Mock(return_value=False)
         mock_user_profile.has_permission = Mock(return_value=False)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with pytest.raises(HTTPException) as exc_info:
@@ -228,6 +238,8 @@ class TestTestTokenEndpoint:
         Without LiveKit configured, this returns 503 — same as active agents.
         """
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from fastapi import HTTPException
         from shared.voice_agents.models import VoiceAgent
 
@@ -248,7 +260,7 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with patch("src.voice_agents.routes.livekit_service") as mock_livekit:
@@ -269,6 +281,8 @@ class TestTestTokenEndpoint:
     async def test_get_test_token_livekit_not_configured(self):
         """Test test token when LiveKit is not configured."""
         from src.voice_agents.routes import get_test_token
+        import sys
+        _routes_mod = sys.modules['src.voice_agents.routes']
         from fastapi import HTTPException
         from shared.voice_agents.models import VoiceAgent
 
@@ -289,7 +303,7 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with patch.object(_routes_mod.settings, "voice_transport", "livekit"), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with patch("src.voice_agents.routes.livekit_service") as mock_livekit:

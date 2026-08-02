@@ -10,11 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
 
+from shared.config.settings import settings
 from shared.voice_agents.livekit_service import AGENT_DISPATCH_NAME, livekit_service
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
 from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.voice_session_service import voice_session_service
 from src.auth.dependencies import assert_has_permission, require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -26,11 +28,23 @@ agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])
 
 
 class TestTokenResponse(BaseModel):
-    """Response model for test token generation."""
+    """Response for browser test-call bootstrap (LiveKit or Pipecat).
 
+    Attributes:
+        transport: ``pipecat`` (WebSocket) or ``livekit`` (legacy WebRTC).
+        token: Session JWT (pipecat) or LiveKit room JWT (livekit).
+        serverUrl: LiveKit server URL when transport is livekit.
+        roomName: LiveKit room name when transport is livekit.
+        wsUrl: Browser WebSocket URL when transport is pipecat.
+        sessionId: Voice session id when transport is pipecat.
+    """
+
+    transport: str = "pipecat"
     token: str
-    serverUrl: str
-    roomName: str
+    serverUrl: Optional[str] = None
+    roomName: Optional[str] = None
+    wsUrl: Optional[str] = None
+    sessionId: Optional[str] = None
 
 
 async def _validate_preset_assignment(preset_id: Optional[UUID]) -> Optional[str]:
@@ -211,11 +225,11 @@ async def get_test_token(
     agent_id: UUID,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Generate a LiveKit token for browser-based agent testing.
+    """Bootstrap a browser test call (Pipecat WebSocket or LiveKit).
 
-    This endpoint allows users to test voice agents directly from the browser
-    without making a phone call. The user connects to a LiveKit room where
-    the AI agent joins and responds to voice input.
+    Controlled by ``VOICE_TRANSPORT`` / ``settings.voice_transport``:
+    - ``pipecat`` (default): short-lived voice_ws session JWT + ``wsUrl``
+    - ``livekit``: legacy LiveKit room token + agent dispatch
     """
     current_user_id, user_profile = user_data
 
@@ -225,8 +239,8 @@ async def get_test_token(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
     # Permission: agent:read on the agent's org. The test token is a
-    # read-equivalent op (it joins a LiveKit room to hear the agent
-    # speak), so the same gate as `get_agent` applies.
+    # read-equivalent op (join a voice session to hear the agent), so the
+    # same gate as `get_agent` applies.
     assert_has_permission(
         user_profile,
         "agent",
@@ -235,7 +249,32 @@ async def get_test_token(
         error_message="Insufficient permissions to test this agent",
     )
 
-    # Generate test token
+    transport = (settings.voice_transport or "pipecat").strip().lower()
+
+    if transport == "pipecat":
+        try:
+            token, session_id = voice_session_service.create_session_token(
+                agent_id=str(agent_id),
+                user_id=str(current_user_id),
+                purpose="test_call",
+            )
+        except ValueError as exc:
+            logger.error("Failed to create voice_ws session token: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Voice session service is not configured. Set JWT_SECRET_KEY.",
+            ) from exc
+
+        base = settings.voice_ws_public_url.rstrip("/")
+        ws_url = f"{base}/ws"
+        return TestTokenResponse(
+            transport="pipecat",
+            token=token,
+            wsUrl=ws_url,
+            sessionId=session_id,
+        )
+
+    # --- Legacy LiveKit path (VOICE_TRANSPORT=livekit) ---
     token, server_url, room_name = livekit_service.generate_test_token(
         agent_id=str(agent_id),
         user_id=str(current_user_id),
@@ -266,6 +305,7 @@ async def get_test_token(
         )
 
     return TestTokenResponse(
+        transport="livekit",
         token=token,
         serverUrl=server_url,
         roomName=room_name,
