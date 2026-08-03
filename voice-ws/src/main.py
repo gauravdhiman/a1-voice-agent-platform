@@ -3,6 +3,7 @@
 Exposes:
 - ``GET /health`` — liveness
 - ``WS /ws?token=...`` — browser audio session (Phase 1 test call)
+- ``WS /twilio?token=...`` — Twilio Media Streams (Phase 2 phone)
 """
 
 from __future__ import annotations
@@ -13,10 +14,12 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pipecat.runner.utils import parse_telephony_websocket
 
 from shared.voice_agents.voice_session_service import VoiceSessionService
 
 from src.bot import run_bot
+from src.twilio_session import build_twilio_serializer, resolve_session_token
 
 load_dotenv()
 
@@ -28,8 +31,8 @@ logger = logging.getLogger("voice-ws")
 
 app = FastAPI(
     title="CogniEnts Voice WebSocket Worker",
-    description="Pipecat + Gemini Realtime voice sessions (Phase 1)",
-    version="0.1.0",
+    description="Pipecat + Gemini Realtime voice sessions (web + Twilio)",
+    version="0.2.0",
 )
 
 session_service = VoiceSessionService()
@@ -69,6 +72,71 @@ async def websocket_endpoint(
         logger.info("WebSocket disconnected session_id=%s", claims.session_id)
     except Exception:
         logger.exception("voice-ws session failed session_id=%s", claims.session_id)
+        try:
+            await websocket.close(code=1011, reason="Internal error")
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@app.websocket("/twilio")
+async def twilio_websocket_endpoint(
+    websocket: WebSocket,
+    token: str | None = Query(
+        None, description="Optional voice_ws_session JWT (query may be stripped)"
+    ),
+) -> None:
+    """Accept a Twilio Media Streams WebSocket and run the Gemini Live bot.
+
+    Auth token may arrive as ``?token=`` on the Stream URL and/or as a Twilio
+    Stream ``<Parameter name="token">`` (preferred fallback). We accept the
+    socket first so the Twilio start handshake can be parsed, then verify.
+    """
+    # Accept before auth so Twilio can send the start event with customParameters.
+    # Unauthenticated sockets are closed immediately after handshake parse.
+    await websocket.accept()
+    logger.info(
+        "Twilio WebSocket accepted (pending auth) query_token_present=%s",
+        bool(token and token.strip()),
+    )
+    try:
+        transport_type, call_data = await parse_telephony_websocket(websocket)
+        if transport_type != "twilio":
+            raise ValueError(f"Expected twilio transport, got {transport_type!r}")
+
+        session_token = resolve_session_token(
+            query_token=token,
+            call_data=call_data,
+        )
+        if not session_token:
+            logger.warning(
+                "Rejecting Twilio WebSocket: no session token in query or Stream params"
+            )
+            await websocket.close(code=4401, reason="Missing session token")
+            return
+
+        claims = session_service.verify_session_token(session_token)
+        if claims is None:
+            logger.warning(
+                "Rejecting Twilio WebSocket: invalid or expired session token"
+            )
+            await websocket.close(code=4401, reason="Invalid session token")
+            return
+
+        serializer = build_twilio_serializer(call_data)
+        stream_id = getattr(call_data, "stream_id", None)
+        call_id = getattr(call_data, "call_id", None)
+        logger.info(
+            "Twilio stream ready session_id=%s agent_id=%s stream_id=%s call_id=%s",
+            claims.session_id,
+            claims.agent_id,
+            stream_id,
+            call_id,
+        )
+        await run_bot(websocket, claims, serializer=serializer)
+    except WebSocketDisconnect:
+        logger.info("Twilio WebSocket disconnected before/during session")
+    except Exception:
+        logger.exception("Twilio voice-ws session failed")
         try:
             await websocket.close(code=1011, reason="Internal error")
         except Exception:  # noqa: BLE001

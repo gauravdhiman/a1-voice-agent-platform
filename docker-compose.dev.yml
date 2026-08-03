@@ -34,6 +34,7 @@ services:
       # Voice transport: pipecat (default) or livekit (legacy rollback)
       - VOICE_TRANSPORT=${VOICE_TRANSPORT:-pipecat}
       - VOICE_WS_PUBLIC_URL=${VOICE_WS_PUBLIC_URL:-ws://localhost:7860}
+      - VOICE_WS_TWILIO_URL=${VOICE_WS_TWILIO_URL:-}
       # Stripe Configuration
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
@@ -141,6 +142,8 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - AGENT_DEFAULT_TIMEZONE=${AGENT_DEFAULT_TIMEZONE:-UTC}
       - VOICE_RECORDING_TEE=${VOICE_RECORDING_TEE:-false}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
     networks:
       - saas-dev-network
     restart: unless-stopped

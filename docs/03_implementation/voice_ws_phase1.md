@@ -36,7 +36,7 @@ docker compose -f docker-compose.dev.yml --profile livekit up -d worker-dev
 
 ## Not in Phase 1
 
-- Phone / Twilio Media Streams
-- Tools, MCP, skills on the Pipecat path
-- Pipeline STT→LLM→TTS
+- Phone / Twilio Media Streams → see [Phase 2](voice_ws_phase2.md)
+- Tools, MCP, skills on the Pipecat path (Phase 3)
+- Pipeline STT→LLM→TTS (Phase 3)
 - Persisted call recording (tee hook only)

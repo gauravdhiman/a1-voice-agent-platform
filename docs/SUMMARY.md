@@ -227,7 +227,7 @@ When adding new features:
 
 ### August 2026
 
-- 🚧 **Voice transport migration (Phase 1):** Pipecat WebSocket + Gemini Realtime via new `voice-ws/` container; LiveKit worker off by default (`VOICE_TRANSPORT=pipecat`). See **[ADR](01_architecture/ADR_VOICE_WS_PIPECAT.md)** and **[Phase 1 notes](03_implementation/voice_ws_phase1.md)**.
+- 🚧 **Voice transport migration (Phases 1–2):** Pipecat WebSocket + Gemini Realtime via `voice-ws/` (browser `/ws` + Twilio Media Streams `/twilio`); LiveKit worker off by default (`VOICE_TRANSPORT=pipecat`). See **[ADR](01_architecture/ADR_VOICE_WS_PIPECAT.md)**, **[Phase 1](03_implementation/voice_ws_phase1.md)**, **[Phase 2](03_implementation/voice_ws_phase2.md)**.
 
 ### January 2026
 

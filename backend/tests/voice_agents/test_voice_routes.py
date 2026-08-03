@@ -1,5 +1,5 @@
 """
-Tests for voice routes (Twilio webhook handling).
+Tests for voice routes (Twilio webhook handling — LiveKit SIP path).
 """
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -10,11 +10,10 @@ from src.voice_agents.voice_routes import handle_twilio_incoming
 
 @pytest.mark.asyncio
 class TestVoiceRoutes:
-    """Test cases for voice webhook routes."""
+    """Test cases for voice webhook routes (VOICE_TRANSPORT=livekit)."""
 
     async def test_handle_twilio_incoming_agent_found(self):
         """Test successful Twilio incoming call with agent found."""
-        # Mock request with form data
         mock_request = MagicMock()
         mock_request.form = AsyncMock(return_value={
             "To": "+1234567890",
@@ -22,20 +21,20 @@ class TestVoiceRoutes:
             "CallSid": "CA123456789"
         })
 
-        # Mock voice agent service
         mock_agent = MagicMock()
         mock_agent.phone_number = "+1234567890"
 
         with patch('src.voice_agents.voice_routes.voice_agent_service') as mock_service, \
+             patch('src.voice_agents.voice_routes.settings') as mock_settings, \
              patch.dict('os.environ', {'LIVEKIT_SIP_DOMAIN': 'sip.example.com'}):
 
+            mock_settings.voice_transport = "livekit"
             mock_service.get_agent_by_phone = AsyncMock(return_value=(mock_agent, None))
 
             response = await handle_twilio_incoming(mock_request)
 
             assert isinstance(response, Response)
             assert response.media_type == "application/xml"
-            # Check that XML contains expected SIP URI
             content = response.body.decode()
             assert "sip:+1234567890@sip.example.com" in content
 
@@ -71,8 +70,10 @@ class TestVoiceRoutes:
         mock_agent.phone_number = "+1234567890"
 
         with patch('src.voice_agents.voice_routes.voice_agent_service') as mock_service, \
+             patch('src.voice_agents.voice_routes.settings') as mock_settings, \
              patch.dict('os.environ', {}, clear=True):
 
+            mock_settings.voice_transport = "livekit"
             mock_service.get_agent_by_phone = AsyncMock(return_value=(mock_agent, None))
 
             response = await handle_twilio_incoming(mock_request)
@@ -95,13 +96,14 @@ class TestVoiceRoutes:
         mock_agent.phone_number = "+1234567890"
 
         with patch('src.voice_agents.voice_routes.voice_agent_service') as mock_service, \
+             patch('src.voice_agents.voice_routes.settings') as mock_settings, \
              patch.dict('os.environ', {'LIVEKIT_SIP_DOMAIN': 'sip:sip.example.com'}):
 
+            mock_settings.voice_transport = "livekit"
             mock_service.get_agent_by_phone = AsyncMock(return_value=(mock_agent, None))
 
             response = await handle_twilio_incoming(mock_request)
 
             assert isinstance(response, Response)
             content = response.body.decode()
-            # Should strip the sip: prefix from domain but keep it in the URI
             assert "sip:+1234567890@sip.example.com" in content

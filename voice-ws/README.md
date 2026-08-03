@@ -1,28 +1,30 @@
 # voice-ws — Pipecat WebSocket voice worker
 
-Phase 1 replacement for the LiveKit worker on the **active** call path.
-Handles browser test calls over a WebSocket using **Gemini Realtime** via Pipecat.
+Active call path for **browser test calls** and **Twilio Media Streams** phone
+calls, using **Gemini Realtime** via Pipecat.
 
 The LiveKit `worker/` package is intentionally left untouched for rollback
 (`VOICE_TRANSPORT=livekit`).
 
-## Architecture (Phase 1)
+## Architecture
 
 ```mermaid
 sequenceDiagram
-  participant FE as Frontend test call
+  participant Phone as Twilio caller
   participant BE as Backend
   participant WS as voice-ws
   participant G as Gemini Realtime
 
-  FE->>BE: POST /api/v1/agents/{id}/test-token
-  BE-->>FE: transport=pipecat, token, wsUrl
-  FE->>WS: WS /ws?token=...
-  WS->>WS: Verify JWT, load agent + prompt
+  Phone->>BE: POST /api/v1/voice/twilio/incoming
+  BE-->>Phone: TwiML Connect Stream + JWT
+  Phone->>WS: WS /twilio?token=...
+  WS->>WS: Verify JWT, parse Twilio start, load agent
   WS->>G: Gemini Live session
-  FE->>WS: Mic audio (protobuf frames)
-  WS->>FE: Agent audio (protobuf frames)
+  Phone->>WS: μ-law audio (Media Streams)
+  WS->>Phone: Agent audio (Media Streams)
 ```
+
+Browser test calls use `WS /ws` with protobuf frames (see Phase 1 notes).
 
 ## Local run (Docker)
 
@@ -44,11 +46,15 @@ curl http://localhost:7860/health
 | `GEMINI_API_KEY` | Platform Gemini key fallback |
 | `AGENT_DEFAULT_TIMEZONE` | Prompt datetime section |
 | `VOICE_RECORDING_TEE` | `true` to log tee activity (no storage yet) |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | Optional; enables Media Streams auto hang-up |
+
+Backend (not this container) also needs `VOICE_WS_TWILIO_URL=wss://…` for phone
+calls so Twilio can reach `/twilio`.
 
 ## Phases
 
-1. **Done here:** Web test call + Gemini Realtime
-2. Twilio Media Streams (phone) → same container
+1. **Done:** Web test call + Gemini Realtime (`/ws`)
+2. **Done:** Twilio Media Streams (phone) → `/twilio`
 3. STT→LLM→TTS pipeline + tools/MCP/skills
 
 ## Recording (future)

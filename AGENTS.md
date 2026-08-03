@@ -779,9 +779,10 @@ Never use `from X import Y` inside a function if `Y` is already imported at the 
 
 - Default active path is **`VOICE_TRANSPORT=pipecat`** with the new **`voice-ws/`** container (WebSocket + Gemini Realtime).
 - Leave the LiveKit **`worker/`** package in place for rollback; do not delete it. Start it with compose profile `livekit` when `VOICE_TRANSPORT=livekit`.
-- Browser test calls use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` when transport is pipecat.
+- Browser test calls use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` when transport is pipecat (`WS /ws`).
+- Phone calls use Twilio Media Streams → `voice-ws` `WS /twilio`. Set **`VOICE_WS_TWILIO_URL`** to a public `wss://` base (ngrok); localhost is rejected.
 - Session auth is a short-lived `voice_ws_session` JWT (`shared/voice_agents/voice_session_service.py`), signed with `JWT_SECRET_KEY` shared by backend and voice-ws.
-- Docs: `docs/01_architecture/ADR_VOICE_WS_PIPECAT.md`, `docs/03_implementation/voice_ws_phase1.md`.
+- Docs: `docs/01_architecture/ADR_VOICE_WS_PIPECAT.md`, `docs/03_implementation/voice_ws_phase1.md`, `docs/03_implementation/voice_ws_phase2.md`.
 
 ### Frontend: Tailwind CSS v4
 

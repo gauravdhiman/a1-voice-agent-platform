@@ -152,6 +152,16 @@ class Settings(BaseSettings):
         default="ws://localhost:7860",
         description="Public WebSocket base URL for the voice-ws service",
     )
+    # Twilio Media Streams require a publicly reachable wss:// URL (e.g. ngrok).
+    # Falls back to voice_ws_public_url only when that URL is already public wss.
+    voice_ws_twilio_url: str = Field(
+        default="",
+        description=(
+            "Public wss:// base URL Twilio uses for Media Streams "
+            "(e.g. wss://abc.ngrok-free.app). Empty means derive from "
+            "VOICE_WS_PUBLIC_URL when non-localhost."
+        ),
+    )
 
     # Token Refresh Service Settings
     token_refresh_check_interval_minutes: int = Field(

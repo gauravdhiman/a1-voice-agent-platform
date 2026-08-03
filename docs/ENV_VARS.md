@@ -32,7 +32,12 @@ All environment variables required for production deployment across all 4 servic
 | `LIVEKIT_API_KEY` | LiveKit API key (for voice token generation) | cloud.livekit.io → project → Settings → Keys | **Yes** |
 | `LIVEKIT_API_SECRET` | LiveKit API secret | cloud.livekit.io → project → Settings → Keys | **Yes** |
 | `LIVEKIT_URL` | LiveKit WebSocket URL | cloud.livekit.io → project → Settings (starts with `wss://`) | No |
-| `LIVEKIT_SIP_DOMAIN` | LiveKit SIP domain (used by `voice_routes.py`) | cloud.livekit.io → project → SIP settings | No |
+| `VOICE_TRANSPORT` | Active voice media path: `pipecat` (default) or `livekit` | Feature flag / `.env` | No |
+| `VOICE_WS_PUBLIC_URL` | Browser-reachable WebSocket base for voice-ws (e.g. `ws://localhost:7860`) | Local / public voice-ws host | No |
+| `VOICE_WS_TWILIO_URL` | Public `wss://` base Twilio Media Streams use (e.g. ngrok). Required for phone when transport is pipecat | ngrok / public tunnel to voice-ws `:7860` | No |
+| `LIVEKIT_SIP_DOMAIN` | LiveKit SIP domain (used when `VOICE_TRANSPORT=livekit`) | cloud.livekit.io → project → SIP settings | No |
+| `LIVEKIT_SIP_USERNAME` | Optional LiveKit SIP digest username | LiveKit / Twilio SIP credentials | **Yes** |
+| `LIVEKIT_SIP_PASSWORD` | Optional LiveKit SIP digest password | LiveKit / Twilio SIP credentials | **Yes** |
 | `RESEND_API_KEY` | Resend email API key for notification emails | resend.com → API Keys | **Yes** |
 | `GOOGLE_OAUTH_TOOL_CLIENT_ID` | Google OAuth client ID | Google Cloud Console → APIs & Services → Credentials | No |
 | `GOOGLE_OAUTH_TOOL_CLIENT_SECRET` | Google OAuth client secret | Google Cloud Console → APIs & Services → Credentials | **Yes** |

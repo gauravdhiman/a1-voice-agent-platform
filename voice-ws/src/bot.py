@@ -1,6 +1,10 @@
-"""Pipecat pipeline for Gemini Realtime over a browser WebSocket.
+"""Pipecat pipeline for Gemini Realtime over WebSocket transports.
 
-Phase 1: web test call only — no tools, no phone Media Streams.
+Supports:
+- Browser test calls (ProtobufFrameSerializer) — Phase 1
+- Twilio Media Streams (TwilioFrameSerializer) — Phase 2
+
+Tools / pipeline STT→LLM→TTS arrive in Phase 3.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
 )
+from pipecat.serializers.base_serializer import FrameSerializer
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.transports.websocket.fastapi import (
@@ -111,19 +116,29 @@ async def _build_system_instruction(agent) -> tuple[str, Optional[object]]:
     return instructions, org
 
 
-async def run_bot(websocket: WebSocket, claims: VoiceSessionClaims) -> None:
+async def run_bot(
+    websocket: WebSocket,
+    claims: VoiceSessionClaims,
+    *,
+    serializer: Optional[FrameSerializer] = None,
+) -> None:
     """Run a Gemini Realtime Pipecat session on an accepted WebSocket.
 
     Args:
-        websocket: Accepted FastAPI WebSocket from the browser client.
+        websocket: Accepted FastAPI WebSocket (browser or Twilio).
         claims: Verified ``voice_ws_session`` JWT claims.
+        serializer: Frame serializer for the transport. Defaults to
+            :class:`ProtobufFrameSerializer` (browser). Pass
+            :class:`TwilioFrameSerializer` for Media Streams.
     """
     agent_id = UUID(claims.agent_id)
+    frame_serializer: FrameSerializer = serializer or ProtobufFrameSerializer()
     logger.info(
-        "Starting voice-ws bot session_id=%s agent_id=%s purpose=%s",
+        "Starting voice-ws bot session_id=%s agent_id=%s purpose=%s serializer=%s",
         claims.session_id,
         claims.agent_id,
         claims.purpose,
+        type(frame_serializer).__name__,
     )
 
     agent, err = await voice_agent_service.get_agent_by_id(agent_id)
@@ -149,7 +164,7 @@ async def run_bot(websocket: WebSocket, claims: VoiceSessionClaims) -> None:
             audio_in_enabled=True,
             audio_out_enabled=True,
             add_wav_header=False,
-            serializer=ProtobufFrameSerializer(),
+            serializer=frame_serializer,
         ),
     )
 

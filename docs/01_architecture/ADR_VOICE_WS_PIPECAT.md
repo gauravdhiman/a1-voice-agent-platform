@@ -1,6 +1,6 @@
 # ADR: Replace LiveKit with Pipecat WebSocket voice transport
 
-**Status:** Accepted (Phase 1 in progress)  
+**Status:** Accepted (Phase 2 complete; Phase 3 pending)  
 **Date:** 2026-08-02  
 **Branch:** `feature/dump-livekit-use-websockets-or-pipecat`
 
@@ -32,6 +32,7 @@ LiveKit Cloud / SIP trunk complexity.
 
 ## Related
 
-- Implementation notes: `docs/03_implementation/voice_ws_phase1.md`
+- Implementation notes: `docs/03_implementation/voice_ws_phase1.md`,
+  `docs/03_implementation/voice_ws_phase2.md`
 - Parked LiveKit cloud deploy: `docs/05_operations/DEPLOY_BRANCH_PARKED.md` (on
   deploy branch only)
