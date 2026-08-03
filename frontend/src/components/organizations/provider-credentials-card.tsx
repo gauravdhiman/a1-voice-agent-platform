@@ -45,6 +45,8 @@ const EMPTY_DRAFT: ProviderCredsDraft = {
   openai: "",
   cartesia: "",
   cerebras: "",
+  openrouter: "",
+  fish: "",
   livekit_api_key: "",
   livekit_api_secret: "",
 };

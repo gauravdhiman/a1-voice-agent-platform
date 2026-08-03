@@ -102,6 +102,8 @@ class OrganizationService(BaseOrganizationService):
             "openai": bool(creds.get("openai")),
             "cartesia": bool(creds.get("cartesia")),
             "cerebras": bool(creds.get("cerebras")),
+            "openrouter": bool(creds.get("openrouter")),
+            "fish": bool(creds.get("fish")),
             "livekit": isinstance(livekit_creds, dict)
             and bool(livekit_creds.get("api_key")),
         }
@@ -406,7 +408,8 @@ class OrganizationService(BaseOrganizationService):
             # providers), and the plaintext column is cleared so the secret
             # exists only in encrypted form. ``provider_credentials_input``
             # carries the other providers (deepgram/openai/cartesia/cerebras/
-            # livekit) the same way. An empty ``google_api_key`` clears the
+            # openrouter/fish/livekit) plus google when the credentials card
+            # is used. An empty ``google_api_key`` clears the
             # google entry from the blob.
             cred_updates: dict = {}
             if (

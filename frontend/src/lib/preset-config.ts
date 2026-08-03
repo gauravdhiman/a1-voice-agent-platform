@@ -25,9 +25,10 @@ export const STT_PROVIDERS = ["deepgram", "livekit_inference"] as const;
 export const LLM_PROVIDERS = [
   "openai",
   "cerebras",
+  "openrouter",
   "livekit_inference",
 ] as const;
-export const TTS_PROVIDERS = ["cartesia", "livekit_inference"] as const;
+export const TTS_PROVIDERS = ["cartesia", "fish", "livekit_inference"] as const;
 export const VAD_PROVIDERS = ["silero"] as const;
 
 /** Default realtime field values — mirror `speech_config.py` constants. */

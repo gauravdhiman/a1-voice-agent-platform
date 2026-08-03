@@ -9,19 +9,32 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.fish.tts import FishAudioTTSService, FishAudioTTSSettings
 from pipecat.services.google.gemini_live.llm import (
     GeminiLiveLLMService,
     GeminiVADParams,
 )
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
 
 from shared.voice_agents.speech_config import (
     PipelineSpeechConfig,
     RealtimeSpeechConfig,
     SpeechConfig,
 )
+from src.speech.thinking_text_filter import ThinkingChannelTextFilter
 
 CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+OPENROUTER_DEFAULT_MODEL = "openai/gpt-4.1"
+FISH_DEFAULT_MODEL = "s2.1-pro-free"
+# Disable OpenRouter reasoning so Gemma/other thinking models do not stream
+# internal channel tokens into assistant content (which TTS would then speak).
+OPENROUTER_DISABLE_REASONING = {"reasoning": {"effort": "none", "exclude": True}}
+
+
+def _pipeline_tts_text_filters() -> list[ThinkingChannelTextFilter]:
+    """Return TTS filters that strip leaked model thinking/channel markers."""
+    return [ThinkingChannelTextFilter()]
 
 
 @dataclass
@@ -38,7 +51,7 @@ class PipelineComponents:
 
     mode: Literal["pipeline"]
     stt: Any
-    llm: OpenAILLMService
+    llm: Any
     tts: Any
     vad: SileroVADAnalyzer
 
@@ -56,8 +69,8 @@ def _stage_provider(config: Any, stage: str) -> str:
     model = (config.model or "").lower()
     candidates = {
         "stt": ("deepgram",),
-        "llm": ("openai", "cerebras"),
-        "tts": ("cartesia",),
+        "llm": ("openai", "cerebras", "openrouter"),
+        "tts": ("cartesia", "fish"),
     }[stage]
     for provider in candidates:
         if hint == provider or provider in model:
@@ -77,6 +90,98 @@ def _require_key(api_keys: dict[str, Any], provider: str, stage: str) -> str:
             f"Pipeline {stage} provider '{provider}' requires a '{provider}' API key."
         )
     return str(api_key)
+
+
+def _build_pipeline_stt(config: Any, api_keys: dict[str, Any]) -> Any:
+    """Build the STT service for a pipeline preset stage."""
+    provider = _stage_provider(config, "stt")
+    if provider != "deepgram":
+        raise ValueError(f"Unsupported Pipecat STT provider: {provider}")
+    stt_kwargs = dict(config.params)
+    if config.model:
+        stt_kwargs["model"] = config.model
+    return DeepgramSTTService(
+        api_key=_require_key(api_keys, provider, "stt"), **stt_kwargs
+    )
+
+
+def _build_pipeline_llm(
+    config: Any,
+    api_keys: dict[str, Any],
+    system_instruction: str,
+    tools: ToolsSchema | None,
+) -> Any:
+    """Build the LLM service for a pipeline preset stage."""
+    provider = _stage_provider(config, "llm")
+    llm_kwargs = dict(config.params)
+    if provider == "openai":
+        if config.model:
+            llm_kwargs["model"] = config.model
+        return OpenAILLMService(
+            api_key=_require_key(api_keys, provider, "llm"),
+            tools=tools,
+            settings=OpenAILLMService.Settings(system_instruction=system_instruction),
+            **llm_kwargs,
+        )
+    if provider == "cerebras":
+        if config.model:
+            llm_kwargs["model"] = config.model
+        llm_kwargs.setdefault("base_url", CEREBRAS_BASE_URL)
+        return OpenAILLMService(
+            api_key=_require_key(api_keys, provider, "llm"),
+            tools=tools,
+            settings=OpenAILLMService.Settings(system_instruction=system_instruction),
+            **llm_kwargs,
+        )
+    if provider == "openrouter":
+        model = config.model or OPENROUTER_DEFAULT_MODEL
+        # Merge preset params.extra (if any) under our reasoning defaults so
+        # callers can still override, but thinking stays off by default.
+        extra = dict(OPENROUTER_DISABLE_REASONING)
+        preset_extra = llm_kwargs.pop("extra", None)
+        if isinstance(preset_extra, dict):
+            extra.update(preset_extra)
+        return OpenRouterLLMService(
+            api_key=_require_key(api_keys, provider, "llm"),
+            tools=tools,
+            settings=OpenRouterLLMSettings(
+                model=model,
+                system_instruction=system_instruction,
+                extra=extra,
+            ),
+            **llm_kwargs,
+        )
+    raise ValueError(f"Unsupported Pipecat LLM provider: {provider}")
+
+
+def _build_pipeline_tts(config: Any, api_keys: dict[str, Any]) -> Any:
+    """Build the TTS service for a pipeline preset stage."""
+    provider = _stage_provider(config, "tts")
+    tts_kwargs = dict(config.params)
+    # Always attach the thinking-channel filter so Gemma/OpenRouter (and similar
+    # reasoning models) cannot leak "<|channel>thought" into spoken audio.
+    tts_kwargs.setdefault("text_filters", _pipeline_tts_text_filters())
+    if provider == "cartesia":
+        if config.model:
+            tts_kwargs["model"] = config.model
+        if config.voice:
+            tts_kwargs["voice_id"] = config.voice
+        return CartesiaTTSService(
+            api_key=_require_key(api_keys, provider, "tts"), **tts_kwargs
+        )
+    if provider == "fish":
+        # Fish Audio uses ``voice`` as the reference/voice id and ``model`` for
+        # the synthesis model (e.g. s2.1-pro-free). Extra params stay available
+        # for latency/prosody via Settings when needed later.
+        return FishAudioTTSService(
+            api_key=_require_key(api_keys, provider, "tts"),
+            settings=FishAudioTTSSettings(
+                model=config.model or FISH_DEFAULT_MODEL,
+                voice=config.voice,
+            ),
+            **tts_kwargs,
+        )
+    raise ValueError(f"Unsupported Pipecat TTS provider: {provider}")
 
 
 def build_speech_components(
@@ -123,42 +228,11 @@ def build_speech_components(
     if not isinstance(speech_config, PipelineSpeechConfig):
         raise TypeError(f"Unsupported speech config: {type(speech_config).__name__}")
 
-    stt_provider = _stage_provider(speech_config.stt, "stt")
-    if stt_provider != "deepgram":
-        raise ValueError(f"Unsupported Pipecat STT provider: {stt_provider}")
-    stt_kwargs = dict(speech_config.stt.params)
-    if speech_config.stt.model:
-        stt_kwargs["model"] = speech_config.stt.model
-    stt = DeepgramSTTService(
-        api_key=_require_key(api_keys, stt_provider, "stt"), **stt_kwargs
+    stt = _build_pipeline_stt(speech_config.stt, api_keys)
+    llm = _build_pipeline_llm(
+        speech_config.llm, api_keys, system_instruction, tools
     )
-
-    llm_provider = _stage_provider(speech_config.llm, "llm")
-    if llm_provider not in {"openai", "cerebras"}:
-        raise ValueError(f"Unsupported Pipecat LLM provider: {llm_provider}")
-    llm_kwargs = dict(speech_config.llm.params)
-    if speech_config.llm.model:
-        llm_kwargs["model"] = speech_config.llm.model
-    if llm_provider == "cerebras":
-        llm_kwargs.setdefault("base_url", CEREBRAS_BASE_URL)
-    llm = OpenAILLMService(
-        api_key=_require_key(api_keys, llm_provider, "llm"),
-        tools=tools,
-        settings=OpenAILLMService.Settings(system_instruction=system_instruction),
-        **llm_kwargs,
-    )
-
-    tts_provider = _stage_provider(speech_config.tts, "tts")
-    if tts_provider != "cartesia":
-        raise ValueError(f"Unsupported Pipecat TTS provider: {tts_provider}")
-    tts_kwargs = dict(speech_config.tts.params)
-    if speech_config.tts.model:
-        tts_kwargs["model"] = speech_config.tts.model
-    if speech_config.tts.voice:
-        tts_kwargs["voice_id"] = speech_config.tts.voice
-    tts = CartesiaTTSService(
-        api_key=_require_key(api_keys, tts_provider, "tts"), **tts_kwargs
-    )
+    tts = _build_pipeline_tts(speech_config.tts, api_keys)
     vad_params = dict(speech_config.vad.params) if speech_config.vad else {}
     return PipelineComponents(
         mode="pipeline",

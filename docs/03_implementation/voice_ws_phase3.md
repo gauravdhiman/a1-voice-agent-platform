@@ -14,7 +14,7 @@ flowchart LR
   JWT[Verified session JWT] --> Setup[prepare_voice_session]
   Setup --> Prompt[Prompt + tools + skills]
   Setup --> Realtime[Gemini Live]
-  Setup --> Pipeline[Deepgram → OpenAI/Cerebras → Cartesia]
+  Setup --> Pipeline[Deepgram → OpenAI/Cerebras/OpenRouter → Cartesia/Fish]
   Prompt --> Realtime
   Prompt --> Pipeline
 ```
@@ -26,8 +26,13 @@ flowchart LR
 - `src/tools/mcp_pipecat.py` discovers remote MCP schemas, sanitizes Gemini
   schemas, and owns MCP client lifecycle through call teardown.
 - Skills expose `load_skill` and `load_skill_reference` only when assigned.
-- `src/speech/factory.py` supports Gemini Live and direct Deepgram,
-  OpenAI/Cerebras, Cartesia, and Silero pipeline providers.
+- `src/speech/factory.py` supports Gemini Live and direct Deepgram STT,
+  OpenAI / Cerebras / OpenRouter LLM, Cartesia / Fish Audio TTS, and Silero VAD.
+  For OpenRouter, reasoning is disabled by default (`reasoning.effort=none`,
+  `exclude=true`) so Gemma-style thinking channels do not stream into assistant
+  content. Pipeline Cartesia/Fish TTS also attach
+  `ThinkingChannelTextFilter` to strip any leaked `<|channel>…` / `<think>`
+  markers before synthesis.
 - Dev compose runs `voice-ws/entrypoint.dev.sh`, which co-starts the local
   Google Calendar REST MCP connector on `127.0.0.1:8733` (required for
   `Google_calendar_mcp`).
@@ -42,8 +47,11 @@ falls back to the Gemini realtime default so the call still connects.
 1. **Realtime + tools:** Assign Gmail/Calendar (or MCP) tools + a skill to an
    agent on a Gemini realtime preset. Web test call and phone call should greet,
    then execute tools / `load_skill` when asked.
-2. **Pipeline preset:** Point the agent at a Deepgram → OpenAI → Cartesia
-   preset (direct providers). Confirm STT/LLM/TTS path speaks and tools still
-   work.
+2. **Pipeline preset:** Point the agent at a Deepgram → OpenRouter → Fish (or
+   OpenAI/Cerebras → Cartesia) preset with **direct** providers. Confirm
+   STT/LLM/TTS path speaks and tools still work.
 3. Env: same as Phase 2, plus pipeline keys as needed
-   (`DEEPGRAM_API_KEY`, `OPENAI_API_KEY` / `CEREBRAS_API_KEY`, `CARTESIA_API_KEY`).
+   (`DEEPGRAM_API_KEY`, `OPENAI_API_KEY` / `CEREBRAS_API_KEY` /
+   `OPENROUTER_API_KEY`, `CARTESIA_API_KEY` / `FISH_API_KEY`).
+   For Fish TTS, set the preset **voice** field to a Fish Audio voice
+   `reference_id` (model e.g. `s2.1-pro-free`).

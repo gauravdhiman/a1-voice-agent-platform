@@ -118,6 +118,8 @@ export default function OrganizationPage() {
     openai: "",
     cartesia: "",
     cerebras: "",
+    openrouter: "",
+    fish: "",
     livekit_api_key: "",
     livekit_api_secret: "",
   });
@@ -321,6 +323,8 @@ export default function OrganizationPage() {
       openai: "",
       cartesia: "",
       cerebras: "",
+      openrouter: "",
+      fish: "",
       livekit_api_key: "",
       livekit_api_secret: "",
     });

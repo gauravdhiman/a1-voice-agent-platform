@@ -333,6 +333,48 @@ class TestCheckAvailability:
         _patch_transport(monkeypatch, lambda req: _ok({"calendars": {"primary": {"busy": []}}}))
         assert await gcr.check_availability_logic("TOK", "2026-07-22T10:00:00Z", "2026-07-22T11:00:00Z") == {"status": "free"}
 
+    async def test_busy_when_google_keys_primary_as_email(self, monkeypatch):
+        """Google freeBusy resolves ``primary`` to the account email in response keys.
+
+        Looking up ``calendars["primary"]`` misses busy blocks and falsely reports
+        free — the real API shape keys by email (e.g. ``user@gmail.com``).
+        """
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return _ok(
+                {
+                    "calendars": {
+                        "gauravd.chd@gmail.com": {
+                            "busy": [
+                                {
+                                    "start": "2026-08-10T17:00:00Z",
+                                    "end": "2026-08-10T17:30:00Z",
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+
+        _patch_transport(monkeypatch, handler)
+        result = await gcr.check_availability_logic(
+            "TOK",
+            "2026-08-10T10:00:00-07:00",
+            "2026-08-10T10:30:00-07:00",
+            calendar_id="primary",
+        )
+        assert result == {"status": "busy"}
+
+    async def test_free_when_email_keyed_primary_has_empty_busy(self, monkeypatch):
+        """Email-keyed primary calendar with empty busy list is free."""
+        _patch_transport(
+            monkeypatch,
+            lambda req: _ok({"calendars": {"user@example.com": {"busy": []}}}),
+        )
+        assert await gcr.check_availability_logic(
+            "TOK", "2026-08-10T10:00:00-07:00", "2026-08-10T10:30:00-07:00"
+        ) == {"status": "free"}
+
 
 # ---------------------------------------------------------------------------
 # error handling

@@ -73,6 +73,8 @@ def clean_env(monkeypatch):
         "OPENAI_API_KEY",
         "CARTESIA_API_KEY",
         "CEREBRAS_API_KEY",
+        "OPENROUTER_API_KEY",
+        "FISH_API_KEY",
         "LIVEKIT_API_KEY",
         "LIVEKIT_API_SECRET",
     ):
@@ -113,6 +115,21 @@ class TestKeyResolver:
         api_keys = resolve_api_keys(_pipeline(), org=None)
         assert api_keys == {"deepgram": "dg", "openai": "oa", "cartesia": "ca"}
         assert "livekit" not in api_keys
+
+    def test_pipeline_openrouter_and_fish_keys(self, patch_decrypt, clean_env):
+        """OpenRouter LLM and Fish Audio TTS resolve from platform env keys."""
+        clean_env.setenv("DEEPGRAM_API_KEY", "dg")
+        clean_env.setenv("OPENROUTER_API_KEY", "or")
+        clean_env.setenv("FISH_API_KEY", "fish")
+        cfg = _pipeline(llm="openrouter", tts="fish")
+        api_keys = resolve_api_keys(cfg, org=None)
+        assert api_keys == {
+            "deepgram": "dg",
+            "openrouter": "or",
+            "fish": "fish",
+        }
+        assert "openai" not in api_keys
+        assert "cartesia" not in api_keys
 
     def test_pipeline_with_inference_stage_injects_livekit(
         self, patch_decrypt, clean_env

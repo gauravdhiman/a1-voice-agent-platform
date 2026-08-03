@@ -390,7 +390,16 @@ class TestProviderCredentialsStatus:
     secrets to the frontend.
     """
 
-    EXPECTED_KEYS = {"google", "deepgram", "openai", "cartesia", "cerebras", "livekit"}
+    EXPECTED_KEYS = {
+        "google",
+        "deepgram",
+        "openai",
+        "cartesia",
+        "cerebras",
+        "openrouter",
+        "fish",
+        "livekit",
+    }
 
     def test_status_from_blob_with_multiple_providers(self):
         with patch("src.organization.service.decrypt_data") as mock_dec:

@@ -55,6 +55,8 @@ _PLATFORM_ENV: dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "cartesia": "CARTESIA_API_KEY",
     "cerebras": "CEREBRAS_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "fish": "FISH_API_KEY",
 }
 
 # LiveKit Inference dispatch key -> the api_keys entry name. Inference shares one

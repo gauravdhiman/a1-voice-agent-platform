@@ -4,7 +4,7 @@
  *
  * Contract:
  *  - `Organization` (read) carries `provider_credentials_status` — a per-
- *    provider boolean map (google/deepgram/openai/cartesia/cerebras/livekit),
+ *    provider boolean map (google/deepgram/openai/cartesia/cerebras/openrouter/fish/livekit),
  *    never the decrypted values.
  *  - `OrganizationUpdate` (write) carries `provider_credentials_input` —
  *    touched providers only; a string to set, `null` to clear, `{api_key,
@@ -38,11 +38,15 @@ describe("Organization provider_credentials_status (read)", () => {
         openai: true,
         cartesia: false,
         cerebras: false,
+        openrouter: false,
+        fish: false,
         livekit: true,
       },
     };
     expect(org.provider_credentials_status?.google).toBe(true);
     expect(org.provider_credentials_status?.deepgram).toBe(false);
+    expect(org.provider_credentials_status?.openrouter).toBe(false);
+    expect(org.provider_credentials_status?.fish).toBe(false);
     expect(org.provider_credentials_status?.livekit).toBe(true);
   });
 });

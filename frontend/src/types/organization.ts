@@ -19,7 +19,8 @@ export interface Organization {
   /**
    * Per-provider "is a key configured?" map (booleans only — never the decrypted
    * values), derived from the encrypted `provider_credentials` blob on read
-   * (Phase 4). Keys: google, deepgram, openai, cartesia, cerebras, livekit.
+   * (Phase 4). Keys: google, deepgram, openai, cartesia, cerebras, openrouter,
+   * fish, livekit.
    * Drives the Configured/Not-configured pills on the org-settings page. The
    * `livekit` boolean is true when the livekit blob has an `api_key`.
    */
@@ -75,7 +76,7 @@ export interface OrganizationUpdate {
    * drops `None`). LiveKit is `{api_key, api_secret}`. The backend merges this
    * with the existing decrypted blob and re-encrypts; this field is never
    * persisted directly. Keys: google, deepgram, openai, cartesia, cerebras,
-   * livekit.
+   * openrouter, fish, livekit.
    */
   provider_credentials_input?: Record<
     string,

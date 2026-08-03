@@ -10,6 +10,8 @@ export const SIMPLE_PROVIDER_KEYS = [
   "openai",
   "cartesia",
   "cerebras",
+  "openrouter",
+  "fish",
 ] as const;
 
 export type SimpleProviderKey = (typeof SIMPLE_PROVIDER_KEYS)[number];
@@ -22,6 +24,8 @@ export const PROVIDER_LABELS: Record<ProviderCredentialKey, string> = {
   openai: "OpenAI",
   cartesia: "Cartesia",
   cerebras: "Cerebras",
+  openrouter: "OpenRouter",
+  fish: "Fish Audio",
   livekit: "LiveKit",
 };
 
@@ -31,6 +35,8 @@ export interface ProviderCredsDraft {
   openai: string;
   cartesia: string;
   cerebras: string;
+  openrouter: string;
+  fish: string;
   livekit_api_key: string;
   livekit_api_secret: string;
 }

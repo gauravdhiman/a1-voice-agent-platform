@@ -346,6 +346,42 @@ async def create_event_logic(
     }
 
 
+def _busy_blocks_from_freebusy(resp_body: dict, calendar_id: str) -> list:
+    """Extract busy intervals from a Google freeBusy response for one calendar.
+
+    Google's freeBusy API accepts ``"primary"`` in the request ``items`` list,
+    but the response ``calendars`` map is keyed by the resolved calendar id
+    (usually the account email), not the literal string ``"primary"``. Looking
+    up only ``calendars[calendar_id]`` therefore misses busy blocks and
+    incorrectly reports free.
+
+    Args:
+        resp_body: Parsed JSON body from ``POST /calendar/v3/freeBusy``.
+        calendar_id: Calendar id requested in the freeBusy call (often
+            ``primary``).
+
+    Returns:
+        List of busy interval dicts (``start`` / ``end``). Empty when the
+        calendar is free or the response has no calendar entries.
+    """
+    calendars = resp_body.get("calendars") or {}
+    if not isinstance(calendars, dict) or not calendars:
+        return []
+
+    direct = calendars.get(calendar_id)
+    if isinstance(direct, dict):
+        return list(direct.get("busy") or [])
+
+    # ``primary`` (and any other alias) may resolve to a single email-keyed
+    # entry. Aggregate busy blocks across all returned calendars for the query
+    # so we never miss an occupied slot.
+    busy: list = []
+    for entry in calendars.values():
+        if isinstance(entry, dict):
+            busy.extend(list(entry.get("busy") or []))
+    return busy
+
+
 async def check_availability_logic(
     token: str, time_min: str, time_max: str, calendar_id: str = "primary"
 ) -> dict:
@@ -371,7 +407,7 @@ async def check_availability_logic(
     status, resp_body = await _call_google("POST", "/freeBusy", token, json_body=body)
     if status != 200:
         return _err(status, resp_body)
-    busy = (resp_body.get("calendars", {}).get(calendar_id, {}) or {}).get("busy", [])
+    busy = _busy_blocks_from_freebusy(resp_body, calendar_id)
     return {"status": "busy" if busy else "free"}
 
 

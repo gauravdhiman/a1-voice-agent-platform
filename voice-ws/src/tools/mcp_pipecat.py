@@ -48,9 +48,10 @@ def _create_mcp_handler(client: McpClient, tool_name: str) -> Callable[..., Any]
             return
         text = _mcp_result_text(result)
         logger.info(
-            "MCP tool %s completed error=%s",
+            "MCP tool %s completed error=%s result=%s",
             tool_name,
             getattr(result, "is_error", False),
+            text[:500] if isinstance(text, str) else text,
         )
         await params.result_callback(text)
 
