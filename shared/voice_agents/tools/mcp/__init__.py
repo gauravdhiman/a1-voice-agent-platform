@@ -17,13 +17,6 @@ Public API:
       :func:`build_livekit_tools_for_agent_tool` — worker dispatch helpers
       (Phase 3a): turn an MCP-sourced ``agent_tools`` row into LiveKit tools.
 """
-from shared.voice_agents.tools.mcp.client import McpClient
-from shared.voice_agents.tools.mcp.dispatch import (
-    build_livekit_tools_for_agent_tool,
-    build_mcp_livekit_tools,
-    mcp_server_config_from_agent_tool,
-)
-from shared.voice_agents.tools.mcp.livekit_adapter import mcp_tool_to_livekit_tool
 from shared.voice_agents.tools.mcp.models import (
     McpServerConfig,
     McpToolDef,
@@ -40,3 +33,29 @@ __all__ = [
     "mcp_server_config_from_agent_tool",
     "mcp_tool_to_livekit_tool",
 ]
+
+
+def __getattr__(name: str):
+    """Load LiveKit-only helpers lazily so Pipecat can use the MCP client.
+
+    The Pipecat container deliberately excludes ``livekit-agents``. Keeping
+    the legacy adapter imports lazy preserves the worker's package-level public
+    API without making the shared MCP client depend on LiveKit at import time.
+    """
+    if name == "McpClient":
+        from shared.voice_agents.tools.mcp.client import McpClient
+
+        return McpClient
+    if name in {
+        "build_livekit_tools_for_agent_tool",
+        "build_mcp_livekit_tools",
+        "mcp_server_config_from_agent_tool",
+    }:
+        from shared.voice_agents.tools.mcp import dispatch
+
+        return getattr(dispatch, name)
+    if name == "mcp_tool_to_livekit_tool":
+        from shared.voice_agents.tools.mcp.livekit_adapter import mcp_tool_to_livekit_tool
+
+        return mcp_tool_to_livekit_tool
+    raise AttributeError(name)

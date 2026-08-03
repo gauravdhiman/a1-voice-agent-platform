@@ -34,6 +34,38 @@ class TestLiveKitToolRegistry:
         # Verify tools were registered
         assert len(registry._tools) >= initial_count
 
+    def test_register_tools_from_package_skips_import_errors(self, registry):
+        """A single broken tool module must not abort package registration.
+
+        voice-ws and the LiveKit worker both discover tools via
+        ``pkgutil.walk_packages``. Optional third-party imports (e.g. ``bs4``
+        for Gmail) may be missing in lean images; registration should skip
+        those modules and continue so the session can still start.
+        """
+        from shared.voice_agents.tools.base.registry_livekit import (
+            LiveKitToolRegistry,
+        )
+
+        fresh = LiveKitToolRegistry()
+        real_import = __import__("importlib").import_module
+
+        def _import_module(name: str, package=None):
+            if name.endswith(".gmail"):
+                raise ModuleNotFoundError("No module named 'bs4'")
+            return real_import(name, package)
+
+        with patch(
+            "shared.voice_agents.tools.base.registry_livekit.importlib.import_module",
+            side_effect=_import_module,
+        ):
+            fresh.register_tools_from_package(
+                "shared.voice_agents.tools.implementations"
+            )
+
+        assert fresh.get_tool_class("Gmail") is None
+        assert fresh.get_tool_class("CalCom") is not None
+        assert fresh.get_tool_class("Google_calendar") is not None
+
     def test_get_tool_class(self, registry):
         """Test getting tool class by name."""
         # Register tools first

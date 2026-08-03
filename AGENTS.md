@@ -782,7 +782,17 @@ Never use `from X import Y` inside a function if `Y` is already imported at the 
 - Browser test calls use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` when transport is pipecat (`WS /ws`).
 - Phone calls use Twilio Media Streams → `voice-ws` `WS /twilio`. Set **`VOICE_WS_TWILIO_URL`** to a public `wss://` base (ngrok); localhost is rejected.
 - Session auth is a short-lived `voice_ws_session` JWT (`shared/voice_agents/voice_session_service.py`), signed with `JWT_SECRET_KEY` shared by backend and voice-ws.
-- Docs: `docs/01_architecture/ADR_VOICE_WS_PIPECAT.md`, `docs/03_implementation/voice_ws_phase1.md`, `docs/03_implementation/voice_ws_phase2.md`.
+- Phase 3 parity lives in `voice-ws/src/session_setup.py`, `src/tools/`, and
+  `src/speech/`; MCP imports must remain lazy in shared modules because the
+  Pipecat container intentionally does not install `livekit-agents`.
+- Local `Google_calendar_mcp` (`http://127.0.0.1:8733/mcp`) is started as a
+  co-process by `voice-ws/entrypoint.dev.sh` (same pattern as
+  `worker/entrypoint.dev.sh`). If calendar tools are missing at runtime, recreate
+  `voice-ws-dev` — a plain uvicorn CMD will not start the connector.
+- After changing `voice-ws/requirements.txt`, rebuild the image
+  (`docker compose -f docker-compose.dev.yml build voice-ws-dev`); restart alone
+  does not install new packages.
+- Docs: `docs/01_architecture/ADR_VOICE_WS_PIPECAT.md`, `docs/03_implementation/voice_ws_phase1.md`, `docs/03_implementation/voice_ws_phase2.md`, `docs/03_implementation/voice_ws_phase3.md`.
 
 ### Frontend: Tailwind CSS v4
 

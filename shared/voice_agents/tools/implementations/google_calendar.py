@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import httpx
-from livekit.agents import RunContext
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from pydantic import Field
 
 from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
@@ -55,7 +55,7 @@ class GoogleCalendarTool(BaseTool):
 
     async def list_events(
         self,
-        context: RunContext,
+        context: ToolContext,
         time_min: str,
         time_max: str | None = None,
         max_results: int = 10,
@@ -70,7 +70,7 @@ class GoogleCalendarTool(BaseTool):
             Default to 10 events, ask for more if needed.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             time_min: Start of time range in ISO format (e.g., 2025-12-30T09:00:00Z), with timezone
             time_max: End of time range in ISO format (optional), with timezone
             max_results: Maximum number of events to return (default: 10)
@@ -101,7 +101,7 @@ class GoogleCalendarTool(BaseTool):
 
     async def create_event(
         self,
-        context: RunContext,
+        context: ToolContext,
         title: str,
         start_time: str,
         duration_minutes: int = 30,
@@ -123,7 +123,7 @@ class GoogleCalendarTool(BaseTool):
             DO NOT CREATE EVENT WITHOUT USER EXPLICIT CONFIRMATION.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             title: Event title
             start_time: Event start time in ISO format
             duration_minutes: Duration in minutes (default: 30 from config)
@@ -165,7 +165,7 @@ class GoogleCalendarTool(BaseTool):
 
     async def update_event(
         self,
-        context: RunContext,
+        context: ToolContext,
         event_id: str,
         title: str | None = None,
         start_time: str | None = None,
@@ -188,7 +188,7 @@ class GoogleCalendarTool(BaseTool):
             DO NOT CREATE EVENT WITHOUT USER EXPLICIT CONFIRMATION.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             event_id: The ID of the event to update
             title: New event title (optional)
             start_time: New event start time in ISO format (optional)
@@ -230,7 +230,7 @@ class GoogleCalendarTool(BaseTool):
             response.raise_for_status()
             return response.json()
 
-    async def delete_event(self, context: RunContext, event_id: str) -> dict[str, Any]:
+    async def delete_event(self, context: ToolContext, event_id: str) -> dict[str, Any]:
         """
         Description:
             Remove / Delete an event from the user's Google Calendar.
@@ -241,7 +241,7 @@ class GoogleCalendarTool(BaseTool):
             as this action cannot be undone.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             event_id: The ID of the event to delete
 
         Returns:
@@ -262,7 +262,7 @@ class GoogleCalendarTool(BaseTool):
             response.raise_for_status()
             return {"success": True, "message": "Event deleted successfully"}
 
-    async def get_event(self, context: RunContext, event_id: str) -> dict[str, Any]:
+    async def get_event(self, context: ToolContext, event_id: str) -> dict[str, Any]:
         """
         Description:
             Get detailed information about a specific calendar event.
@@ -272,7 +272,7 @@ class GoogleCalendarTool(BaseTool):
             Helpful for verifying event information before updates.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             event_id: ID of event to retrieve
 
             Returns:
@@ -299,7 +299,7 @@ class GoogleCalendarTool(BaseTool):
             }
 
     async def check_availability(
-        self, context: RunContext, date: str, duration_minutes: int = 30
+        self, context: ToolContext, date: str, duration_minutes: int = 30
     ) -> dict[str, Any]:
         """
         Description:
@@ -311,7 +311,7 @@ class GoogleCalendarTool(BaseTool):
             - Use before creating or updating events to avoid double-booking.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             date: Date and time to check in ISO format
             duration_minutes: Duration to check in minutes (default: 30)
         """

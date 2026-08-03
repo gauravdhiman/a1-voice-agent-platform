@@ -8,7 +8,7 @@ from venv import logger
 
 import httpx
 from bs4 import BeautifulSoup
-from livekit.agents import RunContext
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from pydantic import Field
 
 from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
@@ -68,7 +68,7 @@ class GmailTool(BaseTool):
 
     async def get_latest_emails(
         self,
-        context: RunContext,
+        context: ToolContext,
         count: int = 5,
     ) -> dict[str, Any]:
         """
@@ -80,7 +80,7 @@ class GmailTool(BaseTool):
             This is for browsing recent emails, not for bulk operations.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             count: Number of latest emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -115,7 +115,7 @@ class GmailTool(BaseTool):
 
     async def get_emails_from_user(
         self,
-        context: RunContext,
+        context: ToolContext,
         user: str,
         count: int = 5,
     ) -> dict[str, Any]:
@@ -128,7 +128,7 @@ class GmailTool(BaseTool):
             For names, use partial matching (e.g., "John" matches "john@example.com").
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             user: Name or email address of the sender
             count: Maximum number of emails to retrieve (default: 5, max: 10)
 
@@ -167,7 +167,7 @@ class GmailTool(BaseTool):
 
     async def get_unread_emails(
         self,
-        context: RunContext,
+        context: ToolContext,
         count: int = 5,
     ) -> dict[str, Any]:
         """
@@ -179,7 +179,7 @@ class GmailTool(BaseTool):
             Suggest user mark as read if they've reviewed them.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             count: Maximum number of unread emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -215,7 +215,7 @@ class GmailTool(BaseTool):
 
     async def get_starred_emails(
         self,
-        context: RunContext,
+        context: ToolContext,
         count: int = 5,
     ) -> dict[str, Any]:
         """
@@ -227,7 +227,7 @@ class GmailTool(BaseTool):
             Limit to 5-10 unless user needs more for review.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             count: Maximum number of starred emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -263,7 +263,7 @@ class GmailTool(BaseTool):
 
     async def get_emails_by_context(
         self,
-        context: RunContext,
+        context: ToolContext,
         query: str,
         count: int = 5,
     ) -> dict[str, Any]:
@@ -276,7 +276,7 @@ class GmailTool(BaseTool):
             Avoid overly broad queries that return hundreds of results.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             query: Search query for filtering emails
             count: Maximum number of emails to retrieve (default: 5, max: 10)
 
@@ -313,7 +313,7 @@ class GmailTool(BaseTool):
 
     async def get_emails_by_date(
         self,
-        context: RunContext,
+        context: ToolContext,
         start_date: int,
         range_in_days: Optional[int] = None,
         num_emails: int = 10,
@@ -327,7 +327,7 @@ class GmailTool(BaseTool):
             Use reasonable range (7-15 days) to avoid overwhelming results.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             start_date: Unix timestamp for start date
             range_in_days: Number of days to include in the range (optional)
             num_emails: Maximum number of emails to retrieve (default: 10)
@@ -371,7 +371,7 @@ class GmailTool(BaseTool):
 
     async def get_emails_by_thread(
         self,
-        context: RunContext,
+        context: ToolContext,
         thread_id: str,
     ) -> dict[str, Any]:
         """
@@ -383,7 +383,7 @@ class GmailTool(BaseTool):
             Useful for understanding full conversation context before responding.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             thread_id: The ID of the email thread
 
         Returns:
@@ -414,7 +414,7 @@ class GmailTool(BaseTool):
 
     async def search_emails(
         self,
-        context: RunContext,
+        context: ToolContext,
         query: str,
         count: int = 1,
     ) -> dict[str, Any]:
@@ -428,7 +428,7 @@ class GmailTool(BaseTool):
             Use Gmail search syntax (from:, subject:, etc.) for precision.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             query: Natural language query to search for
             count: Number of emails to retrieve (default: 1, max: 10)
 
@@ -465,7 +465,7 @@ class GmailTool(BaseTool):
 
     async def create_draft_email(
         self,
-        context: RunContext,
+        context: ToolContext,
         to: str,
         subject: str,
         body: str,
@@ -480,7 +480,7 @@ class GmailTool(BaseTool):
             Drafts can be edited via Gmail interface before sending.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             to: Comma separated string of recipient email addresses
             subject: Email subject
             body: Email body content
@@ -513,7 +513,7 @@ class GmailTool(BaseTool):
 
     async def send_email(
         self,
-        context: RunContext,
+        context: ToolContext,
         to: str,
         subject: str,
         body: str,
@@ -529,7 +529,7 @@ class GmailTool(BaseTool):
             Format body as plain text, not HTML (system handles conversion).
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             to: Comma separated string of recipient email addresses
             subject: Email subject
             body: Email body content
@@ -563,7 +563,7 @@ class GmailTool(BaseTool):
 
     async def send_email_reply(
         self,
-        context: RunContext,
+        context: ToolContext,
         thread_id: str,
         message_id: str,
         to: str,
@@ -580,7 +580,7 @@ class GmailTool(BaseTool):
             Automatically handles "Re:" prefix in subject line.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             thread_id: The ID of the email thread to reply to
             message_id: The ID of the email being replied to
             to: Comma-separated recipient email addresses
@@ -624,7 +624,7 @@ class GmailTool(BaseTool):
 
     async def mark_email_as_read(
         self,
-        context: RunContext,
+        context: ToolContext,
         message_id: str,
     ) -> dict[str, Any]:
         """
@@ -636,7 +636,7 @@ class GmailTool(BaseTool):
             Helps keep inbox organized by tracking read status.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             message_id: The ID of the message to mark as read
 
         Returns:
@@ -660,7 +660,7 @@ class GmailTool(BaseTool):
 
     async def mark_email_as_unread(
         self,
-        context: RunContext,
+        context: ToolContext,
         message_id: str,
     ) -> dict[str, Any]:
         """
@@ -672,7 +672,7 @@ class GmailTool(BaseTool):
             Useful for flagging emails for follow-up.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             message_id: The ID of the message to mark as unread
 
         Returns:
@@ -696,7 +696,7 @@ class GmailTool(BaseTool):
 
     async def list_custom_labels(
         self,
-        context: RunContext,
+        context: ToolContext,
     ) -> dict[str, Any]:
         """
         Description:
@@ -707,7 +707,7 @@ class GmailTool(BaseTool):
             Useful for understanding user's labeling system.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
 
         Returns:
             Dict containing list of custom labels
@@ -736,7 +736,7 @@ class GmailTool(BaseTool):
 
     async def apply_label(
         self,
-        context: RunContext,
+        context: ToolContext,
         query: str,
         label_name: str,
         count: int = 5,
@@ -751,7 +751,7 @@ class GmailTool(BaseTool):
             Use specific search queries for precision.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             query: Gmail search query to find emails
             label_name: Name of the label to apply
             count: Number of emails to process (default: 5, max: 10)
@@ -823,7 +823,7 @@ class GmailTool(BaseTool):
 
     async def remove_label(
         self,
-        context: RunContext,
+        context: ToolContext,
         query: str,
         label_name: str,
         count: int = 5,
@@ -837,7 +837,7 @@ class GmailTool(BaseTool):
             Confirm with user before removing labels from many emails.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             query: Gmail search query to find emails
             label_name: Name of the label to remove
             count: Number of emails to process (default: 5, max: 10)
@@ -903,7 +903,7 @@ class GmailTool(BaseTool):
 
     async def delete_email(
         self,
-        context: RunContext,
+        context: ToolContext,
         message_id: str,
         confirm: bool = False,
     ) -> dict[str, Any]:
@@ -917,7 +917,7 @@ class GmailTool(BaseTool):
             Emails in trash are permanently deleted after 30 days.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             message_id: ID of the message to delete
             confirm: Must be True to actually delete the email
 
@@ -951,7 +951,7 @@ class GmailTool(BaseTool):
 
     async def delete_custom_label(
         self,
-        context: RunContext,
+        context: ToolContext,
         label_name: str,
         confirm: bool = False,
     ) -> dict[str, Any]:
@@ -965,7 +965,7 @@ class GmailTool(BaseTool):
             Warning: Removing label doesn't delete the emails tagged with it.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             label_name: Name of label to delete
             confirm: Must be True to actually delete label
 
@@ -1066,7 +1066,7 @@ class GmailTool(BaseTool):
         return email_data
 
     async def _get_message_details(
-        self, context: RunContext, message_id: str
+        self, context: ToolContext, message_id: str
     ) -> dict[str, Any]:
         """Get detailed information about a specific message."""
         if not self.sensitive_config or not self.sensitive_config.access_token:
@@ -1140,7 +1140,7 @@ class GmailTool(BaseTool):
             }
 
     async def read_email(
-        self, context: RunContext, message_id: str, fetch_body: bool = True
+        self, context: ToolContext, message_id: str, fetch_body: bool = True
     ) -> dict[str, Any]:
         """
         Description:
@@ -1151,7 +1151,7 @@ class GmailTool(BaseTool):
             Optionally skip body if user only wants metadata (headers).
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: LiveKit ToolContext with tool_config and sensitive_config
             message_id: ID of the email to read
             fetch_body: Whether to fetch the email body (default: True)
 

@@ -1,7 +1,8 @@
 # voice-ws — Pipecat WebSocket voice worker
 
 Active call path for **browser test calls** and **Twilio Media Streams** phone
-calls, using **Gemini Realtime** via Pipecat.
+calls, using Pipecat. Agent presets select either **Gemini Realtime** or a
+modular Deepgram → OpenAI/Cerebras → Cartesia pipeline.
 
 The LiveKit `worker/` package is intentionally left untouched for rollback
 (`VOICE_TRANSPORT=livekit`).
@@ -44,6 +45,7 @@ curl http://localhost:7860/health
 | `JWT_SECRET_KEY` | Must match backend (session JWT) |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | Agent/org/prompt loading |
 | `GEMINI_API_KEY` | Platform Gemini key fallback |
+| `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` / `CEREBRAS_API_KEY` | Pipeline provider key fallbacks |
 | `AGENT_DEFAULT_TIMEZONE` | Prompt datetime section |
 | `VOICE_RECORDING_TEE` | `true` to log tee activity (no storage yet) |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | Optional; enables Media Streams auto hang-up |
@@ -55,7 +57,7 @@ calls so Twilio can reach `/twilio`.
 
 1. **Done:** Web test call + Gemini Realtime (`/ws`)
 2. **Done:** Twilio Media Streams (phone) → `/twilio`
-3. STT→LLM→TTS pipeline + tools/MCP/skills
+3. **Done:** STT→LLM→TTS pipeline + shared tools, MCP, and skills
 
 ## Recording (future)
 

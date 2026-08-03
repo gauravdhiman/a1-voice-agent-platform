@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from default_system_prompt import default_system_prompt
+from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -19,16 +19,12 @@ from shared.common.security import decrypt_data
 from shared.organization.service import BaseOrganizationService
 from shared.voice_agents.key_resolver import resolve_api_keys
 from shared.voice_agents.livekit_service import AGENT_DISPATCH_NAME, livekit_service
-from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import (
     PromptBuilder,
     build_current_datetime_section,
 )
 from shared.voice_agents.service import voice_agent_service
-from shared.voice_agents.speech_config import (
-    default_realtime_config,
-    parse_speech_config,
-)
+from shared.voice_agents.speech_config_resolver import resolve_speech_config_for_agent
 
 # MCP integration (Phase 3a) — the parallel tool path. Only used for
 # platform_tools rows marked tool_source='mcp'; the legacy BaseTool path below
@@ -247,81 +243,13 @@ async def _cleanup_mcp_clients(mcp_clients: list, handed_off: bool) -> None:
 
 
 async def _resolve_speech_config(voice_agent, agent_id: str):
-    """Resolve the ``SpeechConfig`` for a call from the agent's preset.
+    """Compatibility alias for the shared speech-config resolver.
 
-    Phase 4 fallback chain (a misconfigured preset/default never breaks a live
-    call — graceful degrade, loud log):
-
-    - explicit ``preset_id``, loadable + parseable -> that preset's config;
-    - explicit ``preset_id`` whose row is missing (deleted), unparseable, or
-      fails to load -> the hardcoded realtime default;
-    - no ``preset_id`` -> the **system default preset** (the single
-      ``is_default`` row the platform admin manages), if present and parseable,
-      else the hardcoded realtime default. The seeded default keeps out-of-box
-      behavior identical to the pre-Phase-4 hardcoded realtime fallback.
-
-    The worker loads the chosen preset **live on every call** (no versioning),
-    so an admin's edit takes effect on the next call. See
-    :mod:`shared.voice_agents.preset_service` (``get_preset_by_id``,
-    ``get_default_preset``).
-
-    Args:
-        voice_agent: The voice-agent row (must expose ``preset_id``; may be
-            ``None`` for a legacy agent or one whose preset was deleted via the
-            FK ``ON DELETE SET NULL``).
-        agent_id: The agent id, for log lines.
-
-    Returns:
-        A concrete ``SpeechConfig`` (realtime or pipeline); always the
-        hardcoded realtime default on any failure in the chain.
+    Existing worker tests and integrations import this private helper. Keep its
+    async shape while delegating all selection and fallback behavior to shared
+    code used by both voice transports.
     """
-    preset_id = getattr(voice_agent, "preset_id", None)
-
-    if preset_id:
-        preset, preset_error = await preset_service.get_preset_by_id(preset_id)
-        if preset_error:
-            logger.error(
-                f"Agent {agent_id}: error loading preset {preset_id}: "
-                f"{preset_error}; falling back to realtime default."
-            )
-            return default_realtime_config()
-        if preset is None:
-            logger.error(
-                f"Agent {agent_id}: preset {preset_id} not found "
-                "(deleted?); falling back to realtime default."
-            )
-            return default_realtime_config()
-        try:
-            return parse_speech_config(preset.config)
-        except Exception as cfg_err:
-            logger.error(
-                f"Agent {agent_id}: preset {preset_id} has an "
-                f"unparseable config ({cfg_err}); falling back to "
-                f"realtime default."
-            )
-            return default_realtime_config()
-
-    # No explicit preset: use the admin-designated system default preset row,
-    # if present and parseable; otherwise the hardcoded realtime default.
-    default_preset, default_error = await preset_service.get_default_preset()
-    if default_error:
-        logger.error(
-            f"Agent {agent_id}: error loading the system default preset: "
-            f"{default_error}; falling back to realtime default."
-        )
-        return default_realtime_config()
-    if default_preset is None:
-        # No default row designated (the migration seeds one, so this is a
-        # degraded/empty-DB state) -> keep the hardcoded realtime default.
-        return default_realtime_config()
-    try:
-        return parse_speech_config(default_preset.config)
-    except Exception as cfg_err:
-        logger.error(
-            f"Agent {agent_id}: system default preset has an unparseable "
-            f"config ({cfg_err}); falling back to realtime default."
-        )
-        return default_realtime_config()
+    return await resolve_speech_config_for_agent(voice_agent, agent_id)
 
 
 class DynamicAgent(Agent):
@@ -608,7 +536,7 @@ async def entrypoint(ctx: JobContext):
             )
             # Fallback to default prompt if org data unavailable; still prepend the
             # current-date/time anchor so the model has a temporal reference.
-            instructions = current_dt_section + "\n\n" + default_system_prompt
+            instructions = current_dt_section + "\n\n" + DEFAULT_VOICE_SYSTEM_PROMPT
             # ``org`` stays None — the key resolver falls back to platform env
             # vars for every provider (no org BYO keys available).
             org = None
@@ -616,7 +544,7 @@ async def entrypoint(ctx: JobContext):
             instructions = PromptBuilder.build(
                 org=org,
                 agent=voice_agent,
-                default_rules=default_system_prompt,
+                default_rules=DEFAULT_VOICE_SYSTEM_PROMPT,
                 enabled_tools=enabled_tool_names,
                 agent_skills=skill_summaries,
                 current_datetime=current_dt_section,

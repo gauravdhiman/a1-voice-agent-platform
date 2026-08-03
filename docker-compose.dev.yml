@@ -124,6 +124,9 @@ services:
     build:
       context: ./voice-ws
       dockerfile: Dockerfile.dev
+    # Dev entrypoint starts the local Google Calendar REST connector (MCP) as a
+    # co-process so Google_calendar_mcp (127.0.0.1:8733) works without LiveKit.
+    command: ["bash", "/app/entrypoint.dev.sh"]
     ports:
       - "7860:7860"
     volumes:
@@ -140,10 +143,16 @@ services:
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CARTESIA_API_KEY=${CARTESIA_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
       - AGENT_DEFAULT_TIMEZONE=${AGENT_DEFAULT_TIMEZONE:-UTC}
       - VOICE_RECORDING_TEE=${VOICE_RECORDING_TEE:-false}
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - MCP_HOST=127.0.0.1
+      - MCP_PORT=8733
     networks:
       - saas-dev-network
     restart: unless-stopped

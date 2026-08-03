@@ -1,8 +1,7 @@
-"""Default voice output rules for Phase 1 (tools deferred to Phase 3)."""
+"""Compatibility exports for the shared voice system prompt."""
 
-DEFAULT_VOICE_RULES = """
-# OUTPUT RULES
-- Speak naturally and briefly; this is a voice conversation.
-- Do not use markdown, bullet lists, or emoji in spoken replies.
-- If you do not know something, say so clearly.
-""".strip()
+from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
+
+DEFAULT_VOICE_RULES = DEFAULT_VOICE_SYSTEM_PROMPT
+
+__all__ = ["DEFAULT_VOICE_SYSTEM_PROMPT", "DEFAULT_VOICE_RULES"]

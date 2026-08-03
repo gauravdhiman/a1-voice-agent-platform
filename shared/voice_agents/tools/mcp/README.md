@@ -98,25 +98,27 @@ prompts the model to gather caller information rather than booking for an
 unknown caller. Regression-guarded by
 `TestToolDescriptionsPromptFrontDeskBehavior`.
 
-**The connector auto-starts with the dev worker container.** The dev compose
-service (`docker-compose.dev.yml`, `worker-dev`) runs
-[`worker/entrypoint.dev.sh`](../../../worker/entrypoint.dev.sh), which launches
-the connector as a co-process and then `exec`s the worker. Because the connector
-is a child of the worker (PID 1) in the same container, it:
+**The connector auto-starts with the active voice container.**
 
-- starts automatically whenever the worker container starts or restarts (so the
-  MCP Calendar path no longer breaks on a worker restart);
-- binds `127.0.0.1:8733` inside the same container the worker lives in — which is
-  why the `Google_calendar_mcp` row can point at `http://127.0.0.1:8733/mcp`;
-- is torn down with the container (`exec` makes the worker PID 1 and receives
+- **Pipecat (`VOICE_TRANSPORT=pipecat`, default):** `voice-ws-dev` runs
+  [`voice-ws/entrypoint.dev.sh`](../../../voice-ws/entrypoint.dev.sh), which
+  launches the connector as a co-process and then `exec`s uvicorn.
+- **LiveKit rollback (`VOICE_TRANSPORT=livekit`):** `worker-dev` runs
+  [`worker/entrypoint.dev.sh`](../../../worker/entrypoint.dev.sh) the same way.
+
+Because the connector is a child of PID 1 in the same container, it:
+
+- starts automatically whenever that voice container starts or restarts;
+- binds `127.0.0.1:8733` inside that container — which is why the
+  `Google_calendar_mcp` row can point at `http://127.0.0.1:8733/mcp`;
+- is torn down with the container (`exec` makes the app PID 1 and receives
   docker's `SIGTERM`).
 
 No manual `docker exec -d …` is needed anymore. (If you ever need to run it by
 hand, the command is
 `MCP_HOST=127.0.0.1 MCP_PORT=8733 python -m shared.voice_agents.tools.mcp.reference_servers.google_calendar_rest`,
 serving Streamable HTTP at `http://127.0.0.1:8733/mcp`.) Production does **not**
-use this entrypoint — it uses Google's remote Calendar MCP server (Path B) and
-the `Dockerfile.dev` default `CMD` (`python src/worker.py dev`).
+use this entrypoint — it uses Google's remote Calendar MCP server (Path B).
 
 ### Path B — Google's remote Calendar MCP server (Workspace Preview-gated; GA target)
 

@@ -13,11 +13,10 @@ import logging
 import pkgutil
 from typing import Any, Callable, Dict, List, Optional, Type
 
-from livekit.agents import RunContext
-
 from shared.voice_agents.tool_models import PlatformToolCreate
 from shared.voice_agents.tool_service import ToolService
 from shared.voice_agents.tools.base.base_tool import BaseTool
+from shared.voice_agents.tools.base.tool_context import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,17 @@ class LiveKitToolRegistry:
         for loader, module_name, is_pkg in pkgutil.walk_packages(
             package.__path__, package.__name__ + "."
         ):
-            module = importlib.import_module(module_name)
+            try:
+                module = importlib.import_module(module_name)
+            except Exception as exc:  # noqa: BLE001 - skip broken optional tool deps
+                # One missing optional dependency (e.g. beautifulsoup4 for Gmail)
+                # must not prevent other tools — or the voice session — from loading.
+                logger.warning(
+                    "LiveKit Registry: Skipping tool module %s due to import error: %s",
+                    module_name,
+                    exc,
+                )
+                continue
             for name, obj in inspect.getmembers(module):
                 if (
                     inspect.isclass(obj)
@@ -123,16 +132,17 @@ class LiveKitToolRegistry:
 
         # Fallback: Check if it's an async method (most tool functions are async)
         if inspect.iscoroutinefunction(func):
-            # If it has RunContext as any parameter, it's likely a tool function
+            # If it has ToolContext as any parameter, it's likely a tool function
             sig = inspect.signature(func)
             params = list(sig.parameters.values())
             if params:
-                # Check if ANY parameter is typed as RunContext
                 for param in params:
                     if param.annotation != inspect.Parameter.empty:
-                        if param.annotation is RunContext:
+                        if param.annotation is ToolContext:
                             logger.debug(
-                                f"LiveKit Registry: Function {func.__name__} looks like a tool function (has a parameter of type RunContext)"  # noqa: E501
+                                "LiveKit Registry: Function %s looks like a tool "
+                                "function (has a ToolContext parameter)",
+                                func.__name__,
                             )
                             return True
 
@@ -224,13 +234,12 @@ class LiveKitToolRegistry:
             parameters = {"type": "object", "properties": {}, "required": []}
 
             for param_name, param in sig.parameters.items():
-                # Skip 'self' parameter and RunContext parameters
+                # Skip 'self' and transport context parameters
                 if param_name == "self":
                     continue
 
-                # Check if parameter is typed as RunContext
                 if param.annotation != inspect.Parameter.empty:
-                    if param.annotation is RunContext:
+                    if param.annotation is ToolContext:
                         continue
 
                 param_info = {"type": "string"}

@@ -70,11 +70,19 @@ TOOLSET_INSTRUCTIONS = {
 - Use calendar data internally to check availability and schedule appropriately
 - Confirm scheduling actions without revealing specific event details""",
 
-    "Calcom": """## Cal.com Tool Guidelines
+    "CalCom": """## Cal.com Tool Guidelines
 - Booking details and attendee information are private
 - DO NOT expose booking IDs, internal URLs, or attendee details to callers
 - Use booking system internally to manage appointments
-- Confirm bookings with general information only""",
+- Confirm bookings with general information only
+- Always call get_available_slots before offering times, and create_booking before confirming a booking""",
+
+    "Google_calendar_mcp": """## Google Calendar Tool Guidelines
+- Calendar events and attendee information are private
+- DO NOT share attendee names, email addresses, or raw event IDs with callers
+- Always call check_availability (or list_events) before offering times
+- Always call create_event before confirming that an appointment was booked
+- If a tool returns an error, say you could not complete the booking — never invent success""",
 }
 
 

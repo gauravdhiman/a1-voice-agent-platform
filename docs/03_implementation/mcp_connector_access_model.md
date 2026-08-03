@@ -42,21 +42,19 @@ sanitization hack) and the error handling.
 
 ### Running the connector (local dev)
 
-The connector runs as a separate process in the worker container. It dies if
-the worker container restarts — restart it with:
+The connector auto-starts as a co-process in the active voice container:
 
-```bash
-docker exec -d -e MCP_HOST=127.0.0.1 -e MCP_PORT=8733 -w /app \
-  a1-voice-agent-platform-worker-dev-1 \
-  python -m shared.voice_agents.tools.mcp.reference_servers.google_calendar_rest
-```
+- Pipecat (default): `voice-ws/entrypoint.dev.sh` inside `voice-ws-dev`
+- LiveKit rollback: `worker/entrypoint.dev.sh` inside `worker-dev`
 
-The `Google_calendar_mcp` row's `mcp_server_url` is
-`http://127.0.0.1:8733/mcp`. The five exposed tools: `list_calendars`,
-`list_events`, `get_event`, `create_event`, `check_availability`. The existing
-OAuth scopes (`calendar.events` read-write + `calendar.calendarlist.readonly`
-+ `calendar.events.freebusy` + `calendar.events.readonly`) cover all five, so
-the user's current token works with no re-auth.
+No manual `docker exec -d …` is required after a container recreate. The
+`Google_calendar_mcp` row's `mcp_server_url` is `http://127.0.0.1:8733/mcp`
+(loopback inside that same container). The five exposed tools:
+`list_calendars`, `list_events`, `get_event`, `create_event`,
+`check_availability`. The existing OAuth scopes (`calendar.events` read-write +
+`calendar.calendarlist.readonly` + `calendar.events.freebusy` +
+`calendar.events.readonly`) cover all five, so the user's current token works
+with no re-auth.
 
 ## Plain-language summary
 

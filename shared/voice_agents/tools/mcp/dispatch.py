@@ -26,7 +26,6 @@ from typing import Optional
 from shared.common.security import decrypt_data
 from shared.voice_agents.tool_models import AgentTool, ToolSource
 from shared.voice_agents.tools.mcp.client import McpClient
-from shared.voice_agents.tools.mcp.livekit_adapter import mcp_tool_to_livekit_tool
 from shared.voice_agents.tools.mcp.models import McpServerConfig
 
 logger = logging.getLogger(__name__)
@@ -158,6 +157,11 @@ async def build_mcp_livekit_tools(
         The client is closed before propagating so the caller does not leak an
         open connection on a failed setup.
     """
+    # Import only on the legacy LiveKit execution path. Pipecat shares this
+    # dispatch module for config resolution but intentionally has no LiveKit
+    # dependency installed.
+    from shared.voice_agents.tools.mcp.livekit_adapter import mcp_tool_to_livekit_tool
+
     client = McpClient(config)
     try:
         tool_defs = await client.list_tools()
