@@ -178,6 +178,31 @@ describe("DashboardLayout - permission-aware nav", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("renders the brand as a wordmark + single 'AI' chip (no duplicate AI)", () => {
+    // With the real brand ("24x7 AI") the sidebar used to render "AI 24x7 AI":
+    // the "AI" logo chip next to the full app name, which already ends in
+    // "AI". The wordmark must drop the trailing " AI" so the header reads
+    // "24x7 [AI]" with the chip rendered exactly once.
+    vi.stubEnv("NEXT_PUBLIC_APP_NAME", "24x7 AI");
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <DashboardLayout>
+        <div />
+      </DashboardLayout>,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    const sidebar = screen.getByRole("complementary");
+    expect(within(sidebar).getByText("24x7")).toBeInTheDocument();
+    expect(within(sidebar).getAllByText("AI")).toHaveLength(1);
+    // The pulsing live dot signals the always-on agent (same motif as the
+    // marketing hero's "live" badge).
+    expect(within(sidebar).getByTestId("brand-live-dot")).toBeInTheDocument();
   });
 
   it("renders all workspace items for a regular org member", () => {

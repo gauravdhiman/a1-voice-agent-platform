@@ -4,15 +4,21 @@ import React from "react";
 import { SignInForm } from "@/components/auth/signin-form";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import Link from "next/link";
-import { Quote } from "lucide-react";
+import {
+  PhoneCall,
+  CalendarCheck,
+  TrendingUp,
+  CheckCircle2,
+} from "lucide-react";
+import { SITE_NAME } from "@/lib/site-config";
 
 export default function SignInPage() {
   return (
     <ProtectedRoute reverse>
       <div className="min-h-screen w-full flex">
-        {/* Left Side - Brand & Testimonial (Hidden on mobile) */}
+        {/* Left Side - Brand & Value Statement (Hidden on mobile) */}
         <div className="hidden lg:flex w-1/2 bg-zinc-900 relative flex-col justify-between p-12 text-white">
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556761175-b413da4baf72?q=80&w=2029&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/80 to-transparent" />
 
           <div className="relative z-10">
@@ -21,31 +27,42 @@ export default function SignInPage() {
                 <span className="text-white font-bold text-xl">AI</span>
               </div>
               <span className="text-xl font-bold tracking-tight">
-                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
+                {SITE_NAME}
               </span>
             </Link>
           </div>
 
           <div className="relative z-10 max-w-lg">
-            <Quote className="h-10 w-10 text-white/50 mb-6" />
-            <blockquote className="text-2xl font-medium leading-relaxed mb-6">
-              &quot;This platform has completely transformed how we handle our
-              voice AI workflows. The efficiency gains are remarkable.&quot;
-            </blockquote>
-            <div className="flex items-center space-x-4">
-              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
-                JD
-              </div>
-              <div>
-                <div className="font-semibold">Jane Doe</div>
-                <div className="text-sm text-white/60">CTO at TechCorp</div>
-              </div>
-            </div>
+            <PhoneCall className="h-10 w-10 text-white/50 mb-6" />
+            <h2 className="text-3xl font-bold leading-tight mb-6">
+              Every call answered.
+              <br />
+              Every appointment booked.
+            </h2>
+            <ul className="space-y-4">
+              <li className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                <span className="text-white/80">
+                  Your calls answered 24x7 - nights, weekends, and holidays.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <CalendarCheck className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                <span className="text-white/80">
+                  Appointments booked and synced to your calendar automatically.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <TrendingUp className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                <span className="text-white/80">
+                  No missed customers, no lost revenue.
+                </span>
+              </li>
+            </ul>
           </div>
 
           <div className="relative z-10 text-sm text-white/40">
-            &copy; {new Date().getFullYear()} {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"} Inc. All rights
-            reserved.
+            &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
           </div>
         </div>
 
@@ -64,7 +81,7 @@ export default function SignInPage() {
                 Welcome back
               </h1>
               <p className="text-muted-foreground mt-2">
-                Enter your credentials to access your account
+                Sign in to manage your AI front desk, agents, and calls.
               </p>
             </div>
 

@@ -6,32 +6,31 @@ import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   Phone,
-  Mic,
-  Shield,
-  Zap,
   Globe,
-  CreditCard,
-  Users,
-  BarChart3,
   Calendar,
   Mail,
   Table,
-  Workflow,
-  Cloud,
-  Key,
   Settings,
   MessageSquare,
   ArrowRight,
   Play,
-  Star,
   Building2,
   Headphones,
-  Bot,
-  Rocket,
   Plug,
   Clock,
   PhoneCall,
+  CalendarCheck,
+  MessageCircle,
+  ClipboardList,
+  UserCheck,
+  BellRing,
+  Stethoscope,
+  Wrench,
+  UtensilsCrossed,
+  Scissors,
+  Home,
 } from "lucide-react";
+import { SITE_NAME, SITE_SALES_EMAIL } from "@/lib/site-config";
 
 // Client-side only waveform to avoid hydration mismatch
 function WaveformVisual() {
@@ -59,6 +58,12 @@ function WaveformVisual() {
 }
 
 export default function LandingPage() {
+  const scrollToHowItWorks = () => {
+    document
+      .getElementById("how-it-works")
+      ?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
       {/* Header */}
@@ -68,7 +73,9 @@ export default function LandingPage() {
             <div className="bg-gradient-to-br from-blue-600 to-cyan-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Phone className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight">VoiceAI</span>
+            <span className="text-xl font-bold tracking-tight">
+              {SITE_NAME}
+            </span>
           </div>
           <nav className="hidden md:flex gap-8">
             <a
@@ -82,6 +89,12 @@ export default function LandingPage() {
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               How It Works
+            </a>
+            <a
+              href="#industries"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Industries
             </a>
             <a
               href="#pricing"
@@ -123,20 +136,21 @@ export default function LandingPage() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                   </span>
-                  No Coding Required
+                  No coding required - go live in minutes
                 </div>
 
                 <div className="space-y-4">
                   <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl xl:text-6xl/none">
-                    AI Voice Agents for{" "}
+                    Never miss a call, a booking, or{" "}
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600">
-                      Every Business
+                      a customer again.
                     </span>
                   </h1>
                   <p className="max-w-[540px] text-muted-foreground md:text-xl leading-relaxed">
-                    Set up intelligent voice agents in minutes — no technical
-                    skills needed. Let AI handle your calls 24/7, so your team
-                    can focus on what matters most.
+                    {SITE_NAME} is your always-on front desk. It answers every
+                    call, books appointments, answers questions, and follows up
+                    - so every customer gets a great experience and your team
+                    stays focused on the work that grows your business.
                   </p>
                 </div>
 
@@ -146,7 +160,7 @@ export default function LandingPage() {
                       size="lg"
                       className="bg-blue-600 hover:bg-blue-700 px-8 h-12 text-base"
                     >
-                      Start Free Trial
+                      Start Free
                       <ArrowRight className="ml-2 w-4 h-4" />
                     </Button>
                   </Link>
@@ -154,58 +168,98 @@ export default function LandingPage() {
                     size="lg"
                     variant="outline"
                     className="px-8 h-12 text-base"
+                    onClick={scrollToHowItWorks}
                   >
                     <Play className="mr-2 w-4 h-4" />
                     See How It Works
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span>Set up in 5 minutes</span>
+                    <span>Set up in minutes</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span>No credit card</span>
+                    <span>No credit card required</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <span>Cancel anytime</span>
                   </div>
                 </div>
               </div>
 
-              {/* Hero Visual */}
+              {/* Hero Visual - a real business moment: call → booked */}
               <div className="relative mx-auto w-full max-w-[560px] lg:max-w-none">
-                <div className="relative aspect-square max-w-[500px] mx-auto">
-                  {/* Animated Phone Mockup */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-3xl rotate-6 opacity-20" />
-                  <div className="absolute inset-0 bg-background rounded-3xl border border-border shadow-2xl overflow-hidden">
-                    {/* Fake UI */}
-                    <div className="h-14 bg-muted/50 border-b flex items-center justify-center">
-                      <div className="w-20 h-4 bg-muted rounded-full" />
-                    </div>
-                    <div className="p-4 space-y-3">
-                      {/* Agent Card */}
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-blue-100 to-cyan-100 dark:from-blue-950/50 dark:to-cyan-950/50 border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
-                            <Bot className="w-6 h-6 text-white" />
+                <div className="relative max-w-[500px] mx-auto">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-3xl rotate-3 opacity-20" />
+                  <div className="relative bg-background border border-border rounded-3xl shadow-2xl overflow-hidden">
+                    {/* Call header */}
+                    <div className="h-16 bg-muted/50 border-b flex items-center justify-between px-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center">
+                          <PhoneCall className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold">
+                            Incoming call
                           </div>
-                          <div className="flex-1">
-                            <div className="h-4 w-24 bg-blue-200 dark:bg-blue-700 rounded mb-2" />
-                            <div className="h-3 w-16 bg-muted rounded" />
+                          <div className="text-xs text-muted-foreground">
+                            Maria G. · New patient
                           </div>
-                          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                         </div>
                       </div>
-                      {/* Call Waveform */}
-                      <div className="h-24 rounded-xl bg-muted/50 flex items-center justify-center gap-1">
+                      <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        Answered
+                      </div>
+                    </div>
+
+                    <div className="p-5 space-y-3">
+                      {/* Live call waveform */}
+                      <div className="h-14 rounded-xl bg-muted/50 flex items-center justify-center gap-1">
                         <WaveformVisual />
                       </div>
-                      {/* Message */}
-                      <div className="p-3 rounded-lg bg-green-100 dark:bg-green-950/50 border border-green-200 dark:border-green-800">
+
+                      {/* Conversation snippet */}
+                      <div className="p-3 rounded-lg bg-blue-100/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
                         <div className="flex items-start gap-2">
-                          <MessageSquare className="w-4 h-4 text-green-600 mt-0.5" />
-                          <div className="h-3 w-48 bg-green-200 dark:bg-green-800 rounded" />
+                          <MessageSquare className="w-4 h-4 text-blue-600 mt-0.5" />
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            &ldquo;Hi Maria! I can get you in for a cleaning
+                            this Thursday at 2:00 PM. Does that work for
+                            you?&rdquo;
+                          </p>
                         </div>
+                      </div>
+
+                      {/* Booking confirmation */}
+                      <div className="p-3 rounded-lg bg-green-100/70 dark:bg-green-950/40 border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <CalendarCheck className="w-4 h-4 text-green-600" />
+                          Appointment booked
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Thu 2:00 PM · Synced to Google Calendar
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Confirmation text sent to Maria
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Outcome strip */}
+                    <div className="border-t border-border bg-muted/30 px-5 py-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-blue-600" />
+                        Every call answered, 24x7
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        No missed customers
                       </div>
                     </div>
                   </div>
@@ -215,34 +269,91 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Trusted By / Social Proof */}
-        <section className="py-12 border-y border-border/40">
-          <div className="container px-4 max-w-7xl mx-auto">
-            <p className="text-center text-sm text-muted-foreground mb-8">
-              Trusted by businesses of all sizes
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16 opacity-60">
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <Building2 className="w-6 h-6" />
-                <span>Acme Corp</span>
+        {/* Industries Section (replaces fabricated logos/testimonials) */}
+        <section
+          id="industries"
+          className="py-20 md:py-28 border-y border-border/40"
+        >
+          <div className="container px-4 md:px-6 max-w-7xl mx-auto">
+            <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
+              <div className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-950/50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-300">
+                Industries
               </div>
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <Building2 className="w-6 h-6" />
-                <span>TechStart</span>
-              </div>
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <Building2 className="w-6 h-6" />
-                <span>GlobalTech</span>
-              </div>
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <Building2 className="w-6 h-6" />
-                <span>DataFlow</span>
-              </div>
+              <h2 className="text-3xl font-bold tracking-tighter md:text-4xl lg:text-5xl">
+                Built for businesses that live on the phone
+              </h2>
+              <p className="max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
+                If your business takes calls, {SITE_NAME} can answer them for
+                you - booking appointments, answering questions, and following
+                up with customers automatically.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  title: "Dental & medical",
+                  description:
+                    "Book cleanings, exams, and new-patient intake - even after hours.",
+                  icon: Stethoscope,
+                  gradient: "from-blue-500 to-cyan-500",
+                },
+                {
+                  title: "HVAC & home services",
+                  description:
+                    "Schedule service calls and triage urgent issues before they escalate.",
+                  icon: Wrench,
+                  gradient: "from-orange-500 to-amber-500",
+                },
+                {
+                  title: "Restaurants",
+                  description:
+                    "Take reservations, party bookings, and special requests without tying up your staff.",
+                  icon: UtensilsCrossed,
+                  gradient: "from-rose-500 to-pink-500",
+                },
+                {
+                  title: "Salons & spas",
+                  description:
+                    "Fill your books with appointments and reminders that reduce no-shows.",
+                  icon: Scissors,
+                  gradient: "from-purple-500 to-fuchsia-500",
+                },
+                {
+                  title: "Real estate & property",
+                  description:
+                    "Qualify leads and book showings the moment they call - day or night.",
+                  icon: Home,
+                  gradient: "from-emerald-500 to-teal-500",
+                },
+                {
+                  title: "Every service business",
+                  description:
+                    "Law, consulting, repair shops, and more - your front desk, always on.",
+                  icon: Building2,
+                  gradient: "from-indigo-500 to-blue-500",
+                },
+              ].map((industry, index) => (
+                <div
+                  key={index}
+                  className="group relative p-6 rounded-2xl border border-border/60 bg-background/50 backdrop-blur-sm transition-all hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/5"
+                >
+                  <div
+                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${industry.gradient} flex items-center justify-center mb-4 shadow-lg`}
+                  >
+                    <industry.icon className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold mb-2">{industry.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {industry.description}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* Features Section */}
+        {/* Features Section - business outcomes */}
         <section id="features" className="py-20 md:py-28">
           <div className="container px-4 md:px-6 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
@@ -250,56 +361,56 @@ export default function LandingPage() {
                 Features
               </div>
               <h2 className="text-3xl font-bold tracking-tighter md:text-4xl lg:text-5xl">
-                Everything you need to automate calls
+                Everything your front desk should handle - automatically
               </h2>
               <p className="max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
-                Powerful yet simple. Our platform handles all the technical
-                complexity so you can focus on your business.
+                {SITE_NAME} takes the work your team does on the phone and does
+                it for you, so no customer is ever left waiting.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[
                 {
-                  title: "Works 24/7",
+                  title: "Answer every call, 24x7",
                   description:
-                    "Never miss a call again. Your AI agent answers instantly, day or night, weekends and holidays.",
-                  icon: Clock,
+                    "Never lose a customer to voicemail. Your agent picks up instantly - nights, weekends, and holidays.",
+                  icon: PhoneCall,
                   gradient: "from-blue-500 to-cyan-500",
                 },
                 {
-                  title: "Natural Conversations",
+                  title: "Book & manage appointments",
                   description:
-                    "AI that sounds human. Uses advanced technology to understand context and respond naturally.",
-                  icon: Bot,
+                    "Schedule, reschedule, and cancel bookings over the phone. Everything syncs to your calendar automatically.",
+                  icon: CalendarCheck,
                   gradient: "from-blue-500 to-cyan-500",
                 },
                 {
-                  title: "Connects to Your Tools",
+                  title: "Answer customer questions",
                   description:
-                    "Works with Gmail, Calendar, and more. Your agent can actually do things — not just talk.",
-                  icon: Plug,
+                    "Hours, services, pricing, location - your agent answers instantly with your business info.",
+                  icon: MessageCircle,
                   gradient: "from-orange-500 to-amber-500",
                 },
                 {
-                  title: "Secure & Private",
+                  title: "Capture new customers",
                   description:
-                    "Enterprise-grade security. Your customer data is protected and never shared.",
-                  icon: Shield,
+                    "Collect names, contact details, and preferences from callers - ready for your team when they come in.",
+                  icon: ClipboardList,
                   gradient: "from-green-500 to-emerald-500",
                 },
                 {
-                  title: "Easy Dashboard",
+                  title: "Follow up & win customers back",
                   description:
-                    "Simple web interface. Manage agents, see call history, and track results — no tech skills needed.",
-                  icon: BarChart3,
+                    "Automatic reminders and recall calls that bring customers back to your door.",
+                  icon: BellRing,
                   gradient: "from-pink-500 to-rose-500",
                 },
                 {
-                  title: "Grows With You",
+                  title: "Escalate to a human anytime",
                   description:
-                    "Start small, scale anytime. Add more agents or minutes as your business grows.",
-                  icon: Rocket,
+                    "When a call truly needs a person, your agent hands it off to your team seamlessly.",
+                  icon: UserCheck,
                   gradient: "from-indigo-500 to-blue-500",
                 },
               ].map((feature, index) => (
@@ -331,31 +442,35 @@ export default function LandingPage() {
                   Works With Your Tools
                 </div>
                 <h2 className="text-3xl font-bold tracking-tighter md:text-4xl mb-4">
-                  Connects to What You Already Use
+                  Syncs with the tools you already use
                 </h2>
                 <p className="text-muted-foreground md:text-lg mb-8">
-                  Your voice agent integrates seamlessly with the tools you use
-                  every day. No extra accounts or complicated setup — just
-                  connect and go.
+                  Your agent plugs into the calendar, email, and spreadsheets
+                  your business runs on - so bookings land where they should,
+                  and your records stay up to date without lifting a finger.
                 </p>
 
                 <div className="grid grid-cols-2 gap-4">
                   {[
-                    { icon: Mail, name: "Gmail", desc: "Send & read emails" },
+                    {
+                      icon: Mail,
+                      name: "Gmail",
+                      desc: "Confirmations sent automatically",
+                    },
                     {
                       icon: Calendar,
                       name: "Google Calendar",
-                      desc: "Schedule meetings",
+                      desc: "Bookings land on your calendar",
                     },
                     {
                       icon: Table,
                       name: "Google Sheets",
-                      desc: "Update spreadsheets",
+                      desc: "Customer records updated",
                     },
                     {
                       icon: Calendar,
                       name: "Cal.com",
-                      desc: "Handle bookings",
+                      desc: "Bookings synced",
                     },
                   ].map((tool, i) => (
                     <div
@@ -386,7 +501,7 @@ export default function LandingPage() {
                     <div>
                       <div className="font-medium">Connected & Ready</div>
                       <div className="text-sm text-muted-foreground">
-                        Gmail, Calendar & Sheets linked
+                        Calendar, email & records linked
                       </div>
                     </div>
                   </div>
@@ -413,11 +528,10 @@ export default function LandingPage() {
                 How It Works
               </div>
               <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
-                Up and running in 3 simple steps
+                Live in minutes - no tech skills needed
               </h2>
               <p className="max-w-[600px] text-muted-foreground md:text-lg">
-                No technical knowledge required. If you can use email, you can
-                set this up.
+                If you can use email, you can launch your AI front desk.
               </p>
             </div>
 
@@ -425,23 +539,23 @@ export default function LandingPage() {
               {[
                 {
                   step: "1",
-                  title: "Create Your Agent",
+                  title: "Tell us about your business",
                   description:
-                    "Give your agent a name and decide what it should do. Our simple setup wizard guides you through.",
+                    "Answer a few plain-English questions about what you offer and what your agent should handle.",
                   icon: Settings,
                 },
                 {
                   step: "2",
-                  title: "Connect Your Tools",
+                  title: "Connect your tools",
                   description:
-                    "Link your Google account or other tools with one click. We'll handle the technical stuff.",
-                  icon: Zap,
+                    "Link your calendar, email, and spreadsheet with one click. We handle the technical side.",
+                  icon: Plug,
                 },
                 {
                   step: "3",
-                  title: "Start Taking Calls",
+                  title: "Go live",
                   description:
-                    "That's it! Your agent is ready. Point a phone number to it and watch it work.",
+                    "Point a phone number to your agent - or add a call button to your website. Your front desk is open.",
                   icon: PhoneCall,
                 },
               ].map((item, index) => (
@@ -462,124 +576,56 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Testimonials */}
-        <section className="py-20 md:py-28 bg-muted/30">
-          <div className="container px-4 md:px-6 max-w-7xl mx-auto">
-            <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
-                Loved by business owners
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                {
-                  quote:
-                    "Set up our customer support agent in under an hour. No developers needed — just me and a cup of coffee.",
-                  author: "Sarah Chen",
-                  role: "Founder, TechFlow",
-                  avatar: "SC",
-                },
-                {
-                  quote:
-                    "Finally, technology that doesn't require a tech team. Our front desk now runs on AI and it's working great.",
-                  author: "Marcus Johnson",
-                  role: "Director, ScaleUp",
-                  avatar: "MJ",
-                },
-                {
-                  quote:
-                    "We needed something simple for our small team. This delivers — easy to use, works perfectly.",
-                  author: "Emily Rodriguez",
-                  role: "Owner, DataCorp",
-                  avatar: "ER",
-                },
-              ].map((testimonial, index) => (
-                <div
-                  key={index}
-                  className="p-6 rounded-2xl bg-background border border-border/60"
-                >
-                  <div className="flex gap-1 mb-4">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className="w-4 h-4 fill-yellow-400 text-yellow-400"
-                      />
-                    ))}
-                  </div>
-                  <p className="text-muted-foreground mb-6 italic">
-                    &ldquo;{testimonial.quote}&rdquo;
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center font-medium text-blue-600">
-                      {testimonial.avatar}
-                    </div>
-                    <div>
-                      <div className="font-medium">{testimonial.author}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {testimonial.role}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Pricing Section */}
-        <section id="pricing" className="py-20 md:py-28">
+        {/* Pricing Section - outcome-focused, no hardcoded dollar figures */}
+        <section id="pricing" className="py-20 md:py-28 bg-muted/30">
           <div className="container px-4 md:px-6 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
               <div className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-950/50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-300">
                 Pricing
               </div>
               <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
-                Simple pricing, no surprises
+                Simple pricing that grows with you
               </h2>
               <p className="max-w-[600px] text-muted-foreground md:text-lg">
-                Start free. Upgrade when you&apos;re ready. Cancel anytime.
+                Start free and get your first agent live in minutes. Pay only as
+                you use it - no long-term contracts, cancel anytime.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
               {[
                 {
-                  name: "Starter",
-                  price: "$0",
-                  description: "Perfect for testing things out.",
+                  name: "Free to start",
+                  description:
+                    "Get your first agent live and see what it can do for your business.",
                   features: [
                     "1 voice agent",
-                    "30 minutes of calls/month",
-                    "Basic tools (Gmail, Calendar)",
-                    "Email support",
+                    "Set up in minutes",
+                    "No credit card required",
                   ],
                   cta: "Start Free",
                   popular: false,
                 },
                 {
-                  name: "Professional",
-                  price: "$99",
-                  description: "For growing businesses.",
+                  name: "For growing teams",
+                  description:
+                    "More agents and more call capacity as your business picks up.",
                   features: [
-                    "5 voice agents",
-                    "1000 minutes of calls/month",
-                    "All tools included",
+                    "Multiple voice agents",
+                    "All tools & skills included",
+                    "Call analytics & history",
                     "Priority support",
-                    "Call analytics",
                   ],
                   cta: "Start Free Trial",
                   popular: true,
                 },
                 {
-                  name: "Enterprise",
-                  price: "Custom",
-                  description: "For large organizations.",
+                  name: "For multi-location",
+                  description:
+                    "Custom plans for businesses that need scale - and a dedicated partner.",
                   features: [
                     "Unlimited agents",
-                    "Unlimited minutes",
                     "Custom integrations",
-                    "24/7 phone support",
                     "Dedicated account manager",
                   ],
                   cta: "Talk to Us",
@@ -600,12 +646,6 @@ export default function LandingPage() {
                     </div>
                   )}
                   <h3 className="text-xl font-bold">{plan.name}</h3>
-                  <div className="mt-4 flex items-baseline">
-                    <span className="text-4xl font-bold">{plan.price}</span>
-                    {plan.price !== "Custom" && (
-                      <span className="ml-1 text-muted-foreground">/month</span>
-                    )}
-                  </div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {plan.description}
                   </p>
@@ -617,16 +657,23 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Button
-                    className={`mt-8 h-12 ${
-                      plan.popular
-                        ? "bg-blue-600 hover:bg-blue-700"
-                        : ""
-                    }`}
-                    variant={plan.popular ? "default" : "outline"}
+                  <Link
+                    href={
+                      plan.cta === "Talk to Us"
+                        ? `mailto:${SITE_SALES_EMAIL}`
+                        : "/auth/signup"
+                    }
+                    className="mt-8"
                   >
-                    {plan.cta}
-                  </Button>
+                    <Button
+                      className={`h-12 w-full ${
+                        plan.popular ? "bg-blue-600 hover:bg-blue-700" : ""
+                      }`}
+                      variant={plan.popular ? "default" : "outline"}
+                    >
+                      {plan.cta}
+                    </Button>
+                  </Link>
                 </div>
               ))}
             </div>
@@ -637,11 +684,11 @@ export default function LandingPage() {
         <section className="py-20 md:py-28 bg-gradient-to-br from-blue-600 to-cyan-600">
           <div className="container px-4 md:px-6 max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold tracking-tighter md:text-4xl text-white mb-4">
-              Ready to automate your calls?
+              Ready to never miss another call?
             </h2>
             <p className="text-blue-100 md:text-lg mb-8 max-w-[600px] mx-auto">
-              Join thousands of businesses using AI to handle calls. Set up
-              takes minutes — no technical skills required.
+              Set up your AI front desk today. Free to start, live in minutes,
+              and no coding required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/auth/signup">
@@ -649,18 +696,20 @@ export default function LandingPage() {
                   size="lg"
                   className="px-8 h-12 text-base bg-white text-blue-600 hover:bg-blue-50"
                 >
-                  Start Free Trial
+                  Start Free
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>
-              <Button
-                size="lg"
-                variant="outline"
-                className="px-8 h-12 text-base border-blue-300 text-white hover:bg-blue-700"
-              >
-                <Headphones className="mr-2 w-4 h-4" />
-                Talk to Sales
-              </Button>
+              <a href={`mailto:${SITE_SALES_EMAIL}`}>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="px-8 h-12 text-base border-blue-300 text-white hover:bg-blue-700"
+                >
+                  <Headphones className="mr-2 w-4 h-4" />
+                  Talk to Sales
+                </Button>
+              </a>
             </div>
           </div>
         </section>
@@ -675,44 +724,85 @@ export default function LandingPage() {
                 <div className="bg-blue-100 dark:bg-blue-950 w-8 h-8 rounded-lg flex items-center justify-center">
                   <Phone className="w-4 h-4 text-blue-600" />
                 </div>
-                <span className="font-bold">VoiceAI</span>
+                <span className="font-bold">{SITE_NAME}</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                AI voice agents for every business.
+                Your AI front desk. Always on.
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-foreground">Features</a></li>
-                <li><a href="#pricing" className="hover:text-foreground">Pricing</a></li>
-                <li><a href="#" className="hover:text-foreground">Help Center</a></li>
+                <li>
+                  <a href="#features" className="hover:text-foreground">
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a href="#industries" className="hover:text-foreground">
+                    Industries
+                  </a>
+                </li>
+                <li>
+                  <a href="#pricing" className="hover:text-foreground">
+                    Pricing
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground">About</a></li>
-                <li><a href="#" className="hover:text-foreground">Blog</a></li>
-                <li><a href="#" className="hover:text-foreground">Contact</a></li>
+                <li>
+                  <a href="#" className="hover:text-foreground">
+                    About
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-foreground">
+                    Blog
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={`mailto:${SITE_SALES_EMAIL}`}
+                    className="hover:text-foreground"
+                  >
+                    Contact
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground">Privacy</a></li>
-                <li><a href="#" className="hover:text-foreground">Terms</a></li>
-                <li><a href="#" className="hover:text-foreground">Security</a></li>
+                <li>
+                  <a href="#" className="hover:text-foreground">
+                    Privacy
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-foreground">
+                    Terms
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-foreground">
+                    Security
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
           <div className="pt-8 border-t border-border/40 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © 2025 VoiceAI Platform. All rights reserved.
+              © {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <Globe className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">English (US)</span>
+              <span className="text-sm text-muted-foreground">
+                English (US)
+              </span>
             </div>
           </div>
         </div>

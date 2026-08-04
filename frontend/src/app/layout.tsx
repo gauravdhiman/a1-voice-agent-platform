@@ -7,6 +7,7 @@ import {
   emitLog,
   emitMetric,
 } from "@/lib/opentelemetry";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site-config";
 
 // Initialize OpenTelemetry
 ensureOpentelemetryIsInitialized();
@@ -26,8 +27,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SaaS Platform",
-  description: "Multi-tenant SaaS application template",
+  title: {
+    default: `${SITE_NAME} - ${SITE_TAGLINE}`,
+    template: `%s - ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
 };
 
 export default function RootLayout({
