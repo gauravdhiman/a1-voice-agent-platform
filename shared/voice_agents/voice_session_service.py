@@ -1,11 +1,8 @@
 """Voice WebSocket session tokens for the Pipecat transport.
 
-Creates and verifies short-lived JWTs that authorize a browser (or future
-Twilio Media Streams bridge) to open a WebSocket against the ``voice-ws``
-service. LiveKit room tokens are intentionally not used here.
-
-Token type is ``voice_ws_session`` so these JWTs cannot be confused with
-Supabase auth tokens or embed LiveKit access tokens.
+Creates and verifies short-lived JWTs (`voice_ws_session`) that authorize a
+browser or Twilio Media Streams bridge to open a WebSocket against the
+``voice-ws`` service. These JWTs are distinct from Supabase auth tokens.
 """
 
 from __future__ import annotations

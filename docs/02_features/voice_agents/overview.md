@@ -37,14 +37,14 @@ graph TB
 
     subgraph Platform["Platform Services"]
         Backend[Backend API]
-        Worker[LiveKit Worker]
+        Worker[voice-ws]
         LLM[Gemini Realtime API]
         DB[(Supabase Database)]
     end
 
     subgraph External["External Services"]
         Twilio[Twilio]
-        LiveKit[LiveKit Cloud]
+        LiveKit[voice-ws (Pipecat)]
         Calendar[Google Calendar]
         CRM[CRM/API]
         Billing[Billing API]
@@ -56,15 +56,15 @@ graph TB
     Backend --> DB
     Backend --> LiveKit
     LiveKit --> Worker
-    Worker --> LLM
-    Worker --> DB
+    voice-ws --> LLM
+    voice-ws --> DB
 
-    Worker --> Calendar
-    Worker --> CRM
-    Worker --> Billing
+    voice-ws --> Calendar
+    voice-ws --> CRM
+    voice-ws --> Billing
 
     style Caller fill:#3b82f6
-    style Worker fill:#ef4444
+    style voice-ws fill:#ef4444
     style LLM fill:#f59e0b
     style DB fill:#10b981
 ```
@@ -116,7 +116,7 @@ sequenceDiagram
     BE->>LK: Create LiveKit room
     LK-->>Twilio: Return SIP dial instruction
     Twilio->>LK: Bridge call via SIP
-    LK->>WK: Dispatch worker job
+    LK->>WK: Dispatch voice-ws job
     WK->>DB: Load agent config
     WK->>DB: Load associated tools
     WK->>LLM: Start conversation
@@ -131,8 +131,8 @@ sequenceDiagram
 3. Backend validates agent and creates LiveKit room
 4. Twilio bridges call to LiveKit SIP trunk
 5. LiveKit dispatches job to worker
-6. Worker loads agent configuration and tools
-7. Worker starts AI conversation with greeting
+6. voice-ws loads agent configuration and tools
+7. voice-ws starts AI conversation with greeting
 8. Call proceeds with real-time voice interaction
 
 ### 3. Tool Execution During Call
@@ -238,7 +238,7 @@ tools = await tool_service.get_tools_by_organization(org_id, safe=True)
 # Does NOT include: OAuth tokens, API keys
 ```
 
-**Worker Layer (Execution)**:
+**voice-ws Layer (Execution)**:
 
 ```python
 # Returns full tool instance WITH secrets
@@ -281,7 +281,7 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 
 2. **Place in Directory**: `shared/voice_agents/tools/implementations/`
 
-3. **Auto-Registered**: Worker discovers tool automatically
+3. **Auto-Registered**: voice-ws discovers tool automatically
 
 4. **Sync to Database**: Backend startup syncs tool metadata to database
 
@@ -325,7 +325,7 @@ async def check_availability(
 - ✅ Delegates to bound method with all parameters
 - ✅ Generic and maintainable
 
-See [LiveKit Tool Wrapping](livekit_tool_wrapping.md) for implementation details.
+See [Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md) for implementation details.
 
 ## Function-Level Control
 
@@ -377,7 +377,7 @@ Database stores `unselected_functions` array:
 agent_tools.unselected_functions = ['delete_event']
 ```
 
-Worker filters functions:
+voice-ws filters functions:
 
 ```python
 if func_name in unselected_functions:
@@ -510,7 +510,7 @@ Always speak clearly and at a moderate pace.
 - Redirect to OAuth provider
 - User authorizes access
 - OAuth tokens stored encrypted in database
-- Worker uses tokens for tool execution
+- voice-ws uses tokens for tool execution
 
 ## Available Tool Sets
 
@@ -644,7 +644,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 
 **Check**:
 
-1. Worker is running: `./start.sh logs worker-dev`
+1. voice-ws is running: `./start.sh logs voice-ws-dev`
 2. LiveKit connection is healthy
 3. Agent is marked `is_active: true`
 4. Phone number is correctly configured
@@ -663,7 +663,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 **Check**:
 
 1. Agent has a name set
-2. Worker is correctly loading greeting from database
+2. voice-ws is correctly loading greeting from database
 3. LiveKit room is created successfully
 
 ### Tool Calls Failing
@@ -679,9 +679,9 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 
 - [Embed Call Button](embed_button.md) - Add voice calling to external websites
 - [Tool System](tool_system.md) - Creating and managing tools
-- [LiveKit Tool Wrapping](livekit_tool_wrapping.md) - Implementation details
+- [Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md) - Implementation details
 - [System Architecture](../../01_architecture/system_architecture.md) - Overall architecture
-- [Worker README](../../worker/README.md) - Worker service details
+- [voice-ws README](../../worker/README.md) - voice-ws service details
 - [Shared Module](../../shared/README.md) - Shared code architecture
 
 ## Next Steps

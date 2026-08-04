@@ -642,7 +642,7 @@ async def get_embed_token(
     """Generate an embed token for browser-based agent calls.
 
     This endpoint is called from the embeddable call interface to obtain
-    a time-limited token for connecting to a LiveKit room.
+    a time-limited token for connecting to a voice-ws WebSocket session.
     """
     from shared.voice_agents.embed_service import embed_service
 

@@ -2,9 +2,9 @@
 # Dev entrypoint for the Pipecat voice-ws worker.
 #
 # Starts the local Google Calendar REST connector (FastMCP) as a co-process,
-# then execs uvicorn. This matches the LiveKit worker-dev pattern so agents that
+# then execs uvicorn. This matches the voice-ws-dev pattern so agents that
 # use `Google_calendar_mcp` (http://127.0.0.1:8733/mcp) keep working when
-# VOICE_TRANSPORT=pipecat and the LiveKit worker profile is not running.
+# VOICE_TRANSPORT=pipecat and the voice-ws profile is not running.
 #
 # See shared/voice_agents/tools/mcp/README.md (Path A).
 set -e

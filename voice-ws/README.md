@@ -5,8 +5,8 @@ Active call path for **browser test calls**, **embed**, **public org page**, and
 **Gemini Realtime** or a modular Deepgram → OpenAI/Cerebras/OpenRouter →
 Cartesia/Fish pipeline (direct providers only).
 
-The legacy LiveKit `worker/` package remains in the repo for reference; it is not
-started in default dev/prod compose.
+The legacy LiveKit **`worker/`** package was removed from the repo; git history
+retains it for reference only.
 
 ## Architecture
 

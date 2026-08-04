@@ -70,7 +70,7 @@ class GoogleCalendarTool(BaseTool):
             Default to 10 events, ask for more if needed.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             time_min: Start of time range in ISO format (e.g., 2025-12-30T09:00:00Z), with timezone
             time_max: End of time range in ISO format (optional), with timezone
             max_results: Maximum number of events to return (default: 10)
@@ -123,7 +123,7 @@ class GoogleCalendarTool(BaseTool):
             DO NOT CREATE EVENT WITHOUT USER EXPLICIT CONFIRMATION.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             title: Event title
             start_time: Event start time in ISO format
             duration_minutes: Duration in minutes (default: 30 from config)
@@ -188,7 +188,7 @@ class GoogleCalendarTool(BaseTool):
             DO NOT CREATE EVENT WITHOUT USER EXPLICIT CONFIRMATION.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             event_id: The ID of the event to update
             title: New event title (optional)
             start_time: New event start time in ISO format (optional)
@@ -241,7 +241,7 @@ class GoogleCalendarTool(BaseTool):
             as this action cannot be undone.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             event_id: The ID of the event to delete
 
         Returns:
@@ -272,7 +272,7 @@ class GoogleCalendarTool(BaseTool):
             Helpful for verifying event information before updates.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             event_id: ID of event to retrieve
 
             Returns:
@@ -311,7 +311,7 @@ class GoogleCalendarTool(BaseTool):
             - Use before creating or updating events to avoid double-booking.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             date: Date and time to check in ISO format
             duration_minutes: Duration to check in minutes (default: 30)
         """

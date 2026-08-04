@@ -31,8 +31,6 @@ services:
       - ENVIRONMENT=development
       - DEBUG=true
       - RELOAD=true
-      # Voice transport: pipecat (default) or livekit (legacy rollback)
-      - VOICE_TRANSPORT=${VOICE_TRANSPORT:-pipecat}
       - VOICE_WS_PUBLIC_URL=${VOICE_WS_PUBLIC_URL:-ws://localhost:7860}
       - VOICE_WS_TWILIO_URL=${VOICE_WS_TWILIO_URL:-}
       # Stripe Configuration
@@ -118,14 +116,13 @@ services:
     networks:
       - saas-dev-network
 
-  # Active voice path (Phase 1): Pipecat WebSocket + Gemini Realtime.
-  # LiveKit worker-dev below is kept for rollback (VOICE_TRANSPORT=livekit).
+  # Pipecat WebSocket voice worker (Gemini Realtime + pipeline presets).
   voice-ws-dev:
     build:
       context: ./voice-ws
       dockerfile: Dockerfile.dev
     # Dev entrypoint starts the local Google Calendar REST connector (MCP) as a
-    # co-process so Google_calendar_mcp (127.0.0.1:8733) works without LiveKit.
+    # co-process so Google_calendar_mcp (127.0.0.1:8733) works without extra setup.
     command: ["bash", "/app/entrypoint.dev.sh"]
     ports:
       - "7860:7860"
@@ -157,58 +154,6 @@ services:
       - MCP_PORT=8733
     networks:
       - saas-dev-network
-    restart: unless-stopped
-
-  worker-dev:
-    build:
-      context: ./worker
-      dockerfile: Dockerfile.dev
-    # Legacy LiveKit worker — not used when VOICE_TRANSPORT=pipecat.
-    # Dev entrypoint starts the local Google Calendar REST connector (MCP server)
-    # as a co-process alongside the worker so it survives worker restarts. See
-    # worker/entrypoint.dev.sh. Prod uses Dockerfile.dev's default CMD (Path B).
-    profiles: ["livekit"]
-    command: ["bash", "/app/entrypoint.dev.sh", "dev"]
-    volumes:
-      - ./worker:/app
-      - ./shared:/app/shared
-    env_file:
-      - .env
-    environment:
-      - ENVIRONMENT=development
-      - DEBUG=true
-      - PYTHONPATH=/app/shared:$PYTHONPATH
-      # LiveKit Configuration
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
-      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-      - LIVEKIT_URL=${LIVEKIT_URL}
-      - LIVEKIT_SIP_DOMAIN=${LIVEKIT_SIP_DOMAIN}
-      # Gemini Configuration
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      # Phase 2 pipeline provider keys (modular STT/LLM/TTS cascade).
-      # Silero VAD is local (no key). Real values come from .env; absent keys
-      # are fine until an agent is configured for the pipeline engine (Phase 3).
-      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - CARTESIA_API_KEY=${CARTESIA_API_KEY:-}
-      # Opentelemetry Configuration
-      - OTEL_ENABLED=true
-      - OTEL_SERVICE_NAME=voice-worker-dev
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-      - OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-      # Metrics
-      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-      - OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-      # Logs
-      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-      - OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-    networks:
-      - saas-dev-network
-    depends_on:
-      - otel-collector
     restart: unless-stopped
 
 volumes:

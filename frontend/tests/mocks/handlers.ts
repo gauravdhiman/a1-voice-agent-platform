@@ -37,9 +37,6 @@ export const handlers = [
       token: 'test_token_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
       wsUrl: 'ws://localhost:7860/ws',
       sessionId: 'sess_test_123',
-      // Legacy LiveKit fields kept for dual-path client tests
-      serverUrl: 'wss://test.livekit.cloud',
-      roomName: 'test_agent-123_abc123',
     })
   }),
 

@@ -80,7 +80,7 @@ class GmailTool(BaseTool):
             This is for browsing recent emails, not for bulk operations.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             count: Number of latest emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -128,7 +128,7 @@ class GmailTool(BaseTool):
             For names, use partial matching (e.g., "John" matches "john@example.com").
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             user: Name or email address of the sender
             count: Maximum number of emails to retrieve (default: 5, max: 10)
 
@@ -179,7 +179,7 @@ class GmailTool(BaseTool):
             Suggest user mark as read if they've reviewed them.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             count: Maximum number of unread emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -227,7 +227,7 @@ class GmailTool(BaseTool):
             Limit to 5-10 unless user needs more for review.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             count: Maximum number of starred emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -276,7 +276,7 @@ class GmailTool(BaseTool):
             Avoid overly broad queries that return hundreds of results.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Search query for filtering emails
             count: Maximum number of emails to retrieve (default: 5, max: 10)
 
@@ -327,7 +327,7 @@ class GmailTool(BaseTool):
             Use reasonable range (7-15 days) to avoid overwhelming results.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             start_date: Unix timestamp for start date
             range_in_days: Number of days to include in the range (optional)
             num_emails: Maximum number of emails to retrieve (default: 10)
@@ -383,7 +383,7 @@ class GmailTool(BaseTool):
             Useful for understanding full conversation context before responding.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             thread_id: The ID of the email thread
 
         Returns:
@@ -428,7 +428,7 @@ class GmailTool(BaseTool):
             Use Gmail search syntax (from:, subject:, etc.) for precision.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Natural language query to search for
             count: Number of emails to retrieve (default: 1, max: 10)
 
@@ -480,7 +480,7 @@ class GmailTool(BaseTool):
             Drafts can be edited via Gmail interface before sending.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             to: Comma separated string of recipient email addresses
             subject: Email subject
             body: Email body content
@@ -529,7 +529,7 @@ class GmailTool(BaseTool):
             Format body as plain text, not HTML (system handles conversion).
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             to: Comma separated string of recipient email addresses
             subject: Email subject
             body: Email body content
@@ -580,7 +580,7 @@ class GmailTool(BaseTool):
             Automatically handles "Re:" prefix in subject line.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             thread_id: The ID of the email thread to reply to
             message_id: The ID of the email being replied to
             to: Comma-separated recipient email addresses
@@ -636,7 +636,7 @@ class GmailTool(BaseTool):
             Helps keep inbox organized by tracking read status.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             message_id: The ID of the message to mark as read
 
         Returns:
@@ -672,7 +672,7 @@ class GmailTool(BaseTool):
             Useful for flagging emails for follow-up.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             message_id: The ID of the message to mark as unread
 
         Returns:
@@ -707,7 +707,7 @@ class GmailTool(BaseTool):
             Useful for understanding user's labeling system.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
 
         Returns:
             Dict containing list of custom labels
@@ -751,7 +751,7 @@ class GmailTool(BaseTool):
             Use specific search queries for precision.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Gmail search query to find emails
             label_name: Name of the label to apply
             count: Number of emails to process (default: 5, max: 10)
@@ -837,7 +837,7 @@ class GmailTool(BaseTool):
             Confirm with user before removing labels from many emails.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Gmail search query to find emails
             label_name: Name of the label to remove
             count: Number of emails to process (default: 5, max: 10)
@@ -917,7 +917,7 @@ class GmailTool(BaseTool):
             Emails in trash are permanently deleted after 30 days.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             message_id: ID of the message to delete
             confirm: Must be True to actually delete the email
 
@@ -965,7 +965,7 @@ class GmailTool(BaseTool):
             Warning: Removing label doesn't delete the emails tagged with it.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             label_name: Name of label to delete
             confirm: Must be True to actually delete label
 
@@ -1151,7 +1151,7 @@ class GmailTool(BaseTool):
             Optionally skip body if user only wants metadata (headers).
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             message_id: ID of the email to read
             fetch_body: Whether to fetch the email body (default: True)
 

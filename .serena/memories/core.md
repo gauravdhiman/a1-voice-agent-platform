@@ -5,8 +5,8 @@ AI voice agent platform (voice-only). Multi-tenant SaaS — orgs, RBAC, billing,
 ## Project structure
 - `backend/` — FastAPI app (Python 3.11), entry: `main.py`, routes in `src/<module>/routes.py`, services in `src/<module>/services.py`
 - `frontend/` — Next.js 15 + React 19 + Tailwind CSS v4, App Router, pages in `src/app/(dashboard)/`
-- `shared/` — Code shared between backend + worker (config, models, services)
-- `worker/` — LiveKit voice AI agent worker
+- `shared/` — Code shared between backend + voice-ws (config, models, services)
+- `voice-ws/` — Pipecat WebSocket voice worker (browser + Twilio Media Streams)
 - `supabase/` — Local Supabase config (runs on `http://127.0.0.1:54321`)
 - `e2e/` — Playwright E2E tests (isolated Docker stack on ports 3001/8001)
 

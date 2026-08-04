@@ -96,7 +96,7 @@ async def run_bot(
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(_transport, _client) -> None:
-        """Queue a first user instruction to match LiveKit greeting behavior."""
+        """Queue a first user instruction so the agent greets on connect."""
         context.add_message({"role": "user", "content": _GREETING_INSTRUCTION})
         await task.queue_frames([LLMRunFrame()])
 

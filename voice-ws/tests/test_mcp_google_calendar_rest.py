@@ -461,7 +461,7 @@ def _ctx_with_header(name: str, value: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Full pipeline: in-process MCP server + McpClient + LiveKit handler
+# Full pipeline: in-process MCP server + McpClient + Pipecat tool handler
 # ---------------------------------------------------------------------------
 
 
@@ -583,14 +583,14 @@ class TestSchemasAreGeminiClean:
     """Every tool schema the connector reports must pass Gemini's strict
     FunctionDeclaration validator (after the worker's sanitize step), so the
     realtime session never aborts on a schema key Gemini rejects. Mirrors the
-    guard in test_mcp_livekit_adapter.py.
+    guard in voice-ws MCP dispatch tests.
     """
 
     async def test_all_tool_schemas_pass_gemini_validation(self, google_calendar_rest_mcp_config):
         from google.genai import types
 
         from shared.voice_agents.tools.mcp.client import McpClient
-        from shared.voice_agents.tools.mcp.livekit_adapter import _build_raw_schema
+        from shared.voice_agents.tools.mcp.schema_sanitize import build_gemini_function_declaration
 
         async with McpClient(google_calendar_rest_mcp_config) as client:
             tools = await client.list_tools()
@@ -598,6 +598,6 @@ class TestSchemasAreGeminiClean:
         # Must not raise for any tool — this is the exact check that crashed the
         # realtime session before the sanitization fix.
         for tool in tools:
-            built = _build_raw_schema(tool)
+            built = build_gemini_function_declaration(tool)
             fd = types.FunctionDeclaration.model_validate(built)
             assert fd.name == tool.name

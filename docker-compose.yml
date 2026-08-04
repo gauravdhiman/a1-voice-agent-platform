@@ -40,6 +40,8 @@ services:
       # Twilio Configuration
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - VOICE_WS_PUBLIC_URL=${VOICE_WS_PUBLIC_URL:-ws://localhost:7860}
+      - VOICE_WS_TWILIO_URL=${VOICE_WS_TWILIO_URL:-}
       # OpenTelemetry Configuration
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=saas-platform-backend
@@ -103,26 +105,35 @@ services:
     networks:
       - saas-network
 
-  worker:
+  voice-ws:
     build:
       context: .
-      dockerfile: worker/Dockerfile
+      dockerfile: voice-ws/Dockerfile
+    ports:
+      - "7860:7860"
     env_file:
       - .env
     environment:
       - ENVIRONMENT=production
       - DEBUG=false
-      - PYTHONPATH=/app:$PYTHONPATH
-      # LiveKit Configuration
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
-      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-      - LIVEKIT_URL=${LIVEKIT_URL}
-      - LIVEKIT_SIP_DOMAIN=${LIVEKIT_SIP_DOMAIN}
-      # Gemini Configuration
+      - PYTHONPATH=/app:/app/shared
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      # Opentelemetry Configuration
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CARTESIA_API_KEY=${CARTESIA_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - FISH_API_KEY=${FISH_API_KEY:-}
+      - AGENT_DEFAULT_TIMEZONE=${AGENT_DEFAULT_TIMEZONE:-UTC}
+      - VOICE_RECORDING_TEE=${VOICE_RECORDING_TEE:-false}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - OTEL_ENABLED=true
-      - OTEL_SERVICE_NAME=voice-worker
+      - OTEL_SERVICE_NAME=voice-ws-prod
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
       - OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
@@ -130,6 +141,7 @@ services:
       - saas-network
     depends_on:
       - otel-collector
+      - backend
     restart: unless-stopped
 
 networks:

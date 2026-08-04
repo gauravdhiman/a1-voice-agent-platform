@@ -1,4 +1,6 @@
-# Dynamic Tool Architecture for LiveKit Agents
+> **Historical note:** Runtime is **`voice-ws`** (Pipecat). Sections below describe the legacy LiveKit `@function_tool` approach; see [dynamic_tool_architecture.md](dynamic_tool_architecture.md) and [voice_engine.md](../02_core_systems/voice_engine.md) for current wiring.
+
+# Dynamic Tool Architecture for Pipecat / voice-ws
 
 ## Executive Summary
 
@@ -27,7 +29,7 @@ graph TD
         AE1 --> AE2
         AE1 --> AE3
 
-        WK1["Worker (worker.py)"]
+        WK1["voice-ws (worker.py)"]
         WK2["Manual @fnc_ctx.ai_callable per tool"]
         WK3["Generic action, details params"]
         WK4["Not using @function_tool"]
@@ -52,7 +54,7 @@ graph TD
 **Current:**
 
 ```python
-# Worker manually creates functions
+# voice-ws manually creates functions
 @fnc_ctx.ai_callable(name="google_calendar", description="...")
 async def call_tool(action: str, details: str):
     return await executor.run_tool("Google_calendar", action=action, details=details)
@@ -167,12 +169,12 @@ agent_tools = [
 - Can't use MCP servers for external tools
 - Can't have tools defined by users/admins
 
-#### Problem 4: Worker Does All of Work, Should Be Declarative
+#### Problem 4: voice-ws Does All of Work, Should Be Declarative
 
 **Current:**
 
 ```python
-# Worker manually:
+# voice-ws manually:
 # 1. Fetches agent tools from DB
 # 2. Fetches tool class from registry
 # 3. Manually creates @fnc_ctx.ai_callable
@@ -183,7 +185,7 @@ agent_tools = [
 **Should be:**
 
 ```python
-# Worker just:
+# voice-ws just:
 # 1. Load agent's configured tools (schemas + implementations)
 # 2. Pass to RealtimeModel with tools parameter
 # 3. Let LiveKit handle function registration and LLM integration
@@ -191,7 +193,7 @@ agent_tools = [
 
 **Impact:**
 
-- Worker logic is complex and error-prone
+- voice-ws logic is complex and error-prone
 - No separation between configuration and execution
 - Hard to test tool registration independently
 
@@ -214,7 +216,7 @@ graph TD
     DB2 --> Session["Agent Session"]
     Session --> AS1["Loads enabled tools"]
     AS1 --> Worker["Worker"]
-    Worker --> WK1["Loads tools"]
+    voice-ws --> WK1["Loads tools"]
     WK1 --> WK2["Injects config into context"]
     WK2 --> LiveKit["LiveKit"]
     LiveKit --> LK1["RealtimeModel"]
@@ -229,7 +231,7 @@ graph TD
 
    - Define tools once with decorators
    - Configure tools in database
-   - Worker just loads and uses
+   - voice-ws just loads and uses
 
 2. **Schema-Driven**
 
@@ -460,7 +462,6 @@ async def create_function_from_schema(
         execute=handler
     )
 
-
 async def create_http_tool(
     name: str,
     description: str,
@@ -574,7 +575,6 @@ class ToolRegistry:
         Get all tool schemas.
         """
         return self._schemas
-
 
 # Global registry instance
 tool_registry = ToolRegistry()
@@ -734,7 +734,7 @@ class ToolService:
             return [], str(e)
 ```
 
-### Component 5: Worker (Major Refactor)
+### Component 5: voice-ws (Major Refactor)
 
 **File:** `worker/src/worker.py`
 
@@ -759,7 +759,6 @@ from shared.voice_agents.tools.base.registry import tool_registry
 
 logger = logging.getLogger("voice-worker")
 logger.setLevel(logging.INFO)
-
 
 async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room {ctx.room.name}")
@@ -855,7 +854,6 @@ async def entrypoint(ctx: JobContext):
         logger.info(f"Participant {participant.identity} disconnected, ending session")
         # Session cleanup happens automatically when AgentSession ends
 
-
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
@@ -922,7 +920,7 @@ async def any_tool_you_want(
   }
 }
 
-# Worker loads it and creates function dynamically
+# voice-ws loads it and creates function dynamically
 ```
 
 **MCP tools:**
@@ -948,13 +946,13 @@ session = AgentSession(
 
 - Admin defines schema in UI
 - Stored in `platform_tools` table
-- Worker loads and registers them
+- voice-ws loads and registers them
 
 ### Associate with Agents
 
 - `agent_tools` table maps `agent_id` → `tool_id`
 - Each association has its own `config` (per-agent settings)
-- Worker resolves and loads enabled tools
+- voice-ws resolves and loads enabled tools
 
 ---
 
@@ -1001,7 +999,7 @@ session = AgentSession(
    - `upsert_platform_tool()` merges registry schemas
    - `get_agent_tools_with_functions()` returns complete data
 
-### Phase 5: Refactor Worker (2 days)
+### Phase 5: Refactor voice-ws (2 days)
 
 1. Remove manual function creation
 
@@ -1060,7 +1058,6 @@ async def send_email(
 
     return {"success": True, "message_id": "..."}
 
-
 # Automatically registered when package is imported
 # tool_registry will discover and register it
 ```
@@ -1109,7 +1106,7 @@ async def send_email(
 - Provides CRM API key as sensitive config
 - Sets default URL in config
 
-**4. Worker loads it:**
+**4. voice-ws loads it:**
 
 - Fetches from `agent_tools`
 - Creates function from schema using `create_function_from_schema()`
@@ -1166,7 +1163,7 @@ async def entrypoint(ctx: JobContext):
 | **Parameter Types**     | Generic `**kwargs`                   | Real Python type hints               |
 | **Schema Management**   | config_schema only (for UI)          | tool_functions_schema (for LLM)      |
 | **Dynamic Loading**     | No                                   | Yes (database + MCP)                 |
-| **Worker Logic**        | Manual function creation             | Declarative (load + pass to LLM)     |
+| **voice-ws Logic**        | Manual function creation             | Declarative (load + pass to LLM)     |
 | **LiveKit Integration** | Low-level @fnc_ctx.ai_callable       | Native @function_tool                |
 | **Config Injection**    | AgentExecutor passes config          | context.userdata injection           |
 | **Flexibility**         | Limited (code-defined only)          | Unlimited (any tool, any schema)     |
@@ -1178,4 +1175,4 @@ This architecture gives you:
 - **Dynamic Loading**: From code, database, or MCP servers
 - **Schema-Driven**: Clear separation of UI config vs LLM function schemas
 - **Agent Association**: Clean mapping in `agent_tools` table
-- **Declarative Worker**: Worker just loads and passes tools
+- **Declarative Worker**: voice-ws just loads and passes tools

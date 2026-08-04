@@ -1,20 +1,20 @@
-"""Tests for LiveKit tool registry."""
+"""Tests for platform tool registry."""
 
 from unittest.mock import Mock, patch
 
 import pytest
 
 
-class TestLiveKitToolRegistry:
-    """Test cases for LiveKitToolRegistry."""
+class TestPlatformToolRegistry:
+    """Test cases for PlatformToolRegistry."""
 
     @pytest.fixture
     def registry(self):
-        """Get the LiveKit tool registry instance."""
-        from shared.voice_agents.tools.base.registry_livekit import \
-            livekit_tool_registry
+        """Get the platform tool registry instance."""
+        from shared.voice_agents.tools.base.platform_tool_registry import \
+            platform_tool_registry
 
-        return livekit_tool_registry
+        return platform_tool_registry
 
     def test_registry_instance_exists(self, registry):
         """Test registry instance exists."""
@@ -37,16 +37,16 @@ class TestLiveKitToolRegistry:
     def test_register_tools_from_package_skips_import_errors(self, registry):
         """A single broken tool module must not abort package registration.
 
-        voice-ws and the LiveKit worker both discover tools via
+        voice-ws and the voice-ws both discover tools via
         ``pkgutil.walk_packages``. Optional third-party imports (e.g. ``bs4``
         for Gmail) may be missing in lean images; registration should skip
         those modules and continue so the session can still start.
         """
-        from shared.voice_agents.tools.base.registry_livekit import (
-            LiveKitToolRegistry,
+        from shared.voice_agents.tools.base.platform_tool_registry import (
+            PlatformToolRegistry,
         )
 
-        fresh = LiveKitToolRegistry()
+        fresh = PlatformToolRegistry()
         real_import = __import__("importlib").import_module
 
         def _import_module(name: str, package=None):
@@ -55,7 +55,7 @@ class TestLiveKitToolRegistry:
             return real_import(name, package)
 
         with patch(
-            "shared.voice_agents.tools.base.registry_livekit.importlib.import_module",
+            "shared.voice_agents.tools.base.platform_tool_registry.importlib.import_module",
             side_effect=_import_module,
         ):
             fresh.register_tools_from_package(
@@ -337,7 +337,7 @@ class TestLiveKitToolRegistry:
         assert "Args:" not in schema["description"]
         assert "Instructions:" not in schema["description"]
         assert "context:" not in schema["description"]
-        assert "LiveKit RunContext" not in schema["description"]
+        assert "ToolContext" not in schema["description"]
 
     def test_extract_description_section(self, registry):
         """Test _extract_description_section extracts only Description: section."""
@@ -352,7 +352,7 @@ class TestLiveKitToolRegistry:
             This is for browsing recent emails, not for bulk operations.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             count: Number of latest emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -376,7 +376,7 @@ class TestLiveKitToolRegistry:
             Format body as plain text, not HTML.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             to: Comma separated string of recipient email addresses
 
         Returns:
@@ -393,7 +393,7 @@ class TestLiveKitToolRegistry:
         Get the latest emails from the user's inbox.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             count: Number of latest emails to retrieve (default: 5, max: 10)
 
         Returns:
@@ -416,7 +416,7 @@ class TestLiveKitToolRegistry:
             Avoid overly broad queries that return too many results.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Natural language query to search for
 
         Returns:
@@ -435,7 +435,7 @@ class TestLiveKitToolRegistry:
         This creates a draft in Gmail for later editing or sending.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             to: Comma separated string of recipient email addresses
 
         Returns:

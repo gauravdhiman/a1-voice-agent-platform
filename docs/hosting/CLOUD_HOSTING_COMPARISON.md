@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document provides a comprehensive analysis of cost-effective cloud hosting options for a containerized full-stack AI Voice Agent Platform. The application consists of four services: Frontend (Next.js), Backend (FastAPI/Python), Worker (LiveKit voice processing), and OpenTelemetry Collector.
+This document provides a comprehensive analysis of cost-effective cloud hosting options for a containerized full-stack AI Voice Agent Platform. The application consists of four services: Frontend (Next.js), Backend (FastAPI/Python), voice-ws (Pipecat WebSocket voice runtime), and OpenTelemetry Collector.
 
 **Recommendation: Render.com or Fly.io** for the initial free tier deployment, with Railway as the best option for production scaling at $5-20/month.
 
@@ -16,7 +16,7 @@ The application uses Docker containers with the following services:
 |---------|-----------|------|----------------|
 | Frontend | Next.js | Web Server | Medium (CPU), Low (Memory) |
 | Backend | FastAPI/Python | API Server | Medium-High (CPU), Medium (Memory) |
-| Worker | Python/LiveKit | Background Worker | High (CPU), High (Memory) |
+| voice-ws | Python/Pipecat | WebSocket voice worker | High (CPU), High (Memory) |
 | OTel Collector | OpenTelemetry | Observability | Low (CPU), Low (Memory) |
 
 **Total containers**: 4
@@ -69,7 +69,7 @@ The application uses Docker containers with the following services:
 - Limited to AWS infrastructure only
 - No persistent storage on free tier
 
-**Verdict for Your App:** ✅ **EXCELLENT** - Can host all 4 services on free tier initially. Worker may need paid tier for persistent运行.
+**Verdict for Your App:** ✅ **EXCELLENT** - Can host all 4 services on free tier initially. voice-ws may need paid tier for persistent运行.
 
 ---
 
@@ -99,7 +99,7 @@ The application uses Docker containers with the following services:
 - Steeper learning curve
 - Memory limits on free tier (256MB/container)
 
-**Verdict for Your App:** ✅ **EXCELLENT** - Best "free forever" option. May need to optimize memory for worker service.
+**Verdict for Your App:** ✅ **EXCELLENT** - Best "free forever" option. May need to optimize memory for voice-ws service.
 
 ---
 
@@ -285,7 +285,7 @@ The application uses Docker containers with the following services:
 **Deployment Plan:**
 1. Deploy Frontend on Render (free) or Fly.io
 2. Deploy Backend on Render (free) or Fly.io  
-3. Deploy Worker on Render (paid $7/mo) or Fly.io
+3. Deploy voice-ws on Render (paid $7/mo) or Fly.io
 4. Use external OTel solution (e.g., Grafana Cloud free tier)
 
 **Estimated Cost: $0-7/month**
@@ -314,14 +314,14 @@ The application uses Docker containers with the following services:
 
 ## Special Considerations for Your Architecture
 
-### Worker Service Concerns
-The LiveKit voice worker requires:
-- Persistent running (cannot spin down)
-- Higher memory for audio processing
-- Network access to LiveKit servers
+### voice-ws Service Concerns
+The Pipecat WebSocket voice worker requires:
+- Persistent running (cannot spin down during active calls)
+- Higher memory for audio processing and LLM sessions
+- Public `wss://` URL for browser and Twilio Media Streams
 
 **Recommendation:** 
-- On Render: Use Standard tier ($25/mo) for worker
+- On Render: Use Standard tier ($25/mo) for voice-ws
 - On Fly.io: May need to optimize memory usage or use larger VM
 
 ### OpenTelemetry Collector

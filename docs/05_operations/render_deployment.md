@@ -8,7 +8,7 @@ This guide covers deploying all platform services to Render.com using the `rende
 |---|---|---|---|
 | `cog-backend` | Web Service | Standard ($25/mo) | `https://cog-backend.onrender.com` |
 | `cog-frontend` | Web Service | Starter ($7/mo) | `https://cog-frontend.onrender.com` |
-| `cog-worker` | Background Worker | Standard ($25/mo) | — (no HTTP) |
+| `cog-voice-ws` | Background voice-ws | Standard ($25/mo) | — (no HTTP) |
 | `cog-otel-collector` | Web Service | Starter ($7/mo) | `https://cog-otel-collector.onrender.com` |
 
 **Estimated monthly cost: ~$64/mo** (or ~$32/mo if OTel Collector skipped)
@@ -42,12 +42,11 @@ Before deploying, gather all credentials:
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 
-### LiveKit Cloud
-- Create a production project at cloud.livekit.io
-- `LIVEKIT_API_KEY`
-- `LIVEKIT_API_SECRET`
-- `LIVEKIT_URL` — e.g., `wss://your-project.livekit.cloud`
-- `LIVEKIT_SIP_DOMAIN` — your SIP domain
+### voice-ws (Pipecat WebSocket)
+- Deploy `cog-voice-ws` from `render.yaml`
+- `JWT_SECRET_KEY` — must match `cog-backend`
+- `GEMINI_API_KEY` and optional pipeline provider keys (Deepgram, OpenAI, Cartesia, …)
+- Backend: `VOICE_WS_PUBLIC_URL`, `VOICE_WS_TWILIO_URL` (public `wss://` for Twilio Media Streams)
 
 ### Google OAuth
 - Create production OAuth credentials at console.cloud.google.com
@@ -128,16 +127,18 @@ JWT_SECRET_KEY=<random_32_bytes_hex>
 CORS_ORIGINS=["https://cog-frontend.onrender.com"]
 ```
 
-**cog-worker:**
+**cog-voice-ws:**
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=<service_role_key>
 SUPABASE_ANON_KEY=<anon_key>
-LIVEKIT_API_KEY=...
-LIVEKIT_API_SECRET=...
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_SIP_DOMAIN=...
+JWT_SECRET_KEY=<same as backend>
 GEMINI_API_KEY=...
+DEEPGRAM_API_KEY=...
+OPENAI_API_KEY=...
+CARTESIA_API_KEY=...
+ENVIRONMENT=production
+DEBUG=false
 ```
 
 **cog-otel-collector** (if deploying):
@@ -153,7 +154,6 @@ NEXT_PUBLIC_API_URL=https://cog-backend.onrender.com
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon_key>
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
-NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
 NEXT_PUBLIC_OTEL_ENABLED=true
 NEXT_PUBLIC_OTEL_SERVICE_NAME=cog-frontend-prod
 NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://cog-otel-collector.onrender.com/v1/traces
@@ -220,7 +220,7 @@ After adding custom domain, update:
 - `NEXT_PUBLIC_API_URL` build arg in cog-frontend: `https://api.yourdomain.com`
 - Stripe webhook URL
 - Google OAuth redirect URIs
-- LiveKit allowed origins
+- `VOICE_WS_PUBLIC_URL` / CORS for WebSocket origins
 
 ---
 
@@ -268,9 +268,9 @@ Full list of all environment variables across all services, to be stored securel
 
 | Variable | Service(s) | Description |
 |---|---|---|
-| `SUPABASE_URL` | backend, worker | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | backend, worker | Supabase service_role key |
-| `SUPABASE_ANON_KEY` | backend, worker | Supabase anon key |
+| `SUPABASE_URL` | backend, voice-ws | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | backend, voice-ws | Supabase service_role key |
+| `SUPABASE_ANON_KEY` | backend, voice-ws | Supabase anon key |
 | `NEXT_PUBLIC_SUPABASE_URL` | frontend (build arg) | Same as SUPABASE_URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | frontend (build arg) | Same as SUPABASE_ANON_KEY |
 | `DATABASE_URL` | backend | PostgreSQL connection string |
@@ -279,13 +279,10 @@ Full list of all environment variables across all services, to be stored securel
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | frontend (build arg) | Stripe live publishable key |
 | `TWILIO_ACCOUNT_SID` | backend | Twilio account SID |
 | `TWILIO_AUTH_TOKEN` | backend | Twilio auth token |
-| `LIVEKIT_API_KEY` | worker | LiveKit API key |
-| `LIVEKIT_API_SECRET` | worker | LiveKit API secret |
-| `LIVEKIT_URL` | worker | LiveKit WebSocket URL |
-| `LIVEKIT_SIP_DOMAIN` | worker | LiveKit SIP domain |
-| `NEXT_PUBLIC_LIVEKIT_URL` | frontend (build arg) | Same as LIVEKIT_URL |
-| `GEMINI_API_KEY` | worker | Google Gemini API key |
-| `JWT_SECRET_KEY` | backend | JWT signing secret |
+| `VOICE_WS_PUBLIC_URL` | backend, voice-ws | Public `wss://` base for browser WebSocket |
+| `VOICE_WS_TWILIO_URL` | backend | Public `wss://` base for Twilio Media Streams |
+| `GEMINI_API_KEY` | voice-ws | Google Gemini API key (platform default) |
+| `JWT_SECRET_KEY` | backend, voice-ws | Shared signing secret for `voice_ws_session` JWTs |
 | `CORS_ORIGINS` | backend | JSON array of allowed origins |
 | `GOOGLE_OAUTH_TOOL_CLIENT_ID` | backend | Google OAuth client ID |
 | `GOOGLE_OAUTH_TOOL_CLIENT_SECRET` | backend | Google OAuth client secret |
@@ -305,9 +302,9 @@ Full list of all environment variables across all services, to be stored securel
 - Check `JWT_SECRET_KEY` is set correctly
 - Verify Supabase keys are correct (service_role vs anon)
 
-**Worker doesn't connect to LiveKit**
-- Verify `LIVEKIT_URL` starts with `wss://` (not `ws://` for production)
-- Check LiveKit Cloud dashboard for active connections
+**voice-ws WebSocket connection fails**
+- Verify `VOICE_WS_PUBLIC_URL` / `VOICE_WS_TWILIO_URL` use `wss://` (not `ws://`) in production
+- Confirm `JWT_SECRET_KEY` matches between backend and voice-ws
 
 **OTel Collector not receiving data**
 - On Render, services in the same region can talk via `http://<service-name>:<port>`

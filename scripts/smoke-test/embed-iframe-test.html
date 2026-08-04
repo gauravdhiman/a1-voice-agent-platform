@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Embed call smoke test</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        line-height: 1.5;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 1.5rem;
+      }
+
+      .panel {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        font-size: 0.875rem;
+        margin-bottom: 6px;
+        color: #94a3b8;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        max-width: 520px;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #475569;
+        background: #0f172a;
+        color: #f8fafc;
+        font-size: 0.95rem;
+      }
+
+      button {
+        margin-top: 12px;
+        padding: 10px 16px;
+        border-radius: 8px;
+        border: none;
+        background: #3b82f6;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #2563eb;
+      }
+
+      .hint {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        margin-top: 8px;
+      }
+
+      .iframe-wrap {
+        margin-top: 16px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #020617;
+        max-width: 420px;
+      }
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: 620px;
+        border: 0;
+      }
+
+      code {
+        background: #0f172a;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.85em;
+      }
+
+      ol {
+        margin: 0;
+        padding-left: 20px;
+      }
+
+      ol li {
+        margin-bottom: 8px;
+      }
+    </style>
+    <!-- AI Voice Agent Call Button -->
+    <script
+      src="http://localhost:3000/embed/call-button.js"
+      data-agent-id="7ee02362-6ed2-4728-ba54-2a5ff56f92fe"
+      data-button-text="Call Us"
+      data-button-color="#3ba6f7"
+      data-button-text-color="#ffffff"
+      data-button-border-radius="8"
+      data-button-size="medium"
+      data-button-position="bottom-right"
+      data-button-style="filled"
+    ></script>
+  </head>
+  <body>
+    <h1>Embed call — local smoke test</h1>
+
+    <div class="panel">
+      <h2 style="margin-top: 0; font-size: 1.1rem">Setup</h2>
+      <ol>
+        <li>Log in at <code>http://localhost:3000</code> and open an agent.</li>
+        <li>Enable <strong>Embed Button</strong> (leave allowed domains empty for local testing).</li>
+        <li>Copy the agent UUID and paste it below.</li>
+        <li>Ensure dev stack is running (<code>./start.sh start dev</code>).</li>
+      </ol>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin-top: 0; font-size: 1.1rem">Option A — iframe (same as popup)</h2>
+      <label for="agentId">Agent ID</label>
+      <input
+        id="agentId"
+        type="text"
+        placeholder="00000000-0000-0000-0000-000000000001"
+        autocomplete="off"
+      />
+      <button type="button" id="loadIframe">Load embed iframe</button>
+      <p class="hint">
+        Opens <code>/embed/call?agentId=…</code> on the frontend. Microphone permission is
+        required.
+      </p>
+      <div class="iframe-wrap" id="iframeContainer" hidden>
+        <iframe
+          id="embedFrame"
+          title="AI voice agent embed call"
+          allow="microphone; camera"
+        ></iframe>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin-top: 0; font-size: 1.1rem">Option B — floating call button script</h2>
+      <p class="hint">
+        Uses the production embed script from your local frontend. Click the floating button
+        in the corner after loading.
+      </p>
+      <button type="button" id="loadScript">Load call-button.js</button>
+      <p class="hint" id="scriptStatus"></p>
+    </div>
+
+    <script>
+      const PLATFORM_ORIGIN = "http://localhost:3000";
+      const agentInput = document.getElementById("agentId");
+      const iframe = document.getElementById("embedFrame");
+      const iframeContainer = document.getElementById("iframeContainer");
+      const scriptStatus = document.getElementById("scriptStatus");
+
+      // Restore last agent id from session storage for convenience
+      const saved = sessionStorage.getItem("embed-smoke-agent-id");
+      if (saved) agentInput.value = saved;
+
+      document.getElementById("loadIframe").addEventListener("click", () => {
+        const agentId = agentInput.value.trim();
+        if (!agentId) {
+          alert("Enter an agent ID first.");
+          return;
+        }
+        sessionStorage.setItem("embed-smoke-agent-id", agentId);
+        iframe.src = `${PLATFORM_ORIGIN}/embed/call?agentId=${encodeURIComponent(agentId)}`;
+        iframeContainer.hidden = false;
+      });
+
+      document.getElementById("loadScript").addEventListener("click", () => {
+        const agentId = agentInput.value.trim();
+        if (!agentId) {
+          alert("Enter an agent ID first.");
+          return;
+        }
+        sessionStorage.setItem("embed-smoke-agent-id", agentId);
+
+        // Remove previous script/button if re-running
+        document.querySelectorAll("[data-embed-smoke-script]").forEach((el) => el.remove());
+        document.querySelectorAll(".ai-call-button-wrapper").forEach((el) => el.remove());
+
+        const script = document.createElement("script");
+        script.src = `${PLATFORM_ORIGIN}/embed/call-button.js`;
+        script.setAttribute("data-agent-id", agentId);
+        script.setAttribute("data-button-text", "Test embed call");
+        script.setAttribute("data-button-color", "#3b82f6");
+        script.setAttribute("data-button-text-color", "#ffffff");
+        script.setAttribute("data-button-position", "bottom-right");
+        script.setAttribute("data-embed-smoke-script", "1");
+        document.body.appendChild(script);
+        scriptStatus.textContent =
+          "Script loaded — look for the floating button (bottom-right).";
+      });
+    </script>
+  </body>
+</html>

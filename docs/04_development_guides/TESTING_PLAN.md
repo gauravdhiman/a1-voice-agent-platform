@@ -855,7 +855,7 @@ vitest: ^2.1.0                # Test runner
 jsdom: ^25.0.0                # DOM environment
 
 # API Mocking
-msw: ^2.6.0                   # Mock Service Worker for API mocking
+msw: ^2.6.0                   # Mock Service voice-ws for API mocking
 
 # Query Mocking
 @tanstack/react-query-devtools: ^5.0.0  # Already in deps

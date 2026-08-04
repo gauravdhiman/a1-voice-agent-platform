@@ -1,8 +1,7 @@
 """Embed call button token and validation service.
 
 Issues short-lived ``voice_ws_session`` JWTs for browser embed calls over the
-Pipecat WebSocket transport. Domain validation and rate limiting remain here;
-LiveKit room tokens are no longer used.
+Pipecat WebSocket transport. Domain validation and rate limiting remain here.
 """
 
 from __future__ import annotations

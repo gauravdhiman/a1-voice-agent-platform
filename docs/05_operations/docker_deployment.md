@@ -54,8 +54,8 @@ docker build -t cog-frontend \
 docker run -p 3000:3000 cog-frontend
 
 # Worker
-docker build -t cog-worker -f worker/Dockerfile .
-docker run --env-file .env cog-worker
+docker build -t cog-voice-ws -f worker/Dockerfile .
+docker run --env-file .env cog-voice-ws
 
 # OTel Collector
 docker build -t cog-otel-collector -f otel-collector/Dockerfile .

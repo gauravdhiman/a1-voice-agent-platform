@@ -1,8 +1,6 @@
 """Gemini-compatible JSON Schema sanitizer for MCP tool arguments.
 
-Transport-neutral — used by both the LiveKit worker adapter and the Pipecat
-voice-ws MCP path. Keeping this out of ``livekit_adapter`` avoids importing
-``livekit`` in the WebSocket worker.
+Transport-neutral — used by the Pipecat voice-ws MCP path and schema tests.
 """
 
 from __future__ import annotations
@@ -103,5 +101,22 @@ def sanitize_schema_for_gemini(schema: Any) -> Any:
     return schema
 
 
-# Back-compat for LiveKit adapter private import sites.
-_sanitize_schema_for_gemini = sanitize_schema_for_gemini
+def build_gemini_function_declaration(tool_def: Any) -> dict[str, Any]:
+    """Build a Gemini ``FunctionDeclaration`` dict from an MCP tool definition.
+
+    Args:
+        tool_def: ``McpToolDef`` (or compatible object with name, description,
+            and ``input_schema``).
+
+    Returns:
+        Dict suitable for ``google.genai.types.FunctionDeclaration.model_validate``.
+    """
+    input_schema = sanitize_schema_for_gemini(
+        getattr(tool_def, "input_schema", None)
+        or {"type": "object", "properties": {}}
+    )
+    return {
+        "name": tool_def.name,
+        "description": getattr(tool_def, "description", None) or "",
+        "parameters": input_schema,
+    }

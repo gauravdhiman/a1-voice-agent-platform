@@ -1,4 +1,4 @@
-"""Shared default voice system rules used by LiveKit worker and voice-ws.
+"""Shared default voice system rules used by voice-ws.
 
 Keep a single source of truth so prompt parity does not drift between
 transports.

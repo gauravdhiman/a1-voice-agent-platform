@@ -1,3 +1,5 @@
+'use client';
+
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
   type AnimationPlaybackControlsWithThen,
@@ -6,18 +8,21 @@ import {
   useMotionValue,
   useMotionValueEvent,
 } from 'motion/react';
-import {
-  type AgentState,
-  type TrackReference,
-  type TrackReferenceOrPlaceholder,
-  useTrackVolume,
-} from '@livekit/components-react';
-import { LocalAudioTrack, RemoteAudioTrack } from 'livekit-client';
 
 const DEFAULT_SPEED = 5;
 const DEFAULT_AMPLITUDE = 0.025;
 const DEFAULT_FREQUENCY = 10;
 const DEFAULT_TRANSITION: ValueAnimationTransition = { duration: 0.2, ease: 'easeOut' };
+
+/** Voice session UI state for the audio visualizer (Pipecat WebSocket path). */
+export type VoiceVisualizerState =
+  | 'disconnected'
+  | 'listening'
+  | 'thinking'
+  | 'connecting'
+  | 'initializing'
+  | 'speaking'
+  | 'idle';
 
 function useAnimatedValue<T>(initialValue: T) {
   const [value, setValue] = useState(initialValue);
@@ -36,23 +41,16 @@ function useAnimatedValue<T>(initialValue: T) {
 }
 
 interface UseAgentAudioVisualizerWaveAnimatorArgs {
-  state?: AgentState;
-  audioTrack?: LocalAudioTrack | RemoteAudioTrack | TrackReferenceOrPlaceholder;
+  state?: VoiceVisualizerState;
 }
 
 export function useAgentAudioVisualizerWave({
   state,
-  audioTrack,
 }: UseAgentAudioVisualizerWaveAnimatorArgs) {
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const { value: amplitude, animate: animateAmplitude } = useAnimatedValue(DEFAULT_AMPLITUDE);
   const { value: frequency, animate: animateFrequency } = useAnimatedValue(DEFAULT_FREQUENCY);
   const { value: opacity, animate: animateOpacity } = useAnimatedValue(1.0);
-
-  const volume = useTrackVolume(audioTrack as TrackReference, {
-    fftSize: 512,
-    smoothingTimeConstant: 0.55,
-  });
 
   useEffect(() => {
     switch (state) {
@@ -87,19 +85,12 @@ export function useAgentAudioVisualizerWave({
       case 'speaking':
       default:
         setSpeed(DEFAULT_SPEED * 2);
-        animateAmplitude(DEFAULT_AMPLITUDE, DEFAULT_TRANSITION);
-        animateFrequency(DEFAULT_FREQUENCY, DEFAULT_TRANSITION);
+        animateAmplitude(DEFAULT_AMPLITUDE * 1.5, DEFAULT_TRANSITION);
+        animateFrequency(DEFAULT_FREQUENCY * 1.5, DEFAULT_TRANSITION);
         animateOpacity(1.0, DEFAULT_TRANSITION);
         return;
     }
   }, [state, setSpeed, animateAmplitude, animateFrequency, animateOpacity]);
-
-  useEffect(() => {
-    if (state === 'speaking') {
-      animateAmplitude(0.015 + 0.4 * volume, { duration: 0 });
-      animateFrequency(20 + 60 * volume, { duration: 0 });
-    }
-  }, [state, volume, animateAmplitude, animateFrequency]);
 
   return {
     speed,

@@ -71,7 +71,7 @@ class GoogleSheetsTool(BaseTool):
             - Returns data as arrays of values
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation (e.g., 'Sheet1!A1:B10')
 
@@ -163,7 +163,7 @@ class GoogleSheetsTool(BaseTool):
             - Row will be appended to the end of the specified range
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation where to append (e.g., 'Sheet1!A1:Z1')
             values: List of values to append as a new row
@@ -220,7 +220,7 @@ class GoogleSheetsTool(BaseTool):
             - Updates cells in the specified range
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation to update (e.g., 'Sheet1!A1', 'Sheet1!A1:B2')
             values: 2D array of values to update [[value1], [value2]]
@@ -276,7 +276,7 @@ class GoogleSheetsTool(BaseTool):
             - Case-insensitive search
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             search_term: Term to search for in the sheet
             range: Optional range in A1 notation to search within (e.g., 'Sheet1!A1:Z100')
@@ -340,7 +340,7 @@ class GoogleSheetsTool(BaseTool):
             - Returns the new spreadsheet ID for future operations
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             title: Title for the new spreadsheet
             sheet_names: List of sheet names to create (default: ["Sheet1"])
 
@@ -506,7 +506,7 @@ class GoogleSheetsTool(BaseTool):
             - Essential for navigating user's spreadsheet collection
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Optional search query to filter spreadsheets (e.g., "title:'Sales Report'")
             max_results: Maximum number of results to return (default: 50, max: 1000)
 
@@ -591,7 +591,7 @@ class GoogleSheetsTool(BaseTool):
             - Useful for locating specific reports, databases, or documents
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             title: Title or partial title to search for
             max_results: Maximum number of results to return (default: 20)
 
@@ -666,7 +666,7 @@ class GoogleSheetsTool(BaseTool):
             - Useful for understanding spreadsheet context before operations
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
 
         Returns:
@@ -747,7 +747,7 @@ class GoogleSheetsTool(BaseTool):
             - Lists all available sheet names and their IDs
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet (from list_user_spreadsheets)
 
         Returns:
@@ -824,7 +824,7 @@ class GoogleSheetsTool(BaseTool):
             - Essential for navigating spreadsheets with multiple sheets
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
 
         Returns:
@@ -889,7 +889,7 @@ class GoogleSheetsTool(BaseTool):
             - Case-insensitive search for sheet titles
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             sheet_title: The title/name of the sheet to find
 
@@ -963,7 +963,7 @@ class GoogleSheetsTool(BaseTool):
             - Returns grid properties, protection settings, and other sheet details
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             sheet_id: The numeric ID of the specific sheet
 
@@ -1047,7 +1047,7 @@ class GoogleSheetsTool(BaseTool):
             - Requires explicit confirmation for large ranges
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation to clear (e.g., 'Sheet1!A1:B10')
 
@@ -1091,7 +1091,7 @@ class GoogleSheetsTool(BaseTool):
             - Each update should have 'range' and 'values' keys
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             updates: List of dictionaries with 'range' and 'values' keys
 

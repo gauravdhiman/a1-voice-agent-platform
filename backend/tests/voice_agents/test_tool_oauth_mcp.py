@@ -1,7 +1,7 @@
 """Tests for the MCP-sourced OAuth path in ``tool_routes.py``.
 
 The legacy ``start_oauth`` / ``oauth_callback`` resolved the tool ONLY through
-the LiveKit registry (``livekit_tool_registry.get_tool_class``), which 404s for
+the platform tool registry (``platform_tool_registry.get_tool_class``), which 404s for
 MCP-sourced platform_tools (they have no in-tree ``BaseTool`` subclass). These
 tests pin the new DB-driven resolution: the tool's OAuth config is read from the
 ``platform_tools.auth_config`` column first, with the legacy registry kept as a
@@ -34,7 +34,7 @@ import pytest
 from fastapi import HTTPException
 
 from shared.voice_agents.tool_models import PlatformTool, ToolSource
-from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
 
 # Test fixtures
 TEST_AGENT_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -151,7 +151,7 @@ class TestStartOauthMcp:
         with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
             mock_ts.get_platform_tools = AsyncMock(return_value=([_mcp_tool()], None))
             with patch.object(
-                livekit_tool_registry, "get_tool_class", return_value=None
+                platform_tool_registry, "get_tool_class", return_value=None
             ) as mock_reg:
                 result = await start_oauth(
                     tool_name="Google_calendar_mcp",
@@ -191,7 +191,7 @@ class TestStartOauthMcp:
         with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
             mock_ts.get_platform_tools = AsyncMock(return_value=([], None))
             with patch.object(
-                livekit_tool_registry, "get_tool_class", return_value=None
+                platform_tool_registry, "get_tool_class", return_value=None
             ):
                 with pytest.raises(HTTPException) as exc_info:
                     await start_oauth(
@@ -218,7 +218,7 @@ class TestStartOauthMcp:
                 return_value=([_legacy_tool_without_db_auth_config()], None)
             )
             with patch.object(
-                livekit_tool_registry,
+                platform_tool_registry,
                 "get_tool_class",
                 return_value=_FakeLegacyToolClass,
             ) as mock_reg:
@@ -264,7 +264,7 @@ class TestOauthCallbackMcp:
             mock_ts.get_platform_tools = AsyncMock(return_value=([_mcp_tool()], None))
             mock_ts.configure_agent_tool = AsyncMock()
             with patch.object(
-                livekit_tool_registry, "get_tool_class", return_value=None
+                platform_tool_registry, "get_tool_class", return_value=None
             ) as mock_reg:
                 with patch("httpx.AsyncClient", return_value=mock_client):
                     result = await oauth_callback(code="auth-code", state=state)
@@ -304,7 +304,7 @@ class TestOauthCallbackMcp:
             mock_ts.get_platform_tools = AsyncMock(return_value=([], None))
             mock_ts.configure_agent_tool = AsyncMock()
             with patch.object(
-                livekit_tool_registry, "get_tool_class", return_value=None
+                platform_tool_registry, "get_tool_class", return_value=None
             ):
                 with patch("httpx.AsyncClient", return_value=mock_client):
                     with pytest.raises(HTTPException) as exc_info:

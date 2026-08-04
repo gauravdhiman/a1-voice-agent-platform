@@ -1,5 +1,8 @@
 # Type Improvements Summary
 
+> **Note:** Some class names below (e.g. removed `LiveKitService`) are historical;
+> current voice runtime uses `voice-ws` and `VoiceSessionService`.
+
 ## Changes Made to Fix Types and Convert Dictionaries to Pydantic Objects
 
 ### 1. **Created Proper AuthConfig Hierarchy**
@@ -50,22 +53,10 @@
 - `ToolService.supabase -> Any`
 - `VoiceAgentService.__init__() -> None`
 - `VoiceAgentService.supabase -> Any`
-- `LiveKitService.__init__() -> None`
-- `LiveKitService.delete_room() -> None`
-
-#### **Token Refresh Service** (added complete type annotations):
-- `__init__(tool_service: ToolService) -> None`
-- `start() -> None`
-- `stop() -> None`
-- `_refresh_loop() -> None`
-- `_refresh_expired_tokens() -> None`
-- `_check_and_refresh_token(agent_tool: Any) -> bool`
-- `_update_agent_tool(agent_tool_id: UUID, sensitive_config: dict[str, Any], tool_name: str) -> None`
-- `start_token_refresh_service(tool_service: ToolService) -> None`
-- `stop_token_refresh_service() -> None`
+- `VoiceSessionService` issue/verify methods (replaces removed LiveKit room tokens)
 
 #### **Registry Service** (added return types):
-- `LiveKitRegistry.__init__() -> None`
+- `PlatformToolRegistry.__init__() -> None`
 - `register_tools_from_package(package_path: str) -> None`
 - `sync_with_db(tool_service: ToolService) -> None`
 
@@ -135,7 +126,7 @@
    - `backend/src/voice_agents/tool_routes.py`
    - `shared/voice_agents/tool_service.py`
    - `shared/voice_agents/service.py`
-   - `shared/voice_agents/livekit_service.py`
-   - `shared/voice_agents/tools/base/registry_livekit.py`
+   - `shared/voice_agents/voice_session_service.py`
+   - `shared/voice_agents/tools/base/platform_tool_registry.py`
 
 All changes maintain backward compatibility while adding type safety and multi-provider OAuth support.

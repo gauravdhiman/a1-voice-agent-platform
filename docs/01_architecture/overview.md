@@ -21,11 +21,11 @@ graph TB
         BE[OpenTelemetry]
     end
 
-    subgraph Worker["Worker (LiveKit)"]
-        WK[Agent Entry Point]
-        WK[Tool Wrapping]
-        WK[Function Execution]
-        WK[Session Management]
+    subgraph VoiceWS["voice-ws (Pipecat WebSocket)"]
+        WK[Session setup]
+        WK[Tool assembly]
+        WK[Speech factory]
+        WK[Twilio / browser transports]
     end
 
     subgraph Database["Supabase (PostgreSQL)"]
@@ -40,14 +40,15 @@ graph TB
         OTEL[OpenTelemetry Collector]
         DOCKER[Docker Compose]
         STRIPE[Stripe]
-        LIVEKIT[LiveKit Cloud]
+        TWILIO[Twilio Media Streams]
     end
 
     FE -->|HTTP|BE
     BE -->|Supabase Client|DB
     WK -->|gRPC|OTEL
     BE -->|Webhooks|STRIPE
-    WK -->|WebRTC|LIVEKIT
+    WK -->|WebSocket|TWILIO
+    FE -->|WebSocket|WK
     OTEL --> DOCKER
 ```
 
@@ -111,7 +112,7 @@ frontend/src/
 
 ### 2. Backend (FastAPI)
 
-**Purpose**: REST API for frontend, tool management, OAuth callbacks, and worker orchestration
+**Purpose**: REST API for frontend, tool management, OAuth callbacks, and voice-ws orchestration
 
 **Key Technologies**:
 
@@ -152,52 +153,54 @@ backend/src/
 - CORS and security middleware
 - Health check endpoints
 
-### 3. Worker (LiveKit)
+### 3. voice-ws (Pipecat WebSocket)
 
-**Purpose**: LiveKit worker for handling real-time voice agent calls and tool execution
+**Purpose**: Real-time voice agent runtime for browser test calls, embed widget, and Twilio phone calls
 
 **Key Technologies**:
 
-- LiveKit Agents Python SDK
-- Google Gemini Realtime Model
+- Pipecat (`pipecat-ai`) with Gemini Realtime and pipeline presets
+- Twilio Media Streams serializer for PSTN
 - OpenTelemetry instrumentation
 
 **Directory Structure**:
 
 ```
-worker/src/
-└── worker.py              # Main worker entry point
+voice-ws/src/
+├── bot.py              # Pipecat pipeline + transport handlers
+├── session_setup.py    # Agent context, tools, speech config
+├── speech/             # STT / LLM / TTS / realtime factories
+└── tools/              # Platform tools, MCP, skills assembly
 ```
 
-**Worker Flow**:
+**voice-ws Flow**:
 
 ```mermaid
 sequenceDiagram
-    participant Room as LiveKit Room
+    participant Client as Browser or Twilio
     participant Backend as FastAPI
-    participant Worker as LiveKit Worker
-    participant Agent as Gemini Model
-    participant Tool as Calendar Tool
+    participant VoiceWS as voice-ws
+    participant Agent as Gemini / pipeline
+    participant Tool as Platform tool
 
-    Backend->>Room: Join call with agent_id and session_id
-    Room->>Worker: JobContext received
-    Worker->>Backend: Fetch agent tools from database
-    Worker->>Worker: Wrap each @function_tool with config injection
-    Worker->>Agent: Pass wrapped functions to RealtimeModel
-    Agent->>Tool: Execute function when called
-    Tool->>Agent: Return result (e.g., calendar events)
-    Agent->>Room: Stream audio response to user
-    Note over Room->>Backend: Session end signal
+    Backend->>Client: voice_ws_session JWT + wsUrl
+    Client->>VoiceWS: WebSocket /ws or /twilio
+    VoiceWS->>Backend: Validate JWT + load agent
+    VoiceWS->>VoiceWS: Assemble tools + speech config
+    VoiceWS->>Agent: Start Pipecat session
+    Client->>VoiceWS: Audio in
+    Agent->>Tool: Function call when needed
+    Tool->>Agent: Result
+    Agent->>Client: Audio out
 ```
 
 **Key Features**:
 
 - Dynamic tool discovery from database
-- Per-agent tool configuration
-- Config injection via `context.userdata`
-- Function enable/disable via `unselected_functions`
-- Stale function name handling
-- Session snapshot management
+- Per-agent tool configuration and OAuth tokens
+- Realtime and STT→LLM→TTS pipeline presets
+- MCP tool servers (Google Calendar, etc.)
+- Twilio inbound (outbound planned — see outbound_phone_calls.md)
 
 ### 4. Database (Supabase PostgreSQL)
 
@@ -282,7 +285,7 @@ flowchart TD
     H --> I[User Toggle Functions]
     I --> J[Update unselected_functions]
 
-    K[Worker Startup] --> L[Fetch Agent Tools]
+    K[voice-ws Startup] --> L[Fetch Agent Tools]
     L --> M[Filter Functions]
     M --> N[Execute Enabled Functions]
 ```
@@ -290,8 +293,8 @@ flowchart TD
 #### Tool Implementation Pattern
 
 ```python
-from livekit.agents import function_tool, RunContext
 from shared.voice_agents.tools.base.base_tool import BaseTool
+from shared.voice_agents.tools.base.tool_context import ToolContext
 
 class ExampleTool(BaseTool):
     @property
@@ -303,22 +306,22 @@ class ExampleTool(BaseTool):
             auth_type="oauth2"
         )
 
-    @function_tool()
     async def example_function(
         self,
-        context: RunContext,
+        context: ToolContext,
         param1: str,
         param2: int = 10
     ) -> dict:
         """Tool function description."""
-        # Access config from context
-        config = context.userdata.get("tool_config", {})
-        sensitive_config = context.userdata.get("sensitive_config", {})
+        config = context.tool_config
+        sensitive_config = context.sensitive_config
 
-        # Tool implementation
         result = await perform_operation(config, sensitive_config, param1, param2)
         return result
 ```
+
+`PlatformToolRegistry` introspects these methods and exposes JSON schemas to
+Pipecat/Gemini at session setup time.
 
 ### 6. Authentication & Authorization
 
@@ -368,7 +371,7 @@ graph TB
     subgraph OTEL[OpenTelemetry Stack]
         FE[Frontend SDK]
         BE[Backend SDK]
-        WK[Worker SDK]
+        WK[voice-ws SDK]
     end
 
     subgraph Collector[OTEL Collector]
@@ -403,10 +406,11 @@ graph TB
 1. **User Setup**: User creates account via frontend → Backend creates org/user in Supabase
 2. **Agent Creation**: User configures voice agent → Backend stores in database
 3. **Tool Integration**: User configures tools for agent → Backend stores tool associations
-4. **Call Initiation**: User triggers outbound call → Backend validates and initiates
-5. **Room Creation**: Backend creates LiveKit room → Worker receives dispatch
-6. **Agent Execution**: Worker loads tools, creates agent → Agent handles voice call
-7. **Tool Calling**: Agent calls tool → Worker executes via wrapped methods
+4. **Inbound call**: PSTN → Twilio webhook → Media Stream → `voice-ws` `/twilio`
+5. **Session start**: Backend issues JWT → `voice-ws` loads agent preset and tools
+6. **Agent Execution**: Pipecat session handles audio and LLM
+7. **Tool Calling**: Agent calls tool → `voice-ws` executes platform tool or MCP
+8. **Outbound (planned)**: See [Outbound phone calls](../03_implementation/outbound_phone_calls.md)
 8. **Response**: Tool returns data → Agent speaks response to user
 9. **Billing**: Backend tracks usage → Stripe handles payments
 
@@ -420,7 +424,7 @@ graph TB
 | Database         | Supabase (PostgreSQL) | -        | Data storage      |
 | ORM              | Supabase Client       | -        | Database client   |
 | Authentication   | Supabase Auth         | -        | User auth         |
-| Voice SDK        | LiveKit Agents        | >=1.3.10 | Voice/video       |
+| Voice runtime    | Pipecat (`voice-ws`)  | —        | WebSocket voice   |
 | LLM              | Google Gemini         | -        | AI model          |
 | Observability    | OpenTelemetry         | Latest   | Tracing & metrics |
 | Metrics Exporter | New Relic OTLP        | -        | External metrics  |
@@ -428,14 +432,14 @@ graph TB
 
 ## Key Design Decisions
 
-### 1. LiveKit Integration
+### 1. Platform tool registry (Pipecat function schemas)
 
-**Decision**: Use LiveKit's native `@function_tool()` decorator
+**Decision**: Introspect `BaseTool` methods and register JSON schemas for LLM function calling  
 **Rationale**:
 
-- LiveKit provides automatic schema extraction from decorated functions
-- Worker can pass decorated functions directly to LLM models
-- No need to manually convert between internal and external formats
+- Keeps tool implementations as plain async Python methods
+- `voice-ws` maps schemas to Pipecat/Gemini at session setup
+- No transport-specific decorators in shared tool code
 
 ### 2. Tool Schema Storage
 

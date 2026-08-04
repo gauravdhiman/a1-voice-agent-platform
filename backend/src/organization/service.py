@@ -404,7 +404,7 @@ class OrganizationService(BaseOrganizationService):
             # providers), and the plaintext column is cleared so the secret
             # exists only in encrypted form. ``provider_credentials_input``
             # carries the other providers (deepgram/openai/cartesia/cerebras/
-            # openrouter/fish/livekit) plus google when the credentials card
+            # openrouter/fish) plus google when the credentials card
             # is used. An empty ``google_api_key`` clears the
             # google entry from the blob.
             cred_updates: dict = {}
@@ -437,9 +437,9 @@ class OrganizationService(BaseOrganizationService):
                 cred_updates["google"] = None
 
             if org_data.provider_credentials_input:
-                # Merge per-provider inputs (e.g. {"openai": "...",
-                # "livekit": {"api_key": "...", "api_secret": "..."}}). A None
-                # value clears that provider.
+                # Merge per-provider inputs (e.g. {"openai": "...", "deepgram": "..."}).
+                # A None / empty value clears that provider. Legacy provider keys
+                # may remain in stored JSON from older rows.
                 #
                 # Google is now managed exclusively on the "API Credentials"
                 # tab (the Organization Info tab's Google field was removed), so

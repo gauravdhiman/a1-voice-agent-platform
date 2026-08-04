@@ -1,10 +1,10 @@
 # MCP tool integration (`shared.voice_agents.tools.mcp`)
 
-The new tool-integration path: a generic **MCP client** in the LiveKit worker
-that calls **remote MCP servers** over Streamable HTTP, instead of hand-rolling
-one `BaseTool` subclass per vendor. This package lives **alongside** the legacy
-`BaseTool` mechanism (`shared/voice_agents/tools/base/`) and does **not** modify
-or replace it — both paths coexist. See
+The tool-integration path for **remote MCP servers** over Streamable HTTP, used by
+`voice-ws` at runtime (via `voice-ws/src/tools/mcp_pipecat.py`) instead of
+hand-rolling one `BaseTool` subclass per vendor. This package lives **alongside**
+the legacy `BaseTool` mechanism (`shared/voice_agents/tools/base/`) — both paths
+coexist. See
 [`docs/03_implementation/mcp_integration_rfc.md`](../../../docs/03_implementation/mcp_integration_rfc.md)
 §1.1 for the coexistence hard constraint.
 
@@ -14,23 +14,23 @@ or replace it — both paths coexist. See
 |---|---|
 | `models.py` | `McpServerConfig`, `McpToolDef`, `McpToolResult` — data models decoupled from the `mcp` SDK. |
 | `client.py` | `McpClient` — async client (`list_tools`, `call_tool`, `close`) over Streamable HTTP. |
-| `livekit_adapter.py` | Synthesizes a LiveKit `RawFunctionTool` from an `McpToolDef` JSON Schema (`mcp_tool_to_livekit_tool`). |
-| `dispatch.py` | Worker-facing helpers: `mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`. |
+| `dispatch.py` | Shared helpers: `mcp_server_config_from_agent_tool`, tool discovery and schema sanitization for LLM runtimes. |
+| `schema_sanitize.py` | JSON Schema normalization for strict realtime models. |
 | `reference_servers/google_calendar.py` | The **first working MCP tool** — a runnable Google-Calendar-shaped MCP server (in-memory). |
 
-## How the worker routes a tool
+Pipecat wiring lives in `voice-ws/src/tools/mcp_pipecat.py` (not in this package).
 
-For each agent, the worker (`worker/src/worker.py`) loads the agent's
-`agent_tools` and, per row:
+## How voice-ws routes a tool
+
+For each session, `voice-ws` loads the agent's `agent_tools` and, per row:
 
 - if `platform_tools.tool_source == 'mcp'` → **MCP path**: build an
   `McpServerConfig` from the row's `mcp_server_*` fields (injecting the per-user
-  OAuth bearer from the decrypted `agent_tools.sensitive_config`), open an
-  `McpClient`, discover the server's tools, synthesize a LiveKit
-  `RawFunctionTool` per tool. The client stays open for the session and is
-  closed when the session ends.
+  OAuth bearer from decrypted `agent_tools.sensitive_config`), open an
+  `McpClient`, discover the server's tools, and register Pipecat-compatible
+  function handlers. The client stays open for the session and is closed on teardown.
 - otherwise → **legacy path**: resolve the `BaseTool` subclass via
-  `LiveKitToolRegistry` (unchanged).
+  `platform_tool_registry` (unchanged).
 
 A broken MCP server fails soft — it is skipped and logged, so the agent's other
 tools (legacy or MCP) still load.
@@ -40,8 +40,8 @@ tools (legacy or MCP) still load.
 The reference server is a real, deployable MCP server (in-memory calendar):
 
 ```bash
-# In the worker container (or any image with `mcp` + `uvicorn` installed):
-docker exec -e MCP_PORT=8000 -w /app a1-voice-agent-platform-worker-dev-1 \
+# In the voice-ws container (or any image with `mcp` + `uvicorn` installed):
+docker exec -e MCP_PORT=8000 -w /app a1-voice-agent-platform-voice-ws-dev-1 \
   python -m shared.voice_agents.tools.mcp.reference_servers.google_calendar
 # Serves Streamable HTTP at http://0.0.0.0:8000/mcp
 ```
@@ -58,7 +58,7 @@ VALUES
 ```
 
 Attach it to an agent via `agent_tools` (with the user's OAuth `access_token`
-stored encrypted in `sensitive_config`, same as the legacy path). The worker
+stored encrypted in `sensitive_config`, same as the legacy path). `voice-ws`
 routes it through MCP automatically; agents still using the legacy
 `Google_calendar` row are unaffected.
 
@@ -85,7 +85,7 @@ real calendars through the full platform path). It is also the better
 long-term design: we own the tool schemas (clean, Gemini-friendly — no
 sanitization hack) and the error handling.
 
-**Front-desk prompting lives in the tool descriptions.** The worker feeds the
+**Front-desk prompting lives in the tool descriptions.** `voice-ws` feeds the
 model the *live* tool descriptions from this connector (via `tools/list`), so
 the `create_event` description is where the booking protocol is enforced: it
 tells the model to book into the **organization's** calendar (not the caller's),
@@ -98,17 +98,14 @@ prompts the model to gather caller information rather than booking for an
 unknown caller. Regression-guarded by
 `TestToolDescriptionsPromptFrontDeskBehavior`.
 
-**The connector auto-starts with the active voice container.**
+**The connector auto-starts with `voice-ws-dev`.**
 
-- **Pipecat (`VOICE_TRANSPORT=pipecat`, default):** `voice-ws-dev` runs
-  [`voice-ws/entrypoint.dev.sh`](../../../voice-ws/entrypoint.dev.sh), which
-  launches the connector as a co-process and then `exec`s uvicorn.
-- **LiveKit rollback (`VOICE_TRANSPORT=livekit`):** `worker-dev` runs
-  [`worker/entrypoint.dev.sh`](../../../worker/entrypoint.dev.sh) the same way.
+`voice-ws-dev` runs [`voice-ws/entrypoint.dev.sh`](../../../voice-ws/entrypoint.dev.sh),
+which launches the connector as a co-process and then `exec`s uvicorn.
 
 Because the connector is a child of PID 1 in the same container, it:
 
-- starts automatically whenever that voice container starts or restarts;
+- starts automatically whenever `voice-ws-dev` starts or restarts;
 - binds `127.0.0.1:8733` inside that container — which is why the
   `Google_calendar_mcp` row can point at `http://127.0.0.1:8733/mcp`;
 - is torn down with the container (`exec` makes the app PID 1 and receives
@@ -153,7 +150,7 @@ full sequence diagram and the one-time GCP setup checklist.
 | `auth_config.scopes` | `calendar.calendarlist.readonly`, `calendar.events.freebusy`, `calendar.events.readonly`, `calendar.events` (read-write superset so write tools work — covers all 5 connector tools incl. `create_event`) |
 | `auth_config.auth_url` / `token_url` | `https://accounts.google.com/o/oauth2/v2/auth` / `https://oauth2.googleapis.com/token` |
 | `auth_config.access_type` / `prompt` | `offline` / `consent` (so Google returns a `refresh_token`) |
-| `tool_functions_schema` | 5 connector tools: `list_calendars`, `list_events`, `get_event`, `create_event`, `check_availability` (display-only — the worker discovers tools live via `tools/list`) |
+| `tool_functions_schema` | 5 connector tools: `list_calendars`, `list_events`, `get_event`, `create_event`, `check_availability` (display-only — voice-ws discovers tools live via `tools/list`) |
 | Token storage | `agent_tools.sensitive_config` (encrypted, auto-refreshed by `TokenRefreshService`). The dispatch layer decrypts and injects the bearer — the MCP server never handles refresh logic. |
 
 **One-time GCP setup** (operator, both paths): enable
@@ -167,15 +164,16 @@ RFC §6.4.
 ## Running the tests
 
 ```bash
-docker exec -w /app a1-voice-agent-platform-worker-dev-1 python -m pytest \
-  tests/test_mcp_client.py tests/test_mcp_livekit_adapter.py \
-  tests/test_mcp_dispatch.py tests/test_mcp_platform_tool.py \
-  tests/test_worker_mcp_branch.py tests/test_mcp_google_calendar_e2e.py \
-  tests/test_mcp_google_calendar_rest.py \
-  -o addopts="" -p no:cacheprovider
+cd voice-ws
+pytest tests/test_mcp_client.py tests/test_tool_runtime_reliability.py -v
+```
+
+Backend shared MCP tests:
+
+```bash
+cd backend
+pytest tests/voice_agents/test_tool_oauth_mcp.py -v
 ```
 
 All tests run against real in-process FastMCP servers over real localhost HTTP
-(no external network, no third-party OAuth). Legacy suites
-(`test_tool_wrapper.py`, `test_base_tool.py`) stay green — coexistence is
-verified by running them together (99 tests green).
+(no external network, no third-party OAuth).

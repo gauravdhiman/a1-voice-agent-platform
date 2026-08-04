@@ -3,9 +3,10 @@
 > **Active transport (2026-08):** Browser, embed, public-page, and phone calls use
 > **`voice-ws/`** (Pipecat WebSocket + Twilio Media Streams). Shared layers below
 > (`SpeechConfig`, presets, `key_resolver`, `PromptBuilder`, tools/MCP/skills) are
-> used by both `voice-ws` and the legacy LiveKit **`worker/`** package (kept in
-> repo, not started by default). **LiveKit Inference** preset stages were removed;
-> pipeline presets use direct providers only.
+> consumed by `voice-ws` at session start. The deprecated preset provider slug
+> **`livekit_inference`** (removed provider name, not the LiveKit product) is
+> normalized to direct providers via migration
+> `20260803000001_remove_livekit_inference_from_presets`.
 
 The voice engine is the part of the platform that turns an authenticated session
 into a conversation. It supports **two configurable engines per agent**, chosen via
@@ -29,23 +30,21 @@ skills), greeting, and cleanup.
 
 ```mermaid
 flowchart TD
-    Call["Inbound / test / embed room"] --> Dispatch["Room-name dispatch"]
-    Dispatch --> Fetch["voice_agent_service.get_agent_by_*"]
+    Call["Inbound / test / embed / phone"] --> Auth["Session JWT + WebSocket"]
+    Auth --> Fetch["voice_agent_service.get_agent_by_*"]
     Fetch --> Prompt["PromptBuilder.build (shared)"]
     Fetch --> Keys["Key resolution (shared)"]
-    Prompt --> Builder["session_builder.build_agent_session()"]
-    Keys --> Builder
-    Fetch --> Tools["Tools + MCP + skills (shared, mode-agnostic)"]
-    Tools --> Agent["DynamicAgent(instructions, tools)"]
-    Builder -->|"realtime"| RT["AgentSession(llm=RealtimeModel)"]
-    Builder -->|"pipeline"| PL["AgentSession(stt, llm, tts, vad, turn_detection)"]
-    RT --> Start["session.start(room, agent)"]
-    PL --> Start
+    Prompt --> Setup["voice-ws session_setup + speech/factory"]
+    Keys --> Setup
+    Fetch --> Tools["Tools + MCP + skills (shared)"]
+    Tools --> Agent["Pipecat pipeline or Gemini realtime"]
+    Setup --> Agent
+    Agent --> Start["Audio in/out (browser or Twilio Stream)"]
 ```
 
-`build_agent_session` is the only place the two engines diverge. It delegates
-plugin construction to the provider factory and only decides how to assemble the
-`AgentSession` from the resulting components.
+`voice-ws` session setup is the only place the two engines diverge. It delegates
+provider construction to `voice-ws/src/speech/factory.py` and assembles either a
+Gemini Realtime session or a modular Pipecat pipeline.
 
 ## Components
 
@@ -66,7 +65,7 @@ A Pydantic discriminated union on `engine_mode`:
 A `SpeechConfig` is stored as the `config` JSONB column on a **preset** row
 (`pipeline_presets.config` — Phase 3 Alembic migration `20260729000001`), not
 directly on the agent. An agent references a preset via `voice_agents.preset_id`
-(FK); the worker loads the preset row live on every call and parses its `config`
+(FK); voice-ws loads the preset row live on every call and parses its `config`
 (no versioning — admin edits take effect on the next call). JSONB + discriminated
 union = adding a provider/tunable is a code change, not a migration.
 
@@ -77,7 +76,7 @@ pattern: no RLS, `is_published` lifecycle, `(result, error)` service contract,
 `assert_platform_role("platform_admin")` gating. `PresetType` is
 `realtime`|`pipeline`, **derived from `config.engine_mode` on every write** by
 the service (denormalized filter column, never hand-set; `extra="forbid"` on the
-Pydantic models rejects a hand-set `preset_type`). The worker fetches a preset by
+Pydantic models rejects a hand-set `preset_type`). The `voice-ws` runtime fetches a preset by
 id (`get_preset_by_id`) — drafts and published both resolve; assignment
 validation (in the agent routes) enforces `is_published`. Deleting an in-use
 preset returns `"in_use"` (route → 409 with the agent list); `?force=true` proceeds
@@ -88,7 +87,7 @@ and the `voice_agents.preset_id` FK `ON DELETE SET NULL` drops agents back to th
 contains one `is_default=true` row (`name='System Default'`, `is_published=false`,
 seeded with `default_realtime_config()`). It is the fallback an agent uses when
 `preset_id` is NULL (legacy agent, or one whose preset was deleted). It replaces
-the previously-hardcoded `default_realtime_config()` worker fallback — now a real,
+the previously-hardcoded `default_realtime_config()` voice-ws fallback — now a real,
 editable row. Platform-admin-managed via dedicated `GET`/`PUT /api/v1/presets/default`
 routes (config-only writes; the service re-validates the `SpeechConfig` and
 re-derives `preset_type`). The service guards make it **non-publishable and
@@ -107,68 +106,41 @@ the factory expects. Reads all per-org provider keys from one Fernet-encrypted
 fallback and the `use_platform_credits` toggle. **Only the providers the config
 needs appear**; missing providers are omitted (the factory fails fast with a
 clear error). Legacy `livekit_inference` stages are normalized to direct providers
-via `normalize_stage_provider()`; LiveKit Cloud credentials are no longer used.
+via `normalize_stage_provider()`; voice-ws (Pipecat) credentials are no longer used.
 
-### `worker/src/speech_providers/` — legacy LiveKit provider factory
+### `voice-ws/src/speech/factory.py` — Pipecat provider factory
 
-> **Deprecated:** Active calls use `voice-ws/src/speech/factory.py`. This section
-> documents the legacy LiveKit worker kept for reference.
+Each builder returns a **Pipecat-compatible service** (STT, LLM, TTS, VAD) for pipeline
+presets, or a Gemini Realtime adapter for `engine_mode=realtime`.
 
-Modeled on HuggingFace's `speech-to-speech` factory pattern — each builder returns
-a **LiveKit plugin instance** (not a custom handler).
+- Realtime — Google Gemini native-audio (see `voice-ws/src/bot.py`, session setup)
+- Pipeline — Deepgram STT, OpenAI/Cerebras/OpenRouter LLM, Cartesia/Fish TTS
+- `normalize_stage_provider()` — maps deprecated `livekit_inference` slug to direct providers
 
-- `realtime/provider.py` — `build_realtime_model(api_key, config)` →
-  `RealtimeModel`. Holds the latency/reliability tuning (thinking off, barge-in
-  on, endpointing). See its docstring for the rationale.
-- `stt/deepgram.py`, `llm/openai.py`, `tts/cartesia.py`, `vad/silero.py` — per-stage
-  **direct** providers (see module docstrings for defaults).
-- `llm/cerebras.py` — Cerebras direct OpenAI-compatible LLM.
-- `turn_detection/` — package stub only (deferred).
-- `registry.py` — `build_session_components(speech_config, api_keys)` dispatches
-  each pipeline stage through `_build_keyed_stage` using direct providers only.
-  LiveKit Inference builders were removed in the Pipecat cutover.
+### `voice-ws/src/session_setup.py` — the seam
 
-### `worker/src/session_builder.py` — the seam
-
-`build_agent_session(speech_config, api_keys, userdata)` → `AgentSession`.
-
-- realtime → `AgentSession(llm=RealtimeModel, userdata=...)`
-- pipeline → `AgentSession(stt=..., llm=..., tts=..., userdata=...)`, with `vad=`
-  and `turn_detection=` passed **only when not `None`** (`vad=None` opts out of
-  VAD; `turn_detection` has no valid `None` and must be omitted). In practice the
-  registry always supplies a Silero VAD, so `vad=` is always set for a pipeline
-  session; the `None`-omission guard is for robustness / direct
-  `PipelineComponents` callers.
-
-### `worker/src/realtime_config.py` — backward-compat shim
-
-Re-exports the realtime builder/constants from `speech_providers.realtime.provider`
-under their old names so existing importers (notably `test_realtime_config.py`)
-keep working. New code should import from `speech_providers.realtime` and
-`shared.voice_agents.speech_config` directly.
+Loads agent, preset, prompt, tools, MCP, and skills; builds the Pipecat pipeline or
+Gemini Realtime session for `/ws` and `/twilio`.
 
 ## Why tools are engine-agnostic
 
-Tools attach to the LiveKit `Agent` (`livekit_agent.update_tools(...)`), not to
-the model/session. So the in-tree `BaseTool` registry, the remote-MCP
-`RawFunctionTool` adapter, and the skills `load_skill` tools all carry over to
-pipeline mode unchanged. Bonus: the Gemini-realtime JSON-schema sanitization
-hack (`mcp/livekit_adapter.py`) is only needed for the realtime model's strict
-validator — pipeline LLMs (OpenAI/Anthropic) are more lenient.
+Tools register as Pipecat function handlers in `voice-ws/src/tools/assembly.py` (platform
+`BaseTool`s, MCP, and skills). The same tool metadata and OAuth tokens are used
+regardless of realtime vs pipeline preset. JSON-schema sanitization in
+`shared/voice_agents/tools/mcp/schema_sanitize.py` helps strict Gemini realtime
+validation; pipeline LLMs are generally more lenient.
 
 ## Latency
 
-LiveKit's pipeline mode already streams at every stage (STT partials → LLM token
-stream → TTS first-chunk) with VAD-driven barge-in. The HF `speech-to-speech`
-repo's extra techniques (SpeculativeTurnTracker, CancelScope generation-counter,
-sentence-batched LLM→TTS, TTS leading-silence trim, background ChatContext
-compaction, model warmup) are **Phase 5 latency hardening**, not a prerequisite
-for the core capability.
+Pipecat pipeline mode streams at every stage (STT partials → LLM token
+stream → TTS first-chunk) with VAD-driven barge-in where configured. Additional
+latency techniques (speculative turn detection, sentence-batched LLM→TTS, model
+warmup) are **future hardening**, not prerequisites for the core capability.
 
 ## Phased rollout
 
 - **Phase 1 (done)** — config models, `speech_providers/` package with realtime
-  provider behind a factory, `session_builder` seam, worker wired through.
+  provider behind a factory, `session_builder` seam, voice-ws wired through.
   Behavior-neutral refactor; existing realtime tests stay green; 100% coverage on
   new modules.
 - **Phase 2 (done)** — pipeline engine: `stt/`, `llm/`, `tts/`, `vad/`,
@@ -178,9 +150,9 @@ for the core capability.
   assembly in `session_builder.py`; env scaffolding
   (`DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY`). Behavior-neutral
   (worker still uses the realtime default); 100% coverage on new modules; full
-  worker suite green.
+  voice-ws suite green.
 - **Phase 2b (done)** — LiveKit **Inference** as a dispatchable provider for
-  STT/LLM/TTS (single LiveKit Cloud auth, many models; special dispatch path
+  STT/LLM/TTS (single voice-ws (Pipecat) auth, many models; special dispatch path
   bypassing the per-provider key guard) + **Cerebras** as a direct LLM
   (`openai.LLM.with_cerebras`, keyed path). A pipeline may mix Inference and
   direct stages per stage (the "mixed preset" direction). Inference reads the
@@ -195,7 +167,7 @@ for the core capability.
   (must exist + be published). Per-org **key resolver** (`key_resolver.py`): all
   keys in one encrypted blob, `livekit` injected only for Inference stages,
   missing providers omitted, `use_platform_credits` toggle. **No versioning** —
-  the worker fetches the preset row live each call; admin edits take effect on
+  voice-ws fetches the preset row live each call; admin edits take effect on
   the next call. Two preset types only: `{realtime, pipeline}` — a "mixed" preset
   is just a pipeline where some stages use Inference and some use direct
   providers. 100% coverage on the new shared modules; 95 backend + 45 worker
@@ -247,7 +219,7 @@ for the core capability.
   content (owner decision).
 - **Phase 4 follow-ups (done)** — two enhancements to the Phase 4 surface:
   - **System default voice profile.** The Phase 4 fallback for an agent with
-    `preset_id=null` was a hardcoded `default_realtime_config()` in the worker —
+    `preset_id=null` was a hardcoded `default_realtime_config()` in voice-ws —
     invisible/unmanageable, and shown in the picker as a hardcoded "Default (Gemini
     Realtime)" option. Promoted to a dedicated, always-present, admin-only,
     non-published **"System Default"** row (`pipeline_presets.is_default=true`,
@@ -259,7 +231,7 @@ for the core capability.
     (`preset_service.get_default_preset`) and keeps `default_realtime_config()`
     only as the ultimate safety net (missing/unparseable default). The org-admin
     picker's hardcoded option became a generic **"Default" → null** (no underlying
-    model revealed). 82 backend + 8 worker + 39 frontend tests green.
+    model revealed). 82 backend + 8 voice-ws + 39 frontend tests green.
     - **Follow-up: aligned default messaging.** The picker's default option now
       shows the **same** name + description as the platform-admin Voice Presets
       page — **"System Default"** / "Used when an agent has no voice profile

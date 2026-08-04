@@ -233,11 +233,11 @@ npm run dev
 
 The application will be available at [http://localhost:3000](http://localhost:3000)
 
-### Worker Setup
+### voice-ws Setup
 
 ```bash
-# Navigate to worker directory
-cd worker
+# Navigate to voice-ws directory
+cd voice-ws
 
 # Create and activate virtual environment
 python3 -m venv .venv
@@ -252,8 +252,8 @@ cp .env.example .env
 # Edit .env with your configuration
 nano .env
 
-# Run the worker
-python src/worker.py
+# Run voice-ws
+uvicorn src.main:app --host 0.0.0.0 --port 7860 --reload
 ```
 
 ### Database Migrations
@@ -278,7 +278,7 @@ The project includes a `start.sh` script that simplifies starting, stopping, and
 
 ### Development Mode
 
-Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collector with hot reloading for active development.
+Starts the frontend, backend, voice-ws, Supabase Studio, and OpenTelemetry Collector with hot reloading for active development.
 
 ```bash
 ./start.sh start dev
@@ -294,7 +294,7 @@ Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collect
 
 ### Production Mode
 
-Starts the frontend, backend, and worker in a production-like environment.
+Starts the frontend, backend, and voice-ws in a production-like environment.
 
 ```bash
 ./start.sh start prod
@@ -372,28 +372,34 @@ To enable billing functionality:
 
 For detailed information about the billing system, see [Billing System](../02_core_systems/billing_system.md).
 
-## LiveKit Configuration
+## voice-ws Configuration
 
-The platform uses LiveKit for real-time voice communication.
+The platform uses **`voice-ws`** (Pipecat WebSocket) for browser test calls and Twilio Media Streams phone calls.
 
-1. **Create a LiveKit account** at [livekit.io](https://livekit.io)
+1. **Ensure voice-ws is running** (default with `./start.sh start dev`)
 
-2. **Get your API keys**:
-
-   - Go to LiveKit Dashboard → Projects → API Keys
-   - Copy your **API Key** and **API Secret**
-
-3. **Add keys to `.env`**:
+2. **Add to `.env`** (backend + voice-ws share `JWT_SECRET_KEY`):
 
    ```bash
-   LIVEKIT_API_KEY=your_api_key
-   LIVEKIT_API_SECRET=your_api_secret
-   LIVEKIT_URL=wss://your-livekit-instance.livekit.cloud
+   JWT_SECRET_KEY=<openssl rand -hex 32>
+   VOICE_WS_PUBLIC_URL=ws://localhost:7860
+   GEMINI_API_KEY=your_gemini_key
    ```
 
-4. **Configure phone numbers** (for outbound calling):
-   - Purchase a phone number in LiveKit Dashboard
-   - Configure the number to route to your agent room
+3. **Phone calls (Twilio Media Streams)** — Twilio must reach a public WebSocket:
+
+   ```bash
+   VOICE_WS_TWILIO_URL=wss://<your-ngrok-or-prod-host>
+   TWILIO_ACCOUNT_SID=...
+   TWILIO_AUTH_TOKEN=...
+   ```
+
+   Tunnel example: `ngrok http 7860` → set `VOICE_WS_TWILIO_URL=wss://<ngrok-host>`.
+
+4. **Configure phone numbers** (inbound today; outbound planned):
+   - Purchase a number in Twilio Console and assign it to an agent
+   - Set the voice webhook to `https://<backend>/api/v1/voice/twilio/incoming`
+   - For outbound calling design, see **[Outbound phone calls](../03_implementation/outbound_phone_calls.md)**
 
 ## Email Configuration
 
@@ -447,11 +453,11 @@ Navigate to `http://localhost:3000` in your browser.
 python -c "from config.supabase import get_supabase_client; print('Connected!' if get_supabase_client() else 'Failed')"
 ```
 
-### 4. Check Worker Logs
+### 4. Check voice-ws Logs
 
 ```bash
 # In Docker
-./start.sh logs dev | grep worker
+./start.sh logs dev | grep voice-ws
 
 # Local
 tail -f worker/logs/worker.log
@@ -523,13 +529,14 @@ alembic stamp <revision_id>
 alembic upgrade head
 ```
 
-#### Worker Not Connecting to LiveKit
+#### voice-ws Not Accepting WebSocket Connections
 
-If the worker can't connect to LiveKit:
+If browser test calls or phone Media Streams fail:
 
-- Verify LIVEKIT_API_KEY and LIVEKIT_API_SECRET are correct
-- Check LIVEKIT_URL is accessible
-- Ensure your IP is allowed in LiveKit security settings
+- Verify `JWT_SECRET_KEY` matches on backend and voice-ws
+- Check `curl http://localhost:7860/health`
+- For phone: ensure `VOICE_WS_TWILIO_URL` is a public `wss://` URL (not localhost)
+- Confirm Twilio voice webhook points at the backend `/api/v1/voice/twilio/incoming`
 - Check firewall settings
 
 #### OpenTelemetry Not Sending Data
@@ -553,6 +560,6 @@ If telemetry isn't showing up in New Relic:
 
 - [Docker Documentation](https://docs.docker.com/)
 - [Supabase Documentation](https://supabase.com/docs)
-- [LiveKit Documentation](https://docs.livekit.io/)
+- [Pipecat Documentation](https://docs.pipecat.ai/)
 - [Stripe Documentation](https://stripe.com/docs)
 - [OpenTelemetry Documentation](https://opentelemetry.io/docs/)

@@ -21,7 +21,7 @@ graph TB
         BE[OpenTelemetry]
     end
 
-    subgraph Worker["Worker (LiveKit)"]
+    subgraph Worker["voice-ws (LiveKit)"]
         WK[Agent Entry Point]
         WK[Tool Wrapping]
         WK[Function Execution]
@@ -60,7 +60,7 @@ sequenceDiagram
     participant Twilio as Twilio
     participant Backend as FastAPI
     participant LiveKit as LiveKit SIP
-    participant Worker as AI Agent
+    participant voice-ws as AI Agent
 
     User->>Twilio: Dials Agent Phone Number
     Twilio->>Backend: POST /api/v1/voice/twilio/incoming
@@ -108,7 +108,7 @@ flowchart TB
         end
     end
 
-    subgraph LiveKit["LiveKit Cloud"]
+    subgraph LiveKit["voice-ws (Pipecat)"]
         Room["LiveKit Room"]
         Worker["AI Worker"]
         Agent["Voice Agent"]
@@ -127,7 +127,7 @@ flowchart TB
     TokenService -->|"3. Create room"| LiveKitSvc
     LiveKitSvc -->|"4. Connect"| Room
     Room -->|"5. Join"| Worker
-    Worker -->|"6. Start"| Agent
+    voice-ws -->|"6. Start"| Agent
 ```
 
 ### Embed Button Call Sequence
@@ -139,8 +139,8 @@ sequenceDiagram
     participant EmbedScript as Embed Script
     participant CallPage as Call Interface
     participant API as Backend API
-    participant LiveKit as LiveKit Cloud
-    participant Worker as AI Worker
+    participant LiveKit as voice-ws (Pipecat)
+    participant voice-ws as AI Worker
 
     Note over Visitor,Worker: Phase 1: Page Load
     
@@ -229,11 +229,11 @@ Static Embed Code → Visitor Clicks → Token Generated → WebRTC Connection
 3. Backend returns TwiML (Twilio Markup Language) response with `<Dial><Sip>` element
 4. Twilio bridges the call to LiveKit SIP domain
 5. LiveKit creates room and dispatches job to worker
-6. Worker joins room with AI agent and handles the call
+6. voice-ws joins room with AI agent and handles the call
 
 **Key Configuration**:
 
-- `LIVEKIT_SIP_DOMAIN`: LiveKit SIP domain for bridging
+- ``: LiveKit SIP domain for bridging
 - `voice_agents.phone_number`: Phone number associated with agent
 - `voice_routes.py`: Handles Twilio webhook and returns TwiML
 
@@ -307,7 +307,7 @@ frontend/
 
 ### 2. Backend (FastAPI + Python 3.11)
 
-**Purpose:** REST API for frontend, tool management, OAuth callbacks, and worker orchestration
+**Purpose:** REST API for frontend, tool management, OAuth callbacks, and voice-ws orchestration
 
 **Key Technologies:**
 
@@ -336,7 +336,7 @@ backend/
 │       ├── agent_routes.py    # Agent CRUD endpoints
 │       ├── routes.py          # Main router aggregation
 │       ├── service.py         # Business logic
-│       └── livekit_service.py # LiveKit integration
+│       └── voice_session_service.py # LiveKit integration
 ├── shared/                      # Shared business logic
 │   ├── config/              # Configuration (Supabase, settings, OTEL)
 │   ├── common/              # Shared utilities
@@ -368,9 +368,9 @@ backend/
 
 ---
 
-### 3. Worker (LiveKit Python)
+### 3. voice-ws (LiveKit Python)
 
-**Purpose:** LiveKit worker for handling real-time voice agent calls and tool execution
+**Purpose:** voice-ws Pipecat voice-ws for handling real-time voice agent calls and tool execution
 
 **Key Technologies:**
 
@@ -383,18 +383,18 @@ backend/
 ```
 worker/
 ├── src/
-│   └── worker.py              # Main worker entry point
+│   └── worker.py              # Main voice-ws entry point
 ├── requirements.txt              # Python dependencies
 └── Dockerfile                  # Container configuration
 ```
 
-**Worker Flow:**
+**voice-ws Flow:**
 
 ```mermaid
 sequenceDiagram
     participant Room as LiveKit Room
     participant Backend as FastAPI
-    participant Worker as LiveKit Worker
+    participant voice-ws as voice-ws
     participant Agent as Gemini Model
     participant Tool as Calendar Tool
 
@@ -512,7 +512,7 @@ flowchart TD
     H --> I[User Toggle Functions]
     I --> J[Update unselected_functions]
 
-    K[Worker Startup] --> L[Fetch Agent Tools]
+    K[voice-ws Startup] --> L[Fetch Agent Tools]
     L --> M[Filter Functions]
     M --> N[Execute Enabled Functions]
 
@@ -715,7 +715,7 @@ graph TB
     subgraph OTEL[OpenTelemetry Stack]
         FE[Frontend SDK]
         BE[Backend SDK]
-        WK[Worker SDK]
+        WK[voice-ws SDK]
     end
 
     subgraph Collector[OTEL Collector]
@@ -853,12 +853,12 @@ services:
     volumes:
       - ./:/app
 
-  worker-dev:
-    image: worker-dev
+  voice-ws-dev:
+    image: voice-ws-dev
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - LIVEKIT_URL=${LIVEKIT_URL}
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - =${}
+      - =${}
     volumes:
       - ./shared:/app/shared
 ```
@@ -880,7 +880,7 @@ services:
 | Observability    | OpenTelemetry         | Latest   | Tracing & metrics                    |
 | Metrics Exporter | New Relic OTLP        | -        | External metrics                     |
 | Containerization | Docker Compose        | -        | Local dev                            |
-| API Protocol     | REST + gRPC           | -        | Frontend uses REST, worker uses gRPC |
+| API Protocol     | REST + gRPC           | -        | Frontend uses REST, voice-ws uses gRPC |
 
 ---
 
@@ -891,7 +891,7 @@ ai-voice-agent-platform/
 ├── .docs/                    # Architecture documentation
 ├── backend/                   # FastAPI backend
 ├── frontend/                  # Next.js frontend
-├── worker/                    # LiveKit worker
+├── worker/                    # voice-ws Pipecat worker
 ├── shared/                    # Shared business logic
 │   ├── config/              # Configuration
 │   ├── common/              # Utilities
@@ -919,7 +919,7 @@ ai-voice-agent-platform/
 **Rationale:**
 
 - LiveKit provides automatic schema extraction from decorated functions
-- Worker can pass decorated functions directly to LLM models
+- voice-ws can pass decorated functions directly to LLM models
 - No need to manually convert between internal and external formats
 
 ### 2. Tool Schema Storage
@@ -1022,9 +1022,9 @@ ai-voice-agent-platform/
 - Indexed queries (id, name, organization_id)
 - Batch operations in tool registry sync
 
-### 2. Worker Scaling
+### 2. voice-ws Scaling
 
-- Stateless worker instances can be horizontally scaled
+- Stateless voice-ws instances can be horizontally scaled
 - Session management prevents duplicate tool executions
 - Config caching reduces database lookups
 

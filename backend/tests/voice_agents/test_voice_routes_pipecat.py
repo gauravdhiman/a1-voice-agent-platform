@@ -85,7 +85,6 @@ class TestTwilioIncomingPipecat:
             ) as mock_sessions,
             patch("src.call_logs.service.call_log_service") as mock_logs,
         ):
-            mock_settings.voice_transport = "pipecat"
             mock_settings.voice_ws_twilio_url = "wss://tunnel.example.com"
             mock_settings.voice_ws_public_url = "ws://localhost:7860"
             mock_service.get_agent_by_phone = AsyncMock(
@@ -128,7 +127,6 @@ class TestTwilioIncomingPipecat:
             ) as mock_service,
             patch("src.call_logs.service.call_log_service") as mock_logs,
         ):
-            mock_settings.voice_transport = "pipecat"
             mock_settings.voice_ws_twilio_url = ""
             mock_settings.voice_ws_public_url = ""
             mock_service.get_agent_by_phone = AsyncMock(
@@ -162,7 +160,6 @@ class TestTwilioIncomingPipecat:
             ) as mock_service,
             patch("src.call_logs.service.call_log_service") as mock_logs,
         ):
-            mock_settings.voice_transport = "pipecat"
             mock_settings.voice_ws_twilio_url = ""
             mock_settings.voice_ws_public_url = "ws://localhost:7860"
             mock_service.get_agent_by_phone = AsyncMock(

@@ -118,7 +118,7 @@ class TestToolRuntimeReliability:
                 new=AsyncMock(side_effect=ConnectionError("connection refused")),
             ),
             patch(
-                "src.tools.assembly.LiveKitToolRegistry.register_tools_from_package",
+                "src.tools.assembly.PlatformToolRegistry.register_tools_from_package",
                 return_value=None,
             ),
         ):

@@ -26,10 +26,12 @@ graph TD
 
     subgraph "Backend Dependency Injection"
         BE -->|Dependency Override| DB[(Transient Docker DB)]
-        BE -->|Service Override| LK[Mock LiveKit Service]
+        BE -->|Service Override| VWS[Mock voice-ws session tokens]
         BE -->|Service Override| ST[Mock Stripe Service]
     end
 ```
+
+Voice media (Pipecat WebSocket, Twilio Media Streams) is **not** exercised in the default E2E stack. The backend returns deterministic `{ token, wsUrl, sessionId }` from a mock voice session service; no real `voice-ws` container or Twilio call is required for UI flows.
 
 ### A. Frontend: Authentication Mocking (Supabase)
 Since the frontend communicates directly with Supabase, we bypass the cloud using **Playwright Network Interception**.
@@ -42,7 +44,7 @@ Since the frontend communicates directly with Supabase, we bypass the cloud usin
 ### B. Backend: External API Mocking
 We use FastAPI's `dependency_overrides` to swap real service classes with mock implementations when the app is running in test mode.
 - **Target Services**: 
-    - `LiveKitService`: Returns fixed room tokens and simulated status.
+    - **Voice session / test-token**: Returns fixed JWT, `wsUrl`, and `sessionId` without contacting `voice-ws` or Twilio.
     - `StripeService`: Simulates successful/failed checkout sessions without network calls.
 - **Activation**: Triggered by `APP_ENV=test` environment variable.
 
@@ -72,9 +74,9 @@ def mock_supabase_auth(page):
 
 ### Mocking Example (FastAPI)
 ```python
-# backend/src/main.py
+# backend/src/main.py (test mode)
 if settings.APP_ENV == "test":
-    app.dependency_overrides[get_livekit_service] = MockLiveKitService
+    app.dependency_overrides[get_voice_session_service] = MockVoiceSessionService
 ```
 
 ---
@@ -92,3 +94,4 @@ To run the full suite locally:
 ## 5. Future Enhancements
 - **Inbucket Integration**: If we ever need to test real email content/links, we will use a local Inbucket (SMTP mock) container.
 - **Visual Regression**: Adding Playwright snapshot testing to ensure UI components don't drift.
+- **Isolated voice-ws smoke**: Optional integration job that connects a test client to a real `voice-ws` instance (separate from the grey-box E2E stack).

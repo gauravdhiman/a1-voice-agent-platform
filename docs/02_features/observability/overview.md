@@ -22,13 +22,13 @@ graph TB
     subgraph Services["Platform Services"]
         FE[Frontend - Next.js]
         BE[Backend - FastAPI]
-        WK[Worker - LiveKit]
+        WK[voice-ws - LiveKit]
     end
 
     subgraph Instrumentation["OpenTelemetry SDK"]
         OTFE[Frontend SDK]
         OTBE[Backend SDK]
-        OTWK[Worker SDK]
+        OTWK[voice-ws SDK]
     end
 
     subgraph Collector["OTEL Collector"]
@@ -80,7 +80,7 @@ A trace represents the entire journey of a request through the system:
 **Example: Voice Agent Call**
 
 ```
-[Incoming Call] → [Backend Validation] → [LiveKit Room] → [Worker Processing] → [Tool Execution] → [Response]
+[Incoming Call] → [Backend Validation] → [LiveKit Room] → [voice-ws Processing] → [Tool Execution] → [Response]
 ```
 
 Each step is a **span** with:
@@ -275,12 +275,12 @@ async def create_agent(agent_data: AgentCreate):
     pass
 ```
 
-### Worker (LiveKit)
+### voice-ws (LiveKit)
 
 **Setup**:
 
 ```python
-# Worker uses LiveKit's built-in OTEL support
+# voice-ws uses LiveKit's built-in OTEL support
 # Configure via environment variables
 
 import os
@@ -376,7 +376,7 @@ services:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
     depends_on:
       - backend-dev
-      - worker-dev
+      - voice-ws-dev
       - frontend-dev
 ```
 

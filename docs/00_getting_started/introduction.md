@@ -10,7 +10,7 @@ At its core, this platform allows users to:
 
 1. **Create Voice Agents**: Configure AI agents with custom system prompts
 2. **Integrate Tools**: Connect agents to external services (Google Calendar, CRM, APIs)
-3. **Handle Voice Calls**: Real-time voice communication via LiveKit
+3. **Handle Voice Calls**: Real-time voice via Pipecat WebSocket (`voice-ws`) and Twilio Media Streams
 4. **Manage Organizations**: Multi-tenant isolation for different businesses
 5. **Bill & Subscribe**: Credit-based billing with Stripe integration
 6. **Control Access**: Role-based permissions for team management
@@ -80,7 +80,7 @@ At its core, this platform allows users to:
        ├───┬───────────┬──────────────┐
        ▼   ▼           ▼              ▼
 ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌───────────┐
-│ Supabase │  │  Worker   │  │ LiveKit  │  │  Stripe   │
+│ Supabase │  │  voice-ws   │  │  Twilio  │  │  Stripe   │
 │ Database  │  │ Service   │  │ Cloud    │  │  API      │
 │          │  │           │  │          │  │           │
 └──────────┘  └───────────┘  └──────────┘  └───────────┘
@@ -95,10 +95,10 @@ At its core, this platform allows users to:
 1. **User Setup**: User creates account via frontend → Backend creates org/user in Supabase
 2. **Agent Creation**: User configures voice agent → Backend stores in database
 3. **Tool Integration**: User configures tools for agent → Backend stores tool associations
-4. **Call Initiation**: User triggers outbound call → Backend validates and initiates
-5. **Room Creation**: Backend creates LiveKit room → Worker receives dispatch
-6. **Agent Execution**: Worker loads tools, creates agent → Agent handles voice call
-7. **Tool Calling**: Agent calls tool → Worker executes via wrapped methods
+4. **Call Initiation**: Inbound PSTN → Twilio webhook → Media Stream → `voice-ws` (outbound planned — see [Outbound phone calls](../03_implementation/outbound_phone_calls.md))
+5. **Session start**: Backend issues JWT → `voice-ws` loads agent preset and tools
+6. **Agent Execution**: Pipecat session handles audio and LLM
+7. **Tool Calling**: Agent calls tool → `voice-ws` executes platform tool or MCP
 8. **Response**: Tool returns data → Agent speaks response to user
 9. **Billing**: Backend tracks usage → Stripe handles payments
 
@@ -121,12 +121,12 @@ At its core, this platform allows users to:
 - **Auth**: JWT + OAuth
 - **Testing**: Pytest
 
-### Worker
+### voice-ws
 
-- **Framework**: LiveKit Agents SDK
-- **LLM**: Gemini Realtime API
+- **Framework**: Pipecat + FastAPI WebSocket
+- **LLM**: Gemini Realtime or modular pipeline presets
 - **Tools**: Dynamic loading from database
-- **Communication**: WebRTC via LiveKit
+- **Communication**: Browser `/ws` and Twilio `/twilio` Media Streams
 - **Testing**: Custom test framework
 
 ### Infrastructure
@@ -135,7 +135,7 @@ At its core, this platform allows users to:
 - **Orchestration**: Docker Compose (dev), Kubernetes (prod planned)
 - **Observability**: OpenTelemetry Collector
 - **Database**: Supabase (managed PostgreSQL)
-- **Real-time**: LiveKit Cloud
+- **Real-time voice**: `voice-ws` (Pipecat) + Twilio
 - **Payments**: Stripe
 - **Email**: Resend.com
 
@@ -157,14 +157,9 @@ At its core, this platform allows users to:
 
 ## Key Innovations
 
-### 1. LiveKit Tool Wrapping
+### 1. Pipecat tool integration
 
-Our platform solves the challenge of making tool methods work with LLMs by creating dynamic wrapper functions that:
-
-- Remove `self` parameter (for instance state)
-- Preserve exact parameter signatures
-- Delegate to bound methods with all parameters
-- Work with LiveKit's `@function_tool` decorator
+Platform tools in `voice-ws` expose JSON schemas for LLM function calling via `PlatformToolRegistry`.
 
 This allows any tool with any signature to work seamlessly with LLMs.
 
@@ -173,7 +168,7 @@ This allows any tool with any signature to work seamlessly with LLMs.
 We provide different tool data for different security needs:
 
 - **API Layer**: Safe metadata (no OAuth tokens, API keys)
-- **Worker Layer**: Full tool instances with all secrets
+- **voice-ws Layer**: Full tool instances with all secrets
 
 This keeps sensitive data secure while enabling powerful tool functionality.
 
@@ -221,7 +216,7 @@ Automatic greeting when agent enters room:
 - Stripe billing
 - Email notifications
 - Voice agent core system
-- LiveKit tool wrapping
+- Pipecat tool integration
 - Google Calendar tool
 - OpenTelemetry observability
 

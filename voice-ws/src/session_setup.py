@@ -114,9 +114,9 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             tools=tools_schema,
         )
     except ValueError as exc:
-        # Pipeline presets that still target LiveKit Inference (or missing
-        # direct-provider keys) must not kill the call — fall back to Gemini
-        # realtime the same way a bad preset falls back in the LiveKit worker.
+        # Pipeline presets with missing direct-provider keys must not kill the
+        # call — fall back to Gemini realtime the same way a bad preset falls
+        # back elsewhere in voice-ws.
         if isinstance(speech_config, PipelineSpeechConfig):
             logger.error(
                 "Agent %s: pipeline speech config could not be built (%s); "

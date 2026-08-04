@@ -1,6 +1,6 @@
 # AI Voice Agent Platform
 
-A production-grade multi-tenant SaaS platform for managing AI voice agents with LiveKit real-time communication, dynamic tool integration, and comprehensive billing/RBAC systems.
+A production-grade multi-tenant SaaS platform for managing AI voice agents with Pipecat WebSocket voice transport (`voice-ws`), dynamic tool integration, and comprehensive billing/RBAC systems.
 
 ## 🚀 Quick Start
 
@@ -10,8 +10,9 @@ A production-grade multi-tenant SaaS platform for managing AI voice agents with 
 - Python 3.11+
 - Docker and Docker Compose
 - Supabase account (for database)
-- LiveKit Cloud account (for real-time voice)
 - Google Cloud account (for OAuth + Gemini API)
+- Twilio account (for inbound/outbound phone calls via Media Streams)
+- Public `wss://` URL for `voice-ws` when testing phone calls locally (e.g. ngrok)
 
 ### Automated Setup
 
@@ -67,16 +68,15 @@ cd ..
    python main.py
    ```
 
-4. **Worker Development (Non-containerized)**
+4. **Voice voice-ws Development (Non-containerized)**
 
    ```bash
-   cd worker
+   cd voice-ws
    python -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
-   cp .env.example .env
-   # Edit .env with your configuration
-   python -m livekit.agents.cli --dev
+   # JWT_SECRET_KEY must match backend; see voice-ws/README.md
+   uvicorn src.main:app --host 0.0.0.0 --port 7860 --reload
    ```
 
 5. **Supabase Realtime Setup (Required for auto-refresh tokens)**
@@ -111,14 +111,14 @@ flowchart TD
     end
 
     subgraph Infrastructure ["Infrastructure & Real-time"]
-        LK["LiveKit Cloud (WebRTC/SIP)"]
-        Twilio["Twilio (Telephony)"]
+        VWS["voice-ws (Pipecat WebSocket)"]
+        Twilio["Twilio (Telephony + Media Streams)"]
         OTEL["OTEL Collector"]
     end
 
-    subgraph Backend_Worker ["Core Platform (Docker)"]
+    subgraph Backend_Voice ["Core Platform (Docker)"]
         BE["FastAPI Backend (REST)"]
-        WK["LiveKit Agent Worker (AI)"]
+        VWS
         Shared["Shared Tools & Logic"]
     end
 
@@ -142,8 +142,8 @@ flowchart TD
     
     %% Flow: Voice Call Interaction
     User <--> Twilio
-    Twilio -- SIP --> LK
-    LK <--> WK
+    Twilio -- Media Stream wss --> VWS
+    Browser -- WebSocket --> VWS
     
     %% Flow: Backend Orchestration
     BE <--> DB
@@ -151,23 +151,23 @@ flowchart TD
     BE <--> Stripe
     BE --> Resend
     BE <--> Google
+    BE --> VWS
     
-    %% Flow: Worker AI Execution
-    WK <--> Shared
-    WK <--> DB
-    WK <--> Gemini
-    WK <--> ExtTools
+    %% Flow: Voice AI Execution
+    VWS <--> Shared
+    VWS <--> DB
+    VWS <--> Gemini
+    VWS <--> ExtTools
 
     %% Flow: Observability
-    BE & WK & Browser --> OTEL
+    BE & VWS & Browser --> OTEL
     OTEL --> NR[New Relic]
 
     %% Styling
     style BE fill:#f9f,stroke:#333,stroke-width:2px
-    style WK fill:#f9f,stroke:#333,stroke-width:2px
+    style VWS fill:#f9f,stroke:#333,stroke-width:2px
     style DB fill:#dfd,stroke:#333,stroke-width:2px
     style Auth fill:#dfd,stroke:#333,stroke-width:2px
-    style LK fill:#ddf,stroke:#333,stroke-width:1px
     style Gemini fill:#ddf,stroke:#333,stroke-width:1px
 ```
 
@@ -189,13 +189,13 @@ flowchart TD
 - **Billing**: Stripe integration with credit-based billing
 - **RBAC**: Role-based access control with fine-grained permissions
 
-### Worker (LiveKit)
+### voice-ws (Pipecat WebSocket)
 
-- **Framework**: LiveKit Agents SDK
-- **LLM Integration**: Gemini Realtime API
-- **Tool System**: Dynamic tool loading and wrapping
-- **Real-time Communication**: Voice streaming via WebRTC
-- **Tool Wrapping**: Automatic wrapper creation for LLM compatibility
+- **Framework**: Pipecat + FastAPI WebSocket server
+- **LLM Integration**: Gemini Realtime or modular STT→LLM→TTS pipeline
+- **Tool System**: Dynamic tool loading (platform tools, MCP, skills)
+- **Real-time Communication**: Browser `/ws` and Twilio Media Streams `/twilio`
+- **Session auth**: Short-lived JWT from backend (`voice_session_service`)
 
 ### Infrastructure
 
@@ -236,16 +236,14 @@ ai-voice-agent-platform/
 │   ├── Dockerfile           # Production Docker config
 │   ├── Dockerfile.dev       # Development Docker config
 │   └── requirements.txt
-├── worker/                  # LiveKit worker service
+├── voice-ws/                # Pipecat WebSocket voice worker
 │   ├── src/
-│   │   ├── worker.py        # Main entry point
-│   │   └── default_system_prompt.py
-│   ├── .docs/              # Worker documentation
-│   ├── test_livekit_wrapping.py  # Tool wrapping tests
+│   │   ├── main.py          # /health, /ws, /twilio
+│   │   ├── session_setup.py # Agent + preset + tools
+│   │   └── speech/          # Provider factory
 │   ├── Dockerfile
-│   ├── Dockerfile.dev
 │   └── requirements.txt
-├── shared/                  # Shared code (backend + worker)
+├── shared/                  # Shared code (backend + voice-ws)
 │   ├── voice_agents/         # Voice agent services and models
 │   │   ├── service.py       # Voice agent CRUD
 │   │   ├── tool_service.py  # Tool management
@@ -284,16 +282,16 @@ ai-voice-agent-platform/
 
 ### Voice Agent System
 
-- ✅ AI voice agents with LiveKit real-time communication
+- ✅ AI voice agents with Pipecat WebSocket (`voice-ws`)
 - ✅ **Dynamic system prompt generation from organization and agent context**
 - ✅ **System prompt preview in agent configuration UI**
 - ✅ Dynamic tool loading from database
-- ✅ LiveKit tool wrapping for LLM compatibility
+- ✅ Pipecat-compatible tool schemas for LLM function calling
 - ✅ Tool function-level enable/disable
 - ✅ Google Calendar tool implementation
-- ✅ Agent greeting on room entry
+- ✅ Agent greeting on session start
 - ✅ OAuth token management for tools
-- ✅ Two-tier tool service (safe API, full worker)
+- ✅ Two-tier tool service (safe API, full voice-ws)
 - ✅ Real-time UI synchronization (Supabase Realtime)
 - ✅ Auto-refresh of OAuth tokens before expiry
 
@@ -318,7 +316,7 @@ ai-voice-agent-platform/
 ### Infrastructure
 
 - ✅ Supabase database (PostgreSQL)
-- ✅ LiveKit Cloud integration
+- ✅ Twilio Media Streams + browser WebSocket voice transport
 - ✅ Google Realtime API (Gemini)
 - ✅ OpenTelemetry Collector architecture
 - ✅ Environment-based configuration
@@ -338,15 +336,11 @@ ai-voice-agent-platform/
 **Two-Tier Tool Service**:
 
 - **API Layer**: Returns safe metadata (no OAuth tokens)
-- **Worker Layer**: Returns full tool instances with all secrets
+- **voice-ws Layer**: Returns full tool instances with all secrets
 
-**LiveKit Tool Wrapping**: Innovative wrapper pattern solves:
+**Pipecat tool schemas**: Platform tools expose JSON schemas the LLM runtime calls via `PlatformToolRegistry`.
 
-- Tool methods have `self` parameter (for state)
-- LiveKit requires functions without `self`
-- Solution: Dynamic wrapper creation with `exec()`
-
-**Agent Greeting**: Automatic greeting when agent enters room eliminates awkward silence.
+**Agent Greeting**: On connect, voice-ws queues an initial user instruction so the agent speaks first.
 
 ### Multi-Tenancy
 
@@ -451,7 +445,7 @@ docs/
 │   └── observability/         # Monitoring & metrics
 ├── 03_implementation/       # Implementation details
 │   ├── tool_system.md          # Tool architecture
-│   ├── livekit_tool_wrapping.md  # Tool wrapping details
+│   ├── dynamic_tool_architecture.md  # Tool runtime design
 │   ├── tool_calling_challenges.md  # Problems & solutions
 │   ├── dynamic_tool_architecture.md  # Dynamic tool loading
 │   ├── tool_implementation_summary.md  # Implementation summary
@@ -462,7 +456,7 @@ docs/
 │   ├── getting_started.md      # Quick start for developers
 │   ├── frontend/              # Frontend development
 │   ├── backend/               # Backend development
-│   ├── worker/                # Worker development
+│   ├── voice-ws/                # Voice voice-ws development
 │   └── shared_module/         # Shared code guide
 ├── 04_development_guides/  # Development guidelines
 │   ├── development_setup.md    # Local dev setup
@@ -491,7 +485,7 @@ docs/
 
 - **[Frontend README](frontend/README.md)** - Next.js application
 - **[Backend README](backend/README.md)** - FastAPI application
-- **[Worker README](worker/README.md)** - LiveKit worker service
+- **[voice-ws README](voice-ws/README.md)** - Pipecat voice voice-ws service
 - **[Shared Module README](shared/README.md)** - Shared code architecture
 
 ## 🔧 Quick Reference
@@ -556,9 +550,9 @@ pytest --cov
 
 ```
 
-#### Worker Test (Pytest)
+#### voice-ws Test (Pytest)
 ```bash
-cd <project-root>/worker
+cd <project-root>/voice-ws
 ../backend/.venv/bin/python -m pytest tests/ --cov
 ```
 
@@ -792,10 +786,10 @@ See [AGENTS.md](AGENTS.md) for detailed coding guidelines.
 For questions and support:
 
 - Review the documentation in `docs/`
-- Check [Worker Documentation](worker/README.md) for voice agent details
+- Check [voice-ws Documentation](voice-ws/README.md) for voice agent details
 - Check [Shared Module Documentation](shared/README.md) for shared code
 - Review [Development Guidelines](AGENTS.md) for coding standards
 - Check existing issues
 - Create a new issue if needed
 
-Built with ❤️ using Next.js, FastAPI, LiveKit, and modern web technologies.
+Built with ❤️ using Next.js, FastAPI, Pipecat, and modern web technologies.

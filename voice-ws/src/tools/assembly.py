@@ -1,9 +1,7 @@
 """Assemble transport-neutral agent tools into Pipecat schemas and handlers.
 
-This module keeps the shared ``BaseTool`` implementations reusable across the
-legacy LiveKit worker and the Pipecat WebSocket worker. It converts their
-signatures into Pipecat schemas and injects ``ToolContext`` server-side so the
-model can never provide or override runtime-only context.
+This module keeps the shared ``BaseTool`` implementations reusable and converts their
+signatures into Pipecat schemas for the WebSocket voice worker.
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ from pipecat.services.llm_service import FunctionCallParams
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.tool_models import ToolSource
 from shared.voice_agents.tool_service import tool_service
-from shared.voice_agents.tools.base.registry_livekit import LiveKitToolRegistry
+from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
 from shared.voice_agents.tools.base.tool_context import ToolContext
 
 from src.tools.mcp_pipecat import build_mcp_pipecat_tools
@@ -207,7 +205,7 @@ async def assemble_agent_tools(agent_id: Any, organization_id: Any) -> Assembled
         provider outage does not prevent a call from starting.
     """
     assembled = AssembledTools()
-    registry = LiveKitToolRegistry()
+    registry = PlatformToolRegistry()
     registry.register_tools_from_package("shared.voice_agents.tools.implementations")
 
     agent_tools, error = await tool_service.get_agent_tools_with_sensitive_config(agent_id)

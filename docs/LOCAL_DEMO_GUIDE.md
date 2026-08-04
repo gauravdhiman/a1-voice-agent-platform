@@ -74,7 +74,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
 > - **SUPABASE_ANON_KEY** and **NEXT_PUBLIC_SUPABASE_ANON_KEY**: The "anon public" key
 > - **SUPABASE_SERVICE_KEY**: The "service_role" key (keep this secret!)
 
-All other values in `.env` can remain as-is. You do **not** need Stripe, LiveKit, Twilio, or other third-party keys to browse the platform UI.
+All other values in `.env` can remain as-is. You do **not** need Stripe, Twilio, or other third-party keys to browse the platform UI (voice calls need `GEMINI_API_KEY` and voice-ws).
 
 ### Step 2 — Start the Platform
 
@@ -125,7 +125,7 @@ The following features require third-party account credentials that are not need
 
 | Feature | Status | What You'll See |
 |---|---|---|
-| **Voice Calls (LiveKit)** | Not functional | UI is visible; calls won't connect without LiveKit API keys |
+| **Voice Calls (Pipecat)** | Partial | UI visible; calls need `GEMINI_API_KEY` + voice-ws running |
 | **Phone Numbers (Twilio)** | Not functional | Purchase UI is disabled without a Twilio account upgrade |
 | **Billing (Stripe)** | Not functional | Payment flows are visible but won't process |
 | **Email Notifications (Resend)** | Not functional | Emails won't send without a Resend API key |

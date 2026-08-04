@@ -70,7 +70,7 @@ Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collect
 
 ### Production Mode
 
-Starts the frontend, backend, and worker in a production-like environment.
+Starts the frontend, backend, and voice-ws in a production-like environment.
 
 ```bash
 ./start.sh start prod
@@ -170,7 +170,7 @@ Once the application is running:
 
 - **Frontend Not Loading**: Check browser console for errors
 - **Backend 500 Errors**: Check backend logs with `./start.sh logs dev`
-- **Worker Issues**: Worker logs are available via `./start.sh logs dev`
+- **voice-ws Issues**: voice-ws logs are available via `./start.sh logs dev`
 
 ### Common Fixes
 
@@ -187,7 +187,7 @@ docker system prune -a
 # View specific service logs
 docker compose -f docker-compose.dev.yml logs -f backend-dev
 docker compose -f docker-compose.dev.yml logs -f frontend-dev
-docker compose -f docker-compose.dev.yml logs -f worker-dev
+docker compose -f docker-compose.dev.yml logs -f voice-ws-dev
 ```
 
 ## Next Steps

@@ -3,9 +3,9 @@
 **Status:** Implemented  
 **ADR:** [Pipecat transport](../01_architecture/ADR_VOICE_WS_PIPECAT.md)
 
-Phase 3 brings the active `voice-ws` transport to functional parity with the
-LiveKit worker for agent-defined speech presets, legacy tools, MCP tools, and
-progressively disclosed skills.
+Phase 3 brings the active `voice-ws` transport to functional parity for
+agent-defined speech presets, legacy tools, MCP tools, and progressively
+disclosed skills.
 
 ## Runtime flow
 
@@ -39,7 +39,8 @@ flowchart LR
 
 Pipeline presets must use **direct** providers only (`deepgram`, `openai`,
 `cerebras`, `openrouter`, `cartesia`, `fish`, etc.). Legacy
-`livekit_inference` stages were removed; migration
+Deprecated preset provider slug **`livekit_inference`** (removed provider name, not
+the LiveKit product) stages were removed; migration
 `20260803000001_remove_livekit_inference_from_presets` rewrites any remaining
 DB rows to direct providers. An unmappable pipeline stage (or missing
 direct-provider key) logs an error and falls back to the Gemini realtime default

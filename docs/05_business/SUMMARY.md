@@ -24,7 +24,7 @@ System architecture and technical design
 Implementation details and development notes
 
 - [Voice Agents Implementation](03_implementation/voice_agents_implementation.md) - Voice agent implementation guide
-- [LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md) - How we wrap tool methods for LLMs
+- [Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md) - How we wrap tool methods for LLMs
 - [Dynamic Tool Loading](03_implementation/dynamic_tool_loading.md) - Runtime tool configuration from database
 - [Agent Greeting Implementation](03_implementation/agent_greeting.md) - Agent greeting when entering rooms
 - [Tool Calling Challenges & Solutions](03_implementation/tool_calling_challenges.md) - Problems we faced and how we solved them
@@ -36,7 +36,7 @@ Development and contribution guides
 - [Development Setup](04_development_guides/development_setup.md) - How to set up development environment
 - [Backend Development](04_development_guides/backend_development.md) - Backend development guidelines
 - [Frontend Development](04_development_guides/frontend_development.md) - Frontend development guidelines
-- [Worker Development](04_development_guides/worker_development.md) - Worker development guidelines
+- [voice-ws Development](04_development_guides/worker_development.md) - voice-ws development guidelines
 - [Testing Guide](04_development_guides/testing.md) - Testing strategies and tools
 - [Code Style Guidelines](04_development_guides/code_style.md) - Coding conventions and best practices
 
@@ -61,7 +61,7 @@ Historical documentation and legacy docs
 
 - **New to the project?** Start with [Platform Architecture Overview](02_architecture/platform_architecture.md)
 - **Want to understand voice agents?** Read [Voice Agents Architecture](02_architecture/voice_agents_architecture.md)
-- **Building a new tool?** Check [LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)
+- **Building a new tool?** Check [Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)
 - **Setting up development?** See [Development Setup](04_development_guides/development_setup.md)
 - **Deploying to production?** Read [Docker Deployment](05_operations/docker_deployment.md)
 
@@ -76,14 +76,14 @@ Historical documentation and legacy docs
 ### Tool System Architecture
 
 - **Dynamic Tool Loading**: Tools fetched from database at runtime
-- **Two-Tier Service**: Frontend gets safe responses, worker gets full objects with OAuth tokens
+- **Two-Tier Service**: Frontend gets safe responses, voice-ws gets full objects with OAuth tokens
 - **LiveKit Wrapper Pattern**: Tool methods wrapped to remove `self` parameter for LiveKit compatibility
 - **Optional Parameters**: Must use `type | None = None` for truly optional fields (Pydantic 2.x)
 
 ### LiveKit Integration
 
-- **LiveKit Room Creation**: Webhook validates agent, LiveKit dispatch creates room, worker extracts phone from room name
-- **No Session Manager**: Worker fetches tools directly from database each call
+- **LiveKit Room Creation**: Webhook validates agent, LiveKit dispatch creates room, voice-ws extracts phone from room name
+- **No Session Manager**: voice-ws fetches tools directly from database each call
 - **Function Wrapping**: Tool methods wrapped with exact parameter signatures for LLM compatibility
 - **Agent Greeting**: Automatic greeting when agent enters room
 
@@ -111,7 +111,7 @@ Historical documentation and legacy docs
 ### Tool Architecture Refactoring (December 2025)
 
 - Moved to dynamic tool loading from database
-- Separated concerns between worker and backend APIs
+- Separated concerns between voice-ws and backend APIs
 - Implemented two-tier service pattern for different security needs
 
 ## Legacy Documentation

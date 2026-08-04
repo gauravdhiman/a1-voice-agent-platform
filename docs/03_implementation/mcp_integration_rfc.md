@@ -1,6 +1,8 @@
 # RFC: MCP-Based Tool Integration for Scalable Third-Party Platform Support
 
-**Status:** Proposed; **Phases 1–3 implemented** — MCP client + LiveKit adapter +
+> **Implementation note (2026-08):** MCP runs in **`voice-ws`** via `voice-ws/src/tools/mcp_pipecat.py` and `shared/voice_agents/tools/mcp/dispatch.py`. The LiveKit adapter was removed; historical RFC text below references the old worker path.
+
+**Status:** Proposed; **Phases 1–3 implemented** — MCP client + Pipecat adapter +
 worker dispatch + Google Calendar reference MCP tool all shipped and tested.
 **Phase 2 migration RUN** (user-approved 2026-07-16; alembic head `20260715000001`).
 **Real Google Calendar MCP path wired (2026-07-16):** the `Google_calendar_mcp`
@@ -19,7 +21,7 @@ Legacy `BaseTool` mechanism untouched.
 - [`dynamic_tool_architecture.md`](./dynamic_tool_architecture.md)
 - [`tool_implementation_summary.md`](./tool_implementation_summary.md)
 - [`tool_calling_challenges.md`](./tool_calling_challenges.md)
-- [`livekit_tool_wrapping.md`](./livekit_tool_wrapping.md)
+- [`dynamic_tool_architecture.md`](./dynamic_tool_architecture.md)
 - [`02_features/voice_agents/tool_connection_states.md`](../02_features/voice_agents/tool_connection_states.md)
 - [`05_business/VOICE_AI_TOOL_INTEGRATION_RECOMMENDATIONS.md`](../05_business/VOICE_AI_TOOL_INTEGRATION_RECOMMENDATIONS.md)
 
@@ -77,10 +79,10 @@ sign-off.
 | 1 — LiveKit `function_tool` synthesis | ✅ `mcp/livekit_adapter.py` builds a `RawFunctionTool` (via `raw_schema`) per `McpToolDef`; 8 tests green. |
 | 1 — Reference MCP server | ✅ In-process FastMCP `calculator` proven end-to-end (real HTTP, `tools/list` + `tools/call`). |
 | 2 — `platform_tools` schema extension | ✅ Migration `20260715000001` **RUN** (user-approved 2026-07-16; alembic head now `20260715000001`); `ToolSource` enum + `mcp_server_url` / `mcp_server_headers` / `mcp_server_name` added to `PlatformTool`; existing 4 tools default to `legacy`; `DATABASE_SCHEMA.md` updated; 7 model tests green. A live `Google_calendar_mcp` row is seeded in local dev, repointed at the **real** remote server (see 3c). |
-| 3a — Worker dispatch branch | ✅ Additive MCP branch in `worker.py` (`_integrate_mcp_agent_tool`), `mcp/dispatch.py` (`mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`); legacy `BaseTool`/`LiveKitToolRegistry` path unchanged; fail-soft (a broken MCP server never blocks other tools). **MCP client lifecycle (fixed 2026-07-16):** the entrypoint returns right after `agent_session.start()` while the session runs on, so clients are handed to the job lifecycle via `ctx.add_shutdown_callback` (`_hand_off_mcp_clients_to_session`) and closed on job shutdown — NOT in the entrypoint `finally`, which now only closes clients when setup failed before handoff (`_cleanup_mcp_clients`). (Earlier the `finally` closed them at return time, so every MCP tool failed with `RuntimeError: McpClient is closed` at call time.) 13 tests green (dispatch + worker branch incl. fail-soft + lifecycle). |
+| 3a — voice-ws dispatch branch | ✅ Additive MCP branch in `worker.py` (`_integrate_mcp_agent_tool`), `mcp/dispatch.py` (`mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`); legacy `BaseTool`/`LiveKitToolRegistry` path unchanged; fail-soft (a broken MCP server never blocks other tools). **MCP client lifecycle (fixed 2026-07-16):** the entrypoint returns right after `agent_session.start()` while the session runs on, so clients are handed to the job lifecycle via `ctx.add_shutdown_callback` (`_hand_off_mcp_clients_to_session`) and closed on job shutdown — NOT in the entrypoint `finally`, which now only closes clients when setup failed before handoff (`_cleanup_mcp_clients`). (Earlier the `finally` closed them at return time, so every MCP tool failed with `RuntimeError: McpClient is closed` at call time.) 13 tests green (dispatch + voice-ws branch incl. fail-soft + lifecycle). |
 | 3b — First working MCP tool (Google Calendar, in-memory) | ✅ In-memory Google Calendar MCP reference server at `shared/voice_agents/tools/mcp/reference_servers/google_calendar.py` (`list_events` / `create_event` / `get_event` / `check_availability`); full-pipeline e2e (discover → synthesize → invoke) green. Proves the platform plumbing with no third-party OAuth. |
 | 3c — Real Google Calendar MCP (remote server + DB-driven OAuth) | ✅ `Google_calendar_mcp` row repointed at Google's official remote server `https://calendarmcp.googleapis.com/mcp/v1` with `auth_type=oauth2`, `requires_auth=true`, and a real Google OAuth `auth_config` (4 scopes). `start_oauth` / `oauth_callback` in `tool_routes.py` made **DB-driven** (`_resolve_tool_auth_config`: DB-first, legacy registry fallback) so MCP-sourced tools reuse the existing OAuth endpoints; `TokenRefreshService` already reads the same `auth_config` column, so MCP tokens auto-refresh with no extra wiring. 5 new backend tests (`test_tool_oauth_mcp.py`) + 14 existing tool_routes tests green (19 total); 305 green across voice_agents + token-refresh + tool-service suites. Frontend `PlatformTool` type extended with `tool_source` / `mcp_server_url` / `mcp_server_name` / `mcp_server_headers` (3 vitest tests). End-to-end against the real Google API pending the one-time GCP client config (§6.4). |
-| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-07-26 to the publish-lifecycle model:** custom MCP authoring is now **platform-admin-only** (author → test → publish to global catalog); org admins **attach** published servers with their **own** API key (`{{KEY}}` template, org key overrides platform test key at runtime). The org-scoped custom tier is **retired**. Migration `20260726000001` adds `is_published` (backfills existing rows TRUE); `20260725000001` (encrypted secret headers) already applied. SSRF guard + `mcpServers` parser unchanged; new publish/unpublish/edit/delete endpoints + platform-admin gating on discover/parse/create; dispatch substitutes `{{KEY}}` (no platform fallback). Frontend `/platform/tools` nav page (parallel to `/platform/skills`) rendering an inline `<PlatformToolsManager>` (Configure MCP server + Manage existing tools views, no catalog tab); platform-admin-gated. 62 backend route/service + 18 worker dispatch + 67 frontend vitest green. |
+| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-07-26 to the publish-lifecycle model:** custom MCP authoring is now **platform-admin-only** (author → test → publish to global catalog); org admins **attach** published servers with their **own** API key (`{{KEY}}` template, org key overrides platform test key at runtime). The org-scoped custom tier is **retired**. Migration `20260726000001` adds `is_published` (backfills existing rows TRUE); `20260725000001` (encrypted secret headers) already applied. SSRF guard + `mcpServers` parser unchanged; new publish/unpublish/edit/delete endpoints + platform-admin gating on discover/parse/create; dispatch substitutes `{{KEY}}` (no platform fallback). Frontend `/platform/tools` nav page (parallel to `/platform/skills`) rendering an inline `<PlatformToolsManager>` (Configure MCP server + Manage existing tools views, no catalog tab); platform-admin-gated. 62 backend route/service + 18 voice-ws dispatch + 67 frontend vitest green. |
 | 4–5 | Not started (gated per §7). |
 
 **What shipped (no legacy code touched):**
@@ -102,7 +104,7 @@ sign-off.
   The legacy `LiveKitToolRegistry` loop is unchanged.
 - `backend/alembic/versions/20260715000001_add_mcp_source_columns_to_platform_tools.py`
   — additive migration (written, **not run**).
-- Tests (all in `worker/tests/`, run in the worker dev container):
+- Tests (all in `worker/tests/`, run in voice-ws dev container):
   `test_mcp_client.py` (17), `test_mcp_livekit_adapter.py` (8),
   `test_mcp_dispatch.py` (9), `test_mcp_platform_tool.py` (7),
   `test_worker_mcp_branch.py` (3), `test_mcp_google_calendar_e2e.py` (5).
@@ -115,7 +117,7 @@ sign-off.
 
 **How to run the MCP tests** (worker dev container):
 ```bash
-docker exec -w /app a1-voice-agent-platform-worker-dev-1 \
+docker exec -w /app a1-voice-agent-platform-voice-ws-dev-1 \
   python -m pytest tests/test_mcp_client.py tests/test_mcp_livekit_adapter.py \
     tests/test_mcp_dispatch.py tests/test_mcp_platform_tool.py \
     tests/test_worker_mcp_branch.py tests/test_mcp_google_calendar_e2e.py \
@@ -130,7 +132,7 @@ docker exec -w /app a1-voice-agent-platform-worker-dev-1 \
    reference server (e.g. `INSERT INTO platform_tools (name, tool_source,
    mcp_server_url, mcp_server_name, ...) VALUES ('Google_calendar_mcp', 'mcp',
    'http://<calendar-mcp-host>/mcp', 'google-calendar', ...)`), then attach it to
-   an agent via `agent_tools`. The worker will route it through MCP
+   an agent via `agent_tools`. voice-ws will route it through MCP
    automatically; the legacy `Google_calendar` row keeps working for any agent
    still using it.
 3. **Deploy the reference server** as its own container (FastMCP +
@@ -193,7 +195,7 @@ Streamable HTTP**: a single `POST /mcp` endpoint, no `initialize` handshake, no
 sticky sessions, no shared session store. Concrete consequences for us:
 
 - **No sandboxing.** Tools are remote HTTP services, not local subprocesses. The
-  LiveKit worker makes authenticated HTTP calls — exactly what it already does
+  voice-ws Pipecat voice-ws makes authenticated HTTP calls — exactly what it already does
   when calling vendor REST APIs directly. The "run CLIs in cloud agents" problem
   disappears entirely.
 - **Horizontally load-balanced by default.** Stateless servers work behind plain
@@ -217,7 +219,7 @@ sticky sessions, no shared session store. Concrete consequences for us:
 ```mermaid
 flowchart LR
   subgraph OurPlatform["Our platform (cloud)"]
-    A[LiveKit Worker] --> C[MCP Client Adapter]
+    A[voice-ws] --> C[MCP Client Adapter]
     DB[("platform_tools: approved MCP server defs<br/>agent_tools: which servers an agent may call<br/>tool_connections: per-org OAuth refs)")]
     C -.reads/writes.-> DB
   end
@@ -306,7 +308,7 @@ sequenceDiagram
     participant BE as Backend (tool_routes)
     participant G as Google OAuth
     participant DB as Supabase (agent_tools)
-    participant W as LiveKit Worker (McpClient)
+    participant W as voice-ws (McpClient)
     participant MCP as calendarmcp.googleapis.com
     U->>FE: click "Connect" on Google_calendar_mcp
     FE->>BE: GET /api/v1/tools/auth/Google_calendar_mcp?agent_id=…
@@ -376,7 +378,7 @@ write tools — `create_event` / `update_event` / `delete_event` — also work).
    Google consent. On success the tool's connection status flips to
    `connected_auth_valid` and a real `access_token` + `refresh_token` are stored
    (encrypted) in `agent_tools.sensitive_config`. Trigger a voice call to that
-   agent and ask it to list/create calendar events — the worker will call the
+   agent and ask it to list/create calendar events — voice-ws will call the
    real `calendarmcp.googleapis.com` with the injected bearer.
 
 **Notes / guardrails:**
@@ -389,9 +391,9 @@ write tools — `create_event` / `update_event` / `delete_event` — also work).
 
 ### 6.5 Tool-schema sanitization for the Gemini realtime plugin (implemented)
 
-**Symptom (the silent-agent bug):** after OAuth succeeds and the worker builds
+**Symptom (the silent-agent bug):** after OAuth succeeds and voice-ws builds
 the MCP tools, the Gemini realtime session never starts and the agent never
-speaks. Worker logs show `failed to generate a reply: generate_reply timed out
+speaks. voice-ws logs show `failed to generate a reply: generate_reply timed out
 waiting for generation_created event`, preceded by a crash inside
 `_main_task` → `_build_connect_config` → `create_tools_config`:
 
@@ -506,7 +508,7 @@ Calendar, Gmail, CalCom, Sheets, etc.) is unaffected.
 - `is_published=true` + `is_active=true` → **published**: a normal tool card
   in every org user's agent tool panel, attachable by org admins.
 - **Unpublish** hides a server from new attaches; existing `agent_tools`
-  attachments keep working (documented) — the worker loads an agent's tools by
+  attachments keep working (documented) — voice-ws loads an agent's tools by
   joining `agent_tools` → `platform_tools` with **no `is_published` filter**, so
   unpublish is safe and reversible. The Manage view surfaces the usage count
   (an info toast) so the admin learns unpublish ≠ "remove from agents".
@@ -634,7 +636,7 @@ enforces the guard even if the frontend is bypassed):
    **400** (`legacy_tools_cannot_be_deleted`) and steers the admin to unpublish;
    the Manage view renders **no Delete button** for `tool_source === "legacy"`.
    Hard-deleting a legacy row is partly futile — `LiveKitToolRegistry.sync_with_db`
-   re-seeds it (upsert by name) on every worker startup.
+   re-seeds it (upsert by name) on every voice-ws startup.
 
 `GET /api/v1/tools/platform/{id}/usage` (platform-admin) returns the agents using a
 tool; it backs both the delete-confirm warnings and the unpublish info toast.
@@ -646,7 +648,7 @@ tool; it backs both the delete-confirm warnings and the unpublish info toast.
 #### Unpublished-but-connected tools surface in the agent Tools tab (implemented 2026-07-28)
 
 Unpublish hides a tool from **new** attaches (the published-only catalog) but
-does **not** strip it from agents already using it — the worker loads an agent's
+does **not** strip it from agents already using it — voice-ws loads an agent's
 tools by joining `agent_tools` → `platform_tools` with **no `is_published`
 filter**, so the agent keeps the tool at runtime. Before this change the Tools
 tab UI hid that reality: the card vanished from the grid on unpublish even
@@ -692,7 +694,7 @@ tool cards and native tool cards:
   `platform_tools.tool_functions_schema = {functions: [{name, description,
   parameters: input_schema}]}` on save/publish. The agent `tool-config-drawer`
   reads `tool.tool_functions_schema.functions` to render each tool with an
-  enable/disable `Switch` (parity with native tool cards). The worker still
+  enable/disable `Switch` (parity with native tool cards). voice-ws still
   re-discovers tools **live** via `tools/list` at call time and filters by
   `agent_tools.unselected_functions` — the stored schema is display-only, but
   must be present for the drawer to show anything. Omitted when no tools were
@@ -787,7 +789,7 @@ pasted, the first is used (v1).
   `?force=true` cascade-detaches `agent_tools` then removes the row; without
   `force`, an MCP tool referenced by any agent returns **409 `in_use`** with
   `{error, count, agents[]}`; a legacy (code-backed) tool is refused with
-  **400** (steer to unpublish — it is re-seeded by the worker on startup, so a
+  **400** (steer to unpublish — it is re-seeded by voice-ws on startup, so a
   hard-delete is partly futile). The force path is audited (structured log +
   OpenTelemetry span attrs: `tool.force_delete`, `tool.detached_agent_count`).
 - `GET /api/v1/tools/platform/{id}/usage` — platform-admin only; returns
@@ -910,7 +912,7 @@ gantt
 - **MCP is not "zero integration work."** For any vendor *without* a community
   server, someone writes an MCP server. The win is that it is a **thin adapter**
   over the vendor's REST API, it can be community/vendor-maintained, and our
-  worker stays generic. We trade in-tree code for an out-of-tree dependency.
+  voice-ws stays generic. We trade in-tree code for an out-of-tree dependency.
 - **New runtime dependency** on remote servers' availability. Mitigate with
   timeouts, retries (we already have `_with_retry` in `tool_service.py`), and
   graceful degradation in the voice loop.
@@ -935,7 +937,7 @@ gantt
 
 ```markdown
 <!-- TODO: [Architecture] Decide SDK choice (Python vs TypeScript MCP client)
-     Rationale: worker is Python; Python SDK is the natural fit, but TS SDK
+     Rationale: voice-ws is Python; Python SDK is the natural fit, but TS SDK
      maturity should be checked at implementation time. Priority: Medium.
      Timeline: Phase 1 kick-off. -->
 

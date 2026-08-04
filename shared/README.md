@@ -1,12 +1,12 @@
 # Shared Code - Voice Agents Platform
 
-This directory contains code shared between the backend and worker services, specifically for the voice agents system.
+This directory contains code shared between the backend and `voice-ws` services, specifically for the voice agents system.
 
 ## 🏗️ Architecture
 
 ### Purpose
 
-The shared module allows both the backend (for API endpoints) and worker (for voice agent execution) to use the same:
+The shared module allows both the backend (for API endpoints) and `voice-ws` (for voice agent execution) to use the same:
 
 - **Data models**: Pydantic models for tools, agents, and configurations
 - **Business logic**: Service layer for tool and agent management
@@ -16,34 +16,29 @@ The shared module allows both the backend (for API endpoints) and worker (for vo
 ```mermaid
 graph TB
     subgraph Shared["shared/ Module"]
-        VS[voice_agents/]
-        VS[service.py - Voice Agent Service]
-        VS[tool_service.py - Tool Service]
-        VS[tool_models.py - Tool Data Models]
-        VS[livekit_service.py - LiveKit Integration]
-        VS[tools/ - Tool Implementations]
-        VS[models.py - Voice Agent Models]
+        VA[voice_agents/]
+        VA --> VS[service.py]
+        VA --> TS[tool_service.py]
+        VA --> TM[tool_models.py]
+        VA --> VSS[voice_session_service.py]
+        VA --> TOOLS[tools/]
+        VA --> MD[models.py]
 
-        VS[config/]
-        VS[opentelemetry.py - OTEL Configuration]
-        VS[settings.py - Settings Management]
-        VS[supabase.py - Supabase Client]
-
-        VS[common/]
-        VS[errors.py - Error Definitions]
-        VS[security.py - Security Utilities]
+        CFG[config/]
+        COM[common/]
     end
 
     subgraph Backend["backend/ (FastAPI)"]
         BR[API Routes]
         BR[Tool Management Endpoints]
         BR[Agent Management Endpoints]
+        BR[Voice session JWT issuance]
     end
 
-    subgraph Worker["worker/ (LiveKit)"]
-        WK[Worker Entry Point]
-        WK[Tool Registry]
-        WK[Dynamic Agent Creation]
+    subgraph VoiceWS["voice-ws/ (Pipecat)"]
+        WK[WebSocket /ws and /twilio]
+        WK[Tool assembly + MCP]
+        WK[Speech pipeline / realtime]
     end
 
     subgraph Database["Supabase"]
@@ -53,9 +48,9 @@ graph TB
         DB[tool_functions]
     end
 
-    BR --> VS
-    WK --> VS
-    VS --> DB
+    BR --> VA
+    WK --> VA
+    VA --> DB
 ```
 
 ## 📁 Directory Structure
@@ -66,7 +61,7 @@ shared/
 │   ├── service.py           # Voice agent CRUD operations
 │   ├── tool_service.py      # Tool CRUD and query operations
 │   ├── tool_models.py       # Pydantic models for tools
-│   ├── livekit_service.py  # LiveKit room creation
+│   ├── voice_session_service.py  # Short-lived JWT for voice-ws sessions
 │   ├── models.py           # Voice agent data models
 │   ├── speech_config.py   # Per-agent speech engine config (realtime vs pipeline; discriminated union)
 │   ├── preset_models.py   # Platform-admin preset Pydantic models (Phase 3)
@@ -76,7 +71,7 @@ shared/
 │   │   ├── base/
 │   │   │   ├── base_tool.py            # Base class for tools
 │   │   │   ├── action_models.py        # Action function models
-│   │   │   ├── registry_livekit.py    # Tool registry for worker
+│   │   │   ├── platform_tool_registry.py    # Tool registry for voice-ws
 │   │   │   └── __init__.py
 │   │   └── implementations/            # Concrete tool implementations
 │   │       ├── google_calendar.py      # Google Calendar tool
@@ -142,12 +137,12 @@ tools = await tool_service.get_tools_by_organization(org_id, safe=True)
 # Does NOT have: sensitive_config, OAuth tokens
 ```
 
-#### For Worker (Agent Execution)
+#### For voice-ws (Agent Execution)
 
 Returns **full tool objects** with all configuration:
 
 ```python
-# Get tool for worker (includes OAuth tokens)
+# Get tool for voice-ws (includes OAuth tokens)
 tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 # Returns: Tool class instance with:
 # - config (public config)
@@ -159,7 +154,7 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 
 - `create_tool()`: Register new platform tool
 - `get_tool()`: Get tool metadata
-- `get_tool_instance()`: Instantiate tool with full config (for worker)
+- `get_tool_instance()`: Instantiate tool with full config (for voice-ws)
 - `get_tools_by_organization()`: List tools (safe mode for API)
 - `associate_tool_with_agent()`: Link tool to agent
 - `get_tools_for_agent()`: Get all tools for an agent
@@ -255,59 +250,39 @@ class MyTool(BaseTool):
         return {"result": "..."}
 ```
 
-### 5. Tool Registry (`voice_agents/tools/base/registry_livekit.py`)
+### 5. Tool Registry (`voice_agents/tools/base/platform_tool_registry.py`)
 
-**Purpose**: Auto-discover and register tool implementations
+**Purpose**: Auto-discover and register platform tool implementations for `voice-ws`
 
 **Process**:
 
 1. Scan `shared.voice_agents.tools.implementations` package
 2. Import all tool classes
-3. Register each tool class in `_tools` dictionary
+3. Register each tool class in the registry dictionary
 4. Provide methods to instantiate tools
 
 **Usage**:
 
 ```python
-from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
 
-# Register tools (done by worker on startup)
-livekit_tool_registry.register_tools_from_package("shared.voice_agents.tools.implementations")
-
-# Get tool class
-tool_class = livekit_tool_registry.get_tool_class("Google_calendar")
-
-# Instantiate tool
+platform_tool_registry.register_tools_from_package(
+    "shared.voice_agents.tools.implementations"
+)
+tool_class = platform_tool_registry.get_tool_class("Google_calendar")
 tool_instance = tool_class(config, sensitive_config)
 ```
 
-### 6. LiveKit Service (`voice_agents/livekit_service.py`)
+### 6. Voice Session Service (`voice_agents/voice_session_service.py`)
 
-**Purpose**: Create LiveKit rooms for voice agent sessions
+**Purpose**: Issue and validate short-lived JWTs for browser and Twilio voice sessions
 
-**Key Method**:
+**Integration flow**:
 
-```python
-async def create_agent_room(
-    agent_id: str,
-    phone_number: str
-) -> dict[str, Any]:
-    """
-    Create a LiveKit room for a voice agent session.
-
-    Room name format: agent-{agent_id}-{phone_number}
-    """
-    # Create room via LiveKit API
-    # Return room details (room_name, room_sid, etc.)
-```
-
-**Integration Flow**:
-
-1. Backend validates agent and initiates call
-2. Backend calls `create_agent_room()` to create LiveKit room
-3. LiveKit dispatch creates job for worker
-4. Worker extracts phone from room name
-5. Agent connects and starts session
+1. Backend validates agent and creates a `voice_ws_session` JWT (`JWT_SECRET_KEY`)
+2. Browser or Twilio connects to `voice-ws` at `/ws` or `/twilio?token=…`
+3. `voice-ws` verifies the JWT, loads agent config, and starts the Pipecat session
+4. For phone calls, backend sets `VOICE_WS_TWILIO_URL` so Twilio Media Streams reach `/twilio`
 
 ### 7. Configuration (`config/`)
 
@@ -320,8 +295,8 @@ async def create_agent_room(
 **settings.py**: Environment-based configuration
 
 - Database URL
-- LiveKit credentials
 - OAuth settings
+- Voice WebSocket URLs (`VOICE_WS_PUBLIC_URL`, `VOICE_WS_TWILIO_URL`)
 - Feature flags
 
 **supabase.py**: Supabase client initialization
@@ -348,7 +323,7 @@ async def create_agent_room(
 
 ### 1. Two-Tier Service
 
-**Rationale**: Different security requirements for API vs. worker
+**Rationale**: Different security requirements for API vs. voice-ws
 
 **Backend (API Layer)**:
 
@@ -359,7 +334,7 @@ tools = await tool_service.get_tools_by_organization(org_id, safe=True)
 # Does NOT return: OAuth tokens, API keys, etc.
 ```
 
-**Worker (Agent Execution)**:
+**voice-ws (Agent Execution)**:
 
 ```python
 # Get tool for LLM execution - WITH secrets
@@ -376,7 +351,7 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 
 **Implementation**:
 
-- Worker fetches tools directly from database each call
+- `voice-ws` fetches tools directly from database each session
 - No in-memory session manager
 - Each call gets fresh configuration and OAuth tokens
 
@@ -384,7 +359,7 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 
 - Simplified architecture
 - No stale configuration
-- Easy to scale (multiple workers)
+- Easy to scale (multiple voice-ws instances)
 - Configuration changes take effect immediately
 
 ### 3. Base Class Pattern
@@ -403,11 +378,11 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 **Process**:
 
 1. Tool classes defined in `shared.voice_agents.tools.implementations`
-2. Worker imports package
+2. `voice-ws` imports package via platform tool registry
 3. Registry auto-discovers all tool classes
-4. Worker queries database for enabled tools
-5. Worker instantiates tools with config
-6. Worker wraps methods for LiveKit compatibility
+4. `voice-ws` queries database for enabled tools
+5. `voice-ws` instantiates tools with config
+6. Tools expose JSON schemas for Pipecat / LLM function calling
 
 ## 🔧 Using the Shared Module
 
@@ -424,16 +399,13 @@ async def list_tools(org_id: str):
     return {"tools": tools}
 ```
 
-### In Worker
+### In voice-ws
 
 ```python
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_service import tool_service
 
-# Get agent configuration
 agent = await voice_agent_service.get_voice_agent(agent_id, include_tools=True)
-
-# Instantiate tool (with OAuth tokens)
 tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 ```
 
@@ -446,9 +418,9 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
        # Implementation
    ```
 
-2. Tool is auto-registered by `registry_livekit.py`
+2. Tool is auto-registered by `platform_tool_registry.py`
 
-3. Worker automatically discovers and uses it
+3. `voice-ws` automatically discovers and uses it
 
 4. Backend can query tool metadata for UI
 
@@ -481,15 +453,15 @@ tool_instance = await tool_service.get_tool_instance(tool_id, org_id)
 1. **OAuth Tokens**: Stored encrypted in database
 2. **Two-Tier Service**: API never returns sensitive data
 3. **Safe Mode**: Default mode for tool queries (no secrets)
-4. **Worker Security**: Only worker has access to full tool instances
+4. **voice-ws Security**: Only voice-ws has access to full tool instances
 5. **Environment Variables**: All secrets in environment (not in code)
 
 ## 📚 Related Documentation
 
-- [Worker Documentation](../worker/README.md)
+- [voice-ws Documentation](../voice-ws/README.md)
 - [Voice Agents Overview](../docs/02_features/voice_agents/overview.md)
 - [Tool Connection States](../docs/02_features/voice_agents/tool_connection_states.md)
-- [LiveKit Tool Wrapping](../docs/03_implementation/livekit_tool_wrapping.md)
+- [Outbound phone calls](../docs/03_implementation/outbound_phone_calls.md)
 - [OAuth Setup](../docs/02_core_systems/oauth_setup.md)
 
 ## 🚧 Future Enhancements

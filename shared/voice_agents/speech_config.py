@@ -2,15 +2,12 @@
 
 This module defines the typed contract between three layers:
 
-1. **Storage** — the ``voice_agents.speech_config`` JSONB column (added in the
-   Phase 3 Alembic migration). Storing the whole config as one validated JSON
-   blob means adding a provider or a tunable does NOT require a schema
-   migration — only a change here.
+1. **Storage** — the ``voice_agents.speech_config`` JSONB column.
 2. **Backend CRUD** — the voice-agent API reads/writes this column and
    validates it through :func:`parse_speech_config`.
-3. **Worker session builder** — :mod:`worker.src.session_builder` dispatches on
-   ``engine_mode`` to construct the LiveKit ``AgentSession`` either as an
-   end-to-end realtime model or as a modular STT -> LLM -> TTS pipeline.
+3. **voice-ws session setup** — :mod:`voice_ws.src.session_setup` and
+   :mod:`voice_ws.src.speech.factory` dispatch on ``engine_mode`` to build
+   either a Gemini realtime session or a modular STT → LLM → TTS pipeline.
 
 Two engine modes are supported via a discriminated union on ``engine_mode``:
 
@@ -21,11 +18,9 @@ Two engine modes are supported via a discriminated union on ``engine_mode``:
 
 Design notes:
 
-- ``RealtimeSpeechConfig`` defaults **exactly reproduce** the constants
-  previously hardcoded in ``worker/src/realtime_config.py`` (model, voice,
-  temperature, endpointing). This is what makes ``default_realtime_config()``
-  behavior-neutral: an agent with no ``speech_config`` set gets the same
-  realtime tuning it gets today.
+- ``RealtimeSpeechConfig`` defaults match the voice-ws Gemini realtime provider
+  (model, voice, temperature, endpointing). ``default_realtime_config()`` keeps
+  legacy agents (no ``speech_config`` column) on the same tuning.
 - The pipeline stage configs (``STTStageConfig`` etc.) carry a ``provider``
   dispatch key, an optional provider-specific ``model`` id, and an open
   ``params`` dict for provider-specific kwargs — so the factory can swap a
@@ -75,7 +70,7 @@ class StageConfig(BaseModel):
 
     Attributes:
         provider: The provider dispatch key, e.g. ``"deepgram"``, ``"openai"``,
-            ``"cartesia"``. The factory maps this to a LiveKit plugin builder.
+            ``"cartesia"``. The voice-ws factory maps this to a provider builder.
         model: Provider-specific model id (e.g. ``"nova-3"``, ``"gpt-4o-mini"``).
             ``None`` means "use the provider's default".
         params: Extra provider-specific kwargs forwarded to the plugin builder.
@@ -121,12 +116,12 @@ class TTSStageConfig(StageConfig):
 
 class VADConfig(StageConfig):
     """Voice-activity-detection config (e.g. Silero). Optional in a pipeline —
-    LiveKit applies a sensible default when ``None``."""
+    voice-ws applies a sensible default when ``None``."""
 
 
 class TurnDetectionConfig(StageConfig):
-    """Turn-detection / endpointing config. Optional — LiveKit applies a
-    default turn detector when ``None``."""
+    """Turn-detection / endpointing config. Optional — voice-ws applies a
+    default when ``None``."""
 
 
 # ---------------------------------------------------------------------------
@@ -134,11 +129,7 @@ class TurnDetectionConfig(StageConfig):
 # ---------------------------------------------------------------------------
 
 
-# The Gemini native-audio realtime model id. Duplicated from
-# worker/src/realtime_config.py (kept there as the runtime source of truth for
-# the realtime provider) so this module can default to it without importing the
-# worker package (which would create a shared->worker dependency). The two must
-# stay in sync; test_speech_config asserts the equality.
+# Default Gemini native-audio realtime model id used by voice-ws.
 DEFAULT_REALTIME_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
 DEFAULT_REALTIME_VOICE = "Puck"
 DEFAULT_REALTIME_TEMPERATURE = 0.7
@@ -180,7 +171,7 @@ class PipelineSpeechConfig(BaseModel):
     """Config for the modular pipeline engine (STT -> LLM -> TTS).
 
     Each core stage is independently configurable. ``vad`` and
-    ``turn_detection`` are optional — LiveKit applies defaults when ``None``.
+    ``turn_detection`` are optional — voice-ws applies defaults when ``None``.
 
     Attributes:
         engine_mode: Always ``pipeline`` (discriminator).

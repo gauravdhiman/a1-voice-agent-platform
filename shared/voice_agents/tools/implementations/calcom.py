@@ -84,7 +84,7 @@ class CalComTool(BaseTool):
             If event_type_id is not provided, uses the default configured ID.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             start_date: Start date in YYYY-MM-DD format
             end_date: End date in YYYY-MM-DD format
             event_type_id: Optional specific event type ID to check
@@ -127,7 +127,7 @@ class CalComTool(BaseTool):
             Use this to find the correct event_type_id for booking.
 
         Args:
-            context: LiveKit ToolContext
+            context: ToolContext
         """
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -169,7 +169,7 @@ class CalComTool(BaseTool):
             Ensure attendee email is valid before creating booking.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             start_time: Start time in ISO 8601 format (UTC)
             name: Attendee's name
             email: Attendee's email
@@ -232,7 +232,7 @@ class CalComTool(BaseTool):
             Returns only bookings with "upcoming" status.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             email: Optional attendee email to filter bookings
 
         Returns:
@@ -296,7 +296,7 @@ class CalComTool(BaseTool):
             Provide a clear reason for the rescheduling.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             booking_uid: Booking UID to reschedule
             new_start_time: New start time in ISO 8601 format (UTC)
             reason: Reason for rescheduling
@@ -352,7 +352,7 @@ class CalComTool(BaseTool):
             This action cannot be undone.
 
         Args:
-            context: LiveKit ToolContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             booking_uid: Booking UID to cancel
             reason: Reason for cancellation
 
