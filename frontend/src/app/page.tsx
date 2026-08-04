@@ -704,7 +704,7 @@ export default function LandingPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="px-8 h-12 text-base border-blue-300 text-white hover:bg-blue-700"
+                  className="h-12 px-8 text-base border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 hover:text-white dark:bg-white/10 dark:hover:bg-white/25"
                 >
                   <Headphones className="mr-2 w-4 h-4" />
                   Talk to Sales
