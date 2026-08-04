@@ -4,15 +4,16 @@ import React from "react";
 import { SignUpForm } from "@/components/auth/signup-form";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import Link from "next/link";
-import { Rocket } from "lucide-react";
+import { Rocket, Zap, CalendarCheck, CreditCard } from "lucide-react";
+import { SITE_NAME } from "@/lib/site-config";
 
 export default function SignUpPage() {
   return (
     <ProtectedRoute reverse>
       <div className="min-h-screen w-full flex">
-        {/* Left Side - Brand & Testimonial (Hidden on mobile) */}
+        {/* Left Side - Brand & Value Statement (Hidden on mobile) */}
         <div className="hidden lg:flex w-1/2 bg-zinc-900 relative flex-col justify-between p-12 text-white">
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=2070&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?q=80&w=2070&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/80 to-transparent" />
 
           <div className="relative z-10">
@@ -21,36 +22,45 @@ export default function SignUpPage() {
                 <span className="text-white font-bold text-xl">AI</span>
               </div>
               <span className="text-xl font-bold tracking-tight">
-                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
+                {SITE_NAME}
               </span>
             </Link>
           </div>
 
           <div className="relative z-10 max-w-lg">
             <Rocket className="h-10 w-10 text-white/50 mb-6" />
-            <h2 className="text-3xl font-bold mb-4">
-              Start building the future
+            <h2 className="text-3xl font-bold leading-tight mb-4">
+              Set up your AI front desk in minutes.
             </h2>
-            <p className="text-lg text-white/80 leading-relaxed">
-              Join thousands of developers and businesses who are already using
-              {" "}{process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"} to power their next-generation voice applications.
+            <p className="text-lg text-white/80 leading-relaxed mb-8">
+              No code. No IT. No headset. If you can use email, you can launch
+              your first agent - answering calls, booking appointments, and
+              following up with customers, 24x7.
             </p>
-            <div className="mt-8 flex gap-4">
-              <div className="flex flex-col">
-                <span className="text-2xl font-bold">10k+</span>
-                <span className="text-sm text-white/60">Active Users</span>
-              </div>
-              <div className="w-px bg-white/20" />
-              <div className="flex flex-col">
-                <span className="text-2xl font-bold">99.9%</span>
-                <span className="text-sm text-white/60">Uptime</span>
-              </div>
-            </div>
+            <ul className="space-y-4">
+              <li className="flex items-center gap-3">
+                <Zap className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                <span className="text-white/80">
+                  Live in minutes - no technical knowledge needed
+                </span>
+              </li>
+              <li className="flex items-center gap-3">
+                <CalendarCheck className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                <span className="text-white/80">
+                  Works with Google Calendar, Gmail &amp; more
+                </span>
+              </li>
+              <li className="flex items-center gap-3">
+                <CreditCard className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                <span className="text-white/80">
+                  Free to start - no credit card required
+                </span>
+              </li>
+            </ul>
           </div>
 
           <div className="relative z-10 text-sm text-white/40">
-            &copy; {new Date().getFullYear()} {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"} Inc. All rights
-            reserved.
+            &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
           </div>
         </div>
 
@@ -66,10 +76,11 @@ export default function SignUpPage() {
                 </div>
               </div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                Create an account
+                Create your free account
               </h1>
               <p className="text-muted-foreground mt-2">
-                Enter your details below to create your account
+                Start free - no credit card required. Your first agent can be
+                live in minutes.
               </p>
             </div>
 

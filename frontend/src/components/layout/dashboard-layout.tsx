@@ -56,6 +56,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Sidebar brand. If the name ends in " AI" (e.g. "24x7 AI"), strip the
+  // trailing " AI" from the wordmark so the "AI" logo chip below is not
+  // duplicated next to the full name (which would read "AI 24x7 AI").
+  const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets";
+  const brandName = appName.replace(/\s+AI$/, "");
+
   const handleSignOut = async () => {
     const { error } = await signOut();
     if (error) {
@@ -176,21 +182,43 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Sidebar Header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-sidebar-border bg-sidebar">
           {!sidebarCollapsed && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-1.5">
+              {/* Brand pill: a single continued box split into a lighter
+                  "24x7" zone and a solid "AI" zone. No outer border: a stroke
+                  would show around the light zone but merge into the solid
+                  "AI" zone, making the two halves look different sizes. */}
+              <div className="flex items-center overflow-hidden rounded-lg">
+                <span className="bg-sidebar-primary/15 text-sidebar-primary font-bold text-sm tracking-tight px-2.5 py-1 whitespace-nowrap">
+                  {brandName}
+                </span>
+                <span className="bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm px-2.5 py-1">
+                  AI
+                </span>
+              </div>
+              {/* Live dot: the AI front desk is always answering. Same
+                  motif as the marketing hero's "live" badge. */}
+              <span
+                data-testid="brand-live-dot"
+                className="relative flex h-2 w-2"
+              >
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <div className="mx-auto flex items-center gap-1">
               <div className="bg-sidebar-primary w-7 h-7 rounded-md flex items-center justify-center">
                 <span className="text-sidebar-primary-foreground font-bold text-base">
                   AI
                 </span>
               </div>
-              <span className="text-base font-bold text-sidebar-foreground tracking-tight">
-                {process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets"}
-              </span>
-            </div>
-          )}
-          {sidebarCollapsed && (
-            <div className="mx-auto bg-sidebar-primary w-7 h-7 rounded-md flex items-center justify-center">
-              <span className="text-sidebar-primary-foreground font-bold text-base">
-                AI
+              <span
+                data-testid="brand-live-dot"
+                className="relative flex h-2 w-2"
+              >
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
             </div>
           )}
