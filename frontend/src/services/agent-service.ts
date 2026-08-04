@@ -276,33 +276,24 @@ class AgentService {
   }
 
   /**
-   * Bootstrap a browser test call.
-   *
-   * Backend returns either a Pipecat WebSocket session (`transport=pipecat`)
-   * or a legacy LiveKit room token (`transport=livekit`).
+   * Bootstrap a browser test call over Pipecat WebSocket transport.
    */
   async getTestToken(agentId: string): Promise<{
-    transport: "pipecat" | "livekit";
+    transport: "pipecat";
     token: string;
-    serverUrl?: string | null;
-    roomName?: string | null;
-    wsUrl?: string | null;
-    sessionId?: string | null;
+    wsUrl: string;
+    sessionId: string;
   }> {
     const response = await apiClient.post<{
-      transport?: "pipecat" | "livekit";
+      transport?: "pipecat";
       token: string;
-      serverUrl?: string | null;
-      roomName?: string | null;
-      wsUrl?: string | null;
-      sessionId?: string | null;
+      wsUrl: string;
+      sessionId: string;
     }>(`${this.agentBaseUrl}/${agentId}/test-token`);
     const data = response.data;
     return {
-      transport: data.transport ?? "livekit",
+      transport: data.transport ?? "pipecat",
       token: data.token,
-      serverUrl: data.serverUrl,
-      roomName: data.roomName,
       wsUrl: data.wsUrl,
       sessionId: data.sessionId,
     };
@@ -335,14 +326,17 @@ class AgentService {
   }
 
   // Embed Token Method (for authenticated testing)
-  async getEmbedToken(
-    agentId: string,
-  ): Promise<{ embedToken: string; livekitToken: string; serverUrl: string; roomName: string }> {
+  async getEmbedToken(agentId: string): Promise<{
+    embed_token: string;
+    token: string;
+    wsUrl: string;
+    sessionId: string;
+  }> {
     const response = await apiClient.post<{
-      embedToken: string;
-      livekitToken: string;
-      serverUrl: string;
-      roomName: string;
+      embed_token: string;
+      token: string;
+      wsUrl: string;
+      sessionId: string;
     }>(`${this.agentBaseUrl}/${agentId}/embed-token`);
     return response.data;
   }

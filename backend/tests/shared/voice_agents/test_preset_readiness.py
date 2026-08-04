@@ -56,8 +56,8 @@ def clean_env(monkeypatch):
         "OPENAI_API_KEY",
         "CARTESIA_API_KEY",
         "CEREBRAS_API_KEY",
-        "LIVEKIT_API_KEY",
-        "LIVEKIT_API_SECRET",
+        "OPENROUTER_API_KEY",
+        "FISH_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
     yield monkeypatch
@@ -148,20 +148,15 @@ class TestIsPresetReady:
             is_preset_ready(_realtime(), org, use_platform_credits=True) is True
         )
 
-    def test_livekit_inference_requires_both_api_key_and_secret(
+    def test_livekit_inference_stt_requires_deepgram_key(
         self, patch_decrypt, clean_env
     ):
+        """Deprecated livekit_inference STT is ready when deepgram is configured."""
         pipeline = _pipeline(stt="livekit_inference", llm="openai", tts="cartesia")
-        org, creds = _org(
-            {
-                "livekit": {"api_key": "lk"},
-                "openai": "o",
-                "cartesia": "c",
-            }
-        )
+        org, creds = _org({"openai": "o", "cartesia": "c"})
         patch_decrypt.return_value = creds
         assert is_preset_ready(pipeline, org, use_platform_credits=False) is False
 
-        creds["livekit"]["api_secret"] = "secret"
+        creds["deepgram"] = "d-key"
         patch_decrypt.return_value = creds
         assert is_preset_ready(pipeline, org, use_platform_credits=False) is True

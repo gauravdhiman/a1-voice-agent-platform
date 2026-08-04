@@ -775,16 +775,25 @@ After implementing any fix or new feature, you MUST:
 
 Never use `from X import Y` inside a function if `Y` is already imported at the top of the file. In Python, a local import makes the name local to the **entire function** — even lines before the import statement. This causes `UnboundLocalError` on earlier references. If you need a conditional import, use a different variable name or import the module instead (`import X; X.Y`).
 
-### Voice transport (Pipecat vs LiveKit)
+### Voice transport (Pipecat — default)
 
-- Default active path is **`VOICE_TRANSPORT=pipecat`** with the new **`voice-ws/`** container (WebSocket + Gemini Realtime).
-- Leave the LiveKit **`worker/`** package in place for rollback; do not delete it. Start it with compose profile `livekit` when `VOICE_TRANSPORT=livekit`.
-- Browser test calls use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` when transport is pipecat (`WS /ws`).
+- **All call surfaces** (dashboard test call, embed, public org page, Twilio phone)
+  use **`voice-ws/`** (Pipecat WebSocket). Backend returns `{ token, wsUrl, sessionId }`.
+- The legacy LiveKit **`worker/`** package remains in the repo for reference only;
+  it is not started in default dev/prod compose. Compose profile `livekit` still
+  exists for emergency comparison, not production.
+- **LiveKit Inference presets were removed.** Pipeline presets use direct providers
+  only; migration `20260803000001_remove_livekit_inference_from_presets` rewrites
+  any remaining DB rows.
+- Browser clients use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` (`WS /ws`).
 - Phone calls use Twilio Media Streams → `voice-ws` `WS /twilio`. Set **`VOICE_WS_TWILIO_URL`** to a public `wss://` base (ngrok); localhost is rejected.
 - Session auth is a short-lived `voice_ws_session` JWT (`shared/voice_agents/voice_session_service.py`), signed with `JWT_SECRET_KEY` shared by backend and voice-ws.
 - Phase 3 parity lives in `voice-ws/src/session_setup.py`, `src/tools/`, and
   `src/speech/`; MCP imports must remain lazy in shared modules because the
   Pipecat container intentionally does not install `livekit-agents`.
+- OpenTelemetry in `voice-ws/src/main.py` uses lazy imports so tests/dev images
+  without OTLP exporters still start; add `opentelemetry-exporter-otlp-proto-grpc`
+  to `voice-ws/requirements.txt` for full export in prod.
 - Local `Google_calendar_mcp` (`http://127.0.0.1:8733/mcp`) is started as a
   co-process by `voice-ws/entrypoint.dev.sh` (same pattern as
   `worker/entrypoint.dev.sh`). If calendar tools are missing at runtime, recreate

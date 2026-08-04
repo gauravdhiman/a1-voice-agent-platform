@@ -66,15 +66,6 @@ describe("buildStage", () => {
     });
     expect(stage).toEqual({ provider: "openai", model: "gpt-4.1", params: {} });
   });
-
-  it("livekit_inference provider is a normal stage value", () => {
-    const stage = buildStage({
-      provider: "livekit_inference",
-      model: "deepgram-nova-3",
-      paramsText: "",
-    });
-    expect(stage.provider).toBe("livekit_inference");
-  });
 });
 
 describe("buildTtsStage", () => {
@@ -109,8 +100,8 @@ describe("buildTtsStage", () => {
 
   it("dedicated voice field wins over params.voice on emit", () => {
     const stage = buildTtsStage({
-      provider: "livekit_inference",
-      model: "cartesia/sonic-3",
+      provider: "cartesia",
+      model: "sonic-3",
       voice: "field-voice",
       paramsText: '{"voice":"params-voice","speed":1.0}',
     });
@@ -200,34 +191,6 @@ describe("buildPipelineConfig", () => {
     form.vad = { provider: "silero", model: "", paramsText: "" };
     const cfg = buildPipelineConfig(form);
     expect(cfg.vad).toEqual({ provider: "silero", params: {} });
-  });
-
-  it("supports a mixed Inference + direct preset", () => {
-    const form = defaultPipelineForm();
-    form.stt = { provider: "livekit_inference", model: "deepgram-nova-3", paramsText: "" };
-    form.llm = { provider: "cerebras", model: "llama-4-scout-17b-16e-instruct", paramsText: "" };
-    form.tts = {
-      provider: "livekit_inference",
-      model: "cartesia-sonic",
-      voice: "",
-      paramsText: "",
-    };
-    const cfg = buildPipelineConfig(form);
-    expect(cfg.stt).toEqual({
-      provider: "livekit_inference",
-      model: "deepgram-nova-3",
-      params: {},
-    });
-    expect(cfg.llm).toEqual({
-      provider: "cerebras",
-      model: "llama-4-scout-17b-16e-instruct",
-      params: {},
-    });
-    expect(cfg.tts).toEqual({
-      provider: "livekit_inference",
-      model: "cartesia-sonic",
-      params: {},
-    });
   });
 
   it("never emits stray keys (extra=forbid safe)", () => {

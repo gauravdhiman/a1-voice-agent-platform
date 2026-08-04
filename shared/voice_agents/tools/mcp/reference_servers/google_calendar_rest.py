@@ -53,7 +53,7 @@ are granted by the existing ``Google_calendar_mcp`` OAuth config):
       ``calendar.events`` + ``calendar.calendarlist.readonly``.
 """
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 import httpx
@@ -321,7 +321,7 @@ async def create_event_logic(
         desc_lines.append(f"Date of birth: {caller_dob}")
     desc_lines.append("Booked by CogniNets voice agent.")
 
-    start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    start_dt = _parse_iso_datetime(start)
     end_dt = (start_dt + timedelta(minutes=duration_minutes)).isoformat()
 
     body: dict = {
@@ -344,6 +344,46 @@ async def create_event_logic(
         "summary": summary,
         "html_link": resp_body.get("htmlLink"),
     }
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parse an ISO 8601 timestamp, treating ``Z`` as UTC."""
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _availability_window_is_in_past(
+    time_min: str,
+    time_max: str,
+    *,
+    reference_now: datetime | None = None,
+) -> bool:
+    """Return True when the requested window starts before the reference instant.
+
+    Args:
+        time_min: Window start (ISO 8601 with timezone).
+        time_max: Window end (ISO 8601 with timezone).
+        reference_now: Optional fixed instant for tests; defaults to wall-clock
+            ``now`` in the same timezone as ``time_min``.
+
+    Returns:
+        True when ``time_min`` is strictly before the reference instant, meaning
+        the slot must not be offered or booked.
+    """
+    start = _parse_iso_datetime(time_min)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    now = reference_now or datetime.now(start.tzinfo)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=start.tzinfo)
+    else:
+        now = now.astimezone(start.tzinfo)
+    # End before/at now also means the window is unusable (fully in the past).
+    end = _parse_iso_datetime(time_max)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=start.tzinfo)
+    else:
+        end = end.astimezone(start.tzinfo)
+    return end <= now or start < now
 
 
 def _busy_blocks_from_freebusy(resp_body: dict, calendar_id: str) -> list:
@@ -383,22 +423,40 @@ def _busy_blocks_from_freebusy(resp_body: dict, calendar_id: str) -> list:
 
 
 async def check_availability_logic(
-    token: str, time_min: str, time_max: str, calendar_id: str = "primary"
+    token: str,
+    time_min: str,
+    time_max: str,
+    calendar_id: str = "primary",
+    *,
+    reference_now: datetime | None = None,
 ) -> dict:
     """Check whether a time window is free or busy on a calendar.
 
-    Uses Google's freebusy endpoint.
+    Uses Google's freebusy endpoint. Rejects windows that start in the past so
+    the agent cannot offer stale slots when the caller asks about "today".
 
     Args:
         token: The caller's OAuth access token.
         time_min: Window start (ISO 8601 with timezone).
         time_max: Window end (ISO 8601 with timezone).
         calendar_id: Calendar to check (default ``primary``).
+        reference_now: Optional fixed instant for unit tests.
 
     Returns:
-        ``{"status": "free"}`` or ``{"status": "busy"}``, or an error dict on
-        non-200.
+        ``{"status": "free"}`` or ``{"status": "busy"}``, ``{"status": "past"}``
+        when the window is before the current time, or an error dict on non-200.
     """
+    if _availability_window_is_in_past(
+        time_min, time_max, reference_now=reference_now
+    ):
+        return {
+            "status": "past",
+            "message": (
+                "The requested time is before the current moment. Do not offer or "
+                "book past slots. Suggest a future time and call "
+                "check_availability again before stating it is free."
+            ),
+        }
     body = {
         "timeMin": time_min,
         "timeMax": time_max,
@@ -577,8 +635,12 @@ def build_google_calendar_rest_server() -> FastMCP:
                 ``primary`` — the business's calendar; do not ask the caller).
 
         Returns:
-            JSON object ``{"status": "free"}`` or ``{"status": "busy"}``. If
-            busy, propose the nearest free alternative to the caller.
+            JSON object ``{"status": "free"}``, ``{"status": "busy"}``, or
+            ``{"status": "past", "message": "..."}`` when the window is before
+            the current time. If busy, propose the nearest **future** free
+            alternative and call ``check_availability`` for it before offering it.
+            Never state a time is free without a successful check_availability
+            result for that exact window.
         """
         return json.dumps(
             await check_availability_logic(_bearer(ctx), time_min, time_max, calendar_id)

@@ -4,11 +4,10 @@
  *
  * Contract:
  *  - `Organization` (read) carries `provider_credentials_status` — a per-
- *    provider boolean map (google/deepgram/openai/cartesia/cerebras/openrouter/fish/livekit),
+ *    provider boolean map (google/deepgram/openai/cartesia/cerebras/openrouter/fish),
  *    never the decrypted values.
  *  - `OrganizationUpdate` (write) carries `provider_credentials_input` —
- *    touched providers only; a string to set, `null` to clear, `{api_key,
- *    api_secret}` for livekit.
+ *    touched providers only; a string to set, `null` to clear.
  */
 import { describe, it, expect, expectTypeOf } from "vitest";
 
@@ -40,14 +39,12 @@ describe("Organization provider_credentials_status (read)", () => {
         cerebras: false,
         openrouter: false,
         fish: false,
-        livekit: true,
       },
     };
     expect(org.provider_credentials_status?.google).toBe(true);
     expect(org.provider_credentials_status?.deepgram).toBe(false);
     expect(org.provider_credentials_status?.openrouter).toBe(false);
     expect(org.provider_credentials_status?.fish).toBe(false);
-    expect(org.provider_credentials_status?.livekit).toBe(true);
   });
 });
 
@@ -55,13 +52,7 @@ describe("OrganizationUpdate provider_credentials_input (write)", () => {
   it("OrganizationUpdate exposes provider_credentials_input as optional", () => {
     expectTypeOf<OrganizationUpdate>()
       .toHaveProperty("provider_credentials_input")
-      .toMatchTypeOf<
-        | Record<
-            string,
-            string | { api_key: string; api_secret: string } | null
-          >
-        | undefined
-      >();
+      .toMatchTypeOf<Record<string, string | null> | undefined>();
   });
 
   it("can set a simple provider with a string", () => {
@@ -76,17 +67,5 @@ describe("OrganizationUpdate provider_credentials_input (write)", () => {
       provider_credentials_input: { openai: null },
     };
     expect(update.provider_credentials_input?.openai).toBeNull();
-  });
-
-  it("can set livekit with {api_key, api_secret}", () => {
-    const update: OrganizationUpdate = {
-      provider_credentials_input: {
-        livekit: { api_key: "lk-key", api_secret: "lk-secret" },
-      },
-    };
-    expect(update.provider_credentials_input?.livekit).toEqual({
-      api_key: "lk-key",
-      api_secret: "lk-secret",
-    });
   });
 });

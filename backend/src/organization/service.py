@@ -92,10 +92,8 @@ class OrganizationService(BaseOrganizationService):
                     exc_info=True,
                 )
         # Per-provider "configured?" booleans. `google` is True when resolvable
-        # from the blob OR the legacy plaintext column fallback; the string
-        # providers are True when present in the decrypted blob; `livekit` is
-        # True only when its nested dict carries an api_key.
-        livekit_creds = creds.get("livekit")
+        # from the blob OR the legacy plaintext column fallback; string providers
+        # are True when present in the decrypted blob.
         provider_credentials_status = {
             "google": bool(google_api_key),
             "deepgram": bool(creds.get("deepgram")),
@@ -104,8 +102,6 @@ class OrganizationService(BaseOrganizationService):
             "cerebras": bool(creds.get("cerebras")),
             "openrouter": bool(creds.get("openrouter")),
             "fish": bool(creds.get("fish")),
-            "livekit": isinstance(livekit_creds, dict)
-            and bool(livekit_creds.get("api_key")),
         }
         return Organization(
             id=org_dict["id"],

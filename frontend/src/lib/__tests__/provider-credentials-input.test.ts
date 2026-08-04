@@ -12,8 +12,6 @@ const emptyDraft = {
   cerebras: "",
   openrouter: "",
   fish: "",
-  livekit_api_key: "",
-  livekit_api_secret: "",
 };
 
 describe("buildProviderCredentialsInput", () => {
@@ -43,28 +41,6 @@ describe("buildProviderCredentialsInput", () => {
       ),
     ).toEqual({ cartesia: null });
   });
-
-  it("sets LiveKit when either field has a value", () => {
-    expect(
-      buildProviderCredentialsInput(
-        {
-          ...emptyDraft,
-          livekit_api_key: "lk-key",
-          livekit_api_secret: "",
-        },
-        { livekit: true },
-      ),
-    ).toEqual({ livekit: { api_key: "lk-key", api_secret: "" } });
-  });
-
-  it("clears LiveKit when both touched fields are empty", () => {
-    expect(
-      buildProviderCredentialsInput(
-        { ...emptyDraft, livekit_api_key: "", livekit_api_secret: "" },
-        { livekit: true },
-      ),
-    ).toEqual({ livekit: null });
-  });
 });
 
 describe("countPendingProviderCredentialChanges", () => {
@@ -73,7 +49,7 @@ describe("countPendingProviderCredentialChanges", () => {
       countPendingProviderCredentialChanges({
         google: true,
         deepgram: false,
-        livekit: true,
+        openrouter: true,
       }),
     ).toBe(2);
   });

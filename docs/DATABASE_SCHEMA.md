@@ -317,7 +317,10 @@ Global, platform-admin-managed catalog of named voice-engine **presets** (Phase 
 
 **No versioning**: the worker fetches the preset row live on every call (`preset_service.get_preset_by_id` for an explicit preset, `preset_service.get_default_preset` for the `preset_id` NULL case), so an admin's edit to a preset takes effect on the next call. The agent stores only `preset_id` (FK) — no `preset_version`, no snapshot.
 
-**Preset types**: only `realtime` and `pipeline`. A "mixed" preset is just a `pipeline` preset where some stages use LiveKit Inference (`provider == "livekit_inference"`) and some use direct providers (deepgram/openai/cartesia/cerebras) — each stage dispatches on its own `provider`.
+**Preset types**: only `realtime` and `pipeline`. Pipeline stages use direct
+providers (`deepgram`, `openai`, `cartesia`, `cerebras`, `openrouter`, `fish`,
+etc.). The deprecated `livekit_inference` provider was removed in migration
+`20260803000001_remove_livekit_inference_from_presets`.
 
 **RBAC**: preset CRUD = `platform_admin`; assigning a preset to an agent = existing `agent:update` (org admin, validated in the agent routes — must exist + be published).
 

@@ -107,10 +107,23 @@ class TestBuildSpeechComponentsPipeline:
         settings = llm_cls.call_args.kwargs["settings"]
         assert settings.model == "anthropic/claude-sonnet-4"
         assert settings.system_instruction == "system prompt"
-        # Gemma/OpenRouter reasoning tokens must not stream into TTS content.
+        # Gemma/OpenRouter reasoning must go via extra_body (SDK rejects top-level).
         assert settings.extra == {
-            "reasoning": {"effort": "none", "exclude": True},
+            "extra_body": {
+                "reasoning": {"effort": "none", "exclude": True},
+            },
         }
+
+    def test_openrouter_extra_merges_legacy_top_level_reasoning(self) -> None:
+        """Preset params.extra reasoning is relocated into extra_body."""
+        from src.speech.factory import _merge_openrouter_extra
+
+        merged = _merge_openrouter_extra(
+            {"reasoning": {"effort": "low"}, "temperature": 0.2}
+        )
+        assert merged["extra_body"]["reasoning"] == {"effort": "low"}
+        assert merged["temperature"] == 0.2
+        assert "reasoning" not in merged
 
     def test_pipeline_tts_attaches_thinking_text_filter(self) -> None:
         """Cartesia and Fish TTS always get the thinking-channel strip filter."""
@@ -169,12 +182,27 @@ class TestBuildSpeechComponentsPipeline:
 
     def test_unsupported_stt_provider_raises(self) -> None:
         """Unknown STT providers fail fast instead of silently degrading."""
-        with pytest.raises(ValueError, match="Unsupported Pipecat STT provider"):
+        with pytest.raises(ValueError, match="is not supported"):
             build_speech_components(
                 _pipeline(stt="assemblyai"),
                 {"assemblyai": "x", "openai": "sk", "cartesia": "cart"},
                 "system",
             )
+
+    def test_realtime_disables_gemini_thinking(self) -> None:
+        """Realtime Gemini Live must disable thinking for latency and speech quality."""
+        with (
+            patch("src.speech.factory.GeminiLiveLLMService") as gemini_cls,
+            patch("src.speech.factory.GeminiLiveLLMService.Settings") as settings_cls,
+        ):
+            settings_cls.return_value = MagicMock()
+            gemini_cls.return_value = MagicMock()
+            build_speech_components(
+                RealtimeSpeechConfig(),
+                {"google": "gem"},
+                "system",
+            )
+        assert settings_cls.call_args.kwargs["thinking"] == {"thinking_budget": 0}
 
     def test_realtime_still_uses_gemini_live(self) -> None:
         """Realtime presets continue to use Gemini Live."""

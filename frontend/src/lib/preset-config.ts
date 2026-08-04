@@ -11,9 +11,8 @@
  *
  * Two engine modes:
  *  - `realtime`  — a single end-to-end Google Gemini native-audio model.
- *  - `pipeline`  — modular STT -> LLM -> TTS cascade (+ optional VAD). A
- *    "mixed" preset is just a pipeline where some stages use LiveKit Inference
- *    (`provider: "livekit_inference"`) and some use direct providers.
+ *  - `pipeline`  — modular STT -> LLM -> TTS cascade (+ optional VAD). Each
+ *    stage uses a direct provider API (Deepgram, OpenAI, Cartesia, etc.).
  *
  * `turn_detection` is intentionally omitted (Phase 5). `vad` is omitted when the
  * admin leaves it unconfigured (the backend default `None` applies; the worker
@@ -21,14 +20,9 @@
  */
 
 /** Provider dispatch keys selectable per pipeline stage. */
-export const STT_PROVIDERS = ["deepgram", "livekit_inference"] as const;
-export const LLM_PROVIDERS = [
-  "openai",
-  "cerebras",
-  "openrouter",
-  "livekit_inference",
-] as const;
-export const TTS_PROVIDERS = ["cartesia", "fish", "livekit_inference"] as const;
+export const STT_PROVIDERS = ["deepgram"] as const;
+export const LLM_PROVIDERS = ["openai", "cerebras", "openrouter"] as const;
+export const TTS_PROVIDERS = ["cartesia", "fish"] as const;
 export const VAD_PROVIDERS = ["silero"] as const;
 
 /** Default realtime field values — mirror `speech_config.py` constants. */

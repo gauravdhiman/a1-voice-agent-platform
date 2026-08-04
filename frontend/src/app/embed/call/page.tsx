@@ -5,14 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { Mic, MicOff, PhoneOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAudioVisualizerWave } from "@/components/agents-ui/agent-audio-visualizer-wave";
+import type { PipecatClient } from "@pipecat-ai/client-js";
 import {
-  Room,
-  RoomEvent,
-  LocalAudioTrack,
-  RemoteAudioTrack,
-  createLocalTracks,
-  Track,
-} from "livekit-client";
+  connectPipecatVoiceCall,
+  disconnectPipecatVoiceCall,
+} from "@/lib/pipecat-voice-client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -26,11 +23,13 @@ function EmbedCallContent() {
   const [isMuted, setIsMuted] = useState(false);
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
-  const [agentAudioTrack, setAgentAudioTrack] = useState<RemoteAudioTrack | null>(null);
-  const [userAudioTrack, setUserAudioTrack] = useState<LocalAudioTrack | null>(null);
 
-  const roomRef = useRef<Room | null>(null);
-  const localTrackRef = useRef<LocalAudioTrack | null>(null);
+  const pipecatRef = useRef<PipecatClient | null>(null);
+
+  const disconnect = useCallback(() => {
+    void disconnectPipecatVoiceCall(pipecatRef.current);
+    pipecatRef.current = null;
+  }, []);
 
   const connect = useCallback(async () => {
     if (!agentId) {
@@ -38,91 +37,39 @@ function EmbedCallContent() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/embed/agent/${agentId}/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/embed/agent/${agentId}/token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
 
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || "Failed to get embed token");
       }
 
-      const { livekit_token, server_url, room_name } = await response.json();
+      const { token, wsUrl, sessionId } = await response.json();
 
-      if (!livekit_token || !server_url || !room_name) {
+      if (!token || !wsUrl || !sessionId) {
         throw new Error("Invalid token response");
       }
 
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        audioCaptureDefaults: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+      const client = await connectPipecatVoiceCall(token, wsUrl, {
+        onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+          setIsAgentSpeaking(isAgentSpeaking);
+          setIsUserSpeaking(isUserSpeaking);
         },
       });
 
-      roomRef.current = room;
-
-      room
-        .on(RoomEvent.ParticipantConnected, (p) => console.log("Participant connected:", p.identity))
-        .on(RoomEvent.ParticipantDisconnected, (p) => console.log("Participant disconnected:", p.identity))
-        .on(RoomEvent.Disconnected, () => console.log("Room disconnected"))
-        .on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-          console.log("Track subscribed:", track.kind, "from", participant.identity);
-          if (track.kind === Track.Kind.Audio) {
-            setAgentAudioTrack(track as RemoteAudioTrack);
-            const el = track.attach();
-            el.autoplay = true;
-            document.body.appendChild(el);
-          }
-        })
-        .on(RoomEvent.TrackUnsubscribed, (track) => {
-          if (track.kind === Track.Kind.Audio) {
-            setAgentAudioTrack(null);
-          }
-        })
-        .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-          const localSid = room.localParticipant.sid;
-          const agentSpeaking = speakers.some((s) => s.sid !== localSid);
-          const userSpeaking = speakers.some((s) => s.sid === localSid);
-          setIsAgentSpeaking(agentSpeaking);
-          setIsUserSpeaking(userSpeaking);
-        });
-
-      await room.connect(server_url, livekit_token);
-
-      const tracks = await createLocalTracks({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false,
-      });
-
-      const audioTrack = tracks.find((t) => t.kind === "audio") as LocalAudioTrack | undefined;
-      if (!audioTrack) throw new Error("No audio track created");
-
-      localTrackRef.current = audioTrack;
-      setUserAudioTrack(audioTrack);
-      await room.localParticipant.publishTrack(audioTrack);
-
+      pipecatRef.current = client;
       setIsConnecting(false);
     } catch (err) {
       console.error("Embed call error:", err);
       throw err;
     }
   }, [agentId]);
-
-  const disconnect = useCallback(() => {
-    document.querySelectorAll("audio[data-livekit]").forEach((el) => el.remove());
-    if (roomRef.current) {
-      roomRef.current.disconnect();
-      roomRef.current = null;
-    }
-    localTrackRef.current = null;
-    setUserAudioTrack(null);
-    setAgentAudioTrack(null);
-  }, []);
 
   const handleHangUp = useCallback(() => {
     setIsEnded(true);
@@ -133,33 +80,16 @@ function EmbedCallContent() {
   }, [disconnect]);
 
   const toggleMute = useCallback(() => {
-    const room = roomRef.current;
-    if (!room) {
-      console.error("No room reference");
+    if (!pipecatRef.current) {
+      console.error("No Pipecat client connected");
       return;
     }
 
-    // Get the published audio track from the local participant
-    const publications = room.localParticipant.audioTrackPublications;
-    const audioPub = Array.from(publications.values())[0];
-    
-    if (!audioPub || !audioPub.track) {
-      console.error("No audio track publication found");
-      return;
-    }
-
-    const track = audioPub.track as LocalAudioTrack;
-    console.log("Current track muted state:", track.isMuted);
-
-    if (track.isMuted) {
-      track.unmute();
-      setIsMuted(false);
-      console.log("Called unmute()");
-    } else {
-      track.mute();
-      setIsMuted(true);
-      console.log("Called mute()");
-    }
+    setIsMuted((prev) => {
+      const next = !prev;
+      pipecatRef.current?.enableMic(!next);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -239,7 +169,6 @@ function EmbedCallContent() {
           </div>
           <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
             <AgentAudioVisualizerWave
-              audioTrack={agentAudioTrack ?? undefined}
               state={isAgentSpeaking ? "speaking" : "listening"}
               color="#22c55e"
               className="w-full h-full"
@@ -254,7 +183,6 @@ function EmbedCallContent() {
           </div>
           <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
             <AgentAudioVisualizerWave
-              audioTrack={userAudioTrack ?? undefined}
               state={isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"}
               color={isMuted ? "#9ca3af" : "#3b82f6"}
               className="w-full h-full"

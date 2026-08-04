@@ -15,6 +15,7 @@ connector's ``_default_client_factory`` seam — no real network, no Google
 credentials required.
 """
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import httpx
@@ -322,16 +323,18 @@ class TestCheckAvailability:
 
         _patch_transport(monkeypatch, handler)
         result = await gcr.check_availability_logic(
-            "TOK", "2026-07-22T10:00:00Z", "2026-07-22T11:00:00Z"
+            "TOK", "2026-08-10T10:00:00Z", "2026-08-10T11:00:00Z"
         )
         assert result == {"status": "busy"}
-        assert posted["timeMin"] == "2026-07-22T10:00:00Z"
-        assert posted["timeMax"] == "2026-07-22T11:00:00Z"
+        assert posted["timeMin"] == "2026-08-10T10:00:00Z"
+        assert posted["timeMax"] == "2026-08-10T11:00:00Z"
         assert posted["items"] == [{"id": "primary"}]
 
     async def test_free_when_no_busy_blocks(self, monkeypatch):
         _patch_transport(monkeypatch, lambda req: _ok({"calendars": {"primary": {"busy": []}}}))
-        assert await gcr.check_availability_logic("TOK", "2026-07-22T10:00:00Z", "2026-07-22T11:00:00Z") == {"status": "free"}
+        assert await gcr.check_availability_logic(
+            "TOK", "2026-08-10T10:00:00Z", "2026-08-10T11:00:00Z"
+        ) == {"status": "free"}
 
     async def test_busy_when_google_keys_primary_as_email(self, monkeypatch):
         """Google freeBusy resolves ``primary`` to the account email in response keys.
@@ -374,6 +377,26 @@ class TestCheckAvailability:
         assert await gcr.check_availability_logic(
             "TOK", "2026-08-10T10:00:00-07:00", "2026-08-10T10:30:00-07:00"
         ) == {"status": "free"}
+
+    async def test_past_window_returns_past_without_calling_google(self, monkeypatch):
+        """Slots before the reference instant must not be offered as free."""
+        called = {"n": 0}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            called["n"] += 1
+            return _ok({"calendars": {"primary": {"busy": []}}})
+
+        _patch_transport(monkeypatch, handler)
+        reference = datetime(2026, 8, 3, 16, 30, tzinfo=timezone(timedelta(hours=-7)))
+        result = await gcr.check_availability_logic(
+            "TOK",
+            "2026-08-03T15:00:00-07:00",
+            "2026-08-03T15:30:00-07:00",
+            reference_now=reference,
+        )
+        assert result["status"] == "past"
+        assert "message" in result
+        assert called["n"] == 0
 
 
 # ---------------------------------------------------------------------------

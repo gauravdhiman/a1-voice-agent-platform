@@ -120,8 +120,6 @@ export default function OrganizationPage() {
     cerebras: "",
     openrouter: "",
     fish: "",
-    livekit_api_key: "",
-    livekit_api_secret: "",
   });
   const [providerCredsTouched, setProviderCredsTouched] = useState<
     Record<string, boolean>
@@ -312,9 +310,7 @@ export default function OrganizationPage() {
    *
    * Builds `provider_credentials_input` with touched keys only: a non-empty
    * value SETS, an empty touched value CLEARS (`null`), and an untouched key is
-   * OMITTED (the backend preserves it). LiveKit is sent as
-   * `{api_key, api_secret}` when either field was touched — both empty clears
-   * it (`null`). Nothing is sent if no field was touched.
+   * OMITTED (the backend preserves it). Nothing is sent if no field was touched.
    */
   const resetProviderCredDraft = () => {
     setProviderCreds({
@@ -325,8 +321,6 @@ export default function OrganizationPage() {
       cerebras: "",
       openrouter: "",
       fish: "",
-      livekit_api_key: "",
-      livekit_api_secret: "",
     });
     setProviderCredsTouched({});
   };
@@ -392,17 +386,8 @@ export default function OrganizationPage() {
         provider_credentials_input: { [key]: null },
       });
       setOrganizationData({ organization: response as OrganizationEnhanced });
-      if (key === "livekit") {
-        setProviderCreds((prev) => ({
-          ...prev,
-          livekit_api_key: "",
-          livekit_api_secret: "",
-        }));
-        clearProviderCredTouched("livekit");
-      } else {
-        setProviderCreds((prev) => ({ ...prev, [key]: "" }));
-        clearProviderCredTouched(key);
-      }
+      setProviderCreds((prev) => ({ ...prev, [key]: "" }));
+      clearProviderCredTouched(key);
       toast.success(`${PROVIDER_LABELS[key]} credentials removed`);
     } catch (error: unknown) {
       console.error("Failed to remove provider credentials:", error);
@@ -885,11 +870,11 @@ During monsoon season (July-September), we have extended hours for flood-related
         </TabsContent>
 
         {/* Third-party API Credentials tab — per-provider API keys for the
-            modular voice engine (Deepgram, OpenAI, Cartesia, Cerebras,
-            LiveKit). A DEDICATED card with its own Save — separate from the
-            main org form so the empty-string-clears-everything footgun can't
-            wipe all keys at once. Feeds the encrypted provider_credentials
-            blob the worker's per-org key resolver reads. */}
+            modular voice engine (Deepgram, OpenAI, Cartesia, Cerebras). A
+            DEDICATED card with its own Save — separate from the main org form
+            so the empty-string-clears-everything footgun can't wipe all keys at
+            once. Feeds the encrypted provider_credentials blob the worker's
+            per-org key resolver reads. */}
         <TabsContent value="credentials">
           <ProviderCredentialsCard
             status={

@@ -18,7 +18,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.serializers.base_serializer import FrameSerializer
-from pipecat.serializers.protobuf import ProtobufFrameSerializer
+
+from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
 from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
@@ -54,7 +55,7 @@ async def run_bot(
     modular Deepgram → OpenAI/Cerebras → Cartesia pipeline. Browser protobuf and
     Twilio serializers share the same transport and assembly path.
     """
-    frame_serializer = serializer or ProtobufFrameSerializer()
+    frame_serializer = serializer or BrowserWebSocketFrameSerializer()
     bundle = await prepare_voice_session(claims)
     transport = FastAPIWebsocketTransport(
         websocket=websocket,
@@ -90,7 +91,7 @@ async def run_bot(
     processors.extend([recording_tee, transport.output(), assistant_aggregator])
     task = PipelineTask(
         Pipeline(processors),
-        params=PipelineParams(allow_interruptions=True, enable_metrics=False),
+        params=PipelineParams(allow_interruptions=True, enable_metrics=True),
     )
 
     @transport.event_handler("on_client_connected")

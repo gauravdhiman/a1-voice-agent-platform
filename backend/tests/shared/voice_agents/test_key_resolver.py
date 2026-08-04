@@ -5,13 +5,12 @@ encrypted ``provider_credentials`` blob and the platform env vars to produce the
 ``api_keys`` map the speech-provider factory expects. It must:
 
 - derive the *needed* providers from the config (realtime -> google; pipeline ->
-  each stage's provider, with ``livekit_inference`` mapped to ``livekit``);
+  each stage's provider, with deprecated ``livekit_inference`` normalized to
+  direct providers via :func:`normalize_stage_provider`);
 - prefer the org's decrypted key unless ``use_platform_credits``;
 - fall back to the platform env var;
 - **omit** a provider when neither org nor env has it (the registry's guard
   raises the clear error — no new error path here);
-- inject ``api_keys["livekit"]`` (a nested ``{api_key, api_secret}`` dict) ONLY
-  when the preset actually uses a LiveKit Inference stage;
 - read Google from the decrypted ``provider_credentials`` blob, NOT the legacy
   plaintext ``google_api_key`` column.
 """
@@ -22,7 +21,7 @@ from unittest.mock import patch
 
 import pytest
 
-from shared.voice_agents.key_resolver import resolve_api_keys
+from shared.voice_agents.key_resolver import normalize_stage_provider, resolve_api_keys
 from shared.voice_agents.speech_config import (
     LLMStageConfig,
     PipelineSpeechConfig,
@@ -75,8 +74,6 @@ def clean_env(monkeypatch):
         "CEREBRAS_API_KEY",
         "OPENROUTER_API_KEY",
         "FISH_API_KEY",
-        "LIVEKIT_API_KEY",
-        "LIVEKIT_API_SECRET",
     ):
         monkeypatch.delenv(var, raising=False)
     yield monkeypatch
@@ -107,14 +104,13 @@ class TestKeyResolver:
         api_keys = resolve_api_keys(_realtime(), org=org, use_platform_credits=True)
         assert api_keys == {"google": "plat-gemini"}
 
-    def test_pipeline_direct_only_no_livekit(self, patch_decrypt, clean_env):
-        """An all-direct pipeline never injects a livekit entry."""
+    def test_pipeline_direct_resolves_all_stages(self, patch_decrypt, clean_env):
+        """An all-direct pipeline resolves each stage provider from env."""
         clean_env.setenv("DEEPGRAM_API_KEY", "dg")
         clean_env.setenv("OPENAI_API_KEY", "oa")
         clean_env.setenv("CARTESIA_API_KEY", "ca")
         api_keys = resolve_api_keys(_pipeline(), org=None)
         assert api_keys == {"deepgram": "dg", "openai": "oa", "cartesia": "ca"}
-        assert "livekit" not in api_keys
 
     def test_pipeline_openrouter_and_fish_keys(self, patch_decrypt, clean_env):
         """OpenRouter LLM and Fish Audio TTS resolve from platform env keys."""
@@ -131,34 +127,38 @@ class TestKeyResolver:
         assert "openai" not in api_keys
         assert "cartesia" not in api_keys
 
-    def test_pipeline_with_inference_stage_injects_livekit(
+    def test_pipeline_livekit_inference_stt_maps_to_deepgram(
         self, patch_decrypt, clean_env
     ):
-        """A pipeline with one livekit_inference stage injects the nested livekit dict."""
+        """Deprecated livekit_inference STT normalizes to deepgram key resolution."""
         clean_env.setenv("DEEPGRAM_API_KEY", "dg")
         clean_env.setenv("OPENAI_API_KEY", "oa")
         clean_env.setenv("CARTESIA_API_KEY", "ca")
-        clean_env.setenv("LIVEKIT_API_KEY", "lk-key")
-        clean_env.setenv("LIVEKIT_API_SECRET", "lk-secret")
         cfg = _pipeline(stt="livekit_inference")
         api_keys = resolve_api_keys(cfg, org=None)
-        assert api_keys["livekit"] == {"api_key": "lk-key", "api_secret": "lk-secret"}
-        assert api_keys["openai"] == "oa"
-        assert api_keys["cartesia"] == "ca"
-        # deepgram was replaced by inference -> not needed
-        assert "deepgram" not in api_keys
+        assert api_keys == {"deepgram": "dg", "openai": "oa", "cartesia": "ca"}
 
-    def test_pipeline_inference_org_livekit_wins(self, patch_decrypt, clean_env):
-        """Org's livekit credentials override the platform env."""
-        clean_env.setenv("LIVEKIT_API_KEY", "plat-lk")
-        clean_env.setenv("LIVEKIT_API_SECRET", "plat-lks")
+    def test_pipeline_livekit_inference_llm_maps_to_openai(
+        self, patch_decrypt, clean_env
+    ):
+        """Deprecated livekit_inference LLM normalizes to openai key resolution."""
+        clean_env.setenv("DEEPGRAM_API_KEY", "dg")
         clean_env.setenv("OPENAI_API_KEY", "oa")
         clean_env.setenv("CARTESIA_API_KEY", "ca")
-        org, creds = _org({"livekit": {"api_key": "org-lk", "api_secret": "org-lks"}})
-        patch_decrypt.return_value = creds
-        cfg = _pipeline(stt="livekit_inference")
-        api_keys = resolve_api_keys(cfg, org=org)
-        assert api_keys["livekit"] == {"api_key": "org-lk", "api_secret": "org-lks"}
+        cfg = _pipeline(llm="livekit_inference")
+        api_keys = resolve_api_keys(cfg, org=None)
+        assert api_keys == {"deepgram": "dg", "openai": "oa", "cartesia": "ca"}
+
+    def test_pipeline_livekit_inference_tts_maps_to_cartesia(
+        self, patch_decrypt, clean_env
+    ):
+        """Deprecated livekit_inference TTS normalizes to cartesia key resolution."""
+        clean_env.setenv("DEEPGRAM_API_KEY", "dg")
+        clean_env.setenv("OPENAI_API_KEY", "oa")
+        clean_env.setenv("CARTESIA_API_KEY", "ca")
+        cfg = _pipeline(tts="livekit_inference")
+        api_keys = resolve_api_keys(cfg, org=None)
+        assert api_keys == {"deepgram": "dg", "openai": "oa", "cartesia": "ca"}
 
     def test_missing_provider_omitted_not_raised(self, patch_decrypt, clean_env):
         """A provider with no org key and no env var is omitted — no exception."""
@@ -168,17 +168,6 @@ class TestKeyResolver:
         assert api_keys == {"openai": "oa"}
         assert "deepgram" not in api_keys
         assert "cartesia" not in api_keys
-
-    def test_livekit_value_is_nested_dict(self, patch_decrypt, clean_env):
-        """The livekit entry is a dict with api_key/api_secret, not a string."""
-        clean_env.setenv("LIVEKIT_API_KEY", "lk-key")
-        clean_env.setenv("LIVEKIT_API_SECRET", "lk-secret")
-        clean_env.setenv("OPENAI_API_KEY", "oa")
-        clean_env.setenv("CARTESIA_API_KEY", "ca")
-        cfg = _pipeline(llm="livekit_inference")
-        api_keys = resolve_api_keys(cfg, org=None)
-        assert isinstance(api_keys["livekit"], dict)
-        assert set(api_keys["livekit"].keys()) == {"api_key", "api_secret"}
 
     def test_google_read_from_decrypted_blob_not_plaintext_column(
         self, patch_decrypt, clean_env
@@ -214,16 +203,6 @@ class TestKeyResolver:
             "cartesia": "plat-ca",
         }
 
-    def test_inference_with_no_livekit_anywhere_omitted(self, patch_decrypt, clean_env):
-        """No livekit env and no org livekit -> livekit omitted (no raise)."""
-        clean_env.setenv("OPENAI_API_KEY", "oa")
-        clean_env.setenv("CARTESIA_API_KEY", "ca")
-        cfg = _pipeline(stt="livekit_inference")
-        api_keys = resolve_api_keys(cfg, org=None)
-        assert "livekit" not in api_keys
-        # direct stages still resolve
-        assert api_keys == {"openai": "oa", "cartesia": "ca"}
-
     def test_unknown_provider_ignored(self, patch_decrypt, clean_env):
         """A provider with no env mapping (e.g. a local adapter) is silently ignored."""
         cfg = _pipeline(stt="silero", llm="openai", tts="cartesia")
@@ -240,6 +219,23 @@ class TestKeyResolver:
         patch_decrypt.side_effect = ValueError("bad key")
         api_keys = resolve_api_keys(_realtime(), org=org)
         assert api_keys == {"google": "plat-gemini"}
+
+
+class TestNormalizeStageProvider:
+    """Unit tests for deprecated livekit_inference normalization."""
+
+    def test_passthrough_for_direct_providers(self):
+        assert normalize_stage_provider("deepgram", stage="stt") == "deepgram"
+        assert normalize_stage_provider("openai", stage="llm") == "openai"
+        assert normalize_stage_provider("cartesia", stage="tts") == "cartesia"
+
+    def test_livekit_inference_maps_by_stage(self):
+        assert normalize_stage_provider("livekit_inference", stage="stt") == "deepgram"
+        assert normalize_stage_provider("livekit_inference", stage="llm") == "openai"
+        assert normalize_stage_provider("livekit_inference", stage="tts") == "cartesia"
+
+    def test_livekit_inference_unknown_stage_defaults_to_openai(self):
+        assert normalize_stage_provider("livekit_inference", stage="") == "openai"
 
 
 class TestKeyResolverEdgeBranches:

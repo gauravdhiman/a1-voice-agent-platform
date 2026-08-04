@@ -1,14 +1,12 @@
 """Twilio voice webhooks for inbound calls and status callbacks.
 
-When ``VOICE_TRANSPORT=pipecat`` (default), inbound calls return TwiML that
-opens a Media Stream WebSocket to ``voice-ws`` (``/twilio``). When transport is
-``livekit``, calls are bridged via LiveKit SIP as before.
+Inbound calls return TwiML that opens a Media Stream WebSocket to ``voice-ws``
+(``/twilio``) using a short-lived ``voice_ws_session`` JWT.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote, urlparse
@@ -112,32 +110,6 @@ def build_pipecat_stream_twiml(
     response.append(connect)
     return str(response)
 
-
-def build_livekit_sip_twiml(
-    *,
-    sip_uri: str,
-    username: Optional[str],
-    password: Optional[str],
-) -> str:
-    """Build TwiML that dials a LiveKit SIP URI (legacy transport).
-
-    Args:
-        sip_uri: Full SIP URI including ``sip:`` prefix.
-        username: Optional SIP digest username from env.
-        password: Optional SIP digest password from env.
-
-    Returns:
-        XML string for Twilio ``application/xml`` response.
-    """
-    response = VoiceResponse()
-    dial = response.dial()
-    if username and password:
-        dial.sip(sip_uri, username=username, password=password)
-    else:
-        dial.sip(sip_uri)
-    return str(response)
-
-
 def _xml_response(content: str) -> Response:
     """Wrap TwiML XML in a FastAPI Response."""
     return Response(content=content, media_type="application/xml")
@@ -197,35 +169,6 @@ async def _handle_pipecat_incoming(
     return _xml_response(twiml)
 
 
-async def _handle_livekit_incoming(
-    *,
-    to_number: Optional[str],
-    call_sid: Optional[str],
-) -> Response:
-    """Bridge the call to LiveKit SIP (legacy path)."""
-    sip_domain = os.getenv("LIVEKIT_SIP_DOMAIN")
-    if not sip_domain:
-        logger.error("LIVEKIT_SIP_DOMAIN is not set")
-        return _say_response("Internal configuration error. SIP domain missing.")
-
-    clean_sip_domain = sip_domain.replace("sip:", "")
-    sip_uri = f"sip:{to_number}@{clean_sip_domain}"
-    username = os.getenv("LIVEKIT_SIP_USERNAME") or None
-    password = os.getenv("LIVEKIT_SIP_PASSWORD") or None
-
-    twiml = build_livekit_sip_twiml(
-        sip_uri=sip_uri,
-        username=username,
-        password=password,
-    )
-    logger.info(
-        "Bridging Twilio call %s to LiveKit SIP via URI: %s",
-        call_sid,
-        sip_uri,
-    )
-    return _xml_response(twiml)
-
-
 @voice_router.post("/twilio/incoming")
 async def handle_twilio_incoming(request: Request):
     """
@@ -270,13 +213,6 @@ async def handle_twilio_incoming(request: Request):
             )
         except Exception as log_err:  # noqa: BLE001 — never fail the call on logging
             logger.warning("Failed to create call log for %s: %s", call_sid, log_err)
-
-    transport = (settings.voice_transport or "pipecat").strip().lower()
-    if transport == "livekit":
-        return await _handle_livekit_incoming(
-            to_number=to_number,
-            call_sid=call_sid,
-        )
 
     return await _handle_pipecat_incoming(
         agent=agent,

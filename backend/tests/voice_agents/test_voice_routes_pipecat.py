@@ -9,7 +9,6 @@ import pytest
 from fastapi import Response
 
 from src.voice_agents.voice_routes import (
-    build_livekit_sip_twiml,
     build_pipecat_stream_twiml,
     handle_twilio_incoming,
     is_twilio_reachable_stream_base,
@@ -38,15 +37,6 @@ class TestTwimlBuilders:
         assert 'name="token"' in xml
         assert "abc.def" in xml
         assert "<Sip" not in xml
-
-    def test_build_livekit_sip_twiml_contains_dial_sip(self) -> None:
-        xml = build_livekit_sip_twiml(
-            sip_uri="sip:+15552222222@sip.example.com",
-            username=None,
-            password=None,
-        )
-        assert "<Dial>" in xml
-        assert "sip:+15552222222@sip.example.com" in xml
 
     def test_resolve_twilio_stream_base_url_prefers_twilio_url(self) -> None:
         with patch("src.voice_agents.voice_routes.settings") as mock_settings:

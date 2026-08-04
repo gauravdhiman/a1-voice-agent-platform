@@ -26,16 +26,13 @@ passes it in.
 from dataclasses import dataclass
 from typing import Any, Callable, Union
 
-from speech_providers.llm import (
-    build_cerebras_llm,
-    build_livekit_inference_llm,
-    build_openai_llm,
-)
+from speech_providers.llm import build_cerebras_llm, build_openai_llm
 from speech_providers.realtime.provider import build_realtime_model
-from speech_providers.stt import build_deepgram_stt, build_livekit_inference_stt
-from speech_providers.tts import build_cartesia_tts, build_livekit_inference_tts
+from speech_providers.stt import build_deepgram_stt
+from speech_providers.tts import build_cartesia_tts
 from speech_providers.vad import build_silero_vad
 
+from shared.voice_agents.key_resolver import normalize_stage_provider
 from shared.voice_agents.speech_config import (
     PipelineSpeechConfig,
     RealtimeSpeechConfig,
@@ -66,27 +63,6 @@ TTS_BUILDERS: dict[str, Callable[[str, StageConfig], Any]] = {
 VAD_BUILDERS: dict[str, Callable[[StageConfig], Any]] = {
     "silero": build_silero_vad,
 }
-
-# ---------------------------------------------------------------------------
-# LiveKit Inference stage dispatch table (Phase 2b).
-#
-# LiveKit Inference (``livekit.agents.inference``) gives access to many STT/LLM/
-# TTS models through a SINGLE LiveKit Cloud auth (``api_key`` + ``api_secret``)
-# rather than a per-provider key. So Inference stages bypass the keyed
-# ``*_BUILDERS`` path (and its per-provider key guard): when a stage's
-# ``provider == "livekit_inference"``, the registry dispatches through this table
-# instead, and the builder resolves the LiveKit key on its own (env in Phase
-# 2b; per-org injection in Phase 3 — see :mod:`speech_providers.stt.inference`).
-# A pipeline may mix Inference stages with direct stages freely (the "mixed
-# preset" direction): each stage dispatches on its own ``provider``.
-# ---------------------------------------------------------------------------
-LIVEKIT_INFERENCE_STAGE_BUILDERS: dict[str, Callable[..., Any]] = {
-    "stt": build_livekit_inference_stt,
-    "llm": build_livekit_inference_llm,
-    "tts": build_livekit_inference_tts,
-}
-# The dispatch key a stage config sets to opt into the Inference path.
-LIVEKIT_INFERENCE_PROVIDER = "livekit_inference"
 
 
 @dataclass
@@ -141,8 +117,7 @@ def build_session_components(
         speech_config: The agent's speech config (realtime or pipeline).
         api_keys: Per-provider API key map, e.g. ``{"google": "<key>"}``. The
             realtime branch requires a ``"google"`` entry. Pipeline entries are
-            strings; the ``"livekit"`` entry (only present when an Inference
-            stage is used) is a nested ``{"api_key", "api_secret"}`` dict.
+            per-stage provider strings (e.g. ``{"deepgram": ..., "openai": ...}``).
 
     Returns:
         RealtimeComponents for a realtime config; PipelineComponents for a
@@ -208,7 +183,7 @@ def _build_keyed_stage(
         NotImplementedError: If ``stage_config.provider`` is not in ``builders``.
         ValueError: If the provider's key is absent from ``api_keys``.
     """
-    provider = stage_config.provider
+    provider = normalize_stage_provider(stage_config.provider, stage=stage_name)
     builder = builders.get(provider)
     if builder is None:
         raise NotImplementedError(
@@ -295,94 +270,16 @@ def _build_pipeline_turn_detection(
     )
 
 
-def _build_livekit_inference_stage(
-    stage_name: str,
-    stage_config: StageConfig,
-    api_keys: dict[str, Any],
-) -> Any:
-    """Dispatch an Inference stage (``provider == "livekit_inference"``) to its builder.
-
-    LiveKit Inference uses a single LiveKit Cloud auth across all Inference
-    stages, so it bypasses the keyed ``*_BUILDERS`` path and its per-provider
-    key guard. The tenant's per-org LiveKit key is injected via the builder's
-    ``api_key`` / ``api_secret`` kwargs (populated by the Phase 3
-    ``key_resolver`` into ``api_keys["livekit"]``). When no ``livekit`` entry is
-    present (an org without a LiveKit key, or ``use_platform_credits``), both
-    kwargs are ``None`` and the builder falls back to the platform
-    ``LIVEKIT_API_KEY`` / ``LIVEKIT_API_SECRET`` env vars — preserving the
-    Phase 2b behavior.
-
-    Args:
-        stage_name: One of ``"stt"`` / ``"llm"`` / ``"tts"``.
-        stage_config: The stage's config (carries ``provider``/``model``/``params``).
-        api_keys: Per-provider API key map. Only the ``"livekit"`` entry
-            (a ``{"api_key", "api_secret"}`` dict) is read here.
-
-    Returns:
-        The constructed LiveKit Inference plugin for the stage.
-
-    Raises:
-        NotImplementedError: If ``stage_name`` is not a known Inference stage
-            (defensive — the pipeline only ever passes stt/llm/tts).
-    """
-    builder = LIVEKIT_INFERENCE_STAGE_BUILDERS.get(stage_name)
-    if builder is None:
-        raise NotImplementedError(
-            f"LiveKit Inference does not support stage {stage_name!r}; "
-            f"supported stages: {sorted(LIVEKIT_INFERENCE_STAGE_BUILDERS.keys())}"
-        )
-    # Phase 3: inject the tenant's per-org LiveKit key for Inference. The
-    # key_resolver populates api_keys["livekit"] = {"api_key", "api_secret"}
-    # only when the preset uses an Inference stage. When absent, both are None
-    # and the builder falls back to the platform env (Phase 2b behavior).
-    # Rationale: the platform's LiveKit plan limits won't scale to all tenants'
-    # calls, so a tenant can bring its own LiveKit key for Inference (mirrors
-    # the Google-key BYO / use_platform_credits pattern).
-    lk = api_keys.get("livekit") or {}
-    return builder(
-        stage_config,
-        api_key=lk.get("api_key"),
-        api_secret=lk.get("api_secret"),
-    )
-
-
-def _build_keyed_or_livekit_inference_stage(
-    stage_name: str,
-    stage_config: StageConfig,
-    builders: dict[str, Callable[..., Any]],
-    api_keys: dict[str, Any],
-) -> Any:
-    """Dispatch a pipeline stage, choosing the Inference or keyed path.
-
-    A stage with ``provider == "livekit_inference"`` takes the special Inference path
-    (single LiveKit Cloud auth, no per-stage key guard); any other provider
-    takes the normal keyed path through ``builders``.
-
-    Args:
-        stage_name: Human-readable stage label for error messages.
-        stage_config: The stage's config.
-        builders: The per-stage provider dispatch table (for the keyed path).
-        api_keys: Per-provider API key map.
-
-    Returns:
-        The constructed LiveKit plugin for the stage.
-    """
-    if stage_config.provider == LIVEKIT_INFERENCE_PROVIDER:
-        return _build_livekit_inference_stage(stage_name, stage_config, api_keys)
-    return _build_keyed_stage(stage_name, stage_config, builders, api_keys)
-
-
 def _build_pipeline_components(
     speech_config: PipelineSpeechConfig,
     api_keys: dict[str, Any],
 ) -> PipelineComponents:
     """Assemble PipelineComponents from a pipeline speech config.
 
-    Dispatches each keyed stage (STT/LLM/TTS) via
-    :func:`_build_keyed_or_livekit_inference_stage` (Inference stages take the special
-    LiveKit-auth path; direct providers take the keyed path), always builds an
-    explicit Silero VAD via :func:`_build_pipeline_vad`, and resolves turn
-    detection via :func:`_build_pipeline_turn_detection`.
+    Dispatches each keyed stage (STT/LLM/TTS) via :func:`_build_keyed_stage`
+    (deprecated ``livekit_inference`` providers are normalized to direct keys
+    first), always builds an explicit Silero VAD via :func:`_build_pipeline_vad`,
+    and resolves turn detection via :func:`_build_pipeline_turn_detection`.
 
     Args:
         speech_config: The pipeline speech config.
@@ -392,15 +289,9 @@ def _build_pipeline_components(
         PipelineComponents with all stage plugins populated.
     """
     return PipelineComponents(
-        stt=_build_keyed_or_livekit_inference_stage(
-            "stt", speech_config.stt, STT_BUILDERS, api_keys
-        ),
-        llm=_build_keyed_or_livekit_inference_stage(
-            "llm", speech_config.llm, LLM_BUILDERS, api_keys
-        ),
-        tts=_build_keyed_or_livekit_inference_stage(
-            "tts", speech_config.tts, TTS_BUILDERS, api_keys
-        ),
+        stt=_build_keyed_stage("stt", speech_config.stt, STT_BUILDERS, api_keys),
+        llm=_build_keyed_stage("llm", speech_config.llm, LLM_BUILDERS, api_keys),
+        tts=_build_keyed_stage("tts", speech_config.tts, TTS_BUILDERS, api_keys),
         vad=_build_pipeline_vad(speech_config.vad),
         turn_detection=_build_pipeline_turn_detection(speech_config.turn_detection),
     )

@@ -290,36 +290,25 @@ class TestBuildSessionComponents:
             build_session_components(object(), api_keys={})  # type: ignore[arg-type]
 
 
-class TestPipelineLiveKitInferenceAndCerebrasDispatch:
-    """Phase 2b: LiveKit Inference + Cerebras dispatch.
+class TestPipelineCerebrasDispatch:
+    """Phase 2b: Cerebras LLM dispatch via the keyed path."""
 
-    Inference stages (``provider == "inference"``) take a special path: they use
-    a single LiveKit Cloud auth (api_key + api_secret) instead of a per-stage
-    provider key, so they bypass the keyed ``*_BUILDERS`` tables and the
-    per-provider key guard. Cerebras is a direct OpenAI-compatible LLM, so it
-    rides the normal keyed path with a ``"cerebras"`` entry in LLM_BUILDERS. A
-    pipeline may mix the two freely (e.g. Inference STT + Cerebras LLM +
-    Inference TTS) — that is the "mixed preset" direction (still just a
-    pipeline; ``type`` stays ``{realtime, pipeline}``).
-    """
-
-    def test_inference_stt_dispatches_through_inference_table(self, monkeypatch):
-        """An inference STT stage must dispatch through
-        LIVEKIT_INFERENCE_STAGE_BUILDERS (NOT the keyed STT_BUILDERS table) and forward
-        the stage config — no per-stage key guard fires."""
+    def test_deprecated_livekit_inference_stt_normalizes_to_deepgram(self, monkeypatch):
+        """Deprecated livekit_inference STT stages normalize to deepgram and use
+        the keyed STT_BUILDERS path (requires a deepgram API key)."""
         import speech_providers.registry as registry
         from speech_providers.registry import build_session_components
 
         captured: dict = {}
         stt_sentinel = object()
 
-        def fake_inference_stt(config=None, **kwargs):
-            captured["stt_config"] = config
-            captured["stt_kwargs"] = kwargs
-            return stt_sentinel
-
         monkeypatch.setitem(
-            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS, "stt", fake_inference_stt
+            registry.STT_BUILDERS,
+            "deepgram",
+            lambda api_key, config=None: captured.update(
+                stt_api_key=api_key, stt_config=config
+            )
+            or stt_sentinel,
         )
         monkeypatch.setitem(
             registry.LLM_BUILDERS, "openai", lambda api_key, config=None: object()
@@ -333,37 +322,12 @@ class TestPipelineLiveKitInferenceAndCerebrasDispatch:
             llm=LLMStageConfig(provider="openai"),
             tts=TTSStageConfig(provider="cartesia"),
         )
-        comps = build_session_components(cfg, api_keys={"openai": "O", "cartesia": "C"})
+        comps = build_session_components(
+            cfg, api_keys={"deepgram": "DKEY", "openai": "O", "cartesia": "C"}
+        )
         assert comps.stt is stt_sentinel
+        assert captured["stt_api_key"] == "DKEY"
         assert captured["stt_config"] is cfg.stt
-
-    def test_inference_stage_needs_no_provider_key(self, monkeypatch):
-        """An inference stage must NOT raise the per-provider key guard even
-        when its provider ('inference') is absent from api_keys — Inference uses
-        the LiveKit key, not a per-stage provider key."""
-        import speech_providers.registry as registry
-        from speech_providers.registry import build_session_components
-
-        monkeypatch.setitem(
-            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS,
-            "stt",
-            lambda config=None, **kwargs: object(),
-        )
-        monkeypatch.setitem(
-            registry.LLM_BUILDERS, "openai", lambda api_key, config=None: object()
-        )
-        monkeypatch.setitem(
-            registry.TTS_BUILDERS, "cartesia", lambda api_key, config=None: object()
-        )
-
-        cfg = PipelineSpeechConfig(
-            stt=STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
-            llm=LLMStageConfig(provider="openai"),
-            tts=TTSStageConfig(provider="cartesia"),
-        )
-        # No 'inference' key in api_keys — must not raise ValueError.
-        comps = build_session_components(cfg, api_keys={"openai": "O", "cartesia": "C"})
-        assert comps.stt is not None
 
     def test_cerebras_llm_dispatches_via_keyed_path(self, monkeypatch):
         """Cerebras rides the normal keyed path: read the 'cerebras' key from
@@ -413,127 +377,3 @@ class TestPipelineLiveKitInferenceAndCerebrasDispatch:
         )
         with pytest.raises(ValueError, match="cerebras"):
             build_session_components(cfg, api_keys={"deepgram": "D", "cartesia": "C"})
-
-    def test_mixed_inference_and_direct_providers(self, monkeypatch):
-        """A pipeline mixing Inference stages (stt, tts) with a direct provider
-        (cerebras llm) must dispatch each correctly — the 'mixed preset'
-        direction. This is still just a pipeline (no third preset type)."""
-        import speech_providers.registry as registry
-        from speech_providers.registry import build_session_components
-
-        stt_sentinel, tts_sentinel, llm_sentinel = object(), object(), object()
-
-        monkeypatch.setitem(
-            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS,
-            "stt",
-            lambda config=None, **kwargs: stt_sentinel,
-        )
-        monkeypatch.setitem(
-            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS,
-            "tts",
-            lambda config=None, **kwargs: tts_sentinel,
-        )
-        monkeypatch.setitem(
-            registry.LLM_BUILDERS,
-            "cerebras",
-            lambda api_key, config=None: llm_sentinel,
-        )
-        monkeypatch.setitem(
-            registry.VAD_BUILDERS, "silero", lambda config=None: object()
-        )
-
-        cfg = PipelineSpeechConfig(
-            stt=STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
-            llm=LLMStageConfig(
-                provider="cerebras", model="llama-4-maverick-17b-128e-instruct"
-            ),
-            tts=TTSStageConfig(provider="livekit_inference", model="cartesia/sonic-3"),
-        )
-        comps = build_session_components(cfg, api_keys={"cerebras": "CK"})
-        assert comps.stt is stt_sentinel
-        assert comps.llm is llm_sentinel
-        assert comps.tts is tts_sentinel
-
-    def test_inference_unknown_stage_name_raises(self):
-        """Defensive guard: _build_livekit_inference_stage with a stage name that is not
-        stt/llm/tts must raise NotImplementedError (unreachable via the public
-        API, which only ever passes those three)."""
-        from speech_providers.registry import _build_livekit_inference_stage
-
-        with pytest.raises(NotImplementedError, match="Inference"):
-            _build_livekit_inference_stage(
-                "vad",
-                STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
-                api_keys={},
-            )
-
-    def test_inference_stage_injects_livekit_key_from_api_keys(self, monkeypatch):
-        """Phase 3: when api_keys carries a nested 'livekit' {api_key, api_secret},
-        the Inference builder is called with those kwargs (tenant BYO LiveKit key
-        for Inference — injected by the per-org key_resolver)."""
-        import speech_providers.registry as registry
-        from speech_providers.registry import build_session_components
-
-        captured: dict = {}
-
-        def fake_inference_stt(config=None, **kwargs):
-            captured["stt_kwargs"] = kwargs
-            return object()
-
-        monkeypatch.setitem(
-            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS, "stt", fake_inference_stt
-        )
-        monkeypatch.setitem(
-            registry.LLM_BUILDERS, "openai", lambda api_key, config=None: object()
-        )
-        monkeypatch.setitem(
-            registry.TTS_BUILDERS, "cartesia", lambda api_key, config=None: object()
-        )
-
-        cfg = PipelineSpeechConfig(
-            stt=STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
-            llm=LLMStageConfig(provider="openai"),
-            tts=TTSStageConfig(provider="cartesia"),
-        )
-        build_session_components(
-            cfg,
-            api_keys={
-                "openai": "O",
-                "cartesia": "C",
-                "livekit": {"api_key": "tenant-lk", "api_secret": "tenant-lks"},
-            },
-        )
-        assert captured["stt_kwargs"]["api_key"] == "tenant-lk"
-        assert captured["stt_kwargs"]["api_secret"] == "tenant-lks"
-
-    def test_inference_stage_falls_back_to_none_when_livekit_absent(self, monkeypatch):
-        """Phase 3: when api_keys has no 'livekit' entry, the Inference builder is
-        called with api_key=None / api_secret=None — it then falls back to the
-        platform LIVEKIT_API_KEY/LIVEKIT_API_SECRET env (Phase 2b behavior)."""
-        import speech_providers.registry as registry
-        from speech_providers.registry import build_session_components
-
-        captured: dict = {}
-
-        def fake_inference_stt(config=None, **kwargs):
-            captured["stt_kwargs"] = kwargs
-            return object()
-
-        monkeypatch.setitem(
-            registry.LIVEKIT_INFERENCE_STAGE_BUILDERS, "stt", fake_inference_stt
-        )
-        monkeypatch.setitem(
-            registry.LLM_BUILDERS, "openai", lambda api_key, config=None: object()
-        )
-        monkeypatch.setitem(
-            registry.TTS_BUILDERS, "cartesia", lambda api_key, config=None: object()
-        )
-
-        cfg = PipelineSpeechConfig(
-            stt=STTStageConfig(provider="livekit_inference", model="deepgram/nova-3"),
-            llm=LLMStageConfig(provider="openai"),
-            tts=TTSStageConfig(provider="cartesia"),
-        )
-        build_session_components(cfg, api_keys={"openai": "O", "cartesia": "C"})
-        assert captured["stt_kwargs"]["api_key"] is None
-        assert captured["stt_kwargs"]["api_secret"] is None

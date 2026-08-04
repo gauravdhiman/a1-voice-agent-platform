@@ -10,8 +10,8 @@ global catalog.
 Two preset types only — ``realtime`` / ``pipeline`` — matching the
 ``SpeechConfig`` discriminated union (:mod:`shared.voice_agents.speech_config`).
 A "mixed" preset is NOT a third type: it is just a ``pipeline`` preset where
-some stages use LiveKit Inference (``provider == "livekit_inference"``) and some
-use direct providers. ``preset_type`` is a denormalized filter column derived
+each stage may use a different direct provider (deepgram, openai, cartesia,
+cerebras, etc.). ``preset_type`` is a denormalized filter column derived
 from ``config.engine_mode`` on every write by the service — never set by hand.
 
 Presets carry **no secrets**: the per-provider API keys live on the

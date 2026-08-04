@@ -14,6 +14,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from pipecat.runner.utils import parse_telephony_websocket
 
 from shared.voice_agents.voice_session_service import VoiceSessionService
@@ -28,12 +29,30 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("voice-ws")
+tracer = trace.get_tracer(__name__)
+
+try:
+    from shared.config.opentelemetry import (
+        instrument_fastapi,
+        setup_manual_opentelemetry,
+    )
+
+    setup_manual_opentelemetry(app_name="voice-ws")
+except Exception as exc:  # pragma: no cover - optional in minimal dev images
+    logger.warning("OpenTelemetry setup skipped: %s", exc)
+    instrument_fastapi = None  # type: ignore[misc, assignment]
 
 app = FastAPI(
     title="CogniEnts Voice WebSocket Worker",
     description="Pipecat + Gemini Realtime voice sessions (web + Twilio)",
     version="0.2.0",
 )
+
+if instrument_fastapi is not None:
+    try:
+        instrument_fastapi(app)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("FastAPI OpenTelemetry instrumentation skipped: %s", exc)
 
 session_service = VoiceSessionService()
 
@@ -59,6 +78,11 @@ async def websocket_endpoint(
         logger.warning("Rejecting WebSocket: invalid or expired session token")
         await websocket.close(code=4401, reason="Invalid session token")
         return
+
+    current_span = trace.get_current_span()
+    current_span.set_attribute("voice.session_id", claims.session_id)
+    current_span.set_attribute("voice.agent_id", claims.agent_id)
+    current_span.set_attribute("voice.purpose", claims.purpose)
 
     await websocket.accept()
     logger.info(

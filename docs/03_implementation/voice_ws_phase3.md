@@ -28,19 +28,22 @@ flowchart LR
 - Skills expose `load_skill` and `load_skill_reference` only when assigned.
 - `src/speech/factory.py` supports Gemini Live and direct Deepgram STT,
   OpenAI / Cerebras / OpenRouter LLM, Cartesia / Fish Audio TTS, and Silero VAD.
-  For OpenRouter, reasoning is disabled by default (`reasoning.effort=none`,
-  `exclude=true`) so Gemma-style thinking channels do not stream into assistant
-  content. Pipeline Cartesia/Fish TTS also attach
+  For OpenRouter, reasoning is disabled by default via `extra_body.reasoning`
+  (`effort=none`, `exclude=true`) so Gemma-style thinking channels do not stream
+  into assistant content. Pipeline Cartesia/Fish TTS also attach
   `ThinkingChannelTextFilter` to strip any leaked `<|channel>…` / `<think>`
   markers before synthesis.
 - Dev compose runs `voice-ws/entrypoint.dev.sh`, which co-starts the local
   Google Calendar REST MCP connector on `127.0.0.1:8733` (required for
   `Google_calendar_mcp`).
 
-`livekit_inference` stages require `params.direct_provider` (or a recognizable
-model identifier) because Pipecat has no LiveKit Inference equivalent. An
-unmappable pipeline stage (or missing direct-provider key) logs an error and
-falls back to the Gemini realtime default so the call still connects.
+Pipeline presets must use **direct** providers only (`deepgram`, `openai`,
+`cerebras`, `openrouter`, `cartesia`, `fish`, etc.). Legacy
+`livekit_inference` stages were removed; migration
+`20260803000001_remove_livekit_inference_from_presets` rewrites any remaining
+DB rows to direct providers. An unmappable pipeline stage (or missing
+direct-provider key) logs an error and falls back to the Gemini realtime default
+so the call still connects.
 
 ## How to test
 

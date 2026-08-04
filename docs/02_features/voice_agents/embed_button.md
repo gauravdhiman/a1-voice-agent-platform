@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Embed Call Button feature allows users to add a customizable voice call button to any external website. Visitors can click the button to start a real-time voice conversation with an AI agent through WebRTC, without leaving the website.
+The Embed Call Button feature allows users to add a customizable voice call button to any external website. Visitors can click the button to start a real-time voice conversation with an AI agent over a **Pipecat WebSocket** session, without leaving the website.
 
 ## Key Features
 
@@ -10,7 +10,7 @@ The Embed Call Button feature allows users to add a customizable voice call butt
 - **One-Click Embed**: Copy-paste ready embed code
 - **Secure Access**: Time-limited tokens with domain validation
 - **Rate Limiting**: Configurable daily call limits
-- **Real-Time Calls**: WebRTC-based voice conversations
+- **Real-Time Calls**: WebSocket-based voice conversations (Pipecat + `@pipecat-ai/client-js`)
 
 ## Getting Started
 
@@ -67,7 +67,7 @@ sequenceDiagram
     participant Website as External Website
     participant Script as Embed Script
     participant Platform as Platform API
-    participant LiveKit as LiveKit
+    participant VoiceWs as voice-ws
 
     Visitor->>Website: Load page with embed
     Website->>Script: Load call-button.js
@@ -76,10 +76,10 @@ sequenceDiagram
     Visitor->>Script: Click button
     Script->>Script: Open modal with iframe
     Script->>Platform: Request embed token
-    Platform->>Platform: Validate domain & rate limits
-    Platform-->>Script: Return LiveKit token
-    Script->>LiveKit: Connect with token
-    LiveKit-->>Visitor: Start voice call
+    Platform->>Platform: Validate domain and rate limits
+    Platform-->>Script: Return voice_ws_session JWT and wsUrl
+    Script->>VoiceWs: WebSocket connect with token
+    VoiceWs-->>Visitor: Start voice call
 ```
 
 ## Security
@@ -88,7 +88,7 @@ sequenceDiagram
 
 - Tokens are generated on-demand when a visitor clicks the button
 - Tokens expire after 1 hour
-- Each token is scoped to a specific agent and room
+- Each token is scoped to a specific agent and session (`voice_ws_session` JWT)
 
 ### Domain Validation
 

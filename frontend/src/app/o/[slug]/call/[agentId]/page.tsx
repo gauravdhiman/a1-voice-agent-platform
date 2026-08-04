@@ -10,14 +10,11 @@ import {
   publicOrgPageService,
   readStoredAccessToken,
 } from "@/services/public-org-page-service";
+import type { PipecatClient } from "@pipecat-ai/client-js";
 import {
-  Room,
-  RoomEvent,
-  LocalAudioTrack,
-  RemoteAudioTrack,
-  createLocalTracks,
-  Track,
-} from "livekit-client";
+  connectPipecatVoiceCall,
+  disconnectPipecatVoiceCall,
+} from "@/lib/pipecat-voice-client";
 
 function PublicCallContent() {
   const params = useParams<{ slug: string; agentId: string }>();
@@ -29,88 +26,35 @@ function PublicCallContent() {
   const [isMuted, setIsMuted] = useState(false);
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
-  const [agentAudioTrack, setAgentAudioTrack] = useState<RemoteAudioTrack | null>(
-    null,
-  );
-  const [userAudioTrack, setUserAudioTrack] = useState<LocalAudioTrack | null>(
-    null,
-  );
 
-  const roomRef = useRef<Room | null>(null);
-  const localTrackRef = useRef<LocalAudioTrack | null>(null);
+  const pipecatRef = useRef<PipecatClient | null>(null);
 
   const disconnect = useCallback(() => {
-    const room = roomRef.current;
-    if (room) {
-      room.disconnect();
-      roomRef.current = null;
-    }
-    localTrackRef.current = null;
-    setUserAudioTrack(null);
-    setAgentAudioTrack(null);
+    void disconnectPipecatVoiceCall(pipecatRef.current);
+    pipecatRef.current = null;
   }, []);
 
   const connect = useCallback(async () => {
     const accessToken = readStoredAccessToken(slug);
-    const data = await publicOrgPageService.getCallToken(slug, agentId, accessToken);
+    const data = await publicOrgPageService.getCallToken(
+      slug,
+      agentId,
+      accessToken,
+    );
 
-    const { livekit_token, server_url, room_name } = data;
-    if (!livekit_token || !server_url || !room_name) {
+    const { token, wsUrl, sessionId } = data;
+    if (!token || !wsUrl || !sessionId) {
       throw new Error("Invalid token response");
     }
 
-    const room = new Room({
-      adaptiveStream: true,
-      dynacast: true,
-      audioCaptureDefaults: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+    const client = await connectPipecatVoiceCall(token, wsUrl, {
+      onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+        setIsAgentSpeaking(isAgentSpeaking);
+        setIsUserSpeaking(isUserSpeaking);
       },
     });
 
-    roomRef.current = room;
-
-    room
-      .on(RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind === Track.Kind.Audio) {
-          setAgentAudioTrack(track as RemoteAudioTrack);
-          const el = track.attach();
-          el.autoplay = true;
-          document.body.appendChild(el);
-        }
-      })
-      .on(RoomEvent.TrackUnsubscribed, (track) => {
-        if (track.kind === Track.Kind.Audio) {
-          setAgentAudioTrack(null);
-        }
-      })
-      .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-        const localSid = room.localParticipant.sid;
-        setIsAgentSpeaking(speakers.some((s) => s.sid !== localSid));
-        setIsUserSpeaking(speakers.some((s) => s.sid === localSid));
-      });
-
-    await room.connect(server_url, livekit_token);
-
-    const tracks = await createLocalTracks({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-      video: false,
-    });
-
-    const audioTrack = tracks.find((t) => t.kind === Track.Kind.Audio) as
-      | LocalAudioTrack
-      | undefined;
-    if (audioTrack) {
-      localTrackRef.current = audioTrack;
-      setUserAudioTrack(audioTrack);
-      await room.localParticipant.publishTrack(audioTrack);
-    }
-
+    pipecatRef.current = client;
     setIsConnecting(false);
   }, [slug, agentId]);
 
@@ -120,21 +64,13 @@ function PublicCallContent() {
   }, [disconnect]);
 
   const toggleMute = useCallback(() => {
-    const room = roomRef.current;
-    if (!room) return;
+    if (!pipecatRef.current) return;
 
-    const publications = room.localParticipant.audioTrackPublications;
-    const audioPub = Array.from(publications.values())[0];
-    if (!audioPub?.track) return;
-
-    const track = audioPub.track as LocalAudioTrack;
-    if (track.isMuted) {
-      track.unmute();
-      setIsMuted(false);
-    } else {
-      track.mute();
-      setIsMuted(true);
-    }
+    setIsMuted((prev) => {
+      const next = !prev;
+      pipecatRef.current?.enableMic(!next);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -203,7 +139,6 @@ function PublicCallContent() {
           </p>
           <div className="h-32 overflow-hidden rounded-xl border bg-card">
             <AgentAudioVisualizerWave
-              audioTrack={agentAudioTrack ?? undefined}
               state={isAgentSpeaking ? "speaking" : "listening"}
               color="#22c55e"
               className="h-full w-full"
@@ -220,7 +155,6 @@ function PublicCallContent() {
           </p>
           <div className="h-32 overflow-hidden rounded-xl border bg-card">
             <AgentAudioVisualizerWave
-              audioTrack={userAudioTrack ?? undefined}
               state={isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"}
               color={isMuted ? "#9ca3af" : "#3b82f6"}
               className="h-full w-full"

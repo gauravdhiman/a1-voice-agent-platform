@@ -191,18 +191,18 @@ class TestEmbedRoutes:
                 mock_embed.check_rate_limit.return_value = True
                 mock_embed.generate_embed_token.return_value = (
                     "embed_token",
-                    "livekit_token",
-                    "wss://livekit.example.com",
-                    "embed_room_123",
+                    "voice.jwt.token",
+                    "ws://localhost:7860/ws",
+                    "sess-embed-123",
                 )
 
                 result = await generate_public_embed_token(
                     agent_id=test_agent_id, request=mock_request
                 )
 
-                assert result.livekit_token == "livekit_token"
-                assert result.server_url == "wss://livekit.example.com"
-                assert result.room_name == "embed_room_123"
+                assert result.token == "voice.jwt.token"
+                assert result.wsUrl == "ws://localhost:7860/ws"
+                assert result.sessionId == "sess-embed-123"
 
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_rate_limited(self):

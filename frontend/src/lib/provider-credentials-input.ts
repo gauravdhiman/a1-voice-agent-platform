@@ -16,7 +16,7 @@ export const SIMPLE_PROVIDER_KEYS = [
 
 export type SimpleProviderKey = (typeof SIMPLE_PROVIDER_KEYS)[number];
 
-export type ProviderCredentialKey = SimpleProviderKey | "livekit";
+export type ProviderCredentialKey = SimpleProviderKey;
 
 export const PROVIDER_LABELS: Record<ProviderCredentialKey, string> = {
   google: "Google",
@@ -26,7 +26,6 @@ export const PROVIDER_LABELS: Record<ProviderCredentialKey, string> = {
   cerebras: "Cerebras",
   openrouter: "OpenRouter",
   fish: "Fish Audio",
-  livekit: "LiveKit",
 };
 
 export interface ProviderCredsDraft {
@@ -37,14 +36,9 @@ export interface ProviderCredsDraft {
   cerebras: string;
   openrouter: string;
   fish: string;
-  livekit_api_key: string;
-  livekit_api_secret: string;
 }
 
-export type ProviderCredentialsInput = Record<
-  string,
-  string | { api_key: string; api_secret: string } | null
->;
+export type ProviderCredentialsInput = Record<string, string | null>;
 
 /**
  * Build the API payload from draft values and touched flags.
@@ -63,13 +57,6 @@ export function buildProviderCredentialsInput(
       const val = draft[key].trim();
       input[key] = val ? val : null;
     }
-  }
-
-  if (touched.livekit) {
-    const apiKey = draft.livekit_api_key.trim();
-    const apiSecret = draft.livekit_api_secret.trim();
-    input.livekit =
-      apiKey || apiSecret ? { api_key: apiKey, api_secret: apiSecret } : null;
   }
 
   return input;

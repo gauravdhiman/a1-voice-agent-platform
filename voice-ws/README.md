@@ -1,11 +1,12 @@
 # voice-ws — Pipecat WebSocket voice worker
 
-Active call path for **browser test calls** and **Twilio Media Streams** phone
-calls, using Pipecat. Agent presets select either **Gemini Realtime** or a
-modular Deepgram → OpenAI/Cerebras/OpenRouter → Cartesia/Fish pipeline.
+Active call path for **browser test calls**, **embed**, **public org page**, and
+**Twilio Media Streams** phone calls, using Pipecat. Agent presets select either
+**Gemini Realtime** or a modular Deepgram → OpenAI/Cerebras/OpenRouter →
+Cartesia/Fish pipeline (direct providers only).
 
-The LiveKit `worker/` package is intentionally left untouched for rollback
-(`VOICE_TRANSPORT=livekit`).
+The legacy LiveKit `worker/` package remains in the repo for reference; it is not
+started in default dev/prod compose.
 
 ## Architecture
 
@@ -26,6 +27,12 @@ sequenceDiagram
 ```
 
 Browser test calls use `WS /ws` with protobuf frames (see Phase 1 notes).
+Pipeline presets use `BrowserWebSocketFrameSerializer` (`src/serialization/`)
+because the JS `@pipecat-ai/websocket-transport` client only decodes **audio**
+and **message** protobuf kinds — STT/LLM text, transcription, and interruption
+frames are dropped (including protobuf field 5, which the JS decoder ignores and
+surfaces as `Unknown frame kind`). TTS audio subclasses are normalized before send.
+Realtime Gemini is unchanged.
 
 ## Local run (Docker)
 

@@ -27,9 +27,32 @@ from src.speech.thinking_text_filter import ThinkingChannelTextFilter
 CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
 OPENROUTER_DEFAULT_MODEL = "openai/gpt-4.1"
 FISH_DEFAULT_MODEL = "s2.1-pro-free"
-# Disable OpenRouter reasoning so Gemma/other thinking models do not stream
-# internal channel tokens into assistant content (which TTS would then speak).
-OPENROUTER_DISABLE_REASONING = {"reasoning": {"effort": "none", "exclude": True}}
+# Disable OpenRouter reasoning via extra_body — the OpenAI SDK rejects a top-level
+# ``reasoning`` kwarg on chat.completions.create(), but OpenRouter honors it in the
+# request body. TTS also uses ThinkingChannelTextFilter as a second line of defense.
+OPENROUTER_DISABLE_REASONING = {
+    "extra_body": {
+        "reasoning": {"effort": "none", "exclude": True},
+    },
+}
+
+
+def _merge_openrouter_extra(preset_extra: dict[str, Any] | None) -> dict[str, Any]:
+    """Merge preset LLM extras without passing unsupported top-level kwargs to the SDK."""
+    extra: dict[str, Any] = {
+        "extra_body": dict(OPENROUTER_DISABLE_REASONING["extra_body"]),
+    }
+    if not isinstance(preset_extra, dict):
+        return extra
+
+    for key, value in preset_extra.items():
+        if key == "reasoning":
+            extra["extra_body"]["reasoning"] = value
+        elif key == "extra_body" and isinstance(value, dict):
+            extra["extra_body"].update(value)
+        elif key != "extra_body":
+            extra[key] = value
+    return extra
 
 
 def _pipeline_tts_text_filters() -> list[ThinkingChannelTextFilter]:
@@ -61,24 +84,24 @@ def _normalize_gemini_model(model: str) -> str:
     return model if model.startswith("models/") else f"models/{model}"
 
 
+_SUPPORTED_STAGE_PROVIDERS = {
+    "stt": ("deepgram",),
+    "llm": ("openai", "cerebras", "openrouter"),
+    "tts": ("cartesia", "fish"),
+}
+
+
 def _stage_provider(config: Any, stage: str) -> str:
-    """Resolve direct provider for a stage, including explicit inference hints."""
-    if config.provider != "livekit_inference":
-        return config.provider
-    hint = str(config.params.get("direct_provider", "")).lower()
-    model = (config.model or "").lower()
-    candidates = {
-        "stt": ("deepgram",),
-        "llm": ("openai", "cerebras", "openrouter"),
-        "tts": ("cartesia", "fish"),
-    }[stage]
-    for provider in candidates:
-        if hint == provider or provider in model:
-            return provider
+    """Resolve direct provider for a pipeline preset stage."""
+    from shared.voice_agents.key_resolver import normalize_stage_provider
+
+    provider = normalize_stage_provider(config.provider, stage=stage)
+    candidates = _SUPPORTED_STAGE_PROVIDERS[stage]
+    if provider in candidates:
+        return provider
     raise ValueError(
-        f"Pipeline {stage} uses livekit_inference but cannot map it to a direct "
-        f"Pipecat provider. Set params.direct_provider to one of {candidates} "
-        "or select a direct provider."
+        f"Pipeline {stage} provider '{config.provider}' is not supported. "
+        f"Use one of {candidates}."
     )
 
 
@@ -135,12 +158,10 @@ def _build_pipeline_llm(
         )
     if provider == "openrouter":
         model = config.model or OPENROUTER_DEFAULT_MODEL
-        # Merge preset params.extra (if any) under our reasoning defaults so
-        # callers can still override, but thinking stays off by default.
-        extra = dict(OPENROUTER_DISABLE_REASONING)
         preset_extra = llm_kwargs.pop("extra", None)
-        if isinstance(preset_extra, dict):
-            extra.update(preset_extra)
+        extra = _merge_openrouter_extra(
+            preset_extra if isinstance(preset_extra, dict) else None
+        )
         return OpenRouterLLMService(
             api_key=_require_key(api_keys, provider, "llm"),
             tools=tools,
@@ -217,6 +238,7 @@ def build_speech_components(
                     voice=speech_config.voice,
                     system_instruction=system_instruction,
                     temperature=speech_config.temperature,
+                    thinking={"thinking_budget": 0},
                     vad=GeminiVADParams(
                         silence_duration_ms=speech_config.silence_duration_ms,
                         prefix_padding_ms=speech_config.prefix_padding_ms,

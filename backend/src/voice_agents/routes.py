@@ -11,7 +11,6 @@ from opentelemetry import trace
 from pydantic import BaseModel
 
 from shared.config.settings import settings
-from shared.voice_agents.livekit_service import AGENT_DISPATCH_NAME, livekit_service
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
@@ -28,23 +27,12 @@ agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])
 
 
 class TestTokenResponse(BaseModel):
-    """Response for browser test-call bootstrap (LiveKit or Pipecat).
-
-    Attributes:
-        transport: ``pipecat`` (WebSocket) or ``livekit`` (legacy WebRTC).
-        token: Session JWT (pipecat) or LiveKit room JWT (livekit).
-        serverUrl: LiveKit server URL when transport is livekit.
-        roomName: LiveKit room name when transport is livekit.
-        wsUrl: Browser WebSocket URL when transport is pipecat.
-        sessionId: Voice session id when transport is pipecat.
-    """
+    """Response for browser test-call bootstrap over Pipecat WebSocket."""
 
     transport: str = "pipecat"
     token: str
-    serverUrl: Optional[str] = None
-    roomName: Optional[str] = None
-    wsUrl: Optional[str] = None
-    sessionId: Optional[str] = None
+    wsUrl: str
+    sessionId: str
 
 
 async def _validate_preset_assignment(preset_id: Optional[UUID]) -> Optional[str]:
@@ -225,12 +213,7 @@ async def get_test_token(
     agent_id: UUID,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Bootstrap a browser test call (Pipecat WebSocket or LiveKit).
-
-    Controlled by ``VOICE_TRANSPORT`` / ``settings.voice_transport``:
-    - ``pipecat`` (default): short-lived voice_ws session JWT + ``wsUrl``
-    - ``livekit``: legacy LiveKit room token + agent dispatch
-    """
+    """Bootstrap a browser test call via Pipecat WebSocket."""
     current_user_id, user_profile = user_data
 
     # Get the agent
@@ -249,66 +232,26 @@ async def get_test_token(
         error_message="Insufficient permissions to test this agent",
     )
 
-    transport = (settings.voice_transport or "pipecat").strip().lower()
-
-    if transport == "pipecat":
-        try:
-            token, session_id = voice_session_service.create_session_token(
-                agent_id=str(agent_id),
-                user_id=str(current_user_id),
-                purpose="test_call",
-            )
-        except ValueError as exc:
-            logger.error("Failed to create voice_ws session token: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Voice session service is not configured. Set JWT_SECRET_KEY.",
-            ) from exc
-
-        base = settings.voice_ws_public_url.rstrip("/")
-        ws_url = f"{base}/ws"
-        return TestTokenResponse(
-            transport="pipecat",
-            token=token,
-            wsUrl=ws_url,
-            sessionId=session_id,
+    try:
+        token, session_id = voice_session_service.create_session_token(
+            agent_id=str(agent_id),
+            user_id=str(current_user_id),
+            purpose="test_call",
         )
-
-    # --- Legacy LiveKit path (VOICE_TRANSPORT=livekit) ---
-    token, server_url, room_name = livekit_service.generate_test_token(
-        agent_id=str(agent_id),
-        user_id=str(current_user_id),
-    )
-
-    if not token or not server_url or not room_name:
+    except ValueError as exc:
+        logger.error("Failed to create voice_ws session token: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LiveKit is not configured. Please contact the administrator.",
-        )
+            detail="Voice session service is not configured. Set JWT_SECRET_KEY.",
+        ) from exc
 
-    # Pre-create the LiveKit room AND explicitly dispatch the worker.
-    # Room creation alone is not enough: LiveKit Cloud automatic dispatch
-    # rules frequently do not fire for web test rooms, so the worker never
-    # receives a job and the caller sits in a silent room. Explicit
-    # agent_dispatch.create_dispatch is what actually starts the agent.
-    # Best-effort: a LiveKit API hiccup here must not block the test call; the
-    # caller still gets a token and can fall back to implicit room creation.
-    try:
-        await livekit_service.create_room(room_name=room_name)
-        await livekit_service.create_agent_dispatch(
-            room_name=room_name,
-            agent_name=AGENT_DISPATCH_NAME,
-        )
-    except Exception as create_err:
-        logger.warning(
-            f"Failed to pre-create/dispatch LiveKit room {room_name} for test call: {create_err}"
-        )
-
+    base = settings.voice_ws_public_url.rstrip("/")
+    ws_url = f"{base}/ws"
     return TestTokenResponse(
-        transport="livekit",
+        transport="pipecat",
         token=token,
-        serverUrl=server_url,
-        roomName=room_name,
+        wsUrl=ws_url,
+        sessionId=session_id,
     )
 
 
@@ -527,9 +470,9 @@ class EmbedTokenResponse(BaseModel):
     """Response model for embed token generation."""
 
     embed_token: str
-    livekit_token: str
-    server_url: str
-    room_name: str
+    token: str
+    wsUrl: str
+    sessionId: str
 
 
 @agent_router.get(
@@ -762,7 +705,7 @@ async def get_embed_token(
     domain = request.headers.get("origin", "")
     ip_address = request.client.host if request.client else None
 
-    embed_token, livekit_token, server_url, room_name = (
+    embed_token, voice_token, ws_url, session_id = (
         embed_service.generate_embed_token(
             agent_id=str(agent_id),
             embed_config_id=str(embed_config["id"]),
@@ -771,7 +714,7 @@ async def get_embed_token(
         )
     )
 
-    if not embed_token or not livekit_token or not server_url or not room_name:
+    if not embed_token or not voice_token or not ws_url or not session_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate embed token",
@@ -779,9 +722,9 @@ async def get_embed_token(
 
     return EmbedTokenResponse(
         embed_token=embed_token,
-        livekit_token=livekit_token,
-        server_url=server_url,
-        room_name=room_name,
+        token=voice_token,
+        wsUrl=ws_url,
+        sessionId=session_id,
     )
 
 

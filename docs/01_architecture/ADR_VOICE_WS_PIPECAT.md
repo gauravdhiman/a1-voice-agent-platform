@@ -1,6 +1,6 @@
 # ADR: Replace LiveKit with Pipecat WebSocket voice transport
 
-**Status:** Accepted (Phase 3 complete)  
+**Status:** Accepted — Pipecat is the default transport (LiveKit deprecated)  
 **Date:** 2026-08-02  
 **Branch:** `feature/dump-livekit-use-websockets-or-pipecat`
 
@@ -14,8 +14,10 @@ LiveKit Cloud / SIP trunk complexity.
 
 1. Add a new container **`voice-ws/`** (Pipecat + FastAPI WebSocket). Do **not**
    modify or delete the existing LiveKit `worker/`.
-2. Route calls via `VOICE_TRANSPORT=pipecat|livekit` (default `pipecat` on this
-   feature branch).
+2. **`VOICE_TRANSPORT=pipecat`** is the default for all call surfaces (dashboard
+   test call, embed, public org page, Twilio phone). The LiveKit `worker/` package
+   remains in the repo for reference only; it is not started in default dev/prod
+   compose.
 3. Deliver in three phases:
    - **Phase 1:** Web test call + Gemini Realtime over WebSocket
    - **Phase 2:** Twilio Media Streams → same worker (phone)
@@ -26,9 +28,10 @@ LiveKit Cloud / SIP trunk complexity.
 ## Consequences
 
 - Browser uses `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport`.
-- Backend issues short-lived `voice_ws_session` JWTs instead of LiveKit room
-  tokens when transport is `pipecat`.
-- LiveKit worker remains available for rollback (`VOICE_TRANSPORT=livekit`).
+- Backend issues short-lived `voice_ws_session` JWTs with `{ token, wsUrl, sessionId }`.
+- LiveKit Inference presets were removed; pipeline presets use direct providers only.
+- Legacy LiveKit worker can still be started with compose profile `livekit` for
+  emergency comparison, but is not a supported production path.
 
 ## Related
 
