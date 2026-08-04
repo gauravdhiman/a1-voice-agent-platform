@@ -12,6 +12,8 @@ export interface Organization {
   is_active: boolean;
   industry?: string | null;
   location?: string | null;
+  /** IANA timezone used to anchor voice agent date/time context. */
+  timezone?: string | null;
   onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
@@ -66,6 +68,8 @@ export interface OrganizationUpdate {
   is_active?: boolean;
   industry?: string | null;
   location?: string | null;
+  /** IANA timezone; empty string clears the org default on save. */
+  timezone?: string | null;
   business_details?: string | null;
   google_api_key?: string | null;
   /**

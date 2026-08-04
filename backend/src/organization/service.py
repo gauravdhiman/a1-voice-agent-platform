@@ -13,6 +13,7 @@ from opentelemetry import metrics, trace
 from shared.common.errors import ErrorCode
 from shared.common.security import decrypt_data, encrypt_data
 from shared.organization.service import BaseOrganizationService
+from shared.organization.timezone import normalize_timezone_input
 from src.notifications.models import SendNotificationRequest
 from src.notifications.service import notification_service
 from src.organization.invitation_models import (
@@ -112,6 +113,7 @@ class OrganizationService(BaseOrganizationService):
             is_active=org_dict["is_active"],
             industry=org_dict.get("industry"),
             location=org_dict.get("location"),
+            timezone=org_dict.get("timezone"),
             business_details=org_dict.get("business_details"),
             google_api_key=google_api_key,
             provider_credentials=provider_credentials,
@@ -392,6 +394,11 @@ class OrganizationService(BaseOrganizationService):
                 update_data["industry"] = org_data.industry
             if org_data.location is not None:
                 update_data["location"] = org_data.location
+            if org_data.timezone is not None:
+                normalized_tz, tz_error = normalize_timezone_input(org_data.timezone)
+                if tz_error:
+                    return None, tz_error
+                update_data["timezone"] = normalized_tz
             if org_data.business_details is not None:
                 update_data["business_details"] = org_data.business_details
 

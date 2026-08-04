@@ -62,7 +62,7 @@ All environment variables required for production deployment across all services
 | `CEREBRAS_API_KEY` | Cerebras LLM (pipeline preset fallback) | cerebras.ai | **Yes** |
 | `OPENROUTER_API_KEY` | OpenRouter LLM (pipeline preset fallback) | openrouter.ai | **Yes** |
 | `FISH_API_KEY` | Fish Audio TTS (pipeline preset fallback) | fish.audio | **Yes** |
-| `AGENT_DEFAULT_TIMEZONE` | IANA timezone for the current date/time injected into agent prompts at session start (grounds "today"/"tomorrow"/"now" reasoning) | IANA tz name, e.g. `America/Phoenix` | No |
+| `AGENT_DEFAULT_TIMEZONE` | Platform fallback IANA timezone when an organization has no `organizations.timezone` set. Used by `voice-ws` to anchor the CURRENT DATE AND TIME section in agent prompts (grounds "today"/"tomorrow"/"now" reasoning). Per-org timezone is preferred — set it on the Organization settings page. | IANA tz name, e.g. `America/Phoenix`; defaults to `UTC` when unset | No |
 | `VOICE_RECORDING_TEE` | Enable pass-through recording tee logging (`true`/`false`; storage not implemented yet) | Default `false` | No |
 | `TWILIO_ACCOUNT_SID` | Twilio account SID (optional; enables Media Streams auto hang-up) | Twilio Console | No |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token (optional; pairs with account SID) | Twilio Console | **Yes** |

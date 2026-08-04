@@ -254,6 +254,50 @@ class TestOrganizationService:
         assert result.description == "A test organization"  # Unchanged
 
     @pytest.mark.asyncio
+    async def test_update_organization_rejects_invalid_timezone(
+        self, organization_service, sample_org_id
+    ):
+        """Timezone updates must be valid IANA names."""
+        result, error = await organization_service.update_organization(
+            sample_org_id, OrganizationUpdate(timezone="Not/A_Real_Zone")
+        )
+
+        assert result is None
+        assert error is not None
+        assert "invalid" in error.lower()
+
+    @pytest.mark.asyncio
+    async def test_update_organization_clears_timezone_with_blank_string(
+        self,
+        organization_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_organization,
+    ):
+        """Empty timezone clears the org default."""
+        now = datetime.now(timezone.utc)
+        updated_org = {
+            **sample_organization,
+            "timezone": None,
+            "updated_at": now.isoformat(),
+        }
+
+        mock_response = MagicMock()
+        mock_response.data = [updated_org]
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+
+        result, error = await organization_service.update_organization(
+            sample_org_id, OrganizationUpdate(timezone="")
+        )
+
+        assert error is None
+        assert result is not None
+        update_payload = (
+            mock_supabase_client.table.return_value.update.call_args[0][0]
+        )
+        assert update_payload["timezone"] is None
+
+    @pytest.mark.asyncio
     async def test_update_organization_rejects_invalid_slug(
         self, organization_service, sample_org_id
     ):

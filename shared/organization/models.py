@@ -34,6 +34,14 @@ class OrganizationBase(BaseModel):
     location: Optional[str] = Field(
         None, max_length=255, description="Physical address or location"
     )
+    timezone: Optional[str] = Field(
+        None,
+        max_length=64,
+        description=(
+            "IANA timezone for this organization (e.g. America/Los_Angeles). "
+            "Used by voice agents to anchor current date/time in prompts."
+        ),
+    )
     business_details: Optional[str] = Field(
         None,
         description="""
@@ -121,6 +129,14 @@ class OrganizationUpdate(BaseModel):
     )
     location: Optional[str] = Field(
         None, max_length=255, description="Physical address or location"
+    )
+    timezone: Optional[str] = Field(
+        None,
+        max_length=64,
+        description=(
+            "IANA timezone for this organization (e.g. America/Los_Angeles). "
+            "Used by voice agents to anchor current date/time in prompts."
+        ),
     )
     business_details: Optional[str] = Field(
         None,
