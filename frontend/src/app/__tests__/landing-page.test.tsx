@@ -67,4 +67,19 @@ describe("Landing page (public marketing messaging)", () => {
     expect(screen.queryByText(/\$99/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\$0/)).not.toBeInTheDocument();
   });
+
+  it("keeps the 'Talk to Sales' CTA legible on the gradient by default", () => {
+    render(<LandingPage />);
+    const talkToSales = screen.getByRole("button", {
+      name: /talk to sales/i,
+    });
+
+    // Regression: the outline variant supplies a bg-background fill (white in
+    // light mode). Combined with text-white, the label was invisible until
+    // hover (hover:bg-blue-700). The CTA must carry its own translucent white
+    // fill + white text so it reads on the blue->cyan gradient immediately.
+    expect(talkToSales.className).not.toContain("bg-background");
+    expect(talkToSales.className).toContain("bg-white/10");
+    expect(talkToSales.className).toContain("text-white");
+  });
 });
