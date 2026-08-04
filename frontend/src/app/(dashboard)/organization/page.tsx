@@ -34,6 +34,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Building2,
   Users,
   Calendar,
@@ -50,6 +57,10 @@ import {
   PROVIDER_LABELS,
   ProviderCredentialKey,
 } from "@/lib/provider-credentials-input";
+import {
+  ORGANIZATION_TIMEZONE_OPTIONS,
+  ORGANIZATION_TIMEZONE_UNSET,
+} from "@/lib/organization-timezones";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,6 +112,7 @@ export default function OrganizationPage() {
     is_active: boolean;
     industry: string;
     location: string;
+    timezone: string;
     business_details: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -151,6 +163,7 @@ export default function OrganizationPage() {
         is_active: org.is_active,
         industry: org.industry || "",
         location: org.location || "",
+        timezone: org.timezone || ORGANIZATION_TIMEZONE_UNSET,
         business_details: org.business_details || "",
       });
     } catch (error) {
@@ -262,6 +275,10 @@ export default function OrganizationPage() {
         is_active: editedOrg.is_active,
         industry: editedOrg.industry,
         location: editedOrg.location,
+        timezone:
+          editedOrg.timezone === ORGANIZATION_TIMEZONE_UNSET
+            ? ""
+            : editedOrg.timezone,
         business_details: editedOrg.business_details,
       });
 
@@ -300,6 +317,7 @@ export default function OrganizationPage() {
         is_active: org.is_active,
         industry: org.industry || "",
         location: org.location || "",
+        timezone: org.timezone || ORGANIZATION_TIMEZONE_UNSET,
         business_details: org.business_details || "",
       });
     }
@@ -654,6 +672,36 @@ export default function OrganizationPage() {
                   </div>
 
                   <div className="space-y-2">
+                    <Label htmlFor="timezone">Business timezone</Label>
+                    <Select
+                      value={editedOrg?.timezone ?? ORGANIZATION_TIMEZONE_UNSET}
+                      onValueChange={(value) =>
+                        editedOrg &&
+                        setEditedOrg({
+                          ...editedOrg,
+                          timezone: value,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="timezone">
+                        <SelectValue placeholder="Select timezone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ORGANIZATION_TIMEZONE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Used by voice agents for &quot;today&quot;, business hours, and
+                      calendar availability. Leave as platform default until you pick
+                      your zone.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="website">Website</Label>
                     <Input
                       id="website"
@@ -797,6 +845,18 @@ During monsoon season (July-September), we have extended hours for flood-related
                         {displayOrg.location || "Not set"}
                       </p>
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Timezone
+                    </label>
+                    <p className="text-foreground">
+                      {displayOrg.timezone
+                        ? ORGANIZATION_TIMEZONE_OPTIONS.find(
+                            (option) => option.value === displayOrg.timezone,
+                          )?.label ?? displayOrg.timezone
+                        : "Platform default"}
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">

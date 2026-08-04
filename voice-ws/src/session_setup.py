@@ -13,6 +13,7 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from shared.organization.service import BaseOrganizationService
 from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from shared.voice_agents.key_resolver import resolve_api_keys
+from shared.organization.timezone import resolve_organization_timezone
 from shared.voice_agents.prompt_builder import (
     PromptBuilder,
     build_current_datetime_section,
@@ -78,9 +79,11 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
         org=org,
         use_platform_credits=bool(getattr(agent, "use_platform_credits", False)),
     )
-    current_datetime = build_current_datetime_section(
-        os.getenv("AGENT_DEFAULT_TIMEZONE", "UTC")
+    session_timezone = resolve_organization_timezone(
+        org,
+        platform_default=os.getenv("AGENT_DEFAULT_TIMEZONE"),
     )
+    current_datetime = build_current_datetime_section(session_timezone)
     instructions = (
         PromptBuilder.build(
             org=org,
@@ -99,7 +102,7 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
     logger.info(
         "Prepared voice session agent=%s timezone=%s functions=%s unavailable=%s",
         agent.id,
-        os.getenv("AGENT_DEFAULT_TIMEZONE", "UTC"),
+        session_timezone,
         [schema.name for schema in tools.schemas],
         tools.unavailable_tools,
     )

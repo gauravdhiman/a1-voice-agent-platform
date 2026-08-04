@@ -339,10 +339,10 @@ def build_current_datetime_section(
     hours). This section states the current date/time in a configured timezone so
     the model reasons from a real reference point.
 
-    The timezone is a platform-level default (``AGENT_DEFAULT_TIMEZONE`` env var,
-    read by the worker) — the business timezone itself is NOT modeled in the DB;
-    the user states it in org details / skills, and the model reconciles against
-    this injected "now" using the tz name + UTC offset shown here.
+    The timezone is resolved per organization (``organizations.timezone`` IANA name)
+    with an optional platform dev fallback (``AGENT_DEFAULT_TIMEZONE`` env var when
+    the org timezone is unset). Business hours may still appear in
+    ``business_details``; this section supplies a structured "now" anchor.
 
     Args:
         timezone_name: IANA timezone name (e.g. ``"America/Phoenix"``). If
@@ -394,9 +394,9 @@ def build_current_datetime_section(
         f"Reference instant (ISO 8601): {iso_now}\n\n"
         "Treat this as the current date and time. When the caller says \"today\", "
         "\"tomorrow\", \"now\", \"this week\", or asks about upcoming/past events, "
-        "reason from this reference point. If the caller's or the organization's "
-        "timezone differs from the one above, reconcile using the timezone stated "
-        "in the organization's details or skills.\n\n"
+        "reason from this reference point. If the caller's timezone differs, "
+        "reconcile using the organization's configured timezone or details in "
+        "business context.\n\n"
         "Never offer, suggest, or book appointment times that start before this "
         "reference instant. If a caller asks about a time that has already passed, "
         "say it is in the past and offer only future alternatives. Before stating "
