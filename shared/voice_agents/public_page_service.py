@@ -1,7 +1,8 @@
-"""Public organization page call tokens (unauthenticated visitor calls).
+"""Public organization page access tokens and Pipecat voice session tokens.
 
-Generates LiveKit rooms with the ``public_{agent_id}_{random}`` prefix so the
-worker can dispatch without embed configuration.
+Unauthenticated visitors on ``/o/{slug}`` receive short-lived access tokens
+(passphrase gate) and ``voice_ws_session`` JWTs for browser calls over
+``voice-ws`` WebSocket transport.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from typing import Any, Optional
 import jwt
 
 from shared.config.settings import settings
-from shared.voice_agents.livekit_service import LiveKitService
+from shared.voice_agents.voice_session_service import voice_session_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,10 @@ class PublicPageAccessError(Exception):
 
 
 class PublicPageService:
-    """JWT access tokens and LiveKit call tokens for public org pages."""
+    """JWT access tokens and Pipecat voice session tokens for public org pages."""
 
     def __init__(self) -> None:
-        self.livekit_service = LiveKitService()
-        self.jwt_secret: str = (
-            settings.livekit_api_secret or "public-page-dev-secret-change-in-prod"
-        )
+        self.jwt_secret: str = settings.jwt_secret_key or "public-page-dev-secret-change-in-prod"
         self.access_token_expiry = timedelta(hours=12)
         self.call_token_expiry = timedelta(hours=1)
 
@@ -67,31 +65,22 @@ class PublicPageService:
     def generate_call_token(
         self, *, agent_id: str
     ) -> tuple[Optional[str], Optional[str], Optional[str]]:
-        """Generate a LiveKit token for a public-page voice call.
+        """Generate a Pipecat voice session for a public-page visitor call.
 
         Returns:
-            Tuple of (livekit_token, server_url, room_name).
+            Tuple of ``(voice_token, ws_url, session_id)``.
         """
-        if not all(
-            [
-                self.livekit_service.api_key,
-                self.livekit_service.api_secret,
-                self.livekit_service.url,
-            ]
-        ):
-            logger.error("LiveKit not configured — cannot generate public call token")
-            return None, None, None
-
-        random_suffix = uuid.uuid4().hex[:8]
-        room_name = f"public_{agent_id}_{random_suffix}"
         try:
-            livekit_token = self.livekit_service.generate_token(
-                room_name=room_name,
-                identity=f"public_visitor_{random_suffix}",
-                name="Visitor",
-                expiration=self.call_token_expiry,
+            visitor_id = f"public_visitor_{uuid.uuid4().hex[:8]}"
+            voice_token, session_id = voice_session_service.create_session_token(
+                agent_id=agent_id,
+                user_id=visitor_id,
+                purpose="public",
+                expires_in=self.call_token_expiry,
             )
-            return livekit_token, self.livekit_service.url or "", room_name
+            base = (settings.voice_ws_public_url or "ws://localhost:7860").rstrip("/")
+            ws_url = f"{base}/ws"
+            return voice_token, ws_url, session_id
         except Exception as exc:
             logger.error("Failed to generate public call token: %s", exc, exc_info=True)
             return None, None, None

@@ -1,7 +1,7 @@
 from typing import Any, Optional, List
 import httpx
 import logging
-from livekit.agents import RunContext
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from pydantic import Field
 
 from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
@@ -57,7 +57,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def get_sheet_values(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         range: str,
     ) -> dict[str, Any]:
@@ -71,7 +71,7 @@ class GoogleSheetsTool(BaseTool):
             - Returns data as arrays of values
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation (e.g., 'Sheet1!A1:B10')
 
@@ -148,7 +148,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def append_row(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         range: str,
         values: List[Any],
@@ -163,7 +163,7 @@ class GoogleSheetsTool(BaseTool):
             - Row will be appended to the end of the specified range
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation where to append (e.g., 'Sheet1!A1:Z1')
             values: List of values to append as a new row
@@ -205,7 +205,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def update_cell(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         range: str,
         values: List[List[Any]],
@@ -220,7 +220,7 @@ class GoogleSheetsTool(BaseTool):
             - Updates cells in the specified range
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation to update (e.g., 'Sheet1!A1', 'Sheet1!A1:B2')
             values: 2D array of values to update [[value1], [value2]]
@@ -261,7 +261,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def search_in_sheet(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         search_term: str,
         range: str = "",
@@ -276,7 +276,7 @@ class GoogleSheetsTool(BaseTool):
             - Case-insensitive search
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             search_term: Term to search for in the sheet
             range: Optional range in A1 notation to search within (e.g., 'Sheet1!A1:Z100')
@@ -326,7 +326,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def create_spreadsheet(
         self,
-        context: RunContext,
+        context: ToolContext,
         title: str,
         sheet_names: List[str] = None,
     ) -> dict[str, Any]:
@@ -340,7 +340,7 @@ class GoogleSheetsTool(BaseTool):
             - Returns the new spreadsheet ID for future operations
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             title: Title for the new spreadsheet
             sheet_names: List of sheet names to create (default: ["Sheet1"])
 
@@ -491,7 +491,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def list_user_spreadsheets(
         self,
-        context: RunContext,
+        context: ToolContext,
         query: str = "",
         max_results: int = 50,
     ) -> dict[str, Any]:
@@ -506,7 +506,7 @@ class GoogleSheetsTool(BaseTool):
             - Essential for navigating user's spreadsheet collection
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             query: Optional search query to filter spreadsheets (e.g., "title:'Sales Report'")
             max_results: Maximum number of results to return (default: 50, max: 1000)
 
@@ -576,7 +576,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def search_spreadsheets_by_title(
         self,
-        context: RunContext,
+        context: ToolContext,
         title: str,
         max_results: int = 20,
     ) -> dict[str, Any]:
@@ -591,7 +591,7 @@ class GoogleSheetsTool(BaseTool):
             - Useful for locating specific reports, databases, or documents
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             title: Title or partial title to search for
             max_results: Maximum number of results to return (default: 20)
 
@@ -653,7 +653,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def get_spreadsheet_details(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
     ) -> dict[str, Any]:
         """
@@ -666,7 +666,7 @@ class GoogleSheetsTool(BaseTool):
             - Useful for understanding spreadsheet context before operations
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
 
         Returns:
@@ -734,7 +734,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def get_spreadsheet_info(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
     ) -> dict[str, Any]:
         """
@@ -747,7 +747,7 @@ class GoogleSheetsTool(BaseTool):
             - Lists all available sheet names and their IDs
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet (from list_user_spreadsheets)
 
         Returns:
@@ -811,7 +811,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def list_spreadsheet_sheets(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
     ) -> dict[str, Any]:
         """
@@ -824,7 +824,7 @@ class GoogleSheetsTool(BaseTool):
             - Essential for navigating spreadsheets with multiple sheets
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
 
         Returns:
@@ -875,7 +875,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def find_sheet_by_title(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         sheet_title: str,
     ) -> dict[str, Any]:
@@ -889,7 +889,7 @@ class GoogleSheetsTool(BaseTool):
             - Case-insensitive search for sheet titles
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             sheet_title: The title/name of the sheet to find
 
@@ -949,7 +949,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def get_sheet_metadata(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         sheet_id: int,
     ) -> dict[str, Any]:
@@ -963,7 +963,7 @@ class GoogleSheetsTool(BaseTool):
             - Returns grid properties, protection settings, and other sheet details
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             sheet_id: The numeric ID of the specific sheet
 
@@ -1033,7 +1033,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def clear_range(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         range: str,
     ) -> dict[str, Any]:
@@ -1047,7 +1047,7 @@ class GoogleSheetsTool(BaseTool):
             - Requires explicit confirmation for large ranges
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             range: Range in A1 notation to clear (e.g., 'Sheet1!A1:B10')
 
@@ -1077,7 +1077,7 @@ class GoogleSheetsTool(BaseTool):
 
     async def batch_update_values(
         self,
-        context: RunContext,
+        context: ToolContext,
         spreadsheet_id: str,
         updates: List[dict],
     ) -> dict[str, Any]:
@@ -1091,7 +1091,7 @@ class GoogleSheetsTool(BaseTool):
             - Each update should have 'range' and 'values' keys
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             spreadsheet_id: The ID of the Google Spreadsheet
             updates: List of dictionaries with 'range' and 'values' keys
 

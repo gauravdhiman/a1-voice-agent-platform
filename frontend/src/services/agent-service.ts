@@ -275,16 +275,28 @@ class AgentService {
     return response.data;
   }
 
-  // Test Token Methods
-  async getTestToken(
-    agentId: string,
-  ): Promise<{ token: string; serverUrl: string; roomName: string }> {
+  /**
+   * Bootstrap a browser test call over Pipecat WebSocket transport.
+   */
+  async getTestToken(agentId: string): Promise<{
+    transport: "pipecat";
+    token: string;
+    wsUrl: string;
+    sessionId: string;
+  }> {
     const response = await apiClient.post<{
+      transport?: "pipecat";
       token: string;
-      serverUrl: string;
-      roomName: string;
+      wsUrl: string;
+      sessionId: string;
     }>(`${this.agentBaseUrl}/${agentId}/test-token`);
-    return response.data;
+    const data = response.data;
+    return {
+      transport: data.transport ?? "pipecat",
+      token: data.token,
+      wsUrl: data.wsUrl,
+      sessionId: data.sessionId,
+    };
   }
 
   // Embed Configuration Methods
@@ -314,14 +326,17 @@ class AgentService {
   }
 
   // Embed Token Method (for authenticated testing)
-  async getEmbedToken(
-    agentId: string,
-  ): Promise<{ embedToken: string; livekitToken: string; serverUrl: string; roomName: string }> {
+  async getEmbedToken(agentId: string): Promise<{
+    embed_token: string;
+    token: string;
+    wsUrl: string;
+    sessionId: string;
+  }> {
     const response = await apiClient.post<{
-      embedToken: string;
-      livekitToken: string;
-      serverUrl: string;
-      roomName: string;
+      embed_token: string;
+      token: string;
+      wsUrl: string;
+      sessionId: string;
     }>(`${this.agentBaseUrl}/${agentId}/embed-token`);
     return response.data;
   }

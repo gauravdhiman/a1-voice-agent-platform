@@ -70,11 +70,21 @@ TOOLSET_INSTRUCTIONS = {
 - Use calendar data internally to check availability and schedule appropriately
 - Confirm scheduling actions without revealing specific event details""",
 
-    "Calcom": """## Cal.com Tool Guidelines
+    "CalCom": """## Cal.com Tool Guidelines
 - Booking details and attendee information are private
 - DO NOT expose booking IDs, internal URLs, or attendee details to callers
 - Use booking system internally to manage appointments
-- Confirm bookings with general information only""",
+- Confirm bookings with general information only
+- Always call get_available_slots before offering times, and create_booking before confirming a booking""",
+
+    "Google_calendar_mcp": """## Google Calendar Tool Guidelines
+- Calendar events and attendee information are private
+- DO NOT share attendee names, email addresses, or raw event IDs with callers
+- Always call check_availability (or list_events) before offering times — never guess
+- If check_availability returns status "past", tell the caller that time has already passed; only suggest future slots
+- If check_availability returns status "busy", call check_availability for each alternative before offering it
+- Always call create_event before confirming that an appointment was booked
+- If a tool returns an error, say you could not complete the booking — never invent success""",
 }
 
 
@@ -376,12 +386,19 @@ def build_current_datetime_section(
     offset = instant.strftime("%z")  # e.g. "-0700"
     offset_pretty = f"UTC{offset[:3]}:{offset[3:]}" if offset else "UTC+00:00"
 
+    iso_now = instant.isoformat()
+
     return (
         "# CURRENT DATE AND TIME\n\n"
-        f"It is currently {formatted} ({timezone_name}, {offset_pretty}).\n\n"
+        f"It is currently {formatted} ({timezone_name}, {offset_pretty}).\n"
+        f"Reference instant (ISO 8601): {iso_now}\n\n"
         "Treat this as the current date and time. When the caller says \"today\", "
         "\"tomorrow\", \"now\", \"this week\", or asks about upcoming/past events, "
         "reason from this reference point. If the caller's or the organization's "
         "timezone differs from the one above, reconcile using the timezone stated "
-        "in the organization's details or skills."
+        "in the organization's details or skills.\n\n"
+        "Never offer, suggest, or book appointment times that start before this "
+        "reference instant. If a caller asks about a time that has already passed, "
+        "say it is in the past and offer only future alternatives. Before stating "
+        "any alternative time is free, call check_availability for that exact window."
     )

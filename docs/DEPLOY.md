@@ -13,7 +13,7 @@ Step-by-step guide for deploying the Voice AI Agents Platform to Render.com prod
 |---|---|---|
 | `cog-backend` (FastAPI) | Web Service — Standard | $25/mo |
 | `cog-frontend` (Next.js) | Web Service — Starter | $7/mo |
-| `cog-worker` (LiveKit Voice Agent) | Background Worker — Standard | $25/mo |
+| `cog-voice-ws` (Pipecat voice worker) | Background Worker — Standard | $25/mo |
 | `cog-otel-collector` (OTel, optional) | Web Service — Starter | $7/mo |
 
 **Total: ~$57–64/mo** (skip OTel collector to save $7/mo)
@@ -35,8 +35,7 @@ Gather all credentials before starting. See [docs/ENV_VARS.md](ENV_VARS.md) for 
 3. **Twilio** — must be a paid account (trial cannot purchase numbers):
    - Collect: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`
 
-4. **LiveKit Cloud** — create a production project at cloud.livekit.io:
-   - Collect: `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_URL`, `LIVEKIT_SIP_DOMAIN`
+4. **voice-ws (Pipecat)** — deploy `cog-voice-ws`; set `JWT_SECRET_KEY` (match backend), `GEMINI_API_KEY`, and backend `VOICE_WS_PUBLIC_URL` / `VOICE_WS_TWILIO_URL`
 
 5. **Google OAuth** — production credentials from Google Cloud Console:
    - Collect: `GOOGLE_OAUTH_TOOL_CLIENT_ID`, `GOOGLE_OAUTH_TOOL_CLIENT_SECRET`
@@ -93,28 +92,25 @@ STRIPE_WEBHOOK_SECRET=whsec_...   ← set after Step 5
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=<auth_token>
 TWILIO_PHONE_NUMBER_SID=<phone_number_sid>
-LIVEKIT_API_KEY=<api_key>
-LIVEKIT_API_SECRET=<api_secret>
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_SIP_DOMAIN=<sip_domain>
+VOICE_WS_PUBLIC_URL=wss://cog-voice-ws.onrender.com
+VOICE_WS_TWILIO_URL=wss://cog-voice-ws.onrender.com
+JWT_SECRET_KEY=<generated_32_byte_hex>
 RESEND_API_KEY=<resend_api_key>
 GOOGLE_OAUTH_TOOL_CLIENT_ID=<client_id>
 GOOGLE_OAUTH_TOOL_CLIENT_SECRET=<client_secret>
 GOOGLE_OAUTH_TOOL_REDIRECT_URI=https://cog-backend.onrender.com/api/v1/tools/callback
-JWT_SECRET_KEY=<generated_32_byte_hex>
 CORS_ORIGINS=["https://cog-frontend.onrender.com"]
 ```
 
-### cog-worker
+### cog-voice-ws
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=<service_role_key>
 SUPABASE_ANON_KEY=<anon_key>
-LIVEKIT_API_KEY=<api_key>
-LIVEKIT_API_SECRET=<api_secret>
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_SIP_DOMAIN=<sip_domain>
+JWT_SECRET_KEY=<same as backend>
 GEMINI_API_KEY=<gemini_key>
+ENVIRONMENT=production
+DEBUG=false
 ```
 
 ### cog-frontend (Docker Build Args)
@@ -124,7 +120,6 @@ NEXT_PUBLIC_API_URL=https://cog-backend.onrender.com
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon_key>
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
-NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
 ```
 
 ### cog-otel-collector (if deploying)
@@ -140,7 +135,7 @@ FRONTEND_URL=https://cog-frontend.onrender.com
 1. In Render Dashboard, trigger a manual deploy for services in this order:
    - `cog-otel-collector` (if using) → wait for healthy
    - `cog-backend` → wait for healthy
-   - `cog-worker` → wait for running
+   - `cog-voice-ws` → wait for running
    - `cog-frontend` (last — needs backend URL baked in) → wait for healthy
 
 2. Watch build logs for errors. Common issues:
@@ -197,7 +192,7 @@ curl https://cog-otel-collector.onrender.com
 - [ ] Open `https://cog-frontend.onrender.com` — landing page loads
 - [ ] Sign up / log in with Supabase auth
 - [ ] Create an organization, configure an AI agent
-- [ ] Test voice call through LiveKit
+- [ ] Test voice call (dashboard test call → Pipecat WebSocket / `voice-ws`)
 - [ ] Purchase a Twilio phone number (requires paid Twilio account)
 - [ ] Verify Stripe subscription flow
 - [ ] Check New Relic / OTel traces are arriving (if configured)
@@ -235,7 +230,7 @@ Render auto-deploys on push to `main`. To configure:
 |---|---|
 | Frontend blank page / API errors | `NEXT_PUBLIC_API_URL` build arg → rebuild frontend |
 | Backend 401 on all requests | `JWT_SECRET_KEY` matches Supabase JWT secret |
-| Worker not connecting to LiveKit | `LIVEKIT_URL` starts with `wss://` (not `ws://`) |
+| voice-ws WebSocket fails | `VOICE_WS_PUBLIC_URL` / `VOICE_WS_TWILIO_URL` use `wss://` (not `ws://`); JWT_SECRET_KEY matches backend |
 | Stripe webhooks failing | Webhook URL is `/billing/webhook`, `STRIPE_WEBHOOK_SECRET` is correct |
 | OTel data missing | Services in same Render region; `OTEL_ENABLED=true`; collector healthy |
 

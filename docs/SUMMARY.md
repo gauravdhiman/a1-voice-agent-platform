@@ -43,9 +43,9 @@ Comprehensive documentation organized by feature.
 1. **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system and lifecycle
 2. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
 3. **[Embed Call Button Plan](03_implementation/EMBED_CALL_BUTTON_PLAN.md)** - Embeddable call button feature architecture
-4. **[Worker README](../worker/README.md)** - Worker service architecture and setup
-5. **[Shared Module README](../shared/README.md)** - Shared code for backend and worker
-6. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Detailed tool wrapping implementation
+4. **[voice-ws README](../voice-ws/README.md)** - Pipecat WebSocket voice voice-ws (browser + Twilio Media Streams)
+5. **[Shared Module README](../shared/README.md)** - Shared code for backend and voice-ws
+6. **[Outbound phone calls](03_implementation/outbound_phone_calls.md)** - Planned outbound PSTN design (reuses Media Streams)
 7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 9. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
@@ -86,7 +86,7 @@ Comprehensive documentation organized by feature.
 ### Tools System
 
 1. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
-2. **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Tool wrapping patterns and type hints handling
+2. **[Tool System](03_implementation/tool_system.md)** - Tool architecture and Pipecat runtime integration
 3. **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Dynamic tool loading design
 4. **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Tool implementation details including Gmail tool
 
@@ -113,14 +113,14 @@ Comprehensive documentation organized by feature.
 ### Working on Voice Agents?
 
 1. Read **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system
-2. Study **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Tool wrapping patterns
-3. Review **[Worker README](../worker/README.md)** - Worker service details
+2. Study **[Tool System](03_implementation/tool_system.md)** - Tool architecture
+3. Review **[voice-ws README](../voice-ws/README.md)** - Pipecat voice worker
 4. Check **[Shared Module](../shared/README.md)** - Shared code architecture
 
 ### Building a New Tool?
 
 1. Read **[Tool System](03_implementation/tool_system.md)** - Understand tool architecture
-2. Review **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)** - Tool wrapping patterns
+2. Study **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Runtime loading design
 3. Study **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Implementation details
 4. See existing tools in `shared/voice_agents/tools/implementations/`
 
@@ -154,9 +154,9 @@ Comprehensive documentation organized by feature.
 - Notification system
 - Observability
 - Multi-tenancy architecture
-- LiveKit tool wrapping
+- Pipecat tool integration
 - Tool calling challenges
-- Worker setup and operation
+- voice-ws setup and operation
 - Shared module documentation
 - Development setup guide
 - API guidelines
@@ -169,7 +169,7 @@ Comprehensive documentation organized by feature.
 
 - Frontend development guide
 - Backend development guide
-- Worker development guide
+- voice-ws development guide
 - Shared module development guide
 - Docker deployment guide
 - Advanced topics
@@ -192,13 +192,13 @@ Comprehensive documentation organized by feature.
 
 - **Frontend**: See **[Frontend Architecture](01_architecture/frontend_architecture.md)** and `frontend/README.md`
 - **Backend**: See **[Backend Architecture](01_architecture/backend_architecture.md)** and `backend/README.md`
-- **Worker**: See **[Worker README](../worker/README.md)** and **[Voice Agents Overview](02_features/voice_agents/overview.md)**
+- **voice-ws**: See **[voice-ws README](../voice-ws/README.md)** and **[Voice Agents Overview](02_features/voice_agents/overview.md)**
 - **Shared**: See **[Shared Module README](../shared/README.md)**
 
 ### By Feature
 
 - **Voice Agents**: See **[Voice Agents Overview](02_features/voice_agents/overview.md)** and **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)**
-- **Tools**: See **[Tool System](03_implementation/tool_system.md)** and **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)**
+- **Tools**: See **[Tool System](03_implementation/tool_system.md)** and **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)**
 - **Authentication**: See **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
 - **Multi-tenancy**: See **[System Architecture](01_architecture/system_architecture.md)**
 - **Billing**: See **[Billing Overview](02_features/billing/overview.md)**
@@ -224,6 +224,10 @@ When adding new features:
 5. **Update SUMMARY.md** - Add links to new documentation
 
 ## 🔄 Recent Updates
+
+### August 2026
+
+- ✅ **Voice transport (Phases 1–3):** Pipecat WebSocket is the only transport — browser `/ws`, Twilio `/twilio`, Gemini Realtime, modular speech pipeline, shared tools, MCP, and skills. See **[ADR](01_architecture/ADR_VOICE_WS_PIPECAT.md)** and **[Phase 3](03_implementation/voice_ws_phase3.md)**.
 
 ### January 2026
 
@@ -281,12 +285,12 @@ When adding new features:
 
 1. Deep dive into **[Voice Agents Overview](02_features/voice_agents/overview.md)**
 2. Understand **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
-3. Learn **[LiveKit Tool Wrapping](03_implementation/livekit_tool_wrapping.md)**
+3. Learn **[Tool System](03_implementation/tool_system.md)**
 4. Review **[Billing Overview](02_features/billing/overview.md)**
 
 ### Advanced (3+ months)
 
-1. Study **[LiveKit Tool Wrapping Architecture](03_implementation/livekit_tool_wrapping.md)**
+1. Study **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)**
 2. Understand **[Dynamic Tool Loading](03_implementation/dynamic_tool_architecture.md)**
 3. Review **[Payment Flow](03_implementation/payment_flow.md)**
 4. Explore **[Observability Overview](02_features/observability/overview.md)**
@@ -298,7 +302,7 @@ When adding new features:
 
 - **Agent Configuration**: System prompts, greetings, phone numbers
 - **Tool Integration**: Dynamic tool loading and execution
-- **Real-Time Communication**: WebRTC via LiveKit
+- **Real-Time Communication**: Pipecat WebSocket via `voice-ws` (browser + Twilio Media Streams)
 - **LLM Integration**: Google Gemini Realtime API
 
 ### Multi-Tenancy
@@ -312,7 +316,7 @@ When adding new features:
 - **Dynamic Loading**: Tools loaded from database at runtime
 - **Function-Level Control**: Enable/disable individual tool functions
 - **OAuth Integration**: Secure token management
-- **Tool Wrapping**: LiveKit-compatible function wrappers
+- **Tool Wrapping**: Pipecat-compatible function schemas for LLM tool calls
 
 ### Billing
 
@@ -327,7 +331,7 @@ When adding new features:
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [LiveKit Documentation](https://docs.livekit.io/)
+- [Pipecat Documentation](https://docs.pipecat.ai/)
 - [Supabase Documentation](https://supabase.com/docs)
 - [Stripe Documentation](https://stripe.com/docs)
 - [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
@@ -337,7 +341,7 @@ When adding new features:
 - **[AGENTS.md](../AGENTS.md)** - AI agent coding guidelines
 - **[Backend README](../backend/README.md)** - Backend service details
 - **[Frontend README](../frontend/README.md)** - Frontend service details
-- **[Worker README](../worker/README.md)** - Worker service details
+- **[voice-ws README](../voice-ws/README.md)** - Pipecat voice voice-ws details
 - **[Shared README](../shared/README.md)** - Shared module documentation
 
 ---

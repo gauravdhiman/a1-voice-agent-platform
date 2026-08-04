@@ -92,18 +92,16 @@ class OrganizationService(BaseOrganizationService):
                     exc_info=True,
                 )
         # Per-provider "configured?" booleans. `google` is True when resolvable
-        # from the blob OR the legacy plaintext column fallback; the string
-        # providers are True when present in the decrypted blob; `livekit` is
-        # True only when its nested dict carries an api_key.
-        livekit_creds = creds.get("livekit")
+        # from the blob OR the legacy plaintext column fallback; string providers
+        # are True when present in the decrypted blob.
         provider_credentials_status = {
             "google": bool(google_api_key),
             "deepgram": bool(creds.get("deepgram")),
             "openai": bool(creds.get("openai")),
             "cartesia": bool(creds.get("cartesia")),
             "cerebras": bool(creds.get("cerebras")),
-            "livekit": isinstance(livekit_creds, dict)
-            and bool(livekit_creds.get("api_key")),
+            "openrouter": bool(creds.get("openrouter")),
+            "fish": bool(creds.get("fish")),
         }
         return Organization(
             id=org_dict["id"],
@@ -406,7 +404,8 @@ class OrganizationService(BaseOrganizationService):
             # providers), and the plaintext column is cleared so the secret
             # exists only in encrypted form. ``provider_credentials_input``
             # carries the other providers (deepgram/openai/cartesia/cerebras/
-            # livekit) the same way. An empty ``google_api_key`` clears the
+            # openrouter/fish) plus google when the credentials card
+            # is used. An empty ``google_api_key`` clears the
             # google entry from the blob.
             cred_updates: dict = {}
             if (
@@ -438,9 +437,9 @@ class OrganizationService(BaseOrganizationService):
                 cred_updates["google"] = None
 
             if org_data.provider_credentials_input:
-                # Merge per-provider inputs (e.g. {"openai": "...",
-                # "livekit": {"api_key": "...", "api_secret": "..."}}). A None
-                # value clears that provider.
+                # Merge per-provider inputs (e.g. {"openai": "...", "deepgram": "..."}).
+                # A None / empty value clears that provider. Legacy provider keys
+                # may remain in stored JSON from older rows.
                 #
                 # Google is now managed exclusively on the "API Credentials"
                 # tab (the Organization Info tab's Google field was removed), so

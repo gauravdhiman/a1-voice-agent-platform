@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 import httpx
-from livekit.agents import RunContext
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from pydantic import BaseModel, Field
 
 from shared.voice_agents.tools.base.base_tool import (
@@ -69,7 +69,7 @@ class CalComTool(BaseTool):
 
     async def get_available_slots(
         self,
-        context: RunContext,
+        context: ToolContext,
         start_date: str,
         end_date: str,
         event_type_id: Optional[int] = None,
@@ -84,7 +84,7 @@ class CalComTool(BaseTool):
             If event_type_id is not provided, uses the default configured ID.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             start_date: Start date in YYYY-MM-DD format
             end_date: End date in YYYY-MM-DD format
             event_type_id: Optional specific event type ID to check
@@ -119,7 +119,7 @@ class CalComTool(BaseTool):
 
     async def list_event_types(
         self,
-        context: RunContext,
+        context: ToolContext,
     ) -> dict[str, Any]:
         """
         Description:
@@ -127,7 +127,7 @@ class CalComTool(BaseTool):
             Use this to find the correct event_type_id for booking.
 
         Args:
-            context: LiveKit RunContext
+            context: ToolContext
         """
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -153,7 +153,7 @@ class CalComTool(BaseTool):
 
     async def create_booking(
         self,
-        context: RunContext,
+        context: ToolContext,
         start_time: str,
         name: str,
         email: str,
@@ -169,7 +169,7 @@ class CalComTool(BaseTool):
             Ensure attendee email is valid before creating booking.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             start_time: Start time in ISO 8601 format (UTC)
             name: Attendee's name
             email: Attendee's email
@@ -220,7 +220,7 @@ class CalComTool(BaseTool):
 
     async def get_upcoming_bookings(
         self,
-        context: RunContext,
+        context: ToolContext,
         email: Optional[str] = None,
     ) -> dict[str, Any]:
         """
@@ -232,7 +232,7 @@ class CalComTool(BaseTool):
             Returns only bookings with "upcoming" status.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             email: Optional attendee email to filter bookings
 
         Returns:
@@ -281,7 +281,7 @@ class CalComTool(BaseTool):
 
     async def reschedule_booking(
         self,
-        context: RunContext,
+        context: ToolContext,
         booking_uid: str,
         new_start_time: str,
         reason: str,
@@ -296,7 +296,7 @@ class CalComTool(BaseTool):
             Provide a clear reason for the rescheduling.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             booking_uid: Booking UID to reschedule
             new_start_time: New start time in ISO 8601 format (UTC)
             reason: Reason for rescheduling
@@ -338,7 +338,7 @@ class CalComTool(BaseTool):
 
     async def cancel_booking(
         self,
-        context: RunContext,
+        context: ToolContext,
         booking_uid: str,
         reason: str,
     ) -> dict[str, Any]:
@@ -352,7 +352,7 @@ class CalComTool(BaseTool):
             This action cannot be undone.
 
         Args:
-            context: LiveKit RunContext with tool_config and sensitive_config
+            context: ToolContext with tool_config and sensitive_config
             booking_uid: Booking UID to cancel
             reason: Reason for cancellation
 

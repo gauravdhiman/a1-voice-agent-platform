@@ -25,9 +25,9 @@ embed_router = APIRouter(prefix="/api/v1/embed", tags=["Embed"])
 class PublicEmbedTokenResponse(BaseModel):
     """Response model for public embed token generation."""
 
-    livekit_token: str
-    server_url: str
-    room_name: str
+    token: str
+    wsUrl: str
+    sessionId: str
 
 
 class AgentInfoResponse(BaseModel):
@@ -117,7 +117,7 @@ async def generate_public_embed_token(
     agent_id: UUID,
     request: Request,
 ):
-    """Generate a LiveKit token for embed calls.
+    """Generate a Pipecat voice session token for embed calls.
 
     This endpoint is called from the embeddable call button on external websites.
     It validates domain restrictions and rate limits before generating a token.
@@ -208,7 +208,7 @@ async def generate_public_embed_token(
     domain = request.headers.get("origin", "")
     ip_address = request.client.host if request.client else None
 
-    embed_token, livekit_token, server_url, room_name = (
+    embed_token, voice_token, ws_url, session_id = (
         embed_service.generate_embed_token(
             agent_id=str(agent_id),
             embed_config_id=str(embed_config["id"]),
@@ -217,7 +217,7 @@ async def generate_public_embed_token(
         )
     )
 
-    if not embed_token or not livekit_token or not server_url or not room_name:
+    if not embed_token or not voice_token or not ws_url or not session_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate embed token",
@@ -240,7 +240,7 @@ async def generate_public_embed_token(
         # Don't fail the request if logging fails
 
     return PublicEmbedTokenResponse(
-        livekit_token=livekit_token,
-        server_url=server_url,
-        room_name=room_name,
+        token=voice_token,
+        wsUrl=ws_url,
+        sessionId=session_id,
     )

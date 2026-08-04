@@ -68,7 +68,7 @@ class OrganizationBase(BaseModel):
         description=(
             "Fernet-encrypted JSON blob of all per-org provider keys via "
             "encrypt_data/decrypt_data: {google, deepgram, openai, cartesia, "
-            "cerebras, livekit: {api_key, api_secret}} (only the set keys "
+            "cerebras, openrouter, fish} (only the set keys "
             "present). Source of truth for the worker's key resolver; the "
             "legacy plaintext google_api_key column is retained but unused. "
             "Returned as the opaque encrypted string; never expose decrypted "
@@ -155,8 +155,7 @@ class OrganizationUpdate(BaseModel):
         exclude=True,
         description=(
             "Plaintext per-org provider credentials supplied from the UI, e.g. "
-            "{'google': '...', 'openai': '...', 'livekit': {'api_key': '...', "
-            "'api_secret': '...'}}. The service merges this with any existing "
+            "{'google': '...', 'openai': '...'}. The service merges this with any existing "
             "decrypted credentials and re-encrypts the whole blob into "
             "provider_credentials; this field is NEVER persisted directly. The "
             "legacy google_api_key field is still accepted and routed into "
@@ -196,7 +195,7 @@ class Organization(OrganizationBase):
             "Per-provider 'is a key configured?' map (booleans only — never the "
             "decrypted values), derived from the encrypted provider_credentials "
             "blob on read: {google, deepgram, openai, cartesia, cerebras, "
-            "livekit}. Surfaced so the org-settings UI can show "
+            "openrouter, fish}. Surfaced so the org-settings UI can show "
             "Configured/Not-configured pills per provider without exposing "
             "secrets to the frontend. Read-only; not an input field."
         ),

@@ -41,7 +41,7 @@ The AI Voice Agent Platform enables organizations to:
 
 - **Create AI Voice Agents**: Configure intelligent agents for customer support, scheduling, and more
 - **Integrate Tools**: Connect agents to business systems (Google Calendar, CRM, APIs)
-- **Handle Voice Calls**: Real-time voice conversations via LiveKit
+- **Handle Voice Calls**: Real-time voice conversations via Pipecat WebSocket (`voice-ws`)
 - **Manage Organizations**: Multi-tenant platform with team management
 - **Bill & Subscribe**: Credit-based billing with Stripe integration
 - **Control Access**: Role-based permissions for team collaboration
@@ -53,7 +53,7 @@ The AI Voice Agent Platform enables organizations to:
 | Frontend         | Next.js 15, TypeScript, Tailwind CSS |
 | Backend          | FastAPI, Python 3.11+                |
 | Database         | Supabase (PostgreSQL)                |
-| Real-time Voice  | LiveKit Cloud                        |
+| Real-time Voice  | voice-ws (Pipecat WebSocket)         |
 | AI/LLM           | Google Gemini Realtime API           |
 | Payments         | Stripe                               |
 | Email            | Resend.com                           |
@@ -68,9 +68,8 @@ Frontend (Next.js)
 Backend (FastAPI)
     ↓
 ├──→ Supabase (Database)
-├──→ LiveKit Cloud (Voice)
+├──→ voice-ws (Pipecat WebSocket — browser + Twilio)
 ├──→ Stripe (Payments)
-└──→ Worker (LiveKit Agents)
 ```
 
 ## Key Features
@@ -89,11 +88,12 @@ Backend (FastAPI)
 **How It Works**:
 
 1. Admin creates agent with system prompt and phone number
-2. Caller dials agent phone number
-3. LiveKit connects to backend, which creates room
-4. Worker loads agent configuration and tools
-5. AI handles conversation, using tools when needed
-6. Responses spoken back to caller in real-time
+2. Caller dials agent phone number (or browser test call / embed)
+3. Backend issues a `voice_ws_session` JWT and WebSocket URL
+4. Twilio Media Stream or Pipecat client connects to `voice-ws`
+5. voice-ws loads agent configuration, preset, and tools
+6. AI handles conversation, using tools when needed
+7. Responses spoken back to caller in real-time
 
 **See Also**: [Voice Agents Feature](../02_features/voice_agents/overview.md)
 
@@ -209,8 +209,8 @@ Backend (FastAPI)
 ai-voice-agent-platform/
 ├── frontend/          # Next.js UI application
 ├── backend/           # FastAPI REST API
-├── worker/            # LiveKit voice agent worker
-├── shared/            # Code shared by backend + worker
+├── voice-ws/          # Pipecat WebSocket voice worker
+├── shared/            # Code shared by backend + voice-ws
 ├── docs/              # Documentation (this folder)
 └── docker-compose.yml  # Container orchestration
 ```
@@ -224,7 +224,7 @@ ai-voice-agent-platform/
 | `frontend/src/services/`   | API client and business logic      | auth-service.ts, agent-service.ts |
 | `backend/src/`             | API endpoints and business logic   | auth/, voice_agents/, billing/    |
 | `backend/src/shared/`      | Shared utilities                   | middleware/, exceptions/          |
-| `worker/src/`              | Worker entry point and agent logic | worker.py                         |
+| `voice-ws/src/`            | Pipecat session setup and tools      | bot.py, session_setup.py          |
 | `shared/voice_agents/`     | Voice agent models and services    | service.py, tool_service.py       |
 | `shared/config/`           | Configuration management           | settings.py, supabase.py          |
 
@@ -243,7 +243,7 @@ cd ai-voice-agent-platform
 cp .env.example .env
 
 # Edit .env with your configuration
-# (Supabase, LiveKit, Stripe, etc.)
+# (Supabase, voice-ws URLs, Stripe, etc.)
 
 # Start all services
 ./start.sh start dev
@@ -253,7 +253,7 @@ cp .env.example .env
 
 - Starts Frontend (Next.js) on http://localhost:3000
 - Starts Backend (FastAPI) on http://localhost:8000
-- Starts Worker (LiveKit) for voice agent calls
+- Starts voice-ws (Pipecat WebSocket) for voice agent calls
 - Starts OpenTelemetry Collector for monitoring
 - Connects all services to Supabase database
 
@@ -285,14 +285,14 @@ cp .env.local.example .env.local
 # Edit .env.local with configuration
 npm run dev
 
-# Worker (new terminal)
-cd worker
-python -m venv .venv-worker
-source .venv-worker/bin/activate
+# voice-ws (new terminal)
+cd voice-ws
+python -m venv .venv-voice-ws
+source .venv-voice-ws/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with configuration
-python -m livekit.agents.cli --dev
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8765
 ```
 
 **When to Use**:
@@ -337,7 +337,7 @@ python -m livekit.agents.cli --dev
            return {"result": "..."}
    ```
 
-2. **Restart Worker**: Worker auto-discovers new tools
+2. **Restart Worker**: voice-ws auto-discovers new tools
 3. **Backend Sync**: Backend syncs tool metadata to database on startup
 4. **Configure in UI**: Go to Tools page, select tool for agent
 5. **Test**: Make test call to verify tool works
@@ -426,7 +426,7 @@ See development guides:
 1. **[Getting Started Dev](../03_development/getting_started.md)** - Local dev setup
 2. **[Frontend Development](../03_development/frontend/)** - Next.js guide
 3. **[Backend Development](../03_development/backend/)** - FastAPI guide
-4. **[Worker Development](../03_development/worker/)** - LiveKit worker guide
+4. **[voice-ws](../voice-ws/README.md)** - Pipecat WebSocket voice worker guide
 5. **[API Guidelines](../04_development_guides/api_guidelines.md)** - API standards
 
 ### Operating the Platform?
@@ -497,12 +497,12 @@ Check operations documentation:
 - Look at existing tool implementations in `shared/voice_agents/tools/implementations/`
 - Review API routes in `backend/src/`
 - Check frontend components in `frontend/src/components/`
-- Study worker logic in `worker/src/worker.py`
+- Study voice-ws logic in `voice-ws/src/bot.py` and `voice-ws/src/session_setup.py`
 
 ### Troubleshooting
 
 - **Frontend Not Loading**: Check backend is running and CORS is configured
-- **Agent Not Responding**: Check worker is running and LiveKit connection is healthy
+- **Agent Not Responding**: Check `voice-ws-dev` container is running; verify `VOICE_WS_PUBLIC_URL` and JWT secret match backend
 - **Tools Not Working**: Verify OAuth tokens are valid and tool configuration is correct
 - **Database Errors**: Check Supabase connection string and permissions
 - **Docker Issues**: Verify Docker is running and ports are not in use

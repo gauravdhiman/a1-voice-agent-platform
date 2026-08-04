@@ -3,15 +3,15 @@
  *
  * Mirrors the backend Pydantic models in `shared/voice_agents/preset_models.py`.
  * A **preset** is a named, platform-admin-managed voice-engine configuration.
- * An agent references one preset by `preset_id`; the worker fetches the preset
+ * An agent references one preset by `preset_id`; voice-ws fetches the preset
  * row live on every call (no versioning — admin edits take effect on the next
  * call). Presets carry **no secrets**; per-provider API keys live on the
  * organization (`organizations.provider_credentials`, encrypted).
  *
  * Two preset types only — `realtime` / `pipeline` — matching the `SpeechConfig`
- * discriminated union (`shared/voice_agents/speech_config.py`). A "mixed" preset
- * is NOT a third type: it is a `pipeline` preset where some stages use LiveKit
- * Inference and some use direct providers. `preset_type` is a denormalized
+ * discriminated union (`shared/voice_agents/speech_config.py`). Legacy DB rows
+ * may still contain the removed `livekit_inference` provider slug on a stage;
+ * migration rewrites those to direct providers. `preset_type` is a denormalized
  * filter column derived from `config.engine_mode` on every write by the backend
  * — never set by hand.
  *

@@ -33,12 +33,10 @@ export const handlers = [
 
   http.post(`${API_BASE_URL}/api/v1/agents/:id/test-token`, () => {
     return HttpResponse.json({
-      success: true,
-      data: {
-        token: 'test_token_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
-        serverUrl: 'wss://test.livekit.cloud',
-        roomName: 'test_agent-123_abc123',
-      },
+      transport: 'pipecat',
+      token: 'test_token_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+      wsUrl: 'ws://localhost:7860/ws',
+      sessionId: 'sess_test_123',
     })
   }),
 

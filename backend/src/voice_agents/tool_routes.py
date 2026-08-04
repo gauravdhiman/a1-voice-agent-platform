@@ -593,13 +593,13 @@ async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
     """Resolve the OAuth ``auth_config`` dict for a tool by name.
 
     DB-first resolution so MCP-sourced ``platform_tools`` (which have no
-    in-tree ``BaseTool`` subclass in the LiveKit registry) flow through the
+    in-tree ``BaseTool`` subclass in the platform tool registry) flow through the
     same OAuth start/callback endpoints as legacy tools. The DB row's
     ``auth_config`` is populated for legacy tools by
-    ``LiveKitToolRegistry.sync_with_db`` and for MCP tools by the platform
+    ``PlatformToolRegistry.sync_with_db`` and for MCP tools by the platform
     seed (see ``docs/03_implementation/mcp_integration_rfc.md``).
 
-    Falls back to the legacy LiveKit registry for back-compat if no DB row
+    Falls back to the legacy platform tool registry for back-compat if no DB row
     carries ``auth_config`` (defensive — synced/seeded rows always have it).
 
     Args:
@@ -632,9 +632,9 @@ async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
         return dict(cfg)
 
     # 2. Legacy registry fallback (back-compat for rows lacking auth_config).
-    from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+    from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
 
-    tool_class = livekit_tool_registry.get_tool_class(tool_name)
+    tool_class = platform_tool_registry.get_tool_class(tool_name)
     if tool_class is not None:
         metadata = tool_class().metadata
         if metadata.auth_config:
@@ -653,7 +653,7 @@ async def start_oauth(
     """Start OAuth flow for a specific tool.
 
     Resolves the tool's OAuth config from the ``platform_tools`` DB row first
-    (so MCP-sourced tools work), falling back to the legacy LiveKit registry.
+    (so MCP-sourced tools work), falling back to the legacy platform tool registry.
     Client credentials come from the ``GOOGLE_OAUTH_TOOL_*`` env vars via
     :class:`OAuthProviderManager`; scopes / auth_url / access_type / prompt
     come from the resolved ``auth_config``.

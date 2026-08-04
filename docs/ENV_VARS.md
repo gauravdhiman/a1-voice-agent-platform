@@ -1,6 +1,6 @@
 # Environment Variables Reference
 
-All environment variables required for production deployment across all 4 services.
+All environment variables required for production deployment across all services.
 
 > **Full deployment guide:** [docs/DEPLOY.md](DEPLOY.md)
 > **Detailed env config notes:** [docs/05_operations/environment_configuration.md](05_operations/environment_configuration.md)
@@ -11,7 +11,7 @@ All environment variables required for production deployment across all 4 servic
 |---|---|---|
 | `cog-backend` | FastAPI (Python) | Standard ($25/mo) |
 | `cog-frontend` | Next.js (Node) | Starter ($7/mo) |
-| `cog-worker` | LiveKit Voice Agent (Python) | Standard ($25/mo) |
+| `cog-voice-ws` | Pipecat WebSocket voice voice-ws (Python) | Standard ($25/mo) |
 | `cog-otel-collector` | OpenTelemetry Collector | Starter ($7/mo, optional) |
 
 ---
@@ -29,15 +29,13 @@ All environment variables required for production deployment across all 4 servic
 | `TWILIO_ACCOUNT_SID` | Twilio account identifier | Twilio Console → Account Info | No |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token | Twilio Console → Account Info | **Yes** |
 | `TWILIO_PHONE_NUMBER_SID` | Default Twilio phone number SID | Twilio Console → Phone Numbers → your number → SID | No |
-| `LIVEKIT_API_KEY` | LiveKit API key (for voice token generation) | cloud.livekit.io → project → Settings → Keys | **Yes** |
-| `LIVEKIT_API_SECRET` | LiveKit API secret | cloud.livekit.io → project → Settings → Keys | **Yes** |
-| `LIVEKIT_URL` | LiveKit WebSocket URL | cloud.livekit.io → project → Settings (starts with `wss://`) | No |
-| `LIVEKIT_SIP_DOMAIN` | LiveKit SIP domain (used by `voice_routes.py`) | cloud.livekit.io → project → SIP settings | No |
+| `VOICE_WS_PUBLIC_URL` | Browser-reachable WebSocket base for voice-ws (e.g. `ws://localhost:7860` dev, `wss://voice.example.com` prod) | Public voice-ws host | No |
+| `VOICE_WS_TWILIO_URL` | Public `wss://` base Twilio Media Streams use for phone calls (e.g. ngrok tunnel to voice-ws `:7860`). **Required for inbound/outbound PSTN** | ngrok / public tunnel or production voice-ws URL | No |
+| `JWT_SECRET_KEY` | JWT signing secret for voice session tokens (must match `voice-ws`) | Generate: `openssl rand -hex 32` | **Yes** |
 | `RESEND_API_KEY` | Resend email API key for notification emails | resend.com → API Keys | **Yes** |
 | `GOOGLE_OAUTH_TOOL_CLIENT_ID` | Google OAuth client ID | Google Cloud Console → APIs & Services → Credentials | No |
 | `GOOGLE_OAUTH_TOOL_CLIENT_SECRET` | Google OAuth client secret | Google Cloud Console → APIs & Services → Credentials | **Yes** |
 | `GOOGLE_OAUTH_TOOL_REDIRECT_URI` | Google OAuth redirect URI (tool OAuth flow) | Backend `oauth_callback` handler; must match an authorized redirect URI on the GCP OAuth client. Local dev: `http://localhost:8000/api/v1/tools/callback`. Prod: `https://<backend-host>/api/v1/tools/callback`. | No |
-| `JWT_SECRET_KEY` | JWT signing secret | Generate: `openssl rand -hex 32` | **Yes** |
 | `CORS_ORIGINS` | JSON array of allowed frontend origins | Set to `["https://cog-frontend.onrender.com"]` (update for custom domain) | No |
 | `ENVIRONMENT` | Runtime environment | Set to `production` | No |
 | `DEBUG` | Debug mode flag | Set to `false` | No |
@@ -49,21 +47,29 @@ All environment variables required for production deployment across all 4 servic
 
 ---
 
-## Worker (`cog-worker`)
+## Voice voice-ws (`cog-voice-ws`)
 
 | Variable | Description | Where to get it | Secret? |
 |---|---|---|---|
 | `SUPABASE_URL` | Supabase project URL | Same as backend | No |
 | `SUPABASE_SERVICE_KEY` | Supabase service_role key | Same as backend | **Yes** |
 | `SUPABASE_ANON_KEY` | Supabase anon key | Same as backend | **Yes** |
-| `LIVEKIT_API_KEY` | LiveKit API key | cloud.livekit.io → project → Settings → Keys | **Yes** |
-| `LIVEKIT_API_SECRET` | LiveKit API secret | cloud.livekit.io → project → Settings → Keys | **Yes** |
-| `LIVEKIT_URL` | LiveKit WebSocket URL | cloud.livekit.io → project → Settings (starts with `wss://`) | No |
-| `LIVEKIT_SIP_DOMAIN` | LiveKit SIP domain | cloud.livekit.io → project → SIP settings | No |
-| `GEMINI_API_KEY` | Google Gemini API key | Google AI Studio → API Keys | **Yes** |
+| `JWT_SECRET_KEY` | Voice session JWT verification (must match backend) | Same as backend | **Yes** |
+| `GEMINI_API_KEY` | Google Gemini API key (platform fallback for realtime presets) | Google AI Studio → API Keys | **Yes** |
+| `DEEPGRAM_API_KEY` | Deepgram STT (pipeline preset fallback) | deepgram.com | **Yes** |
+| `OPENAI_API_KEY` | OpenAI LLM (pipeline preset fallback) | platform.openai.com | **Yes** |
+| `CARTESIA_API_KEY` | Cartesia TTS (pipeline preset fallback) | cartesia.ai | **Yes** |
+| `CEREBRAS_API_KEY` | Cerebras LLM (pipeline preset fallback) | cerebras.ai | **Yes** |
+| `OPENROUTER_API_KEY` | OpenRouter LLM (pipeline preset fallback) | openrouter.ai | **Yes** |
+| `FISH_API_KEY` | Fish Audio TTS (pipeline preset fallback) | fish.audio | **Yes** |
 | `AGENT_DEFAULT_TIMEZONE` | IANA timezone for the current date/time injected into agent prompts at session start (grounds "today"/"tomorrow"/"now" reasoning) | IANA tz name, e.g. `America/Phoenix` | No |
+| `VOICE_RECORDING_TEE` | Enable pass-through recording tee logging (`true`/`false`; storage not implemented yet) | Default `false` | No |
+| `TWILIO_ACCOUNT_SID` | Twilio account SID (optional; enables Media Streams auto hang-up) | Twilio Console | No |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token (optional; pairs with account SID) | Twilio Console | **Yes** |
 | `ENVIRONMENT` | Runtime environment | Set to `production` | No |
 | `DEBUG` | Debug mode flag | Set to `false` | No |
+
+Per-org provider keys (Google, Deepgram, etc.) are stored encrypted in the database and resolved at runtime; env vars above are **platform fallbacks**.
 
 ---
 
@@ -77,14 +83,15 @@ All environment variables required for production deployment across all 4 servic
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Same as `SUPABASE_URL` | No |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | Same as `SUPABASE_ANON_KEY` | **Yes** |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe live publishable key | Stripe Dashboard → Developers → API Keys → Publishable key (Live mode) | No |
-| `NEXT_PUBLIC_LIVEKIT_URL` | LiveKit WebSocket URL | Same as `LIVEKIT_URL` | No |
 | `NODE_ENV` | Node environment | Set to `production` | No |
+
+Browser test calls receive `wsUrl` from the backend API; no separate public WebSocket env var is required on the frontend.
 
 ---
 
 ## OTel Collector (`cog-otel-collector`) — Optional
 
-> Skip this service for initial launch. Set `OTEL_ENABLED=false` on backend/worker and disable frontend OTel (`NEXT_PUBLIC_OTEL_ENABLED=false`) to skip observability entirely.
+> Skip this service for initial launch. Set `OTEL_ENABLED=false` on backend/voice-ws and disable frontend OTel (`NEXT_PUBLIC_OTEL_ENABLED=false`) to skip observability entirely.
 
 | Variable | Description | Where to get it | Secret? |
 |---|---|---|---|
@@ -97,7 +104,9 @@ All environment variables required for production deployment across all 4 servic
 
 - [ ] Production Supabase project created and `alembic upgrade head` run against it
 - [ ] Stripe switched to Live mode
-- [ ] LiveKit Cloud production project created
+- [ ] `voice-ws` deployed and reachable at public `wss://` URL
+- [ ] `VOICE_WS_TWILIO_URL` set on backend to that public `wss://` base (required for phone calls)
+- [ ] `JWT_SECRET_KEY` identical on backend and `voice-ws`
 - [ ] Twilio account upgraded from trial (required for programmatic phone number purchasing)
 - [ ] All `Secret?=Yes` values stored in a team password manager (1Password, Doppler, etc.)
 - [ ] `render.yaml` reviewed — update `NEXT_PUBLIC_API_URL` if using a custom domain

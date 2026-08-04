@@ -202,23 +202,23 @@ async def lifespan(app: FastAPI):
         )
 
     from shared.voice_agents.tool_service import ToolService
-    from shared.voice_agents.tools.base.registry_livekit import livekit_tool_registry
+    from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
     from src.services.token_refresh_service import (
         start_token_refresh_service,
         stop_token_refresh_service,
     )
 
-    # Register tools using LiveKit native registry
-    livekit_tool_registry.register_tools_from_package(
+    # Register in-tree platform tools and sync schemas to the database.
+    platform_tool_registry.register_tools_from_package(
         "shared.voice_agents.tools.implementations"
     )
 
     # Sync with database
     tool_service = ToolService()
 
-    # Sync LiveKit-based registry
-    logging.info("Syncing tools to database using LiveKit native registry...")
-    await livekit_tool_registry.sync_with_db(tool_service)
+    # Sync platform tool registry with database
+    logging.info("Syncing tools to database using platform tool registry...")
+    await platform_tool_registry.sync_with_db(tool_service)
     logging.info("Tools synchronized with database")
 
     # Seed platform skills (idempotent — uses content_hash)

@@ -122,11 +122,12 @@ async def test_generate_call_token_for_published_agent(mock_supabase):
         new=AsyncMock(return_value=(agent, None)),
     ), patch(
         "src.organization.public_routes.public_page_service.generate_call_token",
-        return_value=("lk-token", "wss://livekit", f"public_{AGENT_ID}_abc"),
+        return_value=("voice.jwt.token", "ws://localhost:7860/ws", "sess-public-1"),
     ):
         result = await generate_public_call_token(
             SLUG, AGENT_ID, x_public_access_token=None
         )
 
-    assert result.livekit_token == "lk-token"
-    assert result.room_name.startswith("public_")
+    assert result.token == "voice.jwt.token"
+    assert result.wsUrl == "ws://localhost:7860/ws"
+    assert result.sessionId == "sess-public-1"

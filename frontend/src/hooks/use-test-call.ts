@@ -1,11 +1,15 @@
+"use client";
+
 import { useCallback, useRef, useState } from "react";
+import type { PipecatClient } from "@pipecat-ai/client-js";
 import {
-  Room,
-  RoomEvent,
-  LocalAudioTrack,
-  RemoteAudioTrack,
-  createLocalTracks,
-} from "livekit-client";
+  connectPipecatVoiceCall,
+  disconnectPipecatVoiceCall,
+} from "@/lib/pipecat-voice-client";
+
+/**
+ * Browser test-call hook using Pipecat WebSocket transport.
+ */
 
 export interface TestCallState {
   isConnecting: boolean;
@@ -26,8 +30,6 @@ export interface UseTestCallResult extends TestCallState {
   startCall: () => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
-  remoteAudioTrack: RemoteAudioTrack | null;
-  localAudioTrack: LocalAudioTrack | null;
   isMuted: boolean;
 }
 
@@ -45,34 +47,14 @@ export function useTestCall({
     isUserSpeaking: false,
   });
 
-  const [remoteAudioTrack, setRemoteAudioTrack] = useState<RemoteAudioTrack | null>(null);
-  const [localAudioTrack, setLocalAudioTrack] = useState<LocalAudioTrack | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
-  const roomRef = useRef<Room | null>(null);
-  const audioRef = useRef<{
-    localTracks: LocalAudioTrack[];
-    remoteAudio: RemoteAudioTrack | null;
-  }>({
-    localTracks: [],
-    remoteAudio: null,
-  });
+  const pipecatRef = useRef<PipecatClient | null>(null);
 
   const endCall = useCallback(() => {
-    document.querySelectorAll('audio[data-livekit]').forEach(el => el.remove());
+    void disconnectPipecatVoiceCall(pipecatRef.current);
+    pipecatRef.current = null;
 
-    if (roomRef.current) {
-      roomRef.current.disconnect();
-      roomRef.current = null;
-    }
-
-    audioRef.current = {
-      localTracks: [],
-      remoteAudio: null,
-    };
-
-    setRemoteAudioTrack(null);
-    setLocalAudioTrack(null);
     setIsMuted(false);
 
     setState({
@@ -87,17 +69,11 @@ export function useTestCall({
   }, [onDisconnected]);
 
   const toggleMute = useCallback(() => {
-    const audioTrack = audioRef.current.localTracks[0];
-    if (audioTrack) {
-      if (audioTrack.isMuted) {
-        audioTrack.unmute();
-        setIsMuted(false);
-      } else {
-        audioTrack.mute();
-        setIsMuted(true);
-      }
-    }
-  }, []);
+    if (!pipecatRef.current) return;
+    const next = !isMuted;
+    pipecatRef.current.enableMic(!next);
+    setIsMuted(next);
+  }, [isMuted]);
 
   const startCall = useCallback(async () => {
     if (state.isConnecting || state.isConnected) {
@@ -112,115 +88,49 @@ export function useTestCall({
 
     try {
       const { agentService } = await import("@/services/agent-service");
-      const { token, serverUrl, roomName } = await agentService.getTestToken(agentId);
+      const bootstrap = await agentService.getTestToken(agentId);
 
-      if (!token || !serverUrl || !roomName) {
-        throw new Error("Failed to get test token");
+      if (!bootstrap.token || !bootstrap.wsUrl) {
+        throw new Error("Failed to get Pipecat voice session");
       }
 
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        audioCaptureDefaults: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-
-      roomRef.current = room;
-
-      room
-        .on(RoomEvent.ParticipantConnected, (participant) => {
-          console.log("Participant connected:", participant.identity);
-        })
-        .on(RoomEvent.ParticipantDisconnected, (participant) => {
-          console.log("Participant disconnected:", participant.identity);
-        })
-        .on(RoomEvent.Disconnected, () => {
-          console.log("Room disconnected");
-          endCall();
-        })
-        .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-          const localSid = room.localParticipant.sid;
-          const agentSpeaking = speakers.some((s) => s.sid !== localSid);
-          const userSpeaking = speakers.some((s) => s.sid === localSid);
-          setState((prev) => ({
-            ...prev,
-            isAgentSpeaking: agentSpeaking,
-            isUserSpeaking: userSpeaking,
-          }));
-        })
-        .on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-          console.log("Track subscribed:", track.sid, "from", participant.identity, "kind:", track.kind);
-          if (track.kind === "audio") {
-            audioRef.current.remoteAudio = track as unknown as RemoteAudioTrack;
-            setRemoteAudioTrack(track as unknown as RemoteAudioTrack);
-            
-            const audioElement = track.attach();
-            audioElement.autoplay = true;
-            audioElement.setAttribute('data-livekit', 'true');
-            document.body.appendChild(audioElement);
-            
-            console.log("Attached audio element for track:", track.sid);
-          }
-        })
-        .on(RoomEvent.TrackUnsubscribed, (track) => {
-          console.log("Track unsubscribed:", track.sid);
-          if (audioRef.current.remoteAudio?.sid === track.sid) {
-            audioRef.current.remoteAudio = null;
-            setRemoteAudioTrack(null);
-          }
-        });
-
-      await room.connect(serverUrl, token, {
-        autoSubscribe: true,
-      });
-
-      console.log("Room connected, local participant:", room.localParticipant.identity);
-
-      // Get audio track using LiveKit's native method
-      try {
-        const tracks = await createLocalTracks({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
+      const client = await connectPipecatVoiceCall(
+        bootstrap.token,
+        bootstrap.wsUrl,
+        {
+          onConnected: () => {
+            setState((prev) => ({
+              ...prev,
+              isConnecting: false,
+              isConnected: true,
+            }));
+            onConnected?.();
           },
-          video: false,
-        });
+          onDisconnected: () => {
+            endCall();
+          },
+          onError: (error) => {
+            setState((prev) => ({
+              ...prev,
+              isConnecting: false,
+              error: error.message,
+            }));
+            onError?.(error);
+          },
+          onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+            setState((prev) => ({
+              ...prev,
+              isAgentSpeaking,
+              isUserSpeaking,
+            }));
+          },
+        },
+      );
 
-        const audioTrack = tracks.find(
-          (track) => track.kind === "audio"
-        ) as LocalAudioTrack | undefined;
-
-        if (!audioTrack) {
-          throw new Error("No audio track created");
-        }
-
-        console.log("Created audio track, sid:", audioTrack.sid);
-        
-        audioRef.current.localTracks = [audioTrack];
-        setLocalAudioTrack(audioTrack);
-        
-        // Publish the track
-        await room.localParticipant.publishTrack(audioTrack);
-        
-        console.log("Published audio track");
-      } catch (audioError) {
-        console.error("Failed to get microphone access:", audioError);
-        throw new Error("Microphone access denied. Please allow microphone access to test the agent.");
-      }
-
-      setState((prev) => ({
-        ...prev,
-        isConnecting: false,
-        isConnected: true,
-      }));
-
-      onConnected?.();
+      pipecatRef.current = client;
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Failed to start test call");
+      const error =
+        err instanceof Error ? err : new Error("Failed to start test call");
       console.error("Test call error:", error);
 
       setState((prev) => ({
@@ -232,15 +142,20 @@ export function useTestCall({
       onError?.(error);
       endCall();
     }
-  }, [agentId, state.isConnecting, state.isConnected, endCall, onConnected, onError]);
+  }, [
+    agentId,
+    state.isConnecting,
+    state.isConnected,
+    endCall,
+    onConnected,
+    onError,
+  ]);
 
   return {
     ...state,
     startCall,
     endCall,
     toggleMute,
-    remoteAudioTrack,
-    localAudioTrack,
     isMuted,
   };
 }

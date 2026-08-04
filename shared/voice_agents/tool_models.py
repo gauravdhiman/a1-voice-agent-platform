@@ -35,16 +35,16 @@ class ToolSource(str, Enum):
     """Where a platform tool's implementation lives.
 
     Determines how the worker resolves a ``platform_tools`` row into callable
-    LiveKit tools. See ``docs/03_implementation/mcp_integration_rfc.md``.
+    Pipecat/voice-ws tools. See ``docs/03_implementation/mcp_integration_rfc.md``.
 
     Attributes:
         LEGACY: In-tree ``BaseTool`` subclass, resolved via the
-            ``LiveKitToolRegistry`` from the tool's ``name``. This is the
+            ``PlatformToolRegistry`` from the tool's ``name``. This is the
             original, pre-MCP mechanism and remains the default.
         MCP: Remote MCP server reached over Streamable HTTP. The worker builds
             an :class:`~shared.voice_agents.tools.mcp.client.McpClient` from the
             row's ``mcp_server_*`` fields, discovers the server's tools, and
-            synthesizes LiveKit ``RawFunctionTool`` wrappers for each. Coexists
+            synthesizes Pipecat function schemas and handlers for each. Coexists
             with ``LEGACY`` per RFC §1.1 (no teardown until proven).
     """
 
@@ -80,7 +80,7 @@ class PlatformToolBase(BaseModel):
         default=ToolSource.LEGACY,
         description=(
             "Where the tool implementation lives: 'legacy' (in-tree BaseTool "
-            "via LiveKitToolRegistry) or 'mcp' (remote MCP server)."
+            "via PlatformToolRegistry) or 'mcp' (remote MCP server)."
         ),
     )
     mcp_server_url: Optional[str] = Field(

@@ -2,14 +2,11 @@
 
 The resolver is the seam between a preset's ``SpeechConfig`` (which providers an
 agent's engine needs) and the credentials those providers run on. It produces the
-``api_keys`` map the speech-provider factory
-(:mod:`worker.src.speech_providers.registry`) already expects:
+``api_keys`` map the speech-provider factory expects:
 
 - ``realtime`` engine -> ``{"google": <key>}``
-- ``pipeline`` engine -> one entry per stage provider, e.g.
-  ``{"deepgram": ..., "openai": ..., "cartesia": ...}``, plus a nested
-  ``{"livekit": {"api_key": ..., "api_secret": ...}}`` **only when a stage uses
-  LiveKit Inference** (``provider == "livekit_inference"``).
+- ``pipeline`` engine -> one entry per direct stage provider, e.g.
+  ``{"deepgram": ..., "openai": ..., "cartesia": ...}``.
 
 Resolution priority per provider (mirrors the existing Google-key logic in
 ``worker.py``, generalized to every provider):
@@ -30,7 +27,7 @@ decrypts it once per call and reads ``creds["google"]`` etc.; it NEVER reads the
 legacy plaintext ``google_api_key`` column.
 
 This module is pure-Python (no LiveKit import) so it is safe to import in both the
-backend venv and the worker, and unit-testable without a network.
+backend venv and voice-ws, and unit-testable without a network.
 """
 
 import logging
@@ -55,13 +52,24 @@ _PLATFORM_ENV: dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "cartesia": "CARTESIA_API_KEY",
     "cerebras": "CEREBRAS_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "fish": "FISH_API_KEY",
 }
 
-# LiveKit Inference dispatch key -> the api_keys entry name. Inference shares one
-# LiveKit Cloud auth (api_key + api_secret) across STT/LLM/TTS, so all
-# ``livekit_inference`` stages collapse into a single ``livekit`` entry.
-_LIVEKIT_INFERENCE_DISPATCH = "livekit_inference"
-_LIVEKIT_KEY = "livekit"
+# Deprecated provider removed from the product; kept for migration normalization.
+_LIVEKIT_INFERENCE_PROVIDER = "livekit_inference"
+_INFERENCE_STAGE_DEFAULTS: dict[str, str] = {
+    "stt": "deepgram",
+    "llm": "openai",
+    "tts": "cartesia",
+}
+
+
+def normalize_stage_provider(provider: str, *, stage: str = "") -> str:
+    """Map deprecated ``livekit_inference`` stages to direct provider keys."""
+    if provider == _LIVEKIT_INFERENCE_PROVIDER:
+        return _INFERENCE_STAGE_DEFAULTS.get(stage, "openai")
+    return provider
 
 
 def _providers_needed(speech_config: SpeechConfig) -> set[str]:
@@ -72,9 +80,8 @@ def _providers_needed(speech_config: SpeechConfig) -> set[str]:
 
     Returns:
         A set of provider keys: ``{"google"}`` for realtime, or the per-stage
-        providers for pipeline (with ``livekit_inference`` mapped to
-        ``livekit``). Providers without an env mapping (e.g. ``silero``) are
-        excluded — they need no key.
+        direct providers for pipeline. Providers without an env mapping (e.g.
+        ``silero``) are excluded — they need no key.
 
     Raises:
         TypeError: If ``speech_config`` is neither realtime nor pipeline config.
@@ -83,13 +90,14 @@ def _providers_needed(speech_config: SpeechConfig) -> set[str]:
         return {"google"}
     if isinstance(speech_config, PipelineSpeechConfig):
         needed: set[str] = set()
-        for stage in (speech_config.stt, speech_config.llm, speech_config.tts):
-            provider = stage.provider
-            if provider == _LIVEKIT_INFERENCE_DISPATCH:
-                needed.add(_LIVEKIT_KEY)
-            elif provider in _PLATFORM_ENV:
+        for stage_name, stage in (
+            ("stt", speech_config.stt),
+            ("llm", speech_config.llm),
+            ("tts", speech_config.tts),
+        ):
+            provider = normalize_stage_provider(stage.provider, stage=stage_name)
+            if provider in _PLATFORM_ENV:
                 needed.add(provider)
-            # Unknown/local providers (silero, future adapters) carry no key.
         return needed
     raise TypeError(
         f"Unsupported speech_config type: {type(speech_config)!r} "
@@ -106,10 +114,8 @@ def _org_credentials(org: Optional[Any]) -> dict[str, Any]:
 
     Returns:
         The decrypted credentials dict (e.g.
-        ``{"google": ..., "livekit": {"api_key": ..., "api_secret": ...}}``),
-        or ``{}`` if there is no org, no blob, or decryption fails (a decryption
-        failure is logged and treated as no org creds — the env fallback still
-        applies, so a live call degrades rather than crashing).
+        ``{"google": ..., "deepgram": ...}``), or ``{}`` if there is no org, no
+        blob, or decryption fails.
     """
     if org is None:
         return {}
@@ -137,48 +143,6 @@ def _org_credentials(org: Optional[Any]) -> dict[str, Any]:
     return creds
 
 
-def _resolve_livekit(
-    creds: dict[str, Any],
-    use_platform_credits: bool,
-    *,
-    allow_platform_fallback: bool = True,
-) -> Optional[dict[str, str]]:
-    """Resolve the nested ``{api_key, api_secret}`` LiveKit credential.
-
-    Org values win unless ``use_platform_credits``; missing sub-keys are filled
-    from the platform env (``LIVEKIT_API_KEY`` / ``LIVEKIT_API_SECRET``) so a
-    partial org config still works.
-
-    Args:
-        creds: The decrypted org credentials dict.
-        use_platform_credits: When True, ignore org creds and use env only.
-
-    Returns:
-        The ``{"api_key": ..., "api_secret": ...}`` dict if at least one of
-        api_key/api_secret is resolvable, else ``None`` (caller omits the entry).
-    """
-    resolved: dict[str, str] = {}
-    if not use_platform_credits:
-        org_lk = creds.get(_LIVEKIT_KEY)
-        if isinstance(org_lk, dict):
-            for sub in ("api_key", "api_secret"):
-                val = org_lk.get(sub)
-                if val:
-                    resolved[sub] = str(val)
-    if allow_platform_fallback:
-        if not resolved.get("api_key"):
-            env_k = os.environ.get("LIVEKIT_API_KEY")
-            if env_k:
-                resolved["api_key"] = env_k
-        if not resolved.get("api_secret"):
-            env_s = os.environ.get("LIVEKIT_API_SECRET")
-            if env_s:
-                resolved["api_secret"] = env_s
-    if resolved.get("api_key") or resolved.get("api_secret"):
-        return resolved
-    return None
-
-
 def resolve_api_keys(
     speech_config: SpeechConfig,
     org: Optional[Any] = None,
@@ -189,9 +153,7 @@ def resolve_api_keys(
     """Build the per-provider ``api_keys`` map for a speech config + org.
 
     See the module docstring for the full resolution priority. Only the providers
-    the config actually needs appear in the result, so an org without a LiveKit
-    key running an all-direct pipeline never touches ``livekit``, and a realtime
-    agent gets just ``{"google": ...}``.
+    the config actually needs appear in the result.
 
     Args:
         speech_config: The validated SpeechConfig (realtime or pipeline) loaded
@@ -207,25 +169,14 @@ def resolve_api_keys(
             own keys even when the platform env has fallbacks for worker calls.
 
     Returns:
-        The ``api_keys`` map. String providers map to their key string;
-        ``livekit`` (only when an Inference stage is used) maps to a nested
-        ``{"api_key": ..., "api_secret": ...}`` dict. Providers with no
-        resolvable key are omitted.
+        The ``api_keys`` map. String providers map to their key string.
+        Providers with no resolvable key are omitted.
     """
     needed = _providers_needed(speech_config)
     creds = _org_credentials(org) if not use_platform_credits else {}
     api_keys: dict[str, Any] = {}
 
     for provider in needed:
-        if provider == _LIVEKIT_KEY:
-            resolved = _resolve_livekit(
-                creds,
-                use_platform_credits,
-                allow_platform_fallback=allow_platform_fallback,
-            )
-            if resolved is not None:
-                api_keys[_LIVEKIT_KEY] = resolved
-            continue
         value: Optional[str] = None
         if not use_platform_credits:
             value = creds.get(provider)
@@ -252,8 +203,7 @@ def is_preset_ready(
     single boolean suitable for org-facing catalog APIs (no provider names
     exposed). A preset is **ready** when every provider in
     ``_providers_needed(speech_config)`` appears in the resolved ``api_keys`` map
-    with a usable value. LiveKit Inference stages require both ``api_key`` and
-    ``api_secret``.
+    with a usable value.
 
     Args:
         speech_config: Validated realtime or pipeline config from a preset row.
@@ -284,15 +234,9 @@ def is_preset_ready(
     for provider in needed:
         if provider not in api_keys:
             return False
-        if provider == _LIVEKIT_KEY:
-            lk = api_keys.get(_LIVEKIT_KEY)
-            if not isinstance(lk, dict):
-                return False
-            if not lk.get("api_key") or not lk.get("api_secret"):
-                return False
-        elif not api_keys.get(provider):
+        if not api_keys.get(provider):
             return False
     return True
 
 
-__all__ = ["resolve_api_keys", "is_preset_ready"]
+__all__ = ["resolve_api_keys", "is_preset_ready", "normalize_stage_provider"]

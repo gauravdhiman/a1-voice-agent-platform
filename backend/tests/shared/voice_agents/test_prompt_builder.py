@@ -391,6 +391,8 @@ class TestCurrentDatetimeInjection:
         assert "UTC-07:00" in section
         # Guidance so the model treats this as the reference point.
         assert "today" in section.lower()
+        assert "Reference instant (ISO 8601)" in section
+        assert "Never offer, suggest, or book appointment times" in section
 
     def test_build_current_datetime_section_invalid_tz_falls_back_to_utc(self):
         # An unknown IANA zone must NOT raise; it falls back to UTC.

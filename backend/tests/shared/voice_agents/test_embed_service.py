@@ -120,24 +120,31 @@ class TestEmbedService:
         assert result is False
 
     def test_generate_embed_token(self):
-        """Test embed token generation."""
+        """Test embed token generation returns Pipecat session credentials."""
         from shared.voice_agents.embed_service import embed_service
 
-        with patch.object(embed_service, 'livekit_service') as mock_lk:
-            mock_lk.generate_token.return_value = "test_livekit_token"
-            mock_lk.url = "wss://test.livekit.cloud"
+        with patch(
+            "shared.voice_agents.embed_service.voice_session_service"
+        ) as mock_sessions:
+            mock_sessions.create_session_token.return_value = (
+                "voice.jwt.token",
+                "sess-embed-123",
+            )
 
-            embed_token, livekit_token, server_url, room_name = embed_service.generate_embed_token(
-                agent_id="test-agent-id",
-                embed_config_id="test-config-id",
-                domain="https://example.com",
-                ip_address="127.0.0.1"
+            embed_token, voice_token, ws_url, session_id = (
+                embed_service.generate_embed_token(
+                    agent_id="test-agent-id",
+                    embed_config_id="test-config-id",
+                    domain="https://example.com",
+                    ip_address="127.0.0.1",
+                )
             )
 
             assert embed_token is not None
-            assert livekit_token == "test_livekit_token"
-            assert server_url == "wss://test.livekit.cloud"
-            assert room_name.startswith("embed_test-agent-id_")
+            assert voice_token == "voice.jwt.token"
+            assert ws_url.endswith("/ws")
+            assert session_id == "sess-embed-123"
+            mock_sessions.create_session_token.assert_called_once()
 
     def test_validate_embed_token(self):
         """Test embed token validation."""

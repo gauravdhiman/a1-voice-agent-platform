@@ -132,14 +132,21 @@ class Settings(BaseSettings):
         default=False, description="OTLP logs insecure mode"
     )
 
-    # LiveKit Settings
-    livekit_url: Optional[str] = Field(
-        default=None,
-        description="LiveKit server URL (e.g., wss://your-livekit-server.com)",
+    # Voice WebSocket (Pipecat) public URLs
+    # Browser-reachable WebSocket base for voice-ws (no path; /ws is appended)
+    voice_ws_public_url: str = Field(
+        default="ws://localhost:7860",
+        description="Public WebSocket base URL for the voice-ws service",
     )
-    livekit_api_key: Optional[str] = Field(default=None, description="LiveKit API key")
-    livekit_api_secret: Optional[str] = Field(
-        default=None, description="LiveKit API secret"
+    # Twilio Media Streams require a publicly reachable wss:// URL (e.g. ngrok).
+    # Falls back to voice_ws_public_url only when that URL is already public wss.
+    voice_ws_twilio_url: str = Field(
+        default="",
+        description=(
+            "Public wss:// base URL Twilio uses for Media Streams "
+            "(e.g. wss://abc.ngrok-free.app). Empty means derive from "
+            "VOICE_WS_PUBLIC_URL when non-localhost."
+        ),
     )
 
     # Token Refresh Service Settings

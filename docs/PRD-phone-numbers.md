@@ -1,16 +1,18 @@
-# PRD: Phone Number Management (Twilio + LiveKit)
+# PRD: Phone Number Management (Twilio + voice-ws)
 
 **Feature ID:** F2
 **Status:** Ready for Implementation (v0.9 - Finalized)
 **Last Updated:** 2026-03-01
 **Owner:** Genie (AI Assistant)
 
+**Related:** [Twilio call flow](../01_architecture/twilio_call_flow.md), [Outbound phone calls](../03_implementation/outbound_phone_calls.md) (planned)
+
 ---
 
 ## 1. Overview
 
 ### Summary
-Enable users to purchase, manage, and use phone numbers directly from the VoiceAI platform. The system will integrate with both Twilio and LiveKit APIs to provide numbers, abstracting the technical complexity from business users.
+Enable users to purchase, manage, and use phone numbers directly from the VoiceAI platform. Twilio provides PSTN numbers and Media Streams; `voice-ws` handles the AI voice session over WebSocket.
 
 ### Target Users
 - Small business owners wanting AI voice agents
@@ -40,7 +42,7 @@ Enable users to purchase, manage, and use phone numbers directly from the VoiceA
 
 1. **Purchase numbers** without leaving the platform
 2. **Manage numbers** (assign to agents, activate, deactivate)
-3. **Unified experience** - user doesn't know/care about Twilio vs LiveKit
+3. **Unified experience** - user doesn't manage Twilio webhooks or voice-ws URLs directly
 4. **Cancel numbers** easily when no longer needed
 
 ---
@@ -253,7 +255,7 @@ Acceptance Criteria:
 - Search filters depend on underlying API capabilities
 
 ### D4: No Local Pool ✓
-- Direct integration with Twilio/LiveKit APIs
+- Direct integration with Twilio APIs; voice media via `voice-ws` Media Streams
 - No local pool management
 - Released numbers go back to provider immediately
 

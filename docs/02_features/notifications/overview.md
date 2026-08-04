@@ -538,7 +538,7 @@ graph LR
 2. Resend API is responding
 3. Network connectivity is stable
 4. Database is not locked
-5. Worker capacity is sufficient
+5. voice-ws capacity is sufficient
 
 ## Related Documentation
 

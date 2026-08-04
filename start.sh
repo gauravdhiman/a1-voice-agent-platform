@@ -35,12 +35,12 @@ print_usage() {
     echo "Options:"
     echo "  start dev     - Start containers in development mode"
     echo "  start prod    - Start containers in production mode"
-    echo "  start worker dev - Start worker in development mode"
-    echo "  start worker prod - Start worker in production mode"
+    echo "  start voice-ws dev - Start voice-ws in development mode"
+    echo "  start voice-ws prod - Start voice-ws in production mode"
     echo "  stop dev      - Stop development containers"
     echo "  stop prod     - Stop production containers"
-    echo "  stop worker dev - Stop development worker"
-    echo "  stop worker prod - Stop production worker"
+    echo "  stop voice-ws dev - Stop development voice-ws"
+    echo "  stop voice-ws prod - Stop production voice-ws"
     echo "  restart dev   - Restart development containers"
     echo "  restart prod  - Restart production containers"
     echo "  logs dev      - View development container logs"
@@ -52,7 +52,7 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  ./start.sh start dev"
-    echo "  ./start.sh start worker dev"
+    echo "  ./start.sh start voice-ws dev"
     echo "  ./start.sh stop prod"
     echo "  ./start.sh build dev"
 }
@@ -121,15 +121,15 @@ check_containers_running() {
     fi
 }
 
-# Function to check if worker is running
-check_worker_running() {
+# Function to check if voice-ws is running
+check_voice_ws_running() {
     local mode=$1
     local service_name=""
 
     if [ "$mode" = "dev" ]; then
-        service_name="worker-dev"
+        service_name="voice-ws-dev"
     elif [ "$mode" = "prod" ]; then
-        service_name="worker"
+        service_name="voice-ws"
     else
         return 1
     fi
@@ -143,11 +143,11 @@ check_worker_running() {
         return 1
     fi
 
-    # Check if worker service is running
+    # Check if voice-ws service is running
     if docker compose -f "$compose_file" ps "$service_name" | grep -q "Up"; then
-        return 0  # Worker is running
+        return 0  # voice-ws is running
     else
-        return 1  # Worker is not running
+        return 1  # voice-ws is not running
     fi
 }
 
@@ -169,36 +169,36 @@ build_prod() {
     echo -e "${GREEN}Production images built successfully!${NC}"
 }
 
-# Function to start development worker
-start_worker_dev() {
-    echo -e "${GREEN}Starting development worker...${NC}"
+# Function to start development voice-ws
+start_voice_ws_dev() {
+    echo -e "${GREEN}Starting development voice-ws...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
 
     # Check if worker is already running
-    if check_worker_running "dev"; then
-        echo -e "${YELLOW}Development worker is already running${NC}"
+    if check_voice_ws_running "dev"; then
+        echo -e "${YELLOW}Development voice-ws is already running${NC}"
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" up -d worker-dev
-    echo -e "${GREEN}Development worker started successfully!${NC}"
+    docker compose -f "$COMPOSE_FILE_DEV" up -d voice-ws-dev
+    echo -e "${GREEN}Development voice-ws started successfully!${NC}"
 }
 
-# Function to start production worker
-start_worker_prod() {
-    echo -e "${GREEN}Starting production worker...${NC}"
+# Function to start production voice-ws
+start_voice_ws_prod() {
+    echo -e "${GREEN}Starting production voice-ws...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
 
     # Check if worker is already running
-    if check_worker_running "prod"; then
-        echo -e "${YELLOW}Production worker is already running${NC}"
+    if check_voice_ws_running "prod"; then
+        echo -e "${YELLOW}Production voice-ws is already running${NC}"
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_PROD" up -d worker
-    echo -e "${GREEN}Production worker started successfully!${NC}"
+    docker compose -f "$COMPOSE_FILE_PROD" up -d voice-ws
+    echo -e "${GREEN}Production voice-ws started successfully!${NC}"
 }
 
 # Function to start development containers
@@ -218,8 +218,8 @@ start_dev() {
     echo -e "${GREEN}Development containers started successfully!${NC}"
     show_dev_urls
 
-    # Start worker
-    start_worker_dev
+    # Start voice-ws
+    start_voice_ws_dev
 }
 
 # Function to start production containers
@@ -239,8 +239,8 @@ start_prod() {
     echo -e "${GREEN}Production containers started successfully!${NC}"
     show_prod_urls
 
-    # Start worker
-    start_worker_prod
+    # Start voice-ws
+    start_voice_ws_prod
 }
 
 # Function to show development URLs
@@ -263,34 +263,34 @@ show_prod_urls() {
     echo ""
 }
 
-# Function to stop development worker
-stop_worker_dev() {
-    echo -e "${YELLOW}Stopping development worker...${NC}"
+# Function to stop development voice-ws
+stop_voice_ws_dev() {
+    echo -e "${YELLOW}Stopping development voice-ws...${NC}"
     cd "$PROJECT_DIR"
 
     # Check if worker is running
-    if ! check_worker_running "dev"; then
-        echo -e "${YELLOW}Development worker is not running${NC}"
+    if ! check_voice_ws_running "dev"; then
+        echo -e "${YELLOW}Development voice-ws is not running${NC}"
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" stop worker-dev
-    echo -e "${GREEN}Development worker stopped successfully!${NC}"
+    docker compose -f "$COMPOSE_FILE_DEV" stop voice-ws-dev
+    echo -e "${GREEN}Development voice-ws stopped successfully!${NC}"
 }
 
-# Function to stop production worker
-stop_worker_prod() {
-    echo -e "${YELLOW}Stopping production worker...${NC}"
+# Function to stop production voice-ws
+stop_voice_ws_prod() {
+    echo -e "${YELLOW}Stopping production voice-ws...${NC}"
     cd "$PROJECT_DIR"
 
     # Check if worker is running
-    if ! check_worker_running "prod"; then
-        echo -e "${YELLOW}Production worker is not running${NC}"
+    if ! check_voice_ws_running "prod"; then
+        echo -e "${YELLOW}Production voice-ws is not running${NC}"
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_PROD" stop worker
-    echo -e "${GREEN}Production worker stopped successfully!${NC}"
+    docker compose -f "$COMPOSE_FILE_PROD" stop voice-ws
+    echo -e "${GREEN}Production voice-ws stopped successfully!${NC}"
 }
 
 # Function to stop development containers
@@ -307,8 +307,8 @@ stop_dev() {
     docker compose -f "$COMPOSE_FILE_DEV" down
     echo -e "${GREEN}Development containers stopped successfully!${NC}"
 
-    # Stop worker
-    stop_worker_dev
+    # Stop voice-ws
+    stop_voice_ws_dev
 }
 
 # Function to stop production containers
@@ -325,8 +325,8 @@ stop_prod() {
     docker compose -f "$COMPOSE_FILE_PROD" down
     echo -e "${GREEN}Production containers stopped successfully!${NC}"
 
-    # Stop worker
-    stop_worker_prod
+    # Stop voice-ws
+    stop_voice_ws_prod
 }
 
 # Function to restart development containers
@@ -399,17 +399,17 @@ main() {
                 start_dev
             elif [ "$mode" = "prod" ]; then
                 start_prod
-            elif [ "$mode" = "worker" ]; then
+            elif [ "$mode" = "voice-ws" ]; then
                 if [ "$3" = "dev" ]; then
-                    start_worker_dev
+                    start_voice_ws_dev
                 elif [ "$3" = "prod" ]; then
-                    start_worker_prod
+                    start_voice_ws_prod
                 else
-                    echo -e "${RED}Invalid worker mode. Use 'dev' or 'prod'.${NC}"
+                    echo -e "${RED}Invalid voice-ws mode. Use 'dev' or 'prod'.${NC}"
                     exit 1
                 fi
             else
-                echo -e "${RED}Invalid mode. Use 'dev', 'prod', or 'worker'.${NC}"
+                echo -e "${RED}Invalid mode. Use 'dev', 'prod', or 'voice-ws'.${NC}"
                 exit 1
             fi
             ;;
@@ -418,17 +418,17 @@ main() {
                 stop_dev
             elif [ "$mode" = "prod" ]; then
                 stop_prod
-            elif [ "$mode" = "worker" ]; then
+            elif [ "$mode" = "voice-ws" ]; then
                 if [ "$3" = "dev" ]; then
-                    stop_worker_dev
+                    stop_voice_ws_dev
                 elif [ "$3" = "prod" ]; then
-                    stop_worker_prod
+                    stop_voice_ws_prod
                 else
-                    echo -e "${RED}Invalid worker mode. Use 'dev' or 'prod'.${NC}"
+                    echo -e "${RED}Invalid voice-ws mode. Use 'dev' or 'prod'.${NC}"
                     exit 1
                 fi
             else
-                echo -e "${RED}Invalid mode. Use 'dev', 'prod', or 'worker'.${NC}"
+                echo -e "${RED}Invalid mode. Use 'dev', 'prod', or 'voice-ws'.${NC}"
                 exit 1
             fi
             ;;

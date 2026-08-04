@@ -625,7 +625,7 @@ class ToolService:
 
         - **Legacy (code-backed) tools are never hard-deleted.** They are
           in-tree ``BaseTool`` subclasses re-seeded by
-          ``LiveKitToolRegistry.sync_with_db`` on every worker startup, so
+          ``PlatformToolRegistry.sync_with_db`` on every worker startup, so
           deleting the row is partly futile (it reappears as a draft). Return
           ``"legacy_tools_cannot_be_deleted"``; the caller steers the admin
           to unpublish instead.
@@ -680,7 +680,7 @@ class ToolService:
             tool_source = (fetch.data[0] or {}).get("tool_source")
             if tool_source == "legacy":
                 # Legacy tools are code-backed (in-tree BaseTool subclasses) and
-                # re-seeded by LiveKitToolRegistry.sync_with_db on every worker
+                # re-seeded by PlatformToolRegistry.sync_with_db on every worker
                 # startup — hard-deleting the row is futile (it reappears as a
                 # draft). Steer the admin to unpublish instead.
                 return None, "legacy_tools_cannot_be_deleted"

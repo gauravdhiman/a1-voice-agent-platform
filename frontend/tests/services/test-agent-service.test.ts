@@ -255,15 +255,15 @@ describe('AgentService', () => {
   })
 
   describe('Test Token Methods', () => {
-    it('getTestToken returns test token data', async () => {
+    it('getTestToken returns pipecat session bootstrap data', async () => {
       const result = await agentService.getTestToken('agent-1')
       expect(result).toMatchObject({
+        transport: 'pipecat',
         token: expect.any(String),
-        serverUrl: expect.any(String),
-        roomName: expect.any(String),
+        wsUrl: expect.any(String),
+        sessionId: expect.any(String),
       })
-      // Verify room name format
-      expect(result.roomName).toContain('test_')
+      expect(result.wsUrl).toContain('/ws')
     })
   })
 

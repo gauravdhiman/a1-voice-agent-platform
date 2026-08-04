@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { LiveKitCredentialRow } from "@/components/organizations/livekit-credential-row";
 import { ProviderCredentialRow } from "@/components/organizations/provider-credential-row";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,20 +32,20 @@ export interface ProviderCredentialsCardProps {
   onMarkTouched: (key: string) => void;
   onClearTouched: (key: string) => void;
   onSave: () => void | Promise<void>;
-  onRemoveProvider: (key: SimpleProviderKey | "livekit") => void | Promise<void>;
+  onRemoveProvider: (key: SimpleProviderKey) => void | Promise<void>;
   saving?: boolean;
-  removingProvider?: SimpleProviderKey | "livekit" | null;
+  removingProvider?: SimpleProviderKey | null;
   canUpdate?: boolean;
 }
 
-const EMPTY_DRAFT: ProviderCredsDraft = {
+export const EMPTY_DRAFT: ProviderCredsDraft = {
   google: "",
   deepgram: "",
   openai: "",
   cartesia: "",
   cerebras: "",
-  livekit_api_key: "",
-  livekit_api_secret: "",
+  openrouter: "",
+  fish: "",
 };
 
 /**
@@ -86,17 +85,7 @@ export function ProviderCredentialsCard({
     onClearTouched(key);
   };
 
-  const cancelLiveKitEdit = () => {
-    setEditingKeys((prev) => ({ ...prev, livekit: false }));
-    onDraftChange({
-      ...draft,
-      livekit_api_key: "",
-      livekit_api_secret: "",
-    });
-    onClearTouched("livekit");
-  };
-
-  const handleRemove = async (key: SimpleProviderKey | "livekit") => {
+  const handleRemove = async (key: SimpleProviderKey) => {
     await onRemoveProvider(key);
     setEditingKeys((prev) => ({ ...prev, [key]: false }));
   };
@@ -140,27 +129,6 @@ export function ProviderCredentialsCard({
                 />
               ))}
             </div>
-
-            <LiveKitCredentialRow
-              configured={Boolean(status.livekit)}
-              apiKey={draft.livekit_api_key}
-              apiSecret={draft.livekit_api_secret}
-              editing={Boolean(editingKeys.livekit)}
-              pendingChange={Boolean(touched.livekit)}
-              disabled={busy}
-              removing={removingProvider === "livekit"}
-              onStartEdit={() => startEdit("livekit")}
-              onCancelEdit={cancelLiveKitEdit}
-              onApiKeyChange={(value) => {
-                onDraftChange({ ...draft, livekit_api_key: value });
-                onMarkTouched("livekit");
-              }}
-              onApiSecretChange={(value) => {
-                onDraftChange({ ...draft, livekit_api_secret: value });
-                onMarkTouched("livekit");
-              }}
-              onRemove={() => handleRemove("livekit")}
-            />
 
             {pendingCount > 0 ? (
               <p className="text-sm text-amber-700">

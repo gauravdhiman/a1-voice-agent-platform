@@ -27,7 +27,7 @@ No Workspace account, no Preview enrollment.
 
 ```mermaid
 flowchart LR
-    A["Agent calls<br/>list_events"] --> B["Worker dispatch<br/>(injects user's OAuth token)"]
+    A["Agent calls<br/>list_events"] --> B["voice-ws dispatch<br/>(injects user's OAuth token)"]
     B --> C["REST connector<br/>(local MCP server)"]
     C --> D["Google Calendar REST API<br/>www.googleapis.com/calendar/v3"]
     D --> E["User's real calendar<br/>(works with personal Gmail)"]
@@ -42,21 +42,19 @@ sanitization hack) and the error handling.
 
 ### Running the connector (local dev)
 
-The connector runs as a separate process in the worker container. It dies if
-the worker container restarts — restart it with:
+The connector auto-starts as a co-process in the active voice container:
 
-```bash
-docker exec -d -e MCP_HOST=127.0.0.1 -e MCP_PORT=8733 -w /app \
-  a1-voice-agent-platform-worker-dev-1 \
-  python -m shared.voice_agents.tools.mcp.reference_servers.google_calendar_rest
-```
+- Pipecat (default): `voice-ws/entrypoint.dev.sh` inside `voice-ws-dev`
+- Google Calendar MCP co-process: `voice-ws/entrypoint.dev.sh` inside `voice-ws-dev`
 
-The `Google_calendar_mcp` row's `mcp_server_url` is
-`http://127.0.0.1:8733/mcp`. The five exposed tools: `list_calendars`,
-`list_events`, `get_event`, `create_event`, `check_availability`. The existing
-OAuth scopes (`calendar.events` read-write + `calendar.calendarlist.readonly`
-+ `calendar.events.freebusy` + `calendar.events.readonly`) cover all five, so
-the user's current token works with no re-auth.
+No manual `docker exec -d …` is required after a container recreate. The
+`Google_calendar_mcp` row's `mcp_server_url` is `http://127.0.0.1:8733/mcp`
+(loopback inside that same container). The five exposed tools:
+`list_calendars`, `list_events`, `get_event`, `create_event`,
+`check_availability`. The existing OAuth scopes (`calendar.events` read-write +
+`calendar.calendarlist.readonly` + `calendar.events.freebusy` +
+`calendar.events.readonly`) cover all five, so the user's current token works
+with no re-auth.
 
 ## Plain-language summary
 
@@ -92,7 +90,7 @@ flowchart TD
     A["Customer clicks<br/>'Connect Google Calendar' on our platform"] --> B["Check 1 — OAuth (data access)<br/>Google: 'Allow CogniNets to see your calendar?'<br/>Customer approves → we get a key for THEIR calendar"]
     B --> C["On a call, our agent reads their calendar<br/>via Google's Calendar MCP service"]
     C --> D{"Check 2 — Preview enrollment<br/>Is OUR project enrolled in the<br/>Google Workspace Developer Preview?"}
-    D -->|"No (our situation today)"| X["❌ 'The caller does not have permission'<br/>(the error in the worker logs)"]
+    D -->|"No (our situation today)"| X["❌ 'The caller does not have permission'<br/>(the error in voice-ws logs)"]
     D -->|"Yes (after we enroll)"| Y["✅ Calendar events returned to the agent"]
     style X fill:#ffe6e6,stroke:#c33
     style Y fill:#e6f4ea,stroke:#1e8e3e

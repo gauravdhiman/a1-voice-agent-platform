@@ -1,6 +1,8 @@
+> **Historical note:** Describes LiveKit-era tool wrapping challenges. Current runtime uses **`voice-ws`** with Pipecat function schemas — see `voice-ws/src/tools/assembly.py`.
+
 # Tool Calling Challenges & Solutions
 
-This document describes the challenges we faced with LiveKit tool calling and the solutions we implemented.
+This document describes the challenges we faced with LiveKit tool calling and the solutions we implemented (legacy worker era).
 
 ## Background
 
@@ -395,9 +397,9 @@ for func in functions:
 ## Related Documentation
 
 - [LiveKit Tool Wrapping Architecture](livekit_tool_wrapping.md) - Detailed wrapper implementation
-- [Worker README](../../worker/README.md) - Worker service documentation
+- [voice-ws README](../../worker/README.md) - voice-ws service documentation
 - [Shared Module README](../../shared/README.md) - Shared code architecture
-- [Worker Test File](../../worker/test_livekit_wrapping.py) - Test approaches and results
+- [voice-ws Test File](../../worker/test_livekit_wrapping.py) - Test approaches and results
 
 ## Summary
 

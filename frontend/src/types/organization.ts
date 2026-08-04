@@ -19,9 +19,9 @@ export interface Organization {
   /**
    * Per-provider "is a key configured?" map (booleans only — never the decrypted
    * values), derived from the encrypted `provider_credentials` blob on read
-   * (Phase 4). Keys: google, deepgram, openai, cartesia, cerebras, livekit.
-   * Drives the Configured/Not-configured pills on the org-settings page. The
-   * `livekit` boolean is true when the livekit blob has an `api_key`.
+   * (Phase 4). Keys: google, deepgram, openai, cartesia, cerebras, openrouter,
+   * fish.
+   * Drives the Configured/Not-configured pills on the org-settings page.
    */
   provider_credentials_status?: Record<string, boolean>;
   /** When true, `/o/{slug}` is available to visitors. */
@@ -72,15 +72,11 @@ export interface OrganizationUpdate {
    * Per-provider credentials supplied from the UI (Phase 4). Send ONLY touched
    * fields: a non-empty string to set, `null` to explicitly clear, and OMIT a
    * provider to leave it unchanged (the backend preserves omitted keys and
-   * drops `None`). LiveKit is `{api_key, api_secret}`. The backend merges this
-   * with the existing decrypted blob and re-encrypts; this field is never
-   * persisted directly. Keys: google, deepgram, openai, cartesia, cerebras,
-   * livekit.
+   * drops `None`). The backend merges this with the existing decrypted blob and
+   * re-encrypts; this field is never persisted directly. Keys: google, deepgram,
+   * openai, cartesia, cerebras, openrouter, fish.
    */
-  provider_credentials_input?: Record<
-    string,
-    string | { api_key: string; api_secret: string } | null
-  >;
+  provider_credentials_input?: Record<string, string | null>;
   public_page_enabled?: boolean;
   public_page_passphrase_enabled?: boolean;
   /** Write-only: set or rotate the public page passphrase (never returned). */

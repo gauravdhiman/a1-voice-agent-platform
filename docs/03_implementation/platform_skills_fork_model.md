@@ -699,9 +699,9 @@ Forked skills that are `is_visible=false` but still assigned to an agent show:
 
 ---
 
-## Phase 4: Worker Integration
+## Phase 4: voice-ws Integration
 
-No changes needed to the worker. The worker already:
+No changes needed to the worker. voice-ws already:
 1. Queries `agent_skills` → gets `organization_skills` records
 2. Loads `organization_skills.content` via `load_skill`
 3. Loads reference files via `load_skill_reference`

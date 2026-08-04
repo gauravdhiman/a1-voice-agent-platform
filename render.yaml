@@ -4,7 +4,7 @@
 # DEPLOYMENT ORDER:
 #   1. Deploy otel-collector first (optional — can skip and use New Relic directly)
 #   2. Deploy backend
-#   3. Deploy worker
+#   3. Deploy voice-ws
 #   4. Deploy frontend LAST (needs backend URL as build arg)
 #
 # BEFORE FIRST DEPLOY:
@@ -81,14 +81,10 @@ services:
       - key: TWILIO_PHONE_NUMBER_SID
         sync: false
 
-      # LiveKit (used by voice token generation and SIP dispatch)
-      - key: LIVEKIT_API_KEY
+      # Voice WebSocket (Pipecat) — public URL for browser + Twilio Media Streams
+      - key: VOICE_WS_PUBLIC_URL
         sync: false
-      - key: LIVEKIT_API_SECRET
-        sync: false
-      - key: LIVEKIT_URL
-        sync: false
-      - key: LIVEKIT_SIP_DOMAIN
+      - key: VOICE_WS_TWILIO_URL
         sync: false
 
       # Resend (email notifications)
@@ -149,51 +145,57 @@ services:
         value: /health,/health/ready,/health/live
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # 3. Worker (LiveKit Voice Agent)
-  #    Background worker — no HTTP listener, runs as persistent process.
+  # 3. Voice WebSocket worker (Pipecat + FastAPI)
   # ─────────────────────────────────────────────────────────────────────────────
-  - type: worker
-    name: cog-worker
+  - type: web
+    name: cog-voice-ws
     runtime: docker
-    dockerfilePath: ./worker/Dockerfile
+    dockerfilePath: ./voice-ws/Dockerfile
     dockerContext: .
     plan: standard
     region: oregon
+    healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
         value: production
       - key: DEBUG
         value: "false"
       - key: PYTHONPATH
-        value: /app
+        value: /app:/app/shared
 
-      # Supabase (worker needs DB access for agent config)
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
-
-      # LiveKit
-      - key: LIVEKIT_API_KEY
-        sync: false
-      - key: LIVEKIT_API_SECRET
-        sync: false
-      - key: LIVEKIT_URL
-        sync: false
-      - key: LIVEKIT_SIP_DOMAIN
+      - key: JWT_SECRET_KEY
         sync: false
 
-      # AI Models
       - key: GEMINI_API_KEY
         sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: FISH_API_KEY
+        sync: false
 
-      # OpenTelemetry
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+
       - key: OTEL_ENABLED
         value: "true"
       - key: OTEL_SERVICE_NAME
-        value: cog-worker-prod
+        value: cog-voice-ws-prod
       - key: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
         value: http://cog-otel-collector:4317
       - key: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
@@ -225,8 +227,6 @@ services:
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
       - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        sync: false
-      - key: NEXT_PUBLIC_LIVEKIT_URL
         sync: false
       - key: NEXT_PUBLIC_OTEL_ENABLED
         value: "true"

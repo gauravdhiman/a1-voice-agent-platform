@@ -1,5 +1,10 @@
 # Embed Call Button Feature - Implementation Plan
 
+> **Transport update (2026-08):** Embed calls use **Pipecat WebSocket** (`voice-ws`) and
+> `voice_ws_session` JWTs — not LiveKit rooms. Diagrams below that mention LiveKit
+> rooms are historical; see `shared/voice_agents/embed_service.py` and
+> `frontend/src/components/embed/` for the current flow.
+
 **Status:** Completed  
 **Created:** 2026-02-17  
 **Completed:** 2026-02-20
@@ -257,7 +262,7 @@ flowchart TB
         end
     end
 
-    subgraph LiveKit["LiveKit Cloud"]
+    subgraph LiveKit["voice-ws (Pipecat)"]
         Room["LiveKit Room"]
         Worker["AI Worker"]
         Agent["Voice Agent"]
@@ -280,7 +285,7 @@ flowchart TB
     TokenService -->|"3. Create room"| LiveKitSvc
     LiveKitSvc -->|"4. Connect"| Room
     Room -->|"5. Join room"| Worker
-    Worker -->|"6. Start"| Agent
+    voice-ws -->|"6. Start"| Agent
 ```
 
 ### Embed Button Sequence Diagram
@@ -294,8 +299,8 @@ sequenceDiagram
     participant EmbedScript as Embed Script
     participant CallPage as Call Interface
     participant API as Backend API
-    participant LiveKit as LiveKit Cloud
-    participant Worker as AI Worker
+    participant LiveKit as voice-ws (Pipecat)
+    participant voice-ws as AI Worker
 
     Note over Visitor,Worker: Phase 1: Page Load & Button Display
     
@@ -490,10 +495,10 @@ Browser establishes real-time audio connection with LiveKit.
 - Room is created if it doesn't exist
 - Connection state: "Connecting..."
 
-**Step 3: Worker Notification**
-- LiveKit notifies our AI Worker of new participant
-- Worker checks room name pattern (embed rooms have prefix)
-- Worker prepares to join as agent
+**Step 3: voice-ws Notification**
+- LiveKit notifies our AI voice-ws of new participant
+- voice-ws checks room name pattern (embed rooms have prefix)
+- voice-ws prepares to join as agent
 
 ---
 
@@ -503,12 +508,12 @@ Browser establishes real-time audio connection with LiveKit.
 AI agent joins the room and begins the conversation.
 
 **Step 1: Agent Initialization**
-- Worker fetches agent configuration from database
+- voice-ws fetches agent configuration from database
 - Loads persona, voice settings, tools
 - Initializes LLM connection (OpenAI, Google, etc.)
 
 **Step 2: Join Room**
-- Worker joins LiveKit room as participant
+- voice-ws joins LiveKit room as participant
 - Publishes audio track
 - Connection state: "Connected"
 
@@ -527,10 +532,10 @@ Real-time voice conversation between visitor and AI agent.
 **Audio Flow:**
 1. Visitor speaks → Microphone captures audio
 2. Audio sent to LiveKit → Forwarded to Worker
-3. Worker performs Speech-to-Text (STT)
+3. voice-ws performs Speech-to-Text (STT)
 4. Text sent to LLM for processing
 5. LLM generates response
-6. Worker performs Text-to-Speech (TTS)
+6. voice-ws performs Text-to-Speech (TTS)
 7. Audio sent back to visitor
 
 **Parallel Processing:**
@@ -552,7 +557,7 @@ Call terminates and resources are cleaned up.
 - Microphone access released
 
 **Step 2: Agent Cleanup**
-- Worker detects participant left
+- voice-ws detects participant left
 - Ends LLM session
 - Logs call metrics (duration, outcome)
 - Room automatically destroyed (empty)

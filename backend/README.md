@@ -62,7 +62,7 @@ async def sync_with_db(self) -> None:
     Sync all tool metadata from code to database.
     Creates or updates platform_tools with authentication requirements.
     """
-    for tool_name, tool_class in livekit_tool_registry._tools.items():
+    for tool_name, tool_class in platform_tool_registry._tools.items():
         tool_instance = tool_class()
         metadata = tool_instance.metadata
 

@@ -79,7 +79,7 @@ open e2e/reports/report.html
 **E2E Architecture Details**:
 - **Isolated Stack**: Runs on ports 3001 (FE) and 8001 (BE) using `docker-compose.e2e.yml`.
 - **Transient DB**: Uses a dedicated Postgres container initialized with Supabase schemas (`auth`) and roles.
-- **Mocks**: External services (Supabase Auth, Stripe, LiveKit) are mocked at the network/dependency layer.
+- **Mocks**: External services (Supabase Auth, Stripe, voice-ws session tokens) are mocked at the network/dependency layer.
 - **Reports**: HTML reports and failure artifacts (videos/traces) are saved to `e2e/reports/` (Git ignored).
 
 ## Code Style Guidelines
@@ -516,7 +516,6 @@ for project-wide coverage to be below 100%, but **new/changed code should not
 ship with uncovered branches**. Run coverage locally (`pytest --cov`) and review
 the diff's uncovered lines before considering a task done.
 
-
 ### Python Tests
 
 ```python
@@ -545,15 +544,15 @@ class TestExample:
 ### Key Directories
 
 - `backend/src/`: FastAPI application code (auth, billing, voice_agents, notifications, organization)
-- `shared/`: Shared code between backend and worker (voice_agents models, services, tools)
-- `worker/`: LiveKit worker for voice AI agents
+- `shared/`: Shared code between backend and voice-ws (voice_agents models, services, tools)
+- `voice-ws/`: Pipecat WebSocket voice worker (realtime + pipeline presets)
 - `frontend/src/`: Next.js application (components, services, hooks, types)
 
 ### Important Patterns
 
-1. **No Session Manager**: Worker fetches tools directly from database each call
-2. **Two-Tier Tool Service**: Frontend gets safe responses, worker gets full tool objects with OAuth tokens
-3. **LiveKit Room Creation**: Webhook validates agent, LiveKit dispatch creates room, worker extracts phone from room name
+1. **No Session Manager**: voice-ws fetches tools directly from database each call
+2. **Two-Tier Tool Service**: Frontend gets safe responses, voice-ws gets full tool objects with OAuth tokens
+3. **Voice session JWT**: Backend issues short-lived tokens; browser/Twilio connect to `voice-ws` WebSocket endpoints
 4. **OpenTelemetry**: Manual instrumentation for traces, metrics, and logs throughout
 
 ## Environment Variables
@@ -623,7 +622,7 @@ Run `pre-commit run --all-files` manually before pushing.
     - Mermaid is supported by GitHub, GitLab, and most Markdown editors
     - Always validate Mermaid syntax using https://mermaid.live/
     - Avoid ASCII art or text-based diagrams - use Mermaid instead
-- For each key directories (`backend`, `frontend`, `worker`, `shared`), add a `README.md` file with the module documentation) and keep that always up to date.
+- For each key directories (`backend`, `frontend`, `voice-ws`, `shared`), add a `README.md` file with the module documentation) and keep that always up to date.
 - For each key files, add a docstring with the file documentation
 
 #### Database Schema Documentation
@@ -715,7 +714,7 @@ Run `pre-commit run --all-files` manually before pushing.
 
 ### Local Development Environment
 
-- **Backend, frontend, and worker** run via Docker Compose (`docker-compose.dev.yml`).
+- **Backend, frontend, and voice-ws** run via Docker Compose (`docker-compose.dev.yml`).
 - **Local Supabase** is used for development (not cloud Supabase). It runs on `http://127.0.0.1:54321`.
 - The `.env` file in the project root has local Supabase credentials. `.env.dev` has cloud/staging credentials — do not confuse the two.
 - Backend hot-reloads via volume mounts (`./backend:/app`, `./shared:/app/shared`).
@@ -732,7 +731,7 @@ After implementing any fix or new feature, you MUST:
 1. **Add or update tests** for every code change, BEFORE raising a PR:
    - **Unit tests** (Python `pytest`): Test models, validators, service methods, PromptBuilder logic
    - **Route/integration tests** (Python `pytest`): Test API endpoints with mocked dependencies
-   - **Worker integration tests**: Test PromptBuilder integration, tool integration
+   - **voice-ws integration tests**: Test PromptBuilder integration, tool integration
    - **Frontend tests** (if applicable): Test service methods, component behavior
    - Rule: If you changed code, there must be a corresponding test change. No exceptions.
 2. **Run relevant unit/integration tests** and ensure they pass with good coverage.
@@ -774,6 +773,30 @@ After implementing any fix or new feature, you MUST:
 ### Python: Avoid local imports that shadow top-level imports
 
 Never use `from X import Y` inside a function if `Y` is already imported at the top of the file. In Python, a local import makes the name local to the **entire function** — even lines before the import statement. This causes `UnboundLocalError` on earlier references. If you need a conditional import, use a different variable name or import the module instead (`import X; X.Y`).
+
+### Voice transport (Pipecat WebSocket — voice-ws)
+
+- **All call surfaces** (dashboard test call, embed, public org page, Twilio phone)
+  use **`voice-ws/`** (Pipecat WebSocket). Backend returns `{ token, wsUrl, sessionId }`.
+- The legacy **`worker/`** LiveKit package was **removed**; history lives in git only.
+- The deprecated **`livekit_inference`** preset provider slug was removed. Pipeline
+  presets use direct providers only; migration
+  `20260803000001_remove_livekit_inference_from_presets` rewrites any remaining DB rows.
+- Browser clients use `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` (`WS /ws`).
+- Phone calls use Twilio Media Streams → `voice-ws` `WS /twilio`. Set **`VOICE_WS_TWILIO_URL`** to a public `wss://` base (ngrok); localhost is rejected.
+- Session auth is a short-lived `voice_ws_session` JWT (`shared/voice_agents/voice_session_service.py`), signed with `JWT_SECRET_KEY` shared by backend and voice-ws.
+- Phase 3 parity lives in `voice-ws/src/session_setup.py`, `src/tools/`, and
+  `src/speech/`. Platform tools register via `shared/voice_agents/tools/base/platform_tool_registry.py`.
+- OpenTelemetry in `voice-ws/src/main.py` uses lazy imports so tests/dev images
+  without OTLP exporters still start; add `opentelemetry-exporter-otlp-proto-grpc`
+  to `voice-ws/requirements.txt` for full export in prod.
+- Local `Google_calendar_mcp` (`http://127.0.0.1:8733/mcp`) is started as a
+  co-process by `voice-ws/entrypoint.dev.sh`. If calendar tools are missing at runtime, recreate
+  `voice-ws-dev` — a plain uvicorn CMD will not start the connector.
+- After changing `voice-ws/requirements.txt`, rebuild the image
+  (`docker compose -f docker-compose.dev.yml build voice-ws-dev`); restart alone
+  does not install new packages.
+- Docs: `docs/01_architecture/ADR_VOICE_WS_PIPECAT.md`, `docs/03_implementation/voice_ws_phase1.md`, `docs/03_implementation/voice_ws_phase2.md`, `docs/03_implementation/voice_ws_phase3.md`.
 
 ### Frontend: Tailwind CSS v4
 
@@ -845,8 +868,11 @@ When a process, workflow, or technique proves valuable through repeated use or s
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

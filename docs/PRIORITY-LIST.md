@@ -29,7 +29,7 @@ Build an **AI voice agent platform** (voice-only) that combines:
 | F1 | Platform Skills Management (Admin UI) | M | High | 2026-06-22 |
 | F1 | Shared `<SkillEditor>` + org skills tab migration | M | High | 2026-06-22 |
 | F1 | Platform skills `status` enum (single source of truth) — supersedes the prior soft-delete work; soft-delete / show-deleted / restore now handled via `status` enum (draft/active/deprecated/deleted) + dedicated transition endpoints | M | High | 2026-06-24 |
-| — | Worker token-refresh race condition (multi-instance lease lock) | M | High | 2026-06-23 |
+| — | voice-ws token-refresh race condition (multi-instance lease lock) | M | High | 2026-06-23 |
 | F2 | Phone Number Management (Twilio + LiveKit) | L | High | 2026-03-15 |
 
 ### 🟡 In Progress / Next (priority order)
@@ -221,7 +221,7 @@ appointment-booking/
 - ✅ Built-in skill library expanded to 8 skills (added `insurance-verification`, `dispatch-coordination`).
 - ✅ Platform Skills Management (admin UI) — `/platform/skills` with create/edit/hide-restore/files + import-from-URL.
 - ✅ Shared `<SkillEditor>` extracted; org skills tab migrated to it (org + platform share one UI).
-- ✅ Worker single-instance scaling: Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim/release_token_refresh` SQL fns). Used a row-lease via RPC instead of `pg_advisory_lock` (advisory locks need session affinity, broken by PostgREST pooling). Run `alembic upgrade head` to apply migration `20260623000001`.
+- ✅ voice-ws single-instance scaling: Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim/release_token_refresh` SQL fns). Used a row-lease via RPC instead of `pg_advisory_lock` (advisory locks need session affinity, broken by PostgREST pooling). Run `alembic upgrade head` to apply migration `20260623000001`.
 - ✅ Platform skills `status` enum (single source of truth) — soft-delete / show-deleted / restore are now backed by the enum + transition endpoints. Migration `20260624000001` applied.
 - 🎯 Industry-template onboarding (Phase B) — `organizations.industry` + `industry_skill_templates`; auto-fork industry skills on org create / industry change.
 

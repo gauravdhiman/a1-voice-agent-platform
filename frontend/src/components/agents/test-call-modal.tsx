@@ -39,8 +39,6 @@ export function TestCallModal({
     startCall,
     endCall,
     toggleMute,
-    remoteAudioTrack,
-    localAudioTrack,
     isAgentSpeaking,
     isUserSpeaking,
     isMuted,
@@ -137,7 +135,6 @@ export function TestCallModal({
                   </div>
                   <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
                     <AgentAudioVisualizerWave
-                      audioTrack={remoteAudioTrack ?? undefined}
                       state={isAgentSpeaking ? "speaking" : "listening"}
                       color="#22c55e"
                       className="w-full h-full"
@@ -152,7 +149,6 @@ export function TestCallModal({
                   </div>
                   <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
                     <AgentAudioVisualizerWave
-                      audioTrack={localAudioTrack ?? undefined}
                       state={isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"}
                       color={isMuted ? "#9ca3af" : "#3b82f6"}
                       className="w-full h-full"

@@ -139,7 +139,7 @@ CREATE TABLE skill_categories (
 │  - Marketplace APIs                                           │
 │  - Skill Versioning                                           │
 ├─────────────────────────────────────────────────────────────┤
-│  Worker (LiveKit Agents)                                     │
+│  voice-ws (LiveKit Agents)                                     │
 │  - Skill Loader                                              │
 │  - Dynamic System Prompt Generation                          │
 │  - Skill Context Injection                                   │
@@ -175,7 +175,7 @@ POST   /api/v1/agents/{id}/skills        # Add skill to agent
 DELETE /api/v1/agents/{id}/skills/{sid}  # Remove skill
 ```
 
-### 4.5 Worker Integration
+### 4.5 voice-ws Integration
 
 ```python
 # Skill Loader in Worker
@@ -383,7 +383,7 @@ Every skill must include:
 - File management (upload, read, update, delete)
 - Skill import from GitHub URL
 - URL-based bookmarking (skill tabs, file selection)
-- Skill loader in worker (`load_skill_reference` function)
+- Skill loader in voice-ws (`load_skill_reference` function)
 - Agent skill assignment with toggle switches
 
 ### Phase 2a: Progressive Disclosure ✅ COMPLETE
@@ -463,7 +463,7 @@ Move to Feature F3 per `PRIORITY-LIST.md`. Long-running chat agents with persist
 ## 10. Dependencies
 
 - Supabase (existing)
-- LiveKit Workers (existing)
+- voice-wss (existing)
 - File storage for skill packages (S3/Supabase Storage)
 - Redis (optional, for caching)
 

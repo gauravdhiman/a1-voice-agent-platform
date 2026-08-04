@@ -4,13 +4,11 @@ These are small, self-contained FastMCP servers that expose a tool contract over
 Streamable HTTP. They serve two purposes:
 
 1. **The first working MCP tool** — a platform ``platform_tools`` row with
-   ``tool_source='mcp'`` can point at one of these servers and the worker will
+   ``tool_source='mcp'`` can point at one of these servers and voice-ws will
    route to it via :mod:`shared.voice_agents.tools.mcp.dispatch`. See
    ``docs/03_implementation/mcp_integration_rfc.md``.
-2. **Test fixtures** — the worker tests stand these up in-process on an
-   ephemeral localhost port (see ``worker/tests/conftest.py``) to prove the
-   platform's MCP plumbing end-to-end without third-party OAuth or external
-   network.
+2. **Test fixtures** — voice-ws tests stand these up in-process on an
+   ephemeral localhost port to prove the platform's MCP plumbing end-to-end
 
 The ``google_calendar`` server is an in-memory stand-in for the real Google
 Calendar MCP server. It mirrors the tool contract of the legacy

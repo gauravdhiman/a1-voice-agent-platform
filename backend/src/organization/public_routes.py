@@ -64,11 +64,11 @@ class PublicAccessResponse(BaseModel):
 
 
 class PublicCallTokenResponse(BaseModel):
-    """LiveKit credentials for a public-page voice call."""
+    """Pipecat voice session credentials for a public-page visitor call."""
 
-    livekit_token: str
-    server_url: str
-    room_name: str
+    token: str
+    wsUrl: str
+    sessionId: str
 
 
 async def _load_public_org(url_slug: str) -> dict:
@@ -205,7 +205,7 @@ async def generate_public_call_token(
     agent_id: UUID,
     x_public_access_token: Optional[str] = Header(default=None),
 ) -> PublicCallTokenResponse:
-    """Generate a LiveKit token for a public-page visitor call."""
+    """Generate a Pipecat voice session token for a public-page visitor call."""
     org = await _load_public_org(slug)
     _require_access_token(org, slug, x_public_access_token)
 
@@ -220,17 +220,17 @@ async def generate_public_call_token(
             detail="Agent is not available on the public page",
         )
 
-    livekit_token, server_url, room_name = public_page_service.generate_call_token(
+    voice_token, ws_url, session_id = public_page_service.generate_call_token(
         agent_id=str(agent_id)
     )
-    if not livekit_token or not server_url or not room_name:
+    if not voice_token or not ws_url or not session_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate call token",
         )
 
     return PublicCallTokenResponse(
-        livekit_token=livekit_token,
-        server_url=server_url,
-        room_name=room_name,
+        token=voice_token,
+        wsUrl=ws_url,
+        sessionId=session_id,
     )

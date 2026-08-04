@@ -22,7 +22,7 @@ export interface PublicOrgAgentsResponse {
 }
 
 export interface PublicCallTokenResponse {
-  livekit_token: string;
-  server_url: string;
-  room_name: string;
+  token: string;
+  wsUrl: string;
+  sessionId: string;
 }

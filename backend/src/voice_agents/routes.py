@@ -10,11 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
 
-from shared.voice_agents.livekit_service import AGENT_DISPATCH_NAME, livekit_service
+from shared.config.settings import settings
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
 from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.voice_session_service import voice_session_service
 from src.auth.dependencies import assert_has_permission, require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -26,11 +27,12 @@ agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])
 
 
 class TestTokenResponse(BaseModel):
-    """Response model for test token generation."""
+    """Response for browser test-call bootstrap over Pipecat WebSocket."""
 
+    transport: str = "pipecat"
     token: str
-    serverUrl: str
-    roomName: str
+    wsUrl: str
+    sessionId: str
 
 
 async def _validate_preset_assignment(preset_id: Optional[UUID]) -> Optional[str]:
@@ -211,12 +213,7 @@ async def get_test_token(
     agent_id: UUID,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Generate a LiveKit token for browser-based agent testing.
-
-    This endpoint allows users to test voice agents directly from the browser
-    without making a phone call. The user connects to a LiveKit room where
-    the AI agent joins and responds to voice input.
-    """
+    """Bootstrap a browser test call via Pipecat WebSocket."""
     current_user_id, user_profile = user_data
 
     # Get the agent
@@ -225,8 +222,8 @@ async def get_test_token(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
 
     # Permission: agent:read on the agent's org. The test token is a
-    # read-equivalent op (it joins a LiveKit room to hear the agent
-    # speak), so the same gate as `get_agent` applies.
+    # read-equivalent op (join a voice session to hear the agent), so the
+    # same gate as `get_agent` applies.
     assert_has_permission(
         user_profile,
         "agent",
@@ -235,40 +232,26 @@ async def get_test_token(
         error_message="Insufficient permissions to test this agent",
     )
 
-    # Generate test token
-    token, server_url, room_name = livekit_service.generate_test_token(
-        agent_id=str(agent_id),
-        user_id=str(current_user_id),
-    )
-
-    if not token or not server_url or not room_name:
+    try:
+        token, session_id = voice_session_service.create_session_token(
+            agent_id=str(agent_id),
+            user_id=str(current_user_id),
+            purpose="test_call",
+        )
+    except ValueError as exc:
+        logger.error("Failed to create voice_ws session token: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LiveKit is not configured. Please contact the administrator.",
-        )
+            detail="Voice session service is not configured. Set JWT_SECRET_KEY.",
+        ) from exc
 
-    # Pre-create the LiveKit room AND explicitly dispatch the worker.
-    # Room creation alone is not enough: LiveKit Cloud automatic dispatch
-    # rules frequently do not fire for web test rooms, so the worker never
-    # receives a job and the caller sits in a silent room. Explicit
-    # agent_dispatch.create_dispatch is what actually starts the agent.
-    # Best-effort: a LiveKit API hiccup here must not block the test call; the
-    # caller still gets a token and can fall back to implicit room creation.
-    try:
-        await livekit_service.create_room(room_name=room_name)
-        await livekit_service.create_agent_dispatch(
-            room_name=room_name,
-            agent_name=AGENT_DISPATCH_NAME,
-        )
-    except Exception as create_err:
-        logger.warning(
-            f"Failed to pre-create/dispatch LiveKit room {room_name} for test call: {create_err}"
-        )
-
+    base = settings.voice_ws_public_url.rstrip("/")
+    ws_url = f"{base}/ws"
     return TestTokenResponse(
+        transport="pipecat",
         token=token,
-        serverUrl=server_url,
-        roomName=room_name,
+        wsUrl=ws_url,
+        sessionId=session_id,
     )
 
 
@@ -487,9 +470,9 @@ class EmbedTokenResponse(BaseModel):
     """Response model for embed token generation."""
 
     embed_token: str
-    livekit_token: str
-    server_url: str
-    room_name: str
+    token: str
+    wsUrl: str
+    sessionId: str
 
 
 @agent_router.get(
@@ -659,7 +642,7 @@ async def get_embed_token(
     """Generate an embed token for browser-based agent calls.
 
     This endpoint is called from the embeddable call interface to obtain
-    a time-limited token for connecting to a LiveKit room.
+    a time-limited token for connecting to a voice-ws WebSocket session.
     """
     from shared.voice_agents.embed_service import embed_service
 
@@ -722,7 +705,7 @@ async def get_embed_token(
     domain = request.headers.get("origin", "")
     ip_address = request.client.host if request.client else None
 
-    embed_token, livekit_token, server_url, room_name = (
+    embed_token, voice_token, ws_url, session_id = (
         embed_service.generate_embed_token(
             agent_id=str(agent_id),
             embed_config_id=str(embed_config["id"]),
@@ -731,7 +714,7 @@ async def get_embed_token(
         )
     )
 
-    if not embed_token or not livekit_token or not server_url or not room_name:
+    if not embed_token or not voice_token or not ws_url or not session_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate embed token",
@@ -739,9 +722,9 @@ async def get_embed_token(
 
     return EmbedTokenResponse(
         embed_token=embed_token,
-        livekit_token=livekit_token,
-        server_url=server_url,
-        room_name=room_name,
+        token=voice_token,
+        wsUrl=ws_url,
+        sessionId=session_id,
     )
 
 

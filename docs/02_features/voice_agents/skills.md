@@ -178,9 +178,9 @@ POST   /api/v1/skills/sync-all                               — Sync built-in s
 | Import skills from URL | ✓ | ✓ | ✗ |
 | Sync all orgs | ✓ | ✗ | ✗ |
 
-## Worker Integration
+## voice-ws Integration
 
-The worker registers `load_skill` and `load_skill_reference` function tools when an agent has assigned skills:
+voice-ws registers `load_skill` and `load_skill_reference` function tools when an agent has assigned skills:
 
 ```python
 # Fetch skill summaries for prompt metadata

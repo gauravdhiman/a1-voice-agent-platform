@@ -1,5 +1,12 @@
 # Voice Engine: End-to-End + Pipeline Design (High-Level)
 
+> **Implementation note (2026-08):** Voice runtime is **`voice-ws/`** (Pipecat WebSocket +
+> Twilio Media Streams). Sections below describe the original LiveKit-oriented design
+> phases; current wiring lives in `voice-ws/src/session_setup.py` and
+> `voice-ws/src/speech/factory.py`. See [voice_engine.md](../02_core_systems/voice_engine.md)
+> and [ADR_VOICE_WS_PIPECAT.md](ADR_VOICE_WS_PIPECAT.md). The deprecated preset
+> provider slug **`livekit_inference`** was a removed provider name, not the LiveKit product.
+
 > Status: **Phases 1–4 complete** (Phases 1–2b behavior-neutral; Phase 3 makes the
 > pipeline usable by agents; Phase 4 makes it usable end-to-end through the UI).
 > Phase 1 added the config models, `speech_providers/` package with the realtime
@@ -7,7 +14,7 @@
 > through. Phase 2 wired the pipeline branch: per-stage LiveKit-native cloud
 > providers (Silero VAD + Deepgram STT + OpenAI LLM + Cartesia TTS) behind a
 > table-driven factory, with `turn_detection` deferred to Phase 5. Phase 2b added
-> LiveKit **Inference** (STT/LLM/TTS through a single LiveKit Cloud auth, special
+> LiveKit **Inference** (STT/LLM/TTS through a single voice-ws (Pipecat) auth, special
 > dispatch path) and **Cerebras** (direct OpenAI-compatible LLM, keyed path), so a
 > pipeline can mix Inference and direct stages per stage. **Phase 3** added
 > platform-admin-managed **presets** (`pipeline_presets` catalog), per-agent
@@ -17,7 +24,7 @@
 > picker (a "voice profile" select that hides `engine_mode`/STT/LLM/TTS from org
 > users), and the per-provider org-credentials UI (with a backend-derived
 > `provider_credentials_status` boolean map). 100% coverage on the new shared
-> modules; 95 backend + 45 worker Phase-3 tests green; full frontend vitest suite
+> modules; 95 backend + 45 voice-ws Phase-3 tests green; full frontend vitest suite
 > (532 tests) + org-credentials backend tests (20) green; no-network container
 > smoke confirms the full key-resolution → Inference-injection seam; browser smoke
 > validates the full create/publish/edit/unpublish/delete + picker + org-cred flow.
@@ -35,7 +42,7 @@
 > provider+model picker. Two preset types only — `{realtime, pipeline}` — a
 > "mixed" preset is just a pipeline where some stages use Inference and some use
 > direct providers (no third type). Agents **reference** a preset by id **only** —
-> **no versioning**: the worker fetches the preset row live on every call, so an
+> **no versioning**: voice-ws fetches the preset row live on every call, so an
 > admin's edit takes effect on the next call. For LiveKit Inference, a tenant can
 > **bring its own LiveKit key** (org-level, Inference-only for now, injected only
 > when the preset uses an Inference stage) instead of consuming the platform's
@@ -47,7 +54,7 @@
 >
 > Goal: support **two configurable conversation engines** per agent — the existing
 > Google end-to-end realtime model, **and** a modular STT → LLM → TTS pipeline where
-> each stage can use a different provider/model. Reuse existing worker plumbing; keep
+> each stage can use a different provider/model. Reuse existing voice-ws plumbing; keep
 > it modular and swappable.
 
 ## Key decision (please confirm)
@@ -75,7 +82,7 @@ flowchart LR
         A1["threading.Queue cascade"] --> A2["Custom OpenAI-Realtime WS server"]
     end
     subgraph Us["Our platform (LiveKit agents, asyncio)"]
-        B1["Worker entrypoint"] --> B2["AgentSession"]
+        B1["voice-ws entrypoint"] --> B2["AgentSession"]
         B2 -->|"realtime mode"| B3["RealtimeModel (Google)"]
         B2 -->|"pipeline mode (new)"| B4["STT + LLM + TTS + VAD + TurnDetector"]
     end
@@ -254,7 +261,7 @@ with no resolvable key (neither org nor env) are **omitted** (no raise) — the
 registry's existing per-provider guard raises a clear `ValueError` naming the
 provider, preserving the current fail-fast behavior.
 
-LiveKit **Inference** is the one special case: a single LiveKit Cloud auth
+LiveKit **Inference** is the one special case: a single voice-ws (Pipecat) auth
 (`api_key` + `api_secret`) authenticates *all* Inference stages in a pipeline, so
 the resolver injects it under a dedicated `livekit` entry (a nested
 `{api_key, api_secret}` dict) **only when the preset's config actually contains a
@@ -271,7 +278,7 @@ both are `None`).
 flowchart TD
     Agent["VoiceAgent.preset_id -> preset.config (SpeechConfig)"] --> Resolver["key_resolver.resolve_api_keys(speech_config, org, use_platform_credits)"]
     Blob["organizations.provider_credentials (encrypted JSONB)"] -->|decrypt_data| Resolver
-    Plat["platform env: GEMINI/OPENAI/DEEPGRAM/CARTESIA/CEREBRAS_API_KEY, LIVEKIT_API_KEY/SECRET"] --> Resolver
+    Plat["platform env: GEMINI/OPENAI/DEEPGRAM/CARTESIA/CEREBRAS_API_KEY, /SECRET"] --> Resolver
     Credits["agent.use_platform_credits"] --> Resolver
     Resolver --> Map["{google|openai|deepgram|cartesia|cerebras: str, livekit: {api_key, api_secret} (only when an Inference stage is used)}"]
     Map --> Factories["registry.build_session_components (inference stages read livekit; direct stages read their own)"]
@@ -296,7 +303,7 @@ flowchart LR
         B3["Sentence-batched LLM→TTS handoff<br/>faster time-to-first-audio"]
         B4["TTS leading-silence trim"]
         B5["Background ChatContext compaction<br/>long conversations"]
-        B6["Model warmup at worker boot<br/>avoid cold-start first turn"]
+        B6["Model warmup at voice-ws boot<br/>avoid cold-start first turn"]
     end
     LK --> MVP["MVP: native pipeline mode"]
     Borrow --> V2["v2: latency hardening"]
@@ -378,7 +385,7 @@ flowchart TD
   Phase 5 (non-`None` config raises `NotImplementedError`). 100% coverage on the
   new modules; behavior-neutral (worker still uses the realtime default).
 - **P2b Inference + Cerebras:** Add LiveKit **Inference** as a dispatchable
-  provider for STT/LLM/TTS (single LiveKit Cloud auth via `api_key`+`api_secret`,
+  provider for STT/LLM/TTS (single voice-ws (Pipecat) auth via `api_key`+`api_secret`,
   special dispatch path in `registry.py` bypassing the per-provider key guard)
   and **Cerebras** as a direct LLM (`openai.LLM.with_cerebras`, keyed path). A
   pipeline may mix Inference and direct stages per stage (the "mixed preset"
@@ -396,7 +403,7 @@ flowchart TD
   `voice_agents.preset_id` FK + `organizations.provider_credentials` encrypted blob).
   Two preset types only — `{realtime, pipeline}`; a "mixed" preset is just a
   pipeline mixing Inference + direct stages. **No versioning (locked decision):**
-  the agent stores only `preset_id`; the worker fetches the preset row **live on
+  the agent stores only `preset_id`; voice-ws fetches the preset row **live on
   every call** (`preset_service.get_preset_by_id`), so an admin's edit takes effect
   on the next call — no `preset_version`, no snapshot. Pydantic discriminated-union
   validation (`shared/voice_agents/preset_models.py`); `preset_type` is derived from
@@ -456,7 +463,7 @@ flowchart TD
   (owner decision).
 - **P4 follow-ups (done)** — two enhancements to the Phase 4 surface:
   - **System default voice profile.** The Phase 4 fallback for an agent with
-    `preset_id=null` was a hardcoded `default_realtime_config()` in the worker —
+    `preset_id=null` was a hardcoded `default_realtime_config()` in voice-ws —
     invisible/unmanageable, shown in the picker as a hardcoded "Default (Gemini
     Realtime)" option. Promoted to a dedicated, always-present, admin-only,
     non-published **"System Default"** row: `pipeline_presets.is_default=true`
@@ -472,7 +479,7 @@ flowchart TD
     `preset_service.get_default_preset` and keeps `default_realtime_config()`
     only as the ultimate safety net (missing/unparseable default → hardcoded
     fallback). The org-admin picker's hardcoded option became a generic
-    **"Default" → null**. **✅ Done** — 82 backend + 8 worker + 39 frontend
+    **"Default" → null**. **✅ Done** — 82 backend + 8 voice-ws + 39 frontend
     tests green; browser-validated (System Default row pinned to top with a
     "Default" badge, config edit/save round-trip, picker "Default" option).
     - **Follow-up: aligned default messaging.** The picker's default option now
@@ -522,7 +529,7 @@ flowchart TD
 - **Regression:** existing realtime tests stay green throughout (P1 is behavior-neutral).
 - **Docs:** this file (architecture), a `voice_engine.md` module doc, provider-plugin
   guide (`docs/03_development/`), `DATABASE_SCHEMA.md` update for `speech_config`,
-  README updates for `worker/` and `shared/`.
+  README updates for `voice-ws/` and `shared/`.
 - **Validation gates (per CLAUDE.md):** `py_compile` on changed files, `pytest` with
   coverage of new branches, `agent-browser` smoke test of the config UI, cleanup of
   smoke artifacts. No git commits without explicit approval.

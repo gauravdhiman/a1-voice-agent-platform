@@ -261,7 +261,7 @@ export function PresetConfigForm({
         <p className="text-xs text-muted-foreground">
           {mode === "realtime"
             ? "One Google Gemini native-audio model handles STT + LLM + TTS."
-            : "STT → LLM → TTS cascade; each stage swappable. A 'mixed' preset uses LiveKit Inference for some stages and direct providers for others."}
+            : "STT → LLM → TTS cascade; each stage swappable. A 'mixed' preset uses deprecated livekit_inference provider for some stages and direct providers for others."}
         </p>
       </div>
 

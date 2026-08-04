@@ -35,13 +35,10 @@ class McpToolDef(BaseModel):
     """A tool exposed by an MCP server, as discovered via ``tools/list``.
 
     Attributes:
-        name: Tool name (unique within a server). Used as the LiveKit
-            ``function_tool`` name.
-        description: Human-readable description; becomes the LiveKit tool's
-            prompt-facing description.
+        name: Tool name (unique within a server).
+        description: Human-readable description exposed to the LLM.
         input_schema: JSON Schema (2020-12) for the tool's arguments, taken
-            verbatim from the server's ``inputSchema``. The LiveKit adapter
-            turns this into typed ``function_tool`` parameters.
+            verbatim from the server's ``inputSchema`` and sanitized for Pipecat.
     """
 
     name: str

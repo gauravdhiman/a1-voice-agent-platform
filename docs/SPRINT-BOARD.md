@@ -26,7 +26,7 @@ the active roadmap.
 | Built-in skill library (15 industry-specific skills) | 2026-06-24 | Phase 2c re-design: 15 industry-specific skills, 5 per industry (dental, restaurant, HVAC), one per capability slot. Each skill is industry-tuned with its own decision tree, mermaid diagram, guardrails, and reference files. Skills are decoupled from specific tools — they describe user-visible actions. Library index in `docs/02_features/voice_agents/skills_library.md`. |
 | Platform Skills Management (Admin UI) | 2026-06-22 | Platform-admin-only UI at `/platform/skills`: list/create/edit/hide-restore/files + import-from-URL. Backend RBAC on all routes; `include_inactive` admin list. |
 | Shared `<SkillEditor>` + org skills tab migration | 2026-06-22 | Extracted shared master-detail editor (`frontend/src/components/skills/skill-editor.tsx`); org skills tab now renders it via `OrganizationSkillsTab`. Org + platform share one UI — no drift. |
-| Worker token-refresh race condition (multi-instance) | 2026-06-23 | Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim_token_refresh`/`release_token_refresh` SQL fns, migration `20260623000001`). `TokenRefreshService` claims before the OAuth call, releases in `finally`. Lease TTL auto-recovers from crashes; fail-closed. **Note:** used a row-lease via RPC rather than `pg_advisory_lock` because advisory locks need session affinity, which Supabase/PostgREST connection pooling breaks. TDD (red→green), 9 new tests. |
+| voice-ws token-refresh race condition (multi-instance) | 2026-06-23 | Postgres-backed per-tool lease lock (`token_refresh_leases` + `claim_token_refresh`/`release_token_refresh` SQL fns, migration `20260623000001`). `TokenRefreshService` claims before the OAuth call, releases in `finally`. Lease TTL auto-recovers from crashes; fail-closed. **Note:** used a row-lease via RPC rather than `pg_advisory_lock` because advisory locks need session affinity, which Supabase/PostgREST connection pooling breaks. TDD (red→green), 9 new tests. |
 | Platform skills status enum (single source of truth) | 2026-06-24 | Consolidated `is_active` + `is_deleted` booleans into a single `status VARCHAR(20)` enum (draft / active / deprecated / deleted) with a CHECK constraint. Dedicated transition endpoints (`deprecate` / `reactivate` / `delete` / `restore`) enforce the state machine server-side. Frontend adapter passes `statuses` query param. Migration `20260624000001`. TDD red→green, 36+ tests across backend + frontend. |
 
 ### Platform foundations (shipped)
@@ -65,10 +65,10 @@ the active roadmap.
 
 | ID | Feature | Effort | Priority | Rationale |
 |----|---------|--------|----------|-----------|
-| F7 | Call Recording & Transcription | Medium | P2 | High value; builds on `call_logs` + LiveKit. |
+| F7 | Call Recording & Transcription | Medium | P2 | High value; builds on `call_logs` + voice-ws recording tee. |
+| F13 | Campaign Management (Outbound) | High | P3 | See [outbound_phone_calls.md](03_implementation/outbound_phone_calls.md). |
 | F8 | CRM Integration | Medium | P2 | Reuses the dynamic-tool architecture. |
 | F4 | Call Analytics Dashboard | Low | P3 | Leverages `call_logs` + OTEL metrics already collected. |
-| F13 | Campaign Management (Outbound) | High | P3 | Voice-agent extension; needs scheduling + compliance. |
 | F5 | Voice Templates (Industry) | Low | P3 | Preset system prompts per industry; complements skills. |
 | F6 | SMS/Text Fallback | Medium | P3 | Twilio already integrated. |
 | F9 | Multi-language Support | Medium | P3 | TTS/STT language switching. |
@@ -110,7 +110,7 @@ costs the same as building now.
 ---
 
 ## 📝 Next sprint (suggested)
-- [x] Worker scaling: Postgres-backed lease lock implemented + tested (migration `20260623000001` — `alembic upgrade head` applied; DB head confirmed at `20260624000001`).
+- [x] voice-ws scaling: Postgres-backed lease lock implemented + tested (migration `20260623000001` — `alembic upgrade head` applied; DB head confirmed at `20260624000001`).
 - [x] Platform skills `status` enum (single source of truth) — soft-delete, restore, and show-deleted are now backed by the enum + transition endpoints (PR #25, migration `20260624000001`).
 - [x] **Navigation redesign + permission contract (N1)** — see `docs/tw-drafts/navigation-redesign.md`. All 5 phases shipped: (a) backend `GET /me/permissions` embedded on `/api/v1/auth/me?org_id=` (role-based set, with `*:*` wildcard for `platform_admin`), (b) frontend `useHasPermission()` + `useMyPermissions` hooks, (c) `nav-config.ts` with `requiredPermission` per item, (d) `OrganizationSwitcher` popover in the sidebar, (e) Phone Numbers & Skills promoted to top-level routes, (f) page-level + component-level frontend gates (N1 follow-ups #1–#4), (g) 4 backend tool_routes CRITs closed, (h) 5 surgical auth fixes, (i) `require_permission` / `require_role` factory + `assert_has_permission` / `assert_has_role` helpers. Architecture review at `docs/tw-drafts/n1-architecture-review.md`; per-endpoint PASS/FIXED audit at `docs/02_features/authentication_rbac/backend-endpoint-permission-audit.md`. Epics A + B + D-partial of the review are done. Org page collapse to settings-only is the remaining piece of the original N1 scope; the URL refactor (`?org_id=` → `/{orgId}/`) is filed as task #27.
 - [ ] **N1 Epic C** — migrate the ~27 remaining inline `has_role` ladders to `Depends(require_permission(...))` / `assert_has_permission(...)` per context (task #41). Touches `voice_agents/routes.py`, `skill_routes.py`, `phone_numbers/routes.py`, `organization/routes.py`, `billing/routes.py`, `platform_skill_routes.py`.

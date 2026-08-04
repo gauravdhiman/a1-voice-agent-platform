@@ -10,7 +10,7 @@ Organizations can:
 
 - **Create AI Voice Agents**: Configure intelligent agents with custom system prompts
 - **Integrate External Tools**: Connect agents to business systems (Google Calendar, CRM, APIs)
-- **Handle Voice Calls**: Real-time voice communication powered by LiveKit
+- **Handle Voice Calls**: Real-time voice via Pipecat WebSocket (`voice-ws`) and Twilio Media Streams
 - **Manage Teams**: Multi-tenant architecture with role-based access control
 - **Track Usage**: Credit-based billing with Stripe integration
 - **Scale Securely**: Built with enterprise-grade security and observability
@@ -57,13 +57,13 @@ graph TB
     subgraph Services["Platform Services"]
         FE[Frontend - Next.js]
         BE[Backend - FastAPI]
-        WK[Worker - LiveKit]
+        WK[voice-ws - Pipecat]
         OTEL[OpenTelemetry Collector]
     end
 
     subgraph External["External Services"]
         TW[Twilio]
-        LK[LiveKit Cloud]
+        LK[voice-ws (Pipecat)]
         ST[Stripe]
         GG[Google Services]
         DB[Supabase Database]
@@ -117,10 +117,10 @@ graph TB
   - Stripe webhook handling
   - Multi-tenancy enforcement
 
-### Worker (LiveKit)
+### voice-ws (Pipecat WebSocket)
 
 - **Purpose**: Runs AI voice agents in real-time conversations
-- **Technologies**: LiveKit Agents SDK, Google Gemini Realtime API
+- **Technologies**: Pipecat WebSocket (`voice-ws`), Google Gemini Realtime API
 - **Key Features**:
   - Dynamic tool loading from database
   - Tool wrapping for LLM compatibility
@@ -140,7 +140,7 @@ graph TB
 ### Infrastructure
 
 - **Database**: Supabase (PostgreSQL with Row-Level Security)
-- **Real-time**: LiveKit Cloud for voice/video
+- **Real-time**: voice-ws (Pipecat) for voice/video
 - **Payments**: Stripe for billing and subscriptions
 - **Email**: Resend.com for transactional emails
 - **Observability**: OpenTelemetry with New Relic integration
@@ -148,14 +148,9 @@ graph TB
 
 ## Key Innovations
 
-### 1. LiveKit Tool Wrapping
+### 1. Pipecat tool integration
 
-Our innovative wrapper pattern solves the challenge of making tool methods work with LLMs by creating dynamic wrapper functions that:
-
-- Remove `self` parameter (for instance state)
-- Preserve exact parameter signatures
-- Delegate to bound methods with all parameters
-- Work with LiveKit's `@function_tool` decorator
+Platform tools expose JSON schemas for LLM function calling in `voice-ws` via `PlatformToolRegistry`.
 
 This allows **any** tool with **any** signature to work seamlessly with LLMs.
 
@@ -164,7 +159,7 @@ This allows **any** tool with **any** signature to work seamlessly with LLMs.
 Different tool data for different security needs:
 
 - **API Layer**: Returns safe metadata (no OAuth tokens, API keys)
-- **Worker Layer**: Returns full tool instances with all secrets
+- **voice-ws Layer**: Returns full tool instances with all secrets
 
 This keeps sensitive data secure while enabling powerful tool functionality.
 
@@ -207,14 +202,14 @@ Automatic greeting when agent enters room:
 | **Backend**        | Python 3.11+              | Backend runtime                 |
 | **Backend**        | Supabase Client           | Database client                 |
 | **Database**       | PostgreSQL (via Supabase) | Persistent storage              |
-| **Worker**         | LiveKit Agents SDK        | Real-time voice/video           |
+| **Worker**         | Pipecat WebSocket (`voice-ws`)        | Real-time voice/video           |
 | **Worker**         | Google Gemini Realtime    | AI LLM                          |
 | **Authentication** | Supabase Auth             | User authentication             |
 | **Payments**       | Stripe                    | Billing & subscriptions         |
 | **Email**          | Resend.com                | Transactional emails            |
 | **Observability**  | OpenTelemetry             | Tracing, metrics, logs          |
 | **Containers**     | Docker & Docker Compose   | Containerization                |
-| **Real-time**      | LiveKit Cloud             | Voice/video infrastructure      |
+| **Real-time**      | voice-ws (Pipecat)             | Voice/video infrastructure      |
 | **Phone**          | Twilio                    | Telephony provider              |
 
 ## Who Is This For?
@@ -351,7 +346,7 @@ Automatic greeting when agent enters room:
 - Stripe billing
 - Email notifications
 - Voice agent core system
-- LiveKit tool wrapping
+- Pipecat tool integration
 - Google Calendar tool
 - OpenTelemetry observability
 - Docker deployment
@@ -389,7 +384,7 @@ Automatic greeting when agent enters room:
 - **Documentation**: See `docs/` folder
 - **Backend**: Check [Backend README](../../backend/README.md)
 - **Frontend**: Check [Frontend README](../../frontend/README.md)
-- **Worker**: Check [Worker README](../../worker/README.md)
+- **voice-ws**: Check [voice-ws README](../../voice-ws/README.md)
 - **Shared Module**: Check [Shared README](../../shared/README.md)
 - **Development**: See [AGENTS.md](../../AGENTS.md)
 

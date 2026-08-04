@@ -1,144 +1,68 @@
-# Agent Direct Test Feature - Implementation Plan
+# Agent Direct Test Feature — Architecture (Pipecat WebSocket)
 
-## Overview
+**Status:** Implemented via `voice-ws` + session JWT  
+**Related:** [voice-ws README](../../voice-ws/README.md), [ADR_VOICE_WS_PIPECAT.md](ADR_VOICE_WS_PIPECAT.md)
 
-This document outlines the implementation plan for adding a "Test Agent" feature that allows users to directly test voice agents from the Agent configuration page via a browser-based WebRTC call, bypassing the Twilio phone number flow.
+## Phone call path (Twilio Media Streams)
 
-## Current Architecture
-
-### Existing Phone Call Flow
 ```
-Caller → Twilio → Webhook → TwiML → LiveKit (SIP) → Worker → Agent
+Caller → Twilio → Webhook → TwiML Stream → voice-ws /twilio → Agent
 ```
 
-1. Caller dials Twilio phone number
-2. Twilio hits webhook at `/api/v1/voice/twilio/incoming`
-3. Backend returns TwiML with SIP URI to bridge to LiveKit
-4. Twilio connects to LiveKit via SIP
-5. LiveKit dispatches job to Worker
-6. Worker joins room, loads agent/tools, starts conversation
+1. User dials the agent's Twilio number
+2. Twilio POSTs to `/api/v1/voice/twilio/incoming`
+3. Backend returns TwiML `<Connect><Stream url="wss://…/twilio?token=JWT"/>`
+4. Twilio opens a Media Stream WebSocket to `voice-ws`
+5. `voice-ws` verifies JWT, loads agent preset, starts Pipecat session
 
-### Web-Based Test Flow
+See **[Twilio call flow](twilio_call_flow.md)** for full sequence diagrams.
+
+## Browser test call path
+
 ```
-User clicks "Test Agent"
-  → Backend generates LiveKit token
-  → Backend creates LiveKit room
-  → Backend explicitly dispatches named `voice-agent` worker
-  → Browser connects to LiveKit
-  → Worker joins → Agent responds
+Dashboard → Backend test-token → Pipecat client → voice-ws /ws → Agent
 ```
 
-> **Important:** The worker is explicitly named `voice-agent` via
-> `@server.rtc_session(agent_name="voice-agent")`. This disables the default
-> unnamed automatic dispatch behavior. The test-token endpoint dispatches that
-> named worker explicitly after creating the room.
+1. User clicks **Test Call** on an agent in the dashboard
+2. Frontend calls backend for a short-lived voice session token
+3. Backend returns `{ token, wsUrl, sessionId }` (`VOICE_WS_PUBLIC_URL` + JWT)
+4. Frontend connects with `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport`
+5. `voice-ws` verifies JWT and runs the same agent session as phone calls
 
-## Implementation
+## API contract (test token)
 
-### Backend Changes
+**Endpoint:** `POST /api/v1/voice/agents/{agent_id}/test-token`
 
-#### 1.1 API Endpoint for Test Session Token
-**File:** `backend/src/voice_agents/routes.py`
-
-```python
-@router.post("/agents/{agent_id}/test-token")
-async def get_test_token(agent_id: UUID) -> TestTokenResponse:
-```
-
-**Request:** `agent_id` (UUID)  
 **Response:**
+
 ```json
 {
-  "token": "eyJhbGc...",
-  "serverUrl": "wss://livekit.example.com",
-  "roomName": "test_agent_123_abc"
+  "token": "<voice_ws_session JWT>",
+  "wsUrl": "ws://localhost:7860/ws",
+  "sessionId": "<uuid>"
 }
 ```
 
-#### 1.2 LiveKit Service
-**File:** `shared/voice_agents/livekit_service.py`
+## Key files
 
-- Updated to use settings from config
-- Added `generate_test_token()` method that creates a room named `test_{agent_id}_{random}`
+| File | Role |
+|------|------|
+| `shared/voice_agents/voice_session_service.py` | Create/verify session JWT |
+| `backend/src/voice_agents/voice_routes.py` | Test token + Twilio webhooks |
+| `voice-ws/src/main.py` | `/ws` and `/twilio` WebSocket endpoints |
+| `voice-ws/src/session_setup.py` | Agent load, preset, tools, MCP |
+| `frontend/src/lib/pipecat-voice-client.ts` | Browser Pipecat client |
 
-#### 1.3 Settings
-**File:** `shared/config/settings.py`
+## Environment
 
-- Added LiveKit settings (`livekit_url`, `livekit_api_key`, `livekit_api_secret`)
-
-### Frontend Changes
-
-#### 2.1 Dependencies
-- Added `livekit-client` package
-
-#### 2.2 Environment Variables
-- Added `NEXT_PUBLIC_LIVEKIT_URL` to `.env.local.example`
-
-#### 2.3 Test Call Hook
-**File:** `frontend/src/hooks/use-test-call.ts`
-
-Custom hook managing the test call lifecycle:
-- Connect to LiveKit room using token
-- Handle audio (microphone input, speaker output)
-- Connection state management
-- Cleanup on unmount
-
-#### 2.4 Test Call Modal Component
-**File:** `frontend/src/components/agents/test-call-modal.tsx`
-
-Modal component with:
-- Test Agent button on detail page
-- Connection status UI
-- Mute/Unmute controls
-- End call button
-
-### Worker Changes
-
-#### 3.1 Room Name Detection
-**File:** `worker/src/worker.py`
-
-Updated to handle test room name format:
-- Test room: `test_{agent_id}_{random}`
-- Phone room: `call_{phone_number}_{random}`
-
-Worker fetches agent by ID for test rooms instead of phone number.
-
-## File Changes Summary
-
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `backend/src/voice_agents/routes.py` | Modify | Add `POST /agents/{agent_id}/test-token` endpoint |
-| `shared/voice_agents/livekit_service.py` | Modify | Add `generate_test_token()` method |
-| `shared/config/settings.py` | Modify | Add LiveKit settings |
-| `worker/src/worker.py` | Modify | Handle test room name format |
-| `frontend/package.json` | Modify | Add `livekit-client` dependency |
-| `frontend/.env.local.example` | Modify | Add `NEXT_PUBLIC_LIVEKIT_URL` |
-| `frontend/src/services/agent-service.ts` | Modify | Add `getTestToken()` API method |
-| `frontend/src/hooks/use-test-call.ts` | New | Custom hook for test call |
-| `frontend/src/components/agents/test-call-modal.tsx` | New | Modal component for test UI |
-| `frontend/src/app/(dashboard)/agents/[agentId]/page.tsx` | Modify | Add Test Agent button |
+- `JWT_SECRET_KEY` — shared by backend and `voice-ws`
+- `VOICE_WS_PUBLIC_URL` — browser WebSocket base (backend embeds in `wsUrl`)
+- `VOICE_WS_TWILIO_URL` — public `wss://` base for Twilio (phone only)
+- `GEMINI_API_KEY` — platform fallback for realtime presets
 
 ## Tests
 
-### Backend Tests
-**File:** `backend/tests/voice_agents/test_test_token.py`
+- `backend/tests/voice_agents/test_voice_routes_pipecat.py` — test token + Twilio TwiML
+- `voice-ws/tests/` — WebSocket session and tool runtime tests
 
-- `test_get_test_token_success` - Test successful token generation
-- `test_get_test_token_agent_not_found` - Test when agent doesn't exist
-- `test_get_test_token_permission_denied` - Test permission checks
-- `test_get_test_token_inactive_agent` - Test inactive agent rejection
-- `test_get_test_token_livekit_not_configured` - Test when LiveKit is not configured
-- `test_generate_test_token` - Test LiveKit service token generation
-- `test_generate_test_token_not_configured` - Test service when not configured
-
-### Frontend Tests
-**File:** `frontend/tests/services/test-agent-service.test.ts`
-
-- `getTestToken returns test token data` - Test token retrieval
-
-## Security Considerations
-
-1. **Token Expiration:** Test tokens expire after 10 minutes
-2. **Room Cleanup:** Test rooms auto-delete after inactivity (empty_timeout=300)
-3. **Access Control:** Only users with org access can test agents
-4. **Active Agent Check:** Cannot test inactive agents
+**Historical note:** An earlier design used LiveKit rooms and `@pipecat-ai/client-js` in the browser. That path was removed; git history retains the old implementation.

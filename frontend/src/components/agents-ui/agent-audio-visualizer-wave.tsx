@@ -2,12 +2,13 @@
 
 import { useMemo, type ComponentProps } from 'react';
 import { type VariantProps, cva } from 'class-variance-authority';
-import { type AgentState, type TrackReferenceOrPlaceholder } from '@livekit/components-react';
 
 import { ReactShaderToy } from '@/components/agents-ui/react-shader-toy';
-import { useAgentAudioVisualizerWave } from '@/hooks/agents-ui/use-agent-audio-visualizer-wave';
+import {
+  useAgentAudioVisualizerWave,
+  type VoiceVisualizerState,
+} from '@/hooks/agents-ui/use-agent-audio-visualizer-wave';
 import { cn } from '@/lib/utils';
-import { LocalAudioTrack, RemoteAudioTrack } from 'livekit-client';
 
 const DEFAULT_COLOR = '#1FD5F9';
 
@@ -112,9 +113,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // Apply line intensity
   color *= line;
   
-  // Add dithering for smoother gradients
-  // color += (randFibo(fragCoord).x - 0.5) / 255.0;
-  
   // Calculate alpha based on line intensity
   float alpha = line * uMix;
   
@@ -122,45 +120,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 }`;
 
 interface WaveShaderProps {
-  /**
-   * Class name
-   * @default ''
-   */
   className?: string;
-  /**
-   * Speed of the oscilloscope
-   * @default 10
-   */
   speed?: number;
-  /**
-   * Amplitude of the oscilloscope
-   * @default 0.02
-   */
   amplitude?: number;
-  /**
-   * Frequency of the oscilloscope
-   * @default 20.0
-   */
   frequency?: number;
-  /**
-   * Color of the oscilloscope
-   * @default '#1FD5F9'
-   */
   color?: string;
-  /**
-   * Mix of the oscilloscope
-   * @default 1.0
-   */
   mix?: number;
-  /**
-   * Line width of the oscilloscope in pixels
-   * @default 2.0
-   */
   lineWidth?: number;
-  /**
-   * Blur of the oscilloscope in pixels
-   * @default 0.5
-   */
   blur?: number;
 }
 
@@ -222,58 +188,16 @@ export const AgentAudioVisualizerWaveVariants = cva(['aspect-square'], {
 });
 
 export interface AgentAudioVisualizerWaveProps {
-  /**
-   * The size of the visualizer.
-   * @defaultValue 'lg'
-   */
   size?: 'icon' | 'sm' | 'md' | 'lg' | 'xl';
-  /**
-   * The agent state.
-   * @defaultValue 'speaking'
-   */
-  state?: AgentState;
-  /**
-   * The color of the wave in hex format.
-   * @defaultValue '#1FD5F9'
-   */
+  state?: VoiceVisualizerState;
   color?: string;
-  /**
-   * The line width of the wave in pixels.
-   * @defaultValue 2.0
-   */
   lineWidth?: number;
-  /**
-   * The blur of the wave in pixels.
-   * @defaultValue 0.5
-   */
   blur?: number;
-  /**
-   * The audio track to visualize. Can be a local/remote audio track or a track reference.
-   */
-  audioTrack?: LocalAudioTrack | RemoteAudioTrack | TrackReferenceOrPlaceholder;
-  /**
-   * Additional CSS class names to apply to the container.
-   */
   className?: string;
 }
 
 /**
- * A wave-style audio visualizer that responds to agent state and audio levels.
- * Displays an animated wave that reacts to the current agent state (connecting, thinking, speaking, etc.)
- * and audio volume when speaking.
- *
- * @extends ComponentProps<'div'>
- *
- * @example ```tsx
- * <AgentAudioVisualizerWave
- *   size="lg"
- *   state="speaking"
- *   color="#1FD5F9"
- *   lineWidth={2}
- *   blur={0.5}
- *   audioTrack={audioTrack}
- * />
- * ```
+ * A wave-style audio visualizer driven by voice session state (Pipecat path).
  */
 export function AgentAudioVisualizerWave({
   size = 'lg',
@@ -281,7 +205,6 @@ export function AgentAudioVisualizerWave({
   color,
   lineWidth,
   blur,
-  audioTrack,
   className,
   ref,
   ...props
@@ -301,15 +224,12 @@ export function AgentAudioVisualizerWave({
     }
   }, [lineWidth, size]);
 
-  const { speed, amplitude, frequency, opacity } = useAgentAudioVisualizerWave({
-    state,
-    audioTrack,
-  });
+  const { speed, amplitude, frequency } = useAgentAudioVisualizerWave({ state });
 
   return (
     <WaveShader
       ref={ref}
-      data-lk-state={state}
+      data-voice-state={state}
       speed={speed}
       color={color}
       amplitude={amplitude}

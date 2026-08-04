@@ -1,10 +1,10 @@
-# AI Voice Agent Platform: Architectural Flow & Implementation Guide
+# AI Voice Agent Platform: Twilio Call Flow (Pipecat Media Streams)
 
-This document provides a comprehensive walkthrough of how the platform works, from initial setup to a live AI agent handling a phone call and using tools.
+This document walks through how an inbound PSTN call reaches a voice agent, from phone number configuration through tool execution in `voice-ws`.
 
-## **1. High-Level Architecture**
+## 1. High-Level Architecture
 
-The platform is built as a multi-tenant SaaS that bridges traditional telephony (Twilio) with modern AI (Gemini) and real-time communication (LiveKit).
+The platform bridges traditional telephony (Twilio) with AI speech providers (Gemini Realtime or a modular STT→LLM→TTS pipeline) over a **bidirectional Twilio Media Stream WebSocket** handled by `voice-ws` (Pipecat).
 
 ```mermaid
 graph TD
@@ -19,17 +19,17 @@ graph TD
         AgentSvc[Voice Agent Service]
         ToolSvc[Tool Service]
         VoiceRoutes[Voice Webhooks]
+        SessionSvc[Voice Session JWT]
     end
 
-    subgraph "Agent Worker (LiveKit Agents)"
-        Worker[LiveKit Worker]
-        Gemini[Gemini S2S Model]
-        Executor[Agent Executor]
+    subgraph "voice-ws (Pipecat)"
+        WS[WebSocket /twilio]
+        Pipeline[Realtime or STT→LLM→TTS]
+        Tools[Platform Tools + MCP]
     end
 
     subgraph "External Services"
-        Twilio[Twilio SIP]
-        LK[LiveKit Cloud]
+        Twilio[Twilio Voice + Media Streams]
         Google[Google Calendar API]
         DB[(Supabase DB)]
     end
@@ -38,122 +38,122 @@ graph TD
     API --> DB
     ToolConfig --> Auth
     Twilio -- Incoming Call --> VoiceRoutes
-    VoiceRoutes --> LK
-    LK -- Job Dispatch --> Worker
-    Worker --> Gemini
-    Worker --> Executor
-    Executor --> Google
+    VoiceRoutes --> SessionSvc
+    VoiceRoutes -- TwiML Connect Stream --> Twilio
+    Twilio -- wss + μ-law audio --> WS
+    WS --> Pipeline
+    WS --> Tools
+    Tools --> Google
 ```
+
+For **outbound** PSTN calls (planned), the same Media Stream path is reused after the backend originates the call via Twilio. See **[Outbound phone calls](../03_implementation/outbound_phone_calls.md)**.
 
 ---
 
-## **2. The Flow: Step-by-Step**
+## 2. The Flow: Step-by-Step
 
-### **Phase A: Tool Registration & Configuration**
+### Phase A: Tool Registration & Configuration
 
-Before an agent can do anything, tools must be defined in the code and configured by a business user.
+Before an agent can use tools, they must be defined in code and configured by a business user.
 
-1.  **Code Definition**: A developer creates a tool class (e.g., `GoogleCalendarTool`) inheriting from `BaseTool`. This class defines its `metadata` (name, description, config schema).
-2.  **Registry**: The tool is registered in `registry.py` so the system knows it exists.
-3.  **User Configuration**:
-    - The business user logs into the dashboard.
-    - They see the available tools fetched via `tool_routes.py`.
-    - For the **Google Calendar** tool, they click "Connect", which triggers an OAuth flow handled by `AuthService`.
-    - The encrypted tokens are stored in the `agent_tools` table as `sensitive_config`.
+1. **Code definition**: A developer creates a tool class (e.g. `GoogleCalendarTool`) inheriting from `BaseTool`, with `metadata` (name, description, config schema).
+2. **Registry**: The tool is registered in the platform tool registry so the system knows it exists.
+3. **User configuration**:
+   - The business user logs into the dashboard.
+   - Available tools are fetched via `tool_routes.py`.
+   - For **Google Calendar**, they click "Connect", triggering OAuth via `AuthService`.
+   - Encrypted tokens are stored in `agent_tools` as `sensitive_config`.
 
-### **Phase B: Incoming Call & Session Initialization**
-
-This is where the "Real-time" magic happens.
+### Phase B: Incoming Call & Session Initialization
 
 ```mermaid
 sequenceDiagram
     participant U as User (Phone)
     participant T as Twilio
     participant B as Backend (FastAPI)
-    participant L as LiveKit Cloud
-    participant W as Worker (Gemini Agent)
+    participant V as voice-ws (Pipecat)
 
-    U->>T: Dials Agent Phone Number
+    U->>T: Dials agent phone number
     T->>B: POST /api/v1/voice/twilio/incoming
-    Note over B: Look up Agent by phone number
-    B->>B: Start Session (Snapshot Tools)
-    B->>L: Create Room with Metadata (agent_id, session_id)
-    B-->>T: SIP Dial Response (sip:room@lk.domain)
-    T->>L: Connect via SIP
-    L->>W: Dispatch Job (Room Created)
-    W->>L: Connect to Room
+    Note over B: Look up agent by phone number
+    B->>B: Issue voice_ws_session JWT (agent, org, call metadata)
+    B-->>T: TwiML Connect Stream (wss://…/twilio?token=JWT)
+    T->>V: WebSocket /twilio (Media Streams, μ-law)
+    V->>V: Verify JWT, parse Twilio start event, load agent + preset
+    V->>V: Start Pipecat session (realtime or pipeline)
 ```
 
-**Key Classes/Methods:**
+**Key classes/methods:**
 
-- `VoiceAgentService.get_agent_by_phone()`: Identifies which agent belongs to the dialed number.
-- `SessionManager.start_session()`: Creates a "snapshot" of the agent's current tools. If you disable a tool _during_ a call, the agent keeps using the snapshot until the call ends.
-- `handle_twilio_incoming()`: Returns TwiML that tells Twilio to bridge the call into a LiveKit room via SIP.
+- `VoiceAgentService.get_agent_by_phone()`: Maps the dialed number to an agent.
+- `voice_session_service.create_session_token()`: Signs a short-lived JWT (`JWT_SECRET_KEY`, shared with `voice-ws`).
+- `handle_twilio_incoming()` / `_handle_pipecat_incoming()`: Returns TwiML with `<Connect><Stream url="wss://…/twilio?token=…"/>`.
+- Backend requires **`VOICE_WS_TWILIO_URL`** (public `wss://` base, e.g. ngrok in dev) so Twilio can reach `voice-ws`.
 
-### **Phase C: Agent Execution & Tool Usage**
+There is **no LiveKit room or SIP bridge**. Audio flows directly between Twilio and `voice-ws` over Media Streams.
 
-The worker is now live and talking to the user.
+### Phase C: Agent Execution & Tool Usage
+
+Once the WebSocket is up, `voice-ws` runs the agent preset and executes tools on LLM function calls.
 
 ```mermaid
 sequenceDiagram
-    participant W as Worker
-    participant G as Gemini S2S
-    participant E as Agent Executor
+    participant V as voice-ws
+    participant M as Speech model (Gemini or pipeline LLM)
+    participant T as Tool runtime
     participant API as External API (Google)
 
-    W->>W: entrypoint(ctx)
-    W->>W: Fetch Agent & Tools (from Snapshot)
-    W->>W: Register FunctionContext (Tools -> LLM Functions)
-    W->>G: Initialize RealtimeModel (Instructions + Tools)
+    V->>V: session_setup: load agent, tools, MCP, skills
+    V->>M: Initialize with system prompt + tool schemas
 
-    Note over G: User: "What's on my calendar?"
+    Note over M: User: "What's on my calendar?"
 
-    G->>W: Call Tool: google_calendar(action='list_events')
-    W->>E: run_tool("Google Calendar", action="list_events")
-    E->>API: Execute Google API Call
-    API-->>E: Return Events
-    E-->>W: Tool Result
-    W-->>G: Send Result to LLM
-
-    Note over G: Gemini: "You have a meeting at 10 AM."
+    M->>V: Function call: google_calendar(action='list_events')
+    V->>T: Execute platform tool / MCP dispatch
+    T->>API: Google API call (OAuth from agent_tools)
+    API-->>T: Events
+    T-->>V: Tool result
+    V-->>M: Send result to model
+    V-->>T: Agent audio → Twilio Media Stream → caller
 ```
 
-**Detailed Logic in `worker.py`:**
+**Details in `voice-ws`:**
 
-- **Dynamic Tool Binding**: We loop through `agent_tools` and use `@fnc_ctx.ai_callable` to turn our Python tools into functions the LLM understands.
-- **Closure Capture**: We use a `create_tool_func` helper to ensure that when the LLM calls a tool, it passes the correct `tool_name` to the `AgentExecutor`.
-- **Gemini S2S**: The `RealtimeModel` handles audio directly. It doesn't convert speech-to-text; it _understands_ the audio and generates a response.
-
----
-
-## **3. Key Components Reference**
-
-### **The Executor (`agent_executor.py`)**
-
-The `AgentExecutor` is the bridge between the LLM and the tool implementations.
-
-- It verifies if a tool is enabled.
-- It injects both public `config` (like `calendar_id`) and `sensitive_config` (like OAuth tokens) into the tool's `execute` method.
-
-### **The Session Manager (`session_service.py`)**
-
-Prevents "mid-call configuration drift."
-
-- **`start_session`**: Captures a list of all `AgentTool` objects.
-- **`get_session`**: Used by the worker to retrieve the exact tool state the call started with.
-
-### **The Tool Implementation (`google_calendar.py`)**
-
-- **`metadata`**: Tells the UI how to render the config form and tells the LLM what the tool does.
-- **`execute`**: The actual logic that talks to Google. It receives everything it needs (config + tokens) to perform the action.
+- **Preset resolution**: Agent uses a published preset — Gemini Realtime (`/ws` and `/twilio`) or modular pipeline (STT → LLM → TTS).
+- **Tool assembly**: `voice-ws/src/tools/assembly.py` loads platform tools and MCP connectors from the database (with OAuth tokens).
+- **No session snapshot manager**: Tools and config are loaded at session start from the database; token refresh runs in the backend.
 
 ---
 
-## **Summary for New Developers**
+## 3. Key Components Reference
 
-To add a new capability to the agent:
+### Voice session JWT (`shared/voice_agents/voice_session_service.py`)
 
-1.  Define a new class in `tools/implementations/`.
-2.  Add it to `tools/base/registry.py`.
-3.  The UI will automatically show it.
-4.  Once a user enables it, the `worker.py` will automatically register it as a "Function" for the Gemini model the next time a call comes in.
+- Backend issues tokens for browser test calls (`/ws`), embed, public org page, and Twilio (`/twilio`).
+- `voice-ws` verifies the JWT before accepting the WebSocket.
+
+### Tool service (two-tier)
+
+- **Backend / frontend**: Safe tool responses (no OAuth secrets).
+- **voice-ws**: Full tool instances with decrypted `sensitive_config` for execution.
+
+### Twilio webhooks (`backend/src/voice_agents/voice_routes.py`)
+
+- **Incoming**: Returns Media Stream TwiML.
+- **Status callbacks**: Call lifecycle for logging and billing.
+
+---
+
+## Summary for New Developers
+
+To extend telephony or voice behavior:
+
+1. **Inbound**: Ensure `VOICE_WS_TWILIO_URL` points at a public `wss://` URL for `voice-ws`, and Twilio voice webhooks hit the backend.
+2. **New tool**: Add a class under `shared/voice_agents/tools/implementations/`; `voice-ws` picks it up via the platform tool registry.
+3. **Outbound (planned)**: Backend originates via Twilio Calls API and returns the same Stream TwiML on answer — see **[Outbound phone calls](../03_implementation/outbound_phone_calls.md)**.
+
+**Further reading:**
+
+- [ADR: Pipecat WebSocket transport](ADR_VOICE_WS_PIPECAT.md)
+- [voice-ws README](../../voice-ws/README.md)
+- [Voice engine](02_core_systems/voice_engine.md)

@@ -102,7 +102,7 @@ export interface PlatformToolFunction {
  * Where a `PlatformTool` is served from.
  *
  * Mirrors the backend `ToolSource` enum in `shared/voice_agents/tool_models.py`:
- *   - `legacy` — a hand-rolled `BaseTool` subclass resolved via the LiveKit
+ *   - `legacy` — a hand-rolled `BaseTool` subclass resolved via the platform tool registry
  *     registry (in `shared/voice_agents/tools/base/`).
  *   - `mcp` — a remote MCP server (Streamable HTTP) discovered at runtime by
  *     the worker's MCP client (`shared/voice_agents/tools/mcp/`).
