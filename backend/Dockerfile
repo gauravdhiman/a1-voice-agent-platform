@@ -47,5 +47,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run application (without auto-instrumentation)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Run application (without auto-instrumentation).
+# --proxy-headers + --forwarded-allow-ips='*' are required on Cloud Run:
+# TLS terminates at Google's proxy, which forwards X-Forwarded-Proto=https.
+# Without trusting those headers, FastAPI trailing-slash redirects emit
+# Location: http://... and browsers block them as Mixed Content.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]

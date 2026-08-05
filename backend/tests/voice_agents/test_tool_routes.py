@@ -516,10 +516,11 @@ class TestMcpDiscoverAndCreate:
         )
 
         with patch("src.voice_agents.tool_routes.validate_mcp_server_url", return_value=(True, "")):
-            with patch("src.voice_agents.tool_routes.McpClient") as MockClient:
-                MockClient.return_value.list_tools = AsyncMock(return_value=[tool_def])
-                MockClient.return_value.close = AsyncMock()
-
+            with patch(
+                "src.voice_agents.tool_routes.list_tools_json_http",
+                new_callable=AsyncMock,
+                return_value=[tool_def],
+            ) as mock_discover:
                 result = await discover_mcp_tools(
                     request=McpDiscoverRequest(url="https://example.com/mcp", headers={}),
                     user_data=(TEST_USER_ID, profile),
@@ -528,8 +529,7 @@ class TestMcpDiscoverAndCreate:
                 assert "tools" in result
                 assert result["tools"][0]["name"] == "add"
                 assert result["tools"][0]["description"] == "add two numbers"
-                MockClient.return_value.list_tools.assert_awaited_once()
-                MockClient.return_value.close.assert_awaited_once()
+                mock_discover.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_discover_rejects_ssrf_url_without_calling_client(self):
@@ -541,14 +541,14 @@ class TestMcpDiscoverAndCreate:
             "src.voice_agents.tool_routes.validate_mcp_server_url",
             return_value=(False, "URL resolves to a blocked address (169.254.169.254)"),
         ):
-            with patch("src.voice_agents.tool_routes.McpClient") as MockClient:
+            with patch("src.voice_agents.tool_routes.list_tools_json_http", new_callable=AsyncMock) as mock_discover:
                 with pytest.raises(HTTPException) as exc_info:
                     await discover_mcp_tools(
                         request=McpDiscoverRequest(url="https://169.254.169.254/", headers={}),
                         user_data=(TEST_USER_ID, profile),
                     )
                 assert exc_info.value.status_code == 400
-                MockClient.assert_not_called()
+                mock_discover.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_discover_forbidden_for_org_admin(self):
@@ -558,7 +558,7 @@ class TestMcpDiscoverAndCreate:
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
 
         with patch("src.voice_agents.tool_routes.validate_mcp_server_url") as mock_val:
-            with patch("src.voice_agents.tool_routes.McpClient") as MockClient:
+            with patch("src.voice_agents.tool_routes.list_tools_json_http", new_callable=AsyncMock) as mock_discover:
                 with pytest.raises(HTTPException) as exc_info:
                     await discover_mcp_tools(
                         request=McpDiscoverRequest(url="https://example.com/mcp", headers={}),
@@ -566,7 +566,7 @@ class TestMcpDiscoverAndCreate:
                     )
                 assert exc_info.value.status_code == 403
                 mock_val.assert_not_called()
-                MockClient.assert_not_called()
+                mock_discover.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_discover_forbidden_for_regular_user(self):
@@ -575,7 +575,7 @@ class TestMcpDiscoverAndCreate:
         profile = _make_user_profile()  # no roles
 
         with patch("src.voice_agents.tool_routes.validate_mcp_server_url") as mock_val:
-            with patch("src.voice_agents.tool_routes.McpClient") as MockClient:
+            with patch("src.voice_agents.tool_routes.list_tools_json_http", new_callable=AsyncMock) as mock_discover:
                 with pytest.raises(HTTPException) as exc_info:
                     await discover_mcp_tools(
                         request=McpDiscoverRequest(url="https://example.com/mcp", headers={}),
@@ -583,7 +583,7 @@ class TestMcpDiscoverAndCreate:
                     )
                 assert exc_info.value.status_code == 403
                 mock_val.assert_not_called()
-                MockClient.assert_not_called()
+                mock_discover.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_parse_returns_servers_and_errors_for_platform_admin(self):

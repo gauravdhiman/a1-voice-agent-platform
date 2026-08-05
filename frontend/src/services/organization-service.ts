@@ -25,9 +25,12 @@ class OrganizationService {
     return response.data;
   }
 
-  // Get organizations for current user
+  // Get organizations for current user.
+  // Trailing slash matches the FastAPI route (`GET /api/v1/organizations/`)
+  // and avoids a 307 redirect that can emit http:// Location behind Cloud Run
+  // if proxy headers are not trusted (Mixed Content in the browser).
   async getUserOrganizations(): Promise<Organization[]> {
-    const response = await apiClient.get<Organization[]>(this.baseUrl);
+    const response = await apiClient.get<Organization[]>(`${this.baseUrl}/`);
     return response.data;
   }
 

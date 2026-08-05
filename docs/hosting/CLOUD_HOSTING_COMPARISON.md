@@ -1,10 +1,17 @@
 # Cloud Hosting Platform Comparison Study
 
+> **Current production (247ai.live):** GCP Cloud Run (frontend + backend) + Oracle
+> Free Tier ARM VM (voice-ws) + Supabase. See
+> [deployment/README.md](../05_operations/deployment/README.md). This document is
+> a historical platform comparison — Render is **not** used in production.
+
 ## Executive Summary
 
 This document provides a comprehensive analysis of cost-effective cloud hosting options for a containerized full-stack AI Voice Agent Platform. The application consists of four services: Frontend (Next.js), Backend (FastAPI/Python), voice-ws (Pipecat WebSocket voice runtime), and OpenTelemetry Collector.
 
-**Recommendation: Render.com or Fly.io** for the initial free tier deployment, with Railway as the best option for production scaling at $5-20/month.
+**Historical note:** Production now runs on **GCP Cloud Run + OCI + Supabase**
+(see deployment docs). The comparison below informed early exploration; Render was
+never adopted for 247ai.live production.
 
 ---
 

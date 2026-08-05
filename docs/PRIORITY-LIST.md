@@ -215,7 +215,7 @@ appointment-booking/
 ### Sprint 1 (Complete)
 - ✅ F2: Phone Number Management — shipped 2026-03-15 (PR #2).
 - ✅ F1: Skills System — Phases 1, 2a, 2b, 2c shipped (2026-04-01 → 2026-05-06).
-- ✅ Landing page, onboarding wizard, security hardening, Render.com deployment.
+- ✅ Landing page, onboarding wizard, security hardening, 247ai.live production deployment (GCP + OCI).
 
 ### Sprint 2 (Current)
 - ✅ Built-in skill library expanded to 8 skills (added `insurance-verification`, `dispatch-coordination`).

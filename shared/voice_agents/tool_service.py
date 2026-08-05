@@ -464,7 +464,6 @@ class ToolService:
         # Function-level import: keeps the MCP SDK / client out of import-time
         # for every process that pulls in tool_service, and avoids any circular
         # coupling. Not a shadow of a top-level import.
-        from shared.voice_agents.tools.mcp.client import McpClient
         from shared.voice_agents.tools.mcp.models import McpServerConfig
 
         url = row.get("mcp_server_url")
@@ -500,9 +499,10 @@ class ToolService:
             name=row.get("mcp_server_name") or row.get("name"),
             headers=headers,
         )
-        client = McpClient(config)
         try:
-            tool_defs = await client.list_tools()
+            from shared.voice_agents.tools.mcp.json_http_client import list_tools_json_http
+
+            tool_defs = await list_tools_json_http(config)
         except Exception as e:
             logger.warning(
                 "Publish-time MCP discover failed for %s: %s",
@@ -510,8 +510,6 @@ class ToolService:
                 e,
             )
             return None
-        finally:
-            await client.close()
 
         return {
             "functions": [

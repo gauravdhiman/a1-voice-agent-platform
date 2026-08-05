@@ -737,18 +737,14 @@ class TestPlatformToolPublishLifecycle:
             "shared.voice_agents.tool_service.decrypt_data",
             return_value={"X-Literal": "lit", "Authorization": "Bearer {{KEY}}"},
         ), patch(
-            "shared.voice_agents.tools.mcp.client.McpClient"
-        ) as mock_client_cls, patch(
+            "shared.voice_agents.tools.mcp.json_http_client.list_tools_json_http",
+            new_callable=AsyncMock,
+            return_value=[
+                McpToolDef(name="read_wiki_contents", description="View docs", input_schema={"type": "object"}),
+            ],
+        ), patch(
             "shared.voice_agents.tools.mcp.models.McpServerConfig"
         ) as mock_cfg_cls:
-            # McpClient(ctx).list_tools() → one tool; close() is a coroutine.
-            mock_client = MagicMock()
-            mock_client.list_tools = AsyncMock(return_value=[
-                McpToolDef(name="read_wiki_contents", description="View docs", input_schema={"type": "object"}),
-            ])
-            mock_client.close = AsyncMock()
-            mock_client_cls.return_value = mock_client
-
             schema = await tool_service._discover_functions_schema(row)
 
         # McpServerConfig was built with the merged headers, {{KEY}} dropped.
@@ -771,15 +767,12 @@ class TestPlatformToolPublishLifecycle:
         """A transport failure (list_tools raises) yields None — non-fatal."""
         row = self._row(tool_functions_schema=None, mcp_server_headers={})
         with patch(
-            "shared.voice_agents.tools.mcp.client.McpClient"
-        ) as mock_client_cls, patch(
+            "shared.voice_agents.tools.mcp.json_http_client.list_tools_json_http",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("boom"),
+        ), patch(
             "shared.voice_agents.tools.mcp.models.McpServerConfig"
         ):
-            mock_client = MagicMock()
-            mock_client.list_tools = AsyncMock(side_effect=RuntimeError("boom"))
-            mock_client.close = AsyncMock()
-            mock_client_cls.return_value = mock_client
-
             schema = await tool_service._discover_functions_schema(row)
 
         assert schema is None

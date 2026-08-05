@@ -1,4 +1,11 @@
-# Render.com Blueprint — Voice AI Agents Platform
+# Render.com Blueprint — DEPRECATED (not used in production)
+#
+# Production deploys use GCP Cloud Run + OCI + Supabase.
+# See docs/05_operations/deployment/README.md and ./scripts/deploy.sh
+#
+# This file is kept for historical reference only.
+#
+# Original Render.com Blueprint — Voice AI Agents Platform
 # https://render.com/docs/blueprint-spec
 #
 # DEPLOYMENT ORDER:

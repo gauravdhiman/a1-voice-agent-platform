@@ -1,0 +1,13 @@
+# Caddy reverse proxy for the voice-ws WebSocket worker.
+#
+# Caddy automatically provisions a Let's Encrypt certificate for
+# voice.247ai.live the first time it starts, provided:
+#   1. voice.247ai.live has an A record pointing at this VM's public IP, and
+#   2. ports 80 and 443 are reachable from the internet (OCI security list +
+#      host iptables open for 80/443).
+#
+# Caddy terminates TLS and proxies both /ws (browser audio) and /twilio
+# (Twilio Media Streams) plus /health to the voice-ws container on 7860.
+voice.247ai.live {
+	reverse_proxy voice-ws:7860
+}

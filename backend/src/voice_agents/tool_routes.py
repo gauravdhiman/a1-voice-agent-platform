@@ -11,6 +11,7 @@ from typing import List
 from urllib.parse import quote
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from opentelemetry import trace
 from pydantic import BaseModel, Field
@@ -31,7 +32,11 @@ from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.oauth_provider_utils import (
     get_oauth_manager,
 )
-from shared.voice_agents.tools.mcp.client import McpClient
+from shared.voice_agents.tools.mcp.errors import format_mcp_client_error
+from shared.voice_agents.tools.mcp.json_http_client import (
+    McpJsonRpcError,
+    list_tools_json_http,
+)
 from shared.voice_agents.tools.mcp.models import McpServerConfig
 from shared.voice_agents.tools.mcp.security import (
     parse_mcp_servers_json,
@@ -413,9 +418,9 @@ async def discover_mcp_tools(
 ):
     """Discover the tools a remote MCP server exposes (in-memory probe).
 
-    Validates the URL (SSRF guard), opens a one-shot :class:`McpClient`, calls
-    ``list_tools()``, and returns the sanitized tool definitions so the UI can
-    preview what the agent will get before saving. Nothing is persisted.
+    Validates the URL (SSRF guard), probes the server with JSON Streamable HTTP
+    (``list_tools_json_http``), and returns sanitized tool definitions so the UI
+    can preview what the agent will get before saving. Nothing is persisted.
 
     Gate: platform admin only (probing a remote server is an authoring action,
     RFC §6.6). Org admins attach already-published servers; they do not author.
@@ -431,18 +436,49 @@ async def discover_mcp_tools(
     if not ok:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
-    config = McpServerConfig(url=request.url, headers=request.headers or {})
-    client = McpClient(config)
+    probe_headers = request.headers or {}
+    logger.info(
+        "MCP discover probe url=%s header_keys=%s has_authorization=%s",
+        request.url,
+        sorted(probe_headers.keys()),
+        any(k.lower() == "authorization" for k in probe_headers),
+    )
+    config = McpServerConfig(url=request.url, headers=probe_headers)
     try:
-        tool_defs = await client.list_tools()
-    except Exception as e:
-        logger.warning(f"MCP discover failed for {request.url}: {e}", exc_info=True)
+        # Prefer JSON-only discovery — compatible with Twenty CRM and other
+        # servers that mishandle SSE clients (Cursor/curl use this path).
+        tool_defs = await list_tools_json_http(config)
+    except McpJsonRpcError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not reach MCP server: {e}",
         )
-    finally:
-        await client.close()
+    except httpx.HTTPStatusError as e:
+        detail = format_mcp_client_error(e)
+        logger.warning(
+            "MCP discover failed for %s (header_keys=%s): %s",
+            request.url,
+            sorted(probe_headers.keys()),
+            detail,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach MCP server: {detail}",
+        )
+    except Exception as e:
+        detail = format_mcp_client_error(e)
+        logger.warning(
+            "MCP discover failed for %s (header_keys=%s): %s",
+            request.url,
+            sorted(probe_headers.keys()),
+            detail,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach MCP server: {detail}",
+        )
 
     return {
         "tools": [

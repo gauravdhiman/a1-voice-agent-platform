@@ -464,9 +464,9 @@ docs/
 │   ├── database_migrations.md  # Migration best practices
 │   └── testing.md            # Testing strategies
 ├── 05_operations/           # Operations & deployment
-│   ├── environment_configuration.md  # Environment setup
-│   ├── stripe_management.md   # Stripe tool
-│   └── docker_deployment.md  # Container deployment
+│   ├── deployment/            # Production deploy (GCP + OCI + Supabase)
+│   ├── environment_configuration.md
+│   └── stripe_management.md
 └── 05_business/             # Business requirements
     ├── prd.md                 # Product requirements
     └── SUMMARY.md              # Business summary

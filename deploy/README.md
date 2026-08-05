@@ -1,24 +1,43 @@
 # Deploy artifacts
 
-Deployment scripts and configs for cloud environments. **Status: parked** on branch `deploy/branch-to-deploy` — steps 0–5 complete, steps 6–7 pending. See [DEPLOY_BRANCH_PARKED.md](../docs/05_operations/DEPLOY_BRANCH_PARKED.md).
+Deployment scripts and configs for the **247ai.live** production stack:
+backend + frontend on GCP Cloud Run, voice-ws (Pipecat WebSocket) on an Oracle
+Free Tier ARM VM behind Caddy, Supabase DB.
+
+**Documentation:** [docs/05_operations/deployment/](../docs/05_operations/deployment/README.md)
+
+## Single deploy command
+
+```bash
+./scripts/deploy.sh [all|gcp|backend|frontend|voice-ws|migrate|domains]
+```
+
+Credentials: **`.env.cloud`** only (gitignored). Template: **`.env.cloud.example`**.
 
 ## Layout
 
 | Path | Description |
 |------|-------------|
-| `cloudbuild-backend.yaml` | Cloud Build stub for backend image (local Docker build used in practice) |
-| `cloudbuild-frontend.yaml` | Cloud Build stub for frontend image |
-| `oci/docker-compose.worker.yml` | LiveKit worker on a always-on VM (OCI, GCP e2-micro, or local) |
+| `cloudbuild-backend.yaml` | Cloud Build stub for the backend image |
+| `cloudbuild-frontend.yaml` | Cloud Build stub for the frontend image |
+| `oci/docker-compose.voice-ws.yml` | voice-ws + Caddy on the OCI VM |
+| `oci/Caddyfile` | TLS reverse proxy for `voice.247ai.live` |
 
-## Scripts (repo root)
+## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `scripts/deploy/gcp-deploy.sh` | Deploy backend + frontend to GCP Cloud Run |
+| **`scripts/deploy.sh`** | Single entry point for all production deploys |
+| `.env.cloud.example` | Production env template (copy → `.env.cloud`) |
+| `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend |
 | `scripts/deploy/gcp-map-domains.sh` | Map custom domains to Cloud Run |
-| `scripts/deploy/run-alembic-cloud.sh` | Run production DB migrations |
-| `scripts/deploy/oci-deploy-worker.sh` | Deploy worker to OCI VM via SSH |
+| `scripts/deploy/run-alembic-cloud.sh` | Alembic migrations |
+| `scripts/deploy/oci-deploy-voice-ws.sh` | Sync + build voice-ws on OCI VM |
+| `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.cloud` per service |
 
-## Primary runbook
+## Related docs
 
-[docs/DEPLOY_GCP_OCI.md](../docs/DEPLOY_GCP_OCI.md)
+- [Deployment index](../docs/05_operations/deployment/README.md)
+- [Quick reference](../docs/05_operations/deployment/quick-reference.md)
+- [Runbook](../docs/05_operations/deployment/runbook.md)
+- [Environment variables](../docs/05_operations/deployment/environment-variables.md)

@@ -23,8 +23,10 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Optional
 
+import httpx
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, create_mcp_http_client
 
 from shared.voice_agents.tools.mcp.models import (
     McpServerConfig,
@@ -82,6 +84,16 @@ class McpClient:
             RuntimeError: If the client has been closed.
             Exception: On transport failure (network, non-2xx, protocol error).
         """
+        from shared.voice_agents.tools.mcp.json_http_client import list_tools_json_http
+
+        try:
+            return await list_tools_json_http(self.config)
+        except Exception as json_err:
+            logger.debug(
+                "JSON HTTP list_tools failed for %s, falling back to MCP SDK: %s",
+                self.config.url,
+                json_err,
+            )
         async with self._session() as session:
             result = await session.list_tools()
         return [self._to_tool_def(tool) for tool in result.tools]
@@ -105,6 +117,17 @@ class McpClient:
             RuntimeError: If the client has been closed.
             Exception: On transport failure (network, non-2xx, protocol error).
         """
+        from shared.voice_agents.tools.mcp.json_http_client import call_tool_json_http
+
+        try:
+            return await call_tool_json_http(self.config, name, arguments)
+        except Exception as json_err:
+            logger.debug(
+                "JSON HTTP call_tool failed for %s/%s, falling back to MCP SDK: %s",
+                self.config.url,
+                name,
+                json_err,
+            )
         async with self._session() as session:
             result = await session.call_tool(name, arguments or {})
         content = [self._block_to_dict(block) for block in result.content]
@@ -139,17 +162,27 @@ class McpClient:
         """
         if self._closed:
             raise RuntimeError("McpClient is closed")
-        # ``headers`` must be None (not an empty dict) to let the SDK apply its
-        # defaults; an empty dict is also accepted but None is cleaner.
-        headers = self.config.headers or None
-        async with streamablehttp_client(
-            self.config.url,
-            headers=headers,
-            timeout=self.config.timeout,
-        ) as (read, write, _get_session_id):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield session
+        # Use the current MCP SDK transport API: auth/custom headers live on the
+        # httpx client, not on StreamableHTTPTransport (the deprecated
+        # ``streamablehttp_client(url, headers=...)`` wrapper is easy to misread
+        # and some SDK versions ignore transport-level header params).
+        # ``terminate_on_close=False`` — stateless servers such as Twenty CRM
+        # expose POST /mcp only and return 405 on DELETE; session teardown is a
+        # no-op for them (Cursor/other clients behave the same way).
+        headers = dict(self.config.headers or {})
+        timeout = httpx.Timeout(self.config.timeout, read=MCP_DEFAULT_SSE_READ_TIMEOUT)
+        async with create_mcp_http_client(
+            headers=headers or None,
+            timeout=timeout,
+        ) as http_client:
+            async with streamable_http_client(
+                self.config.url,
+                http_client=http_client,
+                terminate_on_close=False,
+            ) as (read, write, _get_session_id):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    yield session
 
     @staticmethod
     def _to_tool_def(tool: Any) -> McpToolDef:

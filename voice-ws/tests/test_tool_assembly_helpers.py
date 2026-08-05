@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
+
 from src.tools.assembly import (
     build_function_schema,
     create_legacy_tool_handler,
@@ -45,6 +47,28 @@ class TestToolAssemblyHelpers:
         assert schema.properties["subject"]["type"] == "string"
         assert schema.properties["count"]["type"] == "integer"
         assert schema.required == ["subject"]
+
+    def test_build_function_schema_includes_array_items_for_gemini(self) -> None:
+        """Gemini Live requires array parameters to declare item schemas."""
+        schema = build_function_schema(GoogleSheetsTool.append_row)
+
+        values_schema = schema.properties["values"]
+        assert values_schema["type"] == "array"
+        assert "items" in values_schema
+        assert values_schema["items"]["type"] == "string"
+
+    def test_build_function_schema_nested_arrays_and_object_items(self) -> None:
+        """2D arrays and list-of-object params must also declare items."""
+        update_schema = build_function_schema(GoogleSheetsTool.update_cell)
+        values_schema = update_schema.properties["values"]
+        assert values_schema["type"] == "array"
+        assert values_schema["items"]["type"] == "array"
+        assert values_schema["items"]["items"]["type"] == "string"
+
+        batch_schema = build_function_schema(GoogleSheetsTool.batch_update_values)
+        updates_schema = batch_schema.properties["updates"]
+        assert updates_schema["type"] == "array"
+        assert updates_schema["items"]["type"] == "object"
 
     def test_legacy_handler_filters_context_from_model_arguments(self) -> None:
         """A model-provided context key cannot override runtime ToolContext."""

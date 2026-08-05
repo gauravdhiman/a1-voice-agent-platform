@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate Cloud Run env YAML from .env.cloud for a given service."""
+"""Generate Cloud Run / VM env YAML from .env.cloud for a given service.
+
+The ``backend`` service runs on GCP Cloud Run; the ``voice-ws`` service runs on
+the OCI VM (Pipecat WebSocket worker). Both read from the same ``.env.cloud``.
+"""
 
 from __future__ import annotations
 
@@ -37,10 +41,6 @@ BACKEND_KEYS = {
     "TWILIO_ACCOUNT_SID",
     "TWILIO_AUTH_TOKEN",
     "TWILIO_PHONE_NUMBER_SID",
-    "LIVEKIT_URL",
-    "LIVEKIT_API_KEY",
-    "LIVEKIT_API_SECRET",
-    "LIVEKIT_SIP_DOMAIN",
     "RESEND_API_KEY",
     "RESEND_FROM_EMAIL",
     "RESEND_FROM_NAME",
@@ -48,6 +48,11 @@ BACKEND_KEYS = {
     "GOOGLE_OAUTH_TOOL_CLIENT_SECRET",
     "GOOGLE_OAUTH_TOOL_REDIRECT_URI",
     "GEMINI_API_KEY",
+    # Voice transport (Pipecat WebSocket). Backend builds the browser wsUrl and
+    # the Twilio Media Streams URL from these settings.
+    "VOICE_TRANSPORT",
+    "VOICE_WS_PUBLIC_URL",
+    "VOICE_WS_TWILIO_URL",
     "TOKEN_REFRESH_CHECK_INTERVAL_MINUTES",
     "TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES",
     "OTEL_ENABLED",
@@ -57,22 +62,28 @@ BACKEND_KEYS = {
     "PYTHONPATH",
 }
 
+# voice-ws (Pipecat WebSocket worker) env keys.
+# voice-ws verifies the voice_ws_session JWT issued by the backend, so it MUST
+# share JWT_SECRET_KEY. It fetches agent tools directly from Supabase (no session
+# manager), so it needs the Supabase service key, not DATABASE_URL.
 WORKER_KEYS = {
     "ENVIRONMENT",
     "DEBUG",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_KEY",
     "SUPABASE_ANON_KEY",
-    "LIVEKIT_URL",
-    "LIVEKIT_API_KEY",
-    "LIVEKIT_API_SECRET",
-    "LIVEKIT_SIP_DOMAIN",
+    "JWT_SECRET_KEY",
+    "VOICE_TRANSPORT",
     "GEMINI_API_KEY",
     "AGENT_DEFAULT_TIMEZONE",
     "OTEL_ENABLED",
     "DEEPGRAM_API_KEY",
     "OPENAI_API_KEY",
     "CARTESIA_API_KEY",
+    "CEREBRAS_API_KEY",
+    "OPENROUTER_API_KEY",
+    "FISH_API_KEY",
+    "MCP_ALLOW_LOCAL_URLS",
     "PYTHONPATH",
 }
 
@@ -92,7 +103,7 @@ def to_yaml(env: dict[str, str], keys: set[str]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("service", choices=["backend", "worker"])
+    parser.add_argument("service", choices=["backend", "voice-ws"])
     parser.add_argument(
         "--env-file",
         default=".env.cloud",

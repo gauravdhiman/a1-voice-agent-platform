@@ -1,0 +1,177 @@
+# Production deployment runbook — 247ai.live
+
+> **Index:** [deployment/README.md](README.md) · **Commands:** [quick-reference.md](quick-reference.md)
+
+## Target architecture
+
+```mermaid
+flowchart LR
+    subgraph Cloudflare["Cloudflare DNS (247ai.live)"]
+        DNSwww["www.247ai.live CNAME"]
+        DNSapi["api.247ai.live CNAME"]
+        DNSvoice["voice.247ai.live A"]
+    end
+    subgraph GCP["GCP Cloud Run (us-central1)"]
+        FE["frontend-247ai<br/>www.247ai.live"]
+        BE["backend-247ai<br/>api.247ai.live"]
+        AR[Artifact Registry<br/>cognients/*]
+    end
+    subgraph OCI["Oracle Free Tier (us-ashburn-1, ARM A1 Flex)"]
+        CADDY[Caddy :443<br/>auto Let's Encrypt]
+        VW[voice-ws :7860<br/>Pipecat WebSocket]
+    end
+    subgraph External
+        SB[(Supabase cloud DB + Auth)]
+        TW[Twilio]
+        ST[Stripe]
+        GOOG[Google OAuth]
+    end
+    DNSwww --> FE
+    DNSapi --> BE
+    DNSvoice --> CADDY
+    FE --> BE
+    BE --> SB
+    BE --> TW
+    BE --> ST
+    BE --> GOOG
+    FE -.browser wss.-> CADDY
+    TW -.Media Streams wss.-> CADDY
+    CADDY --> VW
+    VW --> SB
+    AR --> FE
+    AR --> BE
+```
+
+| Component | Host | Domain |
+|-----------|------|--------|
+| Frontend (Next.js) | GCP Cloud Run | `https://www.247ai.live` |
+| Backend (FastAPI) | GCP Cloud Run | `https://api.247ai.live` |
+| voice-ws (Pipecat WS) | Oracle ARM VM + Caddy | `wss://voice.247ai.live` |
+| Database + Auth | Supabase cloud | (project URL in `.env.cloud`) |
+
+The voice-ws worker is an **inbound WebSocket server** (port 7860; routes
+`/ws`, `/twilio`, `/health`). Browsers connect to `wss://voice.247ai.live/ws`
+and Twilio Media Streams connect to `wss://voice.247ai.live/twilio`. Caddy on
+the VM terminates TLS (auto Let's Encrypt) and reverse-proxies to `voice-ws:7860`.
+
+## Deploy script (single entry point)
+
+All production deploys go through **`./scripts/deploy.sh`**. Credentials stay in
+**`.env.cloud`** only (gitignored). Copy **`.env.cloud.example`** to `.env.cloud`
+and fill in values — never commit `.env.cloud`.
+
+See [quick-reference.md](quick-reference.md) for the command cheat sheet.
+
+**Note:** `worker` refers to the **voice-ws** Pipecat worker on OCI. The legacy
+LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipecat`).
+
+## First-time setup checklist
+
+| Step | Task | Owner |
+|------|------|-------|
+| 0 | Smoke test on `*.run.app` URLs (optional) | You |
+| 1 | Verify `247ai.live` in GCP (`gcloud domains list-user-verified`) | You |
+| 2 | Cloud Run domain mappings (`api` + `www`) | `./scripts/deploy.sh domains` |
+| 3 | Cloudflare DNS CNAMEs (`api`, `www`) + A record (`voice`) | You |
+| 4 | Supabase Auth — Site URL + redirect URLs for production | You |
+| 5 | Production DB migrations | `./scripts/deploy.sh migrate` |
+| 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
+| 7 | Vendor webhooks (Stripe, Twilio, Google OAuth) | You |
+
+## Scripts and artifacts
+
+| Path | Purpose |
+|------|---------|
+| **`scripts/deploy.sh`** | Single entry point |
+| `.env.cloud.example` | Production env template |
+| `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend to Cloud Run |
+| `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.cloud` per service |
+| `scripts/deploy/gcp-map-domains.sh` | Cloud Run domain mappings |
+| `scripts/deploy/run-alembic-cloud.sh` | Alembic against Supabase |
+| `scripts/deploy/oci-deploy-voice-ws.sh` | Sync + build voice-ws on OCI VM |
+| `scripts/oci-env.sh` | OCI CLI session auth helper |
+| `deploy/oci/docker-compose.voice-ws.yml` | voice-ws + Caddy stack |
+| `deploy/oci/Caddyfile` | TLS reverse proxy for `voice.247ai.live` |
+| `.github/workflows/deploy-cloud.yml` | CI auto-deploy on `main` |
+
+## Environment configuration
+
+- **Production env file:** `.env.cloud` at repo root (gitignored). Never commit.
+- **Template:** `.env.cloud.example` (placeholders only).
+- **Variable reference:** [environment-variables.md](environment-variables.md)
+
+Production non-secret values (secrets stay in `.env.cloud` only):
+
+| Variable | Production value |
+|----------|------------------|
+| `APP_BASE_URL` | `https://www.247ai.live` |
+| `NEXT_PUBLIC_API_URL` | `https://api.247ai.live` |
+| `CORS_ORIGINS` | `["https://www.247ai.live"]` |
+| `GOOGLE_OAUTH_TOOL_REDIRECT_URI` | `https://api.247ai.live/api/v1/tools/callback` |
+| `VOICE_TRANSPORT` | `pipecat` |
+| `VOICE_WS_PUBLIC_URL` | `wss://voice.247ai.live` |
+| `VOICE_WS_TWILIO_URL` | `wss://voice.247ai.live` |
+| `ENVIRONMENT` | `production` |
+| `DEBUG` | `false` |
+| `MCP_ALLOW_LOCAL_URLS` | `false` |
+
+`JWT_SECRET_KEY` is shared by backend and voice-ws. Both services receive it
+via `gcp-env-from-cloud.py`.
+
+## Quick resume checklist
+
+1. Confirm `.env.cloud` exists (from `.env.cloud.example`; gitignored).
+2. Verify cloud services:
+   ```bash
+   curl -s https://api.247ai.live/health
+   curl -s https://www.247ai.live
+   curl -s https://voice.247ai.live/health
+   ```
+3. Migrations (only when new migrations land): `./scripts/deploy.sh migrate`
+4. Redeploy after code changes:
+   ```bash
+   ./scripts/deploy.sh gcp
+   OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh voice-ws
+   ```
+
+## voice-ws on OCI (ARM VM)
+
+Requirements on the VM:
+
+- Oracle **A1 Flex** ARM (Always Free: up to 4 OCPU / 24GB), region **us-ashburn-1**
+- Ubuntu minimal, Docker + compose plugin
+- OCI ingress: **22, 80, 443**; egress: all
+- DNS **A record** `voice.247ai.live` → VM IP (Cloudflare grey cloud / DNS-only)
+
+Deploy:
+
+```bash
+export OCI_SSH_HOST=132.145.130.61
+export OCI_SSH_USER=ubuntu
+# default key: ~/.ssh/oci_voice_ws
+./scripts/deploy.sh voice-ws
+```
+
+The script rsyncs `shared/` + `voice-ws/` + compose + Caddyfile to `~/voice-ws/`
+on the VM, then `docker compose up -d --build`.
+
+## Post-deploy webhooks
+
+- **Stripe** → `https://api.247ai.live/api/v1/billing/webhook/stripe`
+- **Twilio voice** → `https://api.247ai.live/api/v1/voice/twilio/incoming`
+- **Twilio status** → `https://api.247ai.live/api/v1/voice/twilio/status`
+- **Google OAuth (tools)** → `https://api.247ai.live/api/v1/tools/callback`
+- **Supabase Auth** → Site URL `https://www.247ai.live`; redirect `https://www.247ai.live/**`
+
+## Security reminders
+
+- **Never commit** `.env.cloud` or credential copies.
+- Store production env in GitHub secret `ENV_CLOUD` for CI.
+- Rotate secrets if any env file was ever pushed to a remote.
+
+## Related documentation
+
+- [Environment variables](environment-variables.md)
+- [CI / GitHub Actions](ci-github-actions.md)
+- [Local Docker](local-docker.md)
+- [ADR: voice-ws / Pipecat](../../01_architecture/ADR_VOICE_WS_PIPECAT.md)
