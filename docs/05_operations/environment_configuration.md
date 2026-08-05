@@ -26,6 +26,27 @@ The Supabase configuration requires different environment variables for frontend
 2. **SUPABASE_ANON_KEY**: Used by the backend for certain operations (anon key)
 3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
 4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
+5. **NEXT_PUBLIC_GOOGLE_CLIENT_ID**: Google Web Client ID used by the frontend popup sign-in
+
+For local Supabase Google ID-token sign-in, add these values to the root `.env`
+file. The `supabase/config.toml` file reads them through `env(...)`:
+
+```bash
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=your-google-web-client-secret
+```
+
+Use the same Web Client ID for `NEXT_PUBLIC_GOOGLE_CLIENT_ID` and
+`SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`. Keep the client secret server-side;
+never prefix it with `NEXT_PUBLIC_`.
+
+After changing these values, restart local Supabase so the Auth container reloads
+`supabase/config.toml`:
+
+```bash
+supabase stop
+supabase start
+```
 
 ### Getting Your Supabase Database Password
 
@@ -45,7 +66,19 @@ To configure the DATABASE_URL environment variable for Alembic migrations, you'l
 
 ### OAuth Providers
 
-To enable OAuth providers like Google, you need to:
+For hosted Supabase, enable Google under Authentication → Providers and enter
+the Web Client ID and Client Secret there. For local Supabase, the Google
+provider is enabled in `supabase/config.toml`:
+
+```toml
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
+skip_nonce_check = false
+```
+
+If you also retain redirect-based OAuth providers, you additionally need to:
 
 1. Configure the OAuth provider in your Supabase project dashboard:
 
@@ -57,7 +90,10 @@ To enable OAuth providers like Google, you need to:
    - Use the Supabase callback URL: `https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/callback`
    - You can find this URL in your Supabase dashboard under Authentication → Settings
 
-**Note**: You do not need to create any custom callback endpoints in your frontend or backend. Supabase handles the entire OAuth flow for you.
+For the Google Identity Services ID-token flow, the frontend receives the
+credential in the Google popup and sends it to Supabase with
+`signInWithIdToken`; the main page does not navigate through the Supabase
+callback URL. No custom callback endpoint is needed in the frontend or backend.
 
 For detailed instructions on setting up OAuth providers, see [OAUTH_SETUP.md](OAUTH_SETUP.md).
 
@@ -168,6 +204,7 @@ NEXT_PUBLIC_APP_NAME=SaaS Platform
 NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 
 # New Relic Configuration for OpenTelemetry
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
@@ -239,6 +276,7 @@ SUPABASE_SERVICE_KEY=your-service-role-key-here
 SUPABASE_ANON_KEY=your-anon-key-here
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 
 # Application Settings
 ENVIRONMENT=development

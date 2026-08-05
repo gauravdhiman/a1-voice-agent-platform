@@ -717,6 +717,7 @@ Run `pre-commit run --all-files` manually before pushing.
 - **Backend, frontend, and voice-ws** run via Docker Compose (`docker-compose.dev.yml`).
 - **Local Supabase** is used for development (not cloud Supabase). It runs on `http://127.0.0.1:54321`.
 - The `.env` file in the project root has local Supabase credentials. `.env.dev` has cloud/staging credentials — do not confuse the two.
+- Local Google ID-token auth is enabled in `supabase/config.toml` and reads `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` plus `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` from the root `.env`; keep `skip_nonce_check=false`.
 - Backend hot-reloads via volume mounts (`./backend:/app`, `./shared:/app/shared`).
 
 ### Test User (Local Supabase)

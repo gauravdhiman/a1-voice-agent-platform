@@ -4,6 +4,7 @@ import { getTracer, getLogger } from "@/lib/opentelemetry";
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import { SignUpData, SignInData } from "@/lib/supabase";
 import { AuthError, Provider } from "@supabase/supabase-js";
+import type { GoogleIdTokenSignInData } from "@/types/auth";
 
 // Get tracer and logger for this module
 const tracer = getTracer("opentelemetry-helpers");
@@ -102,6 +103,9 @@ type SignInFunction = (
 ) => Promise<{ error: AuthError | null }>;
 type SignInWithOAuthFunction = (
   provider: Provider,
+) => Promise<{ error: AuthError | null }>;
+type SignInWithGoogleIdTokenFunction = (
+  data: GoogleIdTokenSignInData,
 ) => Promise<{ error: AuthError | null }>;
 type SignOutFunction = () => Promise<{ error: AuthError | null }>;
 
@@ -323,6 +327,74 @@ export function withTelemetrySignInWithOAuth(
       throw error;
     } finally {
       // End the span
+      span.end();
+    }
+  };
+}
+
+/**
+ * Wraps Google ID-token authentication with the same tracing and logging
+ * lifecycle as the other frontend authentication operations.
+ *
+ * The credential and nonce are passed only to the wrapped function and are
+ * never included in telemetry attributes or log payloads.
+ *
+ * @param fn Google ID-token exchange function.
+ * @param telemetryOptions Optional span name and static attributes.
+ * @param logOptions Optional operation name and log attributes.
+ * @returns A telemetry-instrumented Google ID-token exchange function.
+ */
+export function withTelemetrySignInWithGoogleIdToken(
+  fn: SignInWithGoogleIdTokenFunction,
+  telemetryOptions: TelemetryOptions = {},
+  logOptions: LogOptions = { operation: "operation" },
+): SignInWithGoogleIdTokenFunction {
+  return async function (data: GoogleIdTokenSignInData) {
+    if (!tracer) {
+      logInfo(
+        `Executing ${logOptions.operation} without telemetry`,
+        logOptions.attributes,
+      );
+      return fn(data);
+    }
+
+    const spanName = telemetryOptions.name || fn.name || "anonymous-function";
+    const span = tracer.startSpan(spanName, {
+      attributes: telemetryOptions.attributes,
+    });
+    const ctx = trace.setSpan(context.active(), span);
+
+    try {
+      logInfo(`Starting ${logOptions.operation}`, {
+        ...logOptions.attributes,
+        "operation.status": "started",
+      });
+
+      const result = await context.with(ctx, fn, undefined, data);
+
+      span.setStatus({ code: SpanStatusCode.OK });
+      logInfo(`Completed ${logOptions.operation}`, {
+        ...logOptions.attributes,
+        "operation.status": "completed",
+      });
+
+      return result;
+    } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      span.recordException(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      logError(`Failed ${logOptions.operation}`, {
+        ...logOptions.attributes,
+        "operation.status": "failed",
+        "error.message": error instanceof Error ? error.message : String(error),
+        "error.name": error instanceof Error ? error.name : "UnknownError",
+      });
+      throw error;
+    } finally {
       span.end();
     }
   };

@@ -39,6 +39,7 @@ docker build -t frontend-dev \
   --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 \
   --build-arg NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co \
   --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key \
+  --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com \
   --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... \
   -f frontend/Dockerfile \
   frontend

@@ -80,6 +80,13 @@ export interface SignInData {
   password: string;
 }
 
+// Google Identity Services credential exchange data
+export interface GoogleIdTokenSignInData {
+  token: string;
+  nonce?: string;
+  invitationToken?: string;
+}
+
 // Complete auth user with organization context
 export interface AuthUserWithOrganization {
   user: AuthUser;
@@ -99,6 +106,9 @@ export interface AuthContextType {
   signIn: (data: SignInData) => Promise<{ error: any }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   signInWithOAuth: (provider: any) => Promise<{ error: any }>;
+  signInWithGoogleIdToken: (
+    data: GoogleIdTokenSignInData,
+  ) => Promise<{ error: { message?: string } | null }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   signOut: () => Promise<{ error: any }>;
   isAuthenticated: boolean;

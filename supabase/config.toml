@@ -308,10 +308,21 @@ redirect_uri = ""
 # Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
 # or any other third-party OIDC providers.
 url = ""
-# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
+# If enabled, the nonce check will be skipped. Use only when this provider
+# cannot return or validate a nonce.
 skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
+
+# Google Identity Services ID-token sign-in.
+# Store both values in the root .env file; env() reads them when Supabase starts.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your Google OAuth client secret to git.
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
+# The frontend supplies a raw nonce to Supabase and a SHA-256 nonce to Google.
+skip_nonce_check = false
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.

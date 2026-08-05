@@ -40,6 +40,7 @@ services:
         - NEXT_PUBLIC_API_URL=http://localhost:8001
         - NEXT_PUBLIC_SUPABASE_URL=https://zymiyfilulmtrmyyhvzw.supabase.co
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=mock-key
+        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=mock-google-client.apps.googleusercontent.com
         - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy_key_for_e2e
         - NEXT_PUBLIC_OTEL_ENABLED=false
     ports:
@@ -49,6 +50,7 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8001
       - NEXT_PUBLIC_SUPABASE_URL=https://zymiyfilulmtrmyyhvzw.supabase.co
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=mock-key
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=mock-google-client.apps.googleusercontent.com
       - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy_key_for_e2e
       - NEXT_PUBLIC_OTEL_ENABLED=false
     depends_on:

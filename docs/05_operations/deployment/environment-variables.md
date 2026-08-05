@@ -87,6 +87,7 @@ time** via `gcp-deploy.sh` build args.
 | `NEXT_PUBLIC_API_URL` | `https://api.247ai.live` | No |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | No |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | **Yes** |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth web client ID used by GIS popup sign-in | No |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key | No |
 | `NEXT_PUBLIC_APP_NAME` | App display name | No |
 | `NEXT_PUBLIC_APP_DESCRIPTION` | App tagline | No |

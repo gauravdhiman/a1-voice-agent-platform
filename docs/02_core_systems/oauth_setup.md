@@ -25,16 +25,20 @@ This guide explains how to configure OAuth providers like Google for your SaaS a
 5. Add your domain to "Authorized domains"
 6. Save the consent screen
 
-### 3. Create OAuth Credentials
+### 3. Create OAuth Credentials for Google Identity Services
 
 1. Navigate to "APIs & Services" → "Credentials"
 2. Click "Create Credentials" → "OAuth client ID"
 3. Select "Web application" as the application type
-4. **IMPORTANT**: For the redirect URIs, you should use the Supabase callback URL:
+4. Add these **Authorized JavaScript origins**:
+   - `https://www.247ai.live`
+   - `http://localhost:3000` (local development)
+5. Keep the Supabase callback URL in **Authorized redirect URIs** for any
+   remaining redirect-based provider flows:
    - Format: `https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/callback`
    - Example: `https://ufyknvcmswkxowpvsazd.supabase.co/auth/v1/callback`
    - You can find this URL in your Supabase dashboard under Authentication → Settings
-5. Save the credentials and note the Client ID and Client Secret
+6. Save the credentials and note the Client ID and Client Secret
 
 ### 4. Configure Supabase OAuth Provider
 
@@ -45,13 +49,40 @@ This guide explains how to configure OAuth providers like Google for your SaaS a
 5. Enter the Google Client ID and Client Secret from step 3
 6. Save the configuration
 
+The frontend uses the Web Client ID as `NEXT_PUBLIC_GOOGLE_CLIENT_ID`. This is
+safe to expose in the browser; do not expose the Client Secret.
+
+### Local Supabase configuration
+
+Local Supabase Auth must also have Google enabled before it will accept the
+ID token from the frontend. Add the same Web Client ID and the Client Secret
+to the root `.env` file:
+
+```bash
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=your-google-web-client-secret
+```
+
+The committed `supabase/config.toml` references the two
+`SUPABASE_AUTH_EXTERNAL_GOOGLE_*` values with `env(...)` and keeps nonce
+validation enabled. Restart local Supabase after changing the values:
+
+```bash
+supabase stop
+supabase start
+```
+
 ### 5. Test the Integration
 
 1. Start your application
 2. Navigate to the sign-in or sign-up page
 3. Click the "Sign in with Google" or "Sign up with Google" button
-4. You should be redirected to Google's OAuth screen
-5. After authenticating, you should be redirected back to your application
+4. Google should open its branded sign-in popup while the main page remains on
+   `www.247ai.live`
+5. After authenticating, the frontend sends Google's ID token to Supabase with
+   `supabase.auth.signInWithIdToken`
+6. The application should continue to the dashboard or organization setup
 
 ## Other OAuth Providers
 
@@ -98,13 +129,17 @@ Each provider will have its own specific setup process, but the general steps ar
 
 ## How OAuth Works with Supabase
 
-When using Supabase for OAuth authentication, the flow is handled entirely by Supabase:
+For Google on the web, the frontend uses Google's Identity Services popup and
+then hands the returned ID token to Supabase:
 
-1. **Frontend** calls `supabase.auth.signInWithOAuth({ provider: 'google' })`
-2. **Supabase** redirects user to Google OAuth
-3. **Google** redirects back to Supabase's callback URL (e.g., `https://your-project.supabase.co/auth/v1/callback`)
-4. **Supabase** handles the token exchange internally
-5. **Supabase** redirects back to your application (based on `redirectTo` option or site URL)
-6. **Frontend** receives the authenticated session through the auth state change listener
+1. **Frontend** loads Google's Identity Services client and renders the
+   official branded button.
+2. **Google** opens a popup and returns an ID token to the frontend callback.
+3. **Frontend** calls
+   `supabase.auth.signInWithIdToken({ provider: 'google', token, nonce })`.
+4. **Supabase** validates the token and returns the application session.
+5. **Frontend** receives the session through the auth state change listener.
 
-**Note**: You do not need to create any custom callback endpoints in your frontend or backend. Supabase handles the entire OAuth flow for you.
+This Google flow does not navigate the main page through the Supabase callback
+URL. LinkedIn and other redirect-based providers continue to use
+`signInWithOAuth`.

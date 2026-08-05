@@ -67,6 +67,7 @@ SUPABASE_SERVICE_KEY=<service role key>
 SUPABASE_ANON_KEY=<anon key>
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=<Google web OAuth client ID>
 ```
 
 > **Where to find these values in Supabase:**

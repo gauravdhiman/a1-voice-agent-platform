@@ -37,6 +37,7 @@ The Supabase configuration requires different environment variables for frontend
 2. **SUPABASE_ANON_KEY**: Used by the backend for certain operations (anon key)
 3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
 4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
+5. **NEXT_PUBLIC_GOOGLE_CLIENT_ID**: Google Web Client ID for popup sign-in
 
 #### Getting Your Supabase Database Password
 

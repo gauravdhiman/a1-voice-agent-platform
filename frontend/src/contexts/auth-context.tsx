@@ -12,6 +12,7 @@ import type {
   AuthUser,
   SignUpData,
   SignInData,
+  GoogleIdTokenSignInData,
   AuthContextType,
   AuthProviderProps,
 } from "@/types/auth";
@@ -24,6 +25,7 @@ import {
   withTelemetrySignUp,
   withTelemetrySignIn,
   withTelemetrySignInWithOAuth,
+  withTelemetrySignInWithGoogleIdToken,
   withTelemetrySignOut,
   logInfo,
   recordMetric,
@@ -44,6 +46,83 @@ const authSuccessCounter = meter?.createCounter("auth_success", {
 const authFailureCounter = meter?.createCounter("auth_failures", {
   description: "Number of failed authentications",
 });
+
+/**
+ * Processes an organization invitation after a user authenticates.
+ *
+ * Invitation processing is intentionally best effort. Authentication has
+ * already succeeded at this point, so a temporary invitation API failure
+ * should not prevent the user from reaching the application.
+ *
+ * @param invitationToken Invitation token supplied by the sign-up URL.
+ * @param userId Supabase user ID that should receive the invitation.
+ * @returns Promise that resolves after processing or logging the failure.
+ */
+async function processInvitationForUser(
+  invitationToken: string | undefined,
+  userId: string,
+): Promise<void> {
+  if (!invitationToken) return;
+
+  try {
+    const { authService } = await import("@/services/auth-service");
+    const result = await authService.processInvitation(invitationToken, userId);
+
+    if (!result.success) {
+      console.warn("Failed to process invitation:", result.error);
+    } else {
+      console.log("Invitation processed successfully:", result.data);
+    }
+  } catch (error) {
+    console.warn("Error processing invitation:", error);
+  }
+}
+
+/**
+ * Normalizes Google profile names into the metadata fields used by the app.
+ *
+ * Google commonly returns `name` or `full_name`, while the platform uses
+ * `first_name` and `last_name` for user profiles and organization setup.
+ *
+ * @param user Authenticated Supabase user returned by Google ID-token exchange.
+ * @param refreshUserProfile Callback that refreshes the cached backend profile.
+ * @returns Promise that resolves after metadata synchronization.
+ */
+async function syncOAuthUserMetadata(
+  user: User,
+  refreshUserProfile: () => Promise<void>,
+): Promise<void> {
+  try {
+    const userMetadata = (user.user_metadata || {}) as Record<
+      string,
+      string | undefined
+    >;
+    const { firstName, lastName } = extractFirstLastName(userMetadata);
+    const currentFirstName = userMetadata.first_name || "";
+    const currentLastName = userMetadata.last_name || "";
+
+    if (firstName === currentFirstName && lastName === currentLastName) {
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        ...userMetadata,
+        first_name: firstName,
+        last_name: lastName,
+      },
+    });
+
+    if (error) {
+      console.error("Error updating user metadata:", error);
+      return;
+    }
+
+    await refreshUserProfile();
+  } catch (error) {
+    console.error("Error processing OAuth user metadata:", error);
+  }
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -357,6 +436,67 @@ export function AuthProvider({ children }: AuthProviderProps) {
     { operation: "OAuth Signin", attributes: { operation: "oauth_signin" } },
   );
 
+  // Sign in with Google Identity Services ID token
+  const signInWithGoogleIdToken = withTelemetrySignInWithGoogleIdToken(
+    async (data: GoogleIdTokenSignInData) => {
+      recordMetric(authAttemptsCounter, 1, {
+        operation: "google_id_token_signin",
+        source: "frontend",
+      });
+
+      const credentials: {
+        provider: "google";
+        token: string;
+        nonce?: string;
+      } = {
+        provider: "google",
+        token: data.token,
+      };
+      if (data.nonce) {
+        credentials.nonce = data.nonce;
+      }
+
+      const { data: authData, error } =
+        await supabase.auth.signInWithIdToken(credentials);
+
+      if (error) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "google_id_token_signin",
+          error: error.status || "unknown",
+        });
+        throw error;
+      }
+
+      if (!authData.user) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "google_id_token_signin",
+          error: "no_user_returned",
+        });
+        throw new Error("Google sign-in did not return a user.");
+      }
+
+      const invitationToken =
+        data.invitationToken ||
+        new URLSearchParams(window.location.search).get("token") ||
+        undefined;
+      await processInvitationForUser(invitationToken, authData.user.id);
+      await syncOAuthUserMetadata(authData.user, refreshUserProfile);
+
+      recordMetric(authSuccessCounter, 1, {
+        operation: "google_id_token_signin",
+      });
+      return { error: null };
+    },
+    {
+      name: "auth.google_id_token_signin",
+      attributes: { operation: "google_id_token_signin" },
+    },
+    {
+      operation: "Google ID Token Signin",
+      attributes: { operation: "google_id_token_signin" },
+    },
+  );
+
   // Sign out
   const signOut = withTelemetrySignOut(
     async () => {
@@ -401,6 +541,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signUp,
     signIn,
     signInWithOAuth,
+    signInWithGoogleIdToken,
     signOut,
     isAuthenticated: !!user,
     refreshUserProfile,
