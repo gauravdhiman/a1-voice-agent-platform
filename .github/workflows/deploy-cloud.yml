@@ -1,0 +1,60 @@
+name: Deploy Cloud (main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: project-bb848762-18cb-4cd6-858
+  GCP_REGION: us-central1
+  # OCI voice-ws VM (public IP — not a secret; DNS: voice.247ai.live)
+  OCI_SSH_HOST: 132.145.130.61
+  OCI_SSH_USER: ubuntu
+
+jobs:
+  deploy-gcp:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Write .env.cloud from GitHub secret
+        run: printf '%s\n' "${{ secrets.ENV_CLOUD }}" > .env.cloud
+
+      - name: Deploy backend and frontend to Cloud Run
+        run: |
+          chmod +x scripts/deploy.sh
+          ./scripts/deploy.sh gcp
+
+  deploy-voice-ws:
+    runs-on: ubuntu-latest
+    needs: deploy-gcp
+    # Skips when the VM SSH private key is not configured in repo secrets.
+    if: ${{ secrets.OCI_SSH_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env.cloud and SSH key
+        run: |
+          printf '%s\n' "${{ secrets.ENV_CLOUD }}" > .env.cloud
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/oci_voice_ws
+          chmod 600 ~/.ssh/oci_voice_ws
+
+      - name: Deploy voice-ws to OCI VM
+        env:
+          OCI_SSH_KEY: ~/.ssh/oci_voice_ws
+        run: |
+          chmod +x scripts/deploy.sh
+          ./scripts/deploy.sh voice-ws

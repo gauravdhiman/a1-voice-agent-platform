@@ -16,6 +16,12 @@ COPY voice-ws/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Pipecat/Gemini Live uses NLTK sentence tokenization. Pre-install corpora at
+# build time — the runtime user has no home dir and cannot download punkt_tab.
+ENV NLTK_DATA=/app/nltk_data
+RUN mkdir -p /app/nltk_data \
+    && python -c "import nltk; nltk.download('punkt_tab', download_dir='/app/nltk_data')"
+
 COPY shared/ /app/shared
 COPY voice-ws/ /app
 

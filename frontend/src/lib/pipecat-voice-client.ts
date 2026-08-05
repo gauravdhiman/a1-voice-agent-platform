@@ -19,6 +19,37 @@ export interface PipecatCallCallbacks {
   onSpeakingChange?: (state: PipecatSpeakingState) => void;
 }
 
+/** Turn Pipecat callback payloads into a readable Error for UI display. */
+export function normalizeVoiceClientError(err: unknown): Error {
+  if (err instanceof Error && typeof err.message === "string" && err.message) {
+    return err;
+  }
+  if (typeof err === "string" && err.trim()) {
+    return new Error(err);
+  }
+  if (err && typeof err === "object") {
+    const record = err as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) {
+      return new Error(record.message);
+    }
+    if (typeof record.error === "string" && record.error.trim()) {
+      return new Error(record.error);
+    }
+    if (record.error && typeof record.error === "object") {
+      const nested = record.error as Record<string, unknown>;
+      if (typeof nested.message === "string" && nested.message.trim()) {
+        return new Error(nested.message);
+      }
+    }
+    try {
+      return new Error(JSON.stringify(err));
+    } catch {
+      /* fall through */
+    }
+  }
+  return new Error("Voice connection error");
+}
+
 /**
  * Build a WebSocket URL with the session JWT appended as a query parameter.
  */
@@ -44,9 +75,7 @@ export async function connectPipecatVoiceCall(
       onConnected: () => callbacks.onConnected?.(),
       onDisconnected: () => callbacks.onDisconnected?.(),
       onError: (err) => {
-        const error =
-          err instanceof Error ? err : new Error(String(err ?? "Voice error"));
-        callbacks.onError?.(error);
+        callbacks.onError?.(normalizeVoiceClientError(err));
       },
     },
   });

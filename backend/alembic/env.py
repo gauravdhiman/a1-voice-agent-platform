@@ -1,26 +1,28 @@
 import os
+import sys
 from logging.config import fileConfig
 
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, engine_from_config, pool
 
-# Load environment variables from .env file
-# Always load .env from the project root directory
-project_root = os.path.join(os.path.dirname(__file__), "..", "..")
-dotenv_path = os.path.join(project_root, ".env")
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
-else:
-    # Fallback to backend .env if project .env doesn't exist
-    dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+# Monorepo layout: ``shared/`` lives at the repository root (parent of ``backend/``).
+# Migrations may import ``shared.*`` at runtime (e.g. seeding default presets).
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Load environment variables — prefer .env.cloud for production deploys, then .env.
+for env_name in (".env.cloud", ".env"):
+    dotenv_path = os.path.join(project_root, env_name)
     if os.path.exists(dotenv_path):
         load_dotenv(dotenv_path)
-    else:
-        # Try to find .env in the current directory
-        dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
-        if os.path.exists(dotenv_path):
-            load_dotenv(dotenv_path)
+        break
+else:
+    # Fallback to backend-local .env
+    backend_env = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if os.path.exists(backend_env):
+        load_dotenv(backend_env)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -110,7 +110,7 @@ Same as inbound Pipecat phone path:
 | `JWT_SECRET_KEY` | Shared backend + voice-ws session signing |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | REST `calls.create` + webhooks |
 
-No LiveKit or `VOICE_TRANSPORT` variables — see [ENV_VARS.md](../ENV_VARS.md) for `VOICE_WS_*` and `JWT_SECRET_KEY`.
+No LiveKit or `VOICE_TRANSPORT` variables — see [deployment/environment-variables.md](../05_operations/deployment/environment-variables.md) for `VOICE_WS_*` and `JWT_SECRET_KEY`.
 
 ## Non-goals for v1
 

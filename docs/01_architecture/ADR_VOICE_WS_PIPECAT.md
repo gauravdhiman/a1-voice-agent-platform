@@ -29,7 +29,7 @@ LiveKit Cloud / SIP trunk complexity.
 - Browser uses `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport`.
 - Backend issues short-lived `voice_ws_session` JWTs with `{ token, wsUrl, sessionId }`.
 - LiveKit Inference presets were removed; pipeline presets use direct providers only.
-- No LiveKit build/deploy path remains in compose or Render blueprint.
+No LiveKit build/deploy path remains in compose; production uses GCP + OCI (see `docs/05_operations/deployment/`).
 
 ## Related
 

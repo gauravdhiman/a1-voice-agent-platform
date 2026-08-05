@@ -11,7 +11,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.services.llm_service import FunctionCallParams
@@ -53,23 +53,53 @@ class AssembledTools:
     unavailable_tools: list[str] = field(default_factory=list)
 
 
-def _json_schema_type(annotation: Any) -> str:
-    """Map a Python annotation to the closest JSON Schema primitive type."""
+def _json_schema_for_annotation(annotation: Any) -> dict[str, Any]:
+    """Map a Python annotation to a JSON Schema fragment for Gemini tools.
+
+    Gemini Live rejects function declarations when ``array`` properties omit
+    the required ``items`` field (e.g. Google Sheets ``values: List[Any]``).
+    """
+    if annotation is inspect.Parameter.empty:
+        annotation = Any
+
     origin = get_origin(annotation)
-    if origin in (list, tuple, set):
-        return "array"
-    if origin is dict:
-        return "object"
-    if origin is not None:
+    if origin is Union:
         choices = [choice for choice in get_args(annotation) if choice is not type(None)]
-        return _json_schema_type(choices[0]) if choices else "string"
-    return {
+        if len(choices) == 1:
+            return _json_schema_for_annotation(choices[0])
+        return {"type": "string"}
+
+    if origin in (list, tuple, set):
+        args = get_args(annotation)
+        item_annotation = args[0] if args else Any
+        return {
+            "type": "array",
+            "items": _json_schema_for_annotation(item_annotation),
+        }
+
+    if origin is dict:
+        args = get_args(annotation)
+        value_annotation = args[1] if len(args) > 1 else Any
+        return {
+            "type": "object",
+            "additionalProperties": _json_schema_for_annotation(value_annotation),
+        }
+
+    primitive = {
         int: "integer",
         float: "number",
         bool: "boolean",
+        str: "string",
         dict: "object",
         list: "array",
-    }.get(annotation, "string")
+    }.get(annotation)
+    if primitive == "array":
+        return {"type": "array", "items": {"type": "string"}}
+    if primitive == "object":
+        return {"type": "object"}
+    if primitive:
+        return {"type": primitive}
+    return {"type": "string"}
 
 
 def build_function_schema(function: Callable[..., Any]) -> FunctionSchema:
@@ -98,7 +128,9 @@ def build_function_schema(function: Callable[..., Any]) -> FunctionSchema:
             inspect.Parameter.VAR_KEYWORD,
         }:
             continue
-        properties[name] = {"type": _json_schema_type(hints.get(name, parameter.annotation))}
+        properties[name] = _json_schema_for_annotation(
+            hints.get(name, parameter.annotation)
+        )
         if parameter.default is inspect.Parameter.empty:
             required.append(name)
     return FunctionSchema(

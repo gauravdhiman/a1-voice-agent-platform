@@ -32,7 +32,12 @@ from src.organization.public_routes import public_org_router
 from src.organization.routes import organization_router
 from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
-from src.security import SecurityHeadersMiddleware, limiter, rate_limit_handler
+from src.security import (
+    CanonicalHostMiddleware,
+    SecurityHeadersMiddleware,
+    limiter,
+    rate_limit_handler,
+)
 from src.voice_agents import (
     agent_router,
     embed_router,
@@ -98,6 +103,9 @@ def create_app() -> FastAPI:
 
     # Add security headers to all responses
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Block direct *.run.app Host in production (custom domain only)
+    app.add_middleware(CanonicalHostMiddleware)
 
     # Configure CORS
     app.add_middleware(

@@ -8,8 +8,10 @@ __pycache__/
 .eggs/
 .env
 .env.*
+!.env.cloud.example
 .env.*.local
 .env.bk*
+.env copy*
 .env.local
 .idea/
 .installed.cfg

@@ -33,6 +33,7 @@ import {
 } from "@/components/layout/nav-config";
 import { useHasPermission } from "@/hooks/use-has-permission";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { SITE_NAME } from "@/lib/site-config";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -59,8 +60,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // Sidebar brand. If the name ends in " AI" (e.g. "24x7 AI"), strip the
   // trailing " AI" from the wordmark so the "AI" logo chip below is not
   // duplicated next to the full name (which would read "AI 24x7 AI").
-  const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "CogniNets";
-  const brandName = appName.replace(/\s+AI$/, "");
+  const appName = SITE_NAME;
+  const brandName = appName.replace(/\s+AI(?:\s+Platform)?$/, "");
 
   const handleSignOut = async () => {
     const { error } = await signOut();

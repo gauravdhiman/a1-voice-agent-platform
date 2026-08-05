@@ -62,7 +62,22 @@ Comprehensive documentation organized by feature.
 1. **[Billing Overview](02_features/billing/overview.md)** - Stripe integration and credit management
 2. **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
 3. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
-4. **[Stripe Management](05_operations/stripe_management.md)** - CLI tool for managing Stripe products
+### 05_operations/ - Operations
+
+#### Deployment (production — 247ai.live)
+
+All deployment docs: **[05_operations/deployment/](05_operations/deployment/README.md)**
+
+1. **[Deployment index](05_operations/deployment/README.md)** — doc map, infrastructure overview, `./scripts/deploy.sh`
+2. **[Quick reference](05_operations/deployment/quick-reference.md)** — day-to-day deploy commands
+3. **[Runbook](05_operations/deployment/runbook.md)** — architecture, first-time setup, DNS, webhooks
+4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.cloud` reference
+5. **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
+6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — auto-deploy secrets and workflow
+
+#### Other operations
+
+1. **[Stripe Management](05_operations/stripe_management.md)** — CLI tool for managing Stripe products
 
 ### Phone Numbers
 
@@ -138,7 +153,7 @@ Comprehensive documentation organized by feature.
 
 ### Deploying to Production?
 
-1. Follow **[Docker Deployment](05_operations/docker_deployment.md)** - Container deployment (coming soon)
+1. Follow **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
 2. Configure **[Environment Variables](05_operations/environment_configuration.md)** - Production settings
 3. Set up **[Observability](02_features/observability/overview.md)** - Monitoring and alerting
 
@@ -208,7 +223,7 @@ Comprehensive documentation organized by feature.
 ### By Task
 
 - **Setup**: See **[Getting Started Dev](03_development/getting_started.md)**
-- **Deployment**: See **[Docker Deployment](05_operations/docker_deployment.md)** (coming soon)
+- **Deployment**: See **[Deployment docs](05_operations/deployment/README.md)**
 - **Development**: See **[Development Guides](04_development_guides/)**
 - **Testing**: See **[Testing Guide](04_development_guides/testing.md)** and **[Comprehensive Testing Plan](04_development_guides/TESTING_PLAN.md)**
 - **Troubleshooting**: See relevant feature documentation
@@ -228,6 +243,8 @@ When adding new features:
 ### August 2026
 
 - ✅ **Voice transport (Phases 1–3):** Pipecat WebSocket is the only transport — browser `/ws`, Twilio `/twilio`, Gemini Realtime, modular speech pipeline, shared tools, MCP, and skills. See **[ADR](01_architecture/ADR_VOICE_WS_PIPECAT.md)** and **[Phase 3](03_implementation/voice_ws_phase3.md)**.
+- 🚀 **Production deploy on `247ai.live`** — **`./scripts/deploy.sh`** (GCP Cloud Run + OCI voice-ws + Supabase). See **[Deployment docs](05_operations/deployment/README.md)**.
+- ✅ GCP Artifact Registry + Cloud Run deploy scripts; Alembic monorepo path fix for production migrations
 
 ### January 2026
 
@@ -268,7 +285,7 @@ When adding new features:
 
 ### Operational Issues
 
-- Check **[Docker Deployment](05_operations/docker_deployment.md)** (coming soon)
+- Check **[Deployment docs](05_operations/deployment/README.md)**
 - Review **[Environment Configuration](05_operations/environment_configuration.md)**
 - Check relevant feature documentation in `02_features/`
 

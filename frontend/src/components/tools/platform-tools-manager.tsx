@@ -258,6 +258,20 @@ export function PlatformToolsManager({
       setInlineError("Enter a Test API key to substitute into {{KEY}}.");
       return;
     }
+    // Secret-header templates overwrite public headers with the same key. If the
+    // admin already put Authorization in Public headers, api_key mode without a
+    // test key would silently replace it with "Bearer " (empty).
+    if (
+      authMode === "api_key" &&
+      secretHeadersJson.trim() &&
+      publicHeadersJson.toLowerCase().includes('"authorization"') &&
+      !testApiKey.trim()
+    ) {
+      setInlineError(
+        "Static API key mode is enabled but Test API key is empty — it will overwrite Authorization from Public headers. Either enter a Test API key, switch Authentication to 'No auth', or clear the secret header template.",
+      );
+      return;
+    }
     const { headers, error } = buildDiscoverHeaders();
     if (error) {
       setInlineError(error);
