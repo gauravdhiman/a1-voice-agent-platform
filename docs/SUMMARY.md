@@ -91,7 +91,11 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 ### Authentication & OAuth
 
 1. **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)** - Complete auth system
-2. **[OAuth Setup](02_core_systems/oauth_setup.md)** - Google OAuth integration
+2. **[Backend redirect OAuth](02_features/authentication_rbac/backend-redirect-oauth.md)** - Canonical Google + LinkedIn sign-in flow
+3. **[Social OAuth architecture](02_features/authentication_rbac/social-oauth-architecture.md)** - Architecture, credentials, and key files
+4. **[LinkedIn sign-in (backend redirect)](02_features/authentication_rbac/linkedin-direct-oidc.md)** - LinkedIn Developer Portal setup
+5. **[Google Identity Services sign-in](02_features/authentication_rbac/google-identity-services.md)** - Legacy GIS notes (historical)
+6. **[OAuth Setup](02_core_systems/oauth_setup.md)** - GCP / LinkedIn console configuration
 
 ### Observability
 

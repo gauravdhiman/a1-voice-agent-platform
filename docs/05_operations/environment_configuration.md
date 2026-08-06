@@ -26,27 +26,35 @@ The Supabase configuration requires different environment variables for frontend
 2. **SUPABASE_ANON_KEY**: Used by the backend for certain operations (anon key)
 3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
 4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
-5. **NEXT_PUBLIC_GOOGLE_CLIENT_ID**: Google Web Client ID used by the frontend popup sign-in
+5. **API_BASE_URL** / **APP_BASE_URL**: Backend OAuth redirect targets (see
+   [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md))
 
-For local Supabase Google ID-token sign-in, add these values to the root `.env`
-file. The `supabase/config.toml` file reads them through `env(...)`:
-
-```bash
-SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
-SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=your-google-web-client-secret
-```
-
-Use the same Web Client ID for `NEXT_PUBLIC_GOOGLE_CLIENT_ID` and
-`SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`. Keep the client secret server-side;
-never prefix it with `NEXT_PUBLIC_`.
-
-After changing these values, restart local Supabase so the Auth container reloads
-`supabase/config.toml`:
+For local backend redirect OAuth, add these to the root `.env`:
 
 ```bash
-supabase stop
-supabase start
+APP_BASE_URL=http://localhost:3000
+API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=...
+
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET=...
+LINKEDIN_OAUTH_SCOPES=openid profile email
+
+JWT_SECRET_KEY=...
 ```
+
+Register **backend** callback URLs in Google Cloud and LinkedIn Developer Portal:
+
+```text
+{API_BASE_URL}/api/v1/auth/google/callback
+{API_BASE_URL}/api/v1/auth/linkedin/callback
+```
+
+See [Social OAuth architecture](../02_features/authentication_rbac/social-oauth-architecture.md)
+and [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md).
 
 ### Getting Your Supabase Database Password
 
@@ -90,12 +98,20 @@ If you also retain redirect-based OAuth providers, you additionally need to:
    - Use the Supabase callback URL: `https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/callback`
    - You can find this URL in your Supabase dashboard under Authentication → Settings
 
-For the Google Identity Services ID-token flow, the frontend receives the
-credential in the Google popup and sends it to Supabase with
-`signInWithIdToken`; the main page does not navigate through the Supabase
-callback URL. No custom callback endpoint is needed in the frontend or backend.
+For backend redirect OAuth (Google and LinkedIn), the backend mints Supabase
+sessions via the admin API. Provider credentials live in the root `.env`; the
+frontend only needs `NEXT_PUBLIC_API_URL` to build authorize links.
 
-For detailed instructions on setting up OAuth providers, see [OAUTH_SETUP.md](OAUTH_SETUP.md).
+Local Supabase can keep Google/LinkedIn providers enabled in `supabase/config.toml`
+for compatibility. Restart local Supabase after changing provider credentials:
+
+```bash
+supabase stop
+supabase start
+```
+
+See [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md)
+for redirect URIs and the handoff flow.
 
 ## OpenTelemetry Configuration
 

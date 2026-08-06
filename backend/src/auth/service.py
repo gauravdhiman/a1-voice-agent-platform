@@ -16,8 +16,7 @@ try:  # pragma: no cover - import shim exercised at runtime, not per-test
 except ImportError:  # pragma: no cover
     from gotrue.errors import AuthApiError
 from opentelemetry import metrics, trace
-from src.organization.models import OrganizationCreate
-from src.rbac.roles.service import role_service
+from src.organization.provisioning import ensure_default_organization_for_user
 from src.rbac.user_roles.service import user_role_service
 from src.shared.utils import extract_first_last_name
 
@@ -146,60 +145,26 @@ class AuthService:
                 expires_in=3600,  # Default 1 hour
             )
 
-            # Assign default org_admin role to new user
+            # Provision the default organization for first-time users.
             try:
-                # Get the org_admin role
-                org_admin_role, role_error = await role_service.get_role_by_name(
-                    "org_admin"
+                org_id, org_error = await ensure_default_organization_for_user(
+                    UUID(str(user.id)),
+                    user.email,
                 )
-                if role_error or not org_admin_role:
-                    logging.warning(f"Could not find org_admin role: {role_error}")
-                else:
-                    # Create a dummy organization for the user with recognizable pattern
-                    org_data = OrganizationCreate(
-                        name=f"{user.email}'s Organization",
-                        description=f"Default organization for {user.email}. Please update with your organization details.",
-                        slug=f"{user.id[:8]}-dummy-org",
-                        is_active=True,
+                if org_error:
+                    logging.warning(
+                        "Could not provision default organization: %s", org_error
                     )
-
-                    from src.organization.service import organization_service
-
-                    organization, org_error = (
-                        await organization_service.create_organization(org_data)
+                elif org_id:
+                    logging.info(
+                        "Provisioned default organization %s for user %s",
+                        org_id,
+                        user.id,
                     )
-                    if org_error or not organization:
-                        logging.warning(
-                            f"Could not create default organization: {org_error}"
-                        )
-                    else:
-                        # Assign org_admin role to user for their organization
-                        from src.rbac.user_roles.models import UserRoleCreate
-
-                        user_role_data = UserRoleCreate(
-                            user_id=user.id,
-                            role_id=org_admin_role.id,
-                            organization_id=organization.id,
-                        )
-
-                        user_role, role_assign_error = (
-                            await user_role_service.assign_role_to_user(user_role_data)
-                        )
-                        if role_assign_error or not user_role:
-                            logging.warning(
-                                f"Could not assign org_admin role: {role_assign_error}"
-                            )
-                        else:
-                            logging.info(
-                                f"Assigned org_admin role to user {user.id} for organization {organization.id}"
-                            )
-                            # Set attributes on current span
-                            current_span.set_attribute("role.assigned", True)
-                            current_span.set_attribute(
-                                "organization.id", str(organization.id)
-                            )
+                    current_span.set_attribute("role.assigned", True)
+                    current_span.set_attribute("organization.id", str(org_id))
             except Exception as e:
-                logging.error(f"Error assigning default role: {e}")
+                logging.error(f"Error provisioning default organization: {e}")
                 current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
 
             current_span.set_status(trace.Status(trace.StatusCode.OK))

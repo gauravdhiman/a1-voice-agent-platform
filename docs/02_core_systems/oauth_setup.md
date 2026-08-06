@@ -25,64 +25,95 @@ This guide explains how to configure OAuth providers like Google for your SaaS a
 5. Add your domain to "Authorized domains"
 6. Save the consent screen
 
-### 3. Create OAuth Credentials for Google Identity Services
+### 3. Create OAuth Credentials (redirect flow)
 
-1. Navigate to "APIs & Services" → "Credentials"
-2. Click "Create Credentials" → "OAuth client ID"
-3. Select "Web application" as the application type
-4. Add these **Authorized JavaScript origins**:
-   - `https://www.247ai.live`
-   - `http://localhost:3000` (local development)
-5. Keep the Supabase callback URL in **Authorized redirect URIs** for any
-   remaining redirect-based provider flows:
-   - Format: `https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/callback`
-   - Example: `https://ufyknvcmswkxowpvsazd.supabase.co/auth/v1/callback`
-   - You can find this URL in your Supabase dashboard under Authentication → Settings
-6. Save the credentials and note the Client ID and Client Secret
+1. Go to **APIs & Services → Credentials**
+2. Create an **OAuth 2.0 Client ID** (Web application)
+3. Add **Authorized redirect URIs** for the **backend** callback (not the frontend):
 
-### 4. Configure Supabase OAuth Provider
-
-1. Go to your Supabase project dashboard
-2. Navigate to "Authentication" → "Providers"
-3. Find "Google" in the list and click it
-4. Toggle the provider to "Enabled"
-5. Enter the Google Client ID and Client Secret from step 3
-6. Save the configuration
-
-The frontend uses the Web Client ID as `NEXT_PUBLIC_GOOGLE_CLIENT_ID`. This is
-safe to expose in the browser; do not expose the Client Secret.
-
-### Local Supabase configuration
-
-Local Supabase Auth must also have Google enabled before it will accept the
-ID token from the frontend. Add the same Web Client ID and the Client Secret
-to the root `.env` file:
-
-```bash
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
-SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
-SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=your-google-web-client-secret
+```text
+http://localhost:8000/api/v1/auth/google/callback
+https://api.247ai.live/api/v1/auth/google/callback
 ```
 
-The committed `supabase/config.toml` references the two
-`SUPABASE_AUTH_EXTERNAL_GOOGLE_*` values with `env(...)` and keeps nonce
-validation enabled. Restart local Supabase after changing the values:
+4. Copy the Client ID and Client Secret into the root `.env`:
+
+```text
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=...
+API_BASE_URL=http://localhost:8000
+```
+
+See [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md)
+for the full sequence diagram.
+
+Optional **Authorized JavaScript origins** (not required for backend redirect, but
+harmless if present):
+
+```text
+http://localhost:3000
+https://www.247ai.live
+```
+
+### 4. Configure environment variables
+
+Add to the root `.env` (Docker Compose):
+
+```text
+APP_BASE_URL=http://localhost:3000
+API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=...
+JWT_SECRET_KEY=...
+```
+
+The frontend does **not** need `NEXT_PUBLIC_GOOGLE_CLIENT_ID` for sign-in; buttons
+link to the backend authorize route.
+
+### 5. Local Supabase configuration
+
+Local Supabase Auth can keep Google enabled in `supabase/config.toml` for
+compatibility. The backend redirect flow mints sessions via the admin API and
+does not rely on frontend `signInWithIdToken`.
+
+Restart local Supabase after changing Google credentials:
 
 ```bash
 supabase stop
 supabase start
 ```
 
-### 5. Test the Integration
+### 6. Test the integration
 
-1. Start your application
-2. Navigate to the sign-in or sign-up page
-3. Click the "Sign in with Google" or "Sign up with Google" button
-4. Google should open its branded sign-in popup while the main page remains on
-   `www.247ai.live`
-5. After authenticating, the frontend sends Google's ID token to Supabase with
-   `supabase.auth.signInWithIdToken`
-6. The application should continue to the dashboard or organization setup
+1. Start the dev stack: `./start.sh start dev`
+2. Open the sign-in or sign-up page
+3. Click **Sign in with Google**
+4. Complete Google consent in the same browser window
+5. You should briefly see `/auth/session` (“Completing sign-in…”) then land on
+   `/dashboard`
+
+## LinkedIn OAuth Setup
+
+1. In the [LinkedIn Developer Portal](https://www.linkedin.com/developers/),
+   enable **Sign In with LinkedIn using OpenID Connect**.
+2. Register the **backend** redirect URI:
+
+```text
+http://localhost:8000/api/v1/auth/linkedin/callback
+https://api.247ai.live/api/v1/auth/linkedin/callback
+```
+
+3. Add credentials to root `.env`:
+
+```text
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET=...
+LINKEDIN_OAUTH_SCOPES=openid profile email
+```
+
+See [LinkedIn sign-in (backend redirect)](../02_features/authentication_rbac/linkedin-direct-oidc.md).
 
 ## Other OAuth Providers
 
@@ -115,10 +146,13 @@ Each provider will have its own specific setup process, but the general steps ar
 
 ### Common Issues
 
-1. **Redirect URI mismatch**: Ensure the redirect URIs in your OAuth provider match exactly with the Supabase callback URL
+1. **Redirect URI mismatch**: Ensure provider redirect URIs match the **backend**
+   callback URLs (`{API_BASE_URL}/api/v1/auth/{provider}/callback`), not the frontend
 2. **OAuth consent screen not approved**: For external applications, the consent screen must be approved by Google
 3. **Invalid client credentials**: Double-check that the Client ID and Secret are correct
-4. **CORS errors**: Ensure your application domains are properly configured in Supabase
+4. **Handoff errors on `/auth/session`**: Confirm `JWT_SECRET_KEY` is set and matches
+   between backend restarts; restart the dev stack after env changes
+5. **CORS errors**: Ensure `NEXT_PUBLIC_API_URL` points at the backend origin
 
 ### Debugging Steps
 
@@ -129,17 +163,33 @@ Each provider will have its own specific setup process, but the general steps ar
 
 ## How OAuth Works with Supabase
 
-For Google on the web, the frontend uses Google's Identity Services popup and
-then hands the returned ID token to Supabase:
+Detailed architecture (sequence diagrams, credential tables, Google vs LinkedIn):
 
-1. **Frontend** loads Google's Identity Services client and renders the
-   official branded button.
-2. **Google** opens a popup and returns an ID token to the frontend callback.
-3. **Frontend** calls
-   `supabase.auth.signInWithIdToken({ provider: 'google', token, nonce })`.
-4. **Supabase** validates the token and returns the application session.
-5. **Frontend** receives the session through the auth state change listener.
+**[Social OAuth architecture](../02_features/authentication_rbac/social-oauth-architecture.md)**
 
-This Google flow does not navigate the main page through the Supabase callback
-URL. LinkedIn and other redirect-based providers continue to use
-`signInWithOAuth`.
+### Google (backend redirect)
+
+1. **Frontend** links to `GET /api/v1/auth/google/authorize`.
+2. **Backend** redirects to Google; Google returns to
+   `/api/v1/auth/google/callback`.
+3. **Backend** mints a Supabase session, provisions a default organization, and
+   redirects to `/auth/session?handoff=...`.
+4. **Frontend** `/auth/session` exchanges the handoff via
+   `POST /api/v1/auth/session/handoff`, calls `setSession`, and navigates to
+   `/dashboard`.
+
+See [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md).
+
+### LinkedIn (backend redirect)
+
+1. **Frontend** links to `GET /api/v1/auth/linkedin/authorize`.
+2. **Backend** redirects to LinkedIn; LinkedIn returns to
+   `/api/v1/auth/linkedin/callback`.
+3. **Backend** exchanges the code, mints a Supabase session, provisions a
+   default organization, and redirects to `/auth/session?handoff=...`.
+4. **Frontend** `/auth/session` exchanges the handoff, stores the session, and
+   navigates to `/dashboard`.
+
+See [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md).
+
+Neither flow navigates the main page through Supabase's OAuth callback URL.

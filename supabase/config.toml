@@ -324,6 +324,20 @@ secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
 # The frontend supplies a raw nonce to Supabase and a SHA-256 nonce to Google.
 skip_nonce_check = false
 
+# Direct LinkedIn OpenID Connect sign-in (app-owned popup + signInWithIdToken).
+# GoTrue only accepts custom OIDC providers (custom:*) for ID-token grants.
+# Register the provider once after `supabase start`:
+#   node scripts/setup-linkedin-custom-oidc.mjs
+# Use the same LinkedIn app credentials as the backend OAuth broker.
+#
+# The built-in linkedin_oidc block below is NOT used by signInWithIdToken.
+# Keep it disabled to avoid confusion with the custom:linkedin provider.
+[auth.external.linkedin_oidc]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET)"
+skip_nonce_check = true
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]

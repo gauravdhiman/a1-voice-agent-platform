@@ -6,7 +6,7 @@ Uses Pydantic Settings for type-safe configuration handling.
 import json
 from typing import Optional
 
-from pydantic import Field, validator
+from pydantic import AliasChoices, Field, validator
 from pydantic_settings import BaseSettings
 
 
@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     app_name: str = Field(default="SaaS Platform", description="Application name")
     app_base_url: str = Field(
         default="http://localhost:3000", description="Base URL for the application"
+    )
+    api_base_url: str = Field(
+        default="http://localhost:8000",
+        description="Public backend API base URL used for OAuth callbacks",
+        validation_alias=AliasChoices("API_BASE_URL", "NEXT_PUBLIC_API_URL"),
     )
     app_version: str = Field(default="1.0.0", description="Application version")
     debug: bool = Field(default=False, description="Debug mode")
@@ -60,6 +65,47 @@ class Settings(BaseSettings):
     )
     supabase_anon_key: Optional[str] = Field(
         default=None, description="Supabase anonymous key"
+    )
+
+    # LinkedIn direct OAuth settings (backend broker; no Supabase custom provider)
+    linkedin_client_id: Optional[str] = Field(
+        default=None,
+        description="LinkedIn OAuth client ID",
+        validation_alias=AliasChoices(
+            "LINKEDIN_CLIENT_ID",
+            "SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID",
+        ),
+    )
+    linkedin_client_secret: Optional[str] = Field(
+        default=None,
+        description="LinkedIn OAuth client secret",
+        validation_alias=AliasChoices(
+            "LINKEDIN_CLIENT_SECRET",
+            "SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET",
+        ),
+    )
+    linkedin_oauth_scopes: str = Field(
+        default="openid profile email",
+        description="Space-separated LinkedIn OpenID Connect scopes",
+    )
+
+    # Google OAuth settings (backend redirect broker for sign-in)
+    google_client_id: Optional[str] = Field(
+        default=None,
+        description="Google OAuth client ID for backend redirect sign-in",
+        validation_alias=AliasChoices(
+            "GOOGLE_CLIENT_ID",
+            "SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
+            "NEXT_PUBLIC_GOOGLE_CLIENT_ID",
+        ),
+    )
+    google_client_secret: Optional[str] = Field(
+        default=None,
+        description="Google OAuth client secret for backend redirect sign-in",
+        validation_alias=AliasChoices(
+            "GOOGLE_CLIENT_SECRET",
+            "SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET",
+        ),
     )
 
     # Stripe Settings

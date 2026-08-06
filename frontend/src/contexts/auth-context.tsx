@@ -6,13 +6,15 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User, Session, Provider } from "@supabase/supabase-js";
+import { User, Session } from "@supabase/supabase-js";
+import type { Provider } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type {
   AuthUser,
   SignUpData,
   SignInData,
   GoogleIdTokenSignInData,
+  LinkedInSessionSignInData,
   AuthContextType,
   AuthProviderProps,
 } from "@/types/auth";
@@ -26,6 +28,7 @@ import {
   withTelemetrySignIn,
   withTelemetrySignInWithOAuth,
   withTelemetrySignInWithGoogleIdToken,
+  withTelemetrySignInWithLinkedInSession,
   withTelemetrySignOut,
   logInfo,
   recordMetric,
@@ -497,6 +500,58 @@ export function AuthProvider({ children }: AuthProviderProps) {
     },
   );
 
+  // Complete the direct LinkedIn popup session handoff
+  const signInWithLinkedInSession = withTelemetrySignInWithLinkedInSession(
+    async (data: LinkedInSessionSignInData) => {
+      recordMetric(authAttemptsCounter, 1, {
+        operation: "linkedin_session_signin",
+        source: "frontend",
+      });
+
+      const { data: authData, error } = await supabase.auth.setSession({
+        access_token: data.accessToken,
+        refresh_token: data.refreshToken,
+      });
+
+      if (error) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "linkedin_session_signin",
+          error: error.status || "unknown",
+        });
+        throw error;
+      }
+
+      const authenticatedUser = authData.user;
+      if (!authenticatedUser) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "linkedin_session_signin",
+          error: "no_user_returned",
+        });
+        throw new Error("LinkedIn sign-in did not return a user.");
+      }
+
+      const invitationToken =
+        data.invitationToken ||
+        new URLSearchParams(window.location.search).get("token") ||
+        undefined;
+      await processInvitationForUser(invitationToken, authenticatedUser.id);
+      await syncOAuthUserMetadata(authenticatedUser, refreshUserProfile);
+
+      recordMetric(authSuccessCounter, 1, {
+        operation: "linkedin_session_signin",
+      });
+      return { error: null };
+    },
+    {
+      name: "auth.linkedin_session_signin",
+      attributes: { operation: "linkedin_session_signin" },
+    },
+    {
+      operation: "LinkedIn Session Signin",
+      attributes: { operation: "linkedin_session_signin" },
+    },
+  );
+
   // Sign out
   const signOut = withTelemetrySignOut(
     async () => {
@@ -542,6 +597,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signIn,
     signInWithOAuth,
     signInWithGoogleIdToken,
+    signInWithLinkedInSession,
     signOut,
     isAuthenticated: !!user,
     refreshUserProfile,

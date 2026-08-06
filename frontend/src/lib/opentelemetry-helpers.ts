@@ -4,7 +4,10 @@ import { getTracer, getLogger } from "@/lib/opentelemetry";
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import { SignUpData, SignInData } from "@/lib/supabase";
 import { AuthError, Provider } from "@supabase/supabase-js";
-import type { GoogleIdTokenSignInData } from "@/types/auth";
+import type {
+  GoogleIdTokenSignInData,
+  LinkedInSessionSignInData,
+} from "@/types/auth";
 
 // Get tracer and logger for this module
 const tracer = getTracer("opentelemetry-helpers");
@@ -106,6 +109,9 @@ type SignInWithOAuthFunction = (
 ) => Promise<{ error: AuthError | null }>;
 type SignInWithGoogleIdTokenFunction = (
   data: GoogleIdTokenSignInData,
+) => Promise<{ error: AuthError | null }>;
+type SignInWithLinkedInSessionFunction = (
+  data: LinkedInSessionSignInData,
 ) => Promise<{ error: AuthError | null }>;
 type SignOutFunction = () => Promise<{ error: AuthError | null }>;
 
@@ -378,6 +384,67 @@ export function withTelemetrySignInWithGoogleIdToken(
         "operation.status": "completed",
       });
 
+      return result;
+    } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      span.recordException(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      logError(`Failed ${logOptions.operation}`, {
+        ...logOptions.attributes,
+        "operation.status": "failed",
+        "error.message": error instanceof Error ? error.message : String(error),
+        "error.name": error instanceof Error ? error.name : "UnknownError",
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  };
+}
+
+/**
+ * Wraps the direct LinkedIn session handoff with frontend auth telemetry.
+ *
+ * Session tokens are passed only to the wrapped function and are never added to
+ * span attributes or log payloads.
+ */
+export function withTelemetrySignInWithLinkedInSession(
+  fn: SignInWithLinkedInSessionFunction,
+  telemetryOptions: TelemetryOptions = {},
+  logOptions: LogOptions = { operation: "operation" },
+): SignInWithLinkedInSessionFunction {
+  return async function (data: LinkedInSessionSignInData) {
+    if (!tracer) {
+      logInfo(
+        `Executing ${logOptions.operation} without telemetry`,
+        logOptions.attributes,
+      );
+      return fn(data);
+    }
+
+    const spanName = telemetryOptions.name || fn.name || "anonymous-function";
+    const span = tracer.startSpan(spanName, {
+      attributes: telemetryOptions.attributes,
+    });
+    const ctx = trace.setSpan(context.active(), span);
+
+    try {
+      logInfo(`Starting ${logOptions.operation}`, {
+        ...logOptions.attributes,
+        "operation.status": "started",
+      });
+
+      const result = await context.with(ctx, fn, undefined, data);
+
+      span.setStatus({ code: SpanStatusCode.OK });
+      logInfo(`Completed ${logOptions.operation}`, {
+        ...logOptions.attributes,
+        "operation.status": "completed",
+      });
       return result;
     } catch (error) {
       span.setStatus({

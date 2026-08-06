@@ -1,29 +1,36 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const useSearchParamsMock = vi.fn(() => new URLSearchParams());
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => useSearchParamsMock(),
+}));
 
 vi.mock("@/contexts/auth-context", () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock("@/components/auth/google-sign-in-button", () => ({
-  GoogleSignInButton: ({
-    onCredential,
-    disabled,
+vi.mock("@/components/auth/oauth-redirect-button", () => ({
+  OAuthRedirectButton: ({
+    provider,
     text,
+    invitationToken,
   }: {
-    onCredential: (credential: string, nonce: string) => void;
-    disabled?: boolean;
+    provider: "google" | "linkedin";
     text: "signin_with" | "signup_with";
+    invitationToken?: string;
   }) => (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onCredential("google-id-token", "google-raw-nonce")}
+    <a
+      href={`http://localhost:8000/api/v1/auth/${provider}/authorize${
+        invitationToken ? `?invitation_token=${invitationToken}` : ""
+      }`}
     >
-      {text === "signin_with" ? "Sign in with Google" : "Sign up with Google"}
-    </button>
+      {text === "signin_with"
+        ? `Sign in with ${provider === "google" ? "Google" : "LinkedIn"}`
+        : `Sign up with ${provider === "google" ? "Google" : "LinkedIn"}`}
+    </a>
   ),
 }));
 
@@ -31,75 +38,53 @@ import { useAuth } from "@/contexts/auth-context";
 import { SignInForm } from "./signin-form";
 import { SignUpForm } from "./signup-form";
 
-describe("Google authentication forms", () => {
+describe("OAuth redirect authentication forms", () => {
   const signIn = vi.fn();
   const signUp = vi.fn();
-  const signInWithOAuth = vi.fn();
-  const signInWithGoogleIdToken = vi.fn();
 
   beforeEach(() => {
     signIn.mockReset();
     signUp.mockReset();
-    signInWithOAuth.mockReset();
-    signInWithGoogleIdToken.mockReset();
-    signInWithGoogleIdToken.mockResolvedValue({ error: null });
+    useSearchParamsMock.mockReturnValue(new URLSearchParams());
 
     vi.mocked(useAuth).mockReturnValue({
       signIn,
       signUp,
-      signInWithOAuth,
-      signInWithGoogleIdToken,
     } as never);
   });
 
-  it("exchanges the Google ID token during sign-in", async () => {
-    const user = userEvent.setup();
-
+  it("renders backend Google redirect links during sign-in", () => {
     render(<SignInForm />);
-    await user.click(
-      screen.getByRole("button", { name: "Sign in with Google" }),
-    );
-
-    await waitFor(() => {
-      expect(signInWithGoogleIdToken).toHaveBeenCalledWith({
-        token: "google-id-token",
-        nonce: "google-raw-nonce",
-      });
-    });
-    expect(signInWithOAuth).not.toHaveBeenCalled();
-  });
-
-  it("exchanges the Google ID token during sign-up", async () => {
-    const user = userEvent.setup();
-
-    render(<SignUpForm />);
-    await user.click(
-      screen.getByRole("button", { name: "Sign up with Google" }),
-    );
-
-    await waitFor(() => {
-      expect(signInWithGoogleIdToken).toHaveBeenCalledWith({
-        token: "google-id-token",
-        nonce: "google-raw-nonce",
-        invitationToken: undefined,
-      });
-    });
-    expect(signInWithOAuth).not.toHaveBeenCalled();
-  });
-
-  it("shows the ID-token exchange error on sign-in", async () => {
-    const user = userEvent.setup();
-    signInWithGoogleIdToken.mockResolvedValueOnce({
-      error: { message: "Google authentication failed" },
-    });
-
-    render(<SignInForm />);
-    await user.click(
-      screen.getByRole("button", { name: "Sign in with Google" }),
-    );
 
     expect(
-      await screen.findByText("Google authentication failed"),
-    ).toBeTruthy();
+      screen.getByRole("link", { name: "Sign in with Google" }),
+    ).toHaveAttribute(
+      "href",
+      "http://localhost:8000/api/v1/auth/google/authorize",
+    );
+  });
+
+  it("renders backend LinkedIn redirect links during sign-in", () => {
+    render(<SignInForm />);
+
+    expect(
+      screen.getByRole("link", { name: "Sign in with LinkedIn" }),
+    ).toHaveAttribute(
+      "href",
+      "http://localhost:8000/api/v1/auth/linkedin/authorize",
+    );
+  });
+
+  it("includes invitation tokens in sign-up OAuth redirect links", () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("token=invite-token"));
+
+    render(<SignUpForm />);
+
+    expect(
+      screen.getByRole("link", { name: "Sign up with Google" }),
+    ).toHaveAttribute(
+      "href",
+      "http://localhost:8000/api/v1/auth/google/authorize?invitation_token=invite-token",
+    );
   });
 });

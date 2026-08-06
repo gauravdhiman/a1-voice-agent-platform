@@ -68,6 +68,46 @@ class SignInRequest(BaseModel):
     password: str = Field(..., min_length=1, description="User password")
 
 
+class LinkedInAuthorizationResponse(BaseModel):
+    """Direct LinkedIn authorization URL and signed state."""
+
+    authorization_url: str = Field(
+        ..., description="LinkedIn authorization URL opened by the browser"
+    )
+    state: str = Field(..., description="Signed state used for callback validation")
+
+
+class LinkedInCodeExchangeRequest(BaseModel):
+    """One-time LinkedIn authorization code returned to the app callback."""
+
+    code: str = Field(
+        ..., min_length=1, max_length=2048, description="LinkedIn authorization code"
+    )
+    state: str = Field(
+        ..., min_length=1, max_length=4096, description="Signed OAuth state"
+    )
+
+
+class SessionHandoffRequest(BaseModel):
+    """Signed one-time token issued after backend OAuth completes."""
+
+    handoff: str = Field(
+        ...,
+        min_length=1,
+        max_length=8192,
+        description="Short-lived signed OAuth session handoff token",
+    )
+
+
+class SessionHandoffResponse(BaseModel):
+    """Supabase session tokens returned from a one-time OAuth handoff exchange."""
+
+    access_token: str = Field(..., description="Supabase access token")
+    refresh_token: str = Field(..., description="Supabase refresh token")
+    expires_in: int = Field(..., description="Token expiration in seconds")
+    token_type: str = Field(default="bearer", description="Token type")
+
+
 class AuthResponse(BaseModel):
     """Authentication response model."""
 

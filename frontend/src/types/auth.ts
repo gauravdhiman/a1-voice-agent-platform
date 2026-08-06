@@ -87,6 +87,18 @@ export interface GoogleIdTokenSignInData {
   invitationToken?: string;
 }
 
+// LinkedIn session returned by the backend after OAuth exchange
+export interface LinkedInSessionData {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+// LinkedIn session plus optional organization invitation context
+export interface LinkedInSessionSignInData extends LinkedInSessionData {
+  invitationToken?: string;
+}
+
 // Complete auth user with organization context
 export interface AuthUserWithOrganization {
   user: AuthUser;
@@ -108,6 +120,9 @@ export interface AuthContextType {
   signInWithOAuth: (provider: any) => Promise<{ error: any }>;
   signInWithGoogleIdToken: (
     data: GoogleIdTokenSignInData,
+  ) => Promise<{ error: { message?: string } | null }>;
+  signInWithLinkedInSession: (
+    data: LinkedInSessionSignInData,
   ) => Promise<{ error: { message?: string } | null }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   signOut: () => Promise<{ error: any }>;
