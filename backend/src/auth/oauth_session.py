@@ -10,14 +10,14 @@ from fastapi import HTTPException, status
 from opentelemetry import trace
 from src.organization.provisioning import ensure_default_organization_for_user
 from src.shared.utils import extract_first_last_name
-from supabase import Client, create_client
+from supabase import Client
+
+from shared.config import create_isolated_supabase_client, settings
 
 try:
     from supabase_auth.errors import AuthApiError
 except ImportError:  # pragma: no cover
     from gotrue.errors import AuthApiError
-
-from shared.config import settings
 
 from .models import AuthResponse, UserProfile
 from .oauth_identity import OAuthVerifiedIdentity
@@ -27,17 +27,8 @@ tracer = trace.get_tracer(__name__)
 
 
 def _create_isolated_auth_client() -> Client:
-    """Return a throwaway Supabase client for auth admin calls only.
-
-    Auth responses from ``verify_otp`` must never be applied to the shared
-    service-role client used for database writes, or PostgREST will start
-    enforcing RLS with the end-user JWT.
-    """
-    if not settings.supabase_url or not settings.supabase_service_key:
-        raise ValueError(
-            "Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY."
-        )
-    return create_client(settings.supabase_url, settings.supabase_service_key)
+    """Return a throwaway Supabase client for auth admin calls only."""
+    return create_isolated_supabase_client()
 
 
 class OAuthSessionService:
@@ -94,6 +85,9 @@ class OAuthSessionService:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"{identity.provider.title()} authentication could not be completed.",
             )
+
+        if identity.provider in {"google", "linkedin"}:
+            self._sync_oauth_sign_in_metadata(auth_client, user, identity)
 
         org_name = (
             f"{identity.first_name}'s Organization" if identity.first_name else None
@@ -163,6 +157,41 @@ class OAuthSessionService:
             if "already" in message or "exists" in message:
                 return
             raise
+
+    def _sync_oauth_sign_in_metadata(
+        self,
+        auth_client: Client,
+        user: Any,
+        identity: OAuthVerifiedIdentity,
+    ) -> None:
+        """Persist OAuth provider metadata and last sign-in method for signup UX."""
+        if identity.provider not in {"google", "linkedin"}:
+            return
+
+        metadata = dict(getattr(user, "user_metadata", None) or {})
+        metadata.update(
+            {
+                "first_name": identity.first_name or metadata.get("first_name"),
+                "last_name": identity.last_name or metadata.get("last_name"),
+                f"{identity.provider}_sub": identity.provider_sub,
+                "last_sign_in_method": identity.provider,
+            }
+        )
+        if identity.picture:
+            metadata["avatar_url"] = identity.picture
+
+        try:
+            auth_client.auth.admin.update_user_by_id(
+                str(user.id),
+                {"user_metadata": metadata},
+            )
+        except AuthApiError as error:
+            logger.warning(
+                "Failed to sync %s OAuth metadata for user %s: %s",
+                identity.provider,
+                user.id,
+                error,
+            )
 
     def _verify_magic_link_session(self, auth_client: Client, email: str) -> Any:
         """Generate and immediately verify a one-time login link server-side."""

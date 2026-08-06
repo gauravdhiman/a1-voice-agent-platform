@@ -26,6 +26,7 @@ from src.auth.oauth_session import oauth_session_service
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import (
     AuthResponse,
+    EmailAvailabilityResponse,
     ErrorResponse,
     LinkedInAuthorizationResponse,
     LinkedInCodeExchangeRequest,
@@ -33,6 +34,7 @@ from src.auth.models import (
     SessionHandoffResponse,
     SignInRequest,
     SignUpRequest,
+    SignUpResponse,
     UserProfile,
 )
 from src.auth.service import auth_service
@@ -57,7 +59,7 @@ class ProcessInvitationRequest(BaseModel):
 
 @auth_router.post(
     "/signup",
-    response_model=AuthResponse,
+    response_model=SignUpResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Validation error"},
         409: {"model": ErrorResponse, "description": "User already exists"},
@@ -67,7 +69,7 @@ class ProcessInvitationRequest(BaseModel):
 )
 @limiter.limit("5/minute")
 @tracer.start_as_current_span("auth.routes.sign_up")
-async def sign_up(request: Request, body: SignUpRequest) -> AuthResponse:
+async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
     """
     Register a new user account.
 
@@ -97,6 +99,39 @@ async def sign_up(request: Request, body: SignUpRequest) -> AuthResponse:
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return auth_response
+
+
+@auth_router.get(
+    "/check-email",
+    response_model=EmailAvailabilityResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid email"},
+        429: {"description": "Too many requests"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+@limiter.limit("20/minute")
+@tracer.start_as_current_span("auth.routes.check_email")
+async def check_email(
+    request: Request,
+    email: str = Query(..., min_length=3, max_length=320, description="Email to check"),
+) -> EmailAvailabilityResponse:
+    """Check whether an email is already registered and how the user can sign in."""
+    current_span = trace.get_current_span()
+    current_span.set_attribute("user.email", email)
+
+    if "@" not in email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid email address.",
+        )
+
+    result, error = await auth_service.check_email_availability(email)
+    if error:
+        raise error
+
+    current_span.set_attribute("email.exists", result.exists)
+    return result
 
 
 @auth_router.post(

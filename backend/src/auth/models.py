@@ -118,6 +118,29 @@ class AuthResponse(BaseModel):
     user: "UserProfile" = Field(..., description="User profile information")
 
 
+class SignUpResponse(BaseModel):
+    """Signup response when session may be withheld pending email verification."""
+
+    user: "UserProfile" = Field(..., description="Newly registered user profile")
+    email_verification_required: bool = Field(
+        ...,
+        description=(
+            "True when Supabase did not issue a session (confirm-email enabled). "
+            "The client must not sign the user in until email is verified."
+        ),
+    )
+    access_token: Optional[str] = Field(
+        None, description="JWT access token when immediate sign-in is allowed"
+    )
+    refresh_token: Optional[str] = Field(
+        None, description="Refresh token when immediate sign-in is allowed"
+    )
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: Optional[int] = Field(
+        None, description="Token expiration in seconds when a session was issued"
+    )
+
+
 class UserProfile(BaseModel):
     """User profile information."""
 
@@ -191,6 +214,20 @@ class UserProfile(BaseModel):
         return False
 
 
+class EmailAvailabilityResponse(BaseModel):
+    """Public signup helper indicating whether an email is already registered."""
+
+    exists: bool = Field(..., description="True when an auth user already uses this email")
+    sign_in_methods: list[str] = Field(
+        default_factory=list,
+        description="Linked sign-in methods when exists=true (email, google, linkedin)",
+    )
+    message: Optional[str] = Field(
+        None,
+        description="Human-readable guidance for the signup form",
+    )
+
+
 class ErrorResponse(BaseModel):
     """Error response model."""
 
@@ -201,3 +238,4 @@ class ErrorResponse(BaseModel):
 
 # Update forward references
 AuthResponse.model_rebuild()
+SignUpResponse.model_rebuild()

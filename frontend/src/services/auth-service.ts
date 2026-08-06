@@ -1,10 +1,135 @@
 // services/auth-service.ts
-import { apiClient } from "@/lib/api/client";
-import type { UserProfile } from "@/types/auth";
+import { apiClient, ApiRequestError } from "@/lib/api/client";
+import type {
+  EmailAvailabilityResult,
+  SignInMethod,
+  SignUpData,
+  SignUpErrorDetails,
+  UserProfile,
+} from "@/types/auth";
+
+function parseConflictDetail(error: ApiRequestError): SignUpErrorDetails {
+  const detail = (error.data as { detail?: unknown } | undefined)?.detail;
+  if (detail && typeof detail === "object" && "message" in detail) {
+    const payload = detail as {
+      message?: string;
+      sign_in_methods?: SignInMethod[];
+    };
+    return {
+      message: payload.message || error.message,
+      signInMethods: payload.sign_in_methods,
+    };
+  }
+
+  return { message: error.message };
+}
 
 // Auth Service class
 class AuthService {
   private baseUrl = "/api/v1/auth";
+
+  async checkEmailAvailability(email: string): Promise<{
+    success: boolean;
+    error?: string;
+    data?: EmailAvailabilityResult;
+  }> {
+    try {
+      const response = await apiClient.get<{
+        exists: boolean;
+        sign_in_methods: SignInMethod[];
+        message?: string;
+      }>(
+        `${this.baseUrl}/check-email?email=${encodeURIComponent(email.trim())}`,
+      );
+
+      const payload = response.data;
+      return {
+        success: true,
+        data: {
+          exists: payload.exists,
+          signInMethods: payload.sign_in_methods ?? [],
+          message: payload.message,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unable to check email.",
+      };
+    }
+  }
+
+  // Sign up via backend (org provisioning + verification gating)
+  async signUp(data: SignUpData): Promise<{
+    success: boolean;
+    error?: string;
+    errorDetails?: SignUpErrorDetails;
+    emailVerificationRequired?: boolean;
+    user?: UserProfile;
+  }> {
+    try {
+      const response = await apiClient.post<{
+        user: UserProfile;
+        email_verification_required: boolean;
+        access_token?: string | null;
+        refresh_token?: string | null;
+        expires_in?: number | null;
+      }>(`${this.baseUrl}/signup`, {
+        email: data.email,
+        password: data.password,
+        password_confirm: data.passwordConfirm,
+        first_name: data.firstName,
+        last_name: data.lastName,
+        invitation_token: data.invitationToken,
+      });
+
+      const payload = response.data;
+      if (!payload?.user) {
+        return {
+          success: false,
+          error: "Failed to create user account.",
+        };
+      }
+
+      if (
+        !payload.email_verification_required &&
+        payload.access_token &&
+        payload.refresh_token
+      ) {
+        const { supabase } = await import("@/lib/supabase");
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: payload.access_token,
+          refresh_token: payload.refresh_token,
+        });
+        if (sessionError) {
+          return {
+            success: false,
+            error: sessionError.message,
+          };
+        }
+      }
+
+      return {
+        success: true,
+        emailVerificationRequired: payload.email_verification_required,
+        user: payload.user,
+      };
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 409) {
+        const errorDetails = parseConflictDetail(error);
+        return {
+          success: false,
+          error: errorDetails.message,
+          errorDetails,
+        };
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Sign up failed.",
+      };
+    }
+  }
 
   // Process invitation to add user to organization
   async processInvitation(

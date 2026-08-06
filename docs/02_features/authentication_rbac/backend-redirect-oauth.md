@@ -75,10 +75,24 @@ Production: set `APP_BASE_URL` to the public frontend origin and `API_BASE_URL`
 to the public backend origin (for example `https://www.247ai.live` and
 `https://api.247ai.live`).
 
+## Email/password signup (aligned backend path)
+
+Email signup uses the same backend org provisioning as OAuth:
+
+1. Browser calls `POST /api/v1/auth/signup`.
+2. Backend creates the Supabase user, processes optional invitations, and calls
+   `ensure_default_organization_for_user()`.
+3. If Supabase **requires email confirmation** (no session returned), the API
+   responds with `email_verification_required: true` and **no tokens** — the
+   client must not sign the user in until they verify and sign in.
+4. If confirmation is **disabled** locally, the API returns session tokens; the
+   client calls `setSession` and redirects to `/dashboard` → `/onboarding`.
+
 ## API routes
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| POST | `/api/v1/auth/signup` | Email signup + default org provisioning |
 | GET | `/api/v1/auth/google/authorize` | Redirect to Google |
 | GET | `/api/v1/auth/google/callback` | Complete Google OAuth |
 | GET | `/api/v1/auth/linkedin/authorize` | Redirect to LinkedIn |

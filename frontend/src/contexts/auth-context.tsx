@@ -292,7 +292,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Sign up with email and password
+  // Sign up with email and password via backend (org provisioning + verification)
   const signUp = withTelemetrySignUp(
     async (data: SignUpData) => {
       recordMetric(authAttemptsCounter, 1, {
@@ -300,72 +300,56 @@ export function AuthProvider({ children }: AuthProviderProps) {
         source: "frontend",
       });
 
-      // Get the invitation token from URL params if not provided in data
       let invitationToken = data.invitationToken;
       if (!invitationToken) {
         const urlParams = new URLSearchParams(window.location.search);
         invitationToken = urlParams.get("token") || undefined;
       }
 
-      // Use Supabase Auth directly for signup
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            first_name: data.firstName,
-            last_name: data.lastName,
-          },
-        },
+      const { authService } = await import("@/services/auth-service");
+      const result = await authService.signUp({
+        ...data,
+        invitationToken,
       });
 
-      if (authError) {
+      if (!result.success) {
         recordMetric(authFailureCounter, 1, {
           operation: "signup",
-          error: authError.status?.toString() || "unknown",
+          error: "backend_signup_failed",
         });
-        throw authError;
-      }
-
-      if (!authData.user) {
-        recordMetric(authFailureCounter, 1, {
-          operation: "signup",
-          error: "no_user_returned",
-        });
-        throw new Error("Failed to create user account");
+        return {
+          user: undefined,
+          emailVerificationRequired: false,
+          error: {
+            message: result.error || "Failed to create user account",
+            signInMethods: result.errorDetails?.signInMethods,
+          },
+        };
       }
 
       recordMetric(authSuccessCounter, 1, { operation: "signup" });
 
-      // If there's an invitation token, process it via backend API
-      if (invitationToken && authData.user) {
-        try {
-          // Import auth service dynamically to avoid circular dependencies
-          const { authService } = await import("@/services/auth-service");
-          const result = await authService.processInvitation(
-            invitationToken,
-            authData.user.id,
-          );
+      const profile = result.user;
+      const user = profile
+        ? ({
+            id: profile.id,
+            email: profile.email,
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+            emailConfirmedAt: profile.email_confirmed_at || undefined,
+            createdAt: profile.created_at,
+            updatedAt: profile.updated_at,
+            roles: profile.roles || [],
+            hasRole: () => false,
+            hasPermission: () => false,
+          } satisfies AuthUser)
+        : undefined;
 
-          if (!result.success) {
-            console.warn("Failed to process invitation:", result.error);
-            // Don't throw error here - user can still sign up, invitation will be processed later
-          } else {
-            console.log("Invitation processed successfully:", result.data);
-          }
-        } catch (inviteError) {
-          console.warn("Error processing invitation:", inviteError);
-          // Don't throw error - user can still sign up
-        }
-      }
-
-      // Transform the user for our AuthUser type
-      const user = transformSupabaseUser(
-        authData.user,
-        [], // Empty array - roles will be fetched on sign in
-      );
-
-      return { user, error: null };
+      return {
+        user,
+        emailVerificationRequired: result.emailVerificationRequired,
+        error: null,
+      };
     },
     { name: "auth.signup", attributes: { operation: "signup" } },
     { operation: "Signup", attributes: { operation: "signup" } },

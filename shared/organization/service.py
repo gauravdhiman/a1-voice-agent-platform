@@ -32,7 +32,12 @@ class BaseOrganizationService:
             raise ValueError(
                 "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY."
             )
-        return self.supabase_config.client
+        client = self.supabase_config.service_client
+        if client is None:
+            raise ValueError(
+                "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY."
+            )
+        return client
 
     @tracer.start_as_current_span("organization.get_organization_by_id")
     async def get_organization_by_id(

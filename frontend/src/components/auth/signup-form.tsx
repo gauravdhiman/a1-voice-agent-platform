@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,70 +8,101 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { OAuthRedirectButton } from "@/components/auth/oauth-redirect-button";
-
-const signUpSchema = z
-  .object({
-    firstName: z.string().min(1, "First name is required").max(50),
-    lastName: z.string().min(1, "Last name is required").max(50),
-    email: z.string().email("Please enter a valid email address"),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Must contain uppercase letter")
-      .regex(/[a-z]/, "Must contain lowercase letter")
-      .regex(/\d/, "Must contain a number")
-      .regex(/[!@#$%^&*(),.?":{}|<>]/, "Must contain special character"),
-    passwordConfirm: z.string().optional(), // Make it optional
-  })
-  .refine(
-    (data) => {
-      // Only validate password match if both password and passwordConfirm have values
-      if (!data.password || !data.passwordConfirm) return true;
-      return data.password === data.passwordConfirm;
-    },
-    {
-      message: "Passwords don't match",
-      path: ["passwordConfirm"],
-    },
-  );
-
-type SignUpFormData = z.infer<typeof signUpSchema>;
+import { ExistingAccountHint } from "@/components/auth/existing-account-hint";
+import { authService } from "@/services/auth-service";
+import {
+  signUpSchema,
+  type SignUpFormData,
+} from "@/lib/auth/signup-schema";
+import type { SignInMethod } from "@/types/auth";
 
 export function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [existingAccountMessage, setExistingAccountMessage] = useState<
+    string | null
+  >(null);
+  const [existingSignInMethods, setExistingSignInMethods] = useState<
+    SignInMethod[]
+  >([]);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSignUpComplete, setIsSignUpComplete] = useState(false);
 
   const { signUp } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const invitationToken = searchParams?.get("token");
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
     watch,
     trigger,
     reset,
   } = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
-    mode: "onChange", // Validate on change
+    mode: "onChange",
+    reValidateMode: "onChange",
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      passwordConfirm: "",
+    },
   });
 
   const password = watch("password");
   const passwordConfirm = watch("passwordConfirm");
+  const emailValue = watch("email");
 
-  // Trigger validation when passwordConfirm changes, but only if it has a value
+  const checkEmailAvailability = useCallback(
+    async (email: string) => {
+      const trimmedEmail = email.trim();
+      if (!trimmedEmail || !z.string().email().safeParse(trimmedEmail).success) {
+        setExistingAccountMessage(null);
+        setExistingSignInMethods([]);
+        return;
+      }
+
+      setIsCheckingEmail(true);
+      try {
+        const result = await authService.checkEmailAvailability(trimmedEmail);
+        if (result.success && result.data?.exists) {
+          setExistingAccountMessage(
+            result.data.message ||
+              "An account with this email already exists. Please sign in instead.",
+          );
+          setExistingSignInMethods(result.data.signInMethods);
+        } else {
+          setExistingAccountMessage(null);
+          setExistingSignInMethods([]);
+        }
+      } finally {
+        setIsCheckingEmail(false);
+      }
+    },
+    [],
+  );
+
+  // Re-validate confirm password when either password field changes.
   React.useEffect(() => {
-    if (passwordConfirm && passwordConfirm.length > 0) {
-      trigger("passwordConfirm");
+    if (passwordConfirm.length > 0) {
+      void trigger("passwordConfirm");
     }
-  }, [passwordConfirm, trigger]);
+  }, [password, passwordConfirm, trigger]);
+
+  const isSubmitDisabled =
+    !!isLoading ||
+    !!existingAccountMessage ||
+    isCheckingEmail ||
+    !isValid;
 
   const getPasswordStrength = (password: string) => {
     let strength = 0;
@@ -96,34 +127,58 @@ export function SignUpForm() {
   const onSubmit = async (data: SignUpFormData) => {
     setIsLoading("password");
     setError(null);
+    setExistingAccountMessage(null);
+    setExistingSignInMethods([]);
     setSuccess(null);
 
     try {
-      const { user, error } = await signUp({
+      const { user, emailVerificationRequired, error } = await signUp({
         email: data.email,
         password: data.password,
-        passwordConfirm: data.passwordConfirm || "",
+        passwordConfirm: data.passwordConfirm,
         firstName: data.firstName,
         lastName: data.lastName,
         invitationToken: invitationToken || undefined,
       });
 
       if (error) {
-        setError(error.message);
+        const message =
+          typeof error === "object" && error !== null && "message" in error
+            ? String(error.message)
+            : String(error);
+        const signInMethods =
+          typeof error === "object" &&
+          error !== null &&
+          "signInMethods" in error &&
+          Array.isArray(error.signInMethods)
+            ? (error.signInMethods as SignInMethod[])
+            : [];
+
+        if (signInMethods.length > 0) {
+          setExistingAccountMessage(message);
+          setExistingSignInMethods(signInMethods);
+          setError(null);
+        } else {
+          setError(message);
+        }
       } else if (user) {
-        // Clear the form after successful signup
         reset();
         setIsSignUpComplete(true);
 
-        if (invitationToken) {
-          setSuccess(
-            "Account created! Please check your email for verification. You will be added to the organization after email confirmation.",
-          );
-        } else {
-          setSuccess(
-            "Account created! Please check your email for verification.",
-          );
+        if (emailVerificationRequired) {
+          if (invitationToken) {
+            setSuccess(
+              "Account created! Please check your email for verification. You will be added to the organization after email confirmation.",
+            );
+          } else {
+            setSuccess(
+              "Account created! Please check your email for verification.",
+            );
+          }
+          return;
         }
+
+        router.replace("/dashboard");
       } else {
         setError("User details not returned after signup. Please try again.");
       }
@@ -147,6 +202,14 @@ export function SignUpForm() {
             </AlertDescription>
           </Alert>
         )}
+
+        {existingAccountMessage ? (
+          <ExistingAccountHint
+            message={existingAccountMessage}
+            signInMethods={existingSignInMethods}
+            email={emailValue}
+          />
+        ) : null}
 
         {error && (
           <Alert variant="destructive">
@@ -207,12 +270,19 @@ export function SignUpForm() {
             <Input
               id="email"
               type="email"
-              {...register("email")}
+              {...register("email", {
+                onBlur: (event) => {
+                  void checkEmailAvailability(event.target.value);
+                },
+              })}
               placeholder="john@example.com"
               className="pl-10"
               disabled={!!isLoading}
             />
           </div>
+          {isCheckingEmail ? (
+            <p className="text-xs text-muted-foreground">Checking email...</p>
+          ) : null}
           {errors.email && (
             <p className="text-sm text-destructive">{errors.email.message}</p>
           )}
@@ -279,7 +349,11 @@ export function SignUpForm() {
               placeholder="Confirm your password"
               className="pl-10 pr-10"
               disabled={!!isLoading}
-              onBlur={() => passwordConfirm && trigger("passwordConfirm")}
+              onBlur={() => {
+                if (passwordConfirm.length > 0) {
+                  void trigger("passwordConfirm");
+                }
+              }}
             />
             <button
               type="button"
@@ -301,7 +375,8 @@ export function SignUpForm() {
           id="create-account-button"
           type="submit"
           className="w-full cursor-pointer"
-          disabled={!!isLoading}
+          disabled={isSubmitDisabled}
+          aria-disabled={isSubmitDisabled}
         >
           {isLoading === "password" ? (
             <>

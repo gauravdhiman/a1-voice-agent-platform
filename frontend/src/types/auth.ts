@@ -74,6 +74,19 @@ export interface SignUpData {
   invitationToken?: string;
 }
 
+export type SignInMethod = "email" | "google" | "linkedin";
+
+export interface EmailAvailabilityResult {
+  exists: boolean;
+  signInMethods: SignInMethod[];
+  message?: string;
+}
+
+export interface SignUpErrorDetails {
+  message: string;
+  signInMethods?: SignInMethod[];
+}
+
 // Sign in form data
 export interface SignInData {
   email: string;
@@ -113,7 +126,12 @@ export interface AuthContextType {
   session: any;
   loading: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  signUp: (data: SignUpData) => Promise<{ user?: AuthUser; error: any }>;
+  signUp: (data: SignUpData) => Promise<{
+    user?: AuthUser;
+    emailVerificationRequired?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    error: any;
+  }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   signIn: (data: SignInData) => Promise<{ error: any }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

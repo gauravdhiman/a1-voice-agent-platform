@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
 import { ForgotPasswordDialog } from "@/components/auth/forgot-password-dialog";
 import { OAuthRedirectButton } from "@/components/auth/oauth-redirect-button";
@@ -31,6 +32,8 @@ export function SignInForm() {
   const [showForgotPasswordDialog, setShowForgotPasswordDialog] =
     useState(false);
   const { signIn } = useAuth();
+  const searchParams = useSearchParams();
+  const prefilledEmail = searchParams?.get("email") || "";
 
   const {
     register,
@@ -38,6 +41,10 @@ export function SignInForm() {
     formState: { errors },
   } = useForm<SignInData>({
     resolver: zodResolver(signInSchema),
+    defaultValues: {
+      email: prefilledEmail,
+      password: "",
+    },
   });
 
   const handleSignIn = async (data: SignInData) => {
