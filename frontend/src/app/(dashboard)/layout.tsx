@@ -2,6 +2,7 @@
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { OrganizationCheck } from "@/components/auth/organization-check";
+import { InviteWelcomeToast } from "@/components/dashboard/invite-welcome-toast";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 export default function DashboardLayoutWrapper({
@@ -12,6 +13,7 @@ export default function DashboardLayoutWrapper({
   return (
     <ProtectedRoute>
       <OrganizationCheck>
+        <InviteWelcomeToast />
         <DashboardLayout>{children}</DashboardLayout>
       </OrganizationCheck>
     </ProtectedRoute>

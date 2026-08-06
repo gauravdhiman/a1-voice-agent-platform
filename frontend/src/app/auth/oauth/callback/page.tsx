@@ -66,6 +66,26 @@ function OAuthCallbackContent() {
             // Don't throw error here - user can still sign up, invitation will be processed later
           } else {
             console.log("Invitation processed successfully:", result.data);
+            const { markInviteWelcomePending } = await import(
+              "@/lib/invite-welcome"
+            );
+            const data =
+              result.data && typeof result.data === "object"
+                ? (result.data as {
+                    organization_name?: unknown;
+                    organization_id?: unknown;
+                  })
+                : null;
+            markInviteWelcomePending({
+              organizationName:
+                typeof data?.organization_name === "string"
+                  ? data.organization_name
+                  : null,
+              organizationId:
+                typeof data?.organization_id === "string"
+                  ? data.organization_id
+                  : null,
+            });
             setInvitationProcessed(true);
           }
         } catch (inviteError) {

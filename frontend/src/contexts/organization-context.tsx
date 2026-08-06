@@ -10,6 +10,8 @@ import React, {
 import { Organization } from "@/types/organization";
 import { useAuth } from "@/contexts/auth-context";
 import { useUserOrganizations } from "@/hooks/use-user-organizations";
+import { selectPreferredOrganization } from "@/lib/organization-utils";
+import { peekInviteWelcome } from "@/lib/invite-welcome";
 
 interface OrganizationContextType {
   organizations: Organization[];
@@ -48,13 +50,6 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
       : "Failed to load organizations"
     : null;
 
-  // Auto-select the first organization if user has organizations but no current selection
-  useEffect(() => {
-    if (organizations.length > 0 && !currentOrganization) {
-      setCurrentOrganizationState(organizations[0]);
-    }
-  }, [organizations, currentOrganization]);
-
   // Clear current organization when not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -72,18 +67,47 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     await refetch();
   };
 
-  // Restore current organization from localStorage on mount
+  // Initial auto-select: prefer the org just joined via invitation, else the
+  // saved selection, else the first membership.
   useEffect(() => {
-    if (organizations.length > 0) {
-      const savedOrgId = localStorage.getItem("currentOrganizationId");
-      if (savedOrgId) {
-        const savedOrg = organizations.find((org) => org.id === savedOrgId);
-        if (savedOrg) {
-          setCurrentOrganizationState(savedOrg);
-        }
-      }
+    if (organizations.length === 0 || currentOrganization) {
+      return;
     }
-  }, [organizations]);
+
+    const savedOrgId =
+      typeof window !== "undefined"
+        ? localStorage.getItem("currentOrganizationId")
+        : null;
+    const invitePending = peekInviteWelcome();
+    const preferred = selectPreferredOrganization(organizations, savedOrgId, {
+      preferredOrganizationId: invitePending?.organizationId,
+    });
+    if (!preferred) {
+      return;
+    }
+
+    setCurrentOrganizationState(preferred);
+    localStorage.setItem("currentOrganizationId", preferred.id);
+  }, [organizations, currentOrganization]);
+
+  // Keep the selected org object in sync when the query refreshes the same id.
+  useEffect(() => {
+    if (!currentOrganization || organizations.length === 0) {
+      return;
+    }
+
+    const refreshed = organizations.find(
+      (org) => org.id === currentOrganization.id,
+    );
+    if (
+      refreshed &&
+      (refreshed.onboarding_completed !==
+        currentOrganization.onboarding_completed ||
+        refreshed.name !== currentOrganization.name)
+    ) {
+      setCurrentOrganizationState(refreshed);
+    }
+  }, [organizations, currentOrganization]);
 
   const value: OrganizationContextType = {
     organizations,

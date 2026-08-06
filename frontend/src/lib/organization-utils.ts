@@ -1,40 +1,54 @@
 /**
- * Utility functions for organization management
+ * Utility functions for organization selection after authentication.
  */
 
-import type { OrganizationForDetection } from "@/types/organization";
+import type { Organization } from "@/types/organization";
 
-/**
- * Check if an organization is a dummy/default organization
- * based on consistent keywords in name, description, or slug
- */
-export function isDummyOrganization(org: OrganizationForDetection): boolean {
-  const defaultKeyword = "default";
-
-  return (
-    org.name.toLowerCase().includes(defaultKeyword) ||
-    (org.description &&
-      org.description.toLowerCase().includes(defaultKeyword)) ||
-    org.slug.includes(defaultKeyword)
-  );
+export interface SelectPreferredOrganizationOptions {
+  /**
+   * Organization the user just joined via invitation. Takes precedence over
+   * a previously saved localStorage selection so invitees land in the invited
+   * tenant even when they already belong to other orgs.
+   */
+  preferredOrganizationId?: string | null;
 }
 
 /**
- * Create dummy organization data with consistent default keywords
+ * Choose the current organization for a newly authenticated session.
+ *
+ * Priority:
+ * 1. Invited organization (just joined)
+ * 2. Previously saved selection (localStorage), when still a member
+ * 3. First organization in the list
+ *
+ * @param organizations Organizations the user belongs to
+ * @param savedOrgId Optional previously selected organization id
+ * @param options Selection behavior flags
+ * @returns Preferred organization, or null when the list is empty
  */
-export function createDummyOrganizationData(user: {
-  firstName?: string;
-  email?: string;
-  id?: string;
-}) {
-  return {
-    name: user?.firstName
-      ? `${user.firstName}'s Default Organization`
-      : "My Default Organization",
-    description: `Default organization for ${user?.email || "new user"}`,
-    slug: user?.id
-      ? `${user.id.substring(0, 8)}-default-org`
-      : `default-org-${Date.now()}`,
-    is_active: true,
-  };
+export function selectPreferredOrganization(
+  organizations: Organization[],
+  savedOrgId?: string | null,
+  options?: SelectPreferredOrganizationOptions,
+): Organization | null {
+  if (organizations.length === 0) {
+    return null;
+  }
+
+  const preferredId = options?.preferredOrganizationId;
+  if (preferredId) {
+    const invited = organizations.find((org) => org.id === preferredId);
+    if (invited) {
+      return invited;
+    }
+  }
+
+  if (savedOrgId) {
+    const saved = organizations.find((org) => org.id === savedOrgId);
+    if (saved) {
+      return saved;
+    }
+  }
+
+  return organizations[0];
 }

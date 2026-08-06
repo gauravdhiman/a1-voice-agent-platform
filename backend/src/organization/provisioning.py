@@ -1,4 +1,4 @@
-"""Default organization provisioning for newly authenticated users."""
+"""Organization provisioning for newly authenticated users without a tenant."""
 
 from __future__ import annotations
 
@@ -8,6 +8,10 @@ from uuid import UUID
 
 from opentelemetry import trace
 
+from shared.organization.slug_utils import (
+    suggest_organization_slug_from_name,
+    validate_organization_slug,
+)
 from src.organization.models import OrganizationCreate
 from src.organization.service import organization_service
 from src.rbac.roles.service import role_service
@@ -31,6 +35,47 @@ def _user_has_organization(user_id: UUID) -> bool:
     return bool(response.data)
 
 
+def _is_slug_taken(slug: str) -> bool:
+    """Return True when another organization already uses ``slug``."""
+    response = (
+        organization_service.supabase.table("organizations")
+        .select("id")
+        .eq("slug", slug)
+        .limit(1)
+        .execute()
+    )
+    return bool(response.data)
+
+
+def _unique_slug_from_name(name: str, user_id: UUID) -> str:
+    """Build a unique kebab-case slug from an organization name.
+
+    Uses the organization name as the primary slug source. On collision,
+    appends a short user-id suffix (and a numeric counter if needed).
+    """
+    base = suggest_organization_slug_from_name(name)
+    if not base:
+        base = "organization"
+
+    is_valid, _ = validate_organization_slug(base)
+    if not is_valid:
+        base = "organization"
+
+    if not _is_slug_taken(base):
+        return base
+
+    suffix = str(user_id).replace("-", "")[:6]
+    candidate = f"{base}-{suffix}"
+    attempt = 2
+    while _is_slug_taken(candidate):
+        candidate = f"{base}-{suffix}{attempt}"
+        attempt += 1
+        if attempt > 50:
+            # Extremely unlikely; fall back to a fully unique slug.
+            return f"{base}-{str(user_id).replace('-', '')[:12]}"
+    return candidate
+
+
 @tracer.start_as_current_span("organization.ensure_default_organization_for_user")
 async def ensure_default_organization_for_user(
     user_id: UUID,
@@ -38,15 +83,15 @@ async def ensure_default_organization_for_user(
     *,
     organization_name: Optional[str] = None,
 ) -> tuple[Optional[UUID], Optional[str]]:
-    """Create a default organization and org_admin role when the user has none.
+    """Create a normal organization and org_admin role when the user has none.
 
-    Email/password signup and OAuth flows (LinkedIn, future providers) call this
-    helper so first-time users land in the product with a tenant already created,
-    matching the legacy signup behavior.
+    Email/password signup and OAuth flows call this helper so first-time users
+    land in the product with a tenant already created. Invited users should
+    already have membership from invitation processing, so this becomes a no-op.
 
     Args:
         user_id: Supabase auth user identifier.
-        email: Verified email used for the default organization label.
+        email: Verified email used when deriving a default organization name.
         organization_name: Optional override for the organization display name.
 
     Returns:
@@ -57,7 +102,7 @@ async def ensure_default_organization_for_user(
     current_span.set_attribute("user.id", str(user_id))
 
     if _user_has_organization(user_id):
-        current_span.add_event("default_organization_already_present")
+        current_span.add_event("organization_already_present")
         return None, None
 
     org_admin_role, role_error = await role_service.get_role_by_name("org_admin")
@@ -67,20 +112,20 @@ async def ensure_default_organization_for_user(
         current_span.set_status(trace.Status(trace.StatusCode.ERROR, message))
         return None, message
 
+    name = organization_name or f"{email}'s Organization"
+    slug = _unique_slug_from_name(name, user_id)
+
     org_data = OrganizationCreate(
-        name=organization_name or f"{email}'s Organization",
-        description=(
-            f"Default organization for {email}. "
-            "Please update with your organization details."
-        ),
-        slug=f"{str(user_id).replace('-', '')[:8]}-dummy-org",
+        name=name,
+        description=None,
+        slug=slug,
         is_active=True,
     )
 
     organization, org_error = await organization_service.create_organization(org_data)
     if org_error or not organization:
-        message = org_error or "Failed to create default organization"
-        logger.warning("Default organization provisioning failed: %s", message)
+        message = org_error or "Failed to create organization"
+        logger.warning("Organization provisioning failed: %s", message)
         current_span.set_status(trace.Status(trace.StatusCode.ERROR, message))
         return None, message
 
@@ -97,10 +142,12 @@ async def ensure_default_organization_for_user(
         return organization.id, message
 
     current_span.set_attribute("organization.id", str(organization.id))
+    current_span.set_attribute("organization.slug", slug)
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     logger.info(
-        "Provisioned default organization %s for user %s",
+        "Provisioned organization %s (slug=%s) for user %s",
         organization.id,
+        slug,
         user_id,
     )
     return organization.id, None

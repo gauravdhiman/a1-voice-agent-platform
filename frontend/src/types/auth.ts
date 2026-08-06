@@ -129,6 +129,8 @@ export interface AuthContextType {
   signUp: (data: SignUpData) => Promise<{
     user?: AuthUser;
     emailVerificationRequired?: boolean;
+    joinedOrganizationId?: string | null;
+    joinedOrganizationName?: string | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     error: any;
   }>;

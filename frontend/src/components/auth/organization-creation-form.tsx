@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
 import { useRouter } from "next/navigation";
 import { organizationService } from "@/services/organization-service";
-import { createDummyOrganizationData } from "@/lib/organization-utils";
+import { suggestOrganizationSlugFromName } from "@/lib/organization-slug";
 
 const organizationSchema = z.object({
   name: z
@@ -153,26 +153,29 @@ export function OrganizationCreationForm({
     setError(null);
 
     try {
-      // Create a default organization with dummy values using the utility function
-      const defaultOrgData = createDummyOrganizationData({
-        firstName: user?.firstName,
-        email: user?.email,
-        id: user?.id,
+      const name = user?.firstName
+        ? `${user.firstName}'s Organization`
+        : user?.email
+          ? `${user.email}'s Organization`
+          : "My Organization";
+      const slug =
+        suggestOrganizationSlugFromName(name) ||
+        `organization-${Date.now().toString(36)}`;
+
+      const result = await organizationService.createSelfOrganization({
+        name,
+        slug,
+        is_active: true,
       });
 
-      // Call the backend API to create the default organization
-      const result =
-        await organizationService.createSelfOrganization(defaultOrgData);
-
-      console.log("Default organization created:", result);
-      // Wait for the organization to be available before redirecting
+      console.log("Organization created:", result);
       await waitForOrganization();
     } catch (err) {
-      console.error("Default organization creation error:", err);
+      console.error("Organization creation error:", err);
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to create default organization. Please try again.",
+          : "Failed to create organization. Please try again.",
       );
       setIsLoading(false);
     }

@@ -2,14 +2,21 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { replaceMock, setSessionMock, getSessionMock, getUserMock, exchangeHandoffMock } =
-  vi.hoisted(() => ({
-    replaceMock: vi.fn(),
-    setSessionMock: vi.fn(),
-    getSessionMock: vi.fn(),
-    getUserMock: vi.fn(),
-    exchangeHandoffMock: vi.fn(),
-  }));
+const {
+  replaceMock,
+  setSessionMock,
+  getSessionMock,
+  getUserMock,
+  exchangeHandoffMock,
+  markInviteWelcomePendingMock,
+} = vi.hoisted(() => ({
+  replaceMock: vi.fn(),
+  setSessionMock: vi.fn(),
+  getSessionMock: vi.fn(),
+  getUserMock: vi.fn(),
+  exchangeHandoffMock: vi.fn(),
+  markInviteWelcomePendingMock: vi.fn(),
+}));
 
 const useSearchParamsMock = vi.fn(
   () => new URLSearchParams("handoff=test-handoff-token"),
@@ -40,6 +47,13 @@ vi.mock("@/services/oauth-session-service", () => ({
   exchangeOAuthSessionHandoff: exchangeHandoffMock,
 }));
 
+vi.mock("@/lib/invite-welcome", () => ({
+  markInviteWelcomePending: markInviteWelcomePendingMock,
+  consumeInviteWelcome: vi.fn(),
+  peekInviteWelcome: vi.fn(),
+  INVITE_WELCOME_STORAGE_KEY: "invite_welcome_v1",
+}));
+
 import OAuthSessionPage, {
   __resetOAuthSessionHandoffForTests,
 } from "./page.client";
@@ -54,6 +68,7 @@ describe("OAuthSessionPage", () => {
     getSessionMock.mockReset();
     getUserMock.mockReset();
     exchangeHandoffMock.mockReset();
+    markInviteWelcomePendingMock.mockReset();
     locationReplaceMock.mockReset();
     useSearchParamsMock.mockReturnValue(
       new URLSearchParams("handoff=test-handoff-token"),
@@ -91,6 +106,46 @@ describe("OAuthSessionPage", () => {
     expect(setSessionMock).toHaveBeenCalledWith({
       access_token: "test-access",
       refresh_token: "test-refresh",
+    });
+    expect(locationReplaceMock).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("marks invite welcome when an invitation token is present", async () => {
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams(
+        "handoff=test-handoff-token&invitation_token=invite-123",
+      ),
+    );
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...window.location,
+        search: "?handoff=test-handoff-token&invitation_token=invite-123",
+        pathname: "/auth/session",
+        replace: locationReplaceMock,
+      },
+    });
+
+    const { authService } = await import("@/services/auth-service");
+    vi.mocked(authService.processInvitation).mockResolvedValueOnce({
+      success: true,
+      data: {
+        organization_id: "org-1",
+        organization_name: "Acme Plumbing",
+      },
+    });
+
+    render(<OAuthSessionPage />);
+
+    await waitFor(() => {
+      expect(authService.processInvitation).toHaveBeenCalledWith(
+        "invite-123",
+        "user-1",
+      );
+    });
+    expect(markInviteWelcomePendingMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      organizationName: "Acme Plumbing",
     });
     expect(locationReplaceMock).toHaveBeenCalledWith("/dashboard");
   });

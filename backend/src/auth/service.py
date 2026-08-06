@@ -158,8 +158,10 @@ class AuthService:
                 "auth.email_verification_required", email_verification_required
             )
 
+            joined_organization_id = None
+            joined_organization_name = None
             if request.invitation_token:
-                _, invite_error = await organization_service.process_invitation(
+                invitation, invite_error = await organization_service.process_invitation(
                     request.invitation_token,
                     UUID(str(user.id)),
                 )
@@ -169,6 +171,9 @@ class AuthService:
                         user.id,
                         invite_error,
                     )
+                elif invitation:
+                    joined_organization_id = invitation.organization_id
+                    joined_organization_name = invitation.organization_name
 
             org_name = (
                 f"{request.first_name}'s Organization" if request.first_name else None
@@ -181,18 +186,18 @@ class AuthService:
                 )
                 if org_error:
                     logging.warning(
-                        "Could not provision default organization: %s", org_error
+                        "Could not provision organization: %s", org_error
                     )
                 elif org_id:
                     logging.info(
-                        "Provisioned default organization %s for user %s",
+                        "Provisioned organization %s for user %s",
                         org_id,
                         user.id,
                     )
                     current_span.set_attribute("role.assigned", True)
                     current_span.set_attribute("organization.id", str(org_id))
             except Exception as e:
-                logging.error(f"Error provisioning default organization: {e}")
+                logging.error(f"Error provisioning organization: {e}")
                 current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
 
             sign_up_response = SignUpResponse(
@@ -202,6 +207,8 @@ class AuthService:
                 refresh_token=session.refresh_token if session else None,
                 token_type="bearer",
                 expires_in=session.expires_in if session else None,
+                joined_organization_id=joined_organization_id,
+                joined_organization_name=joined_organization_name,
             )
 
             current_span.set_status(trace.Status(trace.StatusCode.OK))

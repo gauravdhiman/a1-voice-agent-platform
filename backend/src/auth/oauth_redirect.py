@@ -27,6 +27,9 @@ def oauth_session_redirect(
     tokens cannot be delivered in the hash. Instead the backend issues a short-
     lived signed ``handoff`` query parameter that the frontend exchanges once
     for Supabase session tokens.
+
+    When an invitation was accepted during OAuth, ``organization_id`` (and
+    optional name) are included so the frontend can select that org as current.
     """
     base = settings.app_base_url.rstrip("/")
     query_params: dict[str, str] = {
@@ -34,5 +37,9 @@ def oauth_session_redirect(
     }
     if invitation_token:
         query_params["invitation_token"] = invitation_token
+    if auth_response.joined_organization_id:
+        query_params["organization_id"] = str(auth_response.joined_organization_id)
+    if auth_response.joined_organization_name:
+        query_params["organization_name"] = auth_response.joined_organization_name
 
     return f"{base}/auth/session?{urlencode(query_params)}"

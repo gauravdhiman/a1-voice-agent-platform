@@ -53,6 +53,10 @@ class Invitation(InvitationBase):
     expires_at: datetime = Field(..., description="Invitation expiration time")
     created_at: datetime = Field(..., description="Creation timestamp")
     accepted_at: Optional[datetime] = Field(None, description="Acceptance timestamp")
+    organization_name: Optional[str] = Field(
+        None,
+        description="Display name of the invited organization (populated on accept)",
+    )
 
     class Config:
         from_attributes = True

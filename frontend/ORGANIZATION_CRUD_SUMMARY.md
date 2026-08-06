@@ -30,11 +30,10 @@ A comprehensive organization management system with full CRUD capabilities, prop
 
 - **Features:**
   - Grid view of all user's organizations
-  - Dummy organization detection and badges
+  - Setup-required badge when `onboarding_completed` is false
   - Quick actions (View, Members, Settings)
   - Create organization button (permission-based)
   - Status indicators (Active/Inactive)
-  - Setup required notifications
 
 #### 2. **Organization Detail** (`/organizations/[id]`)
 
@@ -199,7 +198,7 @@ frontend/src/
 
 - Organization cards in dashboard
 - Quick access links
-- Dummy organization notifications
+- Invite welcome toast after joining via invitation
 
 ## 🚧 Future Enhancements
 

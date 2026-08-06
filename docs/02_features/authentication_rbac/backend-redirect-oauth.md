@@ -86,7 +86,17 @@ Email signup uses the same backend org provisioning as OAuth:
    responds with `email_verification_required: true` and **no tokens** — the
    client must not sign the user in until they verify and sign in.
 4. If confirmation is **disabled** locally, the API returns session tokens; the
-   client calls `setSession` and redirects to `/dashboard` → `/onboarding`.
+   client calls `setSession` and redirects to `/dashboard`.
+   - **Self-signup (no invite):** a normal org is provisioned (name-based slug) →
+     `OrganizationCheck` sends **org admins** of unfinished orgs to `/onboarding`.
+   - **Invited signup:** invitation is processed first so personal-org
+     provisioning is skipped; the invitee lands on the dashboard with that org
+     selected (soft welcome toast) and does **not** enter founder onboarding.
+
+Google/LinkedIn OAuth uses the same invite-before-provision ordering inside
+`OAuthSessionService.complete_oauth_sign_in()`. The session redirect includes
+`organization_id` / `organization_name` when an invite was accepted so the
+frontend selects the invited tenant as current.
 
 ## API routes
 

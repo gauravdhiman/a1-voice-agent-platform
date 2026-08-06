@@ -69,12 +69,35 @@ async function processInvitationForUser(
 
   try {
     const { authService } = await import("@/services/auth-service");
+    const { markInviteWelcomePending } = await import("@/lib/invite-welcome");
     const result = await authService.processInvitation(invitationToken, userId);
 
     if (!result.success) {
       console.warn("Failed to process invitation:", result.error);
+      // Backend OAuth may have already accepted the invite; treat that as
+      // success for the soft welcome toast only.
+      const alreadyAccepted =
+        typeof result.error === "string" &&
+        result.error.toLowerCase().includes("already accepted");
+      if (alreadyAccepted) {
+        markInviteWelcomePending();
+      }
     } else {
       console.log("Invitation processed successfully:", result.data);
+      const data =
+        result.data && typeof result.data === "object"
+          ? (result.data as {
+              organization_name?: unknown;
+              organization_id?: unknown;
+            })
+          : null;
+      const organizationName =
+        typeof data?.organization_name === "string"
+          ? data.organization_name
+          : null;
+      const organizationId =
+        typeof data?.organization_id === "string" ? data.organization_id : null;
+      markInviteWelcomePending({ organizationName, organizationId });
     }
   } catch (error) {
     console.warn("Error processing invitation:", error);
@@ -348,6 +371,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         user,
         emailVerificationRequired: result.emailVerificationRequired,
+        joinedOrganizationId: result.joinedOrganizationId ?? null,
+        joinedOrganizationName: result.joinedOrganizationName ?? null,
         error: null,
       };
     },

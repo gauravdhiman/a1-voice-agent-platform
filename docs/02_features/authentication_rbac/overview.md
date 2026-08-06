@@ -444,6 +444,12 @@ graph LR
 
 ### Invitation Flow
 
+Invited users skip founder onboarding. After signup (email or OAuth), they land
+on the dashboard with the **invited org selected** and a soft welcome toast.
+`/onboarding` is reserved for **org admins** of an organization with
+`onboarding_completed = false`. There is no "dummy org" concept — self-signup
+provisions a normal organization with a name-based slug.
+
 ```mermaid
 sequenceDiagram
     participant Admin as Org Admin
@@ -451,14 +457,16 @@ sequenceDiagram
     participant Email as Email Service
     participant Invitee as Invitee
     participant DB as Database
+    participant FE as Frontend
 
     Admin->>BE: Invite user (email + role)
-    BE->>DB: Create membership (status: invited)
+    BE->>DB: Create invitation
     BE->>Email: Send invitation email
-    Email-->>Invitee: Invitation link
-    Invitee->>BE: Accept invitation
-    BE->>DB: Update membership (status: active)
-    BE-->>Invitee: Membership active
+    Email-->>Invitee: Invitation link (/auth/signup?token=...)
+    Invitee->>BE: Sign up with invitation token
+    BE->>DB: Accept invite (skip personal-org create if membership exists)
+    BE-->>Invitee: Session + joined_organization_id
+    Invitee->>FE: /dashboard (select invited org, welcome toast, no /onboarding)
 ```
 
 ## API Endpoints

@@ -728,6 +728,7 @@ async def process_invitation(
             content={
                 "message": "Successfully added to organization",
                 "organization_id": str(invitation.organization_id),
+                "organization_name": invitation.organization_name,
                 "invitation_id": str(invitation.id),
             },
         )
