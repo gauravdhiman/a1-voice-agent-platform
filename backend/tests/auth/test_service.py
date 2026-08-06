@@ -20,10 +20,13 @@ from src.auth.models import SignUpRequest, SignInRequest
 @pytest.fixture
 def auth_service(mock_supabase_client, mock_supabase_auth):
     """AuthService with mocked Supabase."""
-    with patch('src.auth.service.supabase_config') as mock_config:
+    mock_supabase_client.auth = mock_supabase_auth
+    with patch('src.auth.service.supabase_config') as mock_config, patch(
+        'src.auth.service.create_isolated_supabase_client',
+        return_value=mock_supabase_client,
+    ):
         mock_config.client = mock_supabase_client
         mock_config.is_configured.return_value = True
-        mock_supabase_client.auth = mock_supabase_auth
         
         service = AuthService()
         service.supabase_config = mock_config

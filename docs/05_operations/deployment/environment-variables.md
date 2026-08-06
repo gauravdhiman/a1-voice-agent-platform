@@ -41,6 +41,13 @@ passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
 | `GOOGLE_OAUTH_TOOL_CLIENT_ID` | Google OAuth client ID (tools) | No |
 | `GOOGLE_OAUTH_TOOL_CLIENT_SECRET` | Google OAuth client secret | **Yes** |
 | `GOOGLE_OAUTH_TOOL_REDIRECT_URI` | Prod: `https://api.247ai.live/api/v1/tools/callback` | No |
+| `API_BASE_URL` | Public backend origin for OAuth callbacks (e.g. `https://api.247ai.live`) | No |
+| `APP_BASE_URL` | Public frontend origin for post-OAuth redirect (e.g. `https://www.247ai.live`) | No |
+| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | Google OAuth client ID (backend redirect sign-in) | No |
+| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` | Google OAuth client secret | **Yes** |
+| `SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID` | LinkedIn OAuth app client ID (backend redirect sign-in) | No |
+| `SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET` | LinkedIn OAuth app client secret | **Yes** |
+| `LINKEDIN_OAUTH_SCOPES` | Prod: `openid profile email` | No |
 | `CORS_ORIGINS` | Prod: `["https://www.247ai.live"]` | No |
 | `APP_BASE_URL` | Prod: `https://www.247ai.live` | No |
 | `ENVIRONMENT` | `production` | No |
@@ -87,6 +94,7 @@ time** via `gcp-deploy.sh` build args.
 | `NEXT_PUBLIC_API_URL` | `https://api.247ai.live` | No |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | No |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | **Yes** |
+| `NEXT_PUBLIC_API_URL` | Backend API URL used by frontend OAuth redirect buttons | No |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key | No |
 | `NEXT_PUBLIC_APP_NAME` | App display name | No |
 | `NEXT_PUBLIC_APP_DESCRIPTION` | App tagline | No |
@@ -116,6 +124,9 @@ Set in the shell when deploying voice-ws:
 - [ ] `JWT_SECRET_KEY` identical on backend and voice-ws
 - [ ] `VOICE_WS_PUBLIC_URL` / `VOICE_WS_TWILIO_URL` point at production voice host
 - [ ] Stripe webhooks and OAuth redirect URIs use `https://api.247ai.live`
+- [ ] Google Cloud redirect URI: `https://api.247ai.live/api/v1/auth/google/callback`
+- [ ] LinkedIn Developer Portal redirect URI: `https://api.247ai.live/api/v1/auth/linkedin/callback`
+- [ ] Backend has `SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID` and `_SECRET` from `.env.cloud`
 - [ ] All **Secret?=Yes** values stored in a team password manager
 
 See [runbook.md](runbook.md) for full deployment steps.

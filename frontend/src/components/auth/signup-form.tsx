@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,69 +8,101 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
-import { useSearchParams } from "next/navigation";
-
-const signUpSchema = z
-  .object({
-    firstName: z.string().min(1, "First name is required").max(50),
-    lastName: z.string().min(1, "Last name is required").max(50),
-    email: z.string().email("Please enter a valid email address"),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Must contain uppercase letter")
-      .regex(/[a-z]/, "Must contain lowercase letter")
-      .regex(/\d/, "Must contain a number")
-      .regex(/[!@#$%^&*(),.?":{}|<>]/, "Must contain special character"),
-    passwordConfirm: z.string().optional(), // Make it optional
-  })
-  .refine(
-    (data) => {
-      // Only validate password match if both password and passwordConfirm have values
-      if (!data.password || !data.passwordConfirm) return true;
-      return data.password === data.passwordConfirm;
-    },
-    {
-      message: "Passwords don't match",
-      path: ["passwordConfirm"],
-    },
-  );
-
-type SignUpFormData = z.infer<typeof signUpSchema>;
+import { useSearchParams, useRouter } from "next/navigation";
+import { OAuthRedirectButton } from "@/components/auth/oauth-redirect-button";
+import { ExistingAccountHint } from "@/components/auth/existing-account-hint";
+import { authService } from "@/services/auth-service";
+import {
+  signUpSchema,
+  type SignUpFormData,
+} from "@/lib/auth/signup-schema";
+import type { SignInMethod } from "@/types/auth";
 
 export function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [existingAccountMessage, setExistingAccountMessage] = useState<
+    string | null
+  >(null);
+  const [existingSignInMethods, setExistingSignInMethods] = useState<
+    SignInMethod[]
+  >([]);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSignUpComplete, setIsSignUpComplete] = useState(false);
 
-  const { signUp, signInWithOAuth } = useAuth();
+  const { signUp } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const invitationToken = searchParams?.get("token");
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
     watch,
     trigger,
     reset,
   } = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
-    mode: "onChange", // Validate on change
+    mode: "onChange",
+    reValidateMode: "onChange",
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      passwordConfirm: "",
+    },
   });
 
   const password = watch("password");
   const passwordConfirm = watch("passwordConfirm");
+  const emailValue = watch("email");
 
-  // Trigger validation when passwordConfirm changes, but only if it has a value
+  const checkEmailAvailability = useCallback(
+    async (email: string) => {
+      const trimmedEmail = email.trim();
+      if (!trimmedEmail || !z.string().email().safeParse(trimmedEmail).success) {
+        setExistingAccountMessage(null);
+        setExistingSignInMethods([]);
+        return;
+      }
+
+      setIsCheckingEmail(true);
+      try {
+        const result = await authService.checkEmailAvailability(trimmedEmail);
+        if (result.success && result.data?.exists) {
+          setExistingAccountMessage(
+            result.data.message ||
+              "An account with this email already exists. Please sign in instead.",
+          );
+          setExistingSignInMethods(result.data.signInMethods);
+        } else {
+          setExistingAccountMessage(null);
+          setExistingSignInMethods([]);
+        }
+      } finally {
+        setIsCheckingEmail(false);
+      }
+    },
+    [],
+  );
+
+  // Re-validate confirm password when either password field changes.
   React.useEffect(() => {
-    if (passwordConfirm && passwordConfirm.length > 0) {
-      trigger("passwordConfirm");
+    if (passwordConfirm.length > 0) {
+      void trigger("passwordConfirm");
     }
-  }, [passwordConfirm, trigger]);
+  }, [password, passwordConfirm, trigger]);
+
+  const isSubmitDisabled =
+    !!isLoading ||
+    !!existingAccountMessage ||
+    isCheckingEmail ||
+    !isValid;
 
   const getPasswordStrength = (password: string) => {
     let strength = 0;
@@ -95,34 +127,58 @@ export function SignUpForm() {
   const onSubmit = async (data: SignUpFormData) => {
     setIsLoading("password");
     setError(null);
+    setExistingAccountMessage(null);
+    setExistingSignInMethods([]);
     setSuccess(null);
 
     try {
-      const { user, error } = await signUp({
+      const { user, emailVerificationRequired, error } = await signUp({
         email: data.email,
         password: data.password,
-        passwordConfirm: data.passwordConfirm || "",
+        passwordConfirm: data.passwordConfirm,
         firstName: data.firstName,
         lastName: data.lastName,
         invitationToken: invitationToken || undefined,
       });
 
       if (error) {
-        setError(error.message);
+        const message =
+          typeof error === "object" && error !== null && "message" in error
+            ? String(error.message)
+            : String(error);
+        const signInMethods =
+          typeof error === "object" &&
+          error !== null &&
+          "signInMethods" in error &&
+          Array.isArray(error.signInMethods)
+            ? (error.signInMethods as SignInMethod[])
+            : [];
+
+        if (signInMethods.length > 0) {
+          setExistingAccountMessage(message);
+          setExistingSignInMethods(signInMethods);
+          setError(null);
+        } else {
+          setError(message);
+        }
       } else if (user) {
-        // Clear the form after successful signup
         reset();
         setIsSignUpComplete(true);
 
-        if (invitationToken) {
-          setSuccess(
-            "Account created! Please check your email for verification. You will be added to the organization after email confirmation.",
-          );
-        } else {
-          setSuccess(
-            "Account created! Please check your email for verification.",
-          );
+        if (emailVerificationRequired) {
+          if (invitationToken) {
+            setSuccess(
+              "Account created! Please check your email for verification. You will be added to the organization after email confirmation.",
+            );
+          } else {
+            setSuccess(
+              "Account created! Please check your email for verification.",
+            );
+          }
+          return;
         }
+
+        router.replace("/dashboard");
       } else {
         setError("User details not returned after signup. Please try again.");
       }
@@ -130,42 +186,6 @@ export function SignUpForm() {
       console.error("Sign up error:", error);
       setError("An unexpected error occurred. Please try again.");
     } finally {
-      setIsLoading(null);
-    }
-  };
-
-  const handleGoogleSignUp = async () => {
-    setIsLoading("google");
-    setError(null);
-    try {
-      const result = await signInWithOAuth("google");
-      if (result?.error) {
-        setError(result.error.message || "Failed to sign up with Google");
-        setIsLoading(null);
-      }
-      // Note: If successful, OAuth will redirect the user away from this page
-      // The organization creation will happen in the OAuth callback handler
-    } catch (error) {
-      console.error("Google sign up error:", error);
-      setError("An unexpected error occurred. Please try again.");
-      setIsLoading(null);
-    }
-  };
-
-  const handleLinkedInSignUp = async () => {
-    setIsLoading("linkedin_oidc");
-    setError(null);
-    try {
-      const result = await signInWithOAuth("linkedin_oidc");
-      if (result?.error) {
-        setError(result.error.message || "Failed to sign up with LinkedIn");
-        setIsLoading(null);
-      }
-      // Note: If successful, OAuth will redirect the user away from this page
-      // The organization creation will happen in the OAuth callback handler
-    } catch (error) {
-      console.error("LinkedIn sign up error:", error);
-      setError("An unexpected error occurred. Please try again.");
       setIsLoading(null);
     }
   };
@@ -182,6 +202,14 @@ export function SignUpForm() {
             </AlertDescription>
           </Alert>
         )}
+
+        {existingAccountMessage ? (
+          <ExistingAccountHint
+            message={existingAccountMessage}
+            signInMethods={existingSignInMethods}
+            email={emailValue}
+          />
+        ) : null}
 
         {error && (
           <Alert variant="destructive">
@@ -242,12 +270,19 @@ export function SignUpForm() {
             <Input
               id="email"
               type="email"
-              {...register("email")}
+              {...register("email", {
+                onBlur: (event) => {
+                  void checkEmailAvailability(event.target.value);
+                },
+              })}
               placeholder="john@example.com"
               className="pl-10"
               disabled={!!isLoading}
             />
           </div>
+          {isCheckingEmail ? (
+            <p className="text-xs text-muted-foreground">Checking email...</p>
+          ) : null}
           {errors.email && (
             <p className="text-sm text-destructive">{errors.email.message}</p>
           )}
@@ -314,7 +349,11 @@ export function SignUpForm() {
               placeholder="Confirm your password"
               className="pl-10 pr-10"
               disabled={!!isLoading}
-              onBlur={() => passwordConfirm && trigger("passwordConfirm")}
+              onBlur={() => {
+                if (passwordConfirm.length > 0) {
+                  void trigger("passwordConfirm");
+                }
+              }}
             />
             <button
               type="button"
@@ -336,7 +375,8 @@ export function SignUpForm() {
           id="create-account-button"
           type="submit"
           className="w-full cursor-pointer"
-          disabled={!!isLoading}
+          disabled={isSubmitDisabled}
+          aria-disabled={isSubmitDisabled}
         >
           {isLoading === "password" ? (
             <>
@@ -361,62 +401,21 @@ export function SignUpForm() {
       </div>
 
       <div className="space-y-4">
-        <Button
-          variant="outline"
-          onClick={handleGoogleSignUp}
+        <OAuthRedirectButton
+          provider="google"
+          text="signup_with"
+          invitationToken={invitationToken || undefined}
           disabled={!!isLoading}
-          className="w-full flex items-center justify-center cursor-pointer h-11"
-        >
-          {isLoading === "google" ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing up with Google...
-            </>
-          ) : (
-            <div className="flex items-center justify-center gap-3">
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-              <span>Sign up with Google</span>
-            </div>
-          )}
-        </Button>
+          className="w-full"
+        />
 
-        <Button
-          variant="outline"
-          onClick={handleLinkedInSignUp}
+        <OAuthRedirectButton
+          provider="linkedin"
+          text="signup_with"
+          invitationToken={invitationToken || undefined}
           disabled={!!isLoading}
-          className="w-full flex items-center justify-center cursor-pointer h-11"
-        >
-          {isLoading === "linkedin_oidc" ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing up with LinkedIn...
-            </>
-          ) : (
-            <div className="flex items-center justify-center gap-3">
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#0077B5">
-                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-              </svg>
-              <span>Sign up with LinkedIn</span>
-            </div>
-          )}
-        </Button>
+          className="w-full"
+        />
       </div>
     </div>
   );

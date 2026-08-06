@@ -9,6 +9,7 @@ from datetime import datetime
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
@@ -38,6 +39,7 @@ from src.security import (
     limiter,
     rate_limit_handler,
 )
+from src.security.validation_errors import sanitize_validation_errors
 from src.voice_agents import (
     agent_router,
     embed_router,
@@ -97,6 +99,16 @@ def create_app() -> FastAPI:
     # Attach shared rate limiter and 429 handler
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Strip rejected request bodies from validation errors (may contain secrets)."""
+        return JSONResponse(
+            status_code=422,
+            content={"detail": sanitize_validation_errors(exc.errors())},
+        )
 
     # Add SlowAPI middleware for rate limiting
     app.add_middleware(SlowAPIMiddleware)

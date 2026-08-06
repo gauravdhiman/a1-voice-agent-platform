@@ -47,6 +47,9 @@ BACKEND_KEYS = {
     "GOOGLE_OAUTH_TOOL_CLIENT_ID",
     "GOOGLE_OAUTH_TOOL_CLIENT_SECRET",
     "GOOGLE_OAUTH_TOOL_REDIRECT_URI",
+    "SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID",
+    "SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET",
+    "LINKEDIN_OAUTH_SCOPES",
     "GEMINI_API_KEY",
     # Voice transport (Pipecat WebSocket). Backend builds the browser wsUrl and
     # the Twilio Media Streams URL from these settings.

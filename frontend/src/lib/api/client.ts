@@ -1,7 +1,23 @@
 import { ApiResponse } from "@/types";
 import { supabase } from "@/lib/supabase";
+import {
+  getSafeApiErrorMessage,
+  redactSensitiveLogMessage,
+} from "@/lib/api/error-message";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+export class ApiRequestError extends Error {
+  status: number;
+  data?: unknown;
+
+  constructor(message: string, status: number, data?: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.data = data;
+  }
+}
 
 class ApiClient {
   private baseURL: string;
@@ -105,33 +121,24 @@ class ApiClient {
             "Access denied. You do not have permission to perform this action.",
           );
         }
-        // Handle error message extraction more robustly
-        let errorMessage = "API request failed";
+        const errorMessage = getSafeApiErrorMessage(data);
 
-        if (data?.message) {
-          errorMessage =
-            typeof data.message === "string"
-              ? data.message
-              : JSON.stringify(data.message);
-        } else if (data?.detail) {
-          errorMessage =
-            typeof data.detail === "string"
-              ? data.detail
-              : JSON.stringify(data.detail);
-        } else if (data?.error) {
-          errorMessage =
-            typeof data.error === "string"
-              ? data.error
-              : JSON.stringify(data.error);
-        }
-
-        throw new Error(errorMessage);
+        throw new ApiRequestError(errorMessage, response.status, data);
       }
 
       // Handle both wrapped and direct responses
       return data?.data !== undefined ? data : { data, success: true };
     } catch (error) {
-      console.error("API request error:", error);
+      if (error instanceof ApiRequestError) {
+        console.error(
+          "API request error:",
+          redactSensitiveLogMessage(error.message),
+        );
+      } else if (error instanceof Error) {
+        console.error("API request error:", error.message);
+      } else {
+        console.error("API request error");
+      }
       throw error;
     }
   }

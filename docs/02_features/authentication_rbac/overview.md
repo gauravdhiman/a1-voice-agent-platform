@@ -6,7 +6,7 @@ The platform provides comprehensive authentication and authorization through a c
 
 ## What It Provides
 
-- ✅ **Multiple Authentication Methods**: Password-based and Google OAuth
+- ✅ **Multiple Authentication Methods**: Password-based, Google OAuth, and LinkedIn OAuth (backend redirect)
 - ✅ **Secure Session Management**: JWT tokens with refresh tokens
 - ✅ **Multi-Tenant Support**: Users can belong to multiple organizations
 - ✅ **Role-Based Access Control**: Fine-grained permissions per user per organization
@@ -98,7 +98,10 @@ POST /api/v1/auth/forgot-password   Password reset request
 POST /api/v1/auth/reset-password    Password reset
 ```
 
-### 2. Google OAuth
+### 2. Google sign-in (backend redirect)
+
+Google uses the same full-window redirect flow as LinkedIn. Sign-in buttons link
+to the backend authorize route; no GIS popup or frontend ID-token exchange.
 
 **Flow**:
 
@@ -107,38 +110,57 @@ sequenceDiagram
     participant User as User
     participant FE as Frontend
     participant BE as Backend
-    participant Google as Google OAuth
+    participant Google as Google
     participant SB as Supabase
 
     User->>FE: Click "Sign in with Google"
-    FE->>BE: Initiate OAuth flow
-    BE->>Google: Redirect to consent screen
-    User->>Google: Authorize access
-    Google->>BE: OAuth callback with code
-    BE->>Google: Exchange code for tokens
-    Google-->>BE: User tokens
-    BE->>SB: Create/update user
-    BE->>SB: Generate JWT
-    SB-->>BE: JWT tokens
-    BE-->>FE: Redirect with tokens
-    FE->>User: Login successful
+    FE->>BE: GET /auth/google/authorize (full window)
+    BE->>Google: OAuth redirect
+    Google-->>BE: Authorization code
+    BE->>SB: Mint session + provision org
+    BE-->>FE: Redirect /auth/session?handoff=...
+    FE->>BE: POST /auth/session/handoff
+    BE-->>FE: Supabase tokens
+    FE->>SB: setSession(tokens)
+    FE->>User: Dashboard
 ```
 
-**Benefits**:
+**Key files**: `oauth-redirect-button.tsx`, `app/auth/session/page.client.tsx`
 
-- No password to remember
-- Verified email address
-- Single Sign-On (SSO) support
-- Faster onboarding
+**Documentation**:
 
-**Endpoints**:
+- [Backend redirect OAuth](backend-redirect-oauth.md)
+- [Social OAuth architecture](social-oauth-architecture.md)
 
+### 3. LinkedIn sign-in (backend redirect)
+
+LinkedIn uses the same backend redirect pattern as Google.
+
+**Flow**:
+
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant LI as LinkedIn
+    participant SB as Supabase
+
+    User->>FE: Click "Sign in with LinkedIn"
+    FE->>BE: GET /auth/linkedin/authorize (full window)
+    BE->>LI: OAuth redirect
+    LI-->>BE: Authorization code
+    BE->>SB: Mint session + provision org
+    BE-->>FE: Redirect /auth/session?handoff=...
+    FE->>BE: POST /auth/session/handoff
+    BE-->>FE: Supabase tokens
+    FE->>SB: setSession(tokens)
+    FE->>User: Dashboard
 ```
-GET  /api/v1/auth/oauth/google     Initiate Google OAuth
-GET  /api/v1/auth/callback/google   Handle Google OAuth callback
-```
 
-### 3. Session Management
+**Documentation**: [LinkedIn sign-in (backend redirect)](linkedin-direct-oidc.md)
+
+### 4. Session Management
 
 **Token Types**:
 
@@ -451,9 +473,13 @@ POST /api/v1/auth/verify-email        Email verification
 POST /api/v1/auth/forgot-password     Password reset request
 POST /api/v1/auth/reset-password      Password reset
 POST /api/v1/auth/refresh            Refresh access token
-GET  /api/v1/auth/oauth/google       Initiate Google OAuth
-GET  /api/v1/auth/callback/google     Google OAuth callback
-GET  /api/v1/auth/me                Get current user
+GET  /api/v1/auth/google/authorize     Start Google OAuth redirect
+GET  /api/v1/auth/google/callback      Google OAuth callback (backend)
+GET  /api/v1/auth/linkedin/authorize   Start LinkedIn OAuth redirect
+GET  /api/v1/auth/linkedin/callback    LinkedIn OAuth callback (backend)
+POST /api/v1/auth/session/handoff      Exchange OAuth handoff for session tokens
+POST /api/v1/auth/linkedin/exchange    Legacy popup exchange (not used by sign-in UI)
+GET  /api/v1/auth/me                   Get current user
 ```
 
 ### Organization Management
@@ -543,10 +569,16 @@ JWT_SECRET_KEY=your-jwt-secret
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
 
-# OAuth
-GOOGLE_OAUTH_CLIENT_ID=your-client-id
-GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
-GOOGLE_OAUTH_REDIRECT_URI=https://your-app.com/auth/callback/google
+# OAuth (backend redirect — Google + LinkedIn)
+APP_BASE_URL=http://localhost:3000
+API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=your-google-client-id
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=your-google-client-secret
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=your-linkedin-client-id
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET=your-linkedin-client-secret
+LINKEDIN_OAUTH_SCOPES=openid profile email
+JWT_SECRET_KEY=your-jwt-secret
 
 # Password Policy
 MIN_PASSWORD_LENGTH=8
@@ -636,6 +668,11 @@ Custom roles created by platform admins via UI.
 
 ## Related Documentation
 
+- [Backend redirect OAuth](backend-redirect-oauth.md) - Canonical Google + LinkedIn flow
+- [Social OAuth architecture](social-oauth-architecture.md) - Architecture and credentials
+- [LinkedIn sign-in (backend redirect)](linkedin-direct-oidc.md) - LinkedIn setup
+- [Google Identity Services sign-in](google-identity-services.md) - Legacy GIS notes (historical)
+- [OAuth Setup](../../02_core_systems/oauth_setup.md) - GCP and Supabase dashboard steps
 - [Multi-Tenancy Feature](../multi_tenancy/overview.md) - Organization management
 - [API Guidelines](../../04_development/api_guidelines.md) - API development standards
 - [Database Schema](../../01_architecture/database_schema.md) - Database structure

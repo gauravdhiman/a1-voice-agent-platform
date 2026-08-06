@@ -3,7 +3,7 @@ Authentication service for handling user registration, login, and session manage
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -16,14 +16,27 @@ try:  # pragma: no cover - import shim exercised at runtime, not per-test
 except ImportError:  # pragma: no cover
     from gotrue.errors import AuthApiError
 from opentelemetry import metrics, trace
-from src.organization.models import OrganizationCreate
-from src.rbac.roles.service import role_service
+from src.organization.provisioning import ensure_default_organization_for_user
+from src.organization.service import organization_service
 from src.rbac.user_roles.service import user_role_service
 from src.shared.utils import extract_first_last_name
 
-from shared.config import supabase_config
+from shared.config import create_isolated_supabase_client, supabase_config
 
-from .models import AuthResponse, SignInRequest, SignUpRequest, UserProfile
+from .models import (
+    AuthResponse,
+    EmailAvailabilityResponse,
+    SignInRequest,
+    SignUpRequest,
+    SignUpResponse,
+    UserProfile,
+)
+from .sign_in_methods import (
+    GENERIC_EXISTING_ACCOUNT_MESSAGE,
+    SignInGuidance,
+    SignInMethod,
+    resolve_sign_in_guidance,
+)
 
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)
@@ -63,7 +76,7 @@ class AuthService:
     @tracer.start_as_current_span("auth.sign_up")
     async def sign_up(
         self, request: SignUpRequest
-    ) -> tuple[Optional[AuthResponse], Optional[HTTPException]]:
+    ) -> tuple[Optional[SignUpResponse], Optional[HTTPException]]:
         """
         Register a new user account.
 
@@ -87,7 +100,8 @@ class AuthService:
 
         try:
             # Sign up with Supabase Auth
-            response = self.supabase.auth.sign_up(
+            auth_client = create_isolated_supabase_client()
+            response = auth_client.auth.sign_up(
                 {
                     "email": request.email,
                     "password": request.password,
@@ -129,81 +143,69 @@ class AuthService:
 
             profile = UserProfile(
                 id=user.id,
-                email=user.email,
-                first_name=first_name,
-                last_name=last_name,
-                is_verified=user.email_confirmed_at is not None,
-                created_at=user.created_at.isoformat() if user.created_at else "",
-                updated_at=user.updated_at.isoformat() if user.updated_at else "",
+                email=user.email or request.email,
+                first_name=first_name or request.first_name,
+                last_name=last_name or request.last_name,
+                email_confirmed_at=_format_auth_timestamp(user.email_confirmed_at),
+                created_at=_format_auth_timestamp(user.created_at),
+                updated_at=_format_auth_timestamp(user.updated_at),
             )
 
-            # Create auth response
-            auth_response = AuthResponse(
+            email_verification_required = not (
+                session and session.access_token and session.refresh_token
+            )
+            current_span.set_attribute(
+                "auth.email_verification_required", email_verification_required
+            )
+
+            if request.invitation_token:
+                _, invite_error = await organization_service.process_invitation(
+                    request.invitation_token,
+                    UUID(str(user.id)),
+                )
+                if invite_error:
+                    logging.warning(
+                        "Invitation processing failed during signup for %s: %s",
+                        user.id,
+                        invite_error,
+                    )
+
+            org_name = (
+                f"{request.first_name}'s Organization" if request.first_name else None
+            )
+            try:
+                org_id, org_error = await ensure_default_organization_for_user(
+                    UUID(str(user.id)),
+                    user.email or request.email,
+                    organization_name=org_name,
+                )
+                if org_error:
+                    logging.warning(
+                        "Could not provision default organization: %s", org_error
+                    )
+                elif org_id:
+                    logging.info(
+                        "Provisioned default organization %s for user %s",
+                        org_id,
+                        user.id,
+                    )
+                    current_span.set_attribute("role.assigned", True)
+                    current_span.set_attribute("organization.id", str(org_id))
+            except Exception as e:
+                logging.error(f"Error provisioning default organization: {e}")
+                current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+
+            sign_up_response = SignUpResponse(
                 user=profile,
+                email_verification_required=email_verification_required,
                 access_token=session.access_token if session else None,
                 refresh_token=session.refresh_token if session else None,
                 token_type="bearer",
-                expires_in=3600,  # Default 1 hour
+                expires_in=session.expires_in if session else None,
             )
 
-            # Assign default org_admin role to new user
-            try:
-                # Get the org_admin role
-                org_admin_role, role_error = await role_service.get_role_by_name(
-                    "org_admin"
-                )
-                if role_error or not org_admin_role:
-                    logging.warning(f"Could not find org_admin role: {role_error}")
-                else:
-                    # Create a dummy organization for the user with recognizable pattern
-                    org_data = OrganizationCreate(
-                        name=f"{user.email}'s Organization",
-                        description=f"Default organization for {user.email}. Please update with your organization details.",
-                        slug=f"{user.id[:8]}-dummy-org",
-                        is_active=True,
-                    )
-
-                    from src.organization.service import organization_service
-
-                    organization, org_error = (
-                        await organization_service.create_organization(org_data)
-                    )
-                    if org_error or not organization:
-                        logging.warning(
-                            f"Could not create default organization: {org_error}"
-                        )
-                    else:
-                        # Assign org_admin role to user for their organization
-                        from src.rbac.user_roles.models import UserRoleCreate
-
-                        user_role_data = UserRoleCreate(
-                            user_id=user.id,
-                            role_id=org_admin_role.id,
-                            organization_id=organization.id,
-                        )
-
-                        user_role, role_assign_error = (
-                            await user_role_service.assign_role_to_user(user_role_data)
-                        )
-                        if role_assign_error or not user_role:
-                            logging.warning(
-                                f"Could not assign org_admin role: {role_assign_error}"
-                            )
-                        else:
-                            logging.info(
-                                f"Assigned org_admin role to user {user.id} for organization {organization.id}"
-                            )
-                            # Set attributes on current span
-                            current_span.set_attribute("role.assigned", True)
-                            current_span.set_attribute(
-                                "organization.id", str(organization.id)
-                            )
-            except Exception as e:
-                logging.error(f"Error assigning default role: {e}")
-                current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-
             current_span.set_status(trace.Status(trace.StatusCode.OK))
-            return auth_response, None
+            return sign_up_response, None
 
         except AuthApiError as e:
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
@@ -211,9 +213,18 @@ class AuthService:
             auth_failure_counter.add(1, {"operation": "signup", "error": "auth_error"})
             error_msg = str(e).lower()
             if "already registered" in error_msg or "user already" in error_msg:
+                guidance_user = await self._find_auth_user_by_email(request.email)
+                guidance = (
+                    resolve_sign_in_guidance(guidance_user)
+                    if guidance_user is not None
+                    else SignInGuidance([], GENERIC_EXISTING_ACCOUNT_MESSAGE)
+                )
                 return None, HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="User already registered",
+                    detail={
+                        "message": guidance.message,
+                        "sign_in_methods": guidance.sign_in_methods,
+                    },
                 )
             if "rate limit" in error_msg or "email rate" in error_msg:
                 return None, HTTPException(
@@ -256,7 +267,8 @@ class AuthService:
 
         try:
             # Sign in with Supabase Auth
-            response = self.supabase.auth.sign_in_with_password(
+            auth_client = create_isolated_supabase_client()
+            response = auth_client.auth.sign_in_with_password(
                 {"email": request.email, "password": request.password}
             )
 
@@ -305,6 +317,8 @@ class AuthService:
                 token_type="bearer",
                 expires_in=3600,  # Default 1 hour
             )
+
+            await self._record_last_sign_in_method(str(user.id), "email")
 
             current_span.set_status(trace.Status(trace.StatusCode.OK))
             return auth_response, None
@@ -558,6 +572,102 @@ class AuthService:
                 detail="Internal server error while fetching user profile",
             )
 
+    @tracer.start_as_current_span("auth.check_email_availability")
+    async def check_email_availability(
+        self, email: str
+    ) -> tuple[EmailAvailabilityResponse, Optional[HTTPException]]:
+        """Check whether an email is available for new registration."""
+        current_span = trace.get_current_span()
+        current_span.set_attribute("user.email", email)
+
+        try:
+            user = await self._find_auth_user_by_email(email)
+            if user is None:
+                return EmailAvailabilityResponse(exists=False), None
+
+            guidance = resolve_sign_in_guidance(user)
+            return (
+                EmailAvailabilityResponse(
+                    exists=True,
+                    sign_in_methods=guidance.sign_in_methods,
+                    message=guidance.message,
+                ),
+                None,
+            )
+        except Exception as exc:
+            logging.error("Email availability check failed: %s", exc, exc_info=True)
+            return EmailAvailabilityResponse(exists=False), HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to verify email availability",
+            )
+
+    async def _get_sign_in_methods_for_email(self, email: str) -> list[SignInMethod]:
+        """Return sign-in methods for an existing auth user when deterministic."""
+        user = await self._find_auth_user_by_email(email)
+        if user is None:
+            return []
+        return resolve_sign_in_guidance(user).sign_in_methods
+
+    def _hydrate_auth_user(self, user: Any) -> Any:
+        """Load the full auth user record including metadata and identities."""
+        user_id = getattr(user, "id", None)
+        if not user_id:
+            return user
+
+        response = self.supabase.auth.admin.get_user_by_id(str(user_id))
+        if hasattr(response, "user") and response.user is not None:
+            return response.user
+        if isinstance(response, dict):
+            return response.get("user", user)
+        return user
+
+    async def _find_auth_user_by_email(self, email: str) -> Optional[Any]:
+        """Locate a Supabase auth user record by email using the admin API."""
+        normalized_email = email.strip().lower()
+        if not normalized_email:
+            return None
+
+        page = 1
+        max_pages = 10
+        while page <= max_pages:
+            response = self.supabase.auth.admin.list_users(page=page, per_page=200)
+            users_list: list[Any] = []
+            if hasattr(response, "users"):
+                users_list = response.users or []
+            elif isinstance(response, list):
+                users_list = response
+
+            for user in users_list:
+                user_email = getattr(user, "email", None)
+                if user_email and user_email.lower() == normalized_email:
+                    return self._hydrate_auth_user(user)
+
+            if len(users_list) < 200:
+                break
+            page += 1
+
+        return None
+
+    async def _record_last_sign_in_method(
+        self, user_id: str, method: SignInMethod
+    ) -> None:
+        """Persist the last successful sign-in method for signup guidance."""
+        try:
+            response = self.supabase.auth.admin.get_user_by_id(user_id)
+            user = response.user if hasattr(response, "user") else response
+            metadata = dict(getattr(user, "user_metadata", None) or {})
+            metadata["last_sign_in_method"] = method
+            self.supabase.auth.admin.update_user_by_id(
+                user_id,
+                {"user_metadata": metadata},
+            )
+        except Exception as exc:
+            logging.warning(
+                "Failed to record last sign-in method for user %s: %s",
+                user_id,
+                exc,
+            )
+
     @tracer.start_as_current_span("auth.get_user_by_email")
     async def get_user_by_email(
         self, email: str
@@ -582,41 +692,11 @@ class AuthService:
         logging.info(f"Attempting to get user by email: {email}")
 
         try:
-            # Use Supabase Admin API to list users and find by email
-            # Note: In production with high volume, you'd want to cache this or use a different approach
-            response = self.supabase.auth.admin.list_users()
-
-            # Handle different response formats
-            users_list = []
-            if hasattr(response, "users"):
-                # Response has .users attribute
-                users_list = response.users
-            elif isinstance(response, list):
-                # Response is directly a list
-                users_list = response
-            else:
-                logging.warning(
-                    f"Unexpected response format from list_users: {type(response)}"
-                )
-                current_span.set_status(trace.Status(trace.StatusCode.OK))
-                return None, None
-
-            if not users_list:
-                logging.info(f"No users found in system")
-                current_span.set_status(trace.Status(trace.StatusCode.OK))
-                return None, None
-
-            # Find user by email
-            user = None
-            for u in users_list:
-                if u.email and u.email.lower() == email.lower():
-                    user = u
-                    break
-
+            user = await self._find_auth_user_by_email(email)
             if not user:
-                logging.info(f"No user found with email: {email}")
+                logging.info("No user found with email: %s", email)
                 current_span.set_status(trace.Status(trace.StatusCode.OK))
-                return None, None  # User not found is not an error
+                return None, None
 
             # Get user roles with permissions and organization context
             roles_with_permissions, roles_error = (
@@ -659,6 +739,15 @@ class AuthService:
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
             logging.error(f"Get user by email error: {e}")
             return None, str(e)
+
+
+def _format_auth_timestamp(value: object) -> str:
+    """Format Supabase auth timestamp fields for API responses."""
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()  # type: ignore[union-attr]
+    return str(value)
 
 
 # Global auth service instance

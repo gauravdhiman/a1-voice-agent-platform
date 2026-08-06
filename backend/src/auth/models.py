@@ -68,6 +68,46 @@ class SignInRequest(BaseModel):
     password: str = Field(..., min_length=1, description="User password")
 
 
+class LinkedInAuthorizationResponse(BaseModel):
+    """Direct LinkedIn authorization URL and signed state."""
+
+    authorization_url: str = Field(
+        ..., description="LinkedIn authorization URL opened by the browser"
+    )
+    state: str = Field(..., description="Signed state used for callback validation")
+
+
+class LinkedInCodeExchangeRequest(BaseModel):
+    """One-time LinkedIn authorization code returned to the app callback."""
+
+    code: str = Field(
+        ..., min_length=1, max_length=2048, description="LinkedIn authorization code"
+    )
+    state: str = Field(
+        ..., min_length=1, max_length=4096, description="Signed OAuth state"
+    )
+
+
+class SessionHandoffRequest(BaseModel):
+    """Signed one-time token issued after backend OAuth completes."""
+
+    handoff: str = Field(
+        ...,
+        min_length=1,
+        max_length=8192,
+        description="Short-lived signed OAuth session handoff token",
+    )
+
+
+class SessionHandoffResponse(BaseModel):
+    """Supabase session tokens returned from a one-time OAuth handoff exchange."""
+
+    access_token: str = Field(..., description="Supabase access token")
+    refresh_token: str = Field(..., description="Supabase refresh token")
+    expires_in: int = Field(..., description="Token expiration in seconds")
+    token_type: str = Field(default="bearer", description="Token type")
+
+
 class AuthResponse(BaseModel):
     """Authentication response model."""
 
@@ -76,6 +116,29 @@ class AuthResponse(BaseModel):
     expires_in: int = Field(..., description="Token expiration in seconds")
     refresh_token: Optional[str] = Field(None, description="Refresh token")
     user: "UserProfile" = Field(..., description="User profile information")
+
+
+class SignUpResponse(BaseModel):
+    """Signup response when session may be withheld pending email verification."""
+
+    user: "UserProfile" = Field(..., description="Newly registered user profile")
+    email_verification_required: bool = Field(
+        ...,
+        description=(
+            "True when Supabase did not issue a session (confirm-email enabled). "
+            "The client must not sign the user in until email is verified."
+        ),
+    )
+    access_token: Optional[str] = Field(
+        None, description="JWT access token when immediate sign-in is allowed"
+    )
+    refresh_token: Optional[str] = Field(
+        None, description="Refresh token when immediate sign-in is allowed"
+    )
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: Optional[int] = Field(
+        None, description="Token expiration in seconds when a session was issued"
+    )
 
 
 class UserProfile(BaseModel):
@@ -151,6 +214,20 @@ class UserProfile(BaseModel):
         return False
 
 
+class EmailAvailabilityResponse(BaseModel):
+    """Public signup helper indicating whether an email is already registered."""
+
+    exists: bool = Field(..., description="True when an auth user already uses this email")
+    sign_in_methods: list[str] = Field(
+        default_factory=list,
+        description="Linked sign-in methods when exists=true (email, google, linkedin)",
+    )
+    message: Optional[str] = Field(
+        None,
+        description="Human-readable guidance for the signup form",
+    )
+
+
 class ErrorResponse(BaseModel):
     """Error response model."""
 
@@ -161,3 +238,4 @@ class ErrorResponse(BaseModel):
 
 # Update forward references
 AuthResponse.model_rebuild()
+SignUpResponse.model_rebuild()

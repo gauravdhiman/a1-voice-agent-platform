@@ -6,12 +6,15 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User, Session, Provider } from "@supabase/supabase-js";
+import { User, Session } from "@supabase/supabase-js";
+import type { Provider } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type {
   AuthUser,
   SignUpData,
   SignInData,
+  GoogleIdTokenSignInData,
+  LinkedInSessionSignInData,
   AuthContextType,
   AuthProviderProps,
 } from "@/types/auth";
@@ -24,6 +27,8 @@ import {
   withTelemetrySignUp,
   withTelemetrySignIn,
   withTelemetrySignInWithOAuth,
+  withTelemetrySignInWithGoogleIdToken,
+  withTelemetrySignInWithLinkedInSession,
   withTelemetrySignOut,
   logInfo,
   recordMetric,
@@ -44,6 +49,83 @@ const authSuccessCounter = meter?.createCounter("auth_success", {
 const authFailureCounter = meter?.createCounter("auth_failures", {
   description: "Number of failed authentications",
 });
+
+/**
+ * Processes an organization invitation after a user authenticates.
+ *
+ * Invitation processing is intentionally best effort. Authentication has
+ * already succeeded at this point, so a temporary invitation API failure
+ * should not prevent the user from reaching the application.
+ *
+ * @param invitationToken Invitation token supplied by the sign-up URL.
+ * @param userId Supabase user ID that should receive the invitation.
+ * @returns Promise that resolves after processing or logging the failure.
+ */
+async function processInvitationForUser(
+  invitationToken: string | undefined,
+  userId: string,
+): Promise<void> {
+  if (!invitationToken) return;
+
+  try {
+    const { authService } = await import("@/services/auth-service");
+    const result = await authService.processInvitation(invitationToken, userId);
+
+    if (!result.success) {
+      console.warn("Failed to process invitation:", result.error);
+    } else {
+      console.log("Invitation processed successfully:", result.data);
+    }
+  } catch (error) {
+    console.warn("Error processing invitation:", error);
+  }
+}
+
+/**
+ * Normalizes Google profile names into the metadata fields used by the app.
+ *
+ * Google commonly returns `name` or `full_name`, while the platform uses
+ * `first_name` and `last_name` for user profiles and organization setup.
+ *
+ * @param user Authenticated Supabase user returned by Google ID-token exchange.
+ * @param refreshUserProfile Callback that refreshes the cached backend profile.
+ * @returns Promise that resolves after metadata synchronization.
+ */
+async function syncOAuthUserMetadata(
+  user: User,
+  refreshUserProfile: () => Promise<void>,
+): Promise<void> {
+  try {
+    const userMetadata = (user.user_metadata || {}) as Record<
+      string,
+      string | undefined
+    >;
+    const { firstName, lastName } = extractFirstLastName(userMetadata);
+    const currentFirstName = userMetadata.first_name || "";
+    const currentLastName = userMetadata.last_name || "";
+
+    if (firstName === currentFirstName && lastName === currentLastName) {
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        ...userMetadata,
+        first_name: firstName,
+        last_name: lastName,
+      },
+    });
+
+    if (error) {
+      console.error("Error updating user metadata:", error);
+      return;
+    }
+
+    await refreshUserProfile();
+  } catch (error) {
+    console.error("Error processing OAuth user metadata:", error);
+  }
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -210,7 +292,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Sign up with email and password
+  // Sign up with email and password via backend (org provisioning + verification)
   const signUp = withTelemetrySignUp(
     async (data: SignUpData) => {
       recordMetric(authAttemptsCounter, 1, {
@@ -218,72 +300,56 @@ export function AuthProvider({ children }: AuthProviderProps) {
         source: "frontend",
       });
 
-      // Get the invitation token from URL params if not provided in data
       let invitationToken = data.invitationToken;
       if (!invitationToken) {
         const urlParams = new URLSearchParams(window.location.search);
         invitationToken = urlParams.get("token") || undefined;
       }
 
-      // Use Supabase Auth directly for signup
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            first_name: data.firstName,
-            last_name: data.lastName,
-          },
-        },
+      const { authService } = await import("@/services/auth-service");
+      const result = await authService.signUp({
+        ...data,
+        invitationToken,
       });
 
-      if (authError) {
+      if (!result.success) {
         recordMetric(authFailureCounter, 1, {
           operation: "signup",
-          error: authError.status?.toString() || "unknown",
+          error: "backend_signup_failed",
         });
-        throw authError;
-      }
-
-      if (!authData.user) {
-        recordMetric(authFailureCounter, 1, {
-          operation: "signup",
-          error: "no_user_returned",
-        });
-        throw new Error("Failed to create user account");
+        return {
+          user: undefined,
+          emailVerificationRequired: false,
+          error: {
+            message: result.error || "Failed to create user account",
+            signInMethods: result.errorDetails?.signInMethods,
+          },
+        };
       }
 
       recordMetric(authSuccessCounter, 1, { operation: "signup" });
 
-      // If there's an invitation token, process it via backend API
-      if (invitationToken && authData.user) {
-        try {
-          // Import auth service dynamically to avoid circular dependencies
-          const { authService } = await import("@/services/auth-service");
-          const result = await authService.processInvitation(
-            invitationToken,
-            authData.user.id,
-          );
+      const profile = result.user;
+      const user = profile
+        ? ({
+            id: profile.id,
+            email: profile.email,
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+            emailConfirmedAt: profile.email_confirmed_at || undefined,
+            createdAt: profile.created_at,
+            updatedAt: profile.updated_at,
+            roles: profile.roles || [],
+            hasRole: () => false,
+            hasPermission: () => false,
+          } satisfies AuthUser)
+        : undefined;
 
-          if (!result.success) {
-            console.warn("Failed to process invitation:", result.error);
-            // Don't throw error here - user can still sign up, invitation will be processed later
-          } else {
-            console.log("Invitation processed successfully:", result.data);
-          }
-        } catch (inviteError) {
-          console.warn("Error processing invitation:", inviteError);
-          // Don't throw error - user can still sign up
-        }
-      }
-
-      // Transform the user for our AuthUser type
-      const user = transformSupabaseUser(
-        authData.user,
-        [], // Empty array - roles will be fetched on sign in
-      );
-
-      return { user, error: null };
+      return {
+        user,
+        emailVerificationRequired: result.emailVerificationRequired,
+        error: null,
+      };
     },
     { name: "auth.signup", attributes: { operation: "signup" } },
     { operation: "Signup", attributes: { operation: "signup" } },
@@ -357,6 +423,119 @@ export function AuthProvider({ children }: AuthProviderProps) {
     { operation: "OAuth Signin", attributes: { operation: "oauth_signin" } },
   );
 
+  // Sign in with Google Identity Services ID token
+  const signInWithGoogleIdToken = withTelemetrySignInWithGoogleIdToken(
+    async (data: GoogleIdTokenSignInData) => {
+      recordMetric(authAttemptsCounter, 1, {
+        operation: "google_id_token_signin",
+        source: "frontend",
+      });
+
+      const credentials: {
+        provider: "google";
+        token: string;
+        nonce?: string;
+      } = {
+        provider: "google",
+        token: data.token,
+      };
+      if (data.nonce) {
+        credentials.nonce = data.nonce;
+      }
+
+      const { data: authData, error } =
+        await supabase.auth.signInWithIdToken(credentials);
+
+      if (error) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "google_id_token_signin",
+          error: error.status || "unknown",
+        });
+        throw error;
+      }
+
+      if (!authData.user) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "google_id_token_signin",
+          error: "no_user_returned",
+        });
+        throw new Error("Google sign-in did not return a user.");
+      }
+
+      const invitationToken =
+        data.invitationToken ||
+        new URLSearchParams(window.location.search).get("token") ||
+        undefined;
+      await processInvitationForUser(invitationToken, authData.user.id);
+      await syncOAuthUserMetadata(authData.user, refreshUserProfile);
+
+      recordMetric(authSuccessCounter, 1, {
+        operation: "google_id_token_signin",
+      });
+      return { error: null };
+    },
+    {
+      name: "auth.google_id_token_signin",
+      attributes: { operation: "google_id_token_signin" },
+    },
+    {
+      operation: "Google ID Token Signin",
+      attributes: { operation: "google_id_token_signin" },
+    },
+  );
+
+  // Complete the direct LinkedIn popup session handoff
+  const signInWithLinkedInSession = withTelemetrySignInWithLinkedInSession(
+    async (data: LinkedInSessionSignInData) => {
+      recordMetric(authAttemptsCounter, 1, {
+        operation: "linkedin_session_signin",
+        source: "frontend",
+      });
+
+      const { data: authData, error } = await supabase.auth.setSession({
+        access_token: data.accessToken,
+        refresh_token: data.refreshToken,
+      });
+
+      if (error) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "linkedin_session_signin",
+          error: error.status || "unknown",
+        });
+        throw error;
+      }
+
+      const authenticatedUser = authData.user;
+      if (!authenticatedUser) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "linkedin_session_signin",
+          error: "no_user_returned",
+        });
+        throw new Error("LinkedIn sign-in did not return a user.");
+      }
+
+      const invitationToken =
+        data.invitationToken ||
+        new URLSearchParams(window.location.search).get("token") ||
+        undefined;
+      await processInvitationForUser(invitationToken, authenticatedUser.id);
+      await syncOAuthUserMetadata(authenticatedUser, refreshUserProfile);
+
+      recordMetric(authSuccessCounter, 1, {
+        operation: "linkedin_session_signin",
+      });
+      return { error: null };
+    },
+    {
+      name: "auth.linkedin_session_signin",
+      attributes: { operation: "linkedin_session_signin" },
+    },
+    {
+      operation: "LinkedIn Session Signin",
+      attributes: { operation: "linkedin_session_signin" },
+    },
+  );
+
   // Sign out
   const signOut = withTelemetrySignOut(
     async () => {
@@ -401,6 +580,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signUp,
     signIn,
     signInWithOAuth,
+    signInWithGoogleIdToken,
+    signInWithLinkedInSession,
     signOut,
     isAuthenticated: !!user,
     refreshUserProfile,

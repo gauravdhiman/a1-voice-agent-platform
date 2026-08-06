@@ -26,6 +26,35 @@ The Supabase configuration requires different environment variables for frontend
 2. **SUPABASE_ANON_KEY**: Used by the backend for certain operations (anon key)
 3. **NEXT_PUBLIC_SUPABASE_URL**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
 4. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: Used by the frontend (must be prefixed with NEXT*PUBLIC* to be accessible in browser)
+5. **API_BASE_URL** / **APP_BASE_URL**: Backend OAuth redirect targets (see
+   [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md))
+
+For local backend redirect OAuth, add these to the root `.env`:
+
+```bash
+APP_BASE_URL=http://localhost:3000
+API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=...
+
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_SECRET=...
+LINKEDIN_OAUTH_SCOPES=openid profile email
+
+JWT_SECRET_KEY=...
+```
+
+Register **backend** callback URLs in Google Cloud and LinkedIn Developer Portal:
+
+```text
+{API_BASE_URL}/api/v1/auth/google/callback
+{API_BASE_URL}/api/v1/auth/linkedin/callback
+```
+
+See [Social OAuth architecture](../02_features/authentication_rbac/social-oauth-architecture.md)
+and [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md).
 
 ### Getting Your Supabase Database Password
 
@@ -45,7 +74,19 @@ To configure the DATABASE_URL environment variable for Alembic migrations, you'l
 
 ### OAuth Providers
 
-To enable OAuth providers like Google, you need to:
+For hosted Supabase, enable Google under Authentication → Providers and enter
+the Web Client ID and Client Secret there. For local Supabase, the Google
+provider is enabled in `supabase/config.toml`:
+
+```toml
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
+skip_nonce_check = false
+```
+
+If you also retain redirect-based OAuth providers, you additionally need to:
 
 1. Configure the OAuth provider in your Supabase project dashboard:
 
@@ -57,9 +98,20 @@ To enable OAuth providers like Google, you need to:
    - Use the Supabase callback URL: `https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/callback`
    - You can find this URL in your Supabase dashboard under Authentication → Settings
 
-**Note**: You do not need to create any custom callback endpoints in your frontend or backend. Supabase handles the entire OAuth flow for you.
+For backend redirect OAuth (Google and LinkedIn), the backend mints Supabase
+sessions via the admin API. Provider credentials live in the root `.env`; the
+frontend only needs `NEXT_PUBLIC_API_URL` to build authorize links.
 
-For detailed instructions on setting up OAuth providers, see [OAUTH_SETUP.md](OAUTH_SETUP.md).
+Local Supabase can keep Google/LinkedIn providers enabled in `supabase/config.toml`
+for compatibility. Restart local Supabase after changing provider credentials:
+
+```bash
+supabase stop
+supabase start
+```
+
+See [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md)
+for redirect URIs and the handoff flow.
 
 ## OpenTelemetry Configuration
 
@@ -168,6 +220,7 @@ NEXT_PUBLIC_APP_NAME=SaaS Platform
 NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 
 # New Relic Configuration for OpenTelemetry
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
@@ -239,6 +292,7 @@ SUPABASE_SERVICE_KEY=your-service-role-key-here
 SUPABASE_ANON_KEY=your-anon-key-here
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 
 # Application Settings
 ENVIRONMENT=development

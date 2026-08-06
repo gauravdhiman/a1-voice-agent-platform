@@ -21,6 +21,7 @@ Ensure you have **Docker & Docker Compose** installed on your system.
    - `SUPABASE_ANON_KEY` - Anon key for public access
    - `NEXT_PUBLIC_SUPABASE_URL` - Frontend Supabase URL
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Frontend anon key
+   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` - Google web OAuth client ID for popup sign-in
 
 3. **Update `DATABASE_URL` in `.env` for Alembic migrations**:
    Replace `your-database-password-here` and `your-project-ref` with your actual Supabase database password and project reference.

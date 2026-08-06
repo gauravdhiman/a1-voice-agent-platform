@@ -299,6 +299,30 @@ describe('ApiClient', () => {
       await expect(apiClient.get('/test')).rejects.toThrow('Server error')
     })
 
+    it('throws safe message for validation errors without leaking passwords', async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 422,
+          headers: { get: () => 'application/json' },
+          json: () =>
+            Promise.resolve({
+              detail: [
+                {
+                  type: 'value_error',
+                  loc: ['body'],
+                  msg: 'Value error, Passwords do not match',
+                },
+              ],
+            }),
+        } as Response)
+      )
+
+      await expect(apiClient.post('/signup')).rejects.toThrow(
+        'Passwords do not match'
+      )
+    })
+
     it('handles network errors', async () => {
       global.fetch = vi.fn(() =>
         Promise.reject(new Error('Network error'))
