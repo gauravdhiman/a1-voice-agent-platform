@@ -9,10 +9,10 @@
 
 | | |
 |---|---|
-| **Completed** | Phases 0–3 (schema → EntitlementService → publish/grandfathering → migration scheduler + billing UX) |
+| **Completed** | Phases 0–4 (schema → EntitlementService → publish/grandfathering → migration scheduler + billing UX → admin UI) |
 | **Committed** | CP-1 ✅, CP-2 ✅ (user confirmed) |
-| **Ready to commit** | CP-3 — migration scheduler + billing UX (if not committed yet) |
-| **Next up** | **Phase 4** — Admin UI (`/admin/plans`, entitlement catalog, publish dialog) |
+| **Ready to commit** | CP-3 (migration scheduler), CP-4 (admin catalog UI + routes) |
+| **Next up** | **Phase 5** — Credits, PAYG, voice-ws pre-call checks |
 | **Deferred validation** | Local billing UI smoke; full E2E on 24x7 AI cloud after feature complete |
 
 ### Validation notes (local vs cloud)
@@ -95,18 +95,21 @@
 
 ---
 
-## Phase 4 — Admin UI (NEXT)
+## Phase 4 — Admin UI
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `/admin/entitlements` catalog CRUD | ⏳ | Backend catalog exists; admin routes TBD |
-| `/admin/plans` product + version editor | ⏳ | Draft create/clone/edit entitlements |
-| Publish dialog + migration policy | ⏳ | Wires to existing `POST .../plan-versions/{id}/publish` |
-| Admin API: draft/clone (if not in Phase 2) | ⏸ | Publish API exists; draft CRUD may need backend routes |
+| Admin API: entitlement catalog list/update | ✅ | `admin_plan_catalog_service.py`, routes |
+| Admin API: plan products + draft CRUD + clone | ✅ | `admin_plan_routes.py` |
+| `/platform/entitlements` catalog editor | ✅ | `platform-entitlements-manager.tsx` |
+| `/platform/plans` product + version editor | ✅ | `platform-plans-manager.tsx` |
+| Publish dialog + migration policy | ✅ | `plan-publish-dialog.tsx` → existing publish API |
+| Nav entries (Plan Catalog, Entitlements) | ✅ | `nav-config.ts` |
+| Tests | ✅ | `test_admin_plan_catalog_service.py`, `test_admin_plan_routes.py`, vitest publish dialog |
 
 ---
 
-## Phase 5 — Credits, PAYG, voice-ws
+## Phase 5 — Credits, PAYG, voice-ws (NEXT)
 
 | Item | Status | Notes |
 |------|--------|-------|

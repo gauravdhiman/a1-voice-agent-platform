@@ -1,0 +1,119 @@
+"""
+Pydantic models for platform-admin plan catalog and entitlement management APIs.
+
+Used by ``admin_plan_routes.py`` and ``admin_plan_catalog_service.py``.
+See ``docs/03_implementation/plan_entitlements_and_limits.md`` §10.3.
+"""
+
+from datetime import datetime
+from typing import Any, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+from .entitlement_models import EntitlementDefinition, EntitlementKind, EntitlementValueType
+from .plan_version_models import PlanVersionStatus
+
+
+class EntitlementDefinitionUpdate(BaseModel):
+    """Mutable fields on catalog definitions (not key/handler)."""
+
+    display_name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class PlanProductCreate(BaseModel):
+    """Create a new plan product family."""
+
+    slug: str = Field(..., min_length=1, max_length=100)
+    display_name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    sort_order: int = Field(default=10, ge=0)
+
+
+class PlanProduct(BaseModel):
+    """Plan product row for admin list/detail."""
+
+    id: UUID
+    slug: str
+    display_name: str
+    description: Optional[str] = None
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlanVersionEntitlementInput(BaseModel):
+    """Sparse entitlement assignment on a draft version."""
+
+    entitlement_key: str
+    value: dict[str, Any]
+
+
+class PlanVersionDraftCreate(BaseModel):
+    """Create a new draft plan version for a product."""
+
+    display_label: Optional[str] = None
+    price_amount_cents: int = Field(default=0, ge=0)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    billing_interval: str = Field(default="monthly")
+    trial_period_days: Optional[int] = Field(None, ge=0)
+    stripe_product_id: Optional[str] = None
+    entitlements: list[PlanVersionEntitlementInput] = Field(default_factory=list)
+
+
+class PlanVersionDraftUpdate(BaseModel):
+    """Update a draft plan version (immutable once published)."""
+
+    display_label: Optional[str] = None
+    price_amount_cents: Optional[int] = Field(None, ge=0)
+    currency: Optional[str] = Field(None, min_length=3, max_length=3)
+    billing_interval: Optional[str] = None
+    trial_period_days: Optional[int] = Field(None, ge=0)
+    stripe_product_id: Optional[str] = None
+    entitlements: Optional[list[PlanVersionEntitlementInput]] = None
+
+
+class PlanVersionEntitlement(BaseModel):
+    """Entitlement row attached to a plan version."""
+
+    id: UUID
+    entitlement_key: str
+    value: dict[str, Any]
+
+
+class PlanVersionDetail(BaseModel):
+    """Plan version with entitlements for admin editor."""
+
+    id: UUID
+    plan_product_id: UUID
+    version_number: int
+    status: PlanVersionStatus
+    display_label: Optional[str] = None
+    price_amount_cents: int
+    currency: str
+    billing_interval: str
+    trial_period_days: Optional[int] = None
+    stripe_product_id: Optional[str] = None
+    stripe_price_id: Optional[str] = None
+    is_current_for_signup: bool
+    published_at: Optional[datetime] = None
+    legacy_subscription_plan_id: Optional[UUID] = None
+    entitlements: list[PlanVersionEntitlement] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlanProductWithVersions(PlanProduct):
+    """Product with nested versions for admin list."""
+
+    versions: list[PlanVersionDetail] = Field(default_factory=list)
+
+
+class PlanVersionCloneRequest(BaseModel):
+    """Optional overrides when cloning a version to a new draft."""
+
+    display_label: Optional[str] = None
+    price_amount_cents: Optional[int] = Field(None, ge=0)
