@@ -1,8 +1,29 @@
 # Entitlements Implementation Tracker
 
 **Started:** 2026-08-07  
+**Last updated:** 2026-08-07  
 **Spec:** [plan_entitlements_and_limits.md](./plan_entitlements_and_limits.md)  
 **ADR:** [ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md)
+
+## Current status (read this first)
+
+| | |
+|---|---|
+| **Completed** | Phases 0–3 (schema → EntitlementService → publish/grandfathering → migration scheduler + billing UX) |
+| **Committed** | CP-1 ✅, CP-2 ✅ (user confirmed) |
+| **Ready to commit** | CP-3 — migration scheduler + billing UX (if not committed yet) |
+| **Next up** | **Phase 4** — Admin UI (`/admin/plans`, entitlement catalog, publish dialog) |
+| **Deferred validation** | Local billing UI smoke; full E2E on 24x7 AI cloud after feature complete |
+
+### Validation notes (local vs cloud)
+
+| Area | Local dev | Cloud (24x7 AI) | Notes |
+|------|-----------|-----------------|-------|
+| Plans / Credits tabs | Often empty | Works (Stripe catalog) | **Pre-existing** local setup gap — not caused by entitlements work |
+| Manage tab | Hidden without active/trial sub | Same rule | Manage only renders when `subscription.status ∈ {active, trial}` |
+| Phase 3 UI (legacy badge, migration banner, cancel copy) | Not visible without sub + migration state | Validate after Phase 4 or end-of-feature | Code shipped in CP-3; UI is conditional |
+
+**Decision (2026-08-07):** Defer local billing UI validation until Phase 4+ or final pass on deployed environment.
 
 ## Status legend
 
@@ -74,13 +95,14 @@
 
 ---
 
-## Phase 4 — Admin UI
+## Phase 4 — Admin UI (NEXT)
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `/admin/entitlements` catalog CRUD | ⏸ | |
-| `/admin/plans` product + version editor | ⏸ | |
-| Publish dialog + migration policy | ⏸ | |
+| `/admin/entitlements` catalog CRUD | ⏳ | Backend catalog exists; admin routes TBD |
+| `/admin/plans` product + version editor | ⏳ | Draft create/clone/edit entitlements |
+| Publish dialog + migration policy | ⏳ | Wires to existing `POST .../plan-versions/{id}/publish` |
+| Admin API: draft/clone (if not in Phase 2) | ⏸ | Publish API exists; draft CRUD may need backend routes |
 
 ---
 
@@ -106,6 +128,19 @@
 
 Full billing suite: **68 passed**, 6 skipped (2026-08-07).
 
+Additional Phase 2–3 tests: `test_plan_version_service.py` (6), `test_webhook_plan_version.py` (2), `test_plan_migration_service.py` (6), cancel-dialog vitest (1).
+
+---
+
+## Key files (by phase)
+
+| Phase | Backend | Frontend |
+|-------|---------|----------|
+| 0–1 | `entitlement_service.py`, `entitlement_handlers.py`, migration `20260807000002` | — |
+| 2 | `plan_version_service.py`, `admin_plan_routes.py`, `webhook_handler.py` | — |
+| 3 | `plan_migration_service.py`, `plan_migration_scheduler.py`, `routes.py` (migrate) | `plan-migration-banner.tsx`, `subscription-management.tsx`, `cancel-subscription-dialog.tsx` |
+| 4 | TBD admin plan CRUD routes | TBD `/admin/plans`, `/admin/entitlements` |
+
 ---
 
 ## Commits / review checkpoints
@@ -113,9 +148,9 @@ Full billing suite: **68 passed**, 6 skipped (2026-08-07).
 | Checkpoint | Ready for commit when | User testing needed? |
 |------------|----------------------|---------------------|
 | **CP-1** ✅ | Phase 0 migration + Phase 1 code + tests green | Migration applied locally |
-| **CP-2** ✅ | Publish API + webhook binding | |
-| **CP-3** 🚧 | Migration scheduler + billing UX | Ready for review |
-| CP-4 | Admin UI + browser validation | Yes — plan editor + checkout |
+| **CP-2** ✅ | Publish API + webhook binding | Committed |
+| **CP-3** ✅ | Migration scheduler + billing UX | Committed or ready — **local UI validation deferred** |
+| **CP-4** ⏳ | Admin UI (Phase 4) | After implementation; validate on cloud |
 
 ### CP-1 — Before you commit / test
 
@@ -141,5 +176,7 @@ Full billing suite: **68 passed**, 6 skipped (2026-08-07).
 | 2026-08-07 | Tracker created; Phase 0–1 implementation started |
 | 2026-08-07 | **CP-1 complete:** migration file, EntitlementService, max_agents enforcement, 21 new tests, 94% coverage on entitlement modules |
 | 2026-08-07 | Migration `20260807000002` applied on local dev Docker stack |
-| 2026-08-07 | **CP-2 in progress:** PlanVersionService publish/grandfathering, admin publish route, webhook plan_version_id binding, 8 new tests (63 billing passed) |
+| 2026-08-07 | **CP-2 complete:** PlanVersionService publish/grandfathering, admin publish route, webhook `plan_version_id` binding, 8 new tests |
 | 2026-08-07 | **CP-3 complete:** Plan migration scheduler, self-service migrate API, billing UI legacy/grace banner, cancel dialog policy copy, 68 billing tests + vitest |
+| 2026-08-07 | Local billing UI validation deferred (empty Plans/Credits locally is pre-existing; Manage tab requires active sub) |
+| 2026-08-07 | **Next:** Phase 4 Admin UI |
