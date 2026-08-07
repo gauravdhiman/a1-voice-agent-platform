@@ -361,7 +361,7 @@ write tools — `create_event` / `update_event` / `delete_event` — also work).
    ```
 2. **OAuth consent screen** (APIs & Services → OAuth consent screen): add the
    four scopes above to the consent screen's authorized scopes, and add the test
-   user (`platform-admin@cogninets.local` / your Google account) as a **test
+   user (`platform-admin@dev.local` / your Google account) as a **test
    user** while the app is in "Testing" status (the Calendar MCP server is in
    Developer Preview — keep the app in testing until approved).
 3. **Authorized redirect URI** (APIs & Services → Credentials → the OAuth 2.0

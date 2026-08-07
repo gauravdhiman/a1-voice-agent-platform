@@ -76,27 +76,60 @@ Add the following to your `.env` file:
 # Resend Settings
 RESEND_API_KEY=re_your_resend_api_key_here
 RESEND_FROM_EMAIL=noreply@yourdomain.com
-RESEND_FROM_NAME=SaaS Platform
+RESEND_FROM_NAME=24x7 AI
+
+# Required for encrypting Telegram bot tokens in platform settings
+ENCRYPTION_KEY=your-fernet-key
 ```
 
-### 2. Install Dependencies
+Platform admins can override the verification **from email/name** at
+`/platform/notifications` without redeploying. The Resend API key remains
+environment-only.
 
-The Resend SDK is already added to `requirements.txt`:
+### Signup email verification (Resend)
 
-```bash
-resend==2.5.0
-```
+Email/password signup uses a custom verification flow (not Supabase built-in mail):
 
-### 3. Run Database Migration
+1. Backend creates the user with `email_confirm: false` via Supabase Admin API.
+2. A token is stored in `email_verification_tokens` and a link is emailed via Resend
+   (`user.email_verification` template).
+3. User opens `{APP_BASE_URL}/auth/verify-email?token=...`.
+4. Backend confirms the email in Supabase; sign-in is blocked until verified.
 
-Apply the notification system migration:
+**Auth endpoints:**
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/api/v1/auth/verify-email` | Consume verification token |
+| POST | `/api/v1/auth/resend-verification` | Resend verification email (rate limited) |
+
+### Telegram admin alerts
+
+When enabled in platform settings, new signups and invitation joins send a Telegram
+message to the configured chat ID. OAuth signups (Google/LinkedIn) and email signups
+both trigger alerts. Existing users accepting an invitation trigger a separate
+"joined via invitation" alert.
+
+**Settings API (platform admin):**
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/api/v1/notifications/admin/settings` | Read settings (bot token masked) |
+| PUT | `/api/v1/notifications/admin/settings` | Update sender + Telegram config |
+
+---
+
+### 2. Run Database Migration
+
+Apply migrations (includes `platform_notification_settings` and
+`email_verification_tokens`):
 
 ```bash
 cd backend
 alembic upgrade head
 ```
 
-### 4. Seed Notification Events
+### 3. Install Dependencies
 
 Run the seed script to initialize notification events:
 
@@ -104,6 +137,10 @@ Run the seed script to initialize notification events:
 cd backend
 python scripts/seed_notification_events.py
 ```
+
+The Resend SDK is in `requirements.txt` (`resend==2.5.0`).
+
+### 4. Seed Notification Events
 
 This will create the following notification events:
 

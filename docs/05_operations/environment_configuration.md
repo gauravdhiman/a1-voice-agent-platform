@@ -179,7 +179,7 @@ In containerized environments, both frontend and backend send telemetry to the O
 ```bash
 # New Relic Configuration for OpenTelemetry
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=SaaS Platform
+NEW_RELIC_APP_NAME=24x7 AI
 
 # OpenTelemetry Configuration - Traces
 OTEL_ENABLED=true
@@ -216,7 +216,7 @@ NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=SaaS Platform
+NEXT_PUBLIC_APP_NAME=24x7 AI
 NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
@@ -305,7 +305,7 @@ CORS_ORIGINS=["http://localhost:3000", "http://127.0.0.1:3000", "http://frontend
 
 # Frontend Specific Settings
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=SaaS Platform
+NEXT_PUBLIC_APP_NAME=24x7 AI
 NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
 
 # Database Migration Settings (Alembic)
@@ -321,7 +321,7 @@ DATABASE_URL=postgresql://postgres:your-database-password-here@your-project-ref.
 
 # New Relic Configuration for OpenTelemetry
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=SaaS Platform
+NEW_RELIC_APP_NAME=24x7 AI
 
 # OpenTelemetry Configuration - Traces
 OTEL_ENABLED=true

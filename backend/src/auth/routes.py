@@ -38,6 +38,13 @@ from src.auth.models import (
     UserProfile,
 )
 from src.auth.service import auth_service
+from src.notifications.email_verification_service import email_verification_service
+from src.notifications.platform_settings_models import (
+    ResendVerificationRequest,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
+)
+from src.notifications.signup_notifier import signup_notifier
 from src.organization.service import organization_service
 from src.security.rate_limiter import limiter
 
@@ -169,6 +176,48 @@ async def sign_in(request: Request, body: SignInRequest) -> AuthResponse:
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return auth_response
+
+
+@auth_router.post(
+    "/verify-email",
+    response_model=VerifyEmailResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid or expired token"},
+        429: {"description": "Too many requests"},
+    },
+)
+@limiter.limit("10/minute")
+@tracer.start_as_current_span("auth.routes.verify_email")
+async def verify_email(
+    request: Request, body: VerifyEmailRequest
+) -> VerifyEmailResponse:
+    """Verify a user's email address using a token sent via Resend."""
+    del request
+    success, message = await email_verification_service.verify_token(body.token)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return VerifyEmailResponse(success=True, message=message)
+
+
+@auth_router.post(
+    "/resend-verification",
+    responses={
+        200: {"description": "Verification email sent if account exists"},
+        400: {"model": ErrorResponse, "description": "Already verified or send failed"},
+        429: {"description": "Too many requests"},
+    },
+)
+@limiter.limit("3/minute")
+@tracer.start_as_current_span("auth.routes.resend_verification")
+async def resend_verification_email(
+    request: Request, body: ResendVerificationRequest
+) -> JSONResponse:
+    """Resend email verification link via Resend."""
+    del request
+    success, message = await email_verification_service.resend_verification(body.email)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": message})
 
 
 @auth_router.get(
@@ -723,6 +772,17 @@ async def process_invitation(
 
         current_span.set_attribute("organization.id", str(invitation.organization_id))
         current_span.set_status(trace.Status(trace.StatusCode.OK))
+
+        await signup_notifier.notify_new_user(
+            email=user_profile.email,
+            user_id=request.user_id,
+            method="invitation",
+            first_name=user_profile.first_name,
+            last_name=user_profile.last_name,
+            organization_name=invitation.organization_name,
+            is_new_user=False,
+        )
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={

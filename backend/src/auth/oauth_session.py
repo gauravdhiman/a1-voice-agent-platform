@@ -54,8 +54,9 @@ class OAuthSessionService:
         current_span.set_attribute("oauth.provider", identity.provider)
 
         auth_client = self._auth_client_factory()
+        is_new_user = False
         try:
-            await self._ensure_supabase_user(auth_client, identity)
+            is_new_user = await self._ensure_supabase_user(auth_client, identity)
             session_response = self._verify_magic_link_session(
                 auth_client, identity.email
             )
@@ -138,6 +139,32 @@ class OAuthSessionService:
         elif org_id:
             current_span.set_attribute("organization.id", str(org_id))
 
+        from src.notifications.signup_notifier import signup_notifier
+
+        signup_method = identity.provider
+        if identity.invitation_token:
+            signup_method = "invitation"
+        if is_new_user:
+            await signup_notifier.notify_new_user(
+                email=identity.email,
+                user_id=UUID(str(user.id)),
+                method=signup_method,
+                first_name=identity.first_name,
+                last_name=identity.last_name,
+                organization_name=joined_organization_name,
+                is_new_user=True,
+            )
+        elif joined_organization_id:
+            await signup_notifier.notify_new_user(
+                email=identity.email,
+                user_id=UUID(str(user.id)),
+                method="invitation",
+                first_name=identity.first_name,
+                last_name=identity.last_name,
+                organization_name=joined_organization_name,
+                is_new_user=False,
+            )
+
         user_metadata = user.user_metadata or {}
         first_name, last_name = extract_first_last_name(user_metadata)
         profile = UserProfile(
@@ -167,8 +194,12 @@ class OAuthSessionService:
 
     async def _ensure_supabase_user(
         self, auth_client: Client, identity: OAuthVerifiedIdentity
-    ) -> None:
-        """Create the Supabase auth user when the OAuth email is new."""
+    ) -> bool:
+        """Create the Supabase auth user when the OAuth email is new.
+
+        Returns:
+            True if a new user was created, False if the user already existed.
+        """
         metadata = {
             "first_name": identity.first_name,
             "last_name": identity.last_name,
@@ -185,10 +216,11 @@ class OAuthSessionService:
                     "user_metadata": metadata,
                 }
             )
+            return True
         except AuthApiError as error:
             message = str(error).lower()
             if "already" in message or "exists" in message:
-                return
+                return False
             raise
 
     def _sync_oauth_sign_in_metadata(

@@ -116,7 +116,7 @@ The follow-up work from the N1 architecture review has made **substantial progre
 |------|--------|
 | `navigation-redesign.md` as-implemented | ✅ |
 | Deferred Phase 2 wording | ✅ Sprint board + design doc clarified |
-| Replace NeuraSaaS branding | ✅ `NEXT_PUBLIC_APP_NAME ?? "CogniNets"` in layout |
+| Replace NeuraSaaS branding | ✅ `NEXT_PUBLIC_APP_NAME ?? "24x7 AI"` in layout |
 | Fix Platform Skills icon | ✅ `Layers` (was `CreditCard` in review) |
 | Remove duplicate avatar-menu org links | ❌ Still present (Overview, Members, Billing in avatar dropdown) |
 | Skills: drop `tab=skills` on `/skills` | ✅ |

@@ -278,7 +278,7 @@ async def root():
 
     return JSONResponse(
         {
-            "message": "Multi-tenant SaaS Platform API",
+            "message": f"{settings.app_name} API",
             "version": settings.app_version,
             "environment": settings.environment,
             "timestamp": datetime.utcnow().isoformat(),

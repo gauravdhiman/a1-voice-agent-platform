@@ -577,7 +577,7 @@ export function PlatformToolsManager({
                 id="mcp-public-headers"
                 value={publicHeadersJson}
                 onChange={(e) => setPublicHeadersJson(e.target.value)}
-                placeholder='{ "X-Client": "cogninets" }'
+                placeholder='{ "X-Client": "24x7-ai" }'
                 className="min-h-[80px] font-mono text-xs"
               />
             </div>

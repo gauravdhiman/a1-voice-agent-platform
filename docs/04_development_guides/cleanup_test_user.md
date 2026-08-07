@@ -17,13 +17,13 @@ the project virtual environment active):
 
 ```bash
 # 1. Show the plan without changing anything (dry-run, the default)
-python scripts/cleanup_test_user.py --email test@cogninets.local
+python scripts/cleanup_test_user.py --email test@dev.local
 
 # 2. Identify by id instead of email
 python scripts/cleanup_test_user.py --user-id <auth.users-uuid>
 
 # 3. Apply, answering the confirmation prompt
-python scripts/cleanup_test_user.py --email test@cogninets.local --apply
+python scripts/cleanup_test_user.py --email test@dev.local --apply
 
 # 4. Apply without a prompt (CI / scripts)
 python scripts/cleanup_test_user.py --user-id <uuid> --apply --yes

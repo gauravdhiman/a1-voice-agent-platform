@@ -741,6 +741,45 @@ Tracks all sent notifications.
 - `idx_notification_logs_created_at`
 - `idx_notification_logs_recipient_email`
 
+### email_verification_tokens
+
+Stores one-time tokens for Resend-delivered email verification during signup.
+
+| Column     | Type        | Constraints                          | Description                          |
+| ---------- | ----------- | ------------------------------------ | ------------------------------------ |
+| id         | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid() | Token row ID                         |
+| user_id    | UUID        | NOT NULL, UNIQUE                     | Reference to `auth.users.id`         |
+| token      | VARCHAR(255)| NOT NULL, UNIQUE                     | URL-safe verification token          |
+| expires_at | TIMESTAMPTZ | NOT NULL                             | Token expiry (default 24 hours)      |
+| used_at    | TIMESTAMPTZ | NULLABLE                             | When the token was consumed          |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()              | Creation timestamp                   |
+
+**Indexes**:
+
+- `idx_email_verification_tokens_user_id`
+- `idx_email_verification_tokens_token`
+- `idx_email_verification_tokens_expires_at`
+
+**RLS**: Users can read/write only their own rows (`user_id = auth.uid()`).
+
+### platform_notification_settings
+
+Singleton table for platform-admin notification configuration (verification sender + Telegram alerts).
+
+| Column                         | Type         | Constraints              | Description                                      |
+| ------------------------------ | ------------ | ------------------------ | ------------------------------------------------ |
+| id                             | UUID         | PRIMARY KEY              | Fixed singleton ID (`00000000-0000-0000-0000-000000000001`) |
+| verification_from_email        | VARCHAR(255) | NULLABLE                 | Resend sender for verification emails            |
+| verification_from_name         | VARCHAR(100) | NULLABLE                 | Display name for verification emails             |
+| telegram_bot_token_encrypted   | TEXT         | NULLABLE                 | Fernet-encrypted Telegram bot token              |
+| telegram_chat_id               | VARCHAR(100) | NULLABLE                 | Telegram chat/group ID for admin alerts          |
+| telegram_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Enable/disable Telegram signup alerts            |
+| updated_by                     | UUID         | NULLABLE                 | Last platform admin who updated settings         |
+| created_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Creation timestamp                               |
+| updated_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Last update timestamp                            |
+
+**RLS**: Service role only (backend reads/writes via service key).
+
 ---
 
 ## Supabase Auth Tables
@@ -1197,6 +1236,7 @@ erDiagram
 29. `20260731000001` - Public organization page: add `organizations.public_page_enabled`, `public_page_passphrase_enabled`, `public_page_passphrase_hash`, and `voice_agents.is_published_on_public_page`. Enables `/o/{slug}` visitor showcase (using the existing unique `organizations.slug`) with optional passphrase gate and explicit per-agent publish (distinct from `is_active`). See `backend/src/organization/public_routes.py`.
 30. `20260804000001` - Add `organizations.timezone` (VARCHAR(64) NULLABLE) for org-scoped IANA timezone used by `voice-ws` to anchor the CURRENT DATE AND TIME section in agent prompts. Resolution order: org timezone → platform `AGENT_DEFAULT_TIMEZONE` env → `UTC`. Validated on org update via `shared/organization/timezone.py`.
 31. `20260806000001` - Data migration: rewrite seeded `voice_templates` greetings/personas to use `[Agent Name]` instead of hard-coded names (Alex/Jordan/Taylor/Morgan/Casey) so onboarding can substitute the user-chosen agent name. Frontend also applies these replacements at runtime for older rows.
+32. `20260807000001` - Add `platform_notification_settings` singleton table for Resend verification sender overrides and encrypted Telegram bot credentials/chat ID for platform admin signup alerts.
 
 ---
 

@@ -44,6 +44,7 @@ import {
   UsersRound,
   Wallet,
   Wrench,
+  Bell,
 } from "lucide-react";
 import {
   PERMISSION_ACTIONS,
@@ -175,6 +176,13 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       name: "Voice Presets",
       href: "/platform/presets",
       icon: SlidersHorizontal,
+      requiredPermission: "platform:admin",
+      section: "platform_admin",
+    },
+    {
+      name: "Notifications",
+      href: "/platform/notifications",
+      icon: Bell,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },

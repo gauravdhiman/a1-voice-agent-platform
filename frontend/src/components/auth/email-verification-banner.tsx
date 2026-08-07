@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { AlertTriangle, Mail, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { resendVerificationEmail } from "@/lib/supabase";
+import { authService } from "@/services/auth-service";
 
 interface EmailVerificationBannerProps {
   email: string;
@@ -33,7 +33,10 @@ export function EmailVerificationBanner({
     setErrorMessage("");
 
     try {
-      await resendVerificationEmail(email);
+      const result = await authService.resendVerificationEmail(email);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to resend verification email");
+      }
       setResendStatus("success");
     } catch (error) {
       console.error("Error resending verification email:", error);

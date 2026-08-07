@@ -106,7 +106,7 @@ BASE_TEMPLATE = """
             {content}
         </div>
         <div class="email-footer">
-            <p>© 2025 {app_name}. All rights reserved.</p>
+            <p>© 2026 {app_name}. All rights reserved.</p>
             <p>
                 <a href="{app_url}">Visit Dashboard</a> |
                 <a href="{support_url}">Support</a> |

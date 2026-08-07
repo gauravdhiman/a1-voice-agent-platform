@@ -90,12 +90,13 @@ sequenceDiagram
 **Endpoints**:
 
 ```
-POST /api/v1/auth/signup     User registration
-POST /api/v1/auth/login      User login
-POST /api/v1/auth/logout     User logout
-POST /api/v1/auth/verify-email     Email verification
-POST /api/v1/auth/forgot-password   Password reset request
-POST /api/v1/auth/reset-password    Password reset
+POST /api/v1/auth/signup              User registration (sends Resend verification email)
+POST /api/v1/auth/signin              Email/password login (403 if email unverified)
+POST /api/v1/auth/signout             User logout
+POST /api/v1/auth/verify-email        Confirm email with token from Resend link
+POST /api/v1/auth/resend-verification Resend verification email via Resend
+POST /api/v1/auth/forgot-password     Password reset request
+POST /api/v1/auth/reset-password      Password reset
 ```
 
 ### 2. Google sign-in (backend redirect)

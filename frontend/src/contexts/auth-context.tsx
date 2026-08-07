@@ -21,6 +21,7 @@ import type {
 import type { UserRoleAssignment } from "@/types/rbac";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { extractFirstLastName } from "@/lib/user-utils";
+import { authService } from "@/services/auth-service";
 
 import { getMeter } from "@/lib/opentelemetry";
 import {
@@ -388,17 +389,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         source: "frontend",
       });
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const result = await authService.signIn({
         email: data.email,
         password: data.password,
       });
 
-      if (error) {
+      if (!result.success) {
         recordMetric(authFailureCounter, 1, {
           operation: "signin",
-          error: error.status || "unknown",
+          error: result.code || "unknown",
         });
-        throw error;
+        const err = new Error(result.error || "Failed to sign in") as Error & {
+          code?: string;
+        };
+        err.code = result.code;
+        throw err;
       }
 
       recordMetric(authSuccessCounter, 1, { operation: "signin" });

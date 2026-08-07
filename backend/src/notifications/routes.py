@@ -26,6 +26,11 @@ from .models import (
     SendNotificationRequest,
     SendNotificationResponse,
 )
+from .platform_settings_models import (
+    PlatformNotificationSettings,
+    PlatformNotificationSettingsUpdate,
+)
+from .platform_settings_service import platform_notification_settings_service
 from .service import notification_service
 
 logger = logging.getLogger(__name__)
@@ -37,6 +42,48 @@ router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 # ============================================================================
 # PUBLIC ROUTES - Specialized Notification Requests
 # ============================================================================
+
+
+# ============================================================================
+# PLATFORM ADMIN - Notification Settings
+# ============================================================================
+
+
+@router.get(
+    "/admin/settings",
+    response_model=PlatformNotificationSettings,
+)
+async def get_platform_notification_settings(
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Get platform notification settings. Requires platform_admin."""
+    _, user_profile = user_auth
+    if not user_profile.has_role("platform_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only platform administrators can view notification settings",
+        )
+    return await platform_notification_settings_service.get_settings()
+
+
+@router.put(
+    "/admin/settings",
+    response_model=PlatformNotificationSettings,
+)
+async def update_platform_notification_settings(
+    payload: PlatformNotificationSettingsUpdate,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Update platform notification settings. Requires platform_admin."""
+    user_id, user_profile = user_auth
+    if not user_profile.has_role("platform_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only platform administrators can update notification settings",
+        )
+    return await platform_notification_settings_service.update_settings(
+        payload, user_id
+    )
 
 
 # ============================================================================

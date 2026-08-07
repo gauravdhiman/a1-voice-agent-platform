@@ -22,5 +22,8 @@ export const SITE_TAGLINE = "Your AI front desk. Always on.";
 export const SITE_DESCRIPTION =
   "24x7 AI answers every call, books every appointment, and follows up with your customers - 24 hours a day, 7 days a week. No coding required.";
 
+/** Public marketing site URL (production). */
+export const SITE_URL = "https://247ai.live";
+
 /** Sales contact used by the "Talk to Sales" call-to-action. */
 export const SITE_SALES_EMAIL = "sales@247ai.live";

@@ -83,7 +83,7 @@ All environments require a New Relic license key:
 
 ```
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=AI Voice Agent Platform
+NEW_RELIC_APP_NAME=24x7 AI
 ```
 
 #### Backend OpenTelemetry Configuration
@@ -151,7 +151,7 @@ In containerized environments, both frontend and backend send telemetry to the O
 ```bash
 # New Relic Configuration for OpenTelemetry
 NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=AI Voice Agent Platform
+NEW_RELIC_APP_NAME=24x7 AI
 
 # OpenTelemetry Configuration - Traces
 OTEL_ENABLED=true
@@ -417,7 +417,7 @@ The platform uses Resend.com for email notifications.
    ```bash
    RESEND_API_KEY=re_your_api_key
    RESEND_FROM_EMAIL=noreply@yourdomain.com
-   RESEND_FROM_NAME=AI Voice Agent Platform
+   RESEND_FROM_NAME=24x7 AI
    ```
 
 For detailed information about the notification system, see [Notification System](../02_core_systems/notification_system.md).

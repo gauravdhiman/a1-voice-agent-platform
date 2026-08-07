@@ -40,7 +40,7 @@ the active roadmap.
 | Observability (OpenTelemetry) | 2026-03-29 | Traces, metrics, logs across backend + worker. |
 | Security Hardening | 2026-03-29 | Rate limiting, JWT signature verification, security headers, ES256 for local Supabase. |
 | SMB 5-step Onboarding Wizard | 2026-03-29 | Template selection, validation, activation gating. |
-| Landing Page Redesign | 2026-03-29 | Early-adopter CTA, 4-tier pricing, branding (CogniNets). |
+| Landing Page Redesign | 2026-03-29 | Early-adopter CTA, 4-tier pricing, branding (24x7 AI). |
 | 247ai.live production deploy (GCP + OCI) | 2026-08 | `scripts/deploy.sh`, `docs/05_operations/deployment/`, `.env.cloud.example`. |
 | N1 Epic A — Permission vocabulary lock-in | 2026-07-11 | Canonical resource × action matrix in `docs/02_features/authentication_rbac/permission-matrix.md`; `frontend/src/lib/permissions.ts` exports the `P` namespace + `isCanonicalPermission` validator; `permissions.test.ts` pins the contract (14 tests); the legacy `agent:write` / `member:invite` / `member:remove` / `settings:*` names are now rejected by the validator. |
 | N1 Epic B — Single FE permission API | 2026-07-11 | Page-level gates go through `useHasPermission(...)` (low-level) or `useUserPermissions()` (page facade); old role-only gates dropped where a permission is the right check; the `NODE_ENV === "development"` grant-all fallback removed (test `does NOT grant-all when NODE_ENV is development` guards the regression). `useMyPermissions` re-uses the auth context's `/me` query cache, invalidated on org switch. 17 facade tests + 14 `useHasPermission` tests pin the contract. |
@@ -49,7 +49,7 @@ the active roadmap.
 
 ### Tooling / housekeeping
 - `.gitignore` hardened: `.agents/`, `.codex/skills/graphify/`, `.codex/hooks.json`, `graphify-out/`; `.graphifyignore` added for code-only graphify runs.
-- Branding consistency: sidebar + signin/signup pages now drive the product name from `process.env.NEXT_PUBLIC_APP_NAME` (fallback `CogniNets`), matching the rest of the app. No more hardcoded "NeuraSaaS" strings in `frontend/src/`.
+- Branding consistency: sidebar + signin/signup pages drive the product name from `NEXT_PUBLIC_APP_NAME` (fallback `24x7 AI`). Website: https://247ai.live
 
 ---
 

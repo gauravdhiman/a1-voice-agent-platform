@@ -137,6 +137,94 @@ class AuthService {
     }
   }
 
+  async signIn(data: { email: string; password: string }): Promise<{
+    success: boolean;
+    error?: string;
+    code?: string;
+  }> {
+    try {
+      const response = await apiClient.post<{
+        access_token?: string;
+        refresh_token?: string;
+      }>(`${this.baseUrl}/signin`, {
+        email: data.email,
+        password: data.password,
+      });
+
+      const { access_token, refresh_token } = response.data;
+      if (access_token && refresh_token) {
+        const { supabase } = await import("@/lib/supabase");
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+        if (sessionError) {
+          return { success: false, error: sessionError.message };
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof ApiRequestError) {
+        const detail = (error.data as { detail?: unknown } | undefined)?.detail;
+        if (detail && typeof detail === "object" && detail !== null) {
+          const payload = detail as { message?: string; code?: string };
+          return {
+            success: false,
+            error: payload.message || error.message,
+            code: payload.code,
+          };
+        }
+        return { success: false, error: error.message };
+      }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Sign in failed.",
+      };
+    }
+  }
+
+  async resendVerificationEmail(email: string): Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+  }> {
+    try {
+      const response = await apiClient.post<{ message: string }>(
+        `${this.baseUrl}/resend-verification`,
+        { email },
+      );
+      return { success: true, message: response.data.message };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to resend email.",
+      };
+    }
+  }
+
+  async verifyEmail(token: string): Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+  }> {
+    try {
+      const response = await apiClient.post<{ success: boolean; message: string }>(
+        `${this.baseUrl}/verify-email`,
+        { token },
+      );
+      return {
+        success: response.data.success,
+        message: response.data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Verification failed.",
+      };
+    }
+  }
+
   // Process invitation to add user to organization
   async processInvitation(
     token: string,
