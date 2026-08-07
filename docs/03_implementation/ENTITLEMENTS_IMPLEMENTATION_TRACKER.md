@@ -1,0 +1,135 @@
+# Entitlements Implementation Tracker
+
+**Started:** 2026-08-07  
+**Spec:** [plan_entitlements_and_limits.md](./plan_entitlements_and_limits.md)  
+**ADR:** [ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md)
+
+## Status legend
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Done |
+| 🚧 | In progress |
+| ⏳ | Pending |
+| ⏸ | Blocked / deferred |
+
+---
+
+## Phase 0 — Schema & catalog
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Alembic migration (`plan_products`, `plan_versions`, …) | ✅ | `20260807000002_add_plan_versioning_and_entitlements.py` — **not run yet** |
+| Seed `entitlement_definitions` catalog | ✅ | In migration |
+| Backfill `subscription_plans` → `plan_versions` v1 | ✅ | In migration |
+| Add `organization_subscriptions.plan_version_id` | ✅ | In migration |
+| Seed default **free** plan product/version | ✅ | In migration |
+| Update `DATABASE_SCHEMA.md` | ✅ | Planned tables section added |
+
+---
+
+## Phase 1 — EntitlementService core
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Pydantic models (`entitlement_models.py`) | ✅ | |
+| Handler registry (`entitlement_handlers.py`) | ✅ | `limit.max_count`, `limit.max_agents`, `feature.flag` |
+| `EntitlementService` | ✅ | Resolve via `plan_version_id` |
+| Cancel-at-period-end: full access while `active` | ✅ | Tested in `test_entitlement_service.py` |
+| Unit tests (`test_entitlement_service.py`) | ✅ | 10 tests |
+| Handler tests (`test_entitlement_handlers.py`) | ✅ | |
+| Free plan DB resolution test | ✅ | `test_entitlement_service_free_plan.py` |
+| `GET /api/v1/billing/entitlements/{org_id}` | ✅ | |
+| Enforce `max_agents` on `POST /agents` | ✅ | 403 + `entitlement_denied` payload |
+| Route tests for agent limit | ✅ | `TestAgentCreateEntitlementLimits` |
+| `plan_version_id` on Pydantic subscription models | ✅ | `billing/models.py` |
+
+---
+
+## Phase 2 — Publish & grandfathering
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Draft / publish API | ⏸ | Deferred to next PR |
+| `plan_version_publish_events` write path | ⏸ | Table created in Phase 0 |
+| Webhook: bind `plan_version_id` from Stripe price | ⏸ | |
+| Tests: existing sub unchanged after publish | ⏸ | |
+
+---
+
+## Phase 3 — Migration scheduler & UX
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Daily migration job | ⏸ | |
+| Billing UI: legacy badge, grace countdown | ⏸ | |
+| Fix cancel dialog copy (access until period end) | ⏸ | |
+| Self-service migrate CTA | ⏸ | |
+
+---
+
+## Phase 4 — Admin UI
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `/admin/entitlements` catalog CRUD | ⏸ | |
+| `/admin/plans` product + version editor | ⏸ | |
+| Publish dialog + migration policy | ⏸ | |
+
+---
+
+## Phase 5 — Credits, PAYG, voice-ws
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Credit grant from version on renewal | ⏸ | |
+| PAYG handlers | ⏸ | |
+| voice-ws pre-call entitlement check | ⏸ | |
+| `max_concurrent_calls` | ⏸ | |
+
+---
+
+## Test coverage (Phase 1 modules)
+
+| Module | Target | Current |
+|--------|--------|---------|
+| `entitlement_models.py` | ≥90% | **100%** |
+| `entitlement_service.py` | ≥90% | **94%** |
+| `entitlement_handlers.py` | ≥90% | **88%** |
+| **Combined** | ≥90% | **94%** |
+
+Full billing suite: **55 passed**, 6 skipped (2026-08-07).
+
+---
+
+## Commits / review checkpoints
+
+| Checkpoint | Ready for commit when | User testing needed? |
+|------------|----------------------|---------------------|
+| **CP-1** ✅ | Phase 0 migration file + Phase 1 code + tests green | **Run migration** (`alembic upgrade head`) then optional smoke |
+| CP-2 | Publish API + webhook binding | Optional billing smoke |
+| CP-3 | Admin UI + browser validation | Yes — plan editor + checkout |
+
+### CP-1 — Before you commit / test
+
+1. Review changed files (migration + backend entitlement modules + tests).
+2. **Run migration** (requires your approval per project rules):
+   ```bash
+   cd backend && alembic upgrade head
+   ```
+3. Re-run tests in Docker or `.venv-backend`:
+   ```bash
+   pytest tests/billing/test_entitlement_service.py tests/billing/test_entitlement_handlers.py \
+     tests/billing/test_entitlement_service_free_plan.py \
+     tests/voice_agents/test_agent_routes.py::TestAgentCreateEntitlementLimits -v
+   ```
+4. Optional smoke (after migration + dev stack up): create agents until limit blocks with 403.
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-08-07 | Tracker created; Phase 0–1 implementation started |
+| 2026-08-07 | **CP-1 complete:** migration file, EntitlementService, max_agents enforcement, 21 new tests, 94% coverage on entitlement modules |

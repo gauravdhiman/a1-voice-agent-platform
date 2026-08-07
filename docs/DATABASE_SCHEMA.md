@@ -9,6 +9,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Voice Agent Tables](#voice-agent-tables)
 - [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
+- [Planned: Plan Versioning & Entitlements Tables](#planned-plan-versioning--entitlements-tables)
 - [Notification Tables](#notification-tables)
 - [Platform Skills Tables](#platform-skills-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
@@ -640,6 +641,32 @@ Tracks payment history and invoices.
 
 - `idx_billing_history_org_id`
 - `idx_billing_history_stripe_invoice_id`
+
+---
+
+### Planned: Plan Versioning & Entitlements Tables
+
+> **Status:** Not yet migrated — design approved in [Plan Entitlements & Limits](03_implementation/plan_entitlements_and_limits.md) and [ADR: Plan Versioning](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md). These tables will replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
+
+Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
+
+| Table | Purpose |
+| ----- | ------- |
+| `plan_products` | Plan families (`starter`, `growth`) — marketing identity |
+| `plan_versions` | Immutable published snapshots (v1, v2, …) with price + Stripe Price |
+| `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
+| `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB) |
+| `plan_version_publish_events` | Migration policy when a new version is published |
+| `organization_subscription_migrations` | Per-subscriber grace period and migration status |
+| `organization_usage_counters` | Fast usage counts for limit enforcement |
+| `organization_entitlement_overrides` | Optional enterprise per-org exceptions |
+| `organization_subscription_entitlement_snapshots` | Audit snapshots on subscribe/migrate/renew |
+
+**Key change to `organization_subscriptions`:** add `plan_version_id` FK → `plan_versions.id` (subscription locked to version at signup). Deprecate `subscription_plan_id` after backfill.
+
+**Grandfathering rule:** Published `plan_versions` rows are immutable. Admin "edits" create a new draft version → publish → new signups only; existing subs keep old `plan_version_id` until migration job or self-service upgrade.
+
+See the implementation plan for full column definitions, ER diagram, and migration steps.
 
 ---
 

@@ -15,6 +15,8 @@ from src.auth.dependencies import (
 )
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
+from src.billing.entitlement_models import OrgEntitlements
+from src.billing.entitlement_service import entitlement_service
 from src.billing.models import (
     BillingHistory,
     CreditBalance,
@@ -151,6 +153,25 @@ async def get_organization_subscription(
         raise HTTPException(
             status_code=500, detail="Failed to fetch organization subscription"
         )
+
+
+@router.get("/entitlements/{organization_id}", response_model=OrgEntitlements)
+async def get_organization_entitlements(
+    organization_id: UUID,
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Get resolved plan-version entitlements and limits for an organization."""
+    try:
+        return await entitlement_service.get_org_entitlements(organization_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error(
+            f"Error fetching entitlements for organization {organization_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch organization entitlements"
+        ) from e
 
 
 @router.post("/subscription/checkout", response_model=SubscriptionCheckoutResponse)

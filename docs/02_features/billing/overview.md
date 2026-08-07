@@ -59,7 +59,7 @@ graph TB
 
 ### Plans
 
-Plans define pricing and included resources:
+Plans define pricing and included resources. Each **plan product** (e.g. Starter, Growth) can have multiple **immutable versions**. New signups receive the current published version; existing subscribers remain on the version they subscribed to until they migrate (see [Plan Versioning](../03_implementation/plan_entitlements_and_limits.md)).
 
 | Plan           | Price/Month | Included Credits | Features                               |
 | -------------- | ----------- | ---------------- | -------------------------------------- |
@@ -68,14 +68,13 @@ Plans define pricing and included resources:
 | **Pro**        | $149        | 10,000           | Unlimited agents, all tools            |
 | **Enterprise** | Custom      | Custom           | Dedicated support, custom integrations |
 
-**Plan Attributes**:
+**Plan attributes (per version):**
 
-- Price (monthly/annual)
-- Included credits
-- Agent limit
-- Tool access level
-- Support tier
-- Billing interval (monthly/annual)
+- Price (monthly/annual) — new Stripe Price per published version
+- Included credits and any other limits (sparse — each plan only defines what applies)
+- Feature flags (PAYG, premium tools, embed, etc.)
+- Billing interval and trial days
+- Migration policy when superseded (grace period for legacy subscribers)
 
 ### Subscriptions
 
@@ -92,10 +91,34 @@ trialing → active → past_due → (cancel) → canceled
 **Status Descriptions**:
 
 - `trialing`: Free trial period
-- `active`: Subscription is active and payments are current
+- `active`: Subscription is active and payments are current (includes **pending cancel** when `cancel_at_period_end=true` — full access until period end)
 - `past_due`: Payment failed, subscription past due date
-- `canceled`: Subscription canceled, access ends at period end
+- `cancelled`: Subscription ended (after period end or dunning exhausted); entitlements revert to free tier
 - `incomplete`: Initial payment failed
+
+### Cancellation policy
+
+24x7 AI uses **cancel at period end, no refund**:
+
+- When a user cancels, they **keep full plan access** until `current_period_end`
+- **No prorated or full refund** for the current billing period
+- Stripe subscription is modified with `cancel_at_period_end=true` (already implemented)
+- User may **reactivate** before the period ends to continue renewing
+- After period end, webhook `customer.subscription.deleted` moves the org to cancelled / free-tier entitlements
+
+See [Plan Entitlements & Limits — §8.1](../../03_implementation/plan_entitlements_and_limits.md#81-subscription-cancellation-policy-no-refund-active-until-period-end) for full architecture detail.
+
+```mermaid
+stateDiagram-v2
+    active --> pending_cancel: User cancels
+    pending_cancel --> active: Reactivate
+    pending_cancel --> cancelled: Period ends
+    note right of pending_cancel
+        status still "active"
+        full entitlements until current_period_end
+        no refund
+    end note
+```
 
 ### Credits
 
@@ -574,6 +597,8 @@ async def manual_credit_adjustment(
 
 ## Related Documentation
 
+- [Plan Entitlements & Limits (implementation plan)](../../03_implementation/plan_entitlements_and_limits.md) - Versioned plans, sparse limits/features, grandfathering, migration grace periods, enforcement
+- [ADR: Plan Versioning & Entitlements](../../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md) - Architecture decision record
 - [Payment Flow](../../03_implementation/payment_flow.md) - Detailed payment workflows
 - [Stripe Integration](../../03_implementation/stripe_integration.md) - Implementation details
 - [Product Requirements](../../05_business/prd.md) - Business requirements

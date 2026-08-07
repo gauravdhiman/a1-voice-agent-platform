@@ -589,3 +589,34 @@ class TestCheckoutRoutesPermission:
                 )
             assert exc_info.value.status_code == 403
             mock_svc.get_credit_products.assert_not_called()
+
+
+class TestOrganizationEntitlementsRoute:
+    """GET /entitlements/{organization_id} returns resolved plan entitlements."""
+
+    @pytest.mark.asyncio
+    async def test_get_organization_entitlements_success(self):
+        from uuid import uuid4
+
+        from src.billing.entitlement_models import OrgEntitlements
+        from src.billing.routes import get_organization_entitlements
+
+        org_id = TEST_ORG_ID
+        expected = OrgEntitlements(
+            organization_id=org_id,
+            plan_version_id=uuid4(),
+            plan_product_slug="starter",
+            plan_version_number=1,
+            is_entitled=True,
+        )
+        profile = _make_profile(is_org_admin_on=str(org_id))
+
+        with patch("src.billing.routes.entitlement_service") as mock_entitlements:
+            mock_entitlements.get_org_entitlements = AsyncMock(return_value=expected)
+            result = await get_organization_entitlements(
+                organization_id=org_id,
+                _=(TEST_USER_ID, profile),
+            )
+
+        assert result.plan_product_slug == "starter"
+        mock_entitlements.get_org_entitlements.assert_awaited_once_with(org_id)

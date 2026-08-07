@@ -121,6 +121,7 @@ class OrganizationSubscriptionBase(BaseModel):
 
     organization_id: UUID
     subscription_plan_id: Optional[UUID] = None
+    plan_version_id: Optional[UUID] = None
     stripe_subscription_id: Optional[str] = Field(None, max_length=255)
     stripe_customer_id: str = Field(..., max_length=255)
     status: SubscriptionStatus
@@ -145,6 +146,7 @@ class OrganizationSubscriptionUpdate(BaseModel):
     """Model for updating organization subscriptions."""
 
     subscription_plan_id: Optional[UUID] = None
+    plan_version_id: Optional[UUID] = None
     status: Optional[SubscriptionStatus] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None

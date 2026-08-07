@@ -228,8 +228,18 @@ Credits are consumed in the following order:
 1.  **Trial** → **Active** (when trial ends and payment succeeds).
 2.  **Active** → **Past Due** (when payment fails).
 3.  **Past Due** → **Active** (when payment is retried successfully).
-4.  **Active** → **Cancelled** (when cancelled by user/admin).
-5.  **Any Status** → **Expired** (when subscription ends without renewal).
+4.  **Active** → **Pending cancel** (user cancels — `cancel_at_period_end=true`; **still active**, full access until period end, **no refund**).
+5.  **Pending cancel** → **Active** (user reactivates before period end).
+6.  **Pending cancel** → **Cancelled** (when `current_period_end` is reached — Stripe `customer.subscription.deleted`).
+7.  **Active** → **Cancelled** (immediate only via admin/Stripe dashboard exception — not self-service).
+
+### Cancellation policy
+
+- **No refunds** on voluntary cancellation — simplifies billing; customer keeps what they paid for through period end.
+- **Entitlements unchanged** until `current_period_end` when user cancels (same plan version, limits, features, usable credits).
+- Implementation: `POST /api/billing/subscription/cancel` sets Stripe `cancel_at_period_end=true` (see `backend/src/billing/stripe_service.py`).
+
+Full spec: [Plan Entitlements §8.1](../03_implementation/plan_entitlements_and_limits.md#81-subscription-cancellation-policy-no-refund-active-until-period-end).
 
 ### Webhook-Driven Updates
 
