@@ -17,6 +17,7 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.billing.entitlement_models import OrgEntitlements
 from src.billing.entitlement_service import entitlement_service
+from src.billing.plan_migration_service import plan_migration_service
 from src.billing.models import (
     BillingHistory,
     CreditBalance,
@@ -172,6 +173,38 @@ async def get_organization_entitlements(
         raise HTTPException(
             status_code=500, detail="Failed to fetch organization entitlements"
         ) from e
+
+
+@router.post("/subscription/migrate")
+async def migrate_subscription_plan(
+    request: dict[str, Any],
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Self-service migrate to a newer plan version before grace period ends."""
+    try:
+        user_id, user_profile = user_auth
+        organization_id = request.get("organization_id")
+        if not organization_id:
+            raise HTTPException(status_code=400, detail="organization_id is required")
+
+        org_id = UUID(str(organization_id))
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+
+        result = await plan_migration_service.migrate_organization(org_id)
+        return {"success": True, **result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error migrating subscription for org %s: %s", organization_id, exc)
+        raise HTTPException(
+            status_code=500, detail="Failed to migrate subscription plan"
+        ) from exc
 
 
 @router.post("/subscription/checkout", response_model=SubscriptionCheckoutResponse)

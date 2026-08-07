@@ -74,11 +74,49 @@ class OrgEntitlements(BaseModel):
     plan_version_id: UUID
     plan_product_slug: str
     plan_version_number: int
+    plan_version_label: Optional[str] = None
+    is_legacy_version: bool = False
     is_entitled: bool
     cancel_at_period_end: bool = False
     access_until: Optional[str] = None
     limits: dict[str, ResolvedEntitlement] = Field(default_factory=dict)
     features: dict[str, ResolvedEntitlement] = Field(default_factory=dict)
+    migration: Optional["OrgPlanMigrationInfo"] = None
+
+
+class PlanMigrationStatus(str, Enum):
+    """Per-subscriber migration lifecycle state."""
+
+    PENDING = "pending"
+    GRACE_ACTIVE = "grace_active"
+    MIGRATED = "migrated"
+    DECLINED_LEGACY = "declined_legacy"
+    CANCELLED = "cancelled"
+
+
+class OrgPlanMigrationInfo(BaseModel):
+    """Active plan-version migration offer or grace countdown for an org."""
+
+    migration_id: UUID
+    from_plan_version_id: UUID
+    to_plan_version_id: UUID
+    status: PlanMigrationStatus
+    grace_period_ends_at: Optional[str] = None
+    target_plan_version_label: Optional[str] = None
+    allow_indefinite_legacy: bool = True
+    can_self_migrate: bool = True
+
+
+class PlanMigrationRunResult(BaseModel):
+    """Summary from processing due grace-period migrations."""
+
+    processed: int = 0
+    migrated: int = 0
+    skipped: int = 0
+    errors: int = 0
+
+
+OrgEntitlements.model_rebuild()
 
 
 class LimitCheckResult(BaseModel):

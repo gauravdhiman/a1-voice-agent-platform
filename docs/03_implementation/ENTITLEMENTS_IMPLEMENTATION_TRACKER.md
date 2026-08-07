@@ -63,10 +63,14 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Daily migration job | ⏸ | |
-| Billing UI: legacy badge, grace countdown | ⏸ | |
-| Fix cancel dialog copy (access until period end) | ⏸ | |
-| Self-service migrate CTA | ⏸ | |
+| Daily migration job | ✅ | `plan_migration_scheduler.py` (24h loop, started in `main.lifespan`) |
+| `plan_migration_service.py` | ✅ | Auto-migrate on grace expiry + self-service migrate |
+| `POST /api/v1/billing/subscription/migrate` | ✅ | |
+| Entitlements API: migration + legacy version info | ✅ | Extended `OrgEntitlements` |
+| Billing UI: legacy badge, grace countdown | ✅ | `plan-migration-banner.tsx` + subscription header badge |
+| Fix cancel dialog copy (access until period end) | ✅ | No refund; full access until period end |
+| Self-service migrate CTA | ✅ | Confirm dialog in `PlanMigrationBanner` |
+| Tests | ✅ | 6 migration service tests + cancel dialog vitest |
 
 ---
 
@@ -100,7 +104,7 @@
 | `entitlement_handlers.py` | ≥90% | **88%** |
 | **Combined** | ≥90% | **94%** |
 
-Full billing suite: **55 passed**, 6 skipped (2026-08-07).
+Full billing suite: **68 passed**, 6 skipped (2026-08-07).
 
 ---
 
@@ -109,8 +113,9 @@ Full billing suite: **55 passed**, 6 skipped (2026-08-07).
 | Checkpoint | Ready for commit when | User testing needed? |
 |------------|----------------------|---------------------|
 | **CP-1** ✅ | Phase 0 migration + Phase 1 code + tests green | Migration applied locally |
-| **CP-2** 🚧 | Publish API + webhook binding | Ready for review (no user smoke yet) |
-| CP-3 | Admin UI + browser validation | Yes — plan editor + checkout |
+| **CP-2** ✅ | Publish API + webhook binding | |
+| **CP-3** 🚧 | Migration scheduler + billing UX | Ready for review |
+| CP-4 | Admin UI + browser validation | Yes — plan editor + checkout |
 
 ### CP-1 — Before you commit / test
 
@@ -137,3 +142,4 @@ Full billing suite: **55 passed**, 6 skipped (2026-08-07).
 | 2026-08-07 | **CP-1 complete:** migration file, EntitlementService, max_agents enforcement, 21 new tests, 94% coverage on entitlement modules |
 | 2026-08-07 | Migration `20260807000002` applied on local dev Docker stack |
 | 2026-08-07 | **CP-2 in progress:** PlanVersionService publish/grandfathering, admin publish route, webhook plan_version_id binding, 8 new tests (63 billing passed) |
+| 2026-08-07 | **CP-3 complete:** Plan migration scheduler, self-service migrate API, billing UI legacy/grace banner, cancel dialog policy copy, 68 billing tests + vitest |

@@ -29,6 +29,7 @@ from .entitlement_models import (
     ResolvedEntitlement,
 )
 from .models import SubscriptionStatus
+from .plan_migration_service import plan_migration_service
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -80,6 +81,18 @@ class EntitlementService:
         assigned = await self._get_version_entitlements(plan_version_id)
         assigned_by_key = {row["entitlement_key"]: row["value"] for row in assigned}
 
+        display_label = version_row.get("display_label")
+        product_name = product.get("display_name", FREE_PLAN_PRODUCT_SLUG.title())
+        version_number = int(version_row.get("version_number", 1))
+        plan_version_label = display_label or f"{product_name} v{version_number}"
+        is_legacy_version = not bool(version_row.get("is_current_for_signup", False))
+
+        migration = await plan_migration_service.get_active_migration_for_organization(
+            organization_id
+        )
+        if migration is not None:
+            is_legacy_version = True
+
         limits: dict[str, ResolvedEntitlement] = {}
         features: dict[str, ResolvedEntitlement] = {}
 
@@ -105,12 +118,15 @@ class EntitlementService:
             organization_id=organization_id,
             plan_version_id=plan_version_id,
             plan_product_slug=product.get("slug", FREE_PLAN_PRODUCT_SLUG),
-            plan_version_number=int(version_row.get("version_number", 1)),
+            plan_version_number=version_number,
+            plan_version_label=plan_version_label,
+            is_legacy_version=is_legacy_version,
             is_entitled=is_entitled,
             cancel_at_period_end=cancel_at_period_end,
             access_until=access_until,
             limits=limits,
             features=features,
+            migration=migration,
         )
 
     @tracer.start_as_current_span("billing.entitlement.check_limit")

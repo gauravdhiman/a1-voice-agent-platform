@@ -203,6 +203,56 @@ class StripeService:
             logger.error(f"Failed to update subscription {subscription_id}: {e}")
             raise
 
+    async def change_subscription_price(
+        self,
+        subscription_id: str,
+        new_price_id: str,
+        *,
+        at_period_end: bool = False,
+    ) -> stripe.Subscription:
+        """Swap the subscription line item to a new Stripe Price.
+
+        Used when migrating subscribers to a new plan version. When
+        ``at_period_end`` is True, the price change applies at the next billing
+        cycle with no proration.
+
+        Args:
+            subscription_id: Stripe subscription ID.
+            new_price_id: Target Stripe Price ID from the new plan version.
+            at_period_end: If True, defer price change to next renewal.
+
+        Returns:
+            Updated Stripe Subscription object.
+        """
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            items = subscription.get("items", {}).get("data", [])
+            if not items:
+                raise ValueError(
+                    f"Subscription {subscription_id} has no line items to update"
+                )
+            item_id = items[0]["id"]
+            modify_params: dict[str, Any] = {
+                "items": [{"id": item_id, "price": new_price_id}],
+                "proration_behavior": "none",
+            }
+            if at_period_end:
+                modify_params["billing_cycle_anchor"] = "unchanged"
+
+            updated = stripe.Subscription.modify(subscription_id, **modify_params)
+            logger.info(
+                "Changed Stripe subscription %s to price %s (at_period_end=%s)",
+                subscription_id,
+                new_price_id,
+                at_period_end,
+            )
+            return updated
+        except stripe.error.StripeError as e:
+            logger.error(
+                f"Failed to change subscription {subscription_id} price: {e}"
+            )
+            raise
+
     async def cancel_subscription(
         self, subscription_id: str, at_period_end: bool = True
     ) -> stripe.Subscription:

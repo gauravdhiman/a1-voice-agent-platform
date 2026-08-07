@@ -3,10 +3,20 @@ Tests for free-plan resolution via database lookup in EntitlementService.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _mock_plan_migration_lookup():
+    with patch(
+        "src.billing.entitlement_service.plan_migration_service.get_active_migration_for_organization",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield
 
 
 @pytest.fixture

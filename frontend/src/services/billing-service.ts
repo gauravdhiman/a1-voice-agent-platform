@@ -16,6 +16,8 @@ import type {
   CreditConsumptionRequest,
   CreditConsumptionResponse,
   CreditPurchaseResponse,
+  OrgEntitlements,
+  PlanMigrationResponse,
 } from "@/types/billing";
 
 class BillingService {
@@ -68,6 +70,31 @@ class BillingService {
   ): Promise<OrganizationSubscriptionWithPlan> {
     const response = await apiClient.get<OrganizationSubscriptionWithPlan>(
       `${this.baseUrl}/subscription/${organizationId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Fetches resolved plan-version entitlements including migration/grace info.
+   */
+  async getOrganizationEntitlements(
+    organizationId: string,
+  ): Promise<OrgEntitlements> {
+    const response = await apiClient.get<OrgEntitlements>(
+      `${this.baseUrl}/entitlements/${organizationId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Self-service migrate to a newer plan version before grace period ends.
+   */
+  async migrateSubscriptionPlan(
+    organizationId: string,
+  ): Promise<PlanMigrationResponse> {
+    const response = await apiClient.post<PlanMigrationResponse>(
+      `${this.baseUrl}/subscription/migrate`,
+      { organization_id: organizationId },
     );
     return response.data;
   }

@@ -268,6 +268,56 @@ export interface CreditConsumptionResponse {
   transaction_id: string;
 }
 
+// Plan entitlements (version-bound limits and migration status)
+export type PlanMigrationStatus =
+  | "pending"
+  | "grace_active"
+  | "migrated"
+  | "declined_legacy"
+  | "cancelled";
+
+export interface OrgPlanMigrationInfo {
+  migration_id: string;
+  from_plan_version_id: string;
+  to_plan_version_id: string;
+  status: PlanMigrationStatus;
+  grace_period_ends_at: string | null;
+  target_plan_version_label: string | null;
+  allow_indefinite_legacy: boolean;
+  can_self_migrate: boolean;
+}
+
+export interface ResolvedEntitlement {
+  key: string;
+  kind: "limit" | "feature";
+  assigned: boolean;
+  raw_value: Record<string, unknown> | null;
+  effective_value: unknown;
+  is_unlimited: boolean;
+}
+
+export interface OrgEntitlements {
+  organization_id: string;
+  plan_version_id: string;
+  plan_product_slug: string;
+  plan_version_number: number;
+  plan_version_label: string | null;
+  is_legacy_version: boolean;
+  is_entitled: boolean;
+  cancel_at_period_end: boolean;
+  access_until: string | null;
+  limits: Record<string, ResolvedEntitlement>;
+  features: Record<string, ResolvedEntitlement>;
+  migration: OrgPlanMigrationInfo | null;
+}
+
+export interface PlanMigrationResponse {
+  success: boolean;
+  migration_id: string;
+  to_plan_version_id: string;
+  status: string;
+}
+
 // UI Helper interfaces
 export interface PlanFeature {
   name: string;

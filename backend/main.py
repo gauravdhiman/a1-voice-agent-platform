@@ -225,6 +225,10 @@ async def lifespan(app: FastAPI):
 
     from shared.voice_agents.tool_service import ToolService
     from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
+    from src.billing.plan_migration_scheduler import (
+        start_plan_migration_scheduler,
+        stop_plan_migration_scheduler,
+    )
     from src.services.token_refresh_service import (
         start_token_refresh_service,
         stop_token_refresh_service,
@@ -258,9 +262,17 @@ async def lifespan(app: FastAPI):
     await start_token_refresh_service(tool_service)
     logging.info("Token refresh service started")
 
+    logging.info("Starting plan migration scheduler...")
+    await start_plan_migration_scheduler()
+    logging.info("Plan migration scheduler started")
+
     yield
 
     # Shutdown
+    logging.info("Shutting down plan migration scheduler...")
+    await stop_plan_migration_scheduler()
+    logging.info("Plan migration scheduler stopped")
+
     logging.info("Shutting down token refresh service...")
     await stop_token_refresh_service()
     logging.info("Token refresh service stopped")

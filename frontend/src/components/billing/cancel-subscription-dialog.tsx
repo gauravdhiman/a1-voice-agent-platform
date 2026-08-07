@@ -12,17 +12,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, AlertTriangle } from "lucide-react";
+import { format } from "date-fns";
 
 interface CancelSubscriptionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCancel: () => void;
+  /** End of current billing period — full access continues until this date. */
+  accessUntil?: string | Date | null;
 }
 
+/**
+ * Confirmation dialog for cancel-at-period-end subscription cancellation.
+ *
+ * Policy: no refunds; entitlements remain until `accessUntil` (current period end).
+ */
 export function CancelSubscriptionDialog({
   open,
   onOpenChange,
   onCancel,
+  accessUntil,
 }: CancelSubscriptionDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +39,10 @@ export function CancelSubscriptionDialog({
 
   const expectedConfirmation = "Cancel subscription";
   const isConfirmationValid = confirmationText === expectedConfirmation;
+
+  const accessUntilLabel = accessUntil
+    ? format(new Date(accessUntil), "MMMM d, yyyy")
+    : "the end of your current billing period";
 
   const handleConfirm = async () => {
     if (!isConfirmationValid) return;
@@ -66,8 +79,9 @@ export function CancelSubscriptionDialog({
             Cancel Subscription
           </DialogTitle>
           <DialogDescription>
-            This action will cancel your subscription at the end of your current
-            billing period.
+            Your subscription will stay active until {accessUntilLabel}. You
+            will not be charged again after that date, and no refund is issued
+            for the current period.
           </DialogDescription>
         </DialogHeader>
 
@@ -87,14 +101,16 @@ export function CancelSubscriptionDialog({
                 </p>
                 <ul className="space-y-1 text-red-700">
                   <li>
-                    • Subscription will remain active until end of current
-                    billing period
+                    • Full plan access continues until {accessUntilLabel}
                   </li>
-                  <li>• You will not be charged for next billing period</li>
-                  <li>• All access to premium features will be removed</li>
+                  <li>• You will not be charged for the next billing period</li>
+                  <li>• No refund is issued for the current billing period</li>
                   <li>
-                    • You can reactivate subscription anytime before
-                    cancellation date
+                    • After {accessUntilLabel}, your organization moves to the
+                    free tier unless you resubscribe
+                  </li>
+                  <li>
+                    • You can reactivate anytime before {accessUntilLabel}
                   </li>
                 </ul>
               </div>

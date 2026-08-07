@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -24,7 +24,9 @@ import {
 } from "lucide-react";
 import { billingService } from "@/services/billing-service";
 import { CancelSubscriptionDialog } from "@/components/billing/cancel-subscription-dialog";
+import { PlanMigrationBanner } from "@/components/billing/plan-migration-banner";
 import { OrganizationSubscriptionWithPlan } from "@/types/billing";
+import type { OrgEntitlements } from "@/types/billing";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -44,6 +46,29 @@ export function SubscriptionManagement({
     useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [entitlements, setEntitlements] = useState<OrgEntitlements | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    billingService
+      .getOrganizationEntitlements(organizationId)
+      .then((data) => {
+        if (!cancelled) setEntitlements(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load entitlements:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId, subscription.updated_at]);
+
+  const refreshEntitlements = () => {
+    billingService
+      .getOrganizationEntitlements(organizationId)
+      .then(setEntitlements)
+      .catch((error) => console.error("Failed to refresh entitlements:", error));
+  };
 
   const handleCancelSubscription = async () => {
     setCancelDialogOpen(true);
@@ -146,11 +171,22 @@ export function SubscriptionManagement({
 
   return (
     <div className="space-y-6">
+      {entitlements ? (
+        <PlanMigrationBanner
+          organizationId={organizationId}
+          entitlements={entitlements}
+          onMigrated={() => {
+            refreshEntitlements();
+            onSubscriptionUpdated?.();
+          }}
+        />
+      ) : null}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 flex-wrap">
                 Current Subscription
                 <Badge
                   className={`${getStatusColor(
@@ -161,6 +197,12 @@ export function SubscriptionManagement({
                   {subscription.status.charAt(0).toUpperCase() +
                     subscription.status.slice(1)}
                 </Badge>
+                {entitlements?.plan_version_label ? (
+                  <Badge variant="outline" className="font-normal">
+                    {entitlements.plan_version_label}
+                    {entitlements.is_legacy_version ? " (legacy)" : ""}
+                  </Badge>
+                ) : null}
               </CardTitle>
               <CardDescription>
                 Manage your subscription plan and billing settings
@@ -340,6 +382,7 @@ export function SubscriptionManagement({
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
         onCancel={handleCancelConfirm}
+        accessUntil={subscription.current_period_end}
       />
     </div>
   );
