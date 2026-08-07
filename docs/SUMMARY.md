@@ -119,6 +119,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 1. **[AGENTS.md](../AGENTS.md)** - AI agent coding guidelines
 2. **[Getting Started Dev](03_development/getting_started.md)** - Quick start for developers
 3. **[Development Setup](04_development_guides/development_setup.md)** - Local dev environment setup
+4. **[Test User Cleanup](04_development_guides/cleanup_test_user.md)** - Remove test/sandbox users and their resources
 
 ## 🎯 Quick Start Guide
 
