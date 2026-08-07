@@ -450,6 +450,15 @@ on the dashboard with the **invited org selected** and a soft welcome toast.
 `onboarding_completed = false`. There is no "dummy org" concept — self-signup
 provisions a normal organization with a name-based slug.
 
+Founder onboarding (steps 1–4) includes a widget-level **Skip setup and go to
+dashboard** action that calls `completeOnboarding` and navigates to `/dashboard`.
+The skip control is not shown on the final test step (step 5). Step 1 collects
+organization profile fields (name, slug, timezone, website, industry, address).
+Step 2 requires an agent name and optionally a voice template (hard-coded seed
+names are replaced with the chosen agent name). Step 4 is informational only.
+When the agent is created on step 5, onboarding is marked complete immediately
+so a refresh lands on the dashboard; Back is not offered on that step.
+
 ```mermaid
 sequenceDiagram
     participant Admin as Org Admin

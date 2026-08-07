@@ -516,11 +516,7 @@ class TestCompleteOnboardingOrgAdminOnly:
         profile = _make_read_profile(is_platform_admin=True)
         org = Mock()
 
-        with patch("src.organization.routes.organization_service") as mock_svc, patch(
-            "shared.voice_agents.skill_service.skill_service.seed_built_in_skills",
-            new=AsyncMock(),
-            create=True,
-        ):
+        with patch("src.organization.routes.organization_service") as mock_svc:
             mock_svc.complete_onboarding = AsyncMock(return_value=(org, None))
 
             result = await complete_onboarding(
@@ -535,17 +531,29 @@ class TestCompleteOnboardingOrgAdminOnly:
         profile = _make_read_profile(is_org_admin_on=str(TEST_ORG_ID))
         org = Mock()
 
-        with patch("src.organization.routes.organization_service") as mock_svc, patch(
-            "shared.voice_agents.skill_service.skill_service.seed_built_in_skills",
-            new=AsyncMock(),
-            create=True,
-        ):
+        with patch("src.organization.routes.organization_service") as mock_svc:
             mock_svc.complete_onboarding = AsyncMock(return_value=(org, None))
 
             result = await complete_onboarding(
                 org_id=TEST_ORG_ID, user_data=(TEST_USER_ID, profile)
             )
             assert result is org
+
+    @pytest.mark.asyncio
+    async def test_complete_onboarding_does_not_call_missing_skill_seed(self):
+        """Regression: dead seed_built_in_skills + missing logger caused HTTP 500."""
+        from src.organization.routes import complete_onboarding
+
+        profile = _make_read_profile(is_org_admin_on=str(TEST_ORG_ID))
+        org = Mock()
+
+        with patch("src.organization.routes.organization_service") as mock_svc:
+            mock_svc.complete_onboarding = AsyncMock(return_value=(org, None))
+            result = await complete_onboarding(
+                org_id=TEST_ORG_ID, user_data=(TEST_USER_ID, profile)
+            )
+            assert result is org
+            mock_svc.complete_onboarding.assert_awaited_once_with(TEST_ORG_ID)
 
 
 class TestGetAllOrganizationsReadScope:
