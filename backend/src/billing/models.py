@@ -216,7 +216,10 @@ class CreditTransactionBase(BaseModel):
     amount: int = Field(
         ..., description="Positive for credits added, negative for consumed"
     )
-    balance_after: int = Field(..., ge=0)
+    balance_after: int = Field(
+        ...,
+        description="Organization balance after this transaction; may be negative under PAYG",
+    )
     source: TransactionSource
     source_id: Optional[UUID] = None
     credit_event_id: Optional[UUID] = None

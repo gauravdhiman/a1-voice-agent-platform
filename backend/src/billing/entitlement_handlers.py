@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 from uuid import UUID
 
+from shared.billing.call_status import ACTIVE_VOICE_CALL_STATUSES
 from shared.config import supabase_config
 
 from .entitlement_models import LimitCheckResult, OrgEntitlements, ResolvedEntitlement
@@ -104,6 +105,47 @@ class MaxAgentsHandler(MaxCountHandler):
     count_table = "voice_agents"
 
 
+class ConcurrentCallsHandler(MaxCountHandler):
+    """Count in-progress voice calls for concurrent session limits."""
+
+    count_table = "call_logs"
+
+    async def _current_count(self, org_id: UUID) -> int:
+        client = self._client()
+        if client is None:
+            return 0
+        result = (
+            client.table(self.count_table)
+            .select("id", count="exact")
+            .eq(self.count_column, str(org_id))
+            .in_("status", sorted(ACTIVE_VOICE_CALL_STATUSES))
+            .execute()
+        )
+        if getattr(result, "count", None) is not None:
+            count = result.count
+            if isinstance(count, int):
+                return count
+        return len(result.data or [])
+
+    async def check_limit(
+        self,
+        org_id: UUID,
+        entitlements: OrgEntitlements,
+        resolved: ResolvedEntitlement,
+        *,
+        increment: int = 1,
+    ) -> LimitCheckResult:
+        result = await super().check_limit(
+            org_id, entitlements, resolved, increment=increment
+        )
+        if result.message and "max_concurrent_calls" in resolved.key:
+            result.message = (
+                f"Your plan allows {result.limit} concurrent call(s). "
+                f"You currently have {result.current} active."
+            )
+        return result
+
+
 class FeatureFlagHandler(EntitlementHandler):
     """Boolean feature gates — not used for increment checks."""
 
@@ -126,6 +168,7 @@ class FeatureFlagHandler(EntitlementHandler):
 HANDLERS: dict[str, type[EntitlementHandler]] = {
     "limit.max_count": MaxCountHandler,
     "limit.max_agents": MaxAgentsHandler,
+    "limit.concurrent": ConcurrentCallsHandler,
     "feature.flag": FeatureFlagHandler,
 }
 
@@ -139,6 +182,8 @@ def get_handler(
     """Instantiate handler; specialize max_agents when keyed generically."""
     if handler_key == "limit.max_count" and entitlement_key == "max_agents":
         return MaxAgentsHandler(supabase=supabase)
+    if handler_key in {"limit.max_count", "limit.concurrent"} and entitlement_key == "max_concurrent_calls":
+        return ConcurrentCallsHandler(supabase=supabase)
     handler_cls = HANDLERS.get(handler_key)
     if handler_cls is None:
         raise ValueError(f"No entitlement handler registered for '{handler_key}'")

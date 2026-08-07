@@ -467,18 +467,27 @@ async def handle_invoice_payment_succeeded(event):
 
         await billing_service.create_billing_history(billing_data)
 
-        # If this is a subscription invoice, allocate credits
+        # If this is a subscription invoice, allocate credits from plan version
         if invoice.get("subscription"):
+            from .credit_entitlement_service import credit_entitlement_service
+
             subscription = await stripe_service.get_subscription(
                 invoice["subscription"]
             )
             price_id = subscription["items"]["data"][0]["price"]["id"]
 
-            # Get plan for credit allocation
+            # Legacy plan fallback for credit amount
             plans = await billing_service.get_subscription_plans(active_only=False)
             plan = next((p for p in plans if p.stripe_price_id == price_id), None)
 
-            if plan and plan.included_credits > 0:
+            org_uuid = UUID(organization_id)
+            credits_to_grant = await credit_entitlement_service.get_included_credits_monthly(
+                org_uuid
+            )
+            if credits_to_grant <= 0 and plan:
+                credits_to_grant = plan.included_credits
+
+            if credits_to_grant > 0:
                 # Calculate credit expiry (end of current period)
                 expires_at = None
                 if subscription.get("current_period_end"):
@@ -493,14 +502,17 @@ async def handle_invoice_payment_succeeded(event):
                 subscription_id = org_subscription.id if org_subscription else None
 
                 await billing_service.add_subscription_credits(
-                    organization_id=UUID(organization_id),
-                    credits=plan.included_credits,
+                    organization_id=org_uuid,
+                    credits=credits_to_grant,
                     subscription_id=subscription_id,
                     expires_at=expires_at,
                 )
 
                 logger.info(
-                    f"Allocated {plan.included_credits} subscription credits to organization {organization_id}"
+                    "Allocated %s subscription credits to organization %s "
+                    "(plan_version entitlement)",
+                    credits_to_grant,
+                    organization_id,
                 )
 
         logger.info(

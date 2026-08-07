@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from src.billing.entitlement_handlers import (
+    ConcurrentCallsHandler,
     FeatureFlagHandler,
     MaxAgentsHandler,
     get_handler,
@@ -48,6 +49,10 @@ class TestGetHandler:
     def test_max_agents_uses_specialized_handler(self):
         handler = get_handler("limit.max_count", "max_agents")
         assert isinstance(handler, MaxAgentsHandler)
+
+    def test_max_concurrent_calls_uses_concurrent_handler(self):
+        handler = get_handler("limit.max_count", "max_concurrent_calls")
+        assert isinstance(handler, ConcurrentCallsHandler)
 
 
 class TestFeatureFlagHandler:

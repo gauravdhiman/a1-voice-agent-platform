@@ -9,6 +9,7 @@ from uuid import UUID
 
 from shared.config import supabase_config
 
+from .credit_entitlement_service import credit_entitlement_service
 from .models import (
     BillingHistory,
     BillingHistoryCreate,
@@ -663,7 +664,12 @@ class BillingService:
 
             current_balance = int(org_result.data[0]["credit_balance"])
 
-            if current_balance < credits_needed:
+            decision = await credit_entitlement_service.evaluate_consumption(
+                consumption_request.organization_id,
+                credits_needed,
+                current_balance=current_balance,
+            )
+            if not decision.allowed:
                 return CreditConsumptionResponse(
                     success=False,
                     credits_consumed=0,
@@ -681,6 +687,10 @@ class BillingService:
                 }
             ).eq("id", str(consumption_request.organization_id)).execute()
 
+            consumption_metadata = dict(consumption_request.metadata or {})
+            if decision.used_payg:
+                consumption_metadata["payg"] = True
+
             # Create consumption transaction using validated model
             transaction_data = CreditTransactionCreate(
                 organization_id=consumption_request.organization_id,
@@ -690,7 +700,7 @@ class BillingService:
                 source_id=credit_event.id,  # References credit_events table
                 credit_event_id=credit_event.id,
                 description=f"Consumed {consumption_request.quantity}x {consumption_request.event_name}",
-                metadata=consumption_request.metadata,
+                metadata=consumption_metadata or None,
             )
 
             # Log the polymorphic relationship

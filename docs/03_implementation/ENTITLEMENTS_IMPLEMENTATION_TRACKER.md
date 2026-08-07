@@ -9,10 +9,10 @@
 
 | | |
 |---|---|
-| **Completed** | Phases 0–4 (schema → EntitlementService → publish/grandfathering → migration scheduler + billing UX → admin UI) |
-| **Committed** | CP-1 ✅, CP-2 ✅ (user confirmed) |
-| **Ready to commit** | CP-3 (migration scheduler), CP-4 (admin catalog UI + routes) |
-| **Next up** | **Phase 5** — Credits, PAYG, voice-ws pre-call checks |
+| **Completed** | Phases 0–5 (through credits, PAYG, voice-ws pre-call checks) |
+| **Committed** | CP-1 ✅, CP-2 ✅, CP-3 ✅, CP-4 ✅ (user confirmed earlier) |
+| **Ready to commit** | CP-5 — credits/PAYG/voice-ws entitlement enforcement |
+| **Next up** | Post-feature validation on cloud; optional Stripe Billing Meters |
 | **Deferred validation** | Local billing UI smoke; full E2E on 24x7 AI cloud after feature complete |
 
 ### Validation notes (local vs cloud)
@@ -109,14 +109,24 @@
 
 ---
 
-## Phase 5 — Credits, PAYG, voice-ws (NEXT)
+## Phase 5 — Credits, PAYG, voice-ws
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Credit grant from version on renewal | ⏸ | |
-| PAYG handlers | ⏸ | |
-| voice-ws pre-call entitlement check | ⏸ | |
-| `max_concurrent_calls` | ⏸ | |
+| Credit grant from version on renewal | ✅ | `credit_entitlement_service` + invoice webhook |
+| PAYG handlers / consumption | ✅ | `evaluate_consumption` in `consume_credits` |
+| voice-ws concurrent + credit pre-check | ✅ | `shared/billing/voice_session_entitlement.py` |
+| `max_concurrent_calls` handler | ✅ | `ConcurrentCallsHandler` + call log tracking |
+| Tests | ✅ | credit entitlement, PAYG consume, shared precheck |
+
+---
+
+## Post-feature / optional
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Stripe Billing Meters (optional PAYG) | ⏸ | Spec optional |
+| Cloud E2E billing + voice validation | ⏸ | Deferred per user |
 
 ---
 
@@ -183,3 +193,5 @@ Additional Phase 2–3 tests: `test_plan_version_service.py` (6), `test_webhook_
 | 2026-08-07 | **CP-3 complete:** Plan migration scheduler, self-service migrate API, billing UI legacy/grace banner, cancel dialog policy copy, 68 billing tests + vitest |
 | 2026-08-07 | Local billing UI validation deferred (empty Plans/Credits locally is pre-existing; Manage tab requires active sub) |
 | 2026-08-07 | **Next:** Phase 4 Admin UI |
+| 2026-08-07 | **CP-4 complete:** Admin catalog UI + draft CRUD routes |
+| 2026-08-07 | **CP-5 complete:** Credit grant from plan version, PAYG consumption, voice-ws pre-call + concurrent tracking |
