@@ -109,6 +109,10 @@ export function PlatformNotificationSettingsForm() {
     setSuccess("Telegram bot token removed.");
   };
 
+  const verificationActive =
+    verificationFromEmail.trim().length > 0 &&
+    verificationFromName.trim().length > 0;
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -140,10 +144,18 @@ export function PlatformNotificationSettingsForm() {
           ) : resendConfigured === false ? (
             <Badge variant="secondary">Resend API key missing</Badge>
           ) : null}
+          {verificationActive ? (
+            <Badge className="bg-blue-600 hover:bg-blue-600/90">
+              Verification active
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Verification off (set sender)</Badge>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
-          Configure the sender address for signup verification emails. The Resend
-          API key is set via environment variables (
+          Signup email verification is enabled automatically when both From email
+          and From name are set. Clear either field to disable verification. The
+          Resend API key is set via environment variables (
           <code className="text-xs">RESEND_API_KEY</code>).
         </p>
         <Alert>

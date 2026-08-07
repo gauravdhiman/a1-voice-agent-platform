@@ -8,6 +8,7 @@ export interface PlatformNotificationSettings {
   id: string;
   verification_from_email?: string | null;
   verification_from_name?: string | null;
+  email_verification_active: boolean;
   telegram_chat_id?: string | null;
   telegram_notifications_enabled: boolean;
   telegram_bot_token_configured: boolean;

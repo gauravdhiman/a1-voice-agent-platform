@@ -207,6 +207,12 @@ class EmailVerificationService:
     async def resend_verification(self, email: str) -> Tuple[bool, str]:
         """Resend verification email for an unverified user."""
         from src.auth.service import auth_service
+        from src.notifications.platform_settings_service import (
+            platform_notification_settings_service,
+        )
+
+        if not await platform_notification_settings_service.is_email_verification_required():
+            return False, "Email verification is not enabled on this platform."
 
         user = await auth_service._find_auth_user_by_email(email)
         if not user:

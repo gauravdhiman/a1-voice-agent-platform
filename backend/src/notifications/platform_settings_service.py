@@ -15,6 +15,7 @@ from .platform_settings_models import (
     PlatformNotificationSettings,
     PlatformNotificationSettingsUpdate,
     extract_telegram_bot_id,
+    verification_sender_configured,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,10 +44,15 @@ class PlatformNotificationSettingsService:
         row = response.data
         token_encrypted = row.get("telegram_bot_token_encrypted")
         telegram_bot_id = self._read_telegram_bot_id(token_encrypted)
+        from_email = row.get("verification_from_email")
+        from_name = row.get("verification_from_name")
         return PlatformNotificationSettings(
             id=UUID(row["id"]),
-            verification_from_email=row.get("verification_from_email"),
-            verification_from_name=row.get("verification_from_name"),
+            verification_from_email=from_email,
+            verification_from_name=from_name,
+            email_verification_active=verification_sender_configured(
+                from_email, from_name
+            ),
             telegram_chat_id=row.get("telegram_chat_id"),
             telegram_notifications_enabled=bool(
                 row.get("telegram_notifications_enabled")
@@ -96,6 +102,11 @@ class PlatformNotificationSettingsService:
         ).execute()
 
         return await self.get_settings()
+
+    async def is_email_verification_required(self) -> bool:
+        """Return whether signup/sign-in should enforce email verification."""
+        settings = await self.get_settings()
+        return settings.email_verification_active
 
     @staticmethod
     def _read_telegram_bot_id(token_encrypted: Optional[str]) -> Optional[str]:

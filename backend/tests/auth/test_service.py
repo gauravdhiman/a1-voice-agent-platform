@@ -202,25 +202,53 @@ class TestAuthServiceSignIn:
         })
 
     @pytest.mark.asyncio
-    async def test_sign_in_rejects_unverified_email(
+    async def test_sign_in_rejects_unverified_email_when_verification_active(
         self,
         auth_service,
         sign_in_request,
         mock_supabase_auth,
         mock_supabase_user_response,
     ):
-        """Unverified users cannot sign in until email is confirmed."""
+        """Unverified users cannot sign in when email verification is active."""
         mock_supabase_user_response.user.email_confirmed_at = None
         mock_supabase_auth.sign_in_with_password.return_value = (
             mock_supabase_user_response
         )
 
-        result, error = await auth_service.sign_in(sign_in_request)
+        with patch(
+            "src.notifications.platform_settings_service.platform_notification_settings_service.is_email_verification_required",
+            new=AsyncMock(return_value=True),
+        ):
+            result, error = await auth_service.sign_in(sign_in_request)
 
         assert result is None
         assert error is not None
         assert error.status_code == status.HTTP_403_FORBIDDEN
         assert error.detail["code"] == "email_not_confirmed"
+
+    @pytest.mark.asyncio
+    async def test_sign_in_allows_unverified_email_when_verification_disabled(
+        self,
+        auth_service,
+        sign_in_request,
+        mock_supabase_auth,
+        mock_supabase_user_response,
+    ):
+        """Unverified users can sign in when platform verification is disabled."""
+        mock_supabase_user_response.user.email_confirmed_at = None
+        mock_supabase_auth.sign_in_with_password.return_value = (
+            mock_supabase_user_response
+        )
+
+        with patch(
+            "src.notifications.platform_settings_service.platform_notification_settings_service.is_email_verification_required",
+            new=AsyncMock(return_value=False),
+        ):
+            result, error = await auth_service.sign_in(sign_in_request)
+
+        assert error is None
+        assert result is not None
+        assert result.access_token == "test-access-token"
 
     @pytest.mark.asyncio
     async def test_sign_in_invalid_credentials(

@@ -102,7 +102,14 @@ class AuthService:
             from src.notifications.email_verification_service import (
                 email_verification_service,
             )
+            from src.notifications.platform_settings_service import (
+                platform_notification_settings_service,
+            )
             from src.notifications.signup_notifier import signup_notifier
+
+            email_verification_required = (
+                await platform_notification_settings_service.is_email_verification_required()
+            )
 
             auth_client = create_isolated_supabase_client()
             try:
@@ -110,7 +117,7 @@ class AuthService:
                     {
                         "email": request.email,
                         "password": request.password,
-                        "email_confirm": False,
+                        "email_confirm": not email_verification_required,
                         "user_metadata": {
                             "first_name": request.first_name,
                             "last_name": request.last_name,
@@ -150,6 +157,9 @@ class AuthService:
                 )
 
             session = None
+            access_token = None
+            refresh_token = None
+            expires_in = None
 
             # Log the successful sign up
             logging.info(f"User signed up successfully: {user.id}")
@@ -172,21 +182,48 @@ class AuthService:
                 updated_at=_format_auth_timestamp(user.updated_at),
             )
 
-            email_verification_required = True
             current_span.set_attribute(
                 "auth.email_verification_required", email_verification_required
             )
 
             user_name = f"{request.first_name} {request.last_name}".strip()
-            sent, send_error = await email_verification_service.create_and_send_verification(
-                UUID(str(user.id)),
-                user.email or request.email,
-                user_name or request.first_name or "User",
-            )
-            if not sent:
-                logging.warning(
-                    "Verification email failed for %s: %s", user.id, send_error
+            if email_verification_required:
+                sent, send_error = (
+                    await email_verification_service.create_and_send_verification(
+                        UUID(str(user.id)),
+                        user.email or request.email,
+                        user_name or request.first_name or "User",
+                    )
                 )
+                if not sent:
+                    logging.warning(
+                        "Verification email failed for %s: %s", user.id, send_error
+                    )
+            else:
+                sign_in_response = auth_client.auth.sign_in_with_password(
+                    {"email": request.email, "password": request.password}
+                )
+                session = sign_in_response.session if sign_in_response else None
+                if session:
+                    access_token = session.access_token
+                    refresh_token = session.refresh_token
+                    expires_in = session.expires_in
+                elif sign_in_response and sign_in_response.user:
+                    profile = UserProfile(
+                        id=sign_in_response.user.id,
+                        email=sign_in_response.user.email or request.email,
+                        first_name=first_name or request.first_name,
+                        last_name=last_name or request.last_name,
+                        email_confirmed_at=_format_auth_timestamp(
+                            sign_in_response.user.email_confirmed_at
+                        ),
+                        created_at=_format_auth_timestamp(
+                            sign_in_response.user.created_at
+                        ),
+                        updated_at=_format_auth_timestamp(
+                            sign_in_response.user.updated_at
+                        ),
+                    )
 
             joined_organization_id = None
             joined_organization_name = None
@@ -244,10 +281,10 @@ class AuthService:
             sign_up_response = SignUpResponse(
                 user=profile,
                 email_verification_required=email_verification_required,
-                access_token=None,
-                refresh_token=None,
+                access_token=access_token,
+                refresh_token=refresh_token,
                 token_type="bearer",
-                expires_in=None,
+                expires_in=expires_in,
                 joined_organization_id=joined_organization_id,
                 joined_organization_name=joined_organization_name,
             )
@@ -336,7 +373,15 @@ class AuthService:
             user = response.user
             session = response.session
 
-            if not user.email_confirmed_at:
+            from src.notifications.platform_settings_service import (
+                platform_notification_settings_service,
+            )
+
+            verification_required = (
+                await platform_notification_settings_service.is_email_verification_required()
+            )
+
+            if verification_required and not user.email_confirmed_at:
                 auth_failure_counter.add(
                     1, {"operation": "signin", "error": "email_not_confirmed"}
                 )

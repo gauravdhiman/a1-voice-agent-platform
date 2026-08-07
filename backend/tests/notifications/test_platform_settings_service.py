@@ -10,6 +10,7 @@ from src.notifications.platform_settings_models import (
     PLATFORM_SETTINGS_SINGLETON_ID,
     PlatformNotificationSettingsUpdate,
     extract_telegram_bot_id,
+    verification_sender_configured,
 )
 from src.notifications.platform_settings_service import (
     PlatformNotificationSettingsService,
@@ -81,6 +82,37 @@ class TestPlatformNotificationSettingsService:
             settings = await settings_service.get_settings()
 
         assert settings.telegram_bot_id == "123456"
+
+    @pytest.mark.asyncio
+    async def test_is_email_verification_required_when_sender_configured(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row(
+                verification_from_email="verify@example.com",
+                verification_from_name="Platform",
+            )
+        )
+
+        assert await settings_service.is_email_verification_required() is True
+
+    @pytest.mark.asyncio
+    async def test_is_email_verification_required_false_when_sender_incomplete(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row(
+                verification_from_email="verify@example.com",
+                verification_from_name=None,
+            )
+        )
+
+        assert await settings_service.is_email_verification_required() is False
+        assert verification_sender_configured("verify@example.com", None) is False
 
 
 class TestExtractTelegramBotId:

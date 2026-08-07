@@ -21,12 +21,28 @@ def extract_telegram_bot_id(token: str) -> Optional[str]:
     return prefix if prefix.isdigit() else None
 
 
+def verification_sender_configured(
+    from_email: Optional[str], from_name: Optional[str]
+) -> bool:
+    """Return True when both verification sender fields are non-empty."""
+    return bool(
+        from_email
+        and str(from_email).strip()
+        and from_name
+        and str(from_name).strip()
+    )
+
+
 class PlatformNotificationSettings(BaseModel):
     """Platform-wide notification configuration (singleton row)."""
 
     id: UUID
     verification_from_email: Optional[EmailStr] = None
     verification_from_name: Optional[str] = Field(None, max_length=100)
+    email_verification_active: bool = Field(
+        False,
+        description="True when From email and From name are both configured",
+    )
     telegram_chat_id: Optional[str] = Field(None, max_length=100)
     telegram_notifications_enabled: bool = False
     telegram_bot_token_configured: bool = False

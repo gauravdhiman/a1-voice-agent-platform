@@ -60,8 +60,11 @@ def _build_admin_create_user_response() -> MagicMock:
     return response_mock
 
 
-def _signup_patches():
+def _signup_patches(*, verification_required: bool = True):
     return patch(
+        "src.notifications.platform_settings_service.platform_notification_settings_service.is_email_verification_required",
+        new=AsyncMock(return_value=verification_required),
+    ), patch(
         "src.notifications.email_verification_service.email_verification_service.create_and_send_verification",
         new=AsyncMock(return_value=(True, None)),
     ), patch(
@@ -77,7 +80,7 @@ class TestAuthServiceSignUpFlow:
     """Signup creates unverified users, sends Resend email, and alerts admins."""
 
     @pytest.mark.asyncio
-    async def test_sign_up_always_requires_email_verification(
+    async def test_sign_up_requires_email_verification_when_active(
         self,
         auth_service: AuthService,
         sign_up_request: SignUpRequest,
@@ -87,8 +90,10 @@ class TestAuthServiceSignUpFlow:
             _build_admin_create_user_response()
         )
 
-        verify_patch, notify_patch, provision_patch = _signup_patches()
-        with verify_patch as verify_mock, notify_patch as notify_mock, provision_patch:
+        settings_patch, verify_patch, notify_patch, provision_patch = _signup_patches(
+            verification_required=True
+        )
+        with settings_patch, verify_patch as verify_mock, notify_patch as notify_mock, provision_patch:
             result, error = await auth_service.sign_up(sign_up_request)
 
         assert error is None
@@ -98,7 +103,44 @@ class TestAuthServiceSignUpFlow:
         assert result.refresh_token is None
         verify_mock.assert_awaited_once()
         notify_mock.assert_awaited_once()
-        mock_supabase_auth.admin.create_user.assert_called_once()
+        create_kwargs = mock_supabase_auth.admin.create_user.call_args[0][0]
+        assert create_kwargs["email_confirm"] is False
+
+    @pytest.mark.asyncio
+    async def test_sign_up_skips_verification_when_disabled(
+        self,
+        auth_service: AuthService,
+        sign_up_request: SignUpRequest,
+        mock_supabase_auth: MagicMock,
+    ) -> None:
+        confirmed_response = _build_admin_create_user_response()
+        confirmed_response.user.email_confirmed_at = datetime.now(timezone.utc)
+        mock_supabase_auth.admin.create_user.return_value = confirmed_response
+
+        session_mock = MagicMock()
+        session_mock.access_token = "signup-access-token"
+        session_mock.refresh_token = "signup-refresh-token"
+        session_mock.expires_in = 3600
+        sign_in_response = MagicMock()
+        sign_in_response.session = session_mock
+        sign_in_response.user = confirmed_response.user
+        mock_supabase_auth.sign_in_with_password.return_value = sign_in_response
+
+        settings_patch, verify_patch, notify_patch, provision_patch = _signup_patches(
+            verification_required=False
+        )
+        with settings_patch, verify_patch as verify_mock, notify_patch, provision_patch:
+            result, error = await auth_service.sign_up(sign_up_request)
+
+        assert error is None
+        assert result is not None
+        assert result.email_verification_required is False
+        assert result.access_token == "signup-access-token"
+        assert result.refresh_token == "signup-refresh-token"
+        verify_mock.assert_not_awaited()
+        create_kwargs = mock_supabase_auth.admin.create_user.call_args[0][0]
+        assert create_kwargs["email_confirm"] is True
+        mock_supabase_auth.sign_in_with_password.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_sign_up_sends_verification_email_via_resend(
@@ -111,8 +153,8 @@ class TestAuthServiceSignUpFlow:
             _build_admin_create_user_response()
         )
 
-        verify_patch, notify_patch, provision_patch = _signup_patches()
-        with verify_patch as verify_mock, notify_patch, provision_patch:
+        settings_patch, verify_patch, notify_patch, provision_patch = _signup_patches()
+        with settings_patch, verify_patch as verify_mock, notify_patch, provision_patch:
             await auth_service.sign_up(sign_up_request)
 
         verify_mock.assert_awaited_once_with(
@@ -143,8 +185,8 @@ class TestAuthServiceSignUpFlow:
         invitation.organization_id = ORG_ID
         invitation.organization_name = "Acme Plumbing"
 
-        verify_patch, notify_patch, _ = _signup_patches()
-        with verify_patch, notify_patch as notify_mock, patch(
+        settings_patch, verify_patch, notify_patch, _ = _signup_patches()
+        with settings_patch, verify_patch, notify_patch as notify_mock, patch(
             "src.auth.service.organization_service.process_invitation",
             new=AsyncMock(return_value=(invitation, None)),
         ) as invite_mock, patch(
@@ -174,7 +216,11 @@ class TestAuthServiceSignUpFlow:
             "User already registered", 422, "user_already_exists"
         )
 
-        result, error = await auth_service.sign_up(sign_up_request)
+        with patch(
+            "src.notifications.platform_settings_service.platform_notification_settings_service.is_email_verification_required",
+            new=AsyncMock(return_value=True),
+        ):
+            result, error = await auth_service.sign_up(sign_up_request)
 
         assert result is None
         assert error is not None
