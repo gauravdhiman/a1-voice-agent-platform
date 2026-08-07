@@ -104,7 +104,15 @@ Open `docs/index.html` in your browser. Review the pricing tiers and try the wai
 Go to **http://localhost:3000** and create an account using any email address.
 
 **3. Onboarding Wizard**
-You'll be guided through a 5-step SMB onboarding wizard at `/onboarding`. This simulates the setup flow a new customer (e.g., a plumber or HVAC company) would experience.
+You'll be guided through a 5-step SMB onboarding wizard at `/onboarding`. This simulates the setup flow a new customer (e.g., a plumber or HVAC company) would experience:
+
+1. **Organization details** — name, slug, timezone, website, industry (Other allows free text), business address
+2. **Agent + template** — required agent name; templates are optional (skip available)
+3. **Phone** — optional purchase
+4. **Tools** — informational only (configure later in Settings)
+5. **Test** — agent is created; no Back; refresh goes to dashboard once created
+
+On steps 1–4 you can use **Skip setup and go to dashboard** to leave early. That control is hidden on step 5.
 
 **4. Dashboard**
 After onboarding, explore the main dashboard at `/dashboard`. This is the customer's home base — activity overview, quick stats, and navigation.

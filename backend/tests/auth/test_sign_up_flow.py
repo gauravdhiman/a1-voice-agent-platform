@@ -137,9 +137,13 @@ class TestAuthServiceSignUpFlow:
             with_session=True
         )
 
+        invitation = MagicMock()
+        invitation.organization_id = ORG_ID
+        invitation.organization_name = "Acme Plumbing"
+
         with patch(
             "src.auth.service.organization_service.process_invitation",
-            new=AsyncMock(return_value=(MagicMock(), None)),
+            new=AsyncMock(return_value=(invitation, None)),
         ) as invite_mock, patch(
             "src.auth.service.ensure_default_organization_for_user",
             new=AsyncMock(return_value=(None, None)),
@@ -148,6 +152,8 @@ class TestAuthServiceSignUpFlow:
 
         assert error is None
         assert result is not None
+        assert result.joined_organization_id == ORG_ID
+        assert result.joined_organization_name == "Acme Plumbing"
         invite_mock.assert_awaited_once_with("invite-token-123", USER_ID)
         provision_mock.assert_awaited_once()
 

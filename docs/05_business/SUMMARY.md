@@ -39,6 +39,7 @@ Development and contribution guides
 - [voice-ws Development](04_development_guides/worker_development.md) - voice-ws development guidelines
 - [Testing Guide](04_development_guides/testing.md) - Testing strategies and tools
 - [Code Style Guidelines](04_development_guides/code_style.md) - Coding conventions and best practices
+- [Test User Cleanup](04_development_guides/cleanup_test_user.md) - Delete test/sandbox users and their resources
 
 ### 05_operations/
 

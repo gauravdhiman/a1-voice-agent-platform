@@ -404,21 +404,10 @@ async def complete_onboarding(
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    # TODO: [Bug] `seed_built_in_skills(org_id)` is dead code — SkillService
-    # defines `seed_platform_skills()` (no org_id arg, platform-level only,
-    # run on app startup) but NOT `seed_built_in_skills`. The AttributeError
-    # is swallowed by this `except Exception`, so onboarding silently never
-    # seeds org skills. The platform-seeding model is "orgs fork what they
-    # need" (see skill_service.seed_platform_skills docstring), so the right
-    # fix is likely to DELETE this block (no per-org seeding is intended) or
-    # implement a real org-scoped seed if product needs it. Surfaced while
-    # adding the complete_onboarding permission tests (2026-07-13).
-    # Priority: Medium. Timeline: Next skill-seeding touch.
-    try:
-        from shared.voice_agents.skill_service import skill_service
-        await skill_service.seed_built_in_skills(org_id)
-    except Exception as e:
-        logger.warning(f"Failed to seed skills for org {org_id}: {e}")
+    # Note: do not seed org skills here. Platform skills are seeded at app
+    # startup (`seed_platform_skills`); orgs fork what they need. The previous
+    # `seed_built_in_skills` call did not exist and the except block referenced
+    # an undefined `logger`, which turned complete-onboarding into HTTP 500.
 
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return organization

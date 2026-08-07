@@ -48,6 +48,8 @@ export interface Invitation {
   expires_at: string;
   created_at: string;
   accepted_at?: string;
+  /** Populated when an invitation is accepted successfully. */
+  organization_name?: string | null;
 }
 
 // For organization creation (subset of Organization)
@@ -85,13 +87,6 @@ export interface OrganizationUpdate {
   public_page_passphrase_enabled?: boolean;
   /** Write-only: set or rotate the public page passphrase (never returned). */
   public_page_passphrase?: string;
-}
-
-// Minimal organization interface for utility functions
-export interface OrganizationForDetection {
-  name: string;
-  slug: string;
-  description?: string | null;
 }
 
 // Organization with member count (for listings)

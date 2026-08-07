@@ -116,6 +116,14 @@ class AuthResponse(BaseModel):
     expires_in: int = Field(..., description="Token expiration in seconds")
     refresh_token: Optional[str] = Field(None, description="Refresh token")
     user: "UserProfile" = Field(..., description="User profile information")
+    joined_organization_id: Optional[UUID] = Field(
+        None,
+        description="Organization joined via invitation during this auth flow",
+    )
+    joined_organization_name: Optional[str] = Field(
+        None,
+        description="Display name of the organization joined via invitation",
+    )
 
 
 class SignUpResponse(BaseModel):
@@ -138,6 +146,14 @@ class SignUpResponse(BaseModel):
     token_type: str = Field(default="bearer", description="Token type")
     expires_in: Optional[int] = Field(
         None, description="Token expiration in seconds when a session was issued"
+    )
+    joined_organization_id: Optional[UUID] = Field(
+        None,
+        description="Organization joined via invitation during signup",
+    )
+    joined_organization_name: Optional[str] = Field(
+        None,
+        description="Display name of the organization joined via invitation",
     )
 
 

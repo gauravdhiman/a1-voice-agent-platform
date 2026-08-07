@@ -1147,9 +1147,11 @@ class OrganizationService(BaseOrganizationService):
                 expires_at=invitation_dict["expires_at"],
                 created_at=invitation_dict["created_at"],
                 accepted_at=datetime.now(timezone.utc),
+                organization_name=org.name,
             )
 
             current_span.set_attribute("organization.id", str(org.id))
+            current_span.set_attribute("organization.name", org.name)
             current_span.set_status(trace.Status(trace.StatusCode.OK))
 
             logger.info(

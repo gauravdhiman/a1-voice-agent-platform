@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useOrganization } from "@/contexts/organization-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,7 +21,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward } from "lucide-react";
+import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward, Plug } from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
 import { usePresetCatalog } from "@/hooks/use-preset-queries";
 import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
@@ -29,7 +29,15 @@ import { voiceTemplateService } from "@/services/voice-template-service";
 import { toast } from "sonner";
 import type { VoiceAgentCreate } from "@/types/agent";
 import type { VoiceTemplate } from "@/types/voice-template";
+import { AgentCreatePhoneStage } from "@/components/agents/agent-create-phone-stage";
+import { AgentCreateSuccess } from "@/components/agents/agent-create-success";
+import { AgentCreateToolsStage } from "@/components/agents/agent-create-tools-stage";
 import { PresetPicker } from "@/components/agents/preset-picker";
+import {
+  isOptionalE164Phone,
+  normalizeOptionalPhone,
+  resolveAgentCreatePromptFields,
+} from "@/lib/agent-create";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
@@ -37,10 +45,9 @@ const formSchema = z.object({
   name: z.string().min(1, "Agent name is required"),
   phone_number: z
     .string()
-    .min(1, "Phone number is required")
-    .regex(
-      /^\+[1-9]\d{7,14}$/,
-      "Phone number must be in E.164 format with at least 8 digits (e.g., +14155551234 or +441632960000)",
+    .refine(
+      (value) => isOptionalE164Phone(value),
+      "Phone number must be in E.164 format with at least 8 digits (e.g., +14155551234), or left blank",
     ),
   persona: z.string().min(1, "Persona is required"),
   tone: z.string().min(1, "Tone is required"),
@@ -55,14 +62,15 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-type Stage = "template" | "basic" | "phone" | "tools" | "review";
+type Stage = "template" | "basic" | "phone" | "tools" | "review" | "success";
 
 const stageConfig = {
   template: { step: 1, title: "Template", icon: Mic },
   basic: { step: 2, title: "Basic Information", icon: Bot },
   phone: { step: 3, title: "Phone Number", icon: Phone },
-  tools: { step: 4, title: "Platform Tools", icon: Check },
+  tools: { step: 4, title: "Platform Tools", icon: Plug },
   review: { step: 5, title: "Review & Create", icon: Check },
+  success: { step: 6, title: "Done", icon: CheckCircle2 },
 };
 
 function StepIndicator({
@@ -249,11 +257,14 @@ function TemplateSelectionStage({
 }
 
 export function AgentCreateWidget() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { organizations, currentOrganization } = useOrganization();
   const createAgentMutation = useCreateAgent();
   const [currentStage, setCurrentStage] = useState<Stage>("template");
+  const [createdAgent, setCreatedAgent] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -286,9 +297,12 @@ export function AgentCreateWidget() {
   }, [searchParams, organizations, form]);
 
   const stages: Stage[] = ["template", "basic", "phone", "tools", "review"];
+  const indicatorStages: Stage[] =
+    currentStage === "success" ? [...stages, "success"] : stages;
   const currentIndex = stages.indexOf(currentStage);
   const isFirstStage = currentIndex === 0;
-  const isLastStage = currentIndex === stages.length - 1;
+  const isLastStage = currentStage === "review";
+  const isSuccessStage = currentStage === "success";
 
   const handleTemplateSelect = (template: VoiceTemplate) => {
     form.setValue("persona", template.persona ?? "");
@@ -308,9 +322,11 @@ export function AgentCreateWidget() {
     const fieldsToValidate: Record<Stage, (keyof FormData)[]> = {
       template: [],
       basic: ["organization_id", "name", "persona", "tone", "mission"],
+      // Phone is optional; still validate format when a value is entered.
       phone: ["phone_number"],
       tools: [],
       review: [],
+      success: [],
     };
 
     const fields = fieldsToValidate[currentStage];
@@ -326,6 +342,11 @@ export function AgentCreateWidget() {
     );
 
     return results.every((result) => result === true);
+  };
+
+  const handleSkipPhone = () => {
+    form.setValue("phone_number", "", { shouldValidate: true });
+    setCurrentStage("tools");
   };
 
   const handleNext = async (e?: React.MouseEvent) => {
@@ -359,11 +380,30 @@ export function AgentCreateWidget() {
     }
 
     try {
-      const createdAgent = await createAgentMutation.mutateAsync(
-        data as VoiceAgentCreate,
+      const selectedOrg = organizations?.find(
+        (org) => org.id === data.organization_id,
       );
+      const resolvedPromptFields = resolveAgentCreatePromptFields(
+        {
+          persona: data.persona,
+          mission: data.mission,
+          custom_instructions: data.custom_instructions,
+        },
+        {
+          businessName: selectedOrg?.name ?? "",
+          agentName: data.name,
+        },
+      );
+
+      const payload: VoiceAgentCreate = {
+        ...data,
+        ...resolvedPromptFields,
+        phone_number: normalizeOptionalPhone(data.phone_number),
+      };
+      const agent = await createAgentMutation.mutateAsync(payload);
+      setCreatedAgent({ id: agent.id, name: agent.name || data.name });
+      setCurrentStage("success");
       toast.success("Agent created successfully!");
-      router.push(`/agents/${createdAgent.id}?tab=tools`);
     } catch (error) {
       console.error("Failed to create agent:", error);
     }
@@ -558,70 +598,6 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
     </div>
   );
 
-  const renderPhoneStage = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Phone Number</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure the phone number for your voice agent. Enter an existing
-          phone number in E.164 format.
-        </p>
-      </div>
-
-      <FormField
-        control={form.control}
-        name="phone_number"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Phone Number *</FormLabel>
-            <FormControl>
-              <Input {...field} placeholder="+1234567890" />
-            </FormControl>
-            <FormDescription>
-              Enter a phone number in E.164 format (e.g., +1234567890)
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <div className="bg-muted/30 rounded-lg p-4 border border-dashed">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium">Coming Soon:</span> Search and purchase
-          phone numbers directly through our platform.
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderToolsStage = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Platform Tools</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure tools that your agent can use to interact with external
-          services and APIs.
-        </p>
-      </div>
-
-      <div className="bg-muted/30 rounded-lg p-8 text-center border border-dashed">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-4">
-          <Check className="h-6 w-6 text-primary" />
-        </div>
-        <h4 className="font-semibold mb-2">Tools Configuration</h4>
-        <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
-          You can configure platform tools after creating the agent. This
-          feature allows your agent to integrate with external services like
-          calendars, databases, and APIs.
-        </p>
-        <p className="text-sm text-primary font-medium mb-2 max-w-md mx-auto">
-          You can move on and configure tools later from the agent configuration
-          page.
-        </p>
-      </div>
-    </div>
-  );
-
   const renderReviewStage = () => {
     const values = form.watch();
 
@@ -667,7 +643,7 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
                   Phone Number
                 </span>
                 <p className="font-medium mt-1">
-                  {values.phone_number || "Not configured"}
+                  {values.phone_number?.trim() || "Not configured (optional)"}
                 </p>
               </div>
               <div>
@@ -731,62 +707,76 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
       </div>
 
       <Card className="p-6">
-        <StepIndicator stages={stages} currentStage={currentStage} />
+        {!isSuccessStage && (
+          <StepIndicator stages={indicatorStages} currentStage={currentStage} />
+        )}
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-6"
-          >
-            {currentStage === "template" && (
-              <TemplateSelectionStage
-                onSelect={handleTemplateSelect}
-                onSkip={() => setCurrentStage("basic")}
-              />
-            )}
-            {currentStage === "basic" && renderBasicStage()}
-            {currentStage === "phone" && renderPhoneStage()}
-            {currentStage === "tools" && renderToolsStage()}
-            {currentStage === "review" && renderReviewStage()}
+        {isSuccessStage && createdAgent ? (
+          <AgentCreateSuccess
+            agentId={createdAgent.id}
+            agentName={createdAgent.name}
+          />
+        ) : (
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="space-y-6"
+            >
+              {currentStage === "template" && (
+                <TemplateSelectionStage
+                  onSelect={handleTemplateSelect}
+                  onSkip={() => setCurrentStage("basic")}
+                />
+              )}
+              {currentStage === "basic" && renderBasicStage()}
+              {currentStage === "phone" && (
+                <AgentCreatePhoneStage
+                  control={form.control}
+                  onSkip={handleSkipPhone}
+                />
+              )}
+              {currentStage === "tools" && <AgentCreateToolsStage />}
+              {currentStage === "review" && renderReviewStage()}
 
-            {currentStage !== "template" && (
-              <div className="flex items-center justify-between pt-6 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleBack}
-                  disabled={isFirstStage}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Back
-                </Button>
+              {currentStage !== "template" && (
+                <div className="flex items-center justify-between pt-6 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleBack}
+                    disabled={isFirstStage}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Back
+                  </Button>
 
-                <div className="flex items-center gap-2">
-                  {isLastStage ? (
-                    <Button
-                      type="submit"
-                      disabled={createAgentMutation.isPending}
-                    >
-                      {createAgentMutation.isPending ? (
-                        <>Creating...</>
-                      ) : (
-                        <>
-                          Create Agent
-                          <Check className="h-4 w-4 ml-2" />
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                    <Button type="button" onClick={handleNext}>
-                      Next Step
-                      <ChevronRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isLastStage ? (
+                      <Button
+                        type="submit"
+                        disabled={createAgentMutation.isPending}
+                      >
+                        {createAgentMutation.isPending ? (
+                          <>Creating...</>
+                        ) : (
+                          <>
+                            Create Agent
+                            <Check className="h-4 w-4 ml-2" />
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button type="button" onClick={handleNext}>
+                        Next Step
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </form>
-        </Form>
+              )}
+            </form>
+          </Form>
+        )}
       </Card>
     </div>
   );

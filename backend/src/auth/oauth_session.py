@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from opentelemetry import trace
 from src.organization.provisioning import ensure_default_organization_for_user
+from src.organization.service import organization_service
 from src.shared.utils import extract_first_last_name
 from supabase import Client
 
@@ -41,7 +42,13 @@ class OAuthSessionService:
     async def complete_oauth_sign_in(
         self, identity: OAuthVerifiedIdentity
     ) -> tuple[Optional[AuthResponse], Optional[HTTPException]]:
-        """Create or reuse a Supabase user and return a fresh session."""
+        """Create or reuse a Supabase user and return a fresh session.
+
+        When ``identity.invitation_token`` is present, the invitation is
+        processed before personal-organization provisioning. That ordering
+        matches email/password signup and ensures invited users join the
+        inviting org instead of creating a new personal organization.
+        """
         current_span = trace.get_current_span()
         current_span.set_attribute("user.email", identity.email)
         current_span.set_attribute("oauth.provider", identity.provider)
@@ -89,6 +96,30 @@ class OAuthSessionService:
         if identity.provider in {"google", "linkedin"}:
             self._sync_oauth_sign_in_metadata(auth_client, user, identity)
 
+        # Process invitations before org provisioning so invited users join the
+        # inviting tenant and skip creating a personal organization.
+        joined_organization_id = None
+        joined_organization_name = None
+        if identity.invitation_token:
+            invitation, invite_error = await organization_service.process_invitation(
+                identity.invitation_token,
+                UUID(str(user.id)),
+            )
+            if invite_error:
+                logger.warning(
+                    "Invitation processing failed during %s OAuth sign-in for %s: %s",
+                    identity.provider,
+                    user.id,
+                    invite_error,
+                )
+            elif invitation:
+                joined_organization_id = invitation.organization_id
+                joined_organization_name = invitation.organization_name
+                current_span.set_attribute("invitation.processed", True)
+                current_span.set_attribute(
+                    "organization.id", str(invitation.organization_id)
+                )
+
         org_name = (
             f"{identity.first_name}'s Organization" if identity.first_name else None
         )
@@ -99,7 +130,7 @@ class OAuthSessionService:
         )
         if org_error:
             logger.warning(
-                "Default organization not provisioned for %s OAuth user %s: %s",
+                "Organization not provisioned for %s OAuth user %s: %s",
                 identity.provider,
                 user.id,
                 org_error,
@@ -128,6 +159,8 @@ class OAuthSessionService:
                 refresh_token=session.refresh_token,
                 token_type="bearer",
                 expires_in=session.expires_in or 3600,
+                joined_organization_id=joined_organization_id,
+                joined_organization_name=joined_organization_name,
             ),
             None,
         )

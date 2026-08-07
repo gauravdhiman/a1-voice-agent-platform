@@ -146,7 +146,7 @@ backend/
 | Test Case | Method | Description | Priority |
 |-----------|--------|-------------|----------|
 | `test_sign_up_success` | `sign_up()` | Successful user registration with valid data | HIGH |
-| `test_sign_up_creates_default_org` | `sign_up()` | Verifies dummy organization and org_admin role created | HIGH |
+| `test_sign_up_creates_default_org` | `sign_up()` | Verifies a normal organization (name-based slug) and org_admin role created | HIGH |
 | `test_sign_up_with_invitation_token` | `sign_up()` | Sign up with valid invitation token | MEDIUM |
 | `test_sign_up_existing_user` | `sign_up()` | Returns 409 Conflict for duplicate email | HIGH |
 | `test_sign_up_supabase_error` | `sign_up()` | Handles Supabase API failures gracefully | MEDIUM |

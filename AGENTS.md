@@ -725,6 +725,14 @@ Run `pre-commit run --all-files` manually before pushing.
 - **Email:** `test@cogninets.local`
 - **Password:** `Password123!`
 
+### Onboarding vs invitations
+
+- **Founder onboarding** (`/onboarding`) is only for **org admins / platform admins** of an org with `onboarding_completed === false`.
+- **Invited users** skip founder onboarding and land on `/dashboard` with a soft welcome toast.
+- Email signup and OAuth process `invitation_token` **before** org provisioning, so invitees join the inviting tenant instead of creating a new personal org.
+- Provisioned orgs are normal orgs with a **name-based slug** (not `*-dummy-org` / `*-default-org`). There is no "dummy org" concept.
+- After invite accept, set `currentOrganizationId` to the **invited org**; the org switcher still allows switching to other memberships later.
+
 ### Validation Requirements
 
 After implementing any fix or new feature, you MUST:

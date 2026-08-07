@@ -89,12 +89,52 @@ export default function OAuthSessionPage() {
         window.history.replaceState({}, document.title, window.location.pathname);
 
         const invitationToken = readQueryParam("invitation_token", searchParams);
+        const organizationIdFromQuery = readQueryParam(
+          "organization_id",
+          searchParams,
+        );
+        const organizationNameFromQuery = readQueryParam(
+          "organization_name",
+          searchParams,
+        );
         const {
           data: { user },
         } = await supabase.auth.getUser();
 
-        if (user && invitationToken) {
-          await authService.processInvitation(invitationToken, user.id);
+        if (user && (invitationToken || organizationIdFromQuery)) {
+          const { markInviteWelcomePending } = await import(
+            "@/lib/invite-welcome"
+          );
+          let organizationId = organizationIdFromQuery;
+          let organizationName = organizationNameFromQuery;
+
+          if (invitationToken) {
+            const inviteResult = await authService.processInvitation(
+              invitationToken,
+              user.id,
+            );
+            if (
+              inviteResult.success &&
+              inviteResult.data &&
+              typeof inviteResult.data === "object"
+            ) {
+              const data = inviteResult.data as {
+                organization_name?: unknown;
+                organization_id?: unknown;
+              };
+              if (typeof data.organization_id === "string") {
+                organizationId = data.organization_id;
+              }
+              if (typeof data.organization_name === "string") {
+                organizationName = data.organization_name;
+              }
+            }
+          }
+
+          // Backend OAuth already processes the invite before provisioning; a
+          // frontend "already accepted" response still warrants selecting the
+          // invited org (from query params) and showing a welcome toast.
+          markInviteWelcomePending({ organizationId, organizationName });
         }
 
         window.location.replace("/dashboard");

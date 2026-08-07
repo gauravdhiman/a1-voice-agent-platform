@@ -7,6 +7,16 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { OrganizationCheckProps } from "@/types/auth";
 
+/**
+ * Gates dashboard access on organization membership and founder onboarding.
+ *
+ * Redirect rules:
+ * - No organizations → `/auth/create-organization`
+ * - Current org unfinished **and** user is org_admin/platform_admin → `/onboarding`
+ * - Invited members (`regular_user`) skip founder onboarding and stay on the dashboard
+ *
+ * @param children Dashboard content rendered once checks pass
+ */
 export function OrganizationCheck({ children }: OrganizationCheckProps) {
   const { user, loading: authLoading } = useAuth();
   const {
@@ -56,8 +66,20 @@ export function OrganizationCheck({ children }: OrganizationCheckProps) {
         }
       }
 
-      // Redirect new users who haven't completed onboarding
-      if (currentOrganization && currentOrganization.onboarding_completed === false) {
+      // Founder onboarding only: org admins of an unfinished org.
+      // Invited members (typically regular_user) skip the wizard and land on
+      // the dashboard even if the inviting org has not finished onboarding.
+      const canRunFounderOnboarding =
+        !!user &&
+        !!currentOrganization &&
+        (user.hasRole("org_admin", currentOrganization.id) ||
+          user.hasRole("platform_admin"));
+
+      if (
+        currentOrganization &&
+        currentOrganization.onboarding_completed === false &&
+        canRunFounderOnboarding
+      ) {
         setRedirecting(true);
         router.replace("/onboarding");
         return;

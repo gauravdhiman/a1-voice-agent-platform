@@ -15,8 +15,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Eye, Users, CreditCard } from "lucide-react";
 import Link from "next/link";
-import { isDummyOrganization } from "@/lib/organization-utils";
-
 export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
   {
     id: "select",
@@ -62,7 +60,7 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
           <div>
             <div className="font-medium flex items-center gap-2">
               {org.name}
-              {isDummyOrganization(org) && (
+              {!org.onboarding_completed && (
                 <Badge variant="secondary" className="text-xs">
                   Setup Required
                 </Badge>

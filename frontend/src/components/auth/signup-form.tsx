@@ -132,7 +132,13 @@ export function SignUpForm() {
     setSuccess(null);
 
     try {
-      const { user, emailVerificationRequired, error } = await signUp({
+      const {
+        user,
+        emailVerificationRequired,
+        error,
+        joinedOrganizationId,
+        joinedOrganizationName,
+      } = await signUp({
         email: data.email,
         password: data.password,
         passwordConfirm: data.passwordConfirm,
@@ -176,6 +182,16 @@ export function SignUpForm() {
             );
           }
           return;
+        }
+
+        if (invitationToken) {
+          const { markInviteWelcomePending } = await import(
+            "@/lib/invite-welcome"
+          );
+          markInviteWelcomePending({
+            organizationId: joinedOrganizationId,
+            organizationName: joinedOrganizationName,
+          });
         }
 
         router.replace("/dashboard");

@@ -66,6 +66,8 @@ class AuthService {
     errorDetails?: SignUpErrorDetails;
     emailVerificationRequired?: boolean;
     user?: UserProfile;
+    joinedOrganizationId?: string | null;
+    joinedOrganizationName?: string | null;
   }> {
     try {
       const response = await apiClient.post<{
@@ -74,6 +76,8 @@ class AuthService {
         access_token?: string | null;
         refresh_token?: string | null;
         expires_in?: number | null;
+        joined_organization_id?: string | null;
+        joined_organization_name?: string | null;
       }>(`${this.baseUrl}/signup`, {
         email: data.email,
         password: data.password,
@@ -113,6 +117,8 @@ class AuthService {
         success: true,
         emailVerificationRequired: payload.email_verification_required,
         user: payload.user,
+        joinedOrganizationId: payload.joined_organization_id ?? null,
+        joinedOrganizationName: payload.joined_organization_name ?? null,
       };
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 409) {
