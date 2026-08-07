@@ -76,7 +76,7 @@ Add the following to your `.env` file:
 # Resend Settings
 RESEND_API_KEY=re_your_resend_api_key_here
 RESEND_FROM_EMAIL=noreply@yourdomain.com
-RESEND_FROM_NAME=SaaS Platform
+RESEND_FROM_NAME=24x7 AI
 
 # Required for encrypting Telegram bot tokens in platform settings
 ENCRYPTION_KEY=your-fernet-key

@@ -64,7 +64,7 @@ with no re-auth.
 - **What we do once:** enable the Google APIs, set up our OAuth app + permission
   scopes, and **enroll our project in the Google Workspace Developer Preview
   Program** (the one step that was missing).
-- **What the customer does:** 1–2 clicks — the standard "Allow CogniNets to see
+- **What the customer does:** 1–2 clicks — the standard "Allow 24x7 AI to see
   your calendar?" Google popup.
 - **There is no per-user IAM setup.** That was a wrong earlier diagnosis (see
   the Appendix).
@@ -74,7 +74,7 @@ with no re-auth.
 - **Principal** — simply *who* is making the call to Google. Usually the
   customer's own Google account (the call is made *as them*, with *their*
   permission).
-- **OAuth** — the standard "Allow CogniNets to access your calendar?" popup.
+- **OAuth** — the standard "Allow 24x7 AI to access your calendar?" popup.
   Gives our app a key for *that one user's* data. This is the 1–2 click flow.
 - **MCP** — the standard protocol our agent uses to call tools like Google
   Calendar. Google runs an MCP service in front of Calendar/Gmail.
@@ -87,7 +87,7 @@ with no re-auth.
 
 ```mermaid
 flowchart TD
-    A["Customer clicks<br/>'Connect Google Calendar' on our platform"] --> B["Check 1 — OAuth (data access)<br/>Google: 'Allow CogniNets to see your calendar?'<br/>Customer approves → we get a key for THEIR calendar"]
+    A["Customer clicks<br/>'Connect Google Calendar' on our platform"] --> B["Check 1 — OAuth (data access)<br/>Google: 'Allow 24x7 AI to see your calendar?'<br/>Customer approves → we get a key for THEIR calendar"]
     B --> C["On a call, our agent reads their calendar<br/>via Google's Calendar MCP service"]
     C --> D{"Check 2 — Preview enrollment<br/>Is OUR project enrolled in the<br/>Google Workspace Developer Preview?"}
     D -->|"No (our situation today)"| X["❌ 'The caller does not have permission'<br/>(the error in voice-ws logs)"]
@@ -135,7 +135,7 @@ sequenceDiagram
     participant G as Google
     U->>P: Click "Connect Google Calendar" on the agent
     P->>G: Start OAuth (our app, Calendar scopes)
-    G->>U: "Allow CogniNets to see your calendar?"
+    G->>U: "Allow 24x7 AI to see your calendar?"
     U->>G: Approve
     G->>P: Token for that user's calendar (Check 1 ✓)
     P->>P: Store refresh token

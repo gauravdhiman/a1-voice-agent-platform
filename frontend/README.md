@@ -98,7 +98,7 @@ Create `.env.local` from `.env.local.example`:
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=SaaS Platform
+NEXT_PUBLIC_APP_NAME=24x7 AI
 NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
 ```
 

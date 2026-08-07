@@ -139,7 +139,7 @@ Add to `.env`:
 ```bash
 RESEND_API_KEY=re_your_resend_api_key_here
 RESEND_FROM_EMAIL=noreply@yourdomain.com
-RESEND_FROM_NAME=SaaS Platform
+RESEND_FROM_NAME=24x7 AI
 ```
 
 ### 3. Run Migration

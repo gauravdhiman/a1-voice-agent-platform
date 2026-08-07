@@ -1,6 +1,12 @@
-# AI Agent Guidelines for AI Voice Agent Platform
+# AI Agent Guidelines for 24x7 AI Platform
 
 This document provides coding guidelines and commands for AI agents working in this repository.
+
+## Product branding
+
+- **Product name:** 24x7 AI (never CogniNets, CogniEnts, or NeuraSaaS in user-facing copy)
+- **Website:** https://247ai.live
+- **Env vars:** `APP_NAME`, `RESEND_FROM_NAME`, and `NEXT_PUBLIC_APP_NAME` should all use `24x7 AI` (emails and UI read these at runtime)
 
 ## Setup Commands
 
@@ -722,7 +728,7 @@ Run `pre-commit run --all-files` manually before pushing.
 
 ### Test User (Local Supabase)
 
-- **Email:** `test@cogninets.local`
+- **Email:** `test@cogninets.local` (legacy local-only domain; product branding is **24x7 AI**)
 - **Password:** `Password123!`
 
 ### Onboarding vs invitations

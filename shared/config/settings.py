@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     # Application Settings
-    app_name: str = Field(default="SaaS Platform", description="Application name")
+    app_name: str = Field(default="24x7 AI", description="Application name")
     app_base_url: str = Field(
         default="http://localhost:3000", description="Base URL for the application"
     )
@@ -124,7 +124,7 @@ class Settings(BaseSettings):
         default="noreply@example.com", description="Default sender email address"
     )
     resend_from_name: str = Field(
-        default="SaaS Platform", description="Default sender name"
+        default="24x7 AI", description="Default sender name"
     )
 
     # OpenTelemetry Settings

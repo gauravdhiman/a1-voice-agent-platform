@@ -12,6 +12,7 @@ from opentelemetry import metrics, trace
 
 from shared.common.errors import ErrorCode
 from shared.common.security import decrypt_data, encrypt_data
+from shared.config import settings
 from shared.organization.service import BaseOrganizationService
 from shared.organization.timezone import normalize_timezone_input
 from src.notifications.models import SendNotificationRequest
@@ -804,7 +805,7 @@ class OrganizationService(BaseOrganizationService):
                             "role_name": "Member",
                             "invitation_url": f"{self._get_frontend_url()}/auth/signin",
                             "expiry_days": "7",
-                            "app_name": "Your Platform",
+                            "app_name": settings.app_name,
                         },
                     )
 
@@ -929,7 +930,7 @@ class OrganizationService(BaseOrganizationService):
                             "role_name": "Member",
                             "invitation_url": f"{self._get_frontend_url()}/auth/signup?token={token}",
                             "expiry_days": "7",
-                            "app_name": "Your Platform",
+                            "app_name": settings.app_name,
                         },
                     )
 

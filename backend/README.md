@@ -146,7 +146,7 @@ curl http://localhost:8000/health
 
 ```bash
 # Application Settings
-APP_NAME=SaaS Platform API
+APP_NAME=24x7 AI
 APP_VERSION=1.0.0
 DEBUG=true
 ENVIRONMENT=development

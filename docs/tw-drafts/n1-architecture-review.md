@@ -319,7 +319,7 @@ Update `navigation-redesign.md` to **as-implemented**:
 
 | Item | Notes |
 |------|--------|
-| Sidebar brand still **“NeuraSaaS”** | Already on sprint board; should be config-driven (`NEXT_PUBLIC_APP_NAME` / CogniNets) |
+| Sidebar brand still **“NeuraSaaS”** | Already on sprint board; should be config-driven (`NEXT_PUBLIC_APP_NAME` / 24x7 AI) |
 | Platform Skills nav icon is `CreditCard` | Wrong metaphor; use book / layers / sparkles, etc. |
 | Avatar dropdown still duplicates Members / Billing / Overview | Design non-goal for day one; remove soon to avoid two IA stories |
 | Breadcrumbs are a large pathname hard-code | Will rot; could derive from `nav-config` + path segments |
@@ -592,7 +592,7 @@ contains the file-level evidence; this section is the short-form reconciliation.
 | **A — Vocabulary lock-in** | Canonical matrix; fix dead strings; align billing | ✅ Done | `permission-matrix.md` is the source of truth; `use-user-permissions.ts` uses `P.*` constants; forbidden strings only in negative tests |
 | **B — Single FE permission API** | Page gates → `useHasPermission`; remove dev grant-all; invalidate `/me` on org switch | ✅ Mostly done | `useUserPermissions` is a facade over `useMyPermissions`; dev grant-all removed; `queryKey` includes `orgId`. Two page gates still role-only (see §15.3) |
 | **C — Backend auth migration** | Inventory + migrate write endpoints; ownership checks; consistent platform_admin short-circuit | ✅ Done | All 5 route files migrated to the typed helpers; 3-way OR ladders collapse to single `assert_has_permission` because the matrix encodes per-role grants. See the audit doc (2026-07-13 sweep) |
-| **D — Doc & IA cleanup** | As-implemented design doc; rename deferred Phase 2; replace branding; fix Platform Skills icon; avatar dedup; skills tab nit | ✅ Mostly done | Design doc as-implemented; branding → CogniNets; Platform Skills icon → `Layers`; `tab=skills` dropped. Avatar-menu dedup + `OrganizationSkillsTab` rename + breadcrumb derivation from `nav-config` remain as low-priority polish |
+| **D — Doc & IA cleanup** | As-implemented design doc; rename deferred Phase 2; replace branding; fix Platform Skills icon; avatar dedup; skills tab nit | ✅ Mostly done | Design doc as-implemented; branding → 24x7 AI; Platform Skills icon → `Layers`; `tab=skills` dropped. Avatar-menu dedup + `OrganizationSkillsTab` rename + breadcrumb derivation from `nav-config` remain as low-priority polish |
 | **E — Custom roles / Phase 2 resolver** | Do not start | ✅ Correctly deferred | Blocked on Epics A–C, which are now done; the gate is cleared but no customer need yet |
 
 ### 15.3 Known residuals (open, not blocking)

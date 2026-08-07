@@ -12,15 +12,15 @@ class TestAuthEmailValidation:
 
     def test_sign_in_accepts_local_dev_email(self) -> None:
         request = SignInRequest(
-            email="test@cogninets.local",
+            email="test@dev.local",
             password="Password123!",
         )
-        assert request.email == "test@cogninets.local"
+        assert request.email == "test@dev.local"
 
     def test_sign_in_rejects_missing_at(self) -> None:
         with pytest.raises(ValidationError):
             SignInRequest(email="not-an-email", password="x")
 
     def test_resend_verification_accepts_local_dev_email(self) -> None:
-        request = ResendVerificationRequest(email="test@cogninets.local")
-        assert request.email == "test@cogninets.local"
+        request = ResendVerificationRequest(email="test@dev.local")
+        assert request.email == "test@dev.local"

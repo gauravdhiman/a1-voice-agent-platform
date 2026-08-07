@@ -319,7 +319,7 @@ async def create_event_logic(
         desc_lines.append(f"Email: {caller_email}")
     if caller_dob:
         desc_lines.append(f"Date of birth: {caller_dob}")
-    desc_lines.append("Booked by CogniNets voice agent.")
+    desc_lines.append("Booked by 24x7 AI voice agent.")
 
     start_dt = _parse_iso_datetime(start)
     end_dt = (start_dt + timedelta(minutes=duration_minutes)).isoformat()

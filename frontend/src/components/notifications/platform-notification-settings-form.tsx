@@ -177,7 +177,7 @@ export function PlatformNotificationSettingsForm() {
             <Label htmlFor="verification_from_name">From name</Label>
             <Input
               id="verification_from_name"
-              placeholder="Your Platform"
+              placeholder="24x7 AI"
               value={verificationFromName}
               onChange={(e) => setVerificationFromName(e.target.value)}
             />

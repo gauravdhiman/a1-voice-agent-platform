@@ -43,7 +43,7 @@ except Exception as exc:  # pragma: no cover - optional in minimal dev images
     instrument_fastapi = None  # type: ignore[misc, assignment]
 
 app = FastAPI(
-    title="CogniEnts Voice WebSocket Worker",
+    title="24x7 AI Voice WebSocket Worker",
     description="Pipecat + Gemini Realtime voice sessions (web + Twilio)",
     version="0.2.0",
 )

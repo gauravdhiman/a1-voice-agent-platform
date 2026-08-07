@@ -44,7 +44,7 @@ You can preview the marketing landing page right now — no setup required.
 open docs/index.html
 ```
 
-This opens the CogniNets landing page in your browser. Things to explore:
+This opens the 24x7 AI landing page at [https://247ai.live](https://247ai.live) (local dev: `http://localhost:3000`) in your browser. Things to explore:
 - **Pricing section** — four-tier plan (Starter, Growth, Professional, Enterprise)
 - **Waitlist form** — simulates the lead capture flow for prospective customers
 

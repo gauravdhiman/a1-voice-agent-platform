@@ -13,7 +13,7 @@ from src.rbac.roles.models import UserRoleWithPermissions
 def validate_auth_email(value: str) -> str:
     """Validate email format for auth endpoints.
 
-    Uses a permissive check so local/dev addresses (e.g. ``test@cogninets.local``)
+    Uses a permissive check so local/dev addresses (e.g. ``test@dev.local``)
     accepted by Supabase are not rejected by strict DNS-oriented validators.
     """
     normalized = value.strip()

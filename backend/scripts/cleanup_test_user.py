@@ -44,10 +44,10 @@ Safety
 Example
 -------
     # Show the plan (no changes)
-    cd backend && .venv/bin/python scripts/cleanup_test_user.py --email test@cogninets.local
+    cd backend && .venv/bin/python scripts/cleanup_test_user.py --email test@dev.local
 
     # Apply, answering the confirmation prompt
-    cd backend && .venv/bin/python scripts/cleanup_test_user.py --email test@cogninets.local --apply
+    cd backend && .venv/bin/python scripts/cleanup_test_user.py --email test@dev.local --apply
 
     # Apply without a prompt
     cd backend && .venv/bin/python scripts/cleanup_test_user.py --user-id <uuid> --apply --yes
@@ -402,7 +402,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description=doc_first_line,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Example:\n  %(prog)s --email test@cogninets.local --apply --yes",
+        epilog="Example:\n  %(prog)s --email test@dev.local --apply --yes",
     )
     ident = parser.add_mutually_exclusive_group(required=True)
     ident.add_argument("--email", help="Email of the user to clean up")

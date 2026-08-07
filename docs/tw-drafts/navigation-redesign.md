@@ -433,7 +433,7 @@ Remove the `ai-agent`, `skills`, and `phone-numbers` tabs. Keep:
 13. **Red — Org page collapse**: tab-redirect test. Confirm fail.
 14. **Green — Org page collapse**: implement redirects, remove tabs.
 15. **Browser validation** (per AGENTS.md): open
-    `http://localhost:3000`, log in as `test@cogninets.local`, walk through
+    `http://localhost:3000`, log in as `test@dev.local` (or legacy `test@cogninets.local`), walk through
     the new nav, click every item, verify the switcher works, take
     screenshots. Then **clean up** all smoke-test artifacts (test data,
     screenshots, role grants) before merging.

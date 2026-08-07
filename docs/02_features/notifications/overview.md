@@ -387,7 +387,7 @@ ALERT_EMAIL=team@yourcompany.com
 
 # Template Settings
 EMAIL_TEMPLATE_DIR=/app/templates
-APP_NAME=AI Voice Agent Platform
+APP_NAME=24x7 AI
 APP_DOMAIN=yourapp.com
 ```
 
