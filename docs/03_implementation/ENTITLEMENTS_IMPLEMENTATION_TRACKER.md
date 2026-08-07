@@ -19,7 +19,7 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Alembic migration (`plan_products`, `plan_versions`, …) | ✅ | `20260807000002_add_plan_versioning_and_entitlements.py` — **not run yet** |
+| Alembic migration (`plan_products`, `plan_versions`, …) | ✅ | `20260807000002` — **applied on local dev** |
 | Seed `entitlement_definitions` catalog | ✅ | In migration |
 | Backfill `subscription_plans` → `plan_versions` v1 | ✅ | In migration |
 | Add `organization_subscriptions.plan_version_id` | ✅ | In migration |
@@ -50,10 +50,12 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Draft / publish API | ⏸ | Deferred to next PR |
-| `plan_version_publish_events` write path | ⏸ | Table created in Phase 0 |
-| Webhook: bind `plan_version_id` from Stripe price | ⏸ | |
-| Tests: existing sub unchanged after publish | ⏸ | |
+| `plan_version_service.py` (publish, resolve, migration rows) | ✅ | |
+| `POST /api/v1/admin/plan-versions/{id}/publish` | ✅ | `admin_plan_routes.py` |
+| `stripe_service.create_price()` | ✅ | Called on publish when draft has no price |
+| Webhook: bind `plan_version_id` from Stripe price | ✅ | `webhook_handler.py` |
+| Tests: publish grandfathering + webhook binding | ✅ | 8 new tests |
+| Draft / clone / full admin CRUD | ⏸ | Phase 4 admin UI |
 
 ---
 
@@ -106,8 +108,8 @@ Full billing suite: **55 passed**, 6 skipped (2026-08-07).
 
 | Checkpoint | Ready for commit when | User testing needed? |
 |------------|----------------------|---------------------|
-| **CP-1** ✅ | Phase 0 migration file + Phase 1 code + tests green | **Run migration** (`alembic upgrade head`) then optional smoke |
-| CP-2 | Publish API + webhook binding | Optional billing smoke |
+| **CP-1** ✅ | Phase 0 migration + Phase 1 code + tests green | Migration applied locally |
+| **CP-2** 🚧 | Publish API + webhook binding | Ready for review (no user smoke yet) |
 | CP-3 | Admin UI + browser validation | Yes — plan editor + checkout |
 
 ### CP-1 — Before you commit / test
@@ -133,3 +135,5 @@ Full billing suite: **55 passed**, 6 skipped (2026-08-07).
 |------|--------|
 | 2026-08-07 | Tracker created; Phase 0–1 implementation started |
 | 2026-08-07 | **CP-1 complete:** migration file, EntitlementService, max_agents enforcement, 21 new tests, 94% coverage on entitlement modules |
+| 2026-08-07 | Migration `20260807000002` applied on local dev Docker stack |
+| 2026-08-07 | **CP-2 in progress:** PlanVersionService publish/grandfathering, admin publish route, webhook plan_version_id binding, 8 new tests (63 billing passed) |

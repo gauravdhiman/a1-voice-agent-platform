@@ -18,8 +18,41 @@ from .models import (
 )
 from .service import billing_service
 from .stripe_service import stripe_service
+from .plan_version_service import plan_version_service
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_plan_from_stripe_price(price_id: str):
+    """Resolve plan version and legacy subscription plan from a Stripe price ID.
+
+    Prefers ``plan_versions`` (immutable version binding). Falls back to legacy
+    ``subscription_plans`` when no version row exists (pre-migration environments).
+
+    Args:
+        price_id: Stripe Price identifier.
+
+    Returns:
+        Tuple of (resolved_checkout_plan or None, legacy SubscriptionPlan or None).
+        At least one element is non-None when a match exists.
+
+    Raises:
+        ValueError: When no plan matches the price ID.
+    """
+    try:
+        resolved = await plan_version_service.resolve_checkout_plan(price_id)
+        legacy_plan = None
+        if resolved.subscription_plan_id:
+            legacy_plan = await billing_service.get_subscription_plan(
+                resolved.subscription_plan_id
+            )
+        return resolved, legacy_plan
+    except ValueError:
+        plans = await billing_service.get_subscription_plans(active_only=False)
+        legacy_plan = next((p for p in plans if p.stripe_price_id == price_id), None)
+        if not legacy_plan:
+            raise ValueError(f"No plan found for price ID {price_id}")
+        return None, legacy_plan
 
 
 async def handle_stripe_webhook(payload: bytes, signature: str):
@@ -123,14 +156,20 @@ async def handle_subscription_created(event):
             )
             return
 
-        # Get subscription plan from price ID
+        # Resolve plan version + legacy plan from Stripe price ID
         price_id = subscription["items"]["data"][0]["price"]["id"]
-        plans = await billing_service.get_subscription_plans(active_only=False)
-        plan = next((p for p in plans if p.stripe_price_id == price_id), None)
+        resolved, plan = await _resolve_plan_from_stripe_price(price_id)
+
+        if not plan and resolved and resolved.subscription_plan_id:
+            plan = await billing_service.get_subscription_plan(
+                resolved.subscription_plan_id
+            )
 
         if not plan:
             logger.warning(f"No plan found for price ID {price_id}")
             return
+
+        plan_version_id = resolved.plan_version_id if resolved else None
 
         # Check if organization already has a subscription
         existing_subscription = await billing_service.get_organization_subscription(
@@ -153,6 +192,7 @@ async def handle_subscription_created(event):
 
             update_data = OrganizationSubscriptionUpdate(
                 subscription_plan_id=plan.id,
+                plan_version_id=plan_version_id,
                 stripe_subscription_id=subscription["id"],
                 status=_map_stripe_status(subscription["status"]),
             )
@@ -215,6 +255,7 @@ async def handle_subscription_created(event):
             update_data = OrganizationSubscriptionUpdate(
                 stripe_subscription_id=subscription["id"],
                 status=_map_stripe_status(subscription["status"]),
+                plan_version_id=plan_version_id,
             )
 
             # Only set period dates if they exist
@@ -270,20 +311,37 @@ async def handle_subscription_updated(event):
         # Check if plan changed (downgrade detection)
         plan_changed = False
         is_downgrade = False
-        if current_subscription and current_subscription.plan:
-            # Get the new plan from price ID
-            price_id = subscription["items"]["data"][0]["price"]["id"]
-            plans = await billing_service.get_subscription_plans(active_only=False)
-            new_plan = next((p for p in plans if p.stripe_price_id == price_id), None)
+        price_id = subscription["items"]["data"][0]["price"]["id"]
+        resolved = None
+        new_plan = None
 
-            if new_plan and new_plan.id != current_subscription.plan.id:
+        if current_subscription:
+            try:
+                resolved, new_plan = await _resolve_plan_from_stripe_price(price_id)
+            except ValueError:
+                logger.warning(f"No plan found for price ID {price_id}")
+                new_plan = None
+
+            compare_plan_id = (
+                new_plan.id
+                if new_plan
+                else (resolved.subscription_plan_id if resolved else None)
+            )
+            current_plan_id = (
+                current_subscription.plan.id if current_subscription.plan else None
+            )
+
+            if compare_plan_id and current_plan_id and compare_plan_id != current_plan_id:
                 plan_changed = True
-                is_downgrade = (
-                    new_plan.included_credits
-                    < current_subscription.plan.included_credits
-                )
+                if new_plan and current_subscription.plan:
+                    is_downgrade = (
+                        new_plan.included_credits
+                        < current_subscription.plan.included_credits
+                    )
                 logger.info(
-                    f"Plan change detected for organization {organization_id}: {current_subscription.plan.name} -> {new_plan.name}"
+                    f"Plan change detected for organization {organization_id}: "
+                    f"{current_subscription.plan.name if current_subscription.plan else 'unknown'} "
+                    f"-> {new_plan.name if new_plan else compare_plan_id}"
                 )
 
         # Update subscription details
@@ -291,6 +349,13 @@ async def handle_subscription_updated(event):
             status=_map_stripe_status(subscription["status"]),
             cancel_at_period_end=subscription.get("cancel_at_period_end", False),
         )
+
+        if plan_changed and resolved:
+            update_data.plan_version_id = resolved.plan_version_id
+            if resolved.subscription_plan_id:
+                update_data.subscription_plan_id = resolved.subscription_plan_id
+            elif new_plan:
+                update_data.subscription_plan_id = new_plan.id
 
         # Only set period dates if they exist
         if subscription.get("current_period_start"):

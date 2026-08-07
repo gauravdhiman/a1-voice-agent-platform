@@ -71,6 +71,49 @@ class StripeService:
             logger.error(f"Failed to update Stripe customer {customer_id}: {e}")
             raise
 
+    async def create_price(
+        self,
+        product_id: str,
+        unit_amount: int,
+        currency: str = "USD",
+        interval: str = "month",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> stripe.Price:
+        """Create an immutable Stripe Price for a published plan version.
+
+        Args:
+            product_id: Stripe Product ID the price belongs to.
+            unit_amount: Price in smallest currency unit (cents).
+            currency: ISO currency code (default USD).
+            interval: Billing interval — ``month`` or ``year``.
+            metadata: Optional metadata stored on the Stripe Price.
+
+        Returns:
+            Created Stripe Price object.
+
+        Raises:
+            stripe.error.StripeError: When Stripe API call fails.
+        """
+        try:
+            price = stripe.Price.create(
+                product=product_id,
+                unit_amount=unit_amount,
+                currency=currency.lower(),
+                recurring={"interval": interval},
+                metadata=metadata or {},
+            )
+            logger.info(
+                "Created Stripe price %s for product %s (%s %s)",
+                price.id,
+                product_id,
+                unit_amount,
+                currency,
+            )
+            return price
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to create Stripe price for product {product_id}: {e}")
+            raise
+
     async def create_checkout_session(
         self,
         customer_id: str,

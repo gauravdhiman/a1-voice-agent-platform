@@ -27,6 +27,7 @@ from shared.config.opentelemetry import (
 )
 from src.auth.routes import auth_router
 from src.billing.routes import router as billing_router
+from src.billing.admin_plan_routes import router as admin_plan_router
 from src.call_logs import call_logs_router
 from src.notifications.routes import router as notification_router
 from src.organization.public_routes import public_org_router
@@ -156,6 +157,7 @@ def create_app() -> FastAPI:
 
     # Include billing routes
     app.include_router(billing_router)
+    app.include_router(admin_plan_router)
 
     # Include notification routes
     app.include_router(notification_router)
