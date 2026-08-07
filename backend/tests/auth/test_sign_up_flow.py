@@ -1,4 +1,4 @@
-"""Tests for backend email signup with org provisioning and verification gating."""
+"""Tests for backend email signup with Resend verification and admin alerts."""
 
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -45,71 +45,50 @@ def auth_service(mock_supabase_client, mock_supabase_auth) -> AuthService:
         yield service
 
 
-def _build_supabase_signup_response(*, with_session: bool) -> MagicMock:
+def _build_admin_create_user_response() -> MagicMock:
     now = datetime.now(timezone.utc)
     user_mock = MagicMock()
     user_mock.id = str(USER_ID)
     user_mock.email = "newuser@example.com"
     user_mock.user_metadata = {"first_name": "New", "last_name": "User"}
-    user_mock.email_confirmed_at = now if with_session else None
+    user_mock.email_confirmed_at = None
     user_mock.created_at = now
     user_mock.updated_at = now
 
     response_mock = MagicMock()
     response_mock.user = user_mock
-    if with_session:
-        session_mock = MagicMock()
-        session_mock.access_token = "test-access-token"
-        session_mock.refresh_token = "test-refresh-token"
-        session_mock.expires_in = 3600
-        response_mock.session = session_mock
-    else:
-        response_mock.session = None
     return response_mock
 
 
+def _signup_patches():
+    return patch(
+        "src.notifications.email_verification_service.email_verification_service.create_and_send_verification",
+        new=AsyncMock(return_value=(True, None)),
+    ), patch(
+        "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+        new=AsyncMock(),
+    ), patch(
+        "src.auth.service.ensure_default_organization_for_user",
+        new=AsyncMock(return_value=(ORG_ID, None)),
+    )
+
+
 class TestAuthServiceSignUpFlow:
-    """Signup provisions organizations and exposes verification requirements."""
+    """Signup creates unverified users, sends Resend email, and alerts admins."""
 
     @pytest.mark.asyncio
-    async def test_sign_up_with_session_allows_immediate_sign_in(
+    async def test_sign_up_always_requires_email_verification(
         self,
         auth_service: AuthService,
         sign_up_request: SignUpRequest,
         mock_supabase_auth: MagicMock,
     ) -> None:
-        mock_supabase_auth.sign_up.return_value = _build_supabase_signup_response(
-            with_session=True
+        mock_supabase_auth.admin.create_user.return_value = (
+            _build_admin_create_user_response()
         )
 
-        with patch(
-            "src.auth.service.ensure_default_organization_for_user",
-            new=AsyncMock(return_value=(ORG_ID, None)),
-        ) as provision_mock:
-            result, error = await auth_service.sign_up(sign_up_request)
-
-        assert error is None
-        assert result is not None
-        assert result.email_verification_required is False
-        assert result.access_token == "test-access-token"
-        assert result.refresh_token == "test-refresh-token"
-        provision_mock.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_sign_up_without_session_requires_email_verification(
-        self,
-        auth_service: AuthService,
-        sign_up_request: SignUpRequest,
-        mock_supabase_auth: MagicMock,
-    ) -> None:
-        mock_supabase_auth.sign_up.return_value = _build_supabase_signup_response(
-            with_session=False
-        )
-
-        with patch(
-            "src.auth.service.ensure_default_organization_for_user",
-            new=AsyncMock(return_value=(ORG_ID, None)),
-        ) as provision_mock:
+        verify_patch, notify_patch, provision_patch = _signup_patches()
+        with verify_patch as verify_mock, notify_patch as notify_mock, provision_patch:
             result, error = await auth_service.sign_up(sign_up_request)
 
         assert error is None
@@ -117,7 +96,30 @@ class TestAuthServiceSignUpFlow:
         assert result.email_verification_required is True
         assert result.access_token is None
         assert result.refresh_token is None
-        provision_mock.assert_awaited_once()
+        verify_mock.assert_awaited_once()
+        notify_mock.assert_awaited_once()
+        mock_supabase_auth.admin.create_user.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_sign_up_sends_verification_email_via_resend(
+        self,
+        auth_service: AuthService,
+        sign_up_request: SignUpRequest,
+        mock_supabase_auth: MagicMock,
+    ) -> None:
+        mock_supabase_auth.admin.create_user.return_value = (
+            _build_admin_create_user_response()
+        )
+
+        verify_patch, notify_patch, provision_patch = _signup_patches()
+        with verify_patch as verify_mock, notify_patch, provision_patch:
+            await auth_service.sign_up(sign_up_request)
+
+        verify_mock.assert_awaited_once_with(
+            USER_ID,
+            "newuser@example.com",
+            "New User",
+        )
 
     @pytest.mark.asyncio
     async def test_sign_up_processes_invitation_before_default_org(
@@ -133,15 +135,16 @@ class TestAuthServiceSignUpFlow:
             last_name="ited",
             invitation_token="invite-token-123",
         )
-        mock_supabase_auth.sign_up.return_value = _build_supabase_signup_response(
-            with_session=True
+        mock_supabase_auth.admin.create_user.return_value = (
+            _build_admin_create_user_response()
         )
 
         invitation = MagicMock()
         invitation.organization_id = ORG_ID
         invitation.organization_name = "Acme Plumbing"
 
-        with patch(
+        verify_patch, notify_patch, _ = _signup_patches()
+        with verify_patch, notify_patch as notify_mock, patch(
             "src.auth.service.organization_service.process_invitation",
             new=AsyncMock(return_value=(invitation, None)),
         ) as invite_mock, patch(
@@ -156,6 +159,9 @@ class TestAuthServiceSignUpFlow:
         assert result.joined_organization_name == "Acme Plumbing"
         invite_mock.assert_awaited_once_with("invite-token-123", USER_ID)
         provision_mock.assert_awaited_once()
+        notify_mock.assert_awaited_once()
+        assert notify_mock.await_args.kwargs["method"] == "invitation"
+        assert notify_mock.await_args.kwargs["organization_name"] == "Acme Plumbing"
 
     @pytest.mark.asyncio
     async def test_sign_up_existing_user_returns_conflict(
@@ -164,7 +170,7 @@ class TestAuthServiceSignUpFlow:
         sign_up_request: SignUpRequest,
         mock_supabase_auth: MagicMock,
     ) -> None:
-        mock_supabase_auth.sign_up.side_effect = AuthApiError(
+        mock_supabase_auth.admin.create_user.side_effect = AuthApiError(
             "User already registered", 422, "user_already_exists"
         )
 

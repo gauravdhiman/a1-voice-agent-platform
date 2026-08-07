@@ -48,14 +48,24 @@ class TestProcessInvitationAuth:
         from src.auth.routes import ProcessInvitationRequest
 
         profile = _make_user_profile()
+        profile.email = "caller@example.com"
+        profile.first_name = "Caller"
+        profile.last_name = "User"
         request = ProcessInvitationRequest(
             token=TEST_TOKEN, user_id=CALLER_USER_ID
         )
 
-        with patch("src.auth.routes.organization_service") as mock_org_svc:
+        with patch("src.auth.routes.organization_service") as mock_org_svc, patch(
+            "src.auth.routes.signup_notifier.notify_new_user",
+            new=AsyncMock(),
+        ):
             # Service returns a successful response (invitation object, no error).
+            mock_invitation = Mock()
+            mock_invitation.organization_id = UUID("22222222-2222-2222-2222-222222222222")
+            mock_invitation.organization_name = "Acme"
+            mock_invitation.id = UUID("33333333-3333-3333-3333-333333333333")
             mock_org_svc.process_invitation = AsyncMock(
-                return_value=(Mock(), None)
+                return_value=(mock_invitation, None)
             )
 
             result = await process_invitation(

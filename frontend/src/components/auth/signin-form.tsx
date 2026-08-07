@@ -56,7 +56,13 @@ export function SignInForm() {
     try {
       const result = await signIn(data);
       if (result?.error) {
-        setError(result.error.message || "Failed to sign in");
+        const err = result.error as Error & { code?: string };
+        if (err.code === "email_not_confirmed") {
+          setShowVerificationBanner(true);
+          setError(null);
+        } else {
+          setError(err.message || "Failed to sign in");
+        }
       }
       // Success case handled by global route guard
     } catch (error) {

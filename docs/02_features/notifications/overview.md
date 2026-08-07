@@ -2,7 +2,15 @@
 
 ## Overview
 
-The notification system delivers transactional emails to users for critical events like account verification, password resets, team invitations, subscription changes, and credit alerts. The system integrates with Resend.com for reliable email delivery.
+The notification system delivers transactional emails to users for critical events like account verification, password resets, team invitations, subscription changes, and credit alerts. The system integrates with **Resend** for reliable email delivery.
+
+## Signup & Admin Alerts (2026-08)
+
+- **Email verification**: Email/password signup sends a Resend verification link; sign-in is blocked until verified.
+- **Telegram alerts**: Platform admins can receive Telegram messages on new signups and invitation joins.
+- **Settings UI**: Platform admins configure verification sender and Telegram credentials at `/platform/notifications`.
+
+See also: [Notification System (core docs)](../../02_core_systems/notification_system.md) and [Auth RBAC overview](../authentication_rbac/overview.md).
 
 ## What It Provides
 

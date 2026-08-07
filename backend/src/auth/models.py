@@ -3,11 +3,29 @@ Pydantic models for authentication requests and responses.
 """
 
 import re
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, field_validator
 from src.rbac.roles.models import UserRoleWithPermissions
+
+
+def validate_auth_email(value: str) -> str:
+    """Validate email format for auth endpoints.
+
+    Uses a permissive check so local/dev addresses (e.g. ``test@cogninets.local``)
+    accepted by Supabase are not rejected by strict DNS-oriented validators.
+    """
+    normalized = value.strip()
+    if "@" not in normalized:
+        raise ValueError("Invalid email address")
+    local, _, domain = normalized.partition("@")
+    if not local or not domain:
+        raise ValueError("Invalid email address")
+    return normalized
+
+
+AuthEmail = Annotated[str, AfterValidator(validate_auth_email)]
 
 
 class SignUpRequest(BaseModel):
@@ -64,7 +82,7 @@ class SignUpRequest(BaseModel):
 class SignInRequest(BaseModel):
     """User login request model."""
 
-    email: EmailStr = Field(..., description="User email address")
+    email: AuthEmail = Field(..., description="User email address")
     password: str = Field(..., min_length=1, description="User password")
 
 

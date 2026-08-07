@@ -99,22 +99,44 @@ class AuthService:
         logging.info(f"Attempting to sign up user: {request.email}")
 
         try:
-            # Sign up with Supabase Auth
+            from src.notifications.email_verification_service import (
+                email_verification_service,
+            )
+            from src.notifications.signup_notifier import signup_notifier
+
             auth_client = create_isolated_supabase_client()
-            response = auth_client.auth.sign_up(
-                {
-                    "email": request.email,
-                    "password": request.password,
-                    "options": {
-                        "data": {
+            try:
+                create_response = auth_client.auth.admin.create_user(
+                    {
+                        "email": request.email,
+                        "password": request.password,
+                        "email_confirm": False,
+                        "user_metadata": {
                             "first_name": request.first_name,
                             "last_name": request.last_name,
-                        }
-                    },
-                }
-            )
+                            "last_sign_in_method": "email",
+                        },
+                    }
+                )
+            except AuthApiError as create_error:
+                message = str(create_error).lower()
+                if "already" in message or "exists" in message:
+                    raise
+                logging.error("Admin create_user failed: %s", create_error)
+                auth_failure_counter.add(
+                    1, {"operation": "signup", "error": "create_user_failed"}
+                )
+                return None, HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to create user account",
+                )
 
-            if not response or not response.user:
+            user = (
+                create_response.user
+                if hasattr(create_response, "user")
+                else create_response
+            )
+            if not user:
                 current_span.set_status(
                     trace.Status(trace.StatusCode.ERROR, "Sign up failed")
                 )
@@ -127,8 +149,7 @@ class AuthService:
                     detail="Failed to create user account",
                 )
 
-            user = response.user
-            session = response.session
+            session = None
 
             # Log the successful sign up
             logging.info(f"User signed up successfully: {user.id}")
@@ -151,12 +172,21 @@ class AuthService:
                 updated_at=_format_auth_timestamp(user.updated_at),
             )
 
-            email_verification_required = not (
-                session and session.access_token and session.refresh_token
-            )
+            email_verification_required = True
             current_span.set_attribute(
                 "auth.email_verification_required", email_verification_required
             )
+
+            user_name = f"{request.first_name} {request.last_name}".strip()
+            sent, send_error = await email_verification_service.create_and_send_verification(
+                UUID(str(user.id)),
+                user.email or request.email,
+                user_name or request.first_name or "User",
+            )
+            if not sent:
+                logging.warning(
+                    "Verification email failed for %s: %s", user.id, send_error
+                )
 
             joined_organization_id = None
             joined_organization_name = None
@@ -200,13 +230,24 @@ class AuthService:
                 logging.error(f"Error provisioning organization: {e}")
                 current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
 
+            signup_method = "invitation" if request.invitation_token else "email"
+            await signup_notifier.notify_new_user(
+                email=user.email or request.email,
+                user_id=UUID(str(user.id)),
+                method=signup_method,
+                first_name=request.first_name,
+                last_name=request.last_name,
+                organization_name=joined_organization_name,
+                is_new_user=True,
+            )
+
             sign_up_response = SignUpResponse(
                 user=profile,
                 email_verification_required=email_verification_required,
-                access_token=session.access_token if session else None,
-                refresh_token=session.refresh_token if session else None,
+                access_token=None,
+                refresh_token=None,
                 token_type="bearer",
-                expires_in=session.expires_in if session else None,
+                expires_in=None,
                 joined_organization_id=joined_organization_id,
                 joined_organization_name=joined_organization_name,
             )
@@ -294,6 +335,20 @@ class AuthService:
 
             user = response.user
             session = response.session
+
+            if not user.email_confirmed_at:
+                auth_failure_counter.add(
+                    1, {"operation": "signin", "error": "email_not_confirmed"}
+                )
+                return None, HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "message": (
+                            "Please verify your email address before signing in."
+                        ),
+                        "code": "email_not_confirmed",
+                    },
+                )
 
             # Log the successful sign in
             logging.info(f"User signed in successfully: {user.id}")

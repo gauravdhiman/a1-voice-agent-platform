@@ -202,6 +202,27 @@ class TestAuthServiceSignIn:
         })
 
     @pytest.mark.asyncio
+    async def test_sign_in_rejects_unverified_email(
+        self,
+        auth_service,
+        sign_in_request,
+        mock_supabase_auth,
+        mock_supabase_user_response,
+    ):
+        """Unverified users cannot sign in until email is confirmed."""
+        mock_supabase_user_response.user.email_confirmed_at = None
+        mock_supabase_auth.sign_in_with_password.return_value = (
+            mock_supabase_user_response
+        )
+
+        result, error = await auth_service.sign_in(sign_in_request)
+
+        assert result is None
+        assert error is not None
+        assert error.status_code == status.HTTP_403_FORBIDDEN
+        assert error.detail["code"] == "email_not_confirmed"
+
+    @pytest.mark.asyncio
     async def test_sign_in_invalid_credentials(
         self,
         auth_service,

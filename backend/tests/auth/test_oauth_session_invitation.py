@@ -96,7 +96,10 @@ class TestOAuthSessionInvitationOrdering:
         ) as invite_mock, patch(
             "src.auth.oauth_session.ensure_default_organization_for_user",
             new=AsyncMock(side_effect=track_provision),
-        ) as provision_mock:
+        ) as provision_mock, patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
+        ):
             auth_response, error = await service.complete_oauth_sign_in(
                 identity_with_invite
             )
@@ -124,7 +127,10 @@ class TestOAuthSessionInvitationOrdering:
         ), patch(
             "src.auth.oauth_session.ensure_default_organization_for_user",
             new=AsyncMock(return_value=(USER_ID, None)),
-        ) as provision_mock:
+        ) as provision_mock, patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
+        ):
             auth_response, error = await service.complete_oauth_sign_in(
                 identity_with_invite
             )
@@ -149,6 +155,9 @@ class TestOAuthSessionInvitationOrdering:
         ) as invite_mock, patch(
             "src.auth.oauth_session.ensure_default_organization_for_user",
             new=AsyncMock(return_value=(USER_ID, None)),
+        ), patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
         ):
             auth_response, error = await service.complete_oauth_sign_in(
                 identity_without_invite

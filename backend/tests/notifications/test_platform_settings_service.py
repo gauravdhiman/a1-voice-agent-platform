@@ -1,0 +1,119 @@
+"""Tests for platform notification settings singleton."""
+
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+from uuid import UUID
+
+import pytest
+
+from src.notifications.platform_settings_models import (
+    PLATFORM_SETTINGS_SINGLETON_ID,
+    PlatformNotificationSettingsUpdate,
+    extract_telegram_bot_id,
+)
+from src.notifications.platform_settings_service import (
+    PlatformNotificationSettingsService,
+)
+
+ADMIN_ID = UUID("11111111-1111-1111-1111-111111111111")
+
+
+@pytest.fixture
+def settings_service(mock_supabase_client):
+    with patch(
+        "src.notifications.platform_settings_service.supabase_config"
+    ) as cfg:
+        cfg.client = mock_supabase_client
+        cfg.is_configured.return_value = True
+        yield PlatformNotificationSettingsService()
+
+
+def _settings_row(**overrides):
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "id": str(PLATFORM_SETTINGS_SINGLETON_ID),
+        "verification_from_email": "verify@example.com",
+        "verification_from_name": "Platform",
+        "telegram_chat_id": "-100123",
+        "telegram_notifications_enabled": True,
+        "telegram_bot_token_encrypted": "encrypted-value",
+        "updated_by": str(ADMIN_ID),
+        "created_at": now,
+        "updated_at": now,
+    }
+    row.update(overrides)
+    return row
+
+
+class TestPlatformNotificationSettingsService:
+    """CRUD for platform notification settings."""
+
+    @pytest.mark.asyncio
+    async def test_get_settings_masks_bot_token(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row()
+        )
+
+        settings = await settings_service.get_settings()
+
+        assert settings.verification_from_email == "verify@example.com"
+        assert settings.telegram_bot_token_configured is True
+
+    @pytest.mark.asyncio
+    async def test_get_settings_returns_telegram_bot_id(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row()
+        )
+
+        with patch.object(
+            settings_service,
+            "_read_telegram_bot_id",
+            return_value="123456",
+        ):
+            settings = await settings_service.get_settings()
+
+        assert settings.telegram_bot_id == "123456"
+
+
+class TestExtractTelegramBotId:
+    def test_extracts_numeric_prefix(self) -> None:
+        assert extract_telegram_bot_id("8895264981:AAEx-token") == "8895264981"
+
+    def test_invalid_token_returns_none(self) -> None:
+        assert extract_telegram_bot_id("not-a-token") is None
+
+    @pytest.mark.asyncio
+    async def test_update_settings_encrypts_bot_token(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row(telegram_bot_token_encrypted="new-encrypted")
+        )
+
+        payload = PlatformNotificationSettingsUpdate(
+            verification_from_email="noreply@example.com",
+            telegram_bot_token="123456:ABC",
+            telegram_notifications_enabled=True,
+        )
+
+        with patch(
+            "src.notifications.platform_settings_service.encrypt_data",
+            return_value="new-encrypted",
+        ) as encrypt_mock:
+            result = await settings_service.update_settings(payload, ADMIN_ID)
+
+        encrypt_mock.assert_called_once_with(
+            {"token": "123456:ABC", "bot_id": "123456"}
+        )
+        assert result.verification_from_email == "verify@example.com"

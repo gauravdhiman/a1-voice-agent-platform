@@ -66,7 +66,10 @@ class TestLinkedInSupabaseSessionService:
         with patch(
             "src.auth.oauth_session.ensure_default_organization_for_user",
             new=AsyncMock(return_value=(USER_ID, None)),
-        ) as provision:
+        ) as provision, patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
+        ):
             auth_response, error = await service.create_session(identity)
 
         assert error is None
@@ -82,6 +85,9 @@ class TestLinkedInSupabaseSessionService:
         with patch(
             "src.auth.oauth_session.ensure_default_organization_for_user",
             new=AsyncMock(return_value=(None, None)),
+        ), patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
         ):
             auth_response, error = await service.create_session(identity)
 
@@ -108,6 +114,9 @@ class TestLinkedInSupabaseSessionService:
         with patch(
             "src.auth.oauth_session.ensure_default_organization_for_user",
             new=AsyncMock(return_value=(None, None)),
+        ), patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
         ):
             auth_response, error = await service.create_session(identity)
 
