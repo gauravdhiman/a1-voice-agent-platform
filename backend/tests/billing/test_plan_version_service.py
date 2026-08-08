@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 
 from src.billing.plan_version_models import (
+    BillingMode,
     MigrationMode,
     PlanVersionPublishRequest,
     PlanVersionStatus,
@@ -54,7 +55,9 @@ def _version_row(
     *,
     status=PlanVersionStatus.DRAFT.value,
     version_number=2,
+    price_amount_cents=5900,
     stripe_price_id=None,
+    billing_mode=BillingMode.PAID.value,
     is_current=False,
     legacy_plan_id=None,
 ):
@@ -64,12 +67,13 @@ def _version_row(
         "version_number": version_number,
         "status": status,
         "display_label": f"Plan v{version_number}",
-        "price_amount_cents": 5900,
+        "price_amount_cents": price_amount_cents,
         "currency": "USD",
         "billing_interval": "monthly",
         "trial_period_days": None,
         "stripe_product_id": "prod_stripe",
         "stripe_price_id": stripe_price_id,
+        "billing_mode": billing_mode,
         "is_current_for_signup": is_current,
         "published_at": (
             datetime.now(timezone.utc).isoformat()
@@ -84,6 +88,53 @@ def _version_row(
 
 class TestPlanVersionPublish:
     """Publish workflow and grandfathering behavior."""
+
+    @pytest.mark.asyncio
+    async def test_publish_free_version_keeps_stripe_price_optional(
+        self,
+        plan_version_service,
+        draft_version_id,
+        product_id,
+        admin_user_id,
+    ):
+        """Free versions publish without a Stripe Price identifier."""
+        draft = _version_row(
+            draft_version_id,
+            product_id,
+            price_amount_cents=0,
+            billing_mode=BillingMode.FREE.value,
+        )
+
+        with patch.object(
+            plan_version_service, "_get_plan_version", new_callable=AsyncMock
+        ) as mock_get, patch.object(
+            plan_version_service,
+            "_get_current_signup_version_for_product",
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch.object(
+            plan_version_service, "_ensure_stripe_price", new_callable=AsyncMock
+        ) as mock_stripe, patch.object(
+            plan_version_service, "_update_plan_version", new_callable=AsyncMock
+        ) as mock_update, patch.object(
+            plan_version_service, "_create_publish_event", new_callable=AsyncMock
+        ) as mock_event:
+            mock_get.return_value = draft
+            mock_stripe.return_value = None
+            mock_update.return_value = {**draft, "status": "published"}
+            event_id = uuid4()
+            mock_event.return_value = {"id": str(event_id)}
+
+            result = await plan_version_service.publish_plan_version(
+                draft_version_id,
+                PlanVersionPublishRequest(),
+                published_by=admin_user_id,
+            )
+
+        assert result.stripe_price_id is None
+        mock_stripe.assert_awaited_once_with(draft)
+        update_fields = mock_update.call_args.args[1]
+        assert update_fields["stripe_price_id"] is None
 
     @pytest.mark.asyncio
     async def test_publish_marks_draft_current_and_deprecates_previous(
@@ -145,7 +196,9 @@ class TestPlanVersionPublish:
 
             result = await plan_version_service.publish_plan_version(
                 draft_version_id,
-                PlanVersionPublishRequest(migration_mode=MigrationMode.NEW_SIGNUPS_ONLY),
+                PlanVersionPublishRequest(
+                    migration_mode=MigrationMode.NEW_SIGNUPS_ONLY
+                ),
                 published_by=admin_user_id,
             )
 
@@ -324,6 +377,25 @@ class TestEnsureStripePrice:
         )
         result = await plan_version_service._ensure_stripe_price(draft)
         assert result == "price_manual"
+
+    @pytest.mark.asyncio
+    async def test_ensure_stripe_price_skips_stripe_for_free_version(
+        self, plan_version_service, product_id, draft_version_id
+    ):
+        """Free versions may publish without creating a Stripe Price."""
+        draft = _version_row(
+            draft_version_id,
+            product_id,
+            billing_mode=BillingMode.FREE.value,
+        )
+        with patch(
+            "src.billing.plan_version_service.stripe_service.create_price",
+            new_callable=AsyncMock,
+        ) as create_price:
+            result = await plan_version_service._ensure_stripe_price(draft)
+
+        assert result is None
+        create_price.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_ensure_stripe_price_raises_actionable_error_on_stripe_failure(

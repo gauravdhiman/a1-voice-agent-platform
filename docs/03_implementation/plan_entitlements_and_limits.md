@@ -114,6 +114,7 @@ erDiagram
         uuid plan_product_id FK
         int version_number
         text status
+        text billing_mode
         int price_amount_cents
         text currency
         text billing_interval
@@ -708,13 +709,14 @@ All routes: `platform_admin` RBAC.
 | `plan_product_id` | UUID FK | |
 | `version_number` | INT | Per product, monotonic |
 | `status` | ENUM | draft, published, deprecated, retired |
+| `billing_mode` | ENUM | `free` or `paid`; authoritative activation path |
 | `display_label` | TEXT | "Growth (2026-08)" optional |
 | `price_amount_cents` | INT | |
 | `currency` | CHAR(3) | |
 | `billing_interval` | ENUM | monthly, annual |
 | `trial_period_days` | INT NULL | |
 | `stripe_product_id` | VARCHAR | |
-| `stripe_price_id` | VARCHAR UK | Set on publish |
+| `stripe_price_id` | VARCHAR UK NULL | Required for paid checkout; optional catalog metadata for free versions |
 | `is_current_for_signup` | BOOLEAN | At most one per product |
 | `published_at` | TIMESTAMPTZ NULL | |
 | `created_at`, `updated_at` | TIMESTAMPTZ | |

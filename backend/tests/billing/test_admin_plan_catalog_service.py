@@ -19,7 +19,7 @@ from src.billing.entitlement_models import (
     EntitlementKind,
     EntitlementValueType,
 )
-from src.billing.plan_version_models import PlanVersionStatus
+from src.billing.plan_version_models import BillingMode, PlanVersionStatus
 
 
 @pytest.fixture
@@ -56,7 +56,14 @@ def _product_row(product_id, slug="pro"):
     }
 
 
-def _version_row(version_id, product_id, *, status=PlanVersionStatus.DRAFT.value, version_number=1):
+def _version_row(
+    version_id,
+    product_id,
+    *,
+    status=PlanVersionStatus.DRAFT.value,
+    version_number=1,
+    billing_mode=BillingMode.PAID.value,
+):
     now = datetime.now(timezone.utc).isoformat()
     return {
         "id": str(version_id),
@@ -70,6 +77,7 @@ def _version_row(version_id, product_id, *, status=PlanVersionStatus.DRAFT.value
         "trial_period_days": None,
         "stripe_product_id": None,
         "stripe_price_id": None,
+        "billing_mode": billing_mode,
         "is_current_for_signup": False,
         "published_at": None,
         "legacy_subscription_plan_id": None,
@@ -98,7 +106,9 @@ class TestAdminPlanCatalogService:
     """Unit tests for catalog service methods."""
 
     @pytest.mark.asyncio
-    async def test_list_entitlement_definitions(self, catalog_service, mock_supabase_client):
+    async def test_list_entitlement_definitions(
+        self, catalog_service, mock_supabase_client
+    ):
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(
             data=[_entitlement_def_row()]
         )
@@ -106,8 +116,21 @@ class TestAdminPlanCatalogService:
         assert len(result) == 1
         assert result[0].key == "max_agents"
 
+    def test_free_draft_contract_allows_optional_stripe_metadata(self):
+        """A free draft is explicit and does not require Stripe identifiers."""
+        draft = PlanVersionDraftCreate(
+            billing_mode=BillingMode.FREE,
+            price_amount_cents=0,
+            stripe_product_id=None,
+        )
+
+        assert draft.billing_mode is BillingMode.FREE
+        assert draft.stripe_product_id is None
+
     @pytest.mark.asyncio
-    async def test_update_entitlement_definition(self, catalog_service, mock_supabase_client):
+    async def test_update_entitlement_definition(
+        self, catalog_service, mock_supabase_client
+    ):
         updated = _entitlement_def_row()
         updated["display_name"] = "Agents cap"
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(
@@ -163,7 +186,9 @@ class TestAdminPlanCatalogService:
         assert "entitlements" not in PlanVersionSummary.model_fields
 
     @pytest.mark.asyncio
-    async def test_create_plan_product(self, catalog_service, mock_supabase_client, product_id):
+    async def test_create_plan_product(
+        self, catalog_service, mock_supabase_client, product_id
+    ):
         from src.billing.admin_plan_models import PlanProductCreateResult
 
         row = _product_row(product_id)
@@ -213,7 +238,12 @@ class TestAdminPlanCatalogService:
     ):
         from src.billing.admin_plan_models import PlanVersionDetail
 
-        new_row = _version_row(version_id, product_id, version_number=3)
+        new_row = _version_row(
+            version_id,
+            product_id,
+            version_number=3,
+            billing_mode=BillingMode.FREE.value,
+        )
 
         async def fake_get_plan_version(_vid):
             return PlanVersionDetail(**new_row, entitlements=[])
@@ -229,14 +259,23 @@ class TestAdminPlanCatalogService:
         ), patch.object(
             catalog_service, "get_plan_version", side_effect=fake_get_plan_version
         ):
-            catalog_service.supabase.table.return_value.insert.return_value.execute.return_value = MagicMock(
-                data=[new_row]
+            insert_execute = MagicMock(data=[new_row])
+            catalog_service.supabase.table.return_value.insert.return_value.execute.return_value = (
+                insert_execute
             )
             result = await catalog_service.create_draft_version(
                 product_id,
-                PlanVersionDraftCreate(display_label="Pro v3", price_amount_cents=5900),
+                PlanVersionDraftCreate(
+                    display_label="Free v3",
+                    price_amount_cents=0,
+                    billing_mode=BillingMode.FREE,
+                ),
             )
         assert result.version_number == 3
+        inserted_row = (
+            catalog_service.supabase.table.return_value.insert.call_args.args[0]
+        )
+        assert inserted_row["billing_mode"] == BillingMode.FREE.value
 
     @pytest.mark.asyncio
     async def test_update_draft_version_rejects_published(
@@ -288,9 +327,7 @@ class TestAdminPlanCatalogService:
 
         with patch.object(
             catalog_service, "get_plan_version", side_effect=fake_get_plan_version
-        ), patch.object(
-            catalog_service, "_replace_entitlements", return_value=None
-        ):
+        ), patch.object(catalog_service, "_replace_entitlements", return_value=None):
             catalog_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
                 data=[draft]
             )
@@ -317,7 +354,11 @@ class TestAdminPlanCatalogService:
         ), patch.object(
             catalog_service,
             "_get_draft_version_for_product",
-            return_value={"id": str(uuid4()), "version_number": 2, "display_label": "v2"},
+            return_value={
+                "id": str(uuid4()),
+                "version_number": 2,
+                "display_label": "v2",
+            },
         ):
             with pytest.raises(ValueError, match="already has draft"):
                 await catalog_service.create_draft_version(

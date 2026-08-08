@@ -28,6 +28,7 @@ from uuid import UUID
 from shared.config import supabase_config
 
 from .plan_version_models import (
+    BillingMode,
     MigrationMode,
     PlanVersionPublishRequest,
     PlanVersionPublishResult,
@@ -60,7 +61,9 @@ class PlanVersionService:
         """
         row = await self._get_plan_version_by_stripe_price_id(stripe_price_id)
         if not row:
-            raise ValueError(f"No plan version found for Stripe price {stripe_price_id}")
+            raise ValueError(
+                f"No plan version found for Stripe price {stripe_price_id}"
+            )
 
         legacy_raw = row.get("legacy_subscription_plan_id")
         legacy_plan_id = UUID(str(legacy_raw)) if legacy_raw else None
@@ -236,9 +239,17 @@ class PlanVersionService:
             return result.data[0]
         return None
 
-    async def _ensure_stripe_price(self, draft: dict[str, Any]) -> str:
-        """Return existing or newly created Stripe price ID for a draft version."""
+    async def _ensure_stripe_price(self, draft: dict[str, Any]) -> Optional[str]:
+        """Return a Stripe Price ID when the draft's billing mode requires it.
+
+        Free versions may retain optional Stripe catalog metadata, but publishing
+        them must never create a Stripe Price or require a Stripe Product.
+        """
         existing = draft.get("stripe_price_id")
+
+        if draft.get("billing_mode", BillingMode.PAID.value) == BillingMode.FREE.value:
+            return str(existing) if existing else None
+
         if existing:
             return str(existing)
 
@@ -321,7 +332,9 @@ class PlanVersionService:
             "published_by": str(published_by),
             "published_at": published_at.isoformat(),
         }
-        result = self.supabase.table("plan_version_publish_events").insert(row).execute()
+        result = (
+            self.supabase.table("plan_version_publish_events").insert(row).execute()
+        )
         if not result.data:
             raise ValueError("Failed to create plan version publish event")
         return result.data[0]

@@ -95,7 +95,9 @@ class AdminPlanCatalogService:
             output.append(PlanProductWithVersions(**product, versions=versions))
         return output
 
-    async def create_plan_product(self, data: PlanProductCreate) -> PlanProductCreateResult:
+    async def create_plan_product(
+        self, data: PlanProductCreate
+    ) -> PlanProductCreateResult:
         """Create a new plan product family and auto-create a Stripe Product when configured."""
         slug = data.slug.strip().lower()
         row = {
@@ -194,7 +196,9 @@ class AdminPlanCatalogService:
         """Reject creating a second draft for the same plan product."""
         existing = await self._get_draft_version_for_product(product_id)
         if existing is not None:
-            label = existing.get("display_label") or f"v{existing.get('version_number')}"
+            label = (
+                existing.get("display_label") or f"v{existing.get('version_number')}"
+            )
             raise ValueError(
                 f"Plan product already has draft {label}. "
                 "Publish or delete the existing draft before creating another."
@@ -208,8 +212,8 @@ class AdminPlanCatalogService:
         await self._ensure_no_existing_draft(product_id)
         version_number = await self._next_version_number(product_id)
         product = await self._get_product(product_id)
-        inherited_stripe_product_id = (
-            data.stripe_product_id or product.get("stripe_product_id")
+        inherited_stripe_product_id = data.stripe_product_id or product.get(
+            "stripe_product_id"
         )
         now_iso = datetime.now(timezone.utc).isoformat()
         version_row = {
@@ -217,6 +221,7 @@ class AdminPlanCatalogService:
             "version_number": version_number,
             "status": PlanVersionStatus.DRAFT.value,
             "display_label": data.display_label,
+            "billing_mode": data.billing_mode.value,
             "price_amount_cents": data.price_amount_cents,
             "currency": data.currency.upper(),
             "billing_interval": data.billing_interval,
@@ -273,6 +278,7 @@ class AdminPlanCatalogService:
         ]
         create_data = PlanVersionDraftCreate(
             display_label=display_label or source.display_label,
+            billing_mode=source.billing_mode,
             price_amount_cents=(
                 price_amount_cents
                 if price_amount_cents is not None

@@ -647,16 +647,16 @@ Tracks payment history and invoices.
 
 ---
 
-### Planned: Plan Versioning & Entitlements Tables
+### Plan Versioning & Entitlements Tables
 
-> **Status:** Not yet migrated — design approved in [Plan Entitlements & Limits](03_implementation/plan_entitlements_and_limits.md) and [ADR: Plan Versioning](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md). These tables will replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
+> **Status:** Implemented through migrations `20260807000002`–`20260807000008`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
 
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 
 | Table | Purpose |
 | ----- | ------- |
 | `plan_products` | Plan families (`starter`, `growth`) — marketing identity |
-| `plan_versions` | Immutable published snapshots (v1, v2, …) with price + Stripe Price |
+| `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, price, and optional Stripe Price |
 | `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
 | `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB) |
 | `plan_version_publish_events` | Migration policy when a new version is published |
@@ -666,6 +666,8 @@ Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan
 | `organization_subscription_entitlement_snapshots` | Audit snapshots on subscribe/migrate/renew |
 
 **Key change to `organization_subscriptions`:** add `plan_version_id` FK → `plan_versions.id` (subscription locked to version at signup). Deprecate `subscription_plan_id` after backfill.
+
+**Billing mode:** `plan_versions.billing_mode` is constrained to `free` or `paid` and is the authoritative activation decision. Free versions may omit Stripe identifiers; paid versions require Stripe checkout metadata and a Stripe Price before checkout.
 
 **Grandfathering rule:** Published `plan_versions` rows are immutable. Admin "edits" create a new draft version → publish → new signups only; existing subs keep old `plan_version_id` until migration job or self-service upgrade.
 
@@ -1276,6 +1278,7 @@ erDiagram
 36. `20260807000005` - Two-pool credits + low-balance alerts: add `organizations.purchased_credit_balance` (INTEGER NOT NULL DEFAULT 0) and `organizations.low_credit_threshold_notified` (INTEGER NULLABLE); backfill purchased pool as `LEAST(ledger_purchase_sum, credit_balance)` from `credit_transactions` where `source='purchase'` AND `transaction_type='purchased'` AND `expires_at IS NULL` (avoids inflating purchased above the live single-pool balance). Plan credits expire at period end (expire + replace on renewal); purchased credits never expire; consumption drains plan first, then purchased; low-balance emails fire at 20/10/5% of the period's included credits, once per threshold per cycle.
 37. `20260807000006` - Premium tools: add `platform_tools.is_premium` (BOOLEAN NOT NULL DEFAULT FALSE). Premium tools are gated on the `premium_tools` plan feature at attach time (`POST /api/v1/tools/agent` → 403 when off); the frontend shows a badge + locked connect action.
 38. `20260807000007` - Atomic credit consumption: add `debit_organization_credits(organization_id, credits_needed)` Postgres function. Locks the organization row (`SELECT … FOR UPDATE`), allocates plan-first then purchased, and updates both pools in one transaction so concurrent voice sessions cannot overspend prepaid balance.
+39. `20260807000008` - Add required `plan_versions.billing_mode` (`free` or `paid`), backfill existing versions from the current plan-product catalog during migration, and add a check constraint plus lookup index. Free versions no longer require Stripe Price creation at publish time.
 
 ---
 

@@ -11,8 +11,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from .entitlement_models import EntitlementDefinition, EntitlementKind, EntitlementValueType
-from .plan_version_models import PlanVersionStatus
+from .entitlement_models import (
+    EntitlementDefinition,
+    EntitlementKind,
+    EntitlementValueType,
+)
+from .plan_version_models import BillingMode, PlanVersionStatus
 
 
 class EntitlementDefinitionUpdate(BaseModel):
@@ -73,6 +77,7 @@ class PlanVersionDraftCreate(BaseModel):
     """Create a new draft plan version for a product."""
 
     display_label: Optional[str] = None
+    billing_mode: BillingMode = BillingMode.PAID
     price_amount_cents: int = Field(default=0, ge=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
     billing_interval: str = Field(default="monthly")
@@ -85,6 +90,7 @@ class PlanVersionDraftUpdate(BaseModel):
     """Update a draft plan version (immutable once published)."""
 
     display_label: Optional[str] = None
+    billing_mode: Optional[BillingMode] = None
     price_amount_cents: Optional[int] = Field(None, ge=0)
     currency: Optional[str] = Field(None, min_length=3, max_length=3)
     billing_interval: Optional[str] = None
@@ -110,6 +116,7 @@ class PlanVersionSummary(BaseModel):
     version_number: int
     status: PlanVersionStatus
     display_label: Optional[str] = None
+    billing_mode: BillingMode = BillingMode.PAID
     price_amount_cents: int
     currency: str
     billing_interval: str

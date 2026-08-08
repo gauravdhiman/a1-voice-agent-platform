@@ -23,6 +23,13 @@ class PlanVersionStatus(str, Enum):
     RETIRED = "retired"
 
 
+class BillingMode(str, Enum):
+    """Payment path required to activate a plan version."""
+
+    FREE = "free"
+    PAID = "paid"
+
+
 class MigrationMode(str, Enum):
     """How existing subscribers are treated when a new version is published."""
 
@@ -75,7 +82,7 @@ class PlanVersionPublishResult(BaseModel):
     plan_version_id: UUID
     from_plan_version_id: Optional[UUID] = None
     publish_event_id: UUID
-    stripe_price_id: str
+    stripe_price_id: Optional[str] = None
     migration_rows_created: int = 0
     subscribers_migrated_immediately: int = 0
     published_at: datetime
