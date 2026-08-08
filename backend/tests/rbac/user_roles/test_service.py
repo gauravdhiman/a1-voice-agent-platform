@@ -1,19 +1,25 @@
 """
 Tests for RBAC user roles service.
 """
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from src.rbac.user_roles.models import UserRole, UserRoleCreate, UserRoleUpdate, UserWithRoles
+from src.rbac.user_roles.models import (
+    UserRole,
+    UserRoleCreate,
+    UserRoleUpdate,
+    UserWithRoles,
+)
 from src.rbac.user_roles.service import UserRoleService
 
 
 @pytest.fixture
 def user_role_service(mock_supabase_client):
     """UserRoleService with mocked Supabase."""
-    with patch('src.rbac.user_roles.service.supabase_config') as mock_config:
+    with patch("src.rbac.user_roles.service.supabase_config") as mock_config:
         mock_config.client = mock_supabase_client
         mock_config.is_configured.return_value = True
 
@@ -43,12 +49,12 @@ class TestUserRoleService:
         }
         mock_response = MagicMock()
         mock_response.data = [test_data]
-        user_role_service.supabase.table.return_value.insert.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.insert.return_value.execute.return_value = (
+            mock_response
+        )
 
         user_role_data = UserRoleCreate(
-            user_id=user_id,
-            role_id=role_id,
-            organization_id=org_id
+            user_id=user_id, role_id=role_id, organization_id=org_id
         )
         user_role, error = await user_role_service.assign_role_to_user(user_role_data)
 
@@ -62,12 +68,12 @@ class TestUserRoleService:
         """Test role assignment with database error."""
         mock_response = MagicMock()
         mock_response.data = []
-        user_role_service.supabase.table.return_value.insert.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.insert.return_value.execute.return_value = (
+            mock_response
+        )
 
         user_role_data = UserRoleCreate(
-            user_id=uuid4(),
-            role_id=uuid4(),
-            organization_id=uuid4()
+            user_id=uuid4(), role_id=uuid4(), organization_id=uuid4()
         )
         user_role, error = await user_role_service.assign_role_to_user(user_role_data)
 
@@ -76,12 +82,12 @@ class TestUserRoleService:
 
     async def test_assign_role_to_user_exception(self, user_role_service):
         """Test role assignment with exception."""
-        user_role_service.supabase.table.return_value.insert.return_value.execute.side_effect = Exception("Database error")
+        user_role_service.supabase.table.return_value.insert.return_value.execute.side_effect = Exception(
+            "Database error"
+        )
 
         user_role_data = UserRoleCreate(
-            user_id=uuid4(),
-            role_id=uuid4(),
-            organization_id=uuid4()
+            user_id=uuid4(), role_id=uuid4(), organization_id=uuid4()
         )
         user_role, error = await user_role_service.assign_role_to_user(user_role_data)
 
@@ -104,12 +110,11 @@ class TestUserRoleService:
         }
         mock_response = MagicMock()
         mock_response.data = [test_data]
-        user_role_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
-
-        update_data = UserRoleUpdate(
-            role_id=new_role_id,
-            organization_id=new_org_id
+        user_role_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            mock_response
         )
+
+        update_data = UserRoleUpdate(role_id=new_role_id, organization_id=new_org_id)
         user_role, error = await user_role_service.update_user_role(ur_id, update_data)
 
         assert error is None
@@ -122,10 +127,14 @@ class TestUserRoleService:
         """Test user role update when not found."""
         mock_response = MagicMock()
         mock_response.data = []
-        user_role_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         update_data = UserRoleUpdate(role_id=uuid4())
-        user_role, error = await user_role_service.update_user_role(uuid4(), update_data)
+        user_role, error = await user_role_service.update_user_role(
+            uuid4(), update_data
+        )
 
         assert user_role is None
         assert error == "User role assignment not found"
@@ -134,7 +143,9 @@ class TestUserRoleService:
         """Test successful role removal from user."""
         mock_response = MagicMock()
         mock_response.data = [{"id": str(uuid4())}]
-        user_role_service.supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         success, error = await user_role_service.remove_role_from_user(uuid4())
 
@@ -145,7 +156,9 @@ class TestUserRoleService:
         """Test role removal when assignment not found."""
         mock_response = MagicMock()
         mock_response.data = []
-        user_role_service.supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         success, error = await user_role_service.remove_role_from_user(uuid4())
 
@@ -165,7 +178,9 @@ class TestUserRoleService:
         }
         mock_response = MagicMock()
         mock_response.data = [test_data]
-        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         user_role, error = await user_role_service.get_user_role_by_id(ur_id)
 
@@ -177,7 +192,9 @@ class TestUserRoleService:
         """Test user role retrieval by ID when not found."""
         mock_response = MagicMock()
         mock_response.data = []
-        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         user_role, error = await user_role_service.get_user_role_by_id(uuid4())
 
@@ -207,11 +224,13 @@ class TestUserRoleService:
                     "created_at": "2024-01-01T00:00:00.000Z",
                     "updated_at": "2024-01-01T00:00:00.000Z",
                 }
-            }
+            },
         ]
         mock_response = MagicMock()
         mock_response.data = role_data
-        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.is_.return_value.order.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.is_.return_value.order.return_value.execute.return_value = (
+            mock_response
+        )
 
         roles, error = await user_role_service.get_user_roles(user_id)
 
@@ -224,12 +243,50 @@ class TestUserRoleService:
         """Test retrieval of user roles when none exist."""
         mock_response = MagicMock()
         mock_response.data = []
-        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = mock_response
+        user_role_service.supabase.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = (
+            mock_response
+        )
 
         user_roles, error = await user_role_service.get_user_roles(uuid4())
 
         assert error is None
         assert user_roles == []
+
+    async def test_get_organizations_for_user_preserves_timezone(
+        self, user_role_service
+    ):
+        """Organization membership reads must retain the saved timezone."""
+        user_id = uuid4()
+        organization_id = uuid4()
+        organization_data = {
+            "id": str(organization_id),
+            "name": "Timezone Test Org",
+            "description": None,
+            "slug": "timezone-test-org",
+            "website": None,
+            "is_active": True,
+            "industry": "hvac",
+            "location": "123 Main St",
+            "timezone": "America/Phoenix",
+            "business_details": None,
+            "google_api_key": None,
+            "onboarding_completed": False,
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        }
+        mock_response = MagicMock()
+        mock_response.data = [{"organizations": organization_data}]
+        (
+            user_role_service.supabase.table.return_value.select.return_value.eq.return_value.not_.is_.return_value.execute
+        ).return_value = mock_response
+
+        organizations, error = await user_role_service.get_organizations_for_user(
+            user_id
+        )
+
+        assert error is None
+        assert len(organizations) == 1
+        assert organizations[0].timezone == "America/Phoenix"
 
     async def test_user_has_permission_success(self, user_role_service):
         """Test successful permission check for user."""
@@ -244,26 +301,31 @@ class TestUserRoleService:
 
         # Mock role lookup (get_user_roles call)
         from src.rbac.roles.models import Role
+
         mock_role = Role(
             id=role_id,
             name="Admin",
             description="Admin role",
             is_system_role=False,
             created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
+            updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         )
 
         # Mock role_permissions check
         mock_rp_response = MagicMock()
-        mock_rp_response.data = [{"role_id": str(role_id), "permission_id": str(perm_id)}]
+        mock_rp_response.data = [
+            {"role_id": str(role_id), "permission_id": str(perm_id)}
+        ]
 
         user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
             mock_perm_response,  # Permission lookup
             MagicMock(data=[{"roles": mock_role.model_dump()}]),  # get_user_roles
-            mock_rp_response  # role_permissions check
+            mock_rp_response,  # role_permissions check
         ]
 
-        has_permission, error = await user_role_service.user_has_permission(user_id, permission_name)
+        has_permission, error = await user_role_service.user_has_permission(
+            user_id, permission_name
+        )
 
         assert error is None
         assert has_permission is True
@@ -281,10 +343,12 @@ class TestUserRoleService:
         mock_count_response.data = [{"count": 0}]
         user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
             mock_perm_response,  # First call gets permission
-            mock_count_response  # Second call checks if user has permission
+            mock_count_response,  # Second call checks if user has permission
         ]
 
-        has_permission, error = await user_role_service.user_has_permission(user_id, permission_name)
+        has_permission, error = await user_role_service.user_has_permission(
+            user_id, permission_name
+        )
 
         assert error is None
         assert has_permission is False
@@ -301,12 +365,16 @@ class TestUserRoleService:
 
         # Mock user_roles check
         mock_user_role_response = MagicMock()
-        mock_user_role_response.data = [{"user_id": str(user_id), "role_id": str(role_id)}]
+        mock_user_role_response.data = [
+            {"user_id": str(user_id), "role_id": str(role_id)}
+        ]
 
         user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
             mock_role_response,  # Role lookup
         ]
-        user_role_service.supabase.table.return_value.select.return_value.match.return_value.is_.return_value.execute.return_value = mock_user_role_response
+        user_role_service.supabase.table.return_value.select.return_value.match.return_value.is_.return_value.execute.return_value = (
+            mock_user_role_response
+        )
 
         has_role, error = await user_role_service.user_has_role(user_id, role_name)
 
@@ -326,7 +394,7 @@ class TestUserRoleService:
         mock_count_response.data = [{"count": 0}]
         user_role_service.supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
             mock_role_response,  # First call gets role
-            mock_count_response  # Second call checks if user has role
+            mock_count_response,  # Second call checks if user has role
         ]
 
         has_role, error = await user_role_service.user_has_role(user_id, role_name)

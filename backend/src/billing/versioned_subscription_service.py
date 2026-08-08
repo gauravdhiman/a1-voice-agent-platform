@@ -139,9 +139,28 @@ class VersionedSubscriptionService:
         )
 
     async def create_paid_checkout(
-        self, request: VersionedSubscriptionCheckoutRequest
+        self,
+        request: VersionedSubscriptionCheckoutRequest,
+        customer_email: str,
     ) -> VersionedSubscriptionCheckoutResponse:
-        """Create Stripe Checkout for a published paid version."""
+        """Create Stripe Checkout for a published paid version.
+
+        Args:
+            request: Checkout request containing the organization, plan version,
+                and redirect URLs.
+            customer_email: Email address of the authenticated organization
+                administrator starting checkout. This value is supplied by the
+                route from the authenticated user profile and is never accepted
+                from the browser request.
+
+        Returns:
+            The Stripe Checkout URL and session identifier for the selected plan.
+
+        Raises:
+            ValueError: If the plan is not eligible for paid checkout, the
+                organization already has an active subscription, or Stripe setup
+                fails validation.
+        """
         version = await self._get_signup_plan_version(request.plan_version_id)
         self._require_billing_mode(version, BillingMode.PAID)
         price_id = version.get("stripe_price_id")
@@ -164,7 +183,7 @@ class VersionedSubscriptionService:
         organization = organization_result.data[0]
 
         customer = await stripe_service.create_customer(
-            email=f"billing@{organization['slug']}.example.com",
+            email=customer_email,
             name=organization["name"],
             organization_id=str(request.organization_id),
             metadata={"plan_version_id": str(request.plan_version_id)},

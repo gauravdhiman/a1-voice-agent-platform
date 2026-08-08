@@ -58,6 +58,7 @@ vi.mock("@/services/agent-service", () => ({
 
 vi.mock("@/components/onboarding/step-org-details", () => ({
   StepOrgDetails: ({
+    onChange,
     onNext,
   }: {
     state: OnboardingWizardState;
@@ -66,6 +67,22 @@ vi.mock("@/components/onboarding/step-org-details", () => ({
     saving: boolean;
   }) => (
     <div data-testid="mock-org-details">
+      <button
+        onClick={() =>
+          onChange({
+            businessName: "Acme Updated",
+            slug: "acme-updated",
+            timezone: "America/Phoenix",
+            website: "https://acme.example",
+            industry: "hvac",
+            customIndustry: "",
+            location: "123 Main St, Phoenix, AZ",
+            businessDescription: "Heating and cooling services",
+          })
+        }
+      >
+        Fill organization details
+      </button>
       <button onClick={onNext}>Continue organization setup</button>
     </div>
   ),
@@ -98,6 +115,10 @@ const organization = {
   description: null,
   slug: "acme",
   website: null,
+  timezone: null,
+  industry: null,
+  location: null,
+  business_details: null,
   is_active: true,
   onboarding_completed: false,
   created_at: "2026-01-01T00:00:00Z",
@@ -134,6 +155,7 @@ describe("founder onboarding page", () => {
 
     expect(screen.getByTestId("mock-org-details")).toBeInTheDocument();
     expect(screen.queryByTestId("mock-plan-selection")).not.toBeInTheDocument();
+    expect(screen.queryByText(/% complete · Step/i)).not.toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: /continue organization/i }),
@@ -143,6 +165,49 @@ describe("founder onboarding page", () => {
       await screen.findByTestId("mock-plan-selection"),
     ).toBeInTheDocument();
     expect(mockCreateAgent).not.toHaveBeenCalled();
+  });
+
+  it("submits the selected timezone when saving organization details", async () => {
+    render(<OnboardingPage />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /fill organization details/i }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /continue organization/i }),
+    );
+
+    await waitFor(() => {
+      expect(mockUpdateOrganization).toHaveBeenCalledWith("org-1", {
+        name: "Acme Updated",
+        slug: "acme-updated",
+        timezone: "America/Phoenix",
+        website: "https://acme.example",
+        industry: "hvac",
+        location: "123 Main St, Phoenix, AZ",
+        business_details: "Heating and cooling services",
+      });
+    });
+  });
+
+  it("resumes directly at plan selection when organization details are saved", async () => {
+    mockUseOrganization.mockReturnValue({
+      currentOrganization: {
+        ...organization,
+        timezone: "America/Phoenix",
+        industry: "hvac",
+        location: "123 Main St, Phoenix, AZ",
+      },
+      setCurrentOrganization: mockSetCurrentOrganization,
+      refreshOrganizations: mockRefreshOrganizations,
+    });
+
+    render(<OnboardingPage />);
+
+    expect(
+      await screen.findByTestId("mock-plan-selection"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("mock-org-details")).not.toBeInTheDocument();
   });
 
   it("completes onboarding after free activation and goes to the dashboard", async () => {

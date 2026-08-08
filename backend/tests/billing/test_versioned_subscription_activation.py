@@ -215,10 +215,14 @@ class TestVersionedSubscriptionService:
                     plan_version_id=PAID_VERSION_ID,
                     success_url="https://app.test/onboarding/complete",
                     cancel_url="https://app.test/onboarding/plan",
-                )
+                ),
+                customer_email="owner@erp-cosmos.com",
             )
 
         assert result.session_id == "cs_versioned"
+        assert stripe.create_customer.await_args.kwargs["email"] == (
+            "owner@erp-cosmos.com"
+        )
         kwargs = stripe.create_checkout_session.await_args.kwargs
         assert kwargs["price_id"] == "price_growth"
         assert kwargs["metadata"]["plan_version_id"] == str(PAID_VERSION_ID)
@@ -239,7 +243,8 @@ class TestVersionedSubscriptionService:
                     plan_version_id=PAID_VERSION_ID,
                     success_url="https://app.test/onboarding/complete",
                     cancel_url="https://app.test/onboarding/plan",
-                )
+                ),
+                customer_email="owner@erp-cosmos.com",
             )
 
     @pytest.mark.asyncio
@@ -294,7 +299,7 @@ class TestVersionedSubscriptionRoutes:
             success_url="https://app.test/onboarding/complete",
             cancel_url="https://app.test/onboarding/plan",
         )
-        profile = MagicMock()
+        profile = MagicMock(email="owner@erp-cosmos.com")
         with (
             patch("src.billing.routes.assert_billing_access"),
             patch("src.billing.routes.versioned_subscription_service") as service,
@@ -309,3 +314,6 @@ class TestVersionedSubscriptionRoutes:
 
         assert exc_info.value.status_code == 400
         assert "Stripe Price" in exc_info.value.detail
+        service.create_paid_checkout.assert_awaited_once_with(
+            request, customer_email="owner@erp-cosmos.com"
+        )

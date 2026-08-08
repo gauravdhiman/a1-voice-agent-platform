@@ -196,7 +196,9 @@ async def create_versioned_subscription_checkout(
             request.organization_id,
             error_message="Insufficient permissions for billing operations in this organization",
         )
-        return await versioned_subscription_service.create_paid_checkout(request)
+        return await versioned_subscription_service.create_paid_checkout(
+            request, customer_email=user_profile.email
+        )
     except HTTPException:
         raise
     except ValueError as e:
@@ -323,6 +325,7 @@ async def create_subscription_checkout(
 ):
     """Create a Stripe checkout session for subscription."""
     try:
+        _, user_profile = user_auth
         # Get subscription plan
         plan = await billing_service.get_subscription_plan(plan_id)
         if not plan:
@@ -349,7 +352,7 @@ async def create_subscription_checkout(
 
         # Create or get Stripe customer
         customer = await stripe_service.create_customer(
-            email=f"billing@{organization.slug}.example.com",  # TODO: Replace with actual email
+            email=user_profile.email,
             name=organization.name,
             organization_id=str(organization_id),
             metadata={"plan_id": str(plan_id)},
@@ -701,15 +704,11 @@ async def create_subscription_checkout(
         if existing_subscription and existing_subscription.stripe_customer_id:
             customer_id = existing_subscription.stripe_customer_id
         else:
-            # Get user email from auth service
-            from src.auth.service import auth_service
-
-            # We need to get the user email somehow - let's use a placeholder for now
-            user_email = f"billing@{org['slug']}.example.com"
-
             # Create new customer
             customer = await stripe_service.create_customer(
-                email=user_email, name=org["name"], organization_id=organization_id
+                email=user_profile.email,
+                name=org["name"],
+                organization_id=organization_id,
             )
             customer_id = customer.id
 
@@ -795,7 +794,7 @@ async def create_credits_checkout(
             customer_id = existing_subscription.stripe_customer_id
         else:
             customer = await stripe_service.create_customer(
-                email=f"billing@{org['slug']}.example.com",
+                email=user_profile.email,
                 name=org["name"],
                 organization_id=organization_id,
             )

@@ -12,6 +12,7 @@ import {
   CardFooter,
   CardHeader,
 } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { billingService } from "@/services/billing-service";
 import type { CustomerPlanVersion } from "@/types/billing";
 
@@ -27,6 +28,8 @@ export interface StepPlanSelectionProps {
   /** Test seam and optional host override for redirecting to Stripe Checkout. */
   onRedirectToCheckout?: (checkoutUrl: string) => void;
 }
+
+type BillingIntervalTab = "monthly" | "annual";
 
 function formatPrice(plan: CustomerPlanVersion): string {
   if (plan.billing_mode === "free" || plan.price_amount_cents === 0) {
@@ -69,6 +72,8 @@ export function StepPlanSelection({
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeInterval, setActiveInterval] =
+    useState<BillingIntervalTab>("monthly");
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +114,23 @@ export function StepPlanSelection({
     [plans],
   );
 
+  const plansByInterval = useMemo(
+    () => ({
+      monthly: sortedPlans.filter((plan) => plan.billing_interval !== "annual"),
+      annual: sortedPlans.filter((plan) => plan.billing_interval === "annual"),
+    }),
+    [sortedPlans],
+  );
+
+  useEffect(() => {
+    if (
+      plansByInterval.monthly.length === 0 &&
+      plansByInterval.annual.length > 0
+    ) {
+      setActiveInterval("annual");
+    }
+  }, [plansByInterval]);
+
   const handlePlanSelection = async (plan: CustomerPlanVersion) => {
     setLoadingPlanId(plan.id);
     setError(null);
@@ -145,6 +167,103 @@ export function StepPlanSelection({
       setLoadingPlanId(null);
     }
   };
+
+  /**
+   * Render the plan cards for the currently selected billing interval.
+   *
+   * @param plansForInterval - Published plan versions for monthly or annual billing
+   * @returns Plan cards with the existing free and paid activation actions
+   */
+  const renderPlanCards = (plansForInterval: CustomerPlanVersion[]) => (
+    <div className="grid gap-4 md:grid-cols-2">
+      {plansForInterval.map((plan) => {
+        const isLoading = loadingPlanId === plan.id;
+        const features = Object.entries(plan.entitlements)
+          .map(([key, value]) => formatEntitlement(key, value))
+          .filter(Boolean)
+          .slice(0, 4);
+        return (
+          <Card
+            key={plan.id}
+            className={
+              plan.billing_mode === "free"
+                ? "border-blue-200 shadow-sm"
+                : "border-slate-200 shadow-sm"
+            }
+            data-testid={`onboarding-plan-card-${plan.id}`}
+          >
+            <CardHeader className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    {plan.product_name}
+                  </p>
+                  <h3 className="mt-1 text-xl font-semibold text-gray-900">
+                    {plan.display_label || plan.product_name}
+                  </h3>
+                </div>
+                {plan.billing_mode === "free" && (
+                  <Badge variant="secondary">No card required</Badge>
+                )}
+              </div>
+              <div className="text-3xl font-bold text-gray-950">
+                {formatPrice(plan)}
+                {plan.billing_mode === "paid" && (
+                  <span className="ml-1 text-sm font-normal text-gray-500">
+                    / {plan.billing_interval}
+                  </span>
+                )}
+              </div>
+              <p className="min-h-10 text-sm text-gray-500">
+                {plan.product_description || "A plan for your organization."}
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-gray-700">
+                {features.length > 0 ? (
+                  features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-600" />
+                      {feature}
+                    </li>
+                  ))
+                ) : (
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-emerald-600" />
+                    Core workspace access
+                  </li>
+                )}
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button
+                className="w-full"
+                disabled={loadingPlanId !== null}
+                onClick={() => void handlePlanSelection(plan)}
+                data-testid={`onboarding-plan-select-${plan.id}`}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {plan.billing_mode === "free"
+                      ? "Activating..."
+                      : "Opening checkout..."}
+                  </>
+                ) : (
+                  <>
+                    {plan.billing_mode === "free"
+                      ? "Start with Free"
+                      : "Continue to payment"}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </CardFooter>
+          </Card>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="space-y-6" data-testid="onboarding-plan-selection">
@@ -194,95 +313,40 @@ export function StepPlanSelection({
           </AlertDescription>
         </Alert>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {sortedPlans.map((plan) => {
-            const isLoading = loadingPlanId === plan.id;
-            const features = Object.entries(plan.entitlements)
-              .map(([key, value]) => formatEntitlement(key, value))
-              .filter(Boolean)
-              .slice(0, 4);
-            return (
-              <Card
-                key={plan.id}
-                className={
-                  plan.billing_mode === "free"
-                    ? "border-blue-200 shadow-sm"
-                    : "border-slate-200 shadow-sm"
-                }
-                data-testid={`onboarding-plan-card-${plan.id}`}
-              >
-                <CardHeader className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                        {plan.product_name}
-                      </p>
-                      <h3 className="mt-1 text-xl font-semibold text-gray-900">
-                        {plan.display_label || plan.product_name}
-                      </h3>
-                    </div>
-                    {plan.billing_mode === "free" && (
-                      <Badge variant="secondary">No card required</Badge>
-                    )}
-                  </div>
-                  <div className="text-3xl font-bold text-gray-950">
-                    {formatPrice(plan)}
-                    {plan.billing_mode === "paid" && (
-                      <span className="ml-1 text-sm font-normal text-gray-500">
-                        / {plan.billing_interval}
-                      </span>
-                    )}
-                  </div>
-                  <p className="min-h-10 text-sm text-gray-500">
-                    {plan.product_description ||
-                      "A plan for your organization."}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm text-gray-700">
-                    {features.length > 0 ? (
-                      features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-emerald-600" />
-                          {feature}
-                        </li>
-                      ))
-                    ) : (
-                      <li className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-emerald-600" />
-                        Core workspace access
-                      </li>
-                    )}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full"
-                    disabled={loadingPlanId !== null}
-                    onClick={() => void handlePlanSelection(plan)}
-                    data-testid={`onboarding-plan-select-${plan.id}`}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {plan.billing_mode === "free"
-                          ? "Activating..."
-                          : "Opening checkout..."}
-                      </>
-                    ) : (
-                      <>
-                        {plan.billing_mode === "free"
-                          ? "Start with Free"
-                          : "Continue to payment"}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
+        <Tabs
+          value={activeInterval}
+          onValueChange={(value) =>
+            setActiveInterval(value as BillingIntervalTab)
+          }
+          className="w-full"
+        >
+          <TabsList className="mb-6" aria-label="Billing interval">
+            <TabsTrigger value="monthly">Monthly</TabsTrigger>
+            <TabsTrigger value="annual">Annually</TabsTrigger>
+          </TabsList>
+          <TabsContent value="monthly">
+            {plansByInterval.monthly.length > 0 ? (
+              renderPlanCards(plansByInterval.monthly)
+            ) : (
+              <Alert>
+                <AlertDescription>
+                  No monthly plans are available right now.
+                </AlertDescription>
+              </Alert>
+            )}
+          </TabsContent>
+          <TabsContent value="annual">
+            {plansByInterval.annual.length > 0 ? (
+              renderPlanCards(plansByInterval.annual)
+            ) : (
+              <Alert>
+                <AlertDescription>
+                  No annual plans are available right now.
+                </AlertDescription>
+              </Alert>
+            )}
+          </TabsContent>
+        </Tabs>
       )}
 
       {onBack && (

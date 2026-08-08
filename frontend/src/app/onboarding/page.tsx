@@ -13,11 +13,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Phone } from "lucide-react";
 import { toast } from "sonner";
-import { StepIndicator } from "@/components/onboarding/step-indicator";
 import { StepOrgDetails } from "@/components/onboarding/step-org-details";
 import { StepPlanSelection } from "@/components/onboarding/step-plan-selection";
 import { useOrganization } from "@/contexts/organization-context";
 import {
+  isOrgDetailsStepComplete,
   parseIndustrySelection,
   resolveIndustryValue,
   suggestAgentName,
@@ -26,16 +26,40 @@ import {
 import { suggestOrganizationSlugFromName } from "@/lib/organization-slug";
 import { billingService } from "@/services/billing-service";
 import { organizationService } from "@/services/organization-service";
+import type { Organization } from "@/types/organization";
 
 const PAYMENT_POLL_LIMIT = 15;
 const PAYMENT_POLL_INTERVAL_MS = 2000;
+
+/**
+ * Determine whether an organization has enough persisted profile data to skip
+ * the details stage when the founder returns to onboarding.
+ *
+ * @param organization - Organization returned by the API or organization context
+ * @returns True when all required details are already saved
+ */
+function hasSavedOrganizationDetails(organization: Organization): boolean {
+  const industry = parseIndustrySelection(organization.industry);
+  return isOrgDetailsStepComplete({
+    businessName: organization.name,
+    slug: organization.slug,
+    timezone: organization.timezone ?? "",
+    industry: industry.selection,
+    customIndustry: industry.custom,
+    location: organization.location ?? "",
+  });
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentOrganization, setCurrentOrganization, refreshOrganizations } =
     useOrganization();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() =>
+    currentOrganization && hasSavedOrganizationDetails(currentOrganization)
+      ? 2
+      : 1,
+  );
   const [saving, setSaving] = useState(false);
   const [paymentState, setPaymentState] = useState<"failed" | null>(null);
   const completionInFlight = useRef(false);
@@ -81,6 +105,15 @@ export default function OnboardingPage() {
       location: state.location || currentOrganization.location || "",
       agentName: state.agentName || suggestAgentName(currentOrganization.name),
     }));
+  }, [currentOrganization]);
+
+  useEffect(() => {
+    if (
+      currentOrganization &&
+      hasSavedOrganizationDetails(currentOrganization)
+    ) {
+      setStep((currentStep) => (currentStep === 1 ? 2 : currentStep));
+    }
   }, [currentOrganization]);
 
   const updateState = (update: Partial<OnboardingWizardState>) =>
@@ -178,15 +211,19 @@ export default function OnboardingPage() {
         wizardState.industry,
         wizardState.customIndustry,
       );
-      await organizationService.updateOrganization(currentOrganization.id, {
-        name: wizardState.businessName.trim(),
-        slug: wizardState.slug.trim(),
-        timezone: wizardState.timezone || null,
-        website: wizardState.website.trim() || null,
-        industry: industry || null,
-        location: wizardState.location.trim() || null,
-        business_details: wizardState.businessDescription.trim() || null,
-      });
+      const updatedOrganization = await organizationService.updateOrganization(
+        currentOrganization.id,
+        {
+          name: wizardState.businessName.trim(),
+          slug: wizardState.slug.trim(),
+          timezone: wizardState.timezone || null,
+          website: wizardState.website.trim() || null,
+          industry: industry || null,
+          location: wizardState.location.trim() || null,
+          business_details: wizardState.businessDescription.trim() || null,
+        },
+      );
+      setCurrentOrganization(updatedOrganization);
       await refreshOrganizations();
       setStep(2);
     } catch (error) {
@@ -224,15 +261,9 @@ export default function OnboardingPage() {
         <h1 className="text-3xl font-bold text-gray-900">
           Welcome! Let&apos;s get you set up
         </h1>
-        <p className="mt-1 text-gray-500">
-          You&apos;re {Math.round(((step - 1) / 2) * 100)}% complete · Step{" "}
-          {step} of 2
-        </p>
       </div>
 
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-xl">
-        <StepIndicator currentStep={step} />
-
+      <main className="w-full max-w-3xl">
         {step === 1 && (
           <StepOrgDetails
             state={wizardState}
@@ -249,7 +280,7 @@ export default function OnboardingPage() {
             paymentState={visiblePaymentState}
           />
         )}
-      </div>
+      </main>
 
       <p className="mt-6 text-xs text-gray-400">
         You can configure agents, phone numbers, and integrations after your

@@ -176,6 +176,10 @@ sequenceDiagram
     FE-->>Admin: Redirect to dashboard
 ```
 
+Stripe Customer records created by authenticated checkout routes use the
+signed-in billing user's email. Stripe displays that customer email as a
+non-editable Checkout field; it is not supplied by the browser request.
+
 ### Webhook Handling
 
 **Webhook Events**:

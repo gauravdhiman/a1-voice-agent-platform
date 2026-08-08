@@ -1,5 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StepPlanSelection } from "@/components/onboarding/step-plan-selection";
 import { billingService } from "@/services/billing-service";
@@ -47,6 +48,14 @@ const paidPlan: CustomerPlanVersion = {
   billing_mode: "paid",
   price_amount_cents: 2900,
   stripe_price_id: "price_growth",
+};
+
+const annualPlan: CustomerPlanVersion = {
+  ...paidPlan,
+  id: "version-annual",
+  billing_interval: "annual",
+  price_amount_cents: 29000,
+  stripe_price_id: "price_growth_annual",
 };
 
 describe("StepPlanSelection", () => {
@@ -128,6 +137,40 @@ describe("StepPlanSelection", () => {
     expect(onRedirectToCheckout).toHaveBeenCalledWith(
       "https://checkout.stripe.test/session",
     );
+  });
+
+  it("groups plans under Monthly and Annually tabs", async () => {
+    vi.mocked(billingService.getAvailablePlanVersions).mockResolvedValue([
+      freePlan,
+      paidPlan,
+      annualPlan,
+    ]);
+
+    render(<StepPlanSelection organizationId="org-1" onActivated={vi.fn()} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Growth" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Monthly" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByTestId("onboarding-plan-card-version-paid"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-plan-card-version-annual"),
+    ).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Annually" }));
+
+    expect(
+      await screen.findByTestId("onboarding-plan-card-version-annual"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-plan-card-version-paid"),
+    ).not.toBeInTheDocument();
   });
 
   it("preserves the plan selector when checkout is cancelled", async () => {

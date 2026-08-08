@@ -78,7 +78,10 @@ the active roadmap.
 
 ### Low-priority housekeeping
 - Prune merged/stale git branches (~7 fully-merged + several squash-merged remotes safe to delete) — deferred; needs per-branch confirmation.
-- Minor TODO: `backend/src/billing/routes.py:187` placeholder `billing@{slug}.example.com` email.
+- Checkout customer email now comes from the authenticated billing user across
+  onboarding, subscription, and credit checkout routes. The separate
+  webhook-only fallback in `BillingService.create_organization_subscription`
+  remains because that path has no authenticated request context.
 - `OrganizationPage` (`frontend/src/app/(dashboard)/organization/page.tsx`) is a "god page" with 4 tabs that duplicates top-level routes (Agents, Skills, Phone Numbers). Targeted for refactor in N1: collapse to a settings-only page (Profile / Members / Billing / Danger Zone), promote the other tabs to top-level routes.
 
 ### 🟣 Deferred / Speculative (build only when a real need appears)

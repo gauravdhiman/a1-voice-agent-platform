@@ -451,14 +451,23 @@ on the dashboard with the **invited org selected** and a soft welcome toast.
 `onboarding_completed = false`. There is no "dummy org" concept — self-signup
 provisions a normal organization with a name-based slug.
 
-Founder onboarding (steps 1–4) includes a widget-level **Skip setup and go to
-dashboard** action that calls `completeOnboarding` and navigates to `/dashboard`.
-The skip control is not shown on the final test step (step 5). Step 1 collects
-organization profile fields (name, slug, timezone, website, industry, address).
-Step 2 requires an agent name and optionally a voice template (hard-coded seed
-names are replaced with the chosen agent name). Step 4 is informational only.
-When the agent is created on step 5, onboarding is marked complete immediately
-so a refresh lands on the dashboard; Back is not offered on that step.
+Founder onboarding has two stages, without a visible timeline: organization
+details followed by plan activation. The organization details stage collects
+name, slug, timezone, website, industry, and address, then persists them before
+showing plans. A saved organization with all required details resumes directly
+at plan selection after a refresh. The timezone is included in both the update
+response and membership-based organization reads so it remains available to the
+onboarding form.
+
+The plan stage groups published versions under **Monthly** and **Annually**.
+Free plans activate in the platform without Stripe; paid plans use Stripe
+Checkout and return to onboarding for webhook-backed activation confirmation.
+Stripe Checkout customers are initialized from the authenticated organization
+admin's email, so the non-editable email shown by Stripe matches the signed-in
+user rather than a generated organization placeholder.
+Onboarding completion then redirects the founder to `/dashboard`. Agent
+creation, phone-number purchase, tools setup, and test calls happen after
+onboarding from the dashboard.
 
 ```mermaid
 sequenceDiagram
