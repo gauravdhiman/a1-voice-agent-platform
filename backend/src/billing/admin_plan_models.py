@@ -16,7 +16,7 @@ from .entitlement_models import (
     EntitlementKind,
     EntitlementValueType,
 )
-from .plan_version_models import BillingMode, PlanVersionStatus
+from .plan_version_models import BillingMode, CreditGrantPolicy, PlanVersionStatus
 
 
 class EntitlementDefinitionUpdate(BaseModel):
@@ -78,6 +78,7 @@ class PlanVersionDraftCreate(BaseModel):
 
     display_label: Optional[str] = None
     billing_mode: BillingMode = BillingMode.PAID
+    credit_grant_policy: CreditGrantPolicy = CreditGrantPolicy.RECURRING
     price_amount_cents: int = Field(default=0, ge=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
     billing_interval: str = Field(default="monthly")
@@ -91,6 +92,7 @@ class PlanVersionDraftUpdate(BaseModel):
 
     display_label: Optional[str] = None
     billing_mode: Optional[BillingMode] = None
+    credit_grant_policy: Optional[CreditGrantPolicy] = None
     price_amount_cents: Optional[int] = Field(None, ge=0)
     currency: Optional[str] = Field(None, min_length=3, max_length=3)
     billing_interval: Optional[str] = None
@@ -117,6 +119,7 @@ class PlanVersionSummary(BaseModel):
     status: PlanVersionStatus
     display_label: Optional[str] = None
     billing_mode: BillingMode = BillingMode.PAID
+    credit_grant_policy: CreditGrantPolicy = CreditGrantPolicy.RECURRING
     price_amount_cents: int
     currency: str
     billing_interval: str

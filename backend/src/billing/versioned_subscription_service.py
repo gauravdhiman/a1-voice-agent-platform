@@ -1,14 +1,16 @@
 """Service for customer-facing, immutable plan selection and activation."""
 
+import calendar
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
 from shared.config import supabase_config
 
+from .credit_grant_service import credit_grant_service
 from .models import SubscriptionStatus
-from .plan_version_models import BillingMode, PlanVersionStatus
+from .plan_version_models import BillingMode, CreditGrantPolicy, PlanVersionStatus
 from .stripe_service import stripe_service
 from .versioned_subscription_models import (
     CustomerPlanVersion,
@@ -29,6 +31,7 @@ class VersionedSubscriptionService:
     def __init__(self) -> None:
         """Initialize the service with the configured Supabase client."""
         self.supabase = supabase_config.client
+        self.credit_grant_service = credit_grant_service
 
     async def list_available_plan_versions(self) -> list[CustomerPlanVersion]:
         """Return current published versions and their customer-visible entitlements."""
@@ -84,6 +87,9 @@ class VersionedSubscriptionService:
 
         now = datetime.now(timezone.utc)
         period_end = self._period_end(now, version.get("billing_interval", "monthly"))
+        grant_policy = version.get(
+            "credit_grant_policy", CreditGrantPolicy.RECURRING.value
+        )
         payload = {
             "organization_id": str(organization_id),
             "subscription_plan_id": version.get("legacy_subscription_plan_id"),
@@ -98,6 +104,8 @@ class VersionedSubscriptionService:
             "metadata": {
                 "activation_source": "onboarding",
                 "billing_mode": BillingMode.FREE.value,
+                "credit_grant_policy": grant_policy,
+                "billing_interval": version.get("billing_interval", "monthly"),
             },
         }
 
@@ -117,8 +125,16 @@ class VersionedSubscriptionService:
 
         if not result.data:
             raise ValueError("Failed to activate free plan")
+        subscription_row = result.data[0]
+        await self.credit_grant_service.grant_for_subscription(
+            subscription_row,
+            grant_reason="activation",
+            period_start=now,
+            period_end=period_end,
+            grant_key=f"free-subscription:{subscription_row['id']}:activation",
+        )
         return FreePlanActivationResponse(
-            subscription=self._to_subscription_record(result.data[0]),
+            subscription=self._to_subscription_record(subscription_row),
             created=existing is None,
         )
 
@@ -256,6 +272,7 @@ class VersionedSubscriptionService:
             "metadata": {
                 **(stripe_subscription.get("metadata") or {}),
                 "billing_mode": BillingMode.PAID.value,
+                "credit_grant_policy": CreditGrantPolicy.RECURRING.value,
             },
         }
         table = self.supabase.table("organization_subscriptions")
@@ -309,8 +326,19 @@ class VersionedSubscriptionService:
 
     @staticmethod
     def _period_end(start: datetime, billing_interval: str) -> datetime:
-        """Return a provisional period boundary until credit policies are added."""
-        return start + timedelta(days=365 if billing_interval == "annual" else 30)
+        """Return the next calendar-aligned monthly or annual boundary."""
+        if billing_interval == "annual":
+            try:
+                return start.replace(year=start.year + 1)
+            except ValueError:
+                return start.replace(year=start.year + 1, day=28)
+        next_month = start.month + 1
+        next_year = start.year
+        if next_month == 13:
+            next_month = 1
+            next_year += 1
+        next_day = min(start.day, calendar.monthrange(next_year, next_month)[1])
+        return start.replace(year=next_year, month=next_month, day=next_day)
 
     @staticmethod
     def _to_customer_plan_version(
@@ -329,6 +357,9 @@ class VersionedSubscriptionService:
             version_number=row["version_number"],
             display_label=row.get("display_label"),
             billing_mode=BillingMode(row["billing_mode"]),
+            credit_grant_policy=CreditGrantPolicy(
+                row.get("credit_grant_policy", CreditGrantPolicy.RECURRING.value)
+            ),
             price_amount_cents=row["price_amount_cents"],
             currency=row["currency"],
             billing_interval=row["billing_interval"],

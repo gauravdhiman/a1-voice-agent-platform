@@ -18,6 +18,11 @@ import type {
   CreditPurchaseResponse,
   OrgEntitlements,
   PlanMigrationResponse,
+  CustomerPlanVersion,
+  FreePlanActivationResponse,
+  SubscriptionActivationStatus,
+  VersionedSubscriptionCheckoutRequest,
+  VersionedSubscriptionCheckoutResponse,
 } from "@/types/billing";
 
 class BillingService {
@@ -49,6 +54,65 @@ class BillingService {
   async getSubscriptionPlan(planId: string): Promise<SubscriptionPlan> {
     const response = await apiClient.get<SubscriptionPlan>(
       `${this.baseUrl}/plans/${planId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Fetches published plan versions that are available to new organizations.
+   *
+   * @returns Promise resolving to customer-safe plan catalog entries.
+   */
+  async getAvailablePlanVersions(): Promise<CustomerPlanVersion[]> {
+    const response = await apiClient.get<CustomerPlanVersion[]>(
+      `${this.baseUrl}/plans/available`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Activates a free plan version without invoking Stripe.
+   *
+   * @param organizationId Organization being enrolled
+   * @param planVersionId Published free plan version selected by the founder
+   */
+  async activateFreePlan(
+    organizationId: string,
+    planVersionId: string,
+  ): Promise<FreePlanActivationResponse> {
+    const response = await apiClient.post<FreePlanActivationResponse>(
+      `${this.baseUrl}/subscription/free`,
+      { organization_id: organizationId, plan_version_id: planVersionId },
+    );
+    return response.data;
+  }
+
+  /**
+   * Starts Stripe Checkout for a published paid plan version.
+   *
+   * @param request Organization, immutable plan version, and return URLs
+   */
+  async createVersionedSubscriptionCheckout(
+    request: VersionedSubscriptionCheckoutRequest,
+  ): Promise<VersionedSubscriptionCheckoutResponse> {
+    const response =
+      await apiClient.post<VersionedSubscriptionCheckoutResponse>(
+        `${this.baseUrl}/checkout/versioned-subscription`,
+        request,
+      );
+    return response.data;
+  }
+
+  /**
+   * Gets the activation state used while waiting for Stripe webhooks.
+   *
+   * @param organizationId Organization whose activation is being checked
+   */
+  async getSubscriptionActivationStatus(
+    organizationId: string,
+  ): Promise<SubscriptionActivationStatus> {
+    const response = await apiClient.get<SubscriptionActivationStatus>(
+      `${this.baseUrl}/subscription/status/${organizationId}`,
     );
     return response.data;
   }

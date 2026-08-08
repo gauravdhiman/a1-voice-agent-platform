@@ -174,3 +174,63 @@ class TestWebhookPlanVersionBinding:
             update_data = mock_update.call_args[0][1]
             assert update_data.plan_version_id == plan_version_id
             assert update_data.subscription_plan_id == legacy_plan_id
+
+    @pytest.mark.asyncio
+    async def test_invoice_payment_uses_idempotent_plan_credit_grant(
+        self, org_id, plan_version_id
+    ):
+        """Paid invoice renewals grant through the shared policy service."""
+        from src.billing.webhook_handler import handle_invoice_payment_succeeded
+
+        event = {
+            "created": int(datetime.now(timezone.utc).timestamp()),
+            "data": {
+                "object": {
+                    "id": "in_renewal_123",
+                    "customer": "cus_stripe_123",
+                    "subscription": "sub_stripe_123",
+                    "amount_paid": 2900,
+                    "currency": "usd",
+                    "status_transitions": {
+                        "paid_at": int(datetime.now(timezone.utc).timestamp())
+                    },
+                }
+            },
+        }
+        stripe_subscription = {
+            "id": "sub_stripe_123",
+            "metadata": {"organization_id": str(org_id)},
+            "items": {"data": [{"price": {"id": "price_growth"}}]},
+            "current_period_start": int(datetime.now(timezone.utc).timestamp()),
+            "current_period_end": int(datetime.now(timezone.utc).timestamp()) + 86400,
+        }
+        org_subscription = {
+            "id": str(uuid4()),
+            "organization_id": str(org_id),
+            "plan_version_id": str(plan_version_id),
+        }
+
+        with patch(
+            "src.billing.webhook_handler.stripe_service.get_subscription",
+            new_callable=AsyncMock,
+            return_value=stripe_subscription,
+        ), patch(
+            "src.billing.webhook_handler.billing_service.create_billing_history",
+            new_callable=AsyncMock,
+        ), patch(
+            "src.billing.webhook_handler.billing_service.get_organization_subscription",
+            new_callable=AsyncMock,
+            return_value=org_subscription,
+        ), patch(
+            "src.billing.webhook_handler.billing_service.get_subscription_plans",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "src.billing.webhook_handler.credit_grant_service.grant_for_subscription",
+            new_callable=AsyncMock,
+        ) as grant:
+            await handle_invoice_payment_succeeded(event)
+
+        grant.assert_awaited_once()
+        assert grant.await_args.kwargs["grant_reason"] == "invoice_paid"
+        assert grant.await_args.kwargs["grant_key"] == "stripe-invoice:in_renewal_123"

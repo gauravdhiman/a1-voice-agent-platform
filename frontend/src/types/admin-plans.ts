@@ -2,17 +2,17 @@
  * Types for platform-admin plan catalog and entitlement management APIs.
  */
 
-export type PlanVersionStatus = "draft" | "published" | "deprecated" | "retired";
+export type PlanVersionStatus =
+  "draft" | "published" | "deprecated" | "retired";
+
+export type BillingMode = "free" | "paid";
+
+export type CreditGrantPolicy = "recurring" | "one_time";
 
 export type EntitlementKind = "limit" | "feature";
 
 export type EntitlementValueType =
-  | "integer"
-  | "boolean"
-  | "unlimited"
-  | "decimal"
-  | "enum"
-  | "duration_seconds";
+  "integer" | "boolean" | "unlimited" | "decimal" | "enum" | "duration_seconds";
 
 export type MigrationMode =
   | "new_signups_only"
@@ -21,9 +21,7 @@ export type MigrationMode =
   | "immediate_required";
 
 export type StripeMigrationTiming =
-  | "immediate"
-  | "at_period_end"
-  | "at_grace_end";
+  "immediate" | "at_period_end" | "at_grace_end";
 
 export interface EntitlementDefinition {
   key: string;
@@ -75,6 +73,8 @@ export interface PlanVersionSummary {
   version_number: number;
   status: PlanVersionStatus;
   display_label?: string | null;
+  billing_mode: BillingMode;
+  credit_grant_policy: CreditGrantPolicy;
   price_amount_cents: number;
   currency: string;
   billing_interval: string;
@@ -110,6 +110,8 @@ export interface PlanVersionEntitlementInput {
 
 export interface PlanVersionDraftCreate {
   display_label?: string;
+  billing_mode?: BillingMode;
+  credit_grant_policy?: CreditGrantPolicy;
   price_amount_cents?: number;
   currency?: string;
   billing_interval?: string;
@@ -120,6 +122,8 @@ export interface PlanVersionDraftCreate {
 
 export interface PlanVersionDraftUpdate {
   display_label?: string;
+  billing_mode?: BillingMode;
+  credit_grant_policy?: CreditGrantPolicy;
   price_amount_cents?: number;
   currency?: string;
   billing_interval?: string;

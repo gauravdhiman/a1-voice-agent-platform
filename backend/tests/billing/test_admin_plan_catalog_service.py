@@ -15,11 +15,12 @@ from src.billing.admin_plan_models import (
     PlanVersionDraftUpdate,
     PlanVersionEntitlementInput,
 )
-from src.billing.entitlement_models import (
-    EntitlementKind,
-    EntitlementValueType,
+from src.billing.entitlement_models import EntitlementKind, EntitlementValueType
+from src.billing.plan_version_models import (
+    BillingMode,
+    CreditGrantPolicy,
+    PlanVersionStatus,
 )
-from src.billing.plan_version_models import BillingMode, PlanVersionStatus
 
 
 @pytest.fixture
@@ -63,6 +64,7 @@ def _version_row(
     status=PlanVersionStatus.DRAFT.value,
     version_number=1,
     billing_mode=BillingMode.PAID.value,
+    credit_grant_policy=CreditGrantPolicy.RECURRING.value,
 ):
     now = datetime.now(timezone.utc).isoformat()
     return {
@@ -78,6 +80,7 @@ def _version_row(
         "stripe_product_id": None,
         "stripe_price_id": None,
         "billing_mode": billing_mode,
+        "credit_grant_policy": credit_grant_policy,
         "is_current_for_signup": False,
         "published_at": None,
         "legacy_subscription_plan_id": None,
@@ -120,11 +123,13 @@ class TestAdminPlanCatalogService:
         """A free draft is explicit and does not require Stripe identifiers."""
         draft = PlanVersionDraftCreate(
             billing_mode=BillingMode.FREE,
+            credit_grant_policy=CreditGrantPolicy.ONE_TIME,
             price_amount_cents=0,
             stripe_product_id=None,
         )
 
         assert draft.billing_mode is BillingMode.FREE
+        assert draft.credit_grant_policy is CreditGrantPolicy.ONE_TIME
         assert draft.stripe_product_id is None
 
     @pytest.mark.asyncio
@@ -269,6 +274,7 @@ class TestAdminPlanCatalogService:
                     display_label="Free v3",
                     price_amount_cents=0,
                     billing_mode=BillingMode.FREE,
+                    credit_grant_policy=CreditGrantPolicy.ONE_TIME,
                 ),
             )
         assert result.version_number == 3
@@ -276,6 +282,7 @@ class TestAdminPlanCatalogService:
             catalog_service.supabase.table.return_value.insert.call_args.args[0]
         )
         assert inserted_row["billing_mode"] == BillingMode.FREE.value
+        assert inserted_row["credit_grant_policy"] == CreditGrantPolicy.ONE_TIME.value
 
     @pytest.mark.asyncio
     async def test_update_draft_version_rejects_published(
@@ -297,6 +304,37 @@ class TestAdminPlanCatalogService:
                 await catalog_service.update_draft_version(
                     version_id, PlanVersionDraftUpdate(display_label="Nope")
                 )
+
+    @pytest.mark.asyncio
+    async def test_clone_preserves_credit_grant_policy(
+        self, catalog_service, product_id, version_id
+    ):
+        """Cloning a one-time version keeps its explicit credit cadence."""
+        from src.billing.admin_plan_models import PlanVersionDetail
+
+        source = _version_row(
+            version_id,
+            product_id,
+            credit_grant_policy=CreditGrantPolicy.ONE_TIME.value,
+        )
+        source_detail = PlanVersionDetail(**source, entitlements=[])
+        cloned_detail = PlanVersionDetail(
+            **_version_row(uuid4(), product_id), entitlements=[]
+        )
+
+        with patch.object(
+            catalog_service, "get_plan_version", return_value=source_detail
+        ), patch.object(
+            catalog_service, "_ensure_no_existing_draft", return_value=None
+        ), patch.object(
+            catalog_service,
+            "create_draft_version",
+            return_value=cloned_detail,
+        ) as create_draft:
+            await catalog_service.clone_plan_version(source_detail.id)
+
+        create_data = create_draft.call_args.args[1]
+        assert create_data.credit_grant_policy is CreditGrantPolicy.ONE_TIME
 
     @pytest.mark.asyncio
     async def test_update_draft_version_replaces_entitlements(

@@ -386,14 +386,18 @@ class BillingService:
         credits: int,
         subscription_id: UUID,
         expires_at: Optional[datetime] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> CreditTransaction:
-        """Add subscription credits to an organization."""
+        """Add subscription credits to an organization exactly once per key."""
         return await self._add_credits(
             organization_id=organization_id,
             credits=credits,
             source=TransactionSource.SUBSCRIPTION,
             source_id=subscription_id,
             expires_at=expires_at,
+            metadata=metadata,
+            idempotency_key=idempotency_key,
             description=f"Subscription credits allocation",
         )
 
@@ -423,9 +427,7 @@ class BillingService:
                 raise ValueError(f"Organization {organization_id} not found")
 
             current_plan_balance = org_result.data[0]["credit_balance"]
-            current_purchased_balance = org_result.data[0][
-                "purchased_credit_balance"
-            ]
+            current_purchased_balance = org_result.data[0]["purchased_credit_balance"]
 
             # Calculate the difference needed to reach the target plan credit amount
             credit_difference = credits - current_plan_balance
@@ -528,6 +530,8 @@ class BillingService:
         expires_at: Optional[datetime] = None,
         stripe_payment_intent_id: Optional[str] = None,
         description: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> CreditTransaction:
         """Internal method to add credits to the correct pool.
 
@@ -542,6 +546,18 @@ class BillingService:
         Any grant/purchase re-arms low-balance notifications for the cycle.
         """
         try:
+            if idempotency_key:
+                existing_result = (
+                    self.supabase.table("credit_transactions")
+                    .select("*")
+                    .eq("organization_id", str(organization_id))
+                    .contains("metadata", {"grant_key": idempotency_key})
+                    .limit(1)
+                    .execute()
+                )
+                if existing_result.data:
+                    return CreditTransaction(**existing_result.data[0])
+
             # Get current balances
             org_result = (
                 self.supabase.table("organizations")
@@ -602,6 +618,7 @@ class BillingService:
                 expires_at=expires_at,
                 stripe_payment_intent_id=stripe_payment_intent_id,
                 description=description,
+                metadata=metadata,
             )
 
             # Convert UUID objects to strings for JSON serialization
@@ -681,9 +698,7 @@ class BillingService:
             return current_purchased
         except Exception as e:
             # Expiry bookkeeping must not block the new grant.
-            logger.error(
-                f"Error logging plan credit expiry for {organization_id}: {e}"
-            )
+            logger.error(f"Error logging plan credit expiry for {organization_id}: {e}")
             return current_purchased
 
     async def _reset_low_credit_notification(self, organization_id: UUID) -> None:
@@ -848,16 +863,13 @@ class BillingService:
         Returns:
             JSON payload from the RPC with ``success``, balances, and pool usage.
         """
-        result = (
-            self.supabase.rpc(
-                "debit_organization_credits",
-                {
-                    "p_organization_id": str(organization_id),
-                    "p_credits_needed": credits_needed,
-                },
-            )
-            .execute()
-        )
+        result = self.supabase.rpc(
+            "debit_organization_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits_needed": credits_needed,
+            },
+        ).execute()
         payload = result.data
         if isinstance(payload, list):
             payload = payload[0] if payload else {}
@@ -906,14 +918,12 @@ class BillingService:
         grant or purchase. Failures are logged and never break consumption.
         """
         try:
-            from src.rbac.user_roles.service import user_role_service
             from src.notifications.models import SendNotificationRequest
             from src.notifications.service import notification_service
+            from src.rbac.user_roles.service import user_role_service
 
-            included = (
-                await credit_entitlement_service.get_included_credits_per_billing_period(
-                    organization_id
-                )
+            included = await credit_entitlement_service.get_included_credits_per_billing_period(
+                organization_id
             )
             if included <= 0:
                 return
@@ -952,9 +962,7 @@ class BillingService:
 
             # Prefer org admins; fall back to all members
             admins = [
-                m
-                for m in members
-                if any(role.name == "org_admin" for role in m.roles)
+                m for m in members if any(role.name == "org_admin" for role in m.roles)
             ]
             recipients = admins or members
 
@@ -974,7 +982,9 @@ class BillingService:
                         template_variables={
                             "user_name": f"{member.first_name} {member.last_name}".strip(),
                             "current_credits": str(remaining_total),
-                            "organization_name": org_row.get("name", "your organization"),
+                            "organization_name": org_row.get(
+                                "name", "your organization"
+                            ),
                             "purchase_credits_url": purchase_url,
                             "app_name": getattr(settings, "app_name", "24x7 AI"),
                         },

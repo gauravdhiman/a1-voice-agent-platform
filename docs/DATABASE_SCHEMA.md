@@ -9,7 +9,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Voice Agent Tables](#voice-agent-tables)
 - [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
-- [Planned: Plan Versioning & Entitlements Tables](#planned-plan-versioning--entitlements-tables)
+- [Plan Versioning & Entitlements Tables](#plan-versioning--entitlements-tables)
 - [Notification Tables](#notification-tables)
 - [Platform Skills Tables](#platform-skills-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
@@ -509,6 +509,7 @@ Tracks organization subscription status.
 | id                     | UUID         | PRIMARY KEY                          | Unique subscription identifier                      |
 | organization_id        | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                             |
 | subscription_plan_id   | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                     |
+| plan_version_id        | UUID         | NULLABLE, FK → plan_versions.id      | Immutable plan version selected for the subscription |
 | stripe_subscription_id | VARCHAR(255) | NULLABLE, UNIQUE                     | Stripe subscription identifier                      |
 | stripe_customer_id     | VARCHAR(255) | NULLABLE                             | Stripe customer identifier; null for free plans     |
 | status                 | VARCHAR(50)  | NOT NULL                             | Status: trial, active, past_due, cancelled, expired |
@@ -526,6 +527,7 @@ Tracks organization subscription status.
 
 - `organization_id` → `organizations.id` (CASCADE)
 - `subscription_plan_id` → `subscription_plans.id` (SET NULL)
+- `plan_version_id` → `plan_versions.id` (SET NULL)
 
 **RLS**: Enabled
 **Unique Constraints**: `(organization_id)`, `(stripe_subscription_id)`
@@ -569,13 +571,13 @@ Tracks all credit movements.
 | transaction_type         | VARCHAR(50)  | NOT NULL                        | Type: earned, purchased, consumed, expired                |
 | amount                   | INTEGER      | NOT NULL                        | Positive for credits added, negative for consumed         |
 | balance_after            | INTEGER      | NOT NULL                        | Balance after transaction                                 |
-| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry |
+| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry, admin_adjustment, referral |
 | source_id                | UUID         | NULLABLE                        | Reference to source record                                |
 | credit_event_id          | UUID         | NULLABLE, FK → credit_events.id | Event identifier (for consumption)                        |
 | expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for plan (subscription) credits; **NULL for purchased credits** (never expire) — the two-pool backfill in migration 20260807000005 keys on `source='purchase'` + `transaction_type='purchased'` + `expires_at IS NULL` |
 | stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                          |
 | description              | TEXT         | NULLABLE                        | Transaction description                                   |
-| metadata                 | JSONB        | NULLABLE                        | Additional metadata                                       |
+| metadata                 | JSONB        | NULLABLE                        | Source/policy/period metadata; subscription grants include a stable `grant_key` for idempotency |
 | created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                                        |
 
 **Foreign Keys**:
@@ -649,14 +651,14 @@ Tracks payment history and invoices.
 
 ### Plan Versioning & Entitlements Tables
 
-> **Status:** Implemented through migrations `20260807000002`–`20260807000009`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
+> **Status:** Implemented through migrations `20260807000002`–`20260808000011`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
 
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 
 | Table | Purpose |
 | ----- | ------- |
 | `plan_products` | Plan families (`starter`, `growth`) — marketing identity |
-| `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, price, and optional Stripe Price |
+| `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price |
 | `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
 | `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB) |
 | `plan_version_publish_events` | Migration policy when a new version is published |
@@ -668,6 +670,12 @@ Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan
 **Key change to `organization_subscriptions`:** add `plan_version_id` FK → `plan_versions.id` (subscription locked to version at signup). Deprecate `subscription_plan_id` after backfill.
 
 **Billing mode:** `plan_versions.billing_mode` is constrained to `free` or `paid` and is the authoritative activation decision. Free versions may omit Stripe identifiers; paid versions require Stripe checkout metadata and a Stripe Price before checkout.
+
+**Credit cadence:** `plan_versions.credit_grant_policy` is constrained to
+`recurring` or `one_time`. Recurring plan grants expire at the current period
+end and renew from Stripe invoice events for paid plans or the application
+free-plan scheduler for free plans. One-time grants are issued at activation
+only and do not schedule a renewal.
 
 **Grandfathering rule:** Published `plan_versions` rows are immutable. Admin "edits" create a new draft version → publish → new signups only; existing subs keep old `plan_version_id` until migration job or self-service upgrade.
 
@@ -1280,6 +1288,8 @@ erDiagram
 38. `20260807000007` - Atomic credit consumption: add `debit_organization_credits(organization_id, credits_needed)` Postgres function. Locks the organization row (`SELECT … FOR UPDATE`), allocates plan-first then purchased, and updates both pools in one transaction so concurrent voice sessions cannot overspend prepaid balance.
 39. `20260807000008` - Add required `plan_versions.billing_mode` (`free` or `paid`), backfill existing versions from the current plan-product catalog during migration, and add a check constraint plus lookup index. Free versions no longer require Stripe Price creation at publish time.
 40. `20260807000009` - Make `organization_subscriptions.stripe_customer_id` nullable so explicitly free plan subscriptions can be represented without Stripe identifiers.
+41. `20260808000010` - Add constrained `plan_versions.credit_grant_policy` (`recurring` or `one_time`) to distinguish automatic recurring plan credits from one-time free/trial credits.
+42. `20260808000011` - Make the current free signup version usable after onboarding by allowing one agent and assigning 100 included credits per recurring period.
 
 ---
 
@@ -1528,4 +1538,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-05-06
+**Last Updated**: 2026-08-08

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ONBOARDING_FINAL_STEP,
   applyTemplatePlaceholders,
   canContinueTemplateStep,
   canSkipOnboarding,
@@ -22,14 +21,9 @@ const baseOrgDetails = {
 };
 
 describe("canSkipOnboarding", () => {
-  it("allows skip on every step before the final test step", () => {
-    for (let step = 1; step < ONBOARDING_FINAL_STEP; step += 1) {
-      expect(canSkipOnboarding(step)).toBe(true);
-    }
-  });
-
-  it("does not allow skip on the final test step", () => {
-    expect(canSkipOnboarding(ONBOARDING_FINAL_STEP)).toBe(false);
+  it("does not allow skipping either required founder onboarding step", () => {
+    expect(canSkipOnboarding(1)).toBe(false);
+    expect(canSkipOnboarding(2)).toBe(false);
   });
 
   it("does not allow skip for invalid steps", () => {
@@ -44,9 +38,9 @@ describe("isOrgDetailsStepComplete", () => {
     expect(
       isOrgDetailsStepComplete({ ...baseOrgDetails, businessName: "  " }),
     ).toBe(false);
-    expect(isOrgDetailsStepComplete({ ...baseOrgDetails, slug: "Bad Slug" })).toBe(
-      false,
-    );
+    expect(
+      isOrgDetailsStepComplete({ ...baseOrgDetails, slug: "Bad Slug" }),
+    ).toBe(false);
     expect(isOrgDetailsStepComplete({ ...baseOrgDetails, timezone: "" })).toBe(
       false,
     );
@@ -103,7 +97,10 @@ describe("template step gating", () => {
 
   it("requires agent name and a template to continue", () => {
     expect(
-      canContinueTemplateStep({ agentName: "Alex", selectedTemplate: template }),
+      canContinueTemplateStep({
+        agentName: "Alex",
+        selectedTemplate: template,
+      }),
     ).toBe(true);
     expect(
       canContinueTemplateStep({ agentName: "", selectedTemplate: template }),

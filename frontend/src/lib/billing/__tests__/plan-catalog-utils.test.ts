@@ -30,6 +30,8 @@ describe("plan-catalog-utils", () => {
         plan_product_id: "pro",
         version_number: 2,
         status: "published",
+        billing_mode: "paid",
+        credit_grant_policy: "recurring",
         price_amount_cents: 1000,
         currency: "USD",
         billing_interval: "monthly",
@@ -42,6 +44,8 @@ describe("plan-catalog-utils", () => {
         plan_product_id: "pro",
         version_number: 3,
         status: "published",
+        billing_mode: "paid",
+        credit_grant_policy: "recurring",
         price_amount_cents: 12000,
         currency: "USD",
         billing_interval: "annual",
@@ -60,6 +64,8 @@ describe("plan-catalog-utils", () => {
         plan_product_id: "starter-monthly",
         version_number: 1,
         status: "published",
+        billing_mode: "free",
+        credit_grant_policy: "recurring",
         price_amount_cents: 0,
         currency: "USD",
         billing_interval: "monthly",
@@ -74,6 +80,8 @@ describe("plan-catalog-utils", () => {
         plan_product_id: "pro-annual",
         version_number: 1,
         status: "published",
+        billing_mode: "paid",
+        credit_grant_policy: "recurring",
         price_amount_cents: 9900,
         currency: "USD",
         billing_interval: "annual",
@@ -82,8 +90,12 @@ describe("plan-catalog-utils", () => {
         updated_at: "",
       },
     ]);
-    expect(filterProductsByCadence([monthly, annual], "monthly")).toEqual([monthly]);
-    expect(filterProductsByCadence([monthly, annual], "annual")).toEqual([annual]);
+    expect(filterProductsByCadence([monthly, annual], "monthly")).toEqual([
+      monthly,
+    ]);
+    expect(filterProductsByCadence([monthly, annual], "annual")).toEqual([
+      annual,
+    ]);
   });
 
   it("detects draft on product", () => {
@@ -93,6 +105,8 @@ describe("plan-catalog-utils", () => {
         plan_product_id: "x",
         version_number: 1,
         status: "draft",
+        billing_mode: "paid",
+        credit_grant_policy: "recurring",
         price_amount_cents: 0,
         currency: "USD",
         billing_interval: "monthly",

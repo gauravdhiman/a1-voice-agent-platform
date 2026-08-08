@@ -14,12 +14,12 @@ Contract:
   - User with `platform_admin` role → 200 (existing path).
   - `org_service.create_invitation` is NEVER called for a 403 path.
 """
-import json
 
-import pytest
+import json
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
+import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
@@ -48,9 +48,7 @@ def _make_profile(
     )
     profile.has_permission = Mock(
         side_effect=lambda perm, org_id=None: (
-            perm == "member:create"
-            and org_id == str(TEST_ORG_ID)
-            and has_member_create
+            perm == "member:create" and org_id == str(TEST_ORG_ID) and has_member_create
         )
     )
     return profile
@@ -103,8 +101,10 @@ class TestInviteMemberPermissionTypo:
         profile = _make_profile(has_member_create=True)
         mock_request = _make_json_request({"email": TEST_EMAIL})
 
-        with patch("src.organization.routes.organization_service") as mock_svc, \
-             patch("src.organization.service.organization_service") as mock_svc_module:
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.service.organization_service") as mock_svc_module,
+        ):
             mock_svc.create_invitation = AsyncMock(
                 return_value=(_make_invitation(), None)
             )
@@ -147,8 +147,10 @@ class TestInviteMemberPermissionTypo:
         profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
         mock_request = _make_json_request({"email": TEST_EMAIL})
 
-        with patch("src.organization.routes.organization_service") as mock_svc, \
-             patch("src.organization.service.organization_service") as mock_svc_module:
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.service.organization_service") as mock_svc_module,
+        ):
             mock_svc.create_invitation = AsyncMock(
                 return_value=(_make_invitation(), None)
             )
@@ -170,8 +172,10 @@ class TestInviteMemberPermissionTypo:
         profile = _make_profile(is_platform_admin=True)
         mock_request = _make_json_request({"email": TEST_EMAIL})
 
-        with patch("src.organization.routes.organization_service") as mock_svc, \
-             patch("src.organization.service.organization_service") as mock_svc_module:
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.service.organization_service") as mock_svc_module,
+        ):
             mock_svc.create_invitation = AsyncMock(
                 return_value=(_make_invitation(), None)
             )
@@ -246,8 +250,8 @@ class TestCreateOrganizationPlatformRole:
 
     @pytest.mark.asyncio
     async def test_non_platform_admin_gets_403(self):
-        from src.organization.routes import create_organization
         from src.organization.models import OrganizationCreate
+        from src.organization.routes import create_organization
 
         profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
 
@@ -266,8 +270,8 @@ class TestUpdateOrganizationOrgAdminOnly:
 
     @pytest.mark.asyncio
     async def test_org_admin_on_other_org_gets_403(self):
-        from src.organization.routes import update_organization
         from src.organization.models import OrganizationUpdate
+        from src.organization.routes import update_organization
 
         # org_admin on a DIFFERENT org (not TEST_ORG_ID).
         profile = _make_profile(is_org_admin_on="00000000-0000-0000-0000-000000000999")
@@ -282,8 +286,8 @@ class TestUpdateOrganizationOrgAdminOnly:
 
     @pytest.mark.asyncio
     async def test_no_role_gets_403(self):
-        from src.organization.routes import update_organization
         from src.organization.models import OrganizationUpdate
+        from src.organization.routes import update_organization
 
         profile = _make_profile()
         with pytest.raises(HTTPException) as exc_info:
@@ -330,10 +334,7 @@ def _make_read_profile(
     )
 
     def _has_permission(perm, org_id=None):
-        return (
-            perm == "organization:read"
-            and org_id == has_org_read_on
-        )
+        return perm == "organization:read" and org_id == has_org_read_on
 
     profile.has_permission = Mock(side_effect=_has_permission)
     return profile
@@ -516,8 +517,14 @@ class TestCompleteOnboardingOrgAdminOnly:
         profile = _make_read_profile(is_platform_admin=True)
         org = Mock()
 
-        with patch("src.organization.routes.organization_service") as mock_svc:
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.routes.billing_service") as mock_billing,
+        ):
             mock_svc.complete_onboarding = AsyncMock(return_value=(org, None))
+            mock_billing.get_organization_subscription = AsyncMock(
+                return_value=Mock(status="active")
+            )
 
             result = await complete_onboarding(
                 org_id=TEST_ORG_ID, user_data=(TEST_USER_ID, profile)
@@ -531,8 +538,14 @@ class TestCompleteOnboardingOrgAdminOnly:
         profile = _make_read_profile(is_org_admin_on=str(TEST_ORG_ID))
         org = Mock()
 
-        with patch("src.organization.routes.organization_service") as mock_svc:
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.routes.billing_service") as mock_billing,
+        ):
             mock_svc.complete_onboarding = AsyncMock(return_value=(org, None))
+            mock_billing.get_organization_subscription = AsyncMock(
+                return_value=Mock(status="active")
+            )
 
             result = await complete_onboarding(
                 org_id=TEST_ORG_ID, user_data=(TEST_USER_ID, profile)
@@ -547,13 +560,42 @@ class TestCompleteOnboardingOrgAdminOnly:
         profile = _make_read_profile(is_org_admin_on=str(TEST_ORG_ID))
         org = Mock()
 
-        with patch("src.organization.routes.organization_service") as mock_svc:
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.routes.billing_service") as mock_billing,
+        ):
             mock_svc.complete_onboarding = AsyncMock(return_value=(org, None))
+            mock_billing.get_organization_subscription = AsyncMock(
+                return_value=Mock(status="active")
+            )
             result = await complete_onboarding(
                 org_id=TEST_ORG_ID, user_data=(TEST_USER_ID, profile)
             )
             assert result is org
             mock_svc.complete_onboarding.assert_awaited_once_with(TEST_ORG_ID)
+
+    @pytest.mark.asyncio
+    async def test_unselected_plan_cannot_complete_onboarding(self):
+        """Founder onboarding cannot be completed before plan activation."""
+        from src.organization.routes import complete_onboarding
+
+        profile = _make_read_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with (
+            patch("src.organization.routes.billing_service") as mock_billing,
+            patch("src.organization.routes.organization_service") as mock_svc,
+        ):
+            mock_billing.get_organization_subscription = AsyncMock(return_value=None)
+            mock_svc.complete_onboarding = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await complete_onboarding(
+                    org_id=TEST_ORG_ID, user_data=(TEST_USER_ID, profile)
+                )
+
+        assert exc_info.value.status_code == 400
+        assert "subscription" in str(exc_info.value.detail).lower()
+        mock_svc.complete_onboarding.assert_not_called()
 
 
 class TestGetAllOrganizationsReadScope:
@@ -589,4 +631,6 @@ class TestGetAllOrganizationsReadScope:
 
             result = await get_all_organizations(user_data=(TEST_USER_ID, profile))
             assert result is own_orgs
-            mock_role_svc.get_organizations_for_user.assert_called_once_with(TEST_USER_ID)
+            mock_role_svc.get_organizations_for_user.assert_called_once_with(
+                TEST_USER_ID
+            )

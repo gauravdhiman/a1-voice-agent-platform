@@ -222,6 +222,7 @@ class AdminPlanCatalogService:
             "status": PlanVersionStatus.DRAFT.value,
             "display_label": data.display_label,
             "billing_mode": data.billing_mode.value,
+            "credit_grant_policy": data.credit_grant_policy.value,
             "price_amount_cents": data.price_amount_cents,
             "currency": data.currency.upper(),
             "billing_interval": data.billing_interval,
@@ -279,6 +280,7 @@ class AdminPlanCatalogService:
         create_data = PlanVersionDraftCreate(
             display_label=display_label or source.display_label,
             billing_mode=source.billing_mode,
+            credit_grant_policy=source.credit_grant_policy,
             price_amount_cents=(
                 price_amount_cents
                 if price_amount_cents is not None

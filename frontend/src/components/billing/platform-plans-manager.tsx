@@ -12,9 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  CatalogFieldLabel,
-} from "@/components/billing/catalog-help-tooltip";
+import { CatalogFieldLabel } from "@/components/billing/catalog-help-tooltip";
 import {
   PlanProductCreateSheet,
   type PlanProductCreatePayload,
@@ -38,18 +36,13 @@ import {
 import { adminPlanService } from "@/services/admin-plan-service";
 import type {
   EntitlementDefinition,
+  BillingMode,
+  CreditGrantPolicy,
   PlanProductWithVersions,
   PlanVersionDetail,
   PlanVersionSummary,
 } from "@/types/admin-plans";
-import {
-  Copy,
-  Loader2,
-  Plus,
-  Save,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { Copy, Loader2, Plus, Save, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 function statusBadgeVariant(
@@ -75,20 +68,27 @@ function statusBadgeVariant(
  */
 export function PlatformPlansManager() {
   const [products, setProducts] = React.useState<PlanProductWithVersions[]>([]);
-  const [definitions, setDefinitions] = React.useState<EntitlementDefinition[]>([]);
+  const [definitions, setDefinitions] = React.useState<EntitlementDefinition[]>(
+    [],
+  );
   const [loading, setLoading] = React.useState(true);
   const [cadenceTab, setCadenceTab] = React.useState<BillingCadence>("monthly");
   const [createSheetOpen, setCreateSheetOpen] = React.useState(false);
 
-  const [selectedVersionId, setSelectedVersionId] = React.useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = React.useState<PlanVersionDetail | null>(
-    null,
-  );
+  const [selectedVersionId, setSelectedVersionId] = React.useState<
+    string | null
+  >(null);
+  const [selectedVersion, setSelectedVersion] =
+    React.useState<PlanVersionDetail | null>(null);
   const [loadingVersion, setLoadingVersion] = React.useState(false);
 
   const [displayLabel, setDisplayLabel] = React.useState("");
+  const [billingMode, setBillingMode] = React.useState<BillingMode>("paid");
+  const [creditGrantPolicy, setCreditGrantPolicy] =
+    React.useState<CreditGrantPolicy>("recurring");
   const [priceCents, setPriceCents] = React.useState("0");
-  const [billingInterval, setBillingInterval] = React.useState<BillingCadence>("monthly");
+  const [billingInterval, setBillingInterval] =
+    React.useState<BillingCadence>("monthly");
   const [stripeProductId, setStripeProductId] = React.useState("");
   const [stripePriceId, setStripePriceId] = React.useState("");
   const [assignedEntitlements, setAssignedEntitlements] = React.useState<
@@ -126,8 +126,12 @@ export function PlatformPlansManager() {
     (version: PlanVersionDetail, productStripeId?: string | null) => {
       setSelectedVersion(version);
       setDisplayLabel(version.display_label ?? "");
+      setBillingMode(version.billing_mode);
+      setCreditGrantPolicy(version.credit_grant_policy);
       setPriceCents(String(version.price_amount_cents));
-      setBillingInterval(version.billing_interval === "annual" ? "annual" : "monthly");
+      setBillingInterval(
+        version.billing_interval === "annual" ? "annual" : "monthly",
+      );
       setStripeProductId(version.stripe_product_id ?? productStripeId ?? "");
       setStripePriceId(version.stripe_price_id ?? "");
       setAssignedEntitlements(parseAssignedEntitlements(version));
@@ -163,21 +167,31 @@ export function PlatformPlansManager() {
     if (!selectedVersion || selectedVersion.status !== "draft") return;
     try {
       setSaving(true);
-      const entitlements = buildEntitlementInputs(assignedEntitlements, definitions);
-      const updated = await adminPlanService.updateDraftVersion(selectedVersion.id, {
-        display_label: displayLabel || undefined,
-        price_amount_cents: Number(priceCents) || 0,
-        billing_interval: billingInterval,
-        stripe_product_id: stripeProductId.trim() || null,
-        stripe_price_id: stripePriceId.trim() || null,
-        entitlements,
-      });
+      const entitlements = buildEntitlementInputs(
+        assignedEntitlements,
+        definitions,
+      );
+      const updated = await adminPlanService.updateDraftVersion(
+        selectedVersion.id,
+        {
+          display_label: displayLabel || undefined,
+          billing_mode: billingMode,
+          credit_grant_policy: creditGrantPolicy,
+          price_amount_cents: Number(priceCents) || 0,
+          billing_interval: billingInterval,
+          stripe_product_id: stripeProductId.trim() || null,
+          stripe_price_id: stripePriceId.trim() || null,
+          entitlements,
+        },
+      );
       applyVersionToForm(updated);
       toast.success("Draft saved");
       await loadCatalog();
     } catch (error) {
       console.error("Save draft failed:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to save draft");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save draft",
+      );
     } finally {
       setSaving(false);
     }
@@ -236,13 +250,15 @@ export function PlatformPlansManager() {
 
   const productStripeLinked = Boolean(
     stripeProductId.trim() ||
-      selectedProduct?.stripe_product_id ||
-      selectedVersion?.stripe_product_id,
+    selectedProduct?.stripe_product_id ||
+    selectedVersion?.stripe_product_id,
   );
 
   const handleCreateDraft = async (product: PlanProductWithVersions) => {
     if (productHasDraft(product)) {
-      toast.error("This product already has a draft. Publish or delete it first.");
+      toast.error(
+        "This product already has a draft. Publish or delete it first.",
+      );
       return;
     }
     try {
@@ -250,6 +266,8 @@ export function PlatformPlansManager() {
         productBillingBySlug[product.slug] ?? defaultBillingInterval(product);
       const draft = await adminPlanService.createDraftVersion(product.id, {
         display_label: "New draft",
+        billing_mode: "paid",
+        credit_grant_policy: "recurring",
         price_amount_cents: 0,
         billing_interval: interval,
       });
@@ -259,7 +277,9 @@ export function PlatformPlansManager() {
     } catch (error) {
       console.error("Create draft failed:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to create draft version",
+        error instanceof Error
+          ? error.message
+          : "Failed to create draft version",
       );
     }
   };
@@ -272,7 +292,9 @@ export function PlatformPlansManager() {
       await loadVersionDetail(draft.id);
     } catch (error) {
       console.error("Clone failed:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to clone version");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to clone version",
+      );
     }
   };
 
@@ -336,6 +358,9 @@ export function PlatformPlansManager() {
                       ? "Annual billing"
                       : "Monthly billing"}
                   </Badge>
+                  <Badge variant="outline">
+                    {selectedVersion.billing_mode === "free" ? "Free" : "Paid"}
+                  </Badge>
                   <span className="text-sm text-muted-foreground">
                     v{selectedVersion.version_number}
                   </span>
@@ -343,6 +368,57 @@ export function PlatformPlansManager() {
 
                 {selectedVersion.status === "draft" ? (
                   <>
+                    <div className="space-y-2">
+                      <CatalogFieldLabel htmlFor="billing-mode">
+                        Billing mode
+                      </CatalogFieldLabel>
+                      <Select
+                        value={billingMode}
+                        onValueChange={(v) => setBillingMode(v as BillingMode)}
+                      >
+                        <SelectTrigger id="billing-mode" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="free">
+                            Free — activate without Stripe
+                          </SelectItem>
+                          <SelectItem value="paid">
+                            Paid — activate through Stripe
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <CatalogFieldLabel htmlFor="credit-grant-policy">
+                        Included credit cadence
+                      </CatalogFieldLabel>
+                      <Select
+                        value={creditGrantPolicy}
+                        onValueChange={(v) =>
+                          setCreditGrantPolicy(v as CreditGrantPolicy)
+                        }
+                      >
+                        <SelectTrigger
+                          id="credit-grant-policy"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="recurring">
+                            Recurring each billing period
+                          </SelectItem>
+                          <SelectItem value="one_time">
+                            One-time activation grant
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Recurring grants renew from Stripe invoices for paid
+                        plans or the application scheduler for free plans.
+                      </p>
+                    </div>
                     <div className="space-y-2">
                       <CatalogFieldLabel
                         htmlFor="display-label"
@@ -429,8 +505,8 @@ export function PlatformPlansManager() {
                         placeholder="price_…"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Leave empty to auto-create on publish. Set manually if Stripe
-                        Price creation fails.
+                        Leave empty to auto-create on publish. Set manually if
+                        Stripe Price creation fails.
                       </p>
                     </div>
 
@@ -441,7 +517,10 @@ export function PlatformPlansManager() {
                     />
 
                     <div className="flex flex-wrap gap-2">
-                      <Button onClick={() => void handleSaveDraft()} disabled={saving}>
+                      <Button
+                        onClick={() => void handleSaveDraft()}
+                        disabled={saving}
+                      >
                         {saving ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
@@ -449,7 +528,10 @@ export function PlatformPlansManager() {
                         )}
                         Save draft
                       </Button>
-                      <Button variant="default" onClick={() => setPublishOpen(true)}>
+                      <Button
+                        variant="default"
+                        onClick={() => setPublishOpen(true)}
+                      >
                         <Upload className="mr-2 h-4 w-4" />
                         Publish
                       </Button>
@@ -487,7 +569,9 @@ export function PlatformPlansManager() {
                       </div>
                       {selectedVersion.stripe_price_id ? (
                         <div className="sm:col-span-2">
-                          <p className="text-muted-foreground">Stripe price ID</p>
+                          <p className="text-muted-foreground">
+                            Stripe price ID
+                          </p>
                           <p className="font-mono text-xs">
                             {selectedVersion.stripe_price_id}
                           </p>
@@ -501,7 +585,8 @@ export function PlatformPlansManager() {
                     />
 
                     <p className="text-sm text-muted-foreground">
-                      Published versions are immutable. Clone to create a new draft.
+                      Published versions are immutable. Clone to create a new
+                      draft.
                     </p>
                     <Button
                       variant="outline"

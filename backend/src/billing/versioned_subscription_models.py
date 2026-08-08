@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from .models import SubscriptionStatus
-from .plan_version_models import BillingMode
+from .plan_version_models import BillingMode, CreditGrantPolicy
 
 
 class SubscriptionActivationState(str, Enum):
@@ -32,6 +32,7 @@ class CustomerPlanVersion(BaseModel):
     version_number: int
     display_label: Optional[str] = None
     billing_mode: BillingMode
+    credit_grant_policy: CreditGrantPolicy = CreditGrantPolicy.RECURRING
     price_amount_cents: int
     currency: str
     billing_interval: str

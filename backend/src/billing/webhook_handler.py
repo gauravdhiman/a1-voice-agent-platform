@@ -3,11 +3,12 @@ Stripe webhook event handler.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from shared.config import settings
 
+from .credit_grant_service import credit_grant_service
 from .models import (
     BillingHistoryCreate,
     BillingStatus,
@@ -482,10 +483,10 @@ async def handle_invoice_payment_succeeded(event):
 
         await billing_service.create_billing_history(billing_data)
 
-        # If this is a subscription invoice, allocate credits from plan version
+        # If this is a subscription invoice, allocate credits through the
+        # shared policy-aware grant service. Stripe may retry this event, so
+        # the invoice id is the stable grant key.
         if invoice.get("subscription"):
-            from .credit_entitlement_service import credit_entitlement_service
-
             subscription = await stripe_service.get_subscription(
                 invoice["subscription"]
             )
@@ -495,39 +496,33 @@ async def handle_invoice_payment_succeeded(event):
             plans = await billing_service.get_subscription_plans(active_only=False)
             plan = next((p for p in plans if p.stripe_price_id == price_id), None)
 
-            org_uuid = UUID(organization_id)
-            credits_to_grant = await credit_entitlement_service.get_included_credits_per_billing_period(
-                org_uuid
+            org_subscription = await billing_service.get_organization_subscription(
+                UUID(organization_id)
             )
-            if credits_to_grant <= 0 and plan:
-                credits_to_grant = plan.included_credits
-
-            if credits_to_grant > 0:
-                # Calculate credit expiry (end of current period)
-                expires_at = None
-                if subscription.get("current_period_end"):
-                    expires_at = datetime.fromtimestamp(
-                        subscription["current_period_end"]
+            if org_subscription:
+                grant_subscription = (
+                    org_subscription.model_dump(mode="json")
+                    if hasattr(org_subscription, "model_dump")
+                    else dict(org_subscription)
+                )
+                period_start = datetime.fromtimestamp(
+                    subscription.get("current_period_start", event["created"]),
+                    tz=timezone.utc,
+                )
+                period_end = (
+                    datetime.fromtimestamp(
+                        subscription["current_period_end"], tz=timezone.utc
                     )
-
-                # Get the actual subscription record to get its ID
-                org_subscription = await billing_service.get_organization_subscription(
-                    UUID(organization_id)
+                    if subscription.get("current_period_end")
+                    else None
                 )
-                subscription_id = org_subscription.id if org_subscription else None
-
-                await billing_service.add_subscription_credits(
-                    organization_id=org_uuid,
-                    credits=credits_to_grant,
-                    subscription_id=subscription_id,
-                    expires_at=expires_at,
-                )
-
-                logger.info(
-                    "Allocated %s subscription credits to organization %s "
-                    "(plan_version entitlement)",
-                    credits_to_grant,
-                    organization_id,
+                await credit_grant_service.grant_for_subscription(
+                    grant_subscription,
+                    grant_reason="invoice_paid",
+                    period_start=period_start,
+                    period_end=period_end,
+                    grant_key=f"stripe-invoice:{invoice['id']}",
+                    fallback_credits=plan.included_credits if plan else 0,
                 )
 
         logger.info(

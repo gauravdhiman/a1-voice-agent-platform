@@ -21,6 +21,8 @@ const draftVersion = {
   version_number: 2,
   status: "draft" as const,
   display_label: "Pro v2",
+  billing_mode: "paid" as const,
+  credit_grant_policy: "recurring" as const,
   price_amount_cents: 5900,
   currency: "USD",
   billing_interval: "monthly",

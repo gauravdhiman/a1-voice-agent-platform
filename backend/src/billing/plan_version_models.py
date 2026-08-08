@@ -30,6 +30,13 @@ class BillingMode(str, Enum):
     PAID = "paid"
 
 
+class CreditGrantPolicy(str, Enum):
+    """Whether included credits are granted once or every billing period."""
+
+    RECURRING = "recurring"
+    ONE_TIME = "one_time"
+
+
 class MigrationMode(str, Enum):
     """How existing subscribers are treated when a new version is published."""
 

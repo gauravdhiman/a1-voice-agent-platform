@@ -125,6 +125,7 @@ class TestVersionedSubscriptionService:
         """Free activation binds the immutable version without touching Stripe."""
         service = VersionedSubscriptionService()
         service.supabase = MagicMock()
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
         service._get_signup_plan_version = AsyncMock(return_value=_free_version())
         service._get_existing_subscription = AsyncMock(return_value=None)
         subscription_row = {
@@ -157,6 +158,7 @@ class TestVersionedSubscriptionService:
         assert payload["plan_version_id"] == str(FREE_VERSION_ID)
         assert payload["stripe_customer_id"] is None
         stripe.create_customer.assert_not_called()
+        service.credit_grant_service.grant_for_subscription.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_free_activation_is_idempotent_for_same_active_version(self):

@@ -50,6 +50,7 @@ class TransactionSource(str, Enum):
     EXPIRY = "expiry"
     REFUND = "refund"
     ADMIN_ADJUSTMENT = "admin_adjustment"
+    REFERRAL = "referral"
 
 
 class BillingStatus(str, Enum):
@@ -435,6 +436,7 @@ class TransactionSourceMapping:
         TransactionSource.REFUND: "billing_history",
         TransactionSource.EXPIRY: None,  # No source_id needed
         TransactionSource.ADMIN_ADJUSTMENT: None,  # No source_id needed
+        TransactionSource.REFERRAL: None,  # No source_id needed
     }
 
     # Sources that require a source_id
@@ -449,6 +451,7 @@ class TransactionSourceMapping:
     SOURCES_WITHOUT_ID = {
         TransactionSource.EXPIRY,
         TransactionSource.ADMIN_ADJUSTMENT,
+        TransactionSource.REFERRAL,
     }
 
     @classmethod
