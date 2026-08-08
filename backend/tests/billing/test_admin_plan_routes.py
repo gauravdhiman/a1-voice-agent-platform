@@ -130,6 +130,23 @@ class TestAdminPlanRoutesAuthz:
         assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
+    async def test_delete_draft_plan_version_returns_400_on_value_error(self):
+        from src.billing.admin_plan_routes import delete_draft_plan_version
+
+        with patch(
+            "src.billing.admin_plan_routes.admin_plan_catalog_service"
+        ) as mock_svc:
+            mock_svc.delete_draft_version = AsyncMock(
+                side_effect=ValueError("Plan version is not draft")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_draft_plan_version(
+                    plan_version_id=TEST_VERSION_ID,
+                    user_auth=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_clone_plan_version_succeeds_for_admin(self):
         from src.billing.admin_plan_models import PlanVersionCloneRequest
         from src.billing.admin_plan_routes import clone_plan_version

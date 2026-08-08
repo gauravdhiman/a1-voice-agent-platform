@@ -106,7 +106,11 @@ export function PlanPublishDialog({
       onPublished?.();
     } catch (error) {
       console.error("Publish failed:", error);
-      toast.error("Failed to publish plan version");
+      const message =
+        (error as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ??
+        (error instanceof Error ? error.message : "Failed to publish plan version");
+      toast.error("Failed to publish plan version", { description: String(message) });
     } finally {
       setPublishing(false);
     }
@@ -121,7 +125,7 @@ export function PlanPublishDialog({
             {version
               ? `Publish v${version.version_number}${
                   version.display_label ? ` (${version.display_label})` : ""
-                }. Existing subscribers keep their current version unless migration policy requires a change.`
+                }. A Stripe Price is created automatically unless you saved price_… on the draft. Existing subscribers keep their current version unless migration policy requires a change.`
               : "Select a draft version to publish."}
           </DialogDescription>
         </DialogHeader>

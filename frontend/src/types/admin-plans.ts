@@ -52,8 +52,14 @@ export interface PlanProduct {
   description?: string | null;
   sort_order: number;
   is_active: boolean;
+  stripe_product_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PlanProductCreateResult {
+  product: PlanProduct;
+  stripe_auto_create_error?: string | null;
 }
 
 export interface PlanVersionEntitlement {
@@ -62,7 +68,8 @@ export interface PlanVersionEntitlement {
   value: Record<string, unknown>;
 }
 
-export interface PlanVersionDetail {
+/** Version metadata returned in plan product list (entitlements loaded on demand). */
+export interface PlanVersionSummary {
   id: string;
   plan_product_id: string;
   version_number: number;
@@ -77,13 +84,16 @@ export interface PlanVersionDetail {
   is_current_for_signup: boolean;
   published_at?: string | null;
   legacy_subscription_plan_id?: string | null;
-  entitlements: PlanVersionEntitlement[];
   created_at: string;
   updated_at: string;
 }
 
+export interface PlanVersionDetail extends PlanVersionSummary {
+  entitlements: PlanVersionEntitlement[];
+}
+
 export interface PlanProductWithVersions extends PlanProduct {
-  versions: PlanVersionDetail[];
+  versions: PlanVersionSummary[];
 }
 
 export interface PlanProductCreate {
@@ -115,6 +125,7 @@ export interface PlanVersionDraftUpdate {
   billing_interval?: string;
   trial_period_days?: number | null;
   stripe_product_id?: string | null;
+  stripe_price_id?: string | null;
   entitlements?: PlanVersionEntitlementInput[];
 }
 

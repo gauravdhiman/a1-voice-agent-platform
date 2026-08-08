@@ -8,6 +8,7 @@ import type {
   EntitlementDefinitionUpdate,
   PlanProduct,
   PlanProductCreate,
+  PlanProductCreateResult,
   PlanProductWithVersions,
   PlanVersionCloneRequest,
   PlanVersionDetail,
@@ -50,10 +51,21 @@ class AdminPlanService {
     return response.data;
   }
 
-  async createPlanProduct(body: PlanProductCreate): Promise<PlanProduct> {
-    const response = await apiClient.post<PlanProduct>(
+  async createPlanProduct(body: PlanProductCreate): Promise<PlanProductCreateResult> {
+    const response = await apiClient.post<PlanProductCreateResult>(
       `${this.baseUrl}/plan-products`,
       body,
+    );
+    return response.data;
+  }
+
+  async updatePlanProductStripe(
+    productId: string,
+    stripeProductId: string,
+  ): Promise<PlanProduct> {
+    const response = await apiClient.patch<PlanProduct>(
+      `${this.baseUrl}/plan-products/${productId}/stripe`,
+      { stripe_product_id: stripeProductId },
     );
     return response.data;
   }
@@ -85,6 +97,10 @@ class AdminPlanService {
       body,
     );
     return response.data;
+  }
+
+  async deleteDraftVersion(versionId: string): Promise<void> {
+    await apiClient.delete(`${this.baseUrl}/plan-versions/${versionId}`);
   }
 
   async clonePlanVersion(

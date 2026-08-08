@@ -131,19 +131,24 @@ Required variables:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-### Environment Isolation (Local vs Cloud)
+### Environment Isolation (Local vs Staging vs Production)
 
-The project maintains three env files to isolate local dev from cloud/staging:
-
-| File | Purpose | Supabase |
-|------|---------|----------|
+| File | Purpose | Supabase project |
+|------|---------|------------------|
 | `.env` | **Active config** — local dev default | Local Supabase (`http://host.docker.internal:54321`) |
-| `.env.local` | Local dev template | Local Supabase (same as above) |
-| `.env.dev` | Cloud/staging template | Cloud Supabase (`https://zymiyfilulmtrmyyhvzw.supabase.co`) |
+| `.env.local` | Local dev template | Local Supabase |
+| `.env.staging` | **Cloud staging** — safe validation against real cloud stack | `gdzwiwukcwbqohfwxxrx` ([oc-dev-ai-voice-agent-platform](https://supabase.com/dashboard/project/gdzwiwukcwbqohfwxxrx)) |
+| `.env.cloud` | **Production** — deploy / migrate 247ai.live only | `zymiyfilulmtrmyyhvzw` |
 
-**To switch to cloud Supabase** (e.g. for staging/production testing):
+> **Warning:** `.env.dev` historically pointed at **production**. Use `.env.staging` for cloud validation and `.env.cloud` for production deploys. See [staging_environment.md](docs/05_operations/staging_environment.md).
+
+**To switch to cloud staging** (local Docker → staging DB):
+
 ```bash
-cp .env.dev .env
+cp .env.staging.example .env.staging   # first time: fill in keys from Supabase dashboard
+./scripts/bootstrap-staging-db.sh        # first time: migrate + seed
+cp .env.staging .env
+./start.sh restart dev
 ```
 
 **To switch back to local Supabase** (normal dev):

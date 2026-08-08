@@ -9,6 +9,7 @@ __pycache__/
 .env
 .env.*
 !.env.cloud.example
+!.env.staging.example
 .env.*.local
 .env.bk*
 .env copy*

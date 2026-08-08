@@ -1,7 +1,7 @@
 """
-Credit consumption and monthly grant helpers driven by plan-version entitlements.
+Credit consumption and billing-period grant helpers driven by plan-version entitlements.
 
-Resolves ``included_credits_monthly``, ``payg_enabled``, and ``payg_credit_cap``
+Resolves ``included_credits_per_billing_period``, ``payg_enabled``, and ``payg_credit_cap``
 from the bound plan version for renewal grants and PAYG consumption.
 """
 
@@ -30,8 +30,10 @@ class CreditConsumptionDecision:
 class CreditEntitlementService:
     """Plan-version-aware credit grant and PAYG consumption rules."""
 
-    async def get_included_credits_monthly(self, organization_id: UUID) -> int:
-        """Return included monthly credits from the org's bound plan version.
+    async def get_included_credits_per_billing_period(
+        self, organization_id: UUID
+    ) -> int:
+        """Return included credits from the org's bound plan version per billing period.
 
         Falls back to ``0`` when the entitlement is absent or unlimited.
 
@@ -44,10 +46,14 @@ class CreditEntitlementService:
         entitlements = await entitlement_service.get_org_entitlements(organization_id)
         return self.included_credits_from_entitlements(entitlements)
 
+    async def get_included_credits_monthly(self, organization_id: UUID) -> int:
+        """Deprecated alias for ``get_included_credits_per_billing_period``."""
+        return await self.get_included_credits_per_billing_period(organization_id)
+
     @staticmethod
     def included_credits_from_entitlements(entitlements: OrgEntitlements) -> int:
-        """Extract ``included_credits_monthly`` from resolved entitlements."""
-        resolved = entitlements.limits.get("included_credits_monthly")
+        """Extract ``included_credits_per_billing_period`` from resolved entitlements."""
+        resolved = entitlements.limits.get("included_credits_per_billing_period")
         if resolved is None or not resolved.assigned:
             return 0
         if resolved.is_unlimited:

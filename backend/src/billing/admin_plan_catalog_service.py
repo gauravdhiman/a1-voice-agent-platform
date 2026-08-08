@@ -18,15 +18,19 @@ from .admin_plan_models import (
     EntitlementDefinitionUpdate,
     PlanProduct,
     PlanProductCreate,
+    PlanProductCreateResult,
+    PlanProductStripeUpdate,
     PlanProductWithVersions,
     PlanVersionDetail,
     PlanVersionDraftCreate,
     PlanVersionDraftUpdate,
     PlanVersionEntitlement,
     PlanVersionEntitlementInput,
+    PlanVersionSummary,
 )
 from .entitlement_models import EntitlementDefinition
 from .plan_version_models import PlanVersionStatus
+from .stripe_service import stripe_service
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +89,14 @@ class AdminPlanCatalogService:
 
         output: list[PlanProductWithVersions] = []
         for product in products:
-            versions = await self._list_versions_for_product(UUID(str(product["id"])))
+            versions = await self._list_version_summaries_for_product(
+                UUID(str(product["id"]))
+            )
             output.append(PlanProductWithVersions(**product, versions=versions))
         return output
 
-    async def create_plan_product(self, data: PlanProductCreate) -> PlanProduct:
-        """Create a new plan product family."""
+    async def create_plan_product(self, data: PlanProductCreate) -> PlanProductCreateResult:
+        """Create a new plan product family and auto-create a Stripe Product when configured."""
         slug = data.slug.strip().lower()
         row = {
             "slug": slug,
@@ -102,14 +108,109 @@ class AdminPlanCatalogService:
         result = self.supabase.table("plan_products").insert(row).execute()
         if not result.data:
             raise ValueError("Failed to create plan product")
-        return PlanProduct(**result.data[0])
+
+        product_row = result.data[0]
+        product_id = UUID(str(product_row["id"]))
+        stripe_auto_create_error: Optional[str] = None
+
+        try:
+            stripe_product = await stripe_service.create_product(
+                data.display_name,
+                metadata={
+                    "plan_product_id": str(product_id),
+                    "plan_product_slug": slug,
+                },
+            )
+            product_row = await self._update_plan_product_fields(
+                product_id,
+                {"stripe_product_id": stripe_product.id},
+            )
+        except ValueError as exc:
+            stripe_auto_create_error = str(exc)
+            logger.warning(
+                "Plan product %s created without Stripe Product: %s",
+                product_id,
+                exc,
+            )
+        except Exception as exc:
+            stripe_auto_create_error = (
+                f"Stripe Product auto-create failed: {exc}. "
+                "Link prod_… manually from the plan catalog."
+            )
+            logger.warning(
+                "Plan product %s created without Stripe Product: %s",
+                product_id,
+                exc,
+                exc_info=True,
+            )
+
+        return PlanProductCreateResult(
+            product=PlanProduct(**product_row),
+            stripe_auto_create_error=stripe_auto_create_error,
+        )
+
+    async def update_plan_product_stripe(
+        self, product_id: UUID, update: PlanProductStripeUpdate
+    ) -> PlanProduct:
+        """Manually link a Stripe Product ID after auto-create failed."""
+        await self._get_product(product_id)
+        stripe_product_id = update.stripe_product_id.strip()
+        if not stripe_product_id.startswith("prod_"):
+            raise ValueError("Stripe product ID must start with prod_")
+
+        row = await self._update_plan_product_fields(
+            product_id,
+            {"stripe_product_id": stripe_product_id},
+        )
+
+        # Propagate to open drafts missing a product ID.
+        self.supabase.table("plan_versions").update(
+            {"stripe_product_id": stripe_product_id}
+        ).eq("plan_product_id", str(product_id)).eq(
+            "status", PlanVersionStatus.DRAFT.value
+        ).is_(
+            "stripe_product_id", "null"
+        ).execute()
+
+        return PlanProduct(**row)
+
+    async def _get_draft_version_for_product(
+        self, product_id: UUID
+    ) -> Optional[dict[str, Any]]:
+        """Return the existing draft row for a product, if any."""
+        result = (
+            self.supabase.table("plan_versions")
+            .select("id, version_number, display_label")
+            .eq("plan_product_id", str(product_id))
+            .eq("status", PlanVersionStatus.DRAFT.value)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]
+        return None
+
+    async def _ensure_no_existing_draft(self, product_id: UUID) -> None:
+        """Reject creating a second draft for the same plan product."""
+        existing = await self._get_draft_version_for_product(product_id)
+        if existing is not None:
+            label = existing.get("display_label") or f"v{existing.get('version_number')}"
+            raise ValueError(
+                f"Plan product already has draft {label}. "
+                "Publish or delete the existing draft before creating another."
+            )
 
     async def create_draft_version(
         self, product_id: UUID, data: PlanVersionDraftCreate
     ) -> PlanVersionDetail:
         """Create a new draft version for a product."""
         await self._get_product(product_id)
+        await self._ensure_no_existing_draft(product_id)
         version_number = await self._next_version_number(product_id)
+        product = await self._get_product(product_id)
+        inherited_stripe_product_id = (
+            data.stripe_product_id or product.get("stripe_product_id")
+        )
         now_iso = datetime.now(timezone.utc).isoformat()
         version_row = {
             "plan_product_id": str(product_id),
@@ -120,7 +221,7 @@ class AdminPlanCatalogService:
             "currency": data.currency.upper(),
             "billing_interval": data.billing_interval,
             "trial_period_days": data.trial_period_days,
-            "stripe_product_id": data.stripe_product_id,
+            "stripe_product_id": inherited_stripe_product_id,
             "is_current_for_signup": False,
             "created_at": now_iso,
             "updated_at": now_iso,
@@ -133,6 +234,27 @@ class AdminPlanCatalogService:
             await self._replace_entitlements(version_id, data.entitlements)
         return await self.get_plan_version(version_id)
 
+    async def delete_draft_version(self, version_id: UUID) -> None:
+        """Delete an unpublished draft version and its entitlement rows."""
+        current = await self.get_plan_version(version_id)
+        if current.status != PlanVersionStatus.DRAFT:
+            raise ValueError(
+                f"Plan version {version_id} is not draft (status={current.status})"
+            )
+
+        self.supabase.table("plan_version_entitlements").delete().eq(
+            "plan_version_id", str(version_id)
+        ).execute()
+        result = (
+            self.supabase.table("plan_versions")
+            .delete()
+            .eq("id", str(version_id))
+            .eq("status", PlanVersionStatus.DRAFT.value)
+            .execute()
+        )
+        if not result.data:
+            raise ValueError(f"Failed to delete draft plan version {version_id}")
+
     async def clone_plan_version(
         self,
         source_version_id: UUID,
@@ -142,6 +264,7 @@ class AdminPlanCatalogService:
     ) -> PlanVersionDetail:
         """Clone a version (any status) into a new draft with incremented version number."""
         source = await self.get_plan_version(source_version_id)
+        await self._ensure_no_existing_draft(source.plan_product_id)
         entitlements = [
             PlanVersionEntitlementInput(
                 entitlement_key=e.entitlement_key, value=e.value
@@ -202,15 +325,21 @@ class AdminPlanCatalogService:
                 "id", str(version_id)
             ).execute()
 
+            if "stripe_product_id" in fields and fields["stripe_product_id"]:
+                await self._update_plan_product_fields(
+                    current.plan_product_id,
+                    {"stripe_product_id": fields["stripe_product_id"]},
+                )
+
         if data.entitlements is not None:
             await self._replace_entitlements(version_id, data.entitlements)
 
         return await self.get_plan_version(version_id)
 
-    async def _list_versions_for_product(
+    async def _list_version_summaries_for_product(
         self, product_id: UUID
-    ) -> list[PlanVersionDetail]:
-        """List all versions for a product ordered by version_number desc."""
+    ) -> list[PlanVersionSummary]:
+        """List version metadata for a product without entitlement rows."""
         result = (
             self.supabase.table("plan_versions")
             .select("*")
@@ -218,12 +347,7 @@ class AdminPlanCatalogService:
             .order("version_number", desc=True)
             .execute()
         )
-        versions: list[PlanVersionDetail] = []
-        for row in result.data or []:
-            vid = UUID(str(row["id"]))
-            entitlements = await self._get_entitlements_for_version(vid)
-            versions.append(PlanVersionDetail(**row, entitlements=entitlements))
-        return versions
+        return [PlanVersionSummary(**row) for row in (result.data or [])]
 
     async def _get_product(self, product_id: UUID) -> dict[str, Any]:
         result = (
@@ -236,6 +360,24 @@ class AdminPlanCatalogService:
         if not result.data:
             raise ValueError(f"Plan product {product_id} not found")
         return result.data
+
+    async def _update_plan_product_fields(
+        self, product_id: UUID, fields: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update plan product columns and return the updated row."""
+        payload = {
+            **fields,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        result = (
+            self.supabase.table("plan_products")
+            .update(payload)
+            .eq("id", str(product_id))
+            .execute()
+        )
+        if not result.data:
+            raise ValueError(f"Failed to update plan product {product_id}")
+        return result.data[0]
 
     async def _next_version_number(self, product_id: UUID) -> int:
         result = (

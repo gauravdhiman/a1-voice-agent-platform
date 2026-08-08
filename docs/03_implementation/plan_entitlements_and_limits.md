@@ -181,7 +181,7 @@ On successful checkout / subscription create:
 1. Resolve `stripe_price_id` → `plan_versions.id`
 2. Set `organization_subscriptions.plan_version_id` = that version (frozen)
 3. Optionally write `subscription_entitlement_snapshot` JSONB (audit copy; see §5.5)
-4. Grant initial credits from version's `included_credits_monthly` limit
+4. Grant initial credits from version's `included_credits_per_billing_period` limit
 
 **All enforcement reads `plan_version_id` from the subscription** — never "latest version for product slug".
 
@@ -207,7 +207,7 @@ Example — two plans, different shapes:
 | Entitlement key | Starter v2 | Growth v3 |
 |-----------------|------------|-----------|
 | `max_agents` | `{ "type": "integer", "value": 1 }` | `{ "type": "integer", "value": 5 }` |
-| `included_credits_monthly` | `{ "type": "integer", "value": 500 }` | `{ "type": "integer", "value": 1000 }` |
+| `included_credits_per_billing_period` | `{ "type": "integer", "value": 500 }` | `{ "type": "integer", "value": 1000 }` |
 | `payg_enabled` | *(absent = false)* | `{ "type": "boolean", "value": true }` |
 | `payg_credit_cap` | *(absent)* | `{ "type": "integer", "value": 5000 }` |
 | `max_phone_numbers` | *(absent = 0 or platform default)* | `{ "type": "integer", "value": 2 }` |
@@ -385,7 +385,7 @@ Each `entitlement_definitions.key` maps to **call sites**:
 | `max_agents` | `limit.max_count` | `POST /agents` |
 | `max_org_members` | `limit.max_count` | member invite |
 | `max_phone_numbers` | `limit.max_count` | phone purchase |
-| `included_credits_monthly` | `limit.credits_monthly` | renewal webhook grant |
+| `included_credits_per_billing_period` | `limit.credits_monthly` | renewal webhook grant |
 | `max_concurrent_calls` | `limit.concurrent` | voice-ws session start |
 | `payg_enabled` | `feature.flag` | credit consumption fallback |
 | `payg_credit_cap` | `limit.credits_balance` | consume_credits |
@@ -418,7 +418,7 @@ Each `entitlement_definitions.key` maps to **call sites**:
 
 - **Credits** = internal ledger unit
 - **Minutes** = UI derived via `credit_events.voice_call_minute.credit_cost`
-- **`included_credits_monthly`** = entitlement on version; granted on invoice paid
+- **`included_credits_per_billing_period`** = entitlement on version; granted on invoice paid
 - **`payg_enabled` + `payg_credit_cap`** = feature + limit on version
 
 PAYG consumption when balance insufficient:
@@ -819,7 +819,7 @@ Published versions are cache-friendly forever.
 
 ### 14.3 Seed entitlement catalog
 
-Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurrent_calls`, `included_credits_monthly`, `payg_enabled`, `payg_credit_cap`, `premium_tools`, `embed_widget`, `custom_branding`, `credit_topup_enabled`.
+Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurrent_calls`, `included_credits_per_billing_period`, `payg_enabled`, `payg_credit_cap`, `premium_tools`, `embed_widget`, `custom_branding`, `credit_topup_enabled`.
 
 ---
 

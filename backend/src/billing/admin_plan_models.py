@@ -41,8 +41,25 @@ class PlanProduct(BaseModel):
     description: Optional[str] = None
     sort_order: int
     is_active: bool
+    stripe_product_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class PlanProductCreateResult(BaseModel):
+    """Result of creating a plan product, including optional Stripe sync status."""
+
+    product: PlanProduct
+    stripe_auto_create_error: Optional[str] = Field(
+        default=None,
+        description="Set when platform product was created but Stripe Product auto-create failed",
+    )
+
+
+class PlanProductStripeUpdate(BaseModel):
+    """Manually link a Stripe Product when auto-create failed."""
+
+    stripe_product_id: str = Field(..., min_length=1, max_length=255)
 
 
 class PlanVersionEntitlementInput(BaseModel):
@@ -73,6 +90,7 @@ class PlanVersionDraftUpdate(BaseModel):
     billing_interval: Optional[str] = None
     trial_period_days: Optional[int] = Field(None, ge=0)
     stripe_product_id: Optional[str] = None
+    stripe_price_id: Optional[str] = None
     entitlements: Optional[list[PlanVersionEntitlementInput]] = None
 
 
@@ -84,8 +102,8 @@ class PlanVersionEntitlement(BaseModel):
     value: dict[str, Any]
 
 
-class PlanVersionDetail(BaseModel):
-    """Plan version with entitlements for admin editor."""
+class PlanVersionSummary(BaseModel):
+    """Plan version metadata for admin list views (entitlements loaded on demand)."""
 
     id: UUID
     plan_product_id: UUID
@@ -101,15 +119,20 @@ class PlanVersionDetail(BaseModel):
     is_current_for_signup: bool
     published_at: Optional[datetime] = None
     legacy_subscription_plan_id: Optional[UUID] = None
-    entitlements: list[PlanVersionEntitlement] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
 
-class PlanProductWithVersions(PlanProduct):
-    """Product with nested versions for admin list."""
+class PlanVersionDetail(PlanVersionSummary):
+    """Plan version with entitlements for admin editor."""
 
-    versions: list[PlanVersionDetail] = Field(default_factory=list)
+    entitlements: list[PlanVersionEntitlement] = Field(default_factory=list)
+
+
+class PlanProductWithVersions(PlanProduct):
+    """Product with nested version summaries for admin list."""
+
+    versions: list[PlanVersionSummary] = Field(default_factory=list)
 
 
 class PlanVersionCloneRequest(BaseModel):

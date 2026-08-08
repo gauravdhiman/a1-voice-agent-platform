@@ -244,8 +244,20 @@ class PlanVersionService:
 
         product_id = draft.get("stripe_product_id")
         if not product_id:
+            product = (
+                self.supabase.table("plan_products")
+                .select("stripe_product_id")
+                .eq("id", str(draft["plan_product_id"]))
+                .single()
+                .execute()
+            )
+            if product.data:
+                product_id = product.data.get("stripe_product_id")
+
+        if not product_id:
             raise ValueError(
-                "Draft plan version requires stripe_product_id before publish"
+                "Stripe Product ID is required before publish. "
+                "Auto-create may have failed — save prod_… on the draft or plan product, then publish again."
             )
 
         interval = draft.get("billing_interval", "monthly")
@@ -256,14 +268,20 @@ class PlanVersionService:
             "plan_product_id": str(draft["plan_product_id"]),
         }
 
-        price = await stripe_service.create_price(
-            product_id=str(product_id),
-            unit_amount=int(draft.get("price_amount_cents", 0)),
-            currency=str(draft.get("currency", "USD")),
-            interval=stripe_interval,
-            metadata=metadata,
-        )
-        return price.id
+        try:
+            price = await stripe_service.create_price(
+                product_id=str(product_id),
+                unit_amount=int(draft.get("price_amount_cents", 0)),
+                currency=str(draft.get("currency", "USD")),
+                interval=stripe_interval,
+                metadata=metadata,
+            )
+            return price.id
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to auto-create Stripe Price: {exc}. "
+                "Create price_… in Stripe Dashboard, save it on the draft, and publish again."
+            ) from exc
 
     async def _update_plan_version(
         self, plan_version_id: UUID, fields: dict[str, Any]

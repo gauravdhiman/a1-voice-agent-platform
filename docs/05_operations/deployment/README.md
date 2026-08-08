@@ -7,7 +7,7 @@ Production infrastructure for **247ai.live**:
 | Frontend (`frontend-247ai`) | GCP Cloud Run | https://www.247ai.live |
 | Backend (`backend-247ai`) | GCP Cloud Run | https://api.247ai.live |
 | voice-ws (Pipecat WebSocket) | Oracle Free Tier ARM VM + Caddy | wss://voice.247ai.live |
-| Database + Auth | Supabase | (project URL in `.env.cloud`) |
+| Database + Auth | Supabase | Production: `.env.cloud` (`zymiyfilulmtrmyyhvzw`); staging: `.env.staging` (`gdzwiwukcwbqohfwxxrx`) |
 
 **Deploy command:** `./scripts/deploy.sh` — see [Quick reference](quick-reference.md).
 
@@ -27,6 +27,8 @@ Production infrastructure for **247ai.live**:
 |------|---------|
 | `scripts/deploy.sh` | Single entry point: `all`, `gcp`, `backend`, `frontend`, `voice-ws`, `migrate`, `domains` |
 | `.env.cloud.example` | Production env template (copy → `.env.cloud`, gitignored) |
+| `.env.staging.example` | Staging env template (copy → `.env.staging`, gitignored) |
+| `scripts/bootstrap-staging-db.sh` | First-time staging migrate + Stripe seed |
 | `scripts/deploy/` | Lower-level GCP, OCI, Alembic scripts |
 | `deploy/` | Docker compose, Caddyfile, Cloud Build stubs |
 | `.github/workflows/deploy-cloud.yml` | CI deploy on `main` |

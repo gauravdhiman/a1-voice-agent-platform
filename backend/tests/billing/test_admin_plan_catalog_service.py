@@ -3,7 +3,7 @@ Tests for AdminPlanCatalogService draft CRUD and entitlement catalog updates.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -129,15 +129,83 @@ class TestAdminPlanCatalogService:
             )
 
     @pytest.mark.asyncio
+    async def test_list_plan_products_returns_version_summaries_without_entitlements(
+        self, catalog_service, product_id, version_id
+    ):
+        """List endpoint should not load entitlement rows for each version."""
+        from src.billing.admin_plan_models import PlanVersionSummary
+
+        product_row = _product_row(product_id)
+        summary = PlanVersionSummary(**_version_row(version_id, product_id))
+
+        products_execute = MagicMock(data=[product_row])
+        table_mock = MagicMock()
+        table_mock.select.return_value.order.return_value.execute.return_value = (
+            products_execute
+        )
+        catalog_service.supabase.table.return_value = table_mock
+
+        with patch.object(
+            catalog_service,
+            "_list_version_summaries_for_product",
+            return_value=[summary],
+        ) as mock_list_summaries, patch.object(
+            catalog_service,
+            "_get_entitlements_for_version",
+        ) as mock_get_entitlements:
+            result = await catalog_service.list_plan_products()
+            mock_list_summaries.assert_called_once()
+            mock_get_entitlements.assert_not_called()
+
+        assert len(result) == 1
+        assert len(result[0].versions) == 1
+        assert result[0].versions[0].id == version_id
+        assert "entitlements" not in PlanVersionSummary.model_fields
+
+    @pytest.mark.asyncio
     async def test_create_plan_product(self, catalog_service, mock_supabase_client, product_id):
+        from src.billing.admin_plan_models import PlanProductCreateResult
+
         row = _product_row(product_id)
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+        mock_supabase_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
             data=[row]
         )
-        result = await catalog_service.create_plan_product(
-            PlanProductCreate(slug="Pro", display_name="Pro Plan")
+        with patch(
+            "src.billing.admin_plan_catalog_service.stripe_service.create_product",
+            new_callable=AsyncMock,
+        ) as mock_stripe:
+            mock_stripe.return_value = MagicMock(id="prod_auto")
+            with patch.object(
+                catalog_service,
+                "_update_plan_product_fields",
+                return_value={**row, "stripe_product_id": "prod_auto"},
+            ):
+                result = await catalog_service.create_plan_product(
+                    PlanProductCreate(slug="Pro", display_name="Pro Plan")
+                )
+        assert isinstance(result, PlanProductCreateResult)
+        assert result.product.slug == "pro"
+        assert result.product.stripe_product_id == "prod_auto"
+        assert result.stripe_auto_create_error is None
+
+    @pytest.mark.asyncio
+    async def test_create_plan_product_survives_stripe_failure(
+        self, catalog_service, mock_supabase_client, product_id
+    ):
+        row = _product_row(product_id)
+        mock_supabase_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+            data=[row]
         )
-        assert result.slug == "pro"
+        with patch(
+            "src.billing.admin_plan_catalog_service.stripe_service.create_product",
+            new_callable=AsyncMock,
+            side_effect=ValueError("Stripe is not configured"),
+        ):
+            result = await catalog_service.create_plan_product(
+                PlanProductCreate(slug="Pro", display_name="Pro Plan")
+            )
+        assert result.product.slug == "pro"
+        assert result.stripe_auto_create_error is not None
 
     @pytest.mark.asyncio
     async def test_create_draft_version_increments_version_number(
@@ -152,6 +220,8 @@ class TestAdminPlanCatalogService:
 
         with patch.object(
             catalog_service, "_get_product", return_value=_product_row(product_id)
+        ), patch.object(
+            catalog_service, "_get_draft_version_for_product", return_value=None
         ), patch.object(
             catalog_service, "_next_version_number", return_value=3
         ), patch.object(
@@ -237,3 +307,58 @@ class TestAdminPlanCatalogService:
             )
         assert len(result.entitlements) == 1
         assert result.entitlements[0].entitlement_key == "max_agents"
+
+    @pytest.mark.asyncio
+    async def test_create_draft_version_rejects_second_draft(
+        self, catalog_service, product_id
+    ):
+        with patch.object(
+            catalog_service, "_get_product", return_value=_product_row(product_id)
+        ), patch.object(
+            catalog_service,
+            "_get_draft_version_for_product",
+            return_value={"id": str(uuid4()), "version_number": 2, "display_label": "v2"},
+        ):
+            with pytest.raises(ValueError, match="already has draft"):
+                await catalog_service.create_draft_version(
+                    product_id,
+                    PlanVersionDraftCreate(display_label="Pro v3"),
+                )
+
+    @pytest.mark.asyncio
+    async def test_delete_draft_version_removes_row(
+        self, catalog_service, product_id, version_id
+    ):
+        from src.billing.admin_plan_models import PlanVersionDetail
+
+        draft = _version_row(version_id, product_id)
+
+        async def fake_get_plan_version(_vid):
+            return PlanVersionDetail(**draft, entitlements=[])
+
+        with patch.object(
+            catalog_service, "get_plan_version", side_effect=fake_get_plan_version
+        ):
+            catalog_service.supabase.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[draft]
+            )
+            await catalog_service.delete_draft_version(version_id)
+
+    @pytest.mark.asyncio
+    async def test_delete_draft_version_rejects_published(
+        self, catalog_service, product_id, version_id
+    ):
+        from src.billing.admin_plan_models import PlanVersionDetail
+
+        published = _version_row(
+            version_id, product_id, status=PlanVersionStatus.PUBLISHED.value
+        )
+
+        async def fake_get_plan_version(_vid):
+            return PlanVersionDetail(**published, entitlements=[])
+
+        with patch.object(
+            catalog_service, "get_plan_version", side_effect=fake_get_plan_version
+        ):
+            with pytest.raises(ValueError, match="not draft"):
+                await catalog_service.delete_draft_version(version_id)

@@ -481,8 +481,10 @@ async def handle_invoice_payment_succeeded(event):
             plan = next((p for p in plans if p.stripe_price_id == price_id), None)
 
             org_uuid = UUID(organization_id)
-            credits_to_grant = await credit_entitlement_service.get_included_credits_monthly(
-                org_uuid
+            credits_to_grant = (
+                await credit_entitlement_service.get_included_credits_per_billing_period(
+                    org_uuid
+                )
             )
             if credits_to_grant <= 0 and plan:
                 credits_to_grant = plan.included_credits

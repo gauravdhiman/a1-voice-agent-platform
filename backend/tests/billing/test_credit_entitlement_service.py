@@ -53,7 +53,7 @@ class TestCreditEntitlementService:
     """PAYG and monthly credit resolution."""
 
     def test_included_credits_from_entitlements(self):
-        entitlements = _org_entitlements(limits={"included_credits_monthly": 750})
+        entitlements = _org_entitlements(limits={"included_credits_per_billing_period": 750})
         assert (
             CreditEntitlementService.included_credits_from_entitlements(entitlements)
             == 750
@@ -109,13 +109,17 @@ class TestCreditEntitlementService:
         assert "cap" in (decision.denial_message or "").lower()
 
     @pytest.mark.asyncio
-    async def test_get_included_credits_monthly_delegates_to_entitlements(self):
+    async def test_get_included_credits_per_billing_period_delegates_to_entitlements(
+        self,
+    ):
         org_id = uuid4()
-        entitlements = _org_entitlements(limits={"included_credits_monthly": 1200})
+        entitlements = _org_entitlements(
+            limits={"included_credits_per_billing_period": 1200}
+        )
         service = CreditEntitlementService()
         with patch(
             "src.billing.credit_entitlement_service.entitlement_service.get_org_entitlements",
             new=AsyncMock(return_value=entitlements),
         ):
-            result = await service.get_included_credits_monthly(org_id)
+            result = await service.get_included_credits_per_billing_period(org_id)
         assert result == 1200

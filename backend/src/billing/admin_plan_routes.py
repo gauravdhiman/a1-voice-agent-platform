@@ -19,6 +19,8 @@ from src.billing.admin_plan_models import (
     EntitlementDefinitionUpdate,
     PlanProduct,
     PlanProductCreate,
+    PlanProductCreateResult,
+    PlanProductStripeUpdate,
     PlanProductWithVersions,
     PlanVersionCloneRequest,
     PlanVersionDetail,
@@ -114,14 +116,14 @@ async def list_plan_products(
 
 @router.post(
     "/plan-products",
-    response_model=PlanProduct,
+    response_model=PlanProductCreateResult,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_plan_product(
     body: PlanProductCreate,
     user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Create a new plan product family."""
+    """Create a new plan product family (auto-creates Stripe Product when configured)."""
     _, user_profile = user_auth
     _require_platform_admin(user_profile)
     try:
@@ -133,6 +135,32 @@ async def create_plan_product(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create plan product",
+        )
+
+
+@router.patch(
+    "/plan-products/{product_id}/stripe",
+    response_model=PlanProduct,
+)
+async def update_plan_product_stripe(
+    product_id: UUID,
+    body: PlanProductStripeUpdate,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Manually link a Stripe Product when auto-create failed."""
+    _, user_profile = user_auth
+    _require_platform_admin(user_profile)
+    try:
+        return await admin_plan_catalog_service.update_plan_product_stripe(
+            product_id, body
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error linking Stripe product for %s: %s", product_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to link Stripe product",
         )
 
 
@@ -203,6 +231,29 @@ async def update_draft_plan_version(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update plan version",
+        )
+
+
+@router.delete(
+    "/plan-versions/{plan_version_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_draft_plan_version(
+    plan_version_id: UUID,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Delete an unpublished draft plan version."""
+    _, user_profile = user_auth
+    _require_platform_admin(user_profile)
+    try:
+        await admin_plan_catalog_service.delete_draft_version(plan_version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error deleting plan version %s: %s", plan_version_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete plan version",
         )
 
 

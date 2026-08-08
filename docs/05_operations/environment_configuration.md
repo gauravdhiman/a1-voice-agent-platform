@@ -2,6 +2,16 @@
 
 This document explains how to configure environment variables for different development scenarios.
 
+## Supabase projects
+
+| Environment | Project ref | Env file | Notes |
+|-------------|-------------|----------|-------|
+| **Local** | Local CLI (`127.0.0.1:54321`) | `.env` / `.env.local` | Default dev |
+| **Staging** | `gdzwiwukcwbqohfwxxrx` | `.env.staging` | Cloud DB for pre-prod validation — [staging guide](./staging_environment.md) |
+| **Production** | `zymiyfilulmtrmyyhvzw` | `.env.cloud` | 247ai.live — deploy/migrate only |
+
+> Do **not** use production Supabase for local feature testing. Use `.env.staging` instead.
+
 ## Environment Variable Files
 
 The project uses different environment files depending on your development approach:

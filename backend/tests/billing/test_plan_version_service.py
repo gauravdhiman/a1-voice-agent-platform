@@ -310,6 +310,35 @@ class TestPlanVersionPublish:
                 )
 
 
+class TestEnsureStripePrice:
+    """Stripe Price auto-create and manual fallback."""
+
+    @pytest.mark.asyncio
+    async def test_ensure_stripe_price_returns_existing_id(
+        self, plan_version_service, product_id, draft_version_id
+    ):
+        draft = _version_row(
+            draft_version_id,
+            product_id,
+            stripe_price_id="price_manual",
+        )
+        result = await plan_version_service._ensure_stripe_price(draft)
+        assert result == "price_manual"
+
+    @pytest.mark.asyncio
+    async def test_ensure_stripe_price_raises_actionable_error_on_stripe_failure(
+        self, plan_version_service, product_id, draft_version_id
+    ):
+        draft = _version_row(draft_version_id, product_id)
+        with patch(
+            "src.billing.plan_version_service.stripe_service.create_price",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("network down"),
+        ):
+            with pytest.raises(ValueError, match="Failed to auto-create Stripe Price"):
+                await plan_version_service._ensure_stripe_price(draft)
+
+
 class TestResolveCheckoutPlan:
     """Stripe price ID → plan version resolution."""
 

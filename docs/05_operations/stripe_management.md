@@ -119,6 +119,8 @@ The seed command:
 - Provides smart defaults when metadata is missing
 - Reports uncategorized items for manual review
 
+**Cloud staging:** `./scripts/bootstrap-staging-db.sh` runs migrations, then `stripe_manager seed`, then the entitlements migration. See [staging_environment.md](./staging_environment.md).
+
 ### 5. View Metadata Setup Instructions
 
 ```bash

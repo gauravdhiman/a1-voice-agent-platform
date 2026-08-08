@@ -80,7 +80,8 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 
 #### Other operations
 
-1. **[Stripe Management](05_operations/stripe_management.md)** — CLI tool for managing Stripe products
+1. **[Cloud staging environment](05_operations/staging_environment.md)** — `gdzwiwukcwbqohfwxxrx` DB for local pre-prod validation
+2. **[Stripe Management](05_operations/stripe_management.md)** — CLI tool for managing Stripe products
 
 ### Phone Numbers
 

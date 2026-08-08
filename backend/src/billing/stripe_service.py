@@ -71,6 +71,39 @@ class StripeService:
             logger.error(f"Failed to update Stripe customer {customer_id}: {e}")
             raise
 
+    async def create_product(
+        self,
+        name: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> stripe.Product:
+        """Create a Stripe Product for a plan product family.
+
+        Args:
+            name: Customer-facing product name in Stripe.
+            metadata: Optional metadata (e.g. plan_product_id, slug).
+
+        Returns:
+            Created Stripe Product.
+
+        Raises:
+            ValueError: When Stripe is not configured.
+            stripe.error.StripeError: When Stripe API call fails.
+        """
+        if not stripe.api_key:
+            raise ValueError("Stripe is not configured")
+
+        try:
+            product = stripe.Product.create(
+                name=name,
+                metadata=metadata or {},
+            )
+            logger.info("Created Stripe product %s (%s)", product.id, name)
+            return product
+        except stripe.error.StripeError as e:
+            logger.error("Failed to create Stripe product %s: %s", name, e)
+            raise
+
     async def create_price(
         self,
         product_id: str,
