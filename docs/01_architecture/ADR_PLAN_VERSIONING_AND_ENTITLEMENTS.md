@@ -12,7 +12,7 @@
 24x7 AI needs subscription tiers where:
 
 1. Platform admins can define **any number of plans**, each with **any subset** of features and limits.
-2. Limit **types vary by plan** (e.g. one plan has `max_agents` only; another adds `included_credits_per_billing_period` and `payg_credit_cap`).
+2. Limit **types vary by plan** (e.g. one plan has `max_agents` only; another adds `included_credits_per_billing_period` and `premium_tools`).
 3. Configured limits must be **enforceable at runtime** without code deploys for every new limit key (within a registered handler catalog).
 4. When admins change pricing or limits, **existing subscribers must keep what they signed up for**.
 5. New signups receive the **latest published version**.
@@ -106,7 +106,7 @@ flowchart TB
 | Edit `subscription_plans` in place | Breaks grandfathering |
 | Store limits only in Stripe metadata | Not queryable; no versioning story |
 | Snapshot JSON on every request | Harder to admin; drift from catalog |
-| Stripe Entitlements API only | Insufficient for agent counts, concurrent calls, PAYG caps |
+| Stripe Entitlements API only | Insufficient for agent counts, concurrent calls, credit pools |
 
 ---
 

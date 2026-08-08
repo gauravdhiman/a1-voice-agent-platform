@@ -72,6 +72,16 @@ class PlatformToolBase(BaseModel):
     is_active: bool = Field(
         default=True, description="Whether is tool available for use"
     )
+    is_premium: bool = Field(
+        default=False,
+        description=(
+            "Whether the tool requires the 'premium_tools' plan feature. "
+            "Premium tools are visible in the catalog with a Premium badge "
+            "but cannot be attached to an agent unless the org's plan "
+            "entitles the 'premium_tools' feature (gate enforced at attach "
+            "time in the API layer)."
+        ),
+    )
     # --- MCP integration (Phase 2) -----------------------------------------
     # Additive, all optional/defaulted so legacy rows and pre-migration code
     # keep working: a row without these columns is treated as ``LEGACY``.

@@ -9,9 +9,9 @@
 
 | | |
 |---|---|
-| **Completed** | Phases 0–5 (through credits, PAYG, voice-ws pre-call checks) |
+| **Completed** | Phases 0–5 (through credits, two-pool consumption, voice-ws pre-call checks) |
 | **Committed** | CP-1 ✅, CP-2 ✅, CP-3 ✅, CP-4 ✅ (user confirmed earlier) |
-| **Ready to commit** | CP-5 — credits/PAYG/voice-ws entitlement enforcement |
+| **Ready to commit** | CP-5 — credits/credit-pools/voice-ws entitlement enforcement |
 | **Next up** | Post-feature validation on cloud; optional Stripe Billing Meters |
 | **Deferred validation** | Local billing UI smoke; full E2E on 24x7 AI cloud after feature complete |
 
@@ -109,15 +109,18 @@
 
 ---
 
-## Phase 5 — Credits, PAYG, voice-ws
+## Phase 5 — Credits, credit pools, voice-ws
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Credit grant from version on renewal | ✅ | `credit_entitlement_service` + invoice webhook |
-| PAYG handlers / consumption | ✅ | `evaluate_consumption` in `consume_credits` |
+| Two-pool consumption (plan → purchased) | ✅ | `allocate_consumption` in `consume_credits`; PAYG removed (migration `20260807000004`) |
+| Low-balance alerts (20/10/5%) | ✅ | `_maybe_notify_low_balance` + `low_credit_threshold_notified` |
+| `credit_topup_enabled` checkout gates | ✅ | both credit checkout routes → 403 when off |
+| `premium_tools` attach gate | ✅ | `POST /tools/agent` → 403 when off; `platform_tools.is_premium` |
 | voice-ws concurrent + credit pre-check | ✅ | `shared/billing/voice_session_entitlement.py` |
 | `max_concurrent_calls` handler | ✅ | `ConcurrentCallsHandler` + call log tracking |
-| Tests | ✅ | credit entitlement, PAYG consume, shared precheck |
+| Tests | ✅ | credit entitlement, two-pool consume, shared precheck |
 
 ---
 
@@ -125,7 +128,7 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Stripe Billing Meters (optional PAYG) | ⏸ | Spec optional |
+| Stripe Billing Meters (optional) | ⏸ | Spec optional |
 | Cloud E2E billing + voice validation | ⏸ | Deferred per user |
 
 ---
@@ -139,7 +142,7 @@
 | `entitlement_handlers.py` | ≥90% | **88%** |
 | **Combined** | ≥90% | **94%** |
 
-Full billing suite: **68 passed**, 6 skipped (2026-08-07).
+Full billing suite: **121 passed**, 6 skipped (2026-08-07); shared entitlement suite 7 passed; tool routes (incl. premium gate) 50 passed.
 
 Additional Phase 2–3 tests: `test_plan_version_service.py` (6), `test_webhook_plan_version.py` (2), `test_plan_migration_service.py` (6), cancel-dialog vitest (1).
 
@@ -194,4 +197,5 @@ Additional Phase 2–3 tests: `test_plan_version_service.py` (6), `test_webhook_
 | 2026-08-07 | Local billing UI validation deferred (empty Plans/Credits locally is pre-existing; Manage tab requires active sub) |
 | 2026-08-07 | **Next:** Phase 4 Admin UI |
 | 2026-08-07 | **CP-4 complete:** Admin catalog UI + draft CRUD routes |
-| 2026-08-07 | **CP-5 complete:** Credit grant from plan version, PAYG consumption, voice-ws pre-call + concurrent tracking |
+| 2026-08-07 | **CP-5 complete:** Credit grant from plan version, two-pool consumption (PAYG removed), low-balance alerts, premium-tools + top-up gates, voice-ws pre-call + concurrent tracking |
+| 2026-08-08 | **Atomic debit:** `debit_organization_credits` Postgres RPC (`SELECT … FOR UPDATE`) so concurrent consumption cannot overspend prepaid balance; low-balance CTA uses `/organization/billing` |

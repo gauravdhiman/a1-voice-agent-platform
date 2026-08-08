@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Crown,
   Loader2,
   Plus,
   Server,
@@ -27,6 +29,8 @@ import {
   useCreatePlatformTool,
   usePlatformTools,
   usePublishPlatformTool,
+  useSetPlatformToolPremium,
+  useUpdatePlatformTool,
 } from "@/hooks/use-agent-queries";
 import { agentService } from "@/services/agent-service";
 import { toast } from "sonner";
@@ -64,7 +68,13 @@ import { McpToolDeleteDialog } from "@/components/tools/mcp-tool-delete-dialog";
  *    the admin can author another, and the manage list refetches.
  *  - **Manage existing tools** (internal state `view === "manage"`): lists
  *    the platform admin's drafts + published tools (native + MCP) with
- *    publish/unpublish and delete actions.
+ *    publish/unpublish, premium mark/unmark, and delete actions. MCP rows
+ *    also get an **Edit** action that loads the server back into the author
+ *    form (URL, public headers, description, auth mode, premium flag
+ *    prefilled; secret headers stay encrypted at rest and are only replaced
+ *    when the admin pastes new ones). "Save changes" PUTs the payload with
+ *    the row's publish state preserved and `tool_functions_schema` untouched
+ *    unless the admin re-runs "Test & discover".
  *
  * Auth/key model (RFC §6.6):
  *  - **No auth**: no secret headers; the server is called with only the public
@@ -117,6 +127,13 @@ export function PlatformToolsManager({
   const [secretHeadersJson, setSecretHeadersJson] = React.useState("");
   const [testApiKey, setTestApiKey] = React.useState("");
   const [description, setDescription] = React.useState("");
+  // Premium flag: premium tools require the org plan to entitle the
+  // ``premium_tools`` feature before an org can attach them.
+  const [isPremium, setIsPremium] = React.useState(false);
+  // Set while the admin is editing an EXISTING MCP tool (null = authoring new).
+  const [editingTool, setEditingTool] = React.useState<PlatformTool | null>(
+    null,
+  );
 
   // Parse / discover results
   const [discoveredTools, setDiscoveredTools] = React.useState<
@@ -136,6 +153,8 @@ export function PlatformToolsManager({
   const parseMutation = useParseMcpServersJson();
   const createMutation = useCreatePlatformTool();
   const publishMutation = usePublishPlatformTool();
+  const premiumMutation = useSetPlatformToolPremium();
+  const updateMutation = useUpdatePlatformTool();
   // Platform-admin-only surface: list drafts + published for the manage view.
   const { data: platformTools = [] } = usePlatformTools(false, {
     includeDrafts: true,
@@ -153,6 +172,7 @@ export function PlatformToolsManager({
     setSecretHeadersJson("");
     setTestApiKey("");
     setDescription("");
+    setIsPremium(false);
     setDiscoveredTools([]);
     setParseErrors([]);
     setInlineError(null);
@@ -165,7 +185,11 @@ export function PlatformToolsManager({
     if (!trimmed) return { headers: null, error: null };
     try {
       const parsed = JSON.parse(trimmed);
-      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      ) {
         return { headers: null, error: "Headers must be a JSON object." };
       }
       const headers: Record<string, string> = {};
@@ -254,7 +278,11 @@ export function PlatformToolsManager({
       setInlineError("Enter a server URL first.");
       return;
     }
-    if (authMode === "api_key" && secretHeadersJson.includes("{{KEY}}") && !testApiKey.trim()) {
+    if (
+      authMode === "api_key" &&
+      secretHeadersJson.includes("{{KEY}}") &&
+      !testApiKey.trim()
+    ) {
       setInlineError("Enter a Test API key to substitute into {{KEY}}.");
       return;
     }
@@ -317,6 +345,7 @@ export function PlatformToolsManager({
       is_active: true,
       requires_auth: authMode === "api_key",
       auth_type: authMode === "api_key" ? "api_key" : null,
+      is_premium: isPremium,
       is_published: isPublished,
       // Persist the discovered tool list so the agent tool-config drawer can
       // render each tool with an enable/disable toggle (parity with native tool
@@ -399,11 +428,74 @@ export function PlatformToolsManager({
     setDeleteTarget(tool);
   };
 
+  // Load an existing MCP tool into the author form. Secret headers are
+  // encrypted at rest and never returned to the frontend — the field starts
+  // empty; leaving it blank keeps the stored ones (the backend only replaces
+  // them when a non-null value is sent).
+  const startEdit = (tool: PlatformTool) => {
+    setEditingTool(tool);
+    setView("author");
+    setName(tool.name ?? "");
+    setUrl(tool.mcp_server_url ?? "");
+    setPublicHeadersJson(
+      tool.mcp_server_headers && Object.keys(tool.mcp_server_headers).length > 0
+        ? JSON.stringify(tool.mcp_server_headers, null, 2)
+        : "",
+    );
+    setSecretHeadersJson("");
+    setTestApiKey("");
+    setDescription(tool.description ?? "");
+    setAuthMode(
+      tool.requires_auth && tool.auth_type === "api_key" ? "api_key" : "none",
+    );
+    setIsPremium(Boolean(tool.is_premium));
+    setDiscoveredTools([]);
+    setParseErrors([]);
+    setInlineError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingTool(null);
+    resetForm();
+    setView("manage");
+  };
+
+  // Save edits to an EXISTING tool via the full PUT. Publish state is
+  // preserved from the row (published tools keep `is_published=true`; drafts
+  // stay drafts — the admin publishes later from the manage view). A stored
+  // `tool_functions_schema` is untouched: the payload omits it unless the
+  // admin re-runs "Test & discover" in this session.
+  const handleSaveEdit = async () => {
+    if (!editingTool) return;
+    setInlineError(null);
+    if (!name.trim() || !url.trim()) {
+      setInlineError("Name and URL are required.");
+      return;
+    }
+    try {
+      const payload = buildSavePayload(Boolean(editingTool.is_published));
+      await updateMutation.mutateAsync({ toolId: editingTool.id, payload });
+      setEditingTool(null);
+      resetForm();
+      setView("manage");
+    } catch (e) {
+      setInlineError(
+        e instanceof Error ? e.message : "Failed to update MCP server.",
+      );
+    }
+  };
+
+  const handlePremiumToggle = (tool: PlatformTool) => {
+    premiumMutation.mutate({ toolId: tool.id, isPremium: !tool.is_premium });
+  };
+
   const isBusy =
     discoverMutation.isPending ||
     parseMutation.isPending ||
     createMutation.isPending ||
-    publishMutation.isPending;
+    publishMutation.isPending ||
+    premiumMutation.isPending ||
+    updateMutation.isPending;
 
   // Publish requires a successful "Test & discover" so the discovered tool
   // list is captured into tool_functions_schema. Save draft is allowed without
@@ -425,7 +517,12 @@ export function PlatformToolsManager({
               ? "bg-background shadow-sm font-medium"
               : "text-muted-foreground hover:text-foreground",
           )}
-          onClick={() => setView("manage")}
+          onClick={() => {
+            // Leaving the edit session via the tab cancels it (form state and
+            // banner belong to the editing tool).
+            if (editingTool) cancelEdit();
+            else setView("manage");
+          }}
         >
           Manage existing tools ({platformTools.length})
         </button>
@@ -445,6 +542,20 @@ export function PlatformToolsManager({
 
       {view === "author" ? (
         <div className="space-y-5">
+          {editingTool && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border bg-muted/40">
+              <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="text-xs text-muted-foreground">
+                Editing{" "}
+                <span className="font-medium text-foreground">
+                  {editingTool.name.replace(/_/g, " ")}
+                </span>
+                . Changes apply to the existing server. Secret headers left
+                blank are kept as stored (encrypted).
+              </div>
+            </div>
+          )}
+
           {/* Paste JSON config */}
           <div className="space-y-2">
             <Label
@@ -521,9 +632,7 @@ export function PlatformToolsManager({
               <select
                 id="mcp-auth-mode"
                 value={authMode}
-                onChange={(e) =>
-                  setAuthMode(e.target.value as AuthMode)
-                }
+                onChange={(e) => setAuthMode(e.target.value as AuthMode)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="none">No auth</option>
@@ -599,9 +708,15 @@ export function PlatformToolsManager({
                   />
                   <p className="text-xs text-muted-foreground">
                     Use <code>{"{{KEY}}"}</code> where the org&apos;s API key
-                    goes. Literal values (no placeholder) pass through as
-                    fixed shared headers.
+                    goes. Literal values (no placeholder) pass through as fixed
+                    shared headers.
                   </p>
+                  {editingTool?.mcp_secret_headers_configured && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      This server has stored secret headers. Leave the field
+                      blank to keep them; pasting new JSON replaces them.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label
@@ -634,6 +749,29 @@ export function PlatformToolsManager({
                 placeholder="What this server does"
                 className="h-9 text-sm"
               />
+            </div>
+            {/* Premium flag: gates the tool behind the org plan's
+                `premium_tools` feature (403 on attach otherwise). */}
+            <div className="flex items-start gap-2 pt-1">
+              <Checkbox
+                id="mcp-premium"
+                checked={isPremium}
+                onCheckedChange={(checked) => setIsPremium(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="mcp-premium"
+                  className="text-xs font-medium leading-tight"
+                >
+                  Premium tool
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Requires an org plan that entitles the{" "}
+                  <code>premium_tools</code> feature before orgs can attach it;
+                  shown with a Premium badge in the catalog.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -698,31 +836,60 @@ export function PlatformToolsManager({
               buttons). Buttons are w-full on mobile, auto-width side-by-side
               at sm+ so they never overflow the panel. */}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              onClick={() => handleSave(false)}
-              disabled={!name.trim() || !url.trim() || isBusy}
-              variant="outline"
-              className="w-full sm:w-auto"
-            >
-              {createMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4 mr-2" />
-              )}
-              Save draft
-            </Button>
-            <Button
-              onClick={() => handleSave(true)}
-              disabled={!name.trim() || !url.trim() || !canPublish || isBusy}
-              className="w-full sm:w-auto"
-            >
-              {createMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4 mr-2" />
-              )}
-              Publish
-            </Button>
+            {editingTool ? (
+              <>
+                <Button
+                  onClick={cancelEdit}
+                  disabled={isBusy}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveEdit}
+                  disabled={!name.trim() || !url.trim() || isBusy}
+                  className="w-full sm:w-auto"
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                  )}
+                  Save changes
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={() => handleSave(false)}
+                  disabled={!name.trim() || !url.trim() || isBusy}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                >
+                  {createMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  Save draft
+                </Button>
+                <Button
+                  onClick={() => handleSave(true)}
+                  disabled={
+                    !name.trim() || !url.trim() || !canPublish || isBusy
+                  }
+                  className="w-full sm:w-auto"
+                >
+                  {createMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Publish
+                </Button>
+              </>
+            )}
           </div>
           {!canPublish && (
             <p className="text-xs text-muted-foreground -mt-2 sm:text-right">
@@ -738,9 +905,11 @@ export function PlatformToolsManager({
         // Manage view: drafts + published, with publish/unpublish/delete.
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Drafts are visible only to platform admins. Publishing surfaces
-            a tool in every org&apos;s tool catalog; unpublishing hides it
-            from new attaches (existing attachments keep working).
+            Drafts are visible only to platform admins. Publishing surfaces a
+            tool in every org&apos;s tool catalog; unpublishing hides it from
+            new attaches (existing attachments keep working). Marking a tool
+            premium gates it behind the plan&apos;s <code>premium_tools</code>{" "}
+            feature.
           </p>
           {platformTools.length === 0 ? (
             <div className="text-center py-8 bg-muted/20 rounded-lg border border-dashed">
@@ -772,6 +941,15 @@ export function PlatformToolsManager({
                       >
                         {tool.is_published ? "Published" : "Draft"}
                       </Badge>
+                      {tool.is_premium && (
+                        <Badge
+                          variant="outline"
+                          className="h-5 text-[10px] border-amber-300 dark:border-amber-700 bg-amber-100/60 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200"
+                        >
+                          <Crown className="h-2.5 w-2.5 mr-0.5" />
+                          Premium
+                        </Badge>
+                      )}
                     </div>
                     {tool.description && (
                       <p className="text-xs text-muted-foreground line-clamp-2">
@@ -780,6 +958,20 @@ export function PlatformToolsManager({
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={tool.is_premium ? "default" : "outline"}
+                      onClick={() => handlePremiumToggle(tool)}
+                      disabled={isBusy}
+                      title={
+                        tool.is_premium
+                          ? "Remove the premium gate (any entitled plan can attach)"
+                          : "Premium tools require the org plan to entitle the premium_tools feature"
+                      }
+                    >
+                      <Crown className="h-3.5 w-3.5 mr-1" />
+                      {tool.is_premium ? "Unmark premium" : "Mark premium"}
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -795,6 +987,21 @@ export function PlatformToolsManager({
                         </>
                       )}
                     </Button>
+                    {/* Native/legacy tools are code-backed and re-seeded by the
+                        worker on startup — edits (like deletes) would be
+                        clobbered, so only MCP tools get an Edit affordance. */}
+                    {tool.tool_source !== "legacy" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startEdit(tool)}
+                        disabled={isBusy}
+                        aria-label="Edit"
+                      >
+                        <Wrench className="h-3.5 w-3.5 mr-1" />
+                        Edit
+                      </Button>
+                    )}
                     {/* Native/legacy tools are code-backed and re-seeded by the
                         worker on startup — they are not hard-deletable (the backend
                         refuses with 400). Only MCP tools get a Delete affordance. */}

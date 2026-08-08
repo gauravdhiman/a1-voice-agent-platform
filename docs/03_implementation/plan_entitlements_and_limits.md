@@ -38,11 +38,11 @@ Today:
 
 Required example:
 
-| Plan product | Version | Agents | Credits/mo | PAYG | Price | Who gets it |
-|--------------|---------|--------|------------|------|-------|-------------|
-| Starter | v1 | 1 | 500 | No | $49 | Existing subs until migrated |
-| Starter | v2 | 1 | 750 | No | $59 | New signups after publish |
-| Growth | v3 | 5 | 1,000 | Yes | $149 | New signups; v2 subs get 90-day grace then migrate |
+| Plan product | Version | Agents | Credits/mo | Price | Who gets it |
+|--------------|---------|--------|------------|-------|-------------|
+| Starter | v1 | 1 | 500 | $49 | Existing subs until migrated |
+| Starter | v2 | 1 | 750 | $59 | New signups after publish |
+| Growth | v3 | 5 | 1,000 | $149 | New signups; v2 subs get 90-day grace then migrate |
 
 ---
 
@@ -150,7 +150,7 @@ erDiagram
 
 - **Plan product** — Logical tier family (`starter`, `growth`, `enterprise`). Stable marketing identity.
 - **Plan version** — Immutable snapshot (`starter` v1, v2, …). Carries price + entitlements + Stripe Price.
-- **Entitlement** — Generic term for both **limits** (`max_agents`) and **features** (`payg_enabled`).
+- **Entitlement** — Generic term for both **limits** (`max_agents`) and **features** (`premium_tools`).
 
 ### 5.2 Version lifecycle states
 
@@ -191,7 +191,7 @@ Single table `entitlement_definitions` for both limits and features (`kind = 'li
 
 | Column | Purpose |
 |--------|---------|
-| `key` | Stable identifier, e.g. `max_agents`, `payg_enabled` |
+| `key` | Stable identifier, e.g. `max_agents`, `premium_tools` |
 | `kind` | `limit` or `feature` |
 | `value_type` | `integer`, `boolean`, `unlimited`, `decimal`, `enum`, `duration_seconds` |
 | `unit` | Display: `count`, `credits`, `minutes`, `usd` |
@@ -208,8 +208,8 @@ Example — two plans, different shapes:
 |-----------------|------------|-----------|
 | `max_agents` | `{ "type": "integer", "value": 1 }` | `{ "type": "integer", "value": 5 }` |
 | `included_credits_per_billing_period` | `{ "type": "integer", "value": 500 }` | `{ "type": "integer", "value": 1000 }` |
-| `payg_enabled` | *(absent = false)* | `{ "type": "boolean", "value": true }` |
-| `payg_credit_cap` | *(absent)* | `{ "type": "integer", "value": 5000 }` |
+| `premium_tools` | *(absent = false)* | `{ "type": "boolean", "value": true }` |
+| `credit_topup_enabled` | *(absent = false)* | `{ "type": "boolean", "value": true }` |
 | `max_phone_numbers` | *(absent = 0 or platform default)* | `{ "type": "integer", "value": 2 }` |
 
 **Default when absent:** Defined per entitlement in catalog (`default_when_absent`: `false`, `0`, `unlimited`, or `deny`).
@@ -251,7 +251,7 @@ sequenceDiagram
     API->>DB: version.status=published, is_current_for_signup=true
     API->>DB: old version.is_current_for_signup=false, status=deprecated
     API->>DB: Create publish_event + migration rows for v2 subs
-    API-->>UI: Published; N subscribers notified
+    API-->>UI: Published, N subscribers notified
 ```
 
 ### 6.2 Migration policy (per publish event)
@@ -355,9 +355,9 @@ async def resolve_entitlements(org_id: UUID) -> OrgEntitlements:
 HANDLERS: dict[str, EntitlementHandler] = {
     "limit.max_count": MaxCountHandler(),       # max_agents, max_phone_numbers
     "limit.credits_monthly": CreditsMonthlyHandler(),
-    "limit.credits_balance": CreditsBalanceHandler(),  # PAYG cap
+    "limit.credits_balance": CreditsBalanceHandler(),
     "limit.concurrent": ConcurrentSessionsHandler(),
-    "feature.flag": FeatureFlagHandler(),       # payg_enabled, premium_tools
+    "feature.flag": FeatureFlagHandler(),       # premium_tools, credit_topup_enabled
 }
 
 async def check(org_id, key: str, op: str, amount: int = 1) -> LimitCheckResult:
@@ -387,9 +387,8 @@ Each `entitlement_definitions.key` maps to **call sites**:
 | `max_phone_numbers` | `limit.max_count` | phone purchase |
 | `included_credits_per_billing_period` | `limit.credits_monthly` | renewal webhook grant |
 | `max_concurrent_calls` | `limit.concurrent` | voice-ws session start |
-| `payg_enabled` | `feature.flag` | credit consumption fallback |
-| `payg_credit_cap` | `limit.credits_balance` | consume_credits |
-| `premium_tools` | `feature.flag` | tool connect routes |
+| `premium_tools` | `feature.flag` | tool connect routes (`POST /tools/agent` → 403) |
+| `credit_topup_enabled` | `feature.flag` | credit checkout routes (`/checkout/credits`, `POST /credit-products/checkout` → 403) |
 | `embed_widget` | `feature.flag` | embed config |
 
 **Plugin discovery:** `entitlement_definitions.enforcement_call_sites` JSONB lists route names for docs/tests; CI test ensures each active key with `default_enforcement=hard` has ≥1 call site.
@@ -412,24 +411,44 @@ Each `entitlement_definitions.key` maps to **call sites**:
 
 ---
 
-## 8. Credits, Minutes & PAYG
+## 8. Credits, Minutes & Credit Pools
 
-(Unchanged core model; now read from **bound plan version**.)
+(No pay-as-you-go: runtime credit headroom is strictly prepaid.)
 
 - **Credits** = internal ledger unit
 - **Minutes** = UI derived via `credit_events.voice_call_minute.credit_cost`
-- **`included_credits_per_billing_period`** = entitlement on version; granted on invoice paid
-- **`payg_enabled` + `payg_credit_cap`** = feature + limit on version
+- **`included_credits_per_billing_period`** = entitlement on version; granted on invoice paid into `organizations.credit_balance`
 
-PAYG consumption when balance insufficient:
+### Two-pool consumption model
+
+| Pool | Column | Expiry | Drain order |
+|------|--------|--------|-------------|
+| **Plan credits** | `organizations.credit_balance` | Expire at period end; expire + replace on renewal (`_expire_plan_credits` then grant) | 1st |
+| **Purchased credits** | `organizations.purchased_credit_balance` | Never expire (`expires_at IS NULL` on the transaction) | 2nd |
+
+Consumption always drains the **plan pool first**, then purchased:
 
 ```text
-if balance >= cost: allow debit
-elif feature.payg_enabled and balance - cost >= -payg_credit_cap: allow (tag PAYG)
+(plan_used, purchased_used) = allocate_consumption(plan_balance, purchased_balance, cost)
+if plan_balance + purchased_balance >= cost: debit both pools via debit_organization_credits RPC (row lock)
 else: deny 402
 ```
 
-Purchased credit packs remain org-level (not version-specific); consumption rules still respect version PAYG settings.
+`allocate_consumption` is a pure static function in `backend/src/billing/service.py`; runtime debits call the `debit_organization_credits` Postgres function (migration `20260807000007`) so concurrent consumers serialize on the organization row (`SELECT … FOR UPDATE`). The ledger rows record which pool each debit came from. Combined balance for runtime checks (`shared/billing/voice_session_entitlement.py`) is `credit_balance + purchased_credit_balance`.
+
+### Low-balance alerts
+
+When credits are consumed, `_maybe_notify_low_balance` emails org admins at most once per threshold per billing cycle when the **remaining combined balance** (plan + purchased) drops to 20%, 10%, or 5% of the period's included credits:
+
+- Thresholds: `LOW_CREDIT_WARNING_THRESHOLDS = (20, 10, 5)` (percent of `included_credits_per_billing_period`)
+- Dedup: `organizations.low_credit_threshold_notified` stores the highest threshold already emailed; lower thresholds fire as balance drops
+- Re-arm: set NULL on any grant or purchase (`_reset_low_credit_notification`), so the cycle starts fresh
+- Email: `LOW_CREDITS_TEMPLATE` / `credits.low_balance` via `SendNotificationRequest`; vars `current_credits` (string), `organization_name`, `purchase_credits_url` (`{app_base_url}/organization/billing`)
+
+### Credit top-ups
+
+- **`credit_topup_enabled`** = feature on version. When off, both checkout paths return **403** with an upgrade message: `POST /checkout/credits` (frontend purchase page) and `POST /credit-products/checkout`
+- Purchase UI hides the "buy credits" entry point entirely when the feature is off
 
 ---
 
@@ -500,8 +519,7 @@ async def resolve_plan_version(sub: OrganizationSubscription) -> PlanVersion:
 | Credit type | On cancel request | At period end |
 |-------------|-------------------|---------------|
 | **Included subscription credits** (current period) | Remain usable until period end | Expire per existing expiry rules (no refund) |
-| **Purchased credit packs** | Remain usable | Remain usable (no expiry — existing behavior) |
-| **PAYG overage** (if enabled) | Accrued overage still billed on next invoice | N/A after cancel completes |
+| **Purchased credit packs** | Remain usable | Remain usable (never expire) |
 
 No clawback of credits already granted for the paid period.
 
@@ -778,7 +796,7 @@ sequenceDiagram
     ES->>DB: sub.plan_version_id → entitlements
     ES->>DB: usage_counters.agent_count
     alt allowed
-        API->>DB: INSERT agent; increment counter
+        API->>DB: INSERT agent, increment counter
         API-->>User: 201
     else denied
         API-->>User: 403 entitlement_denied
@@ -819,7 +837,7 @@ Published versions are cache-friendly forever.
 
 ### 14.3 Seed entitlement catalog
 
-Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurrent_calls`, `included_credits_per_billing_period`, `payg_enabled`, `payg_credit_cap`, `premium_tools`, `embed_widget`, `custom_branding`, `credit_topup_enabled`.
+Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurrent_calls`, `included_credits_per_billing_period`, `premium_tools`, `embed_widget`, `custom_branding`, `credit_topup_enabled`.
 
 ---
 
@@ -861,17 +879,18 @@ Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurr
 - [ ] Publish dialog with migration policy
 - [ ] Subscriber list per version
 
-### Phase 5 — Credits, PAYG, voice-ws (2 weeks)
+### Phase 5 — Credits, credit pools, voice-ws (2 weeks)
 
 - [ ] Credit grant from version entitlement on renewal
-- [ ] PAYG handlers
+- [ ] Two-pool consumption (plan first, purchased second) + expiry on renewal
+- [ ] Low-balance alerts (20/10/5%) + `credit_topup_enabled` + `premium_tools` gates
 - [ ] voice-ws concurrent + credit pre-check
 
 ### Phase 6 — Extended limits & enterprise (ongoing)
 
 - [ ] More handlers as product grows
 - [ ] Org overrides UI
-- [ ] Stripe Billing Meters (optional PAYG)
+- [ ] Stripe Billing Meters (optional, future)
 
 ---
 

@@ -489,6 +489,156 @@ class TestToolRoutesPermissions:
                 assert result["deleted"] is True
 
 
+class TestPremiumToolGate:
+    """Premium tools are catalog-visible but gated at attach time.
+
+    ``POST /tools/agent`` must 403 when the target ``platform_tools`` row has
+    ``is_premium=True`` and the org's plan does not entitle the
+    ``premium_tools`` feature. Non-premium tools and entitled orgs pass.
+    """
+
+    def _make_platform_tool(self, is_premium: bool = False):
+        from shared.voice_agents.tool_models import PlatformTool
+
+        return PlatformTool(
+            id=TEST_TOOL_ID,
+            name="Premium MCP",
+            description="Test",
+            is_active=True,
+            is_premium=is_premium,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+    @pytest.mark.asyncio
+    async def test_premium_tool_denied_without_feature(self):
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(agent_id=TEST_AGENT_ID, tool_id=TEST_TOOL_ID)
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+            patch("src.voice_agents.tool_routes.entitlement_service") as mock_ent,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(self._make_platform_tool(is_premium=True), None)
+            )
+            mock_ent.check_feature = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await configure_agent_tool(
+                    agent_tool_data=tool_data,
+                    user_data=(TEST_USER_ID, profile),
+                )
+
+            assert exc_info.value.status_code == 403
+            mock_ent.check_feature.assert_awaited_once_with(
+                TEST_ORG_ID, "premium_tools"
+            )
+            mock_ts.configure_agent_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_premium_tool_allowed_with_feature(self):
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(agent_id=TEST_AGENT_ID, tool_id=TEST_TOOL_ID)
+        configured = _make_agent_tool_response()
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+            patch("src.voice_agents.tool_routes.entitlement_service") as mock_ent,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(self._make_platform_tool(is_premium=True), None)
+            )
+            mock_ent.check_feature = AsyncMock(return_value=True)
+            mock_ts.configure_agent_tool = AsyncMock(return_value=(configured, None))
+
+            result = await configure_agent_tool(
+                agent_tool_data=tool_data,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+            assert result is configured
+            mock_ent.check_feature.assert_awaited_once_with(
+                TEST_ORG_ID, "premium_tools"
+            )
+            mock_ts.configure_agent_tool.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_non_premium_tool_skips_gate(self):
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(agent_id=TEST_AGENT_ID, tool_id=TEST_TOOL_ID)
+        configured = _make_agent_tool_response()
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+            patch("src.voice_agents.tool_routes.entitlement_service") as mock_ent,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(self._make_platform_tool(is_premium=False), None)
+            )
+            mock_ent.check_feature = AsyncMock(return_value=False)
+            mock_ts.configure_agent_tool = AsyncMock(return_value=(configured, None))
+
+            result = await configure_agent_tool(
+                agent_tool_data=tool_data,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+            assert result is configured
+            mock_ent.check_feature.assert_not_called()
+            mock_ts.configure_agent_tool.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_skips_gate(self):
+        """A tool missing from the catalog is not premium-gated (the service
+        layer surfaces the not-found error downstream)."""
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(agent_id=TEST_AGENT_ID, tool_id=TEST_TOOL_ID)
+        configured = _make_agent_tool_response()
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+            patch("src.voice_agents.tool_routes.entitlement_service") as mock_ent,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(None, "Platform tool not found")
+            )
+            mock_ent.check_feature = AsyncMock(return_value=False)
+            mock_ts.configure_agent_tool = AsyncMock(return_value=(configured, None))
+
+            result = await configure_agent_tool(
+                agent_tool_data=tool_data,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+            assert result is configured
+            mock_ent.check_feature.assert_not_called()
+
+
 class TestMcpDiscoverAndCreate:
     """Platform-admin authoring endpoints (RFC §6.6 publish lifecycle).
 
@@ -1194,3 +1344,116 @@ class TestPlatformToolDeleteGuardrails:
             assert exc_info.value.status_code == 403
             mock_ts.delete_platform_tool.assert_not_called()
             mock_ts.get_platform_tool_usage.assert_not_called()
+
+
+class TestPlatformToolPremiumToggle:
+    """Premium flag management for platform tools (platform-admin only).
+
+    ``POST /platform/{tool_id}/premium`` flips ``is_premium`` so a platform
+    admin can gate a catalog tool behind the ``premium_tools`` plan feature
+    without resubmitting the full create payload (the PUT route requires a
+    complete ``PlatformToolCreate``). Contract:
+      - platform_admin → 200 with the updated tool (flag persisted)
+      - non-platform-admin → 403 before any service call
+      - unknown tool id → 404
+    """
+
+    def _make_premium_update(self, is_premium: bool):
+        from src.voice_agents.tool_routes import PlatformToolPremiumUpdate
+
+        return PlatformToolPremiumUpdate(is_premium=is_premium)
+
+    def _make_updated_tool(self, is_premium: bool):
+        from shared.voice_agents.tool_models import PlatformTool
+
+        return PlatformTool(
+            id=TEST_TOOL_ID,
+            name="Premium MCP",
+            description="Test",
+            is_active=True,
+            is_premium=is_premium,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_sets_premium_true(self):
+        from src.voice_agents.tool_routes import set_platform_tool_premium
+
+        profile = _make_user_profile(is_platform_admin=True)
+        updated = self._make_updated_tool(is_premium=True)
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.set_platform_tool_premium = AsyncMock(return_value=(updated, None))
+
+            result = await set_platform_tool_premium(
+                tool_id=TEST_TOOL_ID,
+                premium_update=self._make_premium_update(is_premium=True),
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result.is_premium is True
+        mock_ts.set_platform_tool_premium.assert_awaited_once_with(
+            TEST_TOOL_ID, True
+        )
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_sets_premium_false(self):
+        from src.voice_agents.tool_routes import set_platform_tool_premium
+
+        profile = _make_user_profile(is_platform_admin=True)
+        updated = self._make_updated_tool(is_premium=False)
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.set_platform_tool_premium = AsyncMock(return_value=(updated, None))
+
+            result = await set_platform_tool_premium(
+                tool_id=TEST_TOOL_ID,
+                premium_update=self._make_premium_update(is_premium=False),
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result.is_premium is False
+        mock_ts.set_platform_tool_premium.assert_awaited_once_with(
+            TEST_TOOL_ID, False
+        )
+
+    @pytest.mark.asyncio
+    async def test_premium_toggle_forbidden_for_non_platform_admin(self):
+        from src.voice_agents.tool_routes import set_platform_tool_premium
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.set_platform_tool_premium = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await set_platform_tool_premium(
+                    tool_id=TEST_TOOL_ID,
+                    premium_update=self._make_premium_update(is_premium=True),
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 403
+            mock_ts.set_platform_tool_premium.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_premium_toggle_unknown_tool_returns_404(self):
+        from src.voice_agents.tool_routes import set_platform_tool_premium
+
+        profile = _make_user_profile(is_platform_admin=True)
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.set_platform_tool_premium = AsyncMock(
+                return_value=(None, "Platform tool not found")
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await set_platform_tool_premium(
+                    tool_id=TEST_TOOL_ID,
+                    premium_update=self._make_premium_update(is_premium=True),
+                    user_data=(TEST_USER_ID, profile),
+                )
+            assert exc_info.value.status_code == 404
+            mock_ts.set_platform_tool_premium.assert_awaited_once_with(
+                TEST_TOOL_ID, True
+            )

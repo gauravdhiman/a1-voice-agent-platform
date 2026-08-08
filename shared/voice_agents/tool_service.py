@@ -282,6 +282,16 @@ class ToolService:
             if tool_data.tool_source is ToolSource.MCP:
                 data_dict.pop("organization_id", None)
 
+            # Legacy (code-backed) tools carry NO premium metadata in the
+            # registry: ``PlatformToolRegistry.sync_with_db`` re-upserts them
+            # without ``is_premium`` on every worker startup, which would
+            # otherwise reset an admin-set premium flag to False. Preserve the
+            # DB value on updates of existing LEGACY rows (inserts keep the
+            # model default). MCP rows always send ``is_premium`` explicitly
+            # (author-form checkbox), so they pass through unchanged.
+            if tool_data.tool_source is ToolSource.LEGACY and existing.data:
+                data_dict.pop("is_premium", None)
+
             # Encrypt plaintext server-level secret headers before persisting.
             if tool_data.mcp_secret_headers_input:
                 data_dict["mcp_server_secret_headers"] = encrypt_data(
@@ -362,6 +372,40 @@ class ToolService:
             logger.error(f"Error getting platform tools: {e}")
             return [], str(e)
 
+    @tracer.start_as_current_span("tool.get_platform_tool_by_id")
+    async def get_platform_tool_by_id(
+        self, tool_id: UUID
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Fetch a single platform tool row by id.
+
+        Used for attach-time checks (e.g. premium gating) without loading the
+        full catalog.
+
+        Args:
+            tool_id: ``platform_tools.id``.
+
+        Returns:
+            Tuple of (platform tool, error). ``(None, "not found")`` when the
+            row does not exist.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .select("*")
+                .eq("id", str(tool_id))
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(f"Error getting platform tool {tool_id}: {e}")
+            return None, str(e)
+
     @tracer.start_as_current_span("tool.publish_platform_tool")
     async def publish_platform_tool(
         self, tool_id: UUID, published: bool
@@ -433,6 +477,48 @@ class ToolService:
             )
         except Exception as e:
             logger.error(f"Error publishing platform tool {tool_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("tool.set_platform_tool_premium")
+    async def set_platform_tool_premium(
+        self, tool_id: UUID, is_premium: bool
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Set or clear a platform tool's ``is_premium`` flag by id.
+
+        Mirrors :meth:`publish_platform_tool`: a single-column update keyed
+        on the tool id, so the platform-admin Premium toggle in the tools
+        manager never has to resubmit the full create payload. Premium tools
+        render with a Premium badge in every org's catalog and attach is
+        gated on the plan's ``premium_tools`` feature (the route layer
+        enforces the 403). Existing ``agent_tools`` attachments keep working
+        regardless of the flag.
+
+        Args:
+            tool_id: The ``platform_tools`` row id.
+            is_premium: True to gate the tool behind the ``premium_tools``
+                plan feature; False to make it available to all plans.
+
+        Returns:
+            Tuple of (updated PlatformTool, error). ``(None, "not found")``
+            if the row does not exist.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .update({"is_premium": is_premium})
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting premium flag on platform tool {tool_id}: {e}"
+            )
             return None, str(e)
 
     async def _discover_functions_schema(

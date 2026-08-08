@@ -1,14 +1,18 @@
 """
-Credit consumption and billing-period grant helpers driven by plan-version entitlements.
+Credit grant and low-balance threshold helpers driven by plan-version entitlements.
 
-Resolves ``included_credits_per_billing_period``, ``payg_enabled``, and ``payg_credit_cap``
-from the bound plan version for renewal grants and PAYG consumption.
+Resolves ``included_credits_per_billing_period`` from the bound plan version
+for renewal grants, and evaluates prepaid low-balance notification thresholds
+(20% / 10% / 5% of the period's included credits).
+
+Credits are strictly prepaid — there is no pay-as-you-go. Consumption itself
+is handled by ``BillingService.consume_credits`` with a two-pool model (plan
+credits drained first, then purchased credits).
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
@@ -17,18 +21,13 @@ from .entitlement_service import entitlement_service
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class CreditConsumptionDecision:
-    """Result of evaluating whether an org may consume credits."""
-
-    allowed: bool
-    used_payg: bool = False
-    denial_message: Optional[str] = None
+#: Low-balance warning thresholds, expressed as a percentage of the billing
+#: period's included credits. Emailed at most once per threshold per cycle.
+LOW_CREDIT_WARNING_THRESHOLDS: tuple[int, ...] = (20, 10, 5)
 
 
 class CreditEntitlementService:
-    """Plan-version-aware credit grant and PAYG consumption rules."""
+    """Plan-version-aware credit grant and low-balance notification rules."""
 
     async def get_included_credits_per_billing_period(
         self, organization_id: UUID
@@ -63,87 +62,57 @@ class CreditEntitlementService:
         except (TypeError, ValueError):
             return 0
 
-    async def evaluate_consumption(
-        self,
-        organization_id: UUID,
-        credits_needed: int,
-        *,
-        current_balance: Optional[int] = None,
-    ) -> CreditConsumptionDecision:
-        """Evaluate PAYG-aware credit consumption for ``credits_needed``.
+    @staticmethod
+    def low_credit_threshold_to_notify(
+        remaining_credits: int,
+        included_credits: int,
+        last_notified: Optional[int],
+    ) -> Optional[int]:
+        """Return the threshold percentage to notify now, or None.
+
+        Compares ``remaining_credits`` against ``included_credits`` (the
+        billing period's plan allotment) and picks the largest configured
+        threshold (20/10/5) that the remaining percentage is at or below.
+        A notification fires only when that threshold is lower than the last
+        one already notified this cycle, so each threshold is emailed at most
+        once per billing cycle (purchases/renewals re-arm via NULL).
 
         Args:
-            organization_id: Organization UUID.
-            credits_needed: Credits to debit (positive integer).
-            current_balance: Optional pre-fetched balance to avoid duplicate query.
+            remaining_credits: Combined prepaid balance (plan + purchased).
+            included_credits: Plan's included credits for the billing period.
+            last_notified: Last threshold percentage emailed this cycle, or
+                None if none has been sent yet.
 
         Returns:
-            CreditConsumptionDecision with allow/deny and PAYG flag.
+            Threshold percentage to notify (e.g. 20), or None when no new
+            threshold is crossed.
+
+        Example:
+            ```python
+            # 180 credits left on a 1000-credit plan -> warn at 20%
+            low_credit_threshold_to_notify(180, 1000, None)  # -> 20
+            # Already warned at 20%, now at 9% -> warn at 10%
+            low_credit_threshold_to_notify(90, 1000, 20)     # -> 10
+            # At 18% but already warned at 20% this cycle -> no email
+            low_credit_threshold_to_notify(180, 1000, 20)    # -> None
+            ```
         """
-        entitlements = await entitlement_service.get_org_entitlements(organization_id)
-        balance = current_balance
-        if balance is None:
-            balance = await self._fetch_balance(organization_id)
-        return self.evaluate_consumption_with_entitlements(
-            entitlements, balance, credits_needed
-        )
+        if included_credits <= 0 or remaining_credits < 0:
+            return None
 
-    @staticmethod
-    def evaluate_consumption_with_entitlements(
-        entitlements: OrgEntitlements,
-        current_balance: int,
-        credits_needed: int,
-    ) -> CreditConsumptionDecision:
-        """Pure PAYG evaluation using pre-resolved entitlements."""
-        if credits_needed <= 0:
-            return CreditConsumptionDecision(allowed=True)
+        remaining_pct = (remaining_credits / included_credits) * 100
+        candidate: Optional[int] = None
+        for threshold in LOW_CREDIT_WARNING_THRESHOLDS:
+            if remaining_pct <= threshold:
+                candidate = threshold
+            else:
+                break
 
-        if current_balance >= credits_needed:
-            return CreditConsumptionDecision(allowed=True)
-
-        payg = entitlements.features.get("payg_enabled")
-        if payg is None or not bool(payg.effective_value):
-            return CreditConsumptionDecision(
-                allowed=False,
-                denial_message="Insufficient credits.",
-            )
-
-        cap_resolved = entitlements.limits.get("payg_credit_cap")
-        cap = 0
-        if cap_resolved is not None and cap_resolved.assigned:
-            if cap_resolved.is_unlimited:
-                return CreditConsumptionDecision(allowed=True, used_payg=True)
-            try:
-                cap = max(0, int(cap_resolved.effective_value or 0))
-            except (TypeError, ValueError):
-                cap = 0
-
-        if cap <= 0:
-            return CreditConsumptionDecision(
-                allowed=False,
-                denial_message="Pay-as-you-go is not configured on your plan.",
-            )
-
-        projected = current_balance - credits_needed
-        if projected >= -cap:
-            return CreditConsumptionDecision(allowed=True, used_payg=True)
-
-        return CreditConsumptionDecision(
-            allowed=False,
-            denial_message="Pay-as-you-go credit cap exceeded.",
-        )
-
-    async def _fetch_balance(self, organization_id: UUID) -> int:
-        result = (
-            entitlement_service.supabase.table("organizations")
-            .select("credit_balance")
-            .eq("id", str(organization_id))
-            .limit(1)
-            .execute()
-        )
-        if not result.data:
-            return 0
-        return int(result.data[0].get("credit_balance") or 0)
+        if candidate is None:
+            return None
+        if last_notified is not None and candidate >= last_notified:
+            return None
+        return candidate
 
 
 credit_entitlement_service = CreditEntitlementService()

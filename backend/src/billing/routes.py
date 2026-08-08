@@ -435,6 +435,18 @@ async def create_credit_purchase_checkout(
         if not product:
             raise HTTPException(status_code=404, detail="Credit product not found")
 
+        # Credit top-ups are gated on the plan's 'credit_topup_enabled' feature.
+        if not await entitlement_service.check_feature(
+            organization_id, "credit_topup_enabled"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Credit top-ups are not enabled for your current plan. "
+                    "Upgrade your plan to purchase additional credits."
+                ),
+            )
+
         # Get organization subscription for customer ID
         subscription = await billing_service.get_organization_subscription(
             organization_id
@@ -644,6 +656,16 @@ async def create_credits_checkout(
 
         if not product:
             raise HTTPException(status_code=404, detail="Credit product not found")
+
+        # Credit top-ups are gated on the plan's 'credit_topup_enabled' feature.
+        if not await entitlement_service.check_feature(org_id, "credit_topup_enabled"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Credit top-ups are not enabled for your current plan. "
+                    "Upgrade your plan to purchase additional credits."
+                ),
+            )
 
         # Get organization details
         org_result = (

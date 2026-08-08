@@ -11,6 +11,8 @@ import {
   XCircle,
   Server,
   EyeOff,
+  Crown,
+  Lock,
 } from "lucide-react";
 import { AuthStatus, ConnectionStatus } from "@/types/agent";
 import { useLiveTime, formatTimeUntilExpiry } from "@/hooks/use-live-time";
@@ -24,6 +26,12 @@ export interface ToolCardProps {
     tool_source?: "legacy" | "mcp";
     /** Streamable-HTTP URL of the remote MCP server (shown under the name). */
     mcp_server_url?: string | null;
+    /**
+     * Premium tools require the org's plan to entitle the ``premium_tools``
+     * feature. They stay visible with a badge; the connect action is replaced
+     * with a locked upgrade hint (the API enforces the same gate).
+     */
+    is_premium?: boolean;
   };
   authStatus: AuthStatus;
   tokenExpiresAt: number | null;
@@ -32,6 +40,12 @@ export interface ToolCardProps {
   isConnecting?: boolean;
   onClick: () => void;
   disabled?: boolean;
+  /**
+   * True when this org's plan does NOT entitle the ``premium_tools`` feature.
+   * Premium tools render a locked action instead of Connect; the card is
+   * still clickable to view details.
+   */
+  premiumBlocked?: boolean;
   className?: string;
   /**
    * True when this tool is connected to the agent but no longer published in
@@ -53,6 +67,7 @@ export function ToolCard({
   isConnecting = false,
   onClick,
   disabled = false,
+  premiumBlocked = false,
   className,
   isUnpublished = false,
 }: ToolCardProps) {
@@ -173,6 +188,15 @@ export function ToolCard({
                   MCP
                 </Badge>
               )}
+              {tool.is_premium && (
+                <Badge
+                  variant="outline"
+                  className="h-4 text-[9px] px-1 gap-0.5 shrink-0 border-purple-300 text-purple-700 bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:bg-purple-950/40"
+                >
+                  <Crown className="h-2.5 w-2.5" />
+                  Premium
+                </Badge>
+              )}
               {isUnpublished && (
                 <Badge
                   variant="outline"
@@ -216,19 +240,33 @@ export function ToolCard({
             {statusConfig.label}
           </Badge>
 
-          <Button
-            size="sm"
-            variant={isConfigured ? "outline" : "default"}
-            onClick={onClick}
-            disabled={disabled || isConnecting}
-            className="shrink-0"
-          >
-            {isConnecting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              statusConfig.actionText
-            )}
-          </Button>
+          {premiumBlocked && tool.is_premium ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onClick}
+              disabled={isConnecting}
+              className="shrink-0"
+              title="Upgrade your plan to connect premium tools"
+            >
+              <Lock className="h-3 w-3 mr-1" />
+              Premium
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant={isConfigured ? "outline" : "default"}
+              onClick={onClick}
+              disabled={disabled || isConnecting}
+              className="shrink-0"
+            >
+              {isConnecting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                statusConfig.actionText
+              )}
+            </Button>
+          )}
         </div>
 
         {authStatus === AuthStatus.AUTHENTICATED && timeLeft && (

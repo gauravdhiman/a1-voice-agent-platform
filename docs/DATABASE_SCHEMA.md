@@ -53,7 +53,9 @@ Stores tenant organization information. Each organization represents a separate 
 | description      | TEXT         | NULLABLE                | Organization description                                                    |
 | slug             | VARCHAR(100) | NOT NULL, UNIQUE        | URL-friendly identifier; also used for the public page at `/o/{slug}` |
 | is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Organization active status                                                  |
-| credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available credit balance                                                    |
+| credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available plan credits for the current billing period (expire at period end — migration 20260807000005) |
+| purchased_credit_balance | INTEGER | NOT NULL, DEFAULT 0     | Purchased top-up credits; never expire and are drained only after plan credits (migration 20260807000005) |
+| low_credit_threshold_notified | INTEGER | NULLABLE           | Highest low-balance threshold (20/10/5) already emailed this billing cycle; NULL = re-armed (migration 20260807000005) |
 | website          | VARCHAR(255) | NULLABLE                | Organization website URL                                                    |
 | industry         | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                    |
 | location         | VARCHAR(255) | NULLABLE                | Physical address or location                                                |
@@ -249,6 +251,7 @@ System-wide tools available for integration with voice agents.
 | config_schema         | JSONB         | NULLABLE                          | JSON schema for tool configuration                                          |
 | tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
 | is_active             | BOOLEAN       | NOT NULL, DEFAULT TRUE            | Tool active status                                                          |
+| is_premium            | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Premium tools require the plan's `premium_tools` feature to attach. Visible in the catalog with a badge; attach gated at the API (403) — migration 20260807000006 |
 | is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = visible in every org's tool catalog. Backfilled TRUE for existing rows — migration 20260726000001 |
 | auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
 | requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
@@ -569,7 +572,7 @@ Tracks all credit movements.
 | source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry |
 | source_id                | UUID         | NULLABLE                        | Reference to source record                                |
 | credit_event_id          | UUID         | NULLABLE, FK → credit_events.id | Event identifier (for consumption)                        |
-| expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for subscription credits             |
+| expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for plan (subscription) credits; **NULL for purchased credits** (never expire) — the two-pool backfill in migration 20260807000005 keys on `source='purchase'` + `transaction_type='purchased'` + `expires_at IS NULL` |
 | stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                          |
 | description              | TEXT         | NULLABLE                        | Transaction description                                   |
 | metadata                 | JSONB        | NULLABLE                        | Additional metadata                                       |
@@ -889,6 +892,8 @@ erDiagram
         varchar slug
         boolean is_active
         integer credit_balance
+        integer purchased_credit_balance
+        integer low_credit_threshold_notified
         varchar website
         varchar industry
         varchar location
@@ -932,6 +937,7 @@ erDiagram
         jsonb config_schema
         jsonb tool_functions_schema
         boolean is_active
+        boolean is_premium
         timestamptz created_at
         timestamptz updated_at
     }
@@ -1266,6 +1272,10 @@ erDiagram
 32. `20260807000001` - Add `platform_notification_settings` singleton table for Resend verification sender overrides and encrypted Telegram bot credentials/chat ID for platform admin signup alerts.
 33. `20260807000002` - Plan versioning, entitlement catalog, sparse `plan_version_entitlements`, subscription `plan_version_id`.
 34. `20260807000003` - Rename entitlement `included_credits_monthly` → `included_credits_per_billing_period`; add `plan_products.stripe_product_id` for canonical Stripe Product linkage.
+35. `20260807000004` - Remove pay-as-you-go: delete `payg_enabled` / `payg_credit_cap` from `entitlement_definitions` (+ any `plan_version_entitlements` assignments). Runtime credit headroom is strictly prepaid (combined plan + purchased balance).
+36. `20260807000005` - Two-pool credits + low-balance alerts: add `organizations.purchased_credit_balance` (INTEGER NOT NULL DEFAULT 0) and `organizations.low_credit_threshold_notified` (INTEGER NULLABLE); backfill purchased pool as `LEAST(ledger_purchase_sum, credit_balance)` from `credit_transactions` where `source='purchase'` AND `transaction_type='purchased'` AND `expires_at IS NULL` (avoids inflating purchased above the live single-pool balance). Plan credits expire at period end (expire + replace on renewal); purchased credits never expire; consumption drains plan first, then purchased; low-balance emails fire at 20/10/5% of the period's included credits, once per threshold per cycle.
+37. `20260807000006` - Premium tools: add `platform_tools.is_premium` (BOOLEAN NOT NULL DEFAULT FALSE). Premium tools are gated on the `premium_tools` plan feature at attach time (`POST /api/v1/tools/agent` → 403 when off); the frontend shows a badge + locked connect action.
+38. `20260807000007` - Atomic credit consumption: add `debit_organization_credits(organization_id, credits_needed)` Postgres function. Locks the organization row (`SELECT … FOR UPDATE`), allocates plan-first then purchased, and updates both pools in one transaction so concurrent voice sessions cannot overspend prepaid balance.
 
 ---
 

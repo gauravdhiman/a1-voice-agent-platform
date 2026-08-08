@@ -30,18 +30,7 @@ export const ENTITLEMENT_CATALOG_HELP: Record<
     summary:
       "Credits included each billing period (monthly or annual, per Stripe subscription).",
     enforcement:
-      "Granted on invoice paid / renewal. Does not block usage by itself — works with PAYG and credit balance rules.",
-  },
-  payg_credit_cap: {
-    summary:
-      "Maximum negative credit balance allowed when pay-as-you-go is enabled.",
-    enforcement:
-      "Hard block on usage that would exceed the PAYG cap.",
-  },
-  payg_enabled: {
-    summary: "Allows usage after included credits are exhausted (billed as overage).",
-    enforcement:
-      "When off, voice usage stops once included credits are used unless top-up credits exist.",
+      "Granted on invoice paid / renewal. Plan credits expire at period end; purchased credits do not.",
   },
   credit_topup_enabled: {
     summary: "Allows purchasing one-time credit packs from billing UI.",
@@ -50,7 +39,7 @@ export const ENTITLEMENT_CATALOG_HELP: Record<
   premium_tools: {
     summary: "Grants access to premium platform tools on agents.",
     enforcement:
-      "Tool connection or runtime checks reject premium tools when off.",
+      "Premium tools show with a badge in the catalog; attaching them is rejected when off.",
   },
   embed_widget: {
     summary: "Enables the public embeddable call button for the org.",

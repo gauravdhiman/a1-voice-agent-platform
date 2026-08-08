@@ -72,7 +72,7 @@ Plans define pricing and included resources. Each **plan product** (e.g. Starter
 
 - Price (monthly/annual) — new Stripe Price per published version
 - Included credits and any other limits (sparse — each plan only defines what applies)
-- Feature flags (PAYG, premium tools, embed, etc.)
+- Feature flags (premium tools, embed, credit top-ups, etc.)
 - Billing interval and trial days
 - Migration policy when superseded (grace period for legacy subscribers)
 

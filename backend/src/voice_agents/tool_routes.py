@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from src.auth.dependencies import assert_has_permission, assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
+from src.billing.entitlement_service import entitlement_service
 
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_models import (
@@ -51,6 +52,23 @@ tool_router = APIRouter(prefix="/api/v1/tools", tags=["Tools"])
 # --- MCP configure-from-UI request models ---------------------------------
 # Lightweight payloads for the "Add MCP server" flow. Discover and parse are
 # in-memory (nothing persisted); create reuses PlatformToolCreate.
+class PlatformToolPremiumUpdate(BaseModel):
+    """Body for flipping a platform tool's premium flag.
+
+    Attributes:
+        is_premium: True gates the tool behind the plan's ``premium_tools``
+            feature (attach 403 when off); False makes it available to all
+            plans. Already-connected agents keep the tool either way.
+    """
+
+    is_premium: bool = Field(
+        ...,
+        description=(
+            "True to gate the tool behind the premium_tools plan feature"
+        ),
+    )
+
+
 class McpDiscoverRequest(BaseModel):
     """In-memory discover request: test a remote MCP server's tools.
 
@@ -225,6 +243,42 @@ async def unpublish_platform_tool(
         error_message="Only platform admins can unpublish MCP servers",
     )
     tool, error = await tool_service.publish_platform_tool(tool_id, False)
+    if error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if error == "Platform tool not found"
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=error,
+        )
+    return tool
+
+
+@tool_router.post("/platform/{tool_id}/premium", response_model=PlatformTool)
+@tracer.start_as_current_span("tool.routes.set_platform_tool_premium")
+async def set_platform_tool_premium(
+    tool_id: UUID,
+    premium_update: PlatformToolPremiumUpdate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Set or clear a platform tool's premium flag (platform-admin only).
+
+    Flips ``platform_tools.is_premium`` so the tool card shows a Premium
+    badge in every org's catalog and attach is gated on the plan's
+    ``premium_tools`` feature (403 at ``POST /tools/agent`` when off).
+    Existing ``agent_tools`` attachments keep working regardless of the
+    flag.
+    """
+    current_user_id, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can mark tools premium",
+    )
+    tool, error = await tool_service.set_platform_tool_premium(
+        tool_id, premium_update.is_premium
+    )
     if error:
         raise HTTPException(
             status_code=(
@@ -586,6 +640,28 @@ async def configure_agent_tool(
         agent.organization_id,
         error_message="Insufficient permissions to configure tools for this agent",
     )
+
+    # Premium tools are catalog-visible but gated at attach time: the org's
+    # plan must entitle the 'premium_tools' feature (check_feature → 403).
+    platform_tool, tool_error = await tool_service.get_platform_tool_by_id(
+        agent_tool_data.tool_id
+    )
+    if tool_error and tool_error != "Platform tool not found":
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=tool_error,
+        )
+    if platform_tool is not None and platform_tool.is_premium:
+        if not await entitlement_service.check_feature(
+            agent.organization_id, "premium_tools"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Premium tools are not included in your current plan. "
+                    "Upgrade your plan to connect this tool."
+                ),
+            )
 
     agent_tool, error = await tool_service.configure_agent_tool(agent_tool_data)
     if error:

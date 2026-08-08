@@ -218,7 +218,7 @@ class CreditTransactionBase(BaseModel):
     )
     balance_after: int = Field(
         ...,
-        description="Organization balance after this transaction; may be negative under PAYG",
+        description="Organization balance after this transaction",
     )
     source: TransactionSource
     source_id: Optional[UUID] = None

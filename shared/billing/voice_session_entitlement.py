@@ -4,6 +4,10 @@ Voice session entitlement pre-checks shared by the voice-ws worker.
 Resolves plan-version entitlements from Supabase (same binding rules as backend
 ``EntitlementService``) and enforces concurrent call limits plus minimum credit
 headroom before a WebSocket session starts.
+
+Credits are strictly prepaid (no pay-as-you-go): the pre-check passes when the
+combined balance (plan credits + purchased credits) covers at least one
+billable voice minute.
 """
 
 from __future__ import annotations
@@ -53,7 +57,8 @@ async def assert_voice_session_allowed(
 
     Checks:
     - ``max_concurrent_calls`` against active ``call_logs`` rows
-    - Credit balance or PAYG headroom for at least one billable voice minute
+    - Combined credit balance (plan + purchased) for at least one billable
+      voice minute. No pay-as-you-go: consumption is strictly prepaid.
 
     Args:
         organization_id: Tenant owning the voice agent.
@@ -87,12 +92,7 @@ async def assert_voice_session_allowed(
         return
 
     balance = await _get_credit_balance(client, organization_id)
-    allowed, message = _evaluate_credit_headroom(
-        balance,
-        min_cost,
-        payg_enabled=bool(entitlements["features"].get("payg_enabled")),
-        payg_cap=entitlements["limits"].get("payg_credit_cap"),
-    )
+    allowed, message = _evaluate_credit_headroom(balance, min_cost)
     if not allowed:
         raise VoiceSessionEntitlementError(
             "INSUFFICIENT_CREDITS",
@@ -176,16 +176,19 @@ async def _count_active_calls(client: Any, organization_id: UUID) -> int:
 
 
 async def _get_credit_balance(client: Any, organization_id: UUID) -> int:
+    """Return combined prepaid balance (plan credits + purchased credits)."""
     result = (
         client.table("organizations")
-        .select("credit_balance")
+        .select("credit_balance, purchased_credit_balance")
         .eq("id", str(organization_id))
         .limit(1)
         .execute()
     )
     if not result.data:
         return 0
-    return int(result.data[0].get("credit_balance") or 0)
+    plan_credits = int(result.data[0].get("credit_balance") or 0)
+    purchased_credits = int(result.data[0].get("purchased_credit_balance") or 0)
+    return plan_credits + purchased_credits
 
 
 async def _minimum_voice_credit_cost(client: Any, event_name: str) -> int:
@@ -205,20 +208,20 @@ async def _minimum_voice_credit_cost(client: Any, event_name: str) -> int:
 def _evaluate_credit_headroom(
     balance: int,
     credits_needed: int,
-    *,
-    payg_enabled: bool,
-    payg_cap: Optional[dict[str, Any]],
 ) -> tuple[bool, Optional[str]]:
+    """Evaluate whether the prepaid balance covers ``credits_needed``.
+
+    No pay-as-you-go: consumption never goes below zero, so the check is a
+    plain balance comparison.
+
+    Args:
+        balance: Combined prepaid balance (plan + purchased credits).
+        credits_needed: Credits required to start the session.
+
+    Returns:
+        Tuple of (allowed, message). ``allowed`` is True when
+        ``balance >= credits_needed``, else False with a denial message.
+    """
     if balance >= credits_needed:
         return True, None
-    if not payg_enabled:
-        return False, "Insufficient credits to start a voice call."
-    effective, is_unlimited = _parse_entitlement_value(payg_cap)
-    if is_unlimited:
-        return True, None
-    cap = int(effective or 0)
-    if cap <= 0:
-        return False, "Pay-as-you-go is not configured for your plan."
-    if balance - credits_needed >= -cap:
-        return True, None
-    return False, "Pay-as-you-go credit cap would be exceeded."
+    return False, "Insufficient credits to start a voice call."

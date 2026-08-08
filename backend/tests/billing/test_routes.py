@@ -620,3 +620,156 @@ class TestOrganizationEntitlementsRoute:
 
         assert result.plan_product_slug == "starter"
         mock_entitlements.get_org_entitlements.assert_awaited_once_with(org_id)
+
+
+class TestCreditCheckoutTopupGate:
+    """Credit top-up checkouts are gated on the 'credit_topup_enabled' feature.
+
+    Both checkout endpoints (``POST /credit-products/checkout`` and
+    ``POST /checkout/credits``) must return 403 when the org's plan does not
+    entitle the feature, and must proceed when it does.
+    """
+
+    @pytest.mark.asyncio
+    async def test_credit_products_checkout_denied_without_feature(self):
+        from src.billing.routes import create_credit_purchase_checkout
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with (
+            patch("src.billing.routes.billing_service") as mock_svc,
+            patch("src.billing.routes.entitlement_service") as mock_ent,
+        ):
+            mock_svc.get_credit_products = AsyncMock(
+                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_x")]
+            )
+            mock_ent.check_feature = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_credit_purchase_checkout(
+                    organization_id=TEST_ORG_ID,
+                    product_id=TEST_PRODUCT_ID,
+                    success_url="https://example.com/success",
+                    cancel_url="https://example.com/cancel",
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+            assert exc_info.value.status_code == 403
+            mock_ent.check_feature.assert_awaited_once_with(
+                TEST_ORG_ID, "credit_topup_enabled"
+            )
+            mock_svc.get_organization_subscription.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_credit_products_checkout_allowed_with_feature(self):
+        from src.billing.routes import create_credit_purchase_checkout
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with (
+            patch("src.billing.routes.billing_service") as mock_svc,
+            patch("src.billing.routes.entitlement_service") as mock_ent,
+            patch("src.billing.routes.stripe_service") as mock_stripe,
+        ):
+            mock_svc.get_credit_products = AsyncMock(
+                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_x")]
+            )
+            mock_ent.check_feature = AsyncMock(return_value=True)
+            mock_svc.get_organization_subscription = AsyncMock(
+                return_value=Mock(stripe_customer_id="cus_123")
+            )
+            session = Mock()
+            session.url = "https://checkout.stripe.com/session"
+            session.id = "cs_test"
+            mock_stripe.create_checkout_session = AsyncMock(return_value=session)
+
+            result = await create_credit_purchase_checkout(
+                organization_id=TEST_ORG_ID,
+                product_id=TEST_PRODUCT_ID,
+                success_url="https://example.com/success",
+                cancel_url="https://example.com/cancel",
+                user_auth=(TEST_USER_ID, profile),
+            )
+
+            assert result.checkout_url == "https://checkout.stripe.com/session"
+            mock_ent.check_feature.assert_awaited_once_with(
+                TEST_ORG_ID, "credit_topup_enabled"
+            )
+            mock_stripe.create_checkout_session.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_credits_checkout_denied_without_feature(self):
+        from src.billing.routes import create_credits_checkout
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        request = {
+            "organization_id": str(TEST_ORG_ID),
+            "product_id": str(TEST_PRODUCT_ID),
+        }
+
+        with (
+            patch("src.billing.routes.billing_service") as mock_svc,
+            patch("src.billing.routes.entitlement_service") as mock_ent,
+        ):
+            mock_svc.get_credit_products = AsyncMock(
+                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_x")]
+            )
+            mock_ent.check_feature = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_credits_checkout(
+                    request=request, user_auth=(TEST_USER_ID, profile)
+                )
+
+            assert exc_info.value.status_code == 403
+            mock_ent.check_feature.assert_awaited_once_with(
+                TEST_ORG_ID, "credit_topup_enabled"
+            )
+            mock_svc.get_organization_subscription.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_credits_checkout_allowed_with_feature(self):
+        from src.billing.routes import create_credits_checkout
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        request = {
+            "organization_id": str(TEST_ORG_ID),
+            "product_id": str(TEST_PRODUCT_ID),
+        }
+
+        with (
+            patch("src.billing.routes.billing_service") as mock_svc,
+            patch("src.billing.routes.entitlement_service") as mock_ent,
+            patch("src.billing.routes.stripe_service") as mock_stripe,
+        ):
+            mock_svc.get_credit_products = AsyncMock(
+                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_x")]
+            )
+            mock_ent.check_feature = AsyncMock(return_value=True)
+            mock_svc.supabase = Mock()
+            org_table = Mock()
+            org_table.select.return_value = org_table
+            org_table.eq.return_value = org_table
+            org_table.execute.return_value = Mock(
+                data=[{"slug": "acme", "name": "Acme"}]
+            )
+            mock_svc.supabase.table.return_value = org_table
+            mock_svc.get_organization_subscription = AsyncMock(
+                return_value=Mock(stripe_customer_id="cus_123")
+            )
+            session = Mock()
+            session.url = "https://checkout.stripe.com/session"
+            session.id = "cs_test"
+            mock_stripe.create_credits_checkout_session = AsyncMock(
+                return_value=session
+            )
+
+            result = await create_credits_checkout(
+                request=request, user_auth=(TEST_USER_ID, profile)
+            )
+
+            assert result["session_url"] == "https://checkout.stripe.com/session"
+            mock_ent.check_feature.assert_awaited_once_with(
+                TEST_ORG_ID, "credit_topup_enabled"
+            )
+            mock_stripe.create_credits_checkout_session.assert_awaited_once()
