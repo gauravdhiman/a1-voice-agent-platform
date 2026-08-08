@@ -510,7 +510,7 @@ Tracks organization subscription status.
 | organization_id        | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                             |
 | subscription_plan_id   | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                     |
 | stripe_subscription_id | VARCHAR(255) | NULLABLE, UNIQUE                     | Stripe subscription identifier                      |
-| stripe_customer_id     | VARCHAR(255) | NOT NULL                             | Stripe customer identifier                          |
+| stripe_customer_id     | VARCHAR(255) | NULLABLE                             | Stripe customer identifier; null for free plans     |
 | status                 | VARCHAR(50)  | NOT NULL                             | Status: trial, active, past_due, cancelled, expired |
 | current_period_start   | TIMESTAMPTZ  | NULLABLE                             | Current billing period start                        |
 | current_period_end     | TIMESTAMPTZ  | NULLABLE                             | Current billing period end                          |
@@ -649,7 +649,7 @@ Tracks payment history and invoices.
 
 ### Plan Versioning & Entitlements Tables
 
-> **Status:** Implemented through migrations `20260807000002`–`20260807000008`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
+> **Status:** Implemented through migrations `20260807000002`–`20260807000009`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
 
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 
@@ -1279,6 +1279,7 @@ erDiagram
 37. `20260807000006` - Premium tools: add `platform_tools.is_premium` (BOOLEAN NOT NULL DEFAULT FALSE). Premium tools are gated on the `premium_tools` plan feature at attach time (`POST /api/v1/tools/agent` → 403 when off); the frontend shows a badge + locked connect action.
 38. `20260807000007` - Atomic credit consumption: add `debit_organization_credits(organization_id, credits_needed)` Postgres function. Locks the organization row (`SELECT … FOR UPDATE`), allocates plan-first then purchased, and updates both pools in one transaction so concurrent voice sessions cannot overspend prepaid balance.
 39. `20260807000008` - Add required `plan_versions.billing_mode` (`free` or `paid`), backfill existing versions from the current plan-product catalog during migration, and add a check constraint plus lookup index. Free versions no longer require Stripe Price creation at publish time.
+40. `20260807000009` - Make `organization_subscriptions.stripe_customer_id` nullable so explicitly free plan subscriptions can be represented without Stripe identifiers.
 
 ---
 

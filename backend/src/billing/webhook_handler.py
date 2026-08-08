@@ -16,9 +16,10 @@ from .models import (
     TransactionSource,
     TransactionType,
 )
+from .plan_version_service import plan_version_service
 from .service import billing_service
 from .stripe_service import stripe_service
-from .plan_version_service import plan_version_service
+from .versioned_subscription_service import versioned_subscription_service
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,16 @@ async def handle_subscription_created(event):
             plan = await billing_service.get_subscription_plan(
                 resolved.subscription_plan_id
             )
+
+        if not plan and resolved and not resolved.subscription_plan_id:
+            await versioned_subscription_service.record_paid_subscription_from_stripe(
+                UUID(organization_id), resolved, subscription
+            )
+            logger.info(
+                "Created version-bound subscription for organization %s",
+                organization_id,
+            )
+            return
 
         if not plan:
             logger.warning(f"No plan found for price ID {price_id}")
@@ -331,7 +342,11 @@ async def handle_subscription_updated(event):
                 current_subscription.plan.id if current_subscription.plan else None
             )
 
-            if compare_plan_id and current_plan_id and compare_plan_id != current_plan_id:
+            if (
+                compare_plan_id
+                and current_plan_id
+                and compare_plan_id != current_plan_id
+            ):
                 plan_changed = True
                 if new_plan and current_subscription.plan:
                     is_downgrade = (
@@ -481,10 +496,8 @@ async def handle_invoice_payment_succeeded(event):
             plan = next((p for p in plans if p.stripe_price_id == price_id), None)
 
             org_uuid = UUID(organization_id)
-            credits_to_grant = (
-                await credit_entitlement_service.get_included_credits_per_billing_period(
-                    org_uuid
-                )
+            credits_to_grant = await credit_entitlement_service.get_included_credits_per_billing_period(
+                org_uuid
             )
             if credits_to_grant <= 0 and plan:
                 credits_to_grant = plan.included_credits

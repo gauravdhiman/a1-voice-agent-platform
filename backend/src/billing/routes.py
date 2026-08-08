@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+
 from src.auth.dependencies import (
     assert_billing_access,
     assert_platform_role,
@@ -17,7 +18,6 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.billing.entitlement_models import OrgEntitlements
 from src.billing.entitlement_service import entitlement_service
-from src.billing.plan_migration_service import plan_migration_service
 from src.billing.models import (
     BillingHistory,
     CreditBalance,
@@ -34,8 +34,18 @@ from src.billing.models import (
     SubscriptionPlanCreate,
     SubscriptionPlanUpdate,
 )
+from src.billing.plan_migration_service import plan_migration_service
 from src.billing.service import billing_service
 from src.billing.stripe_service import stripe_service
+from src.billing.versioned_subscription_models import (
+    CustomerPlanVersion,
+    FreePlanActivationRequest,
+    FreePlanActivationResponse,
+    SubscriptionActivationStatus,
+    VersionedSubscriptionCheckoutRequest,
+    VersionedSubscriptionCheckoutResponse,
+)
+from src.billing.versioned_subscription_service import versioned_subscription_service
 from src.billing.webhook_handler import handle_stripe_webhook
 from src.organization.service import organization_service
 from src.rbac.user_roles.service import user_role_service
@@ -56,6 +66,18 @@ async def get_subscription_plans(active_only: bool = True):
         raise HTTPException(
             status_code=500, detail="Failed to fetch subscription plans"
         )
+
+
+@router.get("/plans/available", response_model=list[CustomerPlanVersion])
+async def get_available_plan_versions():
+    """List the published plan versions currently available for signup."""
+    try:
+        return await versioned_subscription_service.list_available_plan_versions()
+    except Exception as e:
+        logger.error(f"Error fetching available plan versions: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch available plan versions"
+        ) from e
 
 
 @router.post("/plans", response_model=SubscriptionPlan)
@@ -128,6 +150,88 @@ async def update_subscription_plan(
 
 
 # Organization Subscriptions
+@router.post(
+    "/subscription/free",
+    response_model=FreePlanActivationResponse,
+)
+async def activate_free_plan(
+    request: FreePlanActivationRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Activate a published free plan for an organization without Stripe."""
+    try:
+        _, user_profile = user_auth
+        assert_billing_access(
+            user_profile,
+            request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+        return await versioned_subscription_service.activate_free_plan(
+            request.organization_id, request.plan_version_id
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error activating free plan: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to activate free plan"
+        ) from e
+
+
+@router.post(
+    "/checkout/versioned-subscription",
+    response_model=VersionedSubscriptionCheckoutResponse,
+)
+async def create_versioned_subscription_checkout(
+    request: VersionedSubscriptionCheckoutRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Create Stripe Checkout for a published paid plan version."""
+    try:
+        _, user_profile = user_auth
+        assert_billing_access(
+            user_profile,
+            request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+        return await versioned_subscription_service.create_paid_checkout(request)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error creating versioned subscription checkout: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to create subscription checkout"
+        ) from e
+
+
+@router.get(
+    "/subscription/status/{organization_id}",
+    response_model=SubscriptionActivationStatus,
+)
+async def get_subscription_activation_status(
+    organization_id: UUID,
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Return the plan-selection state used by onboarding and dashboard routing."""
+    try:
+        return await versioned_subscription_service.get_activation_status(
+            organization_id
+        )
+    except Exception as e:
+        logger.error(
+            "Error fetching subscription activation status for %s: %s",
+            organization_id,
+            e,
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch subscription activation status"
+        ) from e
+
+
 @router.get(
     "/subscription/{organization_id}", response_model=OrganizationSubscriptionWithPlan
 )
@@ -201,7 +305,9 @@ async def migrate_subscription_plan(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Error migrating subscription for org %s: %s", organization_id, exc)
+        logger.error(
+            "Error migrating subscription for org %s: %s", organization_id, exc
+        )
         raise HTTPException(
             status_code=500, detail="Failed to migrate subscription plan"
         ) from exc

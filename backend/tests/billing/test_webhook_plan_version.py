@@ -39,7 +39,8 @@ def _stripe_subscription_event(org_id, price_id="price_new", status="active"):
                 "metadata": {"organization_id": str(org_id)},
                 "items": {"data": [{"price": {"id": price_id}}]},
                 "current_period_start": int(datetime.now(timezone.utc).timestamp()),
-                "current_period_end": int(datetime.now(timezone.utc).timestamp()) + 86400,
+                "current_period_end": int(datetime.now(timezone.utc).timestamp())
+                + 86400,
                 "cancel_at_period_end": False,
             }
         }
@@ -95,6 +96,36 @@ class TestWebhookPlanVersionBinding:
 
             update_kwargs = mock_update.call_args[0][1]
             assert update_kwargs.plan_version_id == plan_version_id
+
+    @pytest.mark.asyncio
+    async def test_subscription_created_supports_version_without_legacy_plan(
+        self, org_id, plan_version_id
+    ):
+        """A new catalog version can be activated even without a legacy plan row."""
+        from src.billing.webhook_handler import handle_subscription_created
+
+        event = _stripe_subscription_event(org_id, price_id="price_new")
+        resolved = MagicMock(
+            plan_version_id=plan_version_id,
+            subscription_plan_id=None,
+            stripe_price_id="price_new",
+        )
+
+        with patch(
+            "src.billing.webhook_handler.plan_version_service.resolve_checkout_plan",
+            new_callable=AsyncMock,
+            return_value=resolved,
+        ), patch(
+            "src.billing.webhook_handler.billing_service.get_subscription_plan",
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            "src.billing.webhook_handler.versioned_subscription_service.record_paid_subscription_from_stripe",
+            new_callable=AsyncMock,
+        ) as mock_record:
+            await handle_subscription_created(event)
+
+        mock_record.assert_awaited_once_with(org_id, resolved, event["data"]["object"])
 
     @pytest.mark.asyncio
     async def test_subscription_updated_price_change_updates_plan_version(
