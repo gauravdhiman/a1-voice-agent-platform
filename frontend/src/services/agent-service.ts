@@ -259,6 +259,10 @@ class AgentService {
   async discoverMcpTools(payload: {
     url: string;
     headers?: Record<string, string>;
+    /** When editing, backend merges stored encrypted secret headers. */
+    tool_id?: string;
+    /** Transient {{KEY}} fill for stored secret templates; never persisted. */
+    test_api_key?: string;
   }): Promise<DiscoveredMcpTool[]> {
     const response = await apiClient.post<{ tools: DiscoveredMcpTool[] }>(
       `${this.toolBaseUrl}/mcp/discover`,

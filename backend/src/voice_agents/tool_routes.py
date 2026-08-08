@@ -7,7 +7,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote
 from uuid import UUID
 
@@ -74,11 +74,23 @@ class McpDiscoverRequest(BaseModel):
 
     Attributes:
         url: Streamable HTTP endpoint of the MCP server to probe.
-        headers: Static headers (e.g. an API key) to send on the probe.
+        headers: Static headers already resolved by the UI (public headers
+            plus any secret-header JSON the admin typed for this probe).
+        tool_id: When editing an existing MCP tool, the platform_tools id.
+            The backend decrypts stored ``mcp_server_secret_headers`` and
+            merges them into the probe so the admin does not have to re-paste
+            secrets just to re-test. Request ``headers`` win on key conflicts
+            (typed overrides).
+        test_api_key: Transient key substituted into any ``{{KEY}}`` placeholder
+            found in stored secret headers. Never persisted. Required only when
+            stored secrets use the placeholder and the admin did not send a
+            fully-resolved override in ``headers``.
     """
 
     url: str
     headers: dict[str, str] = Field(default_factory=dict)
+    tool_id: Optional[UUID] = None
+    test_api_key: Optional[str] = None
 
 
 class McpParseRequest(BaseModel):
@@ -490,12 +502,26 @@ async def discover_mcp_tools(
     if not ok:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
-    probe_headers = request.headers or {}
+    probe_headers = dict(request.headers or {})
+    if request.tool_id is not None:
+        merged, merge_error = await tool_service.merge_stored_mcp_secret_headers(
+            request.tool_id,
+            probe_headers,
+            test_api_key=request.test_api_key,
+        )
+        if merge_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=merge_error,
+            )
+        probe_headers = merged
+
     logger.info(
-        "MCP discover probe url=%s header_keys=%s has_authorization=%s",
+        "MCP discover probe url=%s header_keys=%s has_authorization=%s tool_id=%s",
         request.url,
         sorted(probe_headers.keys()),
         any(k.lower() == "authorization" for k in probe_headers),
+        str(request.tool_id) if request.tool_id else None,
     )
     config = McpServerConfig(url=request.url, headers=probe_headers)
     try:

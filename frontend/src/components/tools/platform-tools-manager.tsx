@@ -93,6 +93,9 @@ import { McpToolDeleteDialog } from "@/components/tools/mcp-tool-delete-dialog";
  *    POST /tools/mcp/parse and POST /tools/mcp/discover). The panel only
  *    renders the errors the backend returns; it does no client-side security.
  *  - Secret-header templates are sent as `mcp_secret_headers_input` and
+ *    encrypted at rest. On edit they never round-trip to the UI; leave the
+ *    field blank to keep stored secrets. "Test connection" on edit passes
+ *    `tool_id` so the backend merges those stored secrets into the probe.
  *    encrypted at rest by the backend; decrypted values are never returned.
  *
  * The org-scoped custom tier is retired — every authored server is a global
@@ -309,6 +312,16 @@ export function PlatformToolsManager({
       const tools = await discoverMutation.mutateAsync({
         url: url.trim(),
         headers: Object.keys(headers).length > 0 ? headers : undefined,
+        // Re-test on edit: backend decrypts stored secrets so the admin does
+        // not have to re-paste them. Typed secret JSON still overrides.
+        ...(editingTool
+          ? {
+              tool_id: editingTool.id,
+              ...(testApiKey.trim()
+                ? { test_api_key: testApiKey.trim() }
+                : {}),
+            }
+          : {}),
       });
       setDiscoveredTools(tools);
       if (tools.length === 0) {
@@ -333,15 +346,21 @@ export function PlatformToolsManager({
     }
     return {
       name: name.trim(),
-      description: description.trim() || null,
+      description: description.trim() ? description.trim() : null,
       tool_source: "mcp",
       mcp_server_url: url.trim(),
       mcp_server_name: name.trim(),
-      // Non-secret static headers (plaintext JSONB).
-      mcp_server_headers: publicHeaders,
+      // Non-secret static headers (plaintext JSONB). Empty form → {} so a
+      // clear persists (null would be dropped by the backend exclude_none dump).
+      mcp_server_headers: publicHeaders ?? {},
       // Secret-header template (may contain {{KEY}}); encrypted at rest by the
-      // backend. Decrypted values never come back to the frontend.
-      mcp_secret_headers_input: secretHeaders,
+      // backend. Omit when blank on edit so stored secrets are preserved;
+      // send null/absent when auth is off so the backend can clear them.
+      ...(authMode === "api_key"
+        ? secretHeaders
+          ? { mcp_secret_headers_input: secretHeaders }
+          : {}
+        : {}),
       is_active: true,
       requires_auth: authMode === "api_key",
       auth_type: authMode === "api_key" ? "api_key" : null,
@@ -714,7 +733,11 @@ export function PlatformToolsManager({
                   {editingTool?.mcp_secret_headers_configured && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       This server has stored secret headers. Leave the field
-                      blank to keep them; pasting new JSON replaces them.
+                      blank to keep them when saving, and to reuse them when
+                      testing the connection. Pasting new JSON replaces them on
+                      save. If the stored template uses{" "}
+                      <code>{"{{KEY}}"}</code>, enter a Test API key below for
+                      the probe only.
                     </p>
                   )}
                 </div>

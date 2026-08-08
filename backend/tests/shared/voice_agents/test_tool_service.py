@@ -955,6 +955,147 @@ class TestPlatformToolPublishLifecycle:
         eq_call = mock_supabase_client.table.return_value.eq.call_args
         assert eq_call.args == ("id", str(tool_id))
 
+    async def test_update_platform_tool_clears_public_headers_when_empty(
+        self, tool_service, mock_supabase_client
+    ):
+        """Clearing public headers must persist as {} — not leave the old JSONB."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            mcp_server_headers=None,
+            description=None,
+            requires_auth=False,
+            auth_type=None,
+        )
+        mock_update = MagicMock()
+        mock_update.data = [
+            _platform_tool_row(
+                id=str(tool_id),
+                mcp_server_headers={},
+                description=None,
+                requires_auth=False,
+                auth_type=None,
+            )
+        ]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        assert result is not None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert updated["mcp_server_headers"] == {}
+        assert updated["description"] is None
+        assert updated["auth_type"] is None
+        assert updated["requires_auth"] is False
+
+    async def test_update_platform_tool_preserves_secrets_when_input_omitted(
+        self, tool_service, mock_supabase_client
+    ):
+        """Blank secret field on edit must not wipe stored mcp_server_secret_headers."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            requires_auth=True,
+            auth_type="api_key",
+            # mcp_secret_headers_input omitted → None
+        )
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        assert result is not None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert "mcp_server_secret_headers" not in updated
+
+    async def test_update_platform_tool_clears_secrets_when_auth_disabled(
+        self, tool_service, mock_supabase_client
+    ):
+        """Switching to No auth clears stored secret headers."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            requires_auth=False,
+            auth_type=None,
+        )
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id))]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert updated["mcp_server_secret_headers"] is None
+
+    async def test_merge_stored_mcp_secret_headers_literal(
+        self, tool_service, mock_supabase_client
+    ):
+        """Discover merge applies literal stored secrets when the form left them blank."""
+        tool_id = uuid4()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]
+        )
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"Authorization": "Bearer stored"},
+        ):
+            merged, error = await tool_service.merge_stored_mcp_secret_headers(
+                tool_id, {"X-Client": "ui"}
+            )
+
+        assert error is None
+        assert merged == {
+            "X-Client": "ui",
+            "Authorization": "Bearer stored",
+        }
+
+    async def test_merge_stored_mcp_secret_headers_requires_test_key_for_template(
+        self, tool_service, mock_supabase_client
+    ):
+        tool_id = uuid4()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]
+        )
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"Authorization": "Bearer {{KEY}}"},
+        ):
+            merged, error = await tool_service.merge_stored_mcp_secret_headers(
+                tool_id, {}
+            )
+
+        assert merged == {}
+        assert error is not None
+        assert "{{KEY}}" in error
+
+    async def test_merge_stored_mcp_secret_headers_fills_template(
+        self, tool_service, mock_supabase_client
+    ):
+        tool_id = uuid4()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]
+        )
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"Authorization": "Bearer {{KEY}}"},
+        ):
+            merged, error = await tool_service.merge_stored_mcp_secret_headers(
+                tool_id, {}, test_api_key="probe-key"
+            )
+
+        assert error is None
+        assert merged["Authorization"] == "Bearer probe-key"
+
 
 class TestSetPlatformToolPremium:
     """set_platform_tool_premium flips is_premium on a row by id.

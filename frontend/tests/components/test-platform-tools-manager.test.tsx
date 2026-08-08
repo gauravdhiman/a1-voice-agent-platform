@@ -964,6 +964,11 @@ describe("PlatformToolsManager", () => {
       expect(putBody!.mcp_server_url).toBe("https://mcp.example.com");
       // No discover in this session -> stored schema untouched (omitted).
       expect(putBody!.tool_functions_schema).toBeUndefined();
+      // Blank secret field on edit: omit mcp_secret_headers_input so stored
+      // secrets are preserved (backend only replaces when a non-empty value is sent).
+      expect(putBody!.mcp_secret_headers_input).toBeUndefined();
+      // Public headers still present when unchanged.
+      expect(putBody!.mcp_server_headers).toEqual({ "X-Client": "24x7" });
 
       // After a successful save the panel returns to the manage view.
       await waitFor(() => {
@@ -971,6 +976,127 @@ describe("PlatformToolsManager", () => {
           screen.getByText(/drafts are visible only to platform admins/i),
         ).toBeInTheDocument();
       });
+    });
+
+    it("Edit discover sends tool_id so stored secrets are reused without re-paste", async () => {
+      let discoverBody: {
+        url?: string;
+        tool_id?: string;
+        headers?: Record<string, string>;
+      } | null = null;
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                mcp_server_url: "https://mcp.example.com",
+                mcp_server_headers: { "X-Client": "24x7" },
+                mcp_secret_headers_configured: true,
+                requires_auth: true,
+                auth_type: "api_key",
+                is_published: true,
+              }),
+            ],
+          }),
+        ),
+        http.post(
+          `${API_BASE_URL}/api/v1/tools/mcp/discover`,
+          async ({ request }) => {
+            discoverBody = (await request.json()) as typeof discoverBody;
+            return HttpResponse.json({
+              tools: [
+                {
+                  name: "ping",
+                  description: "Ping",
+                  input_schema: null,
+                },
+              ],
+            });
+          },
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(screen.getByRole("button", { name: /manage/i }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /edit/i }),
+        ).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("button", { name: /edit/i }));
+
+      // Secret field stays blank (stored secrets); discover must still pass tool_id.
+      expect(
+        (
+          screen.getByLabelText(
+            /secret header template/i,
+          ) as HTMLTextAreaElement
+        ).value,
+      ).toBe("");
+
+      await user.click(
+        screen.getByRole("button", {
+          name: /test connection & discover tools/i,
+        }),
+      );
+
+      await waitFor(() => expect(discoverBody).not.toBeNull());
+      expect(discoverBody!.tool_id).toBe("tool-1");
+      expect(discoverBody!.url).toBe("https://mcp.example.com");
+      expect(discoverBody!.headers).toEqual({ "X-Client": "24x7" });
+    });
+
+    it("Edit clearing public headers PUTs empty object so the clear persists", async () => {
+      let putBody: Record<string, any> | null = null;
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                mcp_server_url: "https://mcp.example.com",
+                mcp_server_headers: { Authorization: "Bearer stale" },
+                requires_auth: false,
+                is_published: true,
+              }),
+            ],
+          }),
+        ),
+        http.put(
+          `${API_BASE_URL}/api/v1/tools/platform/:toolId`,
+          async ({ request }) => {
+            putBody = (await request.json()) as Record<string, any>;
+            return HttpResponse.json({ id: "tool-1", ...putBody });
+          },
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(screen.getByRole("button", { name: /manage/i }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /edit/i }),
+        ).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("button", { name: /edit/i }));
+
+      const publicBox = screen.getByLabelText(
+        /public headers/i,
+      ) as HTMLTextAreaElement;
+      expect(publicBox.value).toContain("Authorization");
+      fireEvent.change(publicBox, { target: { value: "" } });
+
+      await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => expect(putBody).not.toBeNull());
+      expect(putBody!.mcp_server_headers).toEqual({});
     });
 
     it("Cancel exits the edit session without PUTting", async () => {

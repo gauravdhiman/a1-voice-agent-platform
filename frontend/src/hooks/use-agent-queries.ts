@@ -459,8 +459,12 @@ export function useDeleteAgentTool() {
 // Used by the Add MCP Server dialog's "Test connection & discover tools" button.
 export function useDiscoverMcpTools() {
   return useMutation({
-    mutationFn: (payload: { url: string; headers?: Record<string, string> }) =>
-      agentService.discoverMcpTools(payload),
+    mutationFn: (payload: {
+      url: string;
+      headers?: Record<string, string>;
+      tool_id?: string;
+      test_api_key?: string;
+    }) => agentService.discoverMcpTools(payload),
     onError: () => {
       toast.error("Failed to discover MCP tools");
     },
