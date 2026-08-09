@@ -7,8 +7,8 @@ receivers:
         endpoint: 0.0.0.0:4318
         cors:
           allowed_origins:
-            - "http://localhost:3000"
-            - "http://127.0.0.1:3000"
+            - "http://localhost:${env:HOST_FRONTEND_PORT}"
+            - "http://127.0.0.1:${env:HOST_FRONTEND_PORT}"
             - "http://frontend:3000"
             - "http://frontend-dev:3000"
           allowed_headers:

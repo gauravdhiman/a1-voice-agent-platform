@@ -7,11 +7,12 @@ services:
     volumes:
       - ./otel-collector-config.yml:/etc/otel-collector-config.yml
     ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-      - "13133:13133" # Health check
+      - "${HOST_OTEL_GRPC_PORT:-4317}:4317" # OTLP gRPC
+      - "${HOST_OTEL_HTTP_PORT:-4318}:4318" # OTLP HTTP
+      - "${HOST_OTEL_HEALTH_PORT:-13133}:13133" # Health check
     environment:
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
+      - HOST_FRONTEND_PORT=${HOST_FRONTEND_PORT:-3000}
     networks:
       - saas-dev-network
 
@@ -20,10 +21,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     ports:
-      - "8000:8000"
+      - "${HOST_BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - ./shared:/app/shared
+      - ./.local-data/call-recordings:/app/.local-data/call-recordings
       - backend_cache:/app/.venv
     env_file:
       - ${ENV_FILE:-.env.local}
@@ -31,8 +33,17 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - DEBUG=${DEBUG:-true}
       - RELOAD=true
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:3000}
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000","http://frontend:3000","http://frontend-dev:3000"]}
+      - GOOGLE_OAUTH_TOOL_REDIRECT_URI=${GOOGLE_OAUTH_TOOL_REDIRECT_URI:-http://localhost:8000/api/v1/tools/callback}
       - VOICE_WS_PUBLIC_URL=${VOICE_WS_PUBLIC_URL:-ws://localhost:7860}
       - VOICE_WS_TWILIO_URL=${VOICE_WS_TWILIO_URL:-}
+      - VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}
+      - RECORDING_STORAGE_BACKEND=${RECORDING_STORAGE_BACKEND:-local}
+      - RECORDING_STORAGE_LOCAL_ROOT=${RECORDING_STORAGE_LOCAL_ROOT:-.local-data/call-recordings}
+      - RECORDING_ENCRYPTION_MODE=${RECORDING_ENCRYPTION_MODE:-provider_managed}
+      - RECORDING_RETENTION_DAYS=${RECORDING_RETENTION_DAYS:-90}
       # Stripe Configuration
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
@@ -88,12 +99,12 @@ services:
         - NEXT_PUBLIC_OTEL_ENABLED=${NEXT_PUBLIC_OTEL_ENABLED}
         - NEXT_PUBLIC_OTEL_SERVICE_NAME=${NEXT_PUBLIC_OTEL_SERVICE_NAME}
         # Use HTTP/protobuf for frontend since it runs in browser
-        - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
+        - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:${HOST_OTEL_HTTP_PORT:-4318}/v1/traces
         - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-        - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
-        - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
+        - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:${HOST_OTEL_HTTP_PORT:-4318}/v1/metrics
+        - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:${HOST_OTEL_HTTP_PORT:-4318}/v1/logs
     ports:
-      - "3000:3000"
+      - "${HOST_FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -102,7 +113,7 @@ services:
       - ${ENV_FILE:-.env.local}
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
       # Explicitly set Supabase environment variables
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
@@ -112,10 +123,10 @@ services:
       - NEXT_PUBLIC_OTEL_ENABLED=${NEXT_PUBLIC_OTEL_ENABLED}
       - NEXT_PUBLIC_OTEL_SERVICE_NAME=${NEXT_PUBLIC_OTEL_SERVICE_NAME}
       # Use HTTP/protobuf for frontend since it runs in browser
-      - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
+      - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}
       - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-      - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
-      - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
+      - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=${NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://localhost:4318/v1/metrics}
+      - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=${NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-http://localhost:4318/v1/logs}
     depends_on:
       - backend-dev
       - otel-collector
@@ -131,10 +142,11 @@ services:
     # co-process so Google_calendar_mcp (127.0.0.1:8733) works without extra setup.
     command: ["bash", "/app/entrypoint.dev.sh"]
     ports:
-      - "7860:7860"
+      - "${HOST_VOICE_WS_PORT:-7860}:7860"
     volumes:
       - ./voice-ws:/app
       - ./shared:/app/shared
+      - ./.local-data/call-recordings:/app/.local-data/call-recordings
     env_file:
       - ${ENV_FILE:-.env.local}
     environment:
@@ -154,6 +166,11 @@ services:
       - FISH_API_KEY=${FISH_API_KEY:-}
       - AGENT_DEFAULT_TIMEZONE=${AGENT_DEFAULT_TIMEZONE:-UTC}
       - VOICE_RECORDING_TEE=${VOICE_RECORDING_TEE:-false}
+      - VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}
+      - RECORDING_STORAGE_BACKEND=${RECORDING_STORAGE_BACKEND:-local}
+      - RECORDING_STORAGE_LOCAL_ROOT=${RECORDING_STORAGE_LOCAL_ROOT:-.local-data/call-recordings}
+      - RECORDING_ENCRYPTION_MODE=${RECORDING_ENCRYPTION_MODE:-provider_managed}
+      - RECORDING_RETENTION_DAYS=${RECORDING_RETENTION_DAYS:-90}
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - MCP_HOST=127.0.0.1

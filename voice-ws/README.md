@@ -54,7 +54,10 @@ curl http://localhost:7860/health
 | `GEMINI_API_KEY` | Platform Gemini key fallback |
 | `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` / `CEREBRAS_API_KEY` / `OPENROUTER_API_KEY` / `FISH_API_KEY` | Pipeline provider key fallbacks |
 | `AGENT_DEFAULT_TIMEZONE` | Prompt datetime section |
-| `VOICE_RECORDING_TEE` | `true` to log tee activity (no storage yet) |
+| `VOICE_RECORDING_ENABLED` | `true` to capture and persist mixed audio (default `false`) |
+| `RECORDING_STORAGE_BACKEND` | `local` for development or `r2` for staging/production |
+| `RECORDING_ENCRYPTION_MODE` | `provider_managed` (customer-managed is reserved) |
+| `RECORDING_R2_*` | Bucket-scoped R2 endpoint, bucket, credentials, and URL TTL |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | Optional; enables Media Streams auto hang-up |
 
 Backend (not this container) also needs `VOICE_WS_TWILIO_URL=wss://…` for phone
@@ -66,7 +69,10 @@ calls so Twilio can reach `/twilio`.
 2. **Done:** Twilio Media Streams (phone) → `/twilio`
 3. **Done:** STT→LLM→TTS pipeline + shared tools, MCP, and skills
 
-## Recording (future)
+## Recording
 
-`src/recording.py` defines a pass-through tee in the pipeline so bidirectional
-audio capture can be added later without reshaping the graph.
+`src/recording.py` captures mixed audio with Pipecat's `AudioBufferProcessor`,
+uploads it on teardown, and records status/retention metadata in
+`call_artifacts`. Recording is best-effort and never masks call billing. Org
+admins and platform admins can listen from the Call Log UI through the
+authenticated backend playback endpoint.

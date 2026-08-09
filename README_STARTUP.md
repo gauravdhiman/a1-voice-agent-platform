@@ -176,6 +176,26 @@ cp .env.prod.example .env.prod         # first-time deployment setup
 ./start.sh start prod                  # .env.prod
 ```
 
+### Running multiple worktrees in parallel
+
+The startup script resolves one host-port map for the whole stack. Use a port
+offset to shift frontend, backend, voice-ws, and OTEL together; the offset also
+gets incorporated into the Compose project name so stop/restart commands remain
+isolated:
+
+```bash
+./start.sh start dev --port-offset 20
+./start.sh start dev --env staging --port-offset 40
+./start.sh config --env staging --port-offset 40
+```
+
+The default map uses 3000/8000/7860 for frontend/backend/voice-ws. For an
+explicit non-uniform map, set `HOST_FRONTEND_PORT`, `HOST_BACKEND_PORT`,
+`HOST_VOICE_WS_PORT`, `HOST_OTEL_GRPC_PORT`, `HOST_OTEL_HTTP_PORT`, and
+`HOST_OTEL_HEALTH_PORT` in the selected environment file. The resolved host
+URLs, API URL, WebSocket URL, CORS origin, OAuth callback, and frontend OTEL
+URLs are derived automatically.
+
 For first-time staging setup, bootstrap the database before starting the app:
 
 ```bash

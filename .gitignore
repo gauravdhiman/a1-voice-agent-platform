@@ -118,6 +118,9 @@ yarn-debug.log*
 yarn-error.log*
 .research/
 
+# Local call recordings are private development artifacts and must never enter Git.
+.local-data/call-recordings/
+
 # graphify (codebase knowledge-graph tooling)
 # Generated graph output, cache, and report — never commit these.
 graphify-out/

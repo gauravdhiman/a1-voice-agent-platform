@@ -11,6 +11,7 @@ export interface CallLog {
   duration: number | null;
   credits_consumed: number;
   credit_transaction_id: string | null;
+  recording_available: boolean;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
@@ -68,6 +69,17 @@ class CallLogService {
       `${this.base}/organization/${orgId}/analytics`,
     );
     return response.data;
+  }
+
+  /**
+   * Downloads one private call recording through the authenticated backend.
+   *
+   * @param callLogId - Call log identifier owning the recording
+   * @returns Promise resolving to the WAV/audio Blob
+   * @throws {Error} When the user lacks admin access or the recording is absent
+   */
+  async downloadRecording(callLogId: string): Promise<Blob> {
+    return apiClient.getBlob(`${this.base}/${callLogId}/recording`);
   }
 }
 

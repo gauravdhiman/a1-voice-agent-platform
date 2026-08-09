@@ -5,6 +5,20 @@ Template: **`.env.prod.example`**. Deploy with **`./scripts/deploy.sh`**.
 
 > **Index:** [deployment/README.md](README.md) · **Local dev config:** [environment_configuration.md](../environment_configuration.md)
 
+## Local Docker host-port configuration
+
+When running local, staging, or production Compose services from multiple
+worktrees, use `./start.sh --port-offset N` to shift the complete host-port map
+without editing Compose files. The default offset is `0`, producing frontend,
+backend, voice-ws, and OTEL ports `3000`, `8000`, `7860`, `4317`, `4318`, and
+`13133`. Use `./start.sh config --port-offset N` to inspect the resolved map.
+
+For a non-uniform map, set `HOST_FRONTEND_PORT`, `HOST_BACKEND_PORT`,
+`HOST_VOICE_WS_PORT`, `HOST_OTEL_GRPC_PORT`, `HOST_OTEL_HTTP_PORT`, and
+`HOST_OTEL_HEALTH_PORT` in the selected environment file. The startup script
+derives the browser API/WebSocket URLs, CORS origins, OAuth callback, and OTEL
+browser endpoints from the same values.
+
 ## Production stack
 
 | Service | Cloud Run / host name | URL |
@@ -73,7 +87,13 @@ passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
 | `OPENROUTER_API_KEY` | LLM gateway fallback | **Yes** |
 | `FISH_API_KEY` | TTS fallback | **Yes** |
 | `AGENT_DEFAULT_TIMEZONE` | IANA tz fallback for agent prompts | No |
-| `VOICE_RECORDING_TEE` | Recording tee logs (`false` default) | No |
+| `VOICE_RECORDING_ENABLED` | Persist mixed call audio (`false` default) | No |
+| `RECORDING_STORAGE_BACKEND` | `local` or private Cloudflare `r2` | No |
+| `RECORDING_ENCRYPTION_MODE` | `provider_managed` (customer-managed reserved) | No |
+| `RECORDING_R2_ENDPOINT` / `RECORDING_R2_BUCKET` | Environment-specific R2 object store | No |
+| `RECORDING_R2_ACCESS_KEY_ID` / `RECORDING_R2_SECRET_ACCESS_KEY` | Bucket-scoped R2 credentials | Yes |
+| `RECORDING_R2_PRESIGN_TTL_SECONDS` | Private playback URL lifetime | No |
+| `RECORDING_RETENTION_DAYS` | Recording retention window, default 90 | No |
 | `TWILIO_ACCOUNT_SID` | Optional — Media Streams hang-up | No |
 | `TWILIO_AUTH_TOKEN` | Pairs with account SID | **Yes** |
 | `ENVIRONMENT` | `production` | No |

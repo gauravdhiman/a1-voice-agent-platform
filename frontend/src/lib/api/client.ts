@@ -147,6 +147,59 @@ class ApiClient {
     return this.request<T>(endpoint, { method: "GET" });
   }
 
+  /**
+   * Fetches an authenticated binary response such as a private call recording.
+   *
+   * @param endpoint - API endpoint that returns the binary payload
+   * @returns Promise resolving to the response Blob
+   * @throws {Error} When authentication, network, or API validation fails
+   */
+  async getBlob(endpoint: string, retryCount = 0): Promise<Blob> {
+    const url = `${this.baseURL}${endpoint}`;
+    const authHeaders = await this.getAuthHeaders();
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        ...authHeaders,
+        Accept: "audio/wav, audio/*",
+      },
+    });
+
+    if (response.status === 401 && retryCount === 0) {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.refreshSession();
+      if (!error && session?.access_token) {
+        return this.getBlob(endpoint, retryCount + 1);
+      }
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Authentication required. Please sign in.");
+      }
+      if (response.status === 403) {
+        throw new Error(
+          "Access denied. You do not have permission to perform this action.",
+        );
+      }
+      let detail: unknown;
+      try {
+        detail = await response.json();
+      } catch {
+        detail = await response.text();
+      }
+      throw new ApiRequestError(
+        getSafeApiErrorMessage(detail),
+        response.status,
+        detail,
+      );
+    }
+
+    return response.blob();
+  }
+
   async post<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: "POST",

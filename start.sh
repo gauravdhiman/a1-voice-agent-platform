@@ -28,6 +28,14 @@ ENV_FILE=""
 REQUESTED_ENV="${APP_ENV:-}"
 ENVIRONMENT_NAME=""
 COMPOSE_PROJECT_NAME=""
+PORT_OFFSET_OVERRIDE=""
+PROJECT_NAME_OVERRIDE=""
+HOST_FRONTEND_PORT=""
+HOST_BACKEND_PORT=""
+HOST_VOICE_WS_PORT=""
+HOST_OTEL_GRPC_PORT=""
+HOST_OTEL_HTTP_PORT=""
+HOST_OTEL_HEALTH_PORT=""
 
 # Required environment variables
 REQUIRED_ENV_VARS=(
@@ -46,6 +54,10 @@ print_usage() {
     echo "  --env NAME    Select local, staging, or production environment"
     echo "  --env-file PATH"
     echo "                Select a custom environment file"
+    echo "  --port-offset N"
+    echo "                Shift the default host-port set by N"
+    echo "  --project-name NAME"
+    echo "                Override the Docker Compose project name"
     echo ""
     echo "Actions:"
     echo "  start dev     - Start containers in development mode"
@@ -72,6 +84,7 @@ print_usage() {
     echo "  ./start.sh restart dev --env-file .env.staging"
     echo "  ./start.sh start prod"
     echo "  ./start.sh config --env staging"
+    echo "  ./start.sh start dev --env staging --port-offset 20"
 }
 
 # Parse environment options wherever they appear in the command line.
@@ -90,6 +103,16 @@ parse_options() {
                 ENV_FILE_OVERRIDE="$2"
                 shift 2
                 ;;
+            --port-offset)
+                [[ $# -ge 2 ]] || { echo "Missing value for --port-offset" >&2; exit 1; }
+                PORT_OFFSET_OVERRIDE="$2"
+                shift 2
+                ;;
+            --project-name)
+                [[ $# -ge 2 ]] || { echo "Missing value for --project-name" >&2; exit 1; }
+                PROJECT_NAME_OVERRIDE="$2"
+                shift 2
+                ;;
             --)
                 shift
                 CLI_ARGS+=("$@")
@@ -101,6 +124,114 @@ parse_options() {
                 ;;
         esac
     done
+}
+
+# Read a simple KEY=value setting without sourcing secrets into this shell.
+read_env_setting() {
+    local key="$1"
+    awk -F= -v name="$key" '$1 == name {
+        sub(/^[^=]*=/, "")
+        gsub(/^"|"$/, "")
+        gsub(/\r$/, "")
+        print
+        exit
+    }' "$ENV_FILE"
+}
+
+# Resolve a setting from the process environment first, then the selected file.
+get_config_setting() {
+    local key="$1"
+    local value=""
+    value="$(printenv "$key" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+        printf '%s' "$value"
+    else
+        read_env_setting "$key"
+    fi
+}
+
+validate_port() {
+    local name="$1"
+    local value="$2"
+    if ! [[ "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 65535 )); then
+        echo -e "${RED}Error: $name must be an integer between 1 and 65535 (received '$value')${NC}" >&2
+        exit 1
+    fi
+}
+
+# Resolve all host-facing ports from one offset, with optional explicit overrides.
+resolve_port_config() {
+    local offset
+    offset="${PORT_OFFSET_OVERRIDE:-}"
+    if [[ -z "$offset" ]]; then
+        offset="$(get_config_setting PORT_OFFSET)"
+    fi
+    [[ -n "$offset" ]] || offset=0
+    if ! [[ "$offset" =~ ^[0-9]+$ ]] || (( offset > 60000 )); then
+        echo -e "${RED}Error: PORT_OFFSET must be a non-negative integer no greater than 60000 (received '$offset')${NC}" >&2
+        exit 1
+    fi
+
+    HOST_FRONTEND_PORT="$(get_config_setting HOST_FRONTEND_PORT)"
+    HOST_BACKEND_PORT="$(get_config_setting HOST_BACKEND_PORT)"
+    HOST_VOICE_WS_PORT="$(get_config_setting HOST_VOICE_WS_PORT)"
+    HOST_OTEL_GRPC_PORT="$(get_config_setting HOST_OTEL_GRPC_PORT)"
+    HOST_OTEL_HTTP_PORT="$(get_config_setting HOST_OTEL_HTTP_PORT)"
+    HOST_OTEL_HEALTH_PORT="$(get_config_setting HOST_OTEL_HEALTH_PORT)"
+
+    local customized_ports=false
+    if (( offset > 0 )) || [[ -n "$HOST_FRONTEND_PORT$HOST_BACKEND_PORT$HOST_VOICE_WS_PORT$HOST_OTEL_GRPC_PORT$HOST_OTEL_HTTP_PORT$HOST_OTEL_HEALTH_PORT" ]]; then
+        customized_ports=true
+    fi
+
+    [[ -n "$HOST_FRONTEND_PORT" ]] || HOST_FRONTEND_PORT=$((3000 + offset))
+    [[ -n "$HOST_BACKEND_PORT" ]] || HOST_BACKEND_PORT=$((8000 + offset))
+    [[ -n "$HOST_VOICE_WS_PORT" ]] || HOST_VOICE_WS_PORT=$((7860 + offset))
+    [[ -n "$HOST_OTEL_GRPC_PORT" ]] || HOST_OTEL_GRPC_PORT=$((4317 + offset))
+    [[ -n "$HOST_OTEL_HTTP_PORT" ]] || HOST_OTEL_HTTP_PORT=$((4318 + offset))
+    [[ -n "$HOST_OTEL_HEALTH_PORT" ]] || HOST_OTEL_HEALTH_PORT=$((13133 + offset))
+
+    validate_port HOST_FRONTEND_PORT "$HOST_FRONTEND_PORT"
+    validate_port HOST_BACKEND_PORT "$HOST_BACKEND_PORT"
+    validate_port HOST_VOICE_WS_PORT "$HOST_VOICE_WS_PORT"
+    validate_port HOST_OTEL_GRPC_PORT "$HOST_OTEL_GRPC_PORT"
+    validate_port HOST_OTEL_HTTP_PORT "$HOST_OTEL_HTTP_PORT"
+    validate_port HOST_OTEL_HEALTH_PORT "$HOST_OTEL_HEALTH_PORT"
+
+    export HOST_FRONTEND_PORT HOST_BACKEND_PORT HOST_VOICE_WS_PORT
+    export HOST_OTEL_GRPC_PORT HOST_OTEL_HTTP_PORT HOST_OTEL_HEALTH_PORT
+
+    if [[ "$customized_ports" = true ]]; then
+        export APP_BASE_URL="http://localhost:${HOST_FRONTEND_PORT}"
+        export API_BASE_URL="http://localhost:${HOST_BACKEND_PORT}"
+        export NEXT_PUBLIC_API_URL="http://localhost:${HOST_BACKEND_PORT}"
+        export VOICE_WS_PUBLIC_URL="ws://localhost:${HOST_VOICE_WS_PORT}"
+        export GOOGLE_OAUTH_TOOL_REDIRECT_URI="http://localhost:${HOST_BACKEND_PORT}/api/v1/tools/callback"
+        export CORS_ORIGINS="[\"http://localhost:${HOST_FRONTEND_PORT}\",\"http://127.0.0.1:${HOST_FRONTEND_PORT}\",\"http://frontend:3000\",\"http://frontend-dev:3000\"]"
+        export NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://localhost:${HOST_OTEL_HTTP_PORT}/v1/traces"
+        export NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT="http://localhost:${HOST_OTEL_HTTP_PORT}/v1/metrics"
+        export NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="http://localhost:${HOST_OTEL_HTTP_PORT}/v1/logs"
+    fi
+
+    local project_suffix
+    project_suffix="$(get_config_setting COMPOSE_PROJECT_SUFFIX)"
+    if [[ -n "$PROJECT_NAME_OVERRIDE" ]]; then
+        COMPOSE_PROJECT_NAME="$PROJECT_NAME_OVERRIDE"
+    else
+        if [[ -z "$project_suffix" ]] && [[ "$customized_ports" = true ]]; then
+            if (( offset > 0 )); then
+                project_suffix="p$offset"
+            else
+                project_suffix="p$HOST_FRONTEND_PORT"
+            fi
+        fi
+        if [[ -n "$project_suffix" ]]; then
+            COMPOSE_PROJECT_NAME="247ai-${ENVIRONMENT_NAME}-${project_suffix}"
+        else
+            COMPOSE_PROJECT_NAME="247ai-${ENVIRONMENT_NAME}"
+        fi
+    fi
+    export COMPOSE_PROJECT_NAME
 }
 
 # Resolve the selected environment file and Compose project name.
@@ -141,7 +272,6 @@ select_environment_file() {
         esac
     fi
 
-    COMPOSE_PROJECT_NAME="247ai-${ENVIRONMENT_NAME}"
     export ENV_FILE
 }
 
@@ -163,6 +293,12 @@ show_config() {
     echo "Env file: $ENV_FILE"
     echo "Supabase: ${supabase_url:-<not set>}"
     echo "Compose project: $COMPOSE_PROJECT_NAME"
+    echo "Frontend host port: $HOST_FRONTEND_PORT"
+    echo "Backend host port: $HOST_BACKEND_PORT"
+    echo "Voice WebSocket host port: $HOST_VOICE_WS_PORT"
+    echo "OTEL gRPC host port: $HOST_OTEL_GRPC_PORT"
+    echo "OTEL HTTP host port: $HOST_OTEL_HTTP_PORT"
+    echo "OTEL health host port: $HOST_OTEL_HEALTH_PORT"
 }
 
 # Function to check if Docker is installed
@@ -357,9 +493,9 @@ start_prod() {
 show_dev_urls() {
     echo ""
     echo -e "${PURPLE}Development URLs:${NC}"
-    echo "Frontend: http://localhost:3000"
-    echo "Backend: http://localhost:8000"
-    echo "Health check: http://localhost:8000/health"
+    echo "Frontend: http://localhost:$HOST_FRONTEND_PORT"
+    echo "Backend: http://localhost:$HOST_BACKEND_PORT"
+    echo "Health check: http://localhost:$HOST_BACKEND_PORT/health"
     echo ""
 }
 
@@ -367,9 +503,9 @@ show_dev_urls() {
 show_prod_urls() {
     echo ""
     echo -e "${PURPLE}Production URLs:${NC}"
-    echo "Frontend: http://localhost:3000"
-    echo "Backend: http://localhost:8000"
-    echo "Health check: http://localhost:8000/health"
+    echo "Frontend: http://localhost:$HOST_FRONTEND_PORT"
+    echo "Backend: http://localhost:$HOST_BACKEND_PORT"
+    echo "Health check: http://localhost:$HOST_BACKEND_PORT/health"
     echo ""
 }
 
@@ -491,6 +627,12 @@ show_status() {
     compose "$COMPOSE_FILE_PROD" ps
 }
 
+# Validate the selected environment and resolve the complete host-facing port map.
+initialize_runtime_config() {
+    validate_env_file
+    resolve_port_config
+}
+
 # Main script logic
 main() {
     parse_options "$@"
@@ -508,6 +650,7 @@ main() {
         selection_mode="${3:-}"
     fi
     select_environment_file "$action" "$selection_mode"
+    initialize_runtime_config
 
     if [ "$action" = "config" ]; then
         show_config

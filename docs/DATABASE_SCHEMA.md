@@ -496,8 +496,9 @@ Tracks voice sessions for organization reporting and concurrent-call limits.
 ### call_artifacts
 
 Stores organization-scoped metadata for recordings, transcripts, and summaries.
-Audio bytes live in the private Supabase Storage bucket `call-recordings`; the
-database stores the bucket/path and text artifacts, never public audio URLs.
+Audio bytes live in the private local recording directory in development or an
+environment-specific Cloudflare R2 bucket in staging/production. The database
+stores the bucket/path and text artifacts, never public audio URLs.
 
 | Column            | Type         | Constraints                              | Description |
 | ----------------- | ------------ | ---------------------------------------- | ----------- |
@@ -506,6 +507,7 @@ database stores the bucket/path and text artifacts, never public audio URLs.
 | organization_id   | UUID         | NOT NULL, FK → organizations.id          | Tenant boundary |
 | artifact_type     | VARCHAR(30)  | NOT NULL, CHECK recording/transcript/summary | Artifact kind |
 | status            | VARCHAR(30)  | NOT NULL, DEFAULT `pending`              | Processing state |
+| encryption_mode   | VARCHAR(30)  | NOT NULL, DEFAULT `provider_managed`    | Key-management strategy used for the object |
 | storage_bucket    | VARCHAR(120) | NULLABLE                                 | Private object bucket |
 | storage_path      | TEXT         | NULLABLE                                 | `{org_id}/{call_id}/recording.wav` |
 | mime_type         | VARCHAR(120) | NULLABLE                                 | Audio or text MIME type |
@@ -513,11 +515,12 @@ database stores the bucket/path and text artifacts, never public audio URLs.
 | duration_seconds  | INTEGER      | NULLABLE                                 | Recording duration |
 | text_content      | TEXT         | NULLABLE                                 | Transcript or summary text |
 | metadata          | JSONB        | NULLABLE                                 | Provider/model/version/audit metadata |
+| retention_expires_at | TIMESTAMPTZ | NULLABLE                              | Earliest safe cleanup time for the object |
 | created_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
 | updated_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
 
 **Unique Constraint**: `(call_log_id, artifact_type)`.
-**Indexes**: organization_id, call_log_id.
+**Indexes**: organization_id, call_log_id, retention_expires_at.
 
 ## Billing Tables
 
@@ -1379,6 +1382,7 @@ erDiagram
 42. `20260808000011` - Make the current free signup version usable after onboarding by allowing one agent and assigning 100 included credits per recurring period.
 43. `20260808000012` - Add the atomic, idempotent `grant_subscription_credits` PostgreSQL function so subscription balance changes and credit ledger rows cannot become partially applied.
 44. `20260809000001` - Add per-call credit linkage (`call_logs.credits_consumed` and `credit_transaction_id`) plus the organization-scoped `call_artifacts` metadata table for private recordings, transcripts, and summaries. Seed the `voice_call_minute` metering event at 10 credits per connected minute and add the idempotent `consume_voice_call_credits` RPC for atomic voice-call debit plus ledger insert.
+45. `20260809000002` - Add `call_artifacts.encryption_mode` and `retention_expires_at` plus a cleanup lookup index for recording key-strategy audits and retention enforcement.
 
 ---
 

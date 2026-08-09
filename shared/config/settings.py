@@ -6,11 +6,10 @@ Uses Pydantic Settings for type-safe configuration handling.
 import json
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, validator
 from pydantic_settings import BaseSettings
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -157,9 +156,7 @@ class Settings(BaseSettings):
     resend_from_email: str = Field(
         default="noreply@example.com", description="Default sender email address"
     )
-    resend_from_name: str = Field(
-        default="24x7 AI", description="Default sender name"
-    )
+    resend_from_name: str = Field(default="24x7 AI", description="Default sender name")
 
     # OpenTelemetry Settings
     new_relic_license_key: Optional[str] = Field(
@@ -227,6 +224,52 @@ class Settings(BaseSettings):
             "(e.g. wss://abc.ngrok-free.app). Empty means derive from "
             "VOICE_WS_PUBLIC_URL when non-localhost."
         ),
+    )
+
+    # Call recording and private object storage
+    voice_recording_enabled: bool = Field(
+        default=False,
+        description="Capture and persist mixed call audio when consent is configured",
+    )
+    recording_storage_backend: Literal["local", "r2"] = Field(
+        default="local",
+        description="Private call-recording storage backend",
+    )
+    recording_storage_local_root: str = Field(
+        default=".local-data/call-recordings",
+        description="Ignored local recording directory for development",
+    )
+    recording_r2_endpoint: Optional[str] = Field(
+        default=None,
+        description="Cloudflare R2 S3-compatible endpoint",
+    )
+    recording_r2_bucket: Optional[str] = Field(
+        default=None,
+        description="Environment-specific private R2 bucket",
+    )
+    recording_r2_access_key_id: Optional[str] = Field(
+        default=None,
+        description="Bucket-scoped R2 access key ID",
+    )
+    recording_r2_secret_access_key: Optional[str] = Field(
+        default=None,
+        description="Bucket-scoped R2 secret access key",
+    )
+    recording_r2_presign_ttl_seconds: int = Field(
+        default=300,
+        ge=1,
+        le=604800,
+        description="Lifetime of an R2 recording playback URL",
+    )
+    recording_encryption_mode: Literal["provider_managed", "customer_managed"] = Field(
+        default="provider_managed",
+        description="Recording encryption strategy; customer mode is reserved",
+    )
+    recording_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        description="Days before a recording becomes eligible for cleanup",
     )
 
     # Token Refresh Service Settings

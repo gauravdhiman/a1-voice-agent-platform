@@ -17,19 +17,19 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.serializers.base_serializer import FrameSerializer
-
-from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
 from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
-
-from shared.voice_agents.voice_session_service import VoiceSessionClaims
-
 from src.call_tracking import end_call_tracking, start_call_tracking
-from src.recording import NoOpRecordingTee
+from src.recording import RecordingCoordinator
+from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
 from src.session_setup import prepare_voice_session
+
+from shared.config import settings
+from shared.voice_agents.voice_session_service import VoiceSessionClaims
 
 logger = logging.getLogger(__name__)
 _GREETING_INSTRUCTION = "Greet the user warmly and ask how you can help."
@@ -80,16 +80,62 @@ async def run_bot(
     for name, handler in bundle.tools.handlers.items():
         llm.register_function(name, handler)
 
-    recording_tee = NoOpRecordingTee(
-        session_id=claims.session_id,
-        enabled=os.getenv("VOICE_RECORDING_TEE", "false").lower() == "true",
+    call_log_id = None
+    recording_coordinator: Optional[RecordingCoordinator] = None
+    audio_buffer: Optional[AudioBufferProcessor] = None
+    if bundle.agent.organization_id:
+        call_log_id = await start_call_tracking(
+            session_id=claims.session_id,
+            call_sid=claims.call_sid,
+            organization_id=bundle.agent.organization_id,
+            agent_id=bundle.agent.id,
+        )
+
+    recording_enabled = settings.voice_recording_enabled or (
+        os.getenv("VOICE_RECORDING_TEE", "false").lower() == "true"
     )
+    if recording_enabled and call_log_id and bundle.agent.organization_id:
+        try:
+            recording_coordinator = RecordingCoordinator(
+                call_log_id=call_log_id,
+                organization_id=bundle.agent.organization_id,
+            )
+            await recording_coordinator.prepare()
+            audio_buffer = AudioBufferProcessor(
+                auto_start_recording=True,
+                num_channels=2,
+            )
+
+            @audio_buffer.event_handler("on_audio_data")
+            async def on_audio_data(_buffer, audio, sample_rate, num_channels) -> None:
+                """Forward Pipecat's final mixed PCM buffer to the coordinator."""
+                if recording_coordinator:
+                    recording_coordinator.capture_audio(
+                        bytes(audio),
+                        sample_rate=sample_rate,
+                        num_channels=num_channels,
+                    )
+
+        except Exception:  # noqa: BLE001 - recording cannot block a call
+            logger.exception(
+                "Recording setup failed for session %s; continuing without audio",
+                claims.session_id,
+            )
+            recording_coordinator = None
+            audio_buffer = None
+
+    output_processor = transport.output()
+    if audio_buffer:
+        # AudioBufferProcessor observes both inbound and outbound audio when it
+        # follows transport.output(), matching Pipecat's mixed-call pattern.
+        output_processor = Pipeline([output_processor, audio_buffer])
+
     processors = [transport.input()]
     if bundle.speech.mode == "pipeline":
         processors.extend([bundle.speech.stt, user_aggregator, llm, bundle.speech.tts])
     else:
         processors.extend([user_aggregator, llm])
-    processors.extend([recording_tee, transport.output(), assistant_aggregator])
+    processors.extend([output_processor, assistant_aggregator])
     task = PipelineTask(
         Pipeline(processors),
         params=PipelineParams(allow_interruptions=True, enable_metrics=True),
@@ -106,17 +152,18 @@ async def run_bot(
         """Stop the active pipeline after its only participant leaves."""
         await task.cancel()
 
-    call_log_id = None
-    if bundle.agent.organization_id:
-        call_log_id = await start_call_tracking(
-            session_id=claims.session_id,
-            call_sid=claims.call_sid,
-            organization_id=bundle.agent.organization_id,
-            agent_id=bundle.agent.id,
-        )
-
     try:
         await PipelineRunner(handle_sigint=False).run(task)
     finally:
+        if audio_buffer:
+            try:
+                await audio_buffer.stop_recording()
+            except Exception:  # noqa: BLE001 - cleanup must continue
+                logger.exception("Failed to stop recording buffer")
+        if recording_coordinator:
+            try:
+                await recording_coordinator.persist()
+            except Exception:  # noqa: BLE001 - cleanup must continue
+                logger.exception("Failed to persist recording artifact")
         await end_call_tracking(call_log_id)
         await _close_mcp_clients(bundle.tools.mcp_clients)
