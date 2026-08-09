@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate Cloud Run / VM env YAML from .env.cloud for a given service.
+"""Generate Cloud Run / VM env YAML from .env.prod for a given service.
 
 The ``backend`` service runs on GCP Cloud Run; the ``voice-ws`` service runs on
-the OCI VM (Pipecat WebSocket worker). Both read from the same ``.env.cloud``.
+the OCI VM (Pipecat WebSocket worker). Both read from the same ``.env.prod``.
 """
 
 from __future__ import annotations
@@ -109,8 +109,8 @@ def main() -> int:
     parser.add_argument("service", choices=["backend", "voice-ws"])
     parser.add_argument(
         "--env-file",
-        default=".env.cloud",
-        help="Path to cloud env file (default: .env.cloud)",
+        default=".env.prod",
+        help="Path to cloud env file (default: .env.prod)",
     )
     args = parser.parse_args()
     path = Path(args.env_file)

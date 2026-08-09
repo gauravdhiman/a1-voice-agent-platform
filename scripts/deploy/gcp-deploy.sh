@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy backend and/or frontend to Google Cloud Run using .env.cloud.
+# Deploy backend and/or frontend to Google Cloud Run using .env.prod.
 #
 # Usually invoked via ./scripts/deploy.sh — not directly.
 # Set GCP_DEPLOY_COMPONENT=backend|frontend|all (default: all).
@@ -14,7 +14,7 @@ REPO="cognients"
 # Cloud Run service names must start with a letter (cannot be 247ai-...).
 BACKEND_SERVICE="${GCP_BACKEND_SERVICE:-backend-247ai}"
 FRONTEND_SERVICE="${GCP_FRONTEND_SERVICE:-frontend-247ai}"
-ENV_FILE="${ENV_FILE:-.env.cloud}"
+ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPONENT="${GCP_DEPLOY_COMPONENT:-all}"
 
 if [[ ! -f "$ENV_FILE" ]]; then

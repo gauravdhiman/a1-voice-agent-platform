@@ -10,7 +10,7 @@ You must still set staging-only secrets from Supabase dashboard:
 
 Usage:
   python3 scripts/create-env-staging.py
-  python3 scripts/create-env-staging.py --from .env.cloud
+  python3 scripts/create-env-staging.py --from .env.prod
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ HEADER = """# Cloud STAGING — oc-dev-ai-voice-agent-platform (gdzwiwukcwbqohfw
 #   https://supabase.com/dashboard/project/gdzwiwukcwbqohfwxxrx/settings/api-keys
 #   https://supabase.com/dashboard/project/gdzwiwukcwbqohfwxxrx?showConnect=true
 #
-# Then: ./scripts/bootstrap-staging-db.sh && cp .env.staging .env
+# Then: ./scripts/bootstrap-staging-db.sh
 
 """
 
@@ -79,7 +79,7 @@ def main() -> int:
         "--from",
         dest="source",
         default=None,
-        help="Source env file (default: .env.cloud, else .env.dev)",
+        help="Source env file (default: .env.prod)",
     )
     parser.add_argument(
         "--out",
@@ -91,12 +91,12 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     source = Path(args.source) if args.source else None
     if source is None:
-        for candidate in (root / ".env.cloud", root / ".env.dev"):
+        for candidate in (root / ".env.prod", root / ".env.local"):
             if candidate.is_file():
                 source = candidate
                 break
     if source is None or not source.is_file():
-        print("No source env file found (.env.cloud or .env.dev)", flush=True)
+        print("No source env file found (.env.prod or .env.local)", flush=True)
         return 1
 
     out_lines = [HEADER]

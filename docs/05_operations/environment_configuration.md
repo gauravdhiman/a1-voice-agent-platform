@@ -6,25 +6,25 @@ This document explains how to configure environment variables for different deve
 
 | Environment | Project ref | Env file | Notes |
 |-------------|-------------|----------|-------|
-| **Local** | Local CLI (`127.0.0.1:54321`) | `.env` / `.env.local` | Default dev |
+| **Local** | Local CLI (`127.0.0.1:54321`) | `.env.local` | Default dev; selected by `./start.sh start dev` |
 | **Staging** | `gdzwiwukcwbqohfwxxrx` | `.env.staging` | Cloud DB for pre-prod validation — [staging guide](./staging_environment.md) |
-| **Production** | `zymiyfilulmtrmyyhvzw` | `.env.cloud` | 247ai.live — deploy/migrate only |
+| **Production** | `zymiyfilulmtrmyyhvzw` | `.env.prod` | 247ai.live — deploy/migrate only |
 
 > Do **not** use production Supabase for local feature testing. Use `.env.staging` instead.
 
 ## Environment Variable Files
 
-The project uses different environment files depending on your development approach:
+The root files are the source of truth for Docker, direct backend commands, and
+deployment:
 
-1. **Local Development (Non-containerized)**:
+1. `.env.local` — local Supabase and local application URLs.
+2. `.env.staging` — cloud staging Supabase with the application still running locally.
+3. `.env.prod` — production Supabase and production URLs; deployment defaults here.
 
-   - Backend: `backend/.env` (copy from `backend/.env.example`)
-   - Frontend: `frontend/.env.local` (copy from `frontend/.env.local.example`)
-
-2. **Containerized Development**:
-   - Root: `.env` (copy from `.env.example`)
-
-**Important**: The service-specific environment files (`backend/.env` and `frontend/.env.local`) are **only for non-containerized local development**. When running services in Docker containers, the root `.env` file is used instead.
+Use `./start.sh start dev --env staging` to test staging. Do not copy any of
+these files into `.env`. The service-specific `backend/.env` and
+`frontend/.env.local` files are compatibility files for advanced
+non-containerized workflows only; the supported development path is Docker.
 
 ## Supabase Configuration
 
@@ -39,7 +39,8 @@ The Supabase configuration requires different environment variables for frontend
 5. **API_BASE_URL** / **APP_BASE_URL**: Backend OAuth redirect targets (see
    [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md))
 
-For local backend redirect OAuth, add these to the root `.env`:
+For local backend redirect OAuth, add these to the selected root file (normally
+`.env.local`):
 
 ```bash
 APP_BASE_URL=http://localhost:3000
@@ -109,7 +110,8 @@ If you also retain redirect-based OAuth providers, you additionally need to:
    - You can find this URL in your Supabase dashboard under Authentication → Settings
 
 For backend redirect OAuth (Google and LinkedIn), the backend mints Supabase
-sessions via the admin API. Provider credentials live in the root `.env`; the
+sessions via the admin API. Provider credentials live in the selected root
+environment file; the
 frontend only needs `NEXT_PUBLIC_API_URL` to build authorize links.
 
 Local Supabase can keep Google/LinkedIn providers enabled in `supabase/config.toml`
@@ -384,11 +386,11 @@ The project includes optimized Docker configurations:
 - **Development**: Volume mounting for hot reloading
 - **Standalone**: Next.js standalone output for optimal Docker performance
 
-Both [docker-compose.yml](file:///Users/gauravdhiman/projects/python/multi-tanent-saas-platform-python-supabase-nextjs/docker-compose.yml) and [docker-compose.dev.yml](file:///Users/gauravdhiman/projects/python/multi-tanent-saas-platform-python-supabase-nextjs/docker-compose.dev.yml) now use the `env_file` directive to load environment variables from the root `.env` file, ensuring consistency across development and production environments.
+Both [docker-compose.yml](../../docker-compose.yml) and [docker-compose.dev.yml](../../docker-compose.dev.yml) use the `env_file` directive with the selected root file. `start.sh` passes the selection explicitly; direct Compose commands default to `.env.prod` for production Compose and `.env.local` for development Compose.
 
 ## Next Steps
 
-1. Copy the appropriate example file to create your environment file
+1. Copy the appropriate example file to create `.env.local`, `.env.staging`, or `.env.prod`
 2. Update the values with your actual configuration
 3. For OAuth providers, configure them in your Supabase dashboard
 4. For database migrations, get your Supabase database password and update the DATABASE_URL

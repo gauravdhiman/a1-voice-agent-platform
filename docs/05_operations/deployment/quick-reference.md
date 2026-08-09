@@ -4,7 +4,7 @@ Production target: **247ai.live**. Start with the [deployment index](README.md) 
 
 ## One-command deploy
 
-Credentials live in **`.env.cloud`** only (gitignored). Template: **`.env.cloud.example`**.
+Credentials live in **`.env.prod`** only (gitignored). Template: **`.env.prod.example`**.
 
 ```bash
 chmod +x scripts/deploy.sh   # once
@@ -57,12 +57,12 @@ curl -s https://voice.247ai.live/health
 
 - **gcloud** CLI — project `project-bb848762-18cb-4cd6-858`, region `us-central1`
 - **Docker** — local builds use `linux/amd64` for Cloud Run
-- **`.env.cloud`** — from `.env.cloud.example`
+- **`.env.prod`** — from `.env.prod.example`
 - **voice-ws:** OCI VM with Docker; ports 22/80/443 open; DNS A record `voice.247ai.live` → VM IP
 
 ## OCI SSH (voice-ws only)
 
-Not stored in `.env.cloud`:
+Not stored in `.env.prod`:
 
 ```bash
 export OCI_SSH_HOST=132.145.130.61      # VM public IP

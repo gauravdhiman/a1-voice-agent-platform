@@ -8,8 +8,9 @@ __pycache__/
 .eggs/
 .env
 .env.*
-!.env.cloud.example
+!.env.prod.example
 !.env.staging.example
+!.env.local.example
 .env.*.local
 .env.bk*
 .env copy*

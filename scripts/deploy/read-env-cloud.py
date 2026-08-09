@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print a single key from .env.cloud (for deploy scripts)."""
+"""Print a single key from .env.prod (for deploy scripts)."""
 
 from __future__ import annotations
 

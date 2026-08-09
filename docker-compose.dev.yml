@@ -26,10 +26,10 @@ services:
       - ./shared:/app/shared
       - backend_cache:/app/.venv
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.local}
     environment:
-      - ENVIRONMENT=development
-      - DEBUG=true
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-true}
       - RELOAD=true
       - VOICE_WS_PUBLIC_URL=${VOICE_WS_PUBLIC_URL:-ws://localhost:7860}
       - VOICE_WS_TWILIO_URL=${VOICE_WS_TWILIO_URL:-}
@@ -99,7 +99,7 @@ services:
       - /app/node_modules
       - /app/.next
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.local}
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -136,10 +136,10 @@ services:
       - ./voice-ws:/app
       - ./shared:/app/shared
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.local}
     environment:
-      - ENVIRONMENT=development
-      - DEBUG=true
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-true}
       - PYTHONPATH=/app:/app/shared
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - SUPABASE_URL=${SUPABASE_URL}

@@ -85,5 +85,5 @@ ENV_FILE="$ENV_FILE" REVISION=head "${ROOT}/scripts/deploy/run-alembic.sh"
 
 echo ""
 echo "==> Staging bootstrap complete."
-echo "    Verify: cp .env.staging .env && ./start.sh restart dev"
+echo "    Verify: ./start.sh restart dev --env staging"
 echo "    Docs:   docs/05_operations/staging_environment.md"

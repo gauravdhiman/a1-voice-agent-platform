@@ -112,5 +112,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic revision -
 - The initial migration (`91759229c32b_add_initial_rbac_tables.py`) sets up the RBAC tables
 - Always test migrations in a development environment before applying to production
 - Alembic and SQLAlchemy are development dependencies only and not included in the production requirements
-- For local development, you can add DATABASE_URL to your `.env` file
-- When using Docker, the environment variables are loaded from the root `.env` file via the `env_file` directive in docker-compose files
+- For local development, add DATABASE_URL to the selected root environment file
+  (`.env.local` by default; use `ENV_FILE=.env.staging` when appropriate)
+- When using Docker, the environment variables are loaded from the selected root
+  environment file via the `env_file` directive in the Compose files

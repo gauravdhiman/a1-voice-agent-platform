@@ -12,13 +12,14 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Load environment variables — ENV_FILE (staging/prod deploy), then .env.staging, .env.cloud, .env.
+# Load environment variables — ENV_FILE for staging/production, otherwise the
+# canonical local file. Staging and production are never selected implicitly.
 _env_file_override = os.getenv("ENV_FILE")
 if _env_file_override and os.path.exists(_env_file_override):
     load_dotenv(_env_file_override)
 else:
     loaded = False
-    for env_name in (".env.staging", ".env.cloud", ".env"):
+    for env_name in (".env.local",):
         dotenv_path = os.path.join(project_root, env_name)
         if os.path.exists(dotenv_path):
             load_dotenv(dotenv_path)

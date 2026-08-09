@@ -54,12 +54,12 @@ This opens the 24x7 AI landing page at [https://247ai.live](https://247ai.live) 
 
 ### Step 1 — Create Your Environment File
 
-Copy the example configuration file:
+Copy the local example configuration file:
 ```bash
-cp .env.example .env
+cp .env.local.example .env.local
 ```
 
-Now open `.env` in a text editor. Find the lines below and replace the placeholder values with your actual Supabase credentials (from **Project Settings → API** in Supabase):
+Now open `.env.local` in a text editor. Find the lines below and replace the placeholder values with your actual local Supabase credentials (from **Project Settings → API** in Supabase):
 
 ```bash
 SUPABASE_URL=https://<your-project>.supabase.co
@@ -75,7 +75,7 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=<Google web OAuth client ID>
 > - **SUPABASE_ANON_KEY** and **NEXT_PUBLIC_SUPABASE_ANON_KEY**: The "anon public" key
 > - **SUPABASE_SERVICE_KEY**: The "service_role" key (keep this secret!)
 
-All other values in `.env` can remain as-is. You do **not** need Stripe, Twilio, or other third-party keys to browse the platform UI (voice calls need `GEMINI_API_KEY` and voice-ws).
+All other values in `.env.local` can remain as-is. You do **not** need Stripe, Twilio, or other third-party keys to browse the platform UI (voice calls need `GEMINI_API_KEY` and voice-ws).
 
 ### Step 2 — Start the Platform
 
@@ -169,11 +169,11 @@ Another application is using that port. Find and stop it, or restart your comput
 ```
 Press `Ctrl+C` to stop watching the logs.
 
-**"Error: .env file not found"**
-You skipped Step 1. Run `cp .env.example .env` and fill in your Supabase credentials.
+**"Error: environment file not found"**
+You skipped Step 1. Run `cp .env.local.example .env.local` and fill in your local Supabase credentials.
 
 **"Missing required environment variables"**
-Your `.env` file is missing Supabase values. Re-check Step 1 and make sure `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are all set.
+Your `.env.local` file is missing Supabase values. Re-check Step 1 and make sure `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are all set.
 
 **Docker Desktop not running**
 Make sure Docker Desktop is open and shows a green "Running" status before running `./start.sh start dev`.

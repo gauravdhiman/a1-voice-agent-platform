@@ -11,7 +11,7 @@
  * Usage (from repo root, with local Supabase running):
  *   node scripts/setup-linkedin-custom-oidc.mjs
  *
- * Requires in root `.env`:
+ * Requires in the selected root environment file (normally `.env.local`):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_KEY
  *   SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID (or LINKEDIN_CLIENT_ID)

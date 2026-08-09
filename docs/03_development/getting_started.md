@@ -239,10 +239,10 @@ Fastest way to get all services running:
 git clone <repository-url>
 cd ai-voice-agent-platform
 
-# Copy environment template
-cp .env.example .env
+# Copy the local environment template once
+cp .env.local.example .env.local
 
-# Edit .env with your configuration
+# Edit .env.local with your local Supabase and provider configuration
 # (Supabase, voice-ws URLs, Stripe, etc.)
 
 # Start all services
@@ -274,8 +274,8 @@ cd backend
 python -m venv .venv-backend
 source .venv-backend/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env
-# Edit .env with configuration
+cd ..
+ENV_FILE=.env.local python backend/main.py
 python main.py
 
 # Frontend (new terminal)
@@ -290,8 +290,7 @@ cd voice-ws
 python -m venv .venv-voice-ws
 source .venv-voice-ws/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with configuration
+# The supported Docker workflow selects .env.local/.env.staging for all services.
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8765
 ```
 

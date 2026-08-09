@@ -74,7 +74,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 1. **[Deployment index](05_operations/deployment/README.md)** — doc map, infrastructure overview, `./scripts/deploy.sh`
 2. **[Quick reference](05_operations/deployment/quick-reference.md)** — day-to-day deploy commands
 3. **[Runbook](05_operations/deployment/runbook.md)** — architecture, first-time setup, DNS, webhooks
-4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.cloud` reference
+4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.prod` reference
 5. **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
 6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — auto-deploy secrets and workflow
 

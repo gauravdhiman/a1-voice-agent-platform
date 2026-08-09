@@ -14,18 +14,18 @@ Before you begin, ensure you have the following installed:
 
 ## Environment Configuration
 
-The project uses different environment files depending on your development approach:
+The project has three canonical root environment files:
 
-### Local Development (Non-containerized)
+- `.env.local` — local Supabase; default for `./start.sh start dev`
+- `.env.staging` — cloud staging Supabase; use `./start.sh start dev --env staging`
+- `.env.prod` — production Supabase; default for `./start.sh start prod` and deployment
 
-- **Backend**: `backend/.env` (copy from `backend/.env.example`)
-- **Frontend**: `frontend/.env.local` (copy from `frontend/.env.local.example`)
+Create each from its matching `.example` template. Do not copy any file into a
+root `.env`; the startup script and Compose files select the correct file.
 
-### Containerized Development
-
-- **Root**: `.env` (copy from `.env.example`)
-
-**Important**: The service-specific environment files (`backend/.env` and `frontend/.env.local`) are **only for non-containerized local development**. When running services in Docker containers, the root `.env` file is used instead.
+The supported development workflow is containerized. The service-specific
+`backend/.env` and `frontend/.env.local` files are compatibility files for
+advanced non-containerized workflows only.
 
 ### Supabase Configuration
 
@@ -199,14 +199,12 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements-dev.txt
 
-# Copy environment configuration
-cp .env.example .env
-
-# Edit .env with your configuration
-nano .env  # or use your preferred editor
+# From the repository root, create .env.local once from .env.local.example.
+# Select staging instead with: ENV_FILE=.env.staging python backend/main.py
+cd ..
 
 # Run the application
-python main.py
+python backend/main.py
 ```
 
 The API will be available at [http://localhost:8000](http://localhost:8000)
@@ -247,11 +245,9 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements-dev.txt
 
-# Copy environment configuration
-cp .env.example .env
-
-# Edit .env with your configuration
-nano .env
+# Use the root selected environment file. The supported workflow is Docker;
+# for a direct worker process, export variables from that selected file first.
+# Example: ./start.sh start voice-ws dev --env local
 
 # Run voice-ws
 uvicorn src.main:app --host 0.0.0.0 --port 7860 --reload
@@ -364,7 +360,7 @@ To enable billing functionality:
    - Add endpoint: `https://your-domain.com/api/billing/webhooks`
    - Select events: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
 
-4. **Add keys to `.env`**:
+4. **Add keys to the selected environment file** (normally `.env.local`):
    ```bash
    STRIPE_PUBLISHABLE_KEY=pk_live_your_publishable_key
    STRIPE_SECRET_KEY=sk_live_your_secret_key

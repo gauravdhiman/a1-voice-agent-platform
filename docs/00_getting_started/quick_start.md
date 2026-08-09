@@ -11,7 +11,7 @@ Ensure you have **Docker & Docker Compose** installed on your system.
 1. **Copy the example environment file**:
 
    ```bash
-   cp .env.example .env
+   cp .env.local.example .env.local
    ```
 
 2. **Update `.env` with your Supabase credentials**:
@@ -58,7 +58,7 @@ The project includes a `start.sh` script that simplifies starting, stopping, and
 Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collector with hot reloading for active development.
 
 ```bash
-./start.sh start dev
+   ./start.sh start dev
 ```
 
 **Access URLs (Development Mode)**:

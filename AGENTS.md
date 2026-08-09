@@ -563,9 +563,11 @@ class TestExample:
 
 ## Environment Variables
 
-- Containerized dev: Root `.env` file
-- Local dev: `backend/.env` and `frontend/.env.local`
-- Use `.env.example` as template
+- Containerized dev: `.env.local` by default; select `.env.staging` with
+  `./start.sh start dev --env staging`
+- Production Compose/deploy: `.env.prod` by default
+- Use `.env.local.example`, `.env.staging.example`, and `.env.prod.example`
+  as the matching templates. Do not copy any file into a root `.env`.
 
 ## Pre-Commit Hooks
 
@@ -722,11 +724,12 @@ Run `pre-commit run --all-files` manually before pushing.
 
 - **Backend, frontend, and voice-ws** run via Docker Compose (`docker-compose.dev.yml`).
 - **Local Supabase** is used for default development (not cloud Supabase). It runs on `http://127.0.0.1:54321`.
-- The `.env` file in the project root has local Supabase credentials.
-- **Staging (cloud):** `.env.staging` → `gdzwiwukcwbqohfwxxrx` — use for pre-prod validation (`cp .env.staging .env`). Bootstrap: `./scripts/bootstrap-staging-db.sh`. See `docs/05_operations/staging_environment.md`.
-- **Production (cloud):** `.env.cloud` → `zymiyfilulmtrmyyhvzw` (247ai.live) — deploy/migrate only. Never use for local feature testing.
-- **Legacy:** `.env.dev` pointed at production; prefer `.env.staging` / `.env.cloud` instead.
-- Local Google ID-token auth is enabled in `supabase/config.toml` and reads `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` plus `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` from the root `.env`; keep `skip_nonce_check=false`.
+- The `.env.local` file in the project root has local Supabase credentials and is the default for `./start.sh start dev`.
+- **Staging (cloud):** `.env.staging` → `gdzwiwukcwbqohfwxxrx` — use for pre-prod validation with `./start.sh start dev --env staging`. Bootstrap: `./scripts/bootstrap-staging-db.sh`. See `docs/05_operations/staging_environment.md`.
+- **Production (cloud):** `.env.prod` → `zymiyfilulmtrmyyhvzw` (247ai.live) — deploy/migrate only. Never use for local feature testing.
+- Legacy `.env`, `.env.dev`, and backup copies are removed; use only the three
+  canonical files above.
+- Local Google ID-token auth is enabled in `supabase/config.toml` and reads `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` plus `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` from `.env.local`; keep `skip_nonce_check=false`.
 - Backend hot-reloads via volume mounts (`./backend:/app`, `./shared:/app/shared`).
 
 ### Test User (Local Supabase)

@@ -1,9 +1,15 @@
 #!/bin/bash
 
-# Multi-Tenant SaaS Platform Startup Script
-# This script simplifies starting and stopping containers in both development and production modes
+# 24x7 AI environment-aware Docker startup script.
+#
+# Environment selection is explicit and never requires copying into .env:
+#   ./start.sh start dev                    # local Supabase, .env.local
+#   ./start.sh start dev --env staging      # cloud staging Supabase, .env.staging
+#   ./start.sh start prod                   # production Supabase, .env.prod
+#
+# Use --env-file PATH when working with a temporary or generated env file.
 
-set -e  # Exit on any error
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -17,7 +23,11 @@ NC='\033[0m' # No Color
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE_PROD="docker-compose.yml"
 COMPOSE_FILE_DEV="docker-compose.dev.yml"
-ENV_FILE=".env"
+ENV_FILE_OVERRIDE="${ENV_FILE:-}"
+ENV_FILE=""
+REQUESTED_ENV="${APP_ENV:-}"
+ENVIRONMENT_NAME=""
+COMPOSE_PROJECT_NAME=""
 
 # Required environment variables
 REQUIRED_ENV_VARS=(
@@ -28,11 +38,16 @@ REQUIRED_ENV_VARS=(
 
 # Function to print usage
 print_usage() {
-    echo -e "${BLUE}Multi-Tenant SaaS Platform Startup Script${NC}"
+    echo -e "${BLUE}24x7 AI environment-aware startup script${NC}"
     echo ""
-    echo "Usage: ./start.sh [OPTIONS]"
+    echo "Usage: ./start.sh [OPTIONS] ACTION [MODE]"
     echo ""
     echo "Options:"
+    echo "  --env NAME    Select local, staging, or production environment"
+    echo "  --env-file PATH"
+    echo "                Select a custom environment file"
+    echo ""
+    echo "Actions:"
     echo "  start dev     - Start containers in development mode"
     echo "  start prod    - Start containers in production mode"
     echo "  start voice-ws dev - Start voice-ws in development mode"
@@ -48,13 +63,106 @@ print_usage() {
     echo "  status        - Show status of all containers"
     echo "  build dev     - Build development images"
     echo "  build prod    - Build production images"
+    echo "  config        - Show the selected env file and safe connection metadata"
     echo "  help          - Show this help message"
     echo ""
     echo "Examples:"
     echo "  ./start.sh start dev"
-    echo "  ./start.sh start voice-ws dev"
-    echo "  ./start.sh stop prod"
-    echo "  ./start.sh build dev"
+    echo "  ./start.sh start dev --env staging"
+    echo "  ./start.sh restart dev --env-file .env.staging"
+    echo "  ./start.sh start prod"
+    echo "  ./start.sh config --env staging"
+}
+
+# Parse environment options wherever they appear in the command line.
+parse_options() {
+    CLI_ARGS=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --env)
+                [[ $# -ge 2 ]] || { echo "Missing value for --env" >&2; exit 1; }
+                REQUESTED_ENV="$2"
+                shift 2
+                ;;
+            --env-file)
+                [[ $# -ge 2 ]] || { echo "Missing value for --env-file" >&2; exit 1; }
+                ENV_FILE_OVERRIDE="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                CLI_ARGS+=("$@")
+                break
+                ;;
+            *)
+                CLI_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# Resolve the selected environment file and Compose project name.
+select_environment_file() {
+    local action="${1:-}"
+    local mode="${2:-}"
+
+    if [[ -n "$ENV_FILE_OVERRIDE" ]]; then
+        ENV_FILE="$ENV_FILE_OVERRIDE"
+        [[ "$ENV_FILE" = /* ]] || ENV_FILE="$PROJECT_DIR/$ENV_FILE"
+        ENVIRONMENT_NAME="custom"
+    else
+        if [[ -z "$REQUESTED_ENV" ]]; then
+            if [[ "$mode" = "prod" ]]; then
+                REQUESTED_ENV="production"
+            else
+                REQUESTED_ENV="local"
+            fi
+        fi
+
+        case "$(printf '%s' "$REQUESTED_ENV" | tr '[:upper:]' '[:lower:]')" in
+            local|dev|development)
+                ENVIRONMENT_NAME="local"
+                ENV_FILE="$PROJECT_DIR/.env.local"
+                ;;
+            staging|stage)
+                ENVIRONMENT_NAME="staging"
+                ENV_FILE="$PROJECT_DIR/.env.staging"
+                ;;
+            cloud|prod|production)
+                ENVIRONMENT_NAME="production"
+                ENV_FILE="$PROJECT_DIR/.env.prod"
+                ;;
+            *)
+                echo "Invalid environment '$REQUESTED_ENV'. Use local, staging, or production." >&2
+                exit 1
+                ;;
+        esac
+    fi
+
+    COMPOSE_PROJECT_NAME="247ai-${ENVIRONMENT_NAME}"
+    export ENV_FILE
+}
+
+# Run Docker Compose with the selected env file and isolated project name.
+compose() {
+    local compose_file="$1"
+    shift
+    docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
+        -f "$compose_file" "$@"
+}
+
+# Show selection metadata without starting Docker containers or exposing secrets.
+show_config() {
+    validate_env_file
+    local supabase_url
+    supabase_url="$(awk -F= '/^NEXT_PUBLIC_SUPABASE_URL=/{print $2; exit}' "$ENV_FILE")"
+
+    echo "Environment: $ENVIRONMENT_NAME"
+    echo "Env file: $ENV_FILE"
+    echo "Supabase: ${supabase_url:-<not set>}"
+    echo "Compose project: $COMPOSE_PROJECT_NAME"
 }
 
 # Function to check if Docker is installed
@@ -65,26 +173,28 @@ check_docker() {
         exit 1
     fi
 
-    if ! command -v docker compose &> /dev/null; then
+    if ! docker compose version &> /dev/null; then
         echo -e "${RED}Error: Docker Compose is not installed or not in PATH${NC}"
         echo "Please install Docker Compose: https://docs.docker.com/compose/install/"
         exit 1
     fi
 }
 
-# Function to validate .env file
+# Function to validate the selected environment file
 validate_env_file() {
-    if [ ! -f "$PROJECT_DIR/$ENV_FILE" ]; then
-        echo -e "${RED}Error: $ENV_FILE file not found${NC}"
-        echo "Please create $ENV_FILE with your configuration before starting containers"
-        echo "You can copy .env.example to $ENV_FILE and update with your values"
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${RED}Error: environment file not found: $ENV_FILE${NC}"
+        echo "Create it from the matching example:"
+        echo "  .env.local.example   → .env.local"
+        echo "  .env.staging.example → .env.staging"
+        echo "  .env.prod.example   → .env.prod"
         exit 1
     fi
 
     # Check for required environment variables
     local missing_vars=()
     for var in "${REQUIRED_ENV_VARS[@]}"; do
-        if ! grep -q "^${var}=" "$PROJECT_DIR/$ENV_FILE" || grep -q "^${var}=$" "$PROJECT_DIR/$ENV_FILE"; then
+        if ! grep -q "^${var}=" "$ENV_FILE" || grep -q "^${var}=$" "$ENV_FILE"; then
             missing_vars+=("$var")
         fi
     done
@@ -114,7 +224,7 @@ check_containers_running() {
     fi
 
     # Check if any containers are running for this compose file
-    if docker compose -f "$compose_file" ps --format "table {{.Names}}\t{{.Status}}" | grep -q "Up"; then
+    if compose "$compose_file" ps --format "table {{.Names}}\t{{.Status}}" | grep -q "Up"; then
         return 0  # Containers are running
     else
         return 1  # Containers are not running
@@ -144,7 +254,7 @@ check_voice_ws_running() {
     fi
 
     # Check if voice-ws service is running
-    if docker compose -f "$compose_file" ps "$service_name" | grep -q "Up"; then
+    if compose "$compose_file" ps "$service_name" | grep -q "Up"; then
         return 0  # voice-ws is running
     else
         return 1  # voice-ws is not running
@@ -156,7 +266,7 @@ build_dev() {
     echo -e "${BLUE}Building development images...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
-    docker compose -f "$COMPOSE_FILE_DEV" build
+    compose "$COMPOSE_FILE_DEV" build
     echo -e "${GREEN}Development images built successfully!${NC}"
 }
 
@@ -165,7 +275,7 @@ build_prod() {
     echo -e "${BLUE}Building production images...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
-    docker compose -f "$COMPOSE_FILE_PROD" build
+    compose "$COMPOSE_FILE_PROD" build
     echo -e "${GREEN}Production images built successfully!${NC}"
 }
 
@@ -181,7 +291,7 @@ start_voice_ws_dev() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" up -d voice-ws-dev
+    compose "$COMPOSE_FILE_DEV" up -d voice-ws-dev
     echo -e "${GREEN}Development voice-ws started successfully!${NC}"
 }
 
@@ -197,7 +307,7 @@ start_voice_ws_prod() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_PROD" up -d voice-ws
+    compose "$COMPOSE_FILE_PROD" up -d voice-ws
     echo -e "${GREEN}Production voice-ws started successfully!${NC}"
 }
 
@@ -214,7 +324,7 @@ start_dev() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" up -d
+    compose "$COMPOSE_FILE_DEV" up -d
     echo -e "${GREEN}Development containers started successfully!${NC}"
     show_dev_urls
 
@@ -235,7 +345,7 @@ start_prod() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_PROD" up -d
+    compose "$COMPOSE_FILE_PROD" up -d
     echo -e "${GREEN}Production containers started successfully!${NC}"
     show_prod_urls
 
@@ -274,7 +384,7 @@ stop_voice_ws_dev() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" stop voice-ws-dev
+    compose "$COMPOSE_FILE_DEV" stop voice-ws-dev
     echo -e "${GREEN}Development voice-ws stopped successfully!${NC}"
 }
 
@@ -289,7 +399,7 @@ stop_voice_ws_prod() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_PROD" stop voice-ws
+    compose "$COMPOSE_FILE_PROD" stop voice-ws
     echo -e "${GREEN}Production voice-ws stopped successfully!${NC}"
 }
 
@@ -304,7 +414,7 @@ stop_dev() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_DEV" down
+    compose "$COMPOSE_FILE_DEV" down
     echo -e "${GREEN}Development containers stopped successfully!${NC}"
 
     # Stop voice-ws
@@ -322,7 +432,7 @@ stop_prod() {
         return 0
     fi
 
-    docker compose -f "$COMPOSE_FILE_PROD" down
+    compose "$COMPOSE_FILE_PROD" down
     echo -e "${GREEN}Production containers stopped successfully!${NC}"
 
     # Stop voice-ws
@@ -356,14 +466,14 @@ show_logs() {
             echo -e "${YELLOW}Development containers are not running${NC}"
             return 0
         fi
-        docker compose -f "$COMPOSE_FILE_DEV" logs -f
+        compose "$COMPOSE_FILE_DEV" logs -f
     elif [ "$mode" = "prod" ]; then
         echo -e "${BLUE}Showing production container logs...${NC}"
         if ! check_containers_running "prod"; then
             echo -e "${YELLOW}Production containers are not running${NC}"
             return 0
         fi
-        docker compose -f "$COMPOSE_FILE_PROD" logs -f
+        compose "$COMPOSE_FILE_PROD" logs -f
     else
         echo -e "${RED}Invalid mode for logs. Use 'dev' or 'prod'.${NC}"
         exit 1
@@ -374,16 +484,17 @@ show_logs() {
 show_status() {
     echo -e "${BLUE}Development containers status:${NC}"
     cd "$PROJECT_DIR"
-    docker compose -f "$COMPOSE_FILE_DEV" ps
+    compose "$COMPOSE_FILE_DEV" ps
 
     echo -e "\n${BLUE}Production containers status:${NC}"
     cd "$PROJECT_DIR"
-    docker compose -f "$COMPOSE_FILE_PROD" ps
+    compose "$COMPOSE_FILE_PROD" ps
 }
 
 # Main script logic
 main() {
-    check_docker
+    parse_options "$@"
+    set -- "${CLI_ARGS[@]}"
 
     if [ $# -eq 0 ]; then
         print_usage
@@ -391,7 +502,19 @@ main() {
     fi
 
     local action=$1
-    local mode=$2
+    local mode="${2:-}"
+    local selection_mode="$mode"
+    if [ "$mode" = "voice-ws" ]; then
+        selection_mode="${3:-}"
+    fi
+    select_environment_file "$action" "$selection_mode"
+
+    if [ "$action" = "config" ]; then
+        show_config
+        return 0
+    fi
+
+    check_docker
 
     case $action in
         start)
@@ -400,9 +523,9 @@ main() {
             elif [ "$mode" = "prod" ]; then
                 start_prod
             elif [ "$mode" = "voice-ws" ]; then
-                if [ "$3" = "dev" ]; then
+                if [ "${3:-}" = "dev" ]; then
                     start_voice_ws_dev
-                elif [ "$3" = "prod" ]; then
+                elif [ "${3:-}" = "prod" ]; then
                     start_voice_ws_prod
                 else
                     echo -e "${RED}Invalid voice-ws mode. Use 'dev' or 'prod'.${NC}"
@@ -419,9 +542,9 @@ main() {
             elif [ "$mode" = "prod" ]; then
                 stop_prod
             elif [ "$mode" = "voice-ws" ]; then
-                if [ "$3" = "dev" ]; then
+                if [ "${3:-}" = "dev" ]; then
                     stop_voice_ws_dev
-                elif [ "$3" = "prod" ]; then
+                elif [ "${3:-}" = "prod" ]; then
                     stop_voice_ws_prod
                 else
                     echo -e "${RED}Invalid voice-ws mode. Use 'dev' or 'prod'.${NC}"

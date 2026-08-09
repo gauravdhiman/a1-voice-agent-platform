@@ -19,11 +19,9 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install dependencies (runtime + development tools)
 pip install -r requirements-dev.txt
 
-# Copy environment configuration
-cp .env.example .env
-
-# Edit .env with your configuration, including DATABASE_URL for migrations
-# See docs/ENVIRONMENT.md for instructions on getting your Supabase database password
+# From the repository root, create .env.local from .env.local.example.
+# Settings default to the root .env.local file. Select staging explicitly with:
+# ENV_FILE=.env.staging python backend/main.py
 
 # Run the application
 python main.py
@@ -93,7 +91,7 @@ backend/
 ├── scripts/               # Development and deployment scripts
 ├── main.py                # FastAPI application entry point
 ├── requirements.txt       # Python dependencies
-├── .env.example          # Environment template
+├── ../.env.local         # Canonical local environment file (gitignored)
 ├── Dockerfile            # Production container
 ├── Dockerfile.dev        # Development container
 └── README.md

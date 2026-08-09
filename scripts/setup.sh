@@ -11,33 +11,16 @@ if [ ! -f "README.md" ]; then
     exit 1
 fi
 
-echo "📁 Creating environment files..."
+echo "📁 Creating the canonical local environment file..."
 
-# Create root .env file if it doesn't exist
-if [ ! -f ".env" ]; then
-    echo "📝 Creating root .env file (for containerized development)..."
-    cp .env.example .env
-    echo "✅ Root .env file created. Please update it with your configuration for Docker containers."
+# Create .env.local if it doesn't exist. Staging and production files are
+# intentionally opt-in so a fresh setup cannot accidentally target cloud data.
+if [ ! -f ".env.local" ]; then
+    echo "📝 Creating .env.local from .env.local.example..."
+    cp .env.local.example .env.local
+    echo "✅ .env.local created. Please update it with your local Supabase and provider values."
 else
-    echo "✅ Root .env file already exists (used for containerized development)"
-fi
-
-# Create backend .env file if it doesn't exist
-if [ ! -f "backend/.env" ]; then
-    echo "📝 Creating backend .env file (for non-containerized local development)..."
-    cp backend/.env.example backend/.env
-    echo "✅ Backend .env file created. Please update it with your configuration for local development."
-else
-    echo "✅ Backend .env file already exists (used for non-containerized local development)"
-fi
-
-# Create frontend .env.local file if it doesn't exist
-if [ ! -f "frontend/.env.local" ]; then
-    echo "📝 Creating frontend .env.local file (for non-containerized local development)..."
-    cp frontend/.env.local.example frontend/.env.local
-    echo "✅ Frontend .env.local file created. Please update it with your configuration for local development."
-else
-    echo "✅ Frontend .env.local file already exists (used for non-containerized local development)"
+    echo "✅ .env.local already exists"
 fi
 
 echo ""
@@ -79,19 +62,15 @@ echo ""
 echo "✅ Setup complete!"
 echo ""
 echo "📝 Next steps:"
-echo "1. Update the environment files with your configuration:"
-echo "  - For containerized development with Docker:"
-echo "      - .env"
-echo "  - For local development without Docker:"
-echo "      - backend/.env"
-echo "      - frontend/.env.local"
+echo "1. Update .env.local with your local configuration."
+echo "   For cloud staging validation, create .env.staging from its example and run:"
+echo "      ./start.sh start dev --env staging"
 echo ""
-echo "2. For local development (without Docker) - start the services separately:"
-echo "   - Backend: cd backend && source .venv/bin/activate && python main.py"
-echo "   - Frontend: cd frontend && npm run dev"
+echo "2. For local development with Docker:"
+echo "   - Start: ./start.sh start dev"
+echo "   - Check selected config: ./start.sh config"
 echo ""
-echo "3. For containerized development (with Docker) - start the services with the following commands:"
-echo "   - To build: ./script/setup.sh build dev"
-echo "   - To start: ./script/setup.sh start dev"
+echo "3. For production deployment, create .env.prod from .env.prod.example"
+echo "   and run ./scripts/deploy.sh (production is the default deploy file)."
 echo ""
-echo "📖 For more information, see docs/ENVIRONMENT.md"
+echo "📖 For more information, see docs/ENV_VARS.md"

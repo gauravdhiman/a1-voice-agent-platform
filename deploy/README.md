@@ -12,7 +12,7 @@ Free Tier ARM VM behind Caddy, Supabase DB.
 ./scripts/deploy.sh [all|gcp|backend|frontend|voice-ws|migrate|domains]
 ```
 
-Credentials: **`.env.cloud`** only (gitignored). Template: **`.env.cloud.example`**.
+Credentials: **`.env.prod`** only (gitignored). Template: **`.env.prod.example`**.
 
 ## Layout
 
@@ -28,12 +28,12 @@ Credentials: **`.env.cloud`** only (gitignored). Template: **`.env.cloud.example
 | Script | Description |
 |--------|-------------|
 | **`scripts/deploy.sh`** | Single entry point for all production deploys |
-| `.env.cloud.example` | Production env template (copy → `.env.cloud`) |
+| `.env.prod.example` | Production env template (copy → `.env.prod`) |
 | `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend |
 | `scripts/deploy/gcp-map-domains.sh` | Map custom domains to Cloud Run |
 | `scripts/deploy/run-alembic-cloud.sh` | Alembic migrations |
 | `scripts/deploy/oci-deploy-voice-ws.sh` | Sync + build voice-ws on OCI VM |
-| `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.cloud` per service |
+| `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
 
 ## Related docs
 

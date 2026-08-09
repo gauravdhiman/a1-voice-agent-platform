@@ -138,9 +138,9 @@ Required variables:
 | `.env` | **Active config** — local dev default | Local Supabase (`http://host.docker.internal:54321`) |
 | `.env.local` | Local dev template | Local Supabase |
 | `.env.staging` | **Cloud staging** — safe validation against real cloud stack | `gdzwiwukcwbqohfwxxrx` ([oc-dev-ai-voice-agent-platform](https://supabase.com/dashboard/project/gdzwiwukcwbqohfwxxrx)) |
-| `.env.cloud` | **Production** — deploy / migrate 247ai.live only | `zymiyfilulmtrmyyhvzw` |
+| `.env.prod` | **Production** — deploy / migrate 247ai.live only | `zymiyfilulmtrmyyhvzw` |
 
-> **Warning:** `.env.dev` historically pointed at **production**. Use `.env.staging` for cloud validation and `.env.cloud` for production deploys. See [staging_environment.md](docs/05_operations/staging_environment.md).
+> **Warning:** `.env.dev` historically pointed at **production**. Use `.env.staging` for cloud validation and `.env.prod` for production deploys. See [staging_environment.md](docs/05_operations/staging_environment.md).
 
 **To switch to cloud staging** (local Docker → staging DB):
 

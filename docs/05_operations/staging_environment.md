@@ -5,7 +5,7 @@
 **Region:** `us-west-2`  
 **Purpose:** Isolated cloud database for local Docker validation before production deploy.
 
-Production Supabase (`zymiyfilulmtrmyyhvzw`) powers **247ai.live** — never point local `.env` at production for feature testing.
+Production Supabase (`zymiyfilulmtrmyyhvzw`) powers **247ai.live** — never point local `.env.local` or `.env.staging` at production for feature testing.
 
 ---
 
@@ -15,26 +15,24 @@ Production Supabase (`zymiyfilulmtrmyyhvzw`) powers **247ai.live** — never poi
 |------|----------|----------|
 | `.env.local` | Local (`127.0.0.1:54321`) | Default day-to-day dev |
 | `.env.staging` | Staging (`gdzwiwukcwbqohfwxxrx`) | Local Docker + cloud staging DB |
-| `.env.cloud` | Production (`zymiyfilulmtrmyyhvzw`) | Deploy / migrate production only |
+| `.env.prod` | Production (`zymiyfilulmtrmyyhvzw`) | Deploy / migrate production only |
 
 Templates (committed):
 
+- `.env.local.example` → copy to `.env.local`
 - `.env.staging.example` → copy to `.env.staging`
-- `.env.cloud.example` → copy to `.env.cloud`
+- `.env.prod.example` → copy to `.env.prod`
 
-Switch local Docker to staging:
-
-```bash
-cp .env.staging .env
-./start.sh restart dev
-```
-
-Switch back to local Supabase:
+The startup script selects the file for you. No file copying is needed:
 
 ```bash
-cp .env.local .env
-./start.sh restart dev
+./start.sh start dev                 # local Supabase (.env.local)
+./start.sh start dev --env staging   # staging Supabase (.env.staging)
+./start.sh start prod                # production Supabase (.env.prod)
 ```
+
+Use `./start.sh config --env staging` to verify the selected file and Supabase
+URL without printing secrets.
 
 ---
 
@@ -47,12 +45,12 @@ The staging project starts **empty** and **behind** on Alembic (was at `20260127
 ```bash
 cp .env.staging.example .env.staging
 # or copy Stripe/OAuth from prod and swap Supabase refs:
-python3 scripts/create-env-staging.py --from .env.cloud
+python3 scripts/create-env-staging.py --from .env.prod
 ```
 
 Supabase **renamed** the old API keys in newer projects. Use this mapping in `.env.staging`:
 
-| What you need in `.env` | Where in Supabase dashboard | Starts with |
+| What you need in `.env.staging` | Where in Supabase dashboard | Starts with |
 |-------------------------|----------------------------|-------------|
 | `SUPABASE_SERVICE_KEY` | **Settings → API Keys → Secret keys** | `sb_secret_...` (or legacy JWT on **Legacy API Keys** tab) |
 | `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Settings → API Keys → Publishable keys** | `sb_publishable_...` (or legacy `anon` JWT on **Legacy API Keys** tab) |
@@ -91,7 +89,7 @@ Example shape (yours will include the real password):
 DATABASE_URL=postgresql://postgres.gdzwiwukcwbqohfwxxrx:YOUR_URL_ENCODED_PASSWORD@aws-0-us-west-2.pooler.supabase.com:5432/postgres
 ```
 
-Copy Stripe keys from production `.env.cloud` for now (same Stripe account). Split test keys later.
+Copy Stripe keys from production `.env.prod` for now (same Stripe account). Split test keys later.
 
 ### 2. Run bootstrap
 
@@ -119,13 +117,12 @@ Options:
 ### 3. Point local app at staging
 
 ```bash
-cp .env.staging .env
-./start.sh restart dev
+./start.sh restart dev --env staging
 ```
 
 Open http://localhost:3000 — auth and data come from staging Supabase.
 
-**CORS:** When running the frontend at `http://localhost:3000`, `CORS_ORIGINS` in `.env.staging` must include localhost (see `.env.staging.example`). If you generated `.env.staging` from `.env.cloud` via `create-env-staging.py`, re-run the script or copy the `CORS_ORIGINS` line from the example — production-only origins (`https://www.247ai.live`) cause signup/API calls to fail with `OPTIONS 400 Disallowed CORS origin`.
+**CORS:** When running the frontend at `http://localhost:3000`, `CORS_ORIGINS` in `.env.staging` must include localhost (see `.env.staging.example`). If you generated `.env.staging` from `.env.prod` via `create-env-staging.py`, re-run the script or copy the `CORS_ORIGINS` line from the example — production-only origins (`https://www.247ai.live`) cause signup/API calls to fail with `OPTIONS 400 Disallowed CORS origin`.
 
 ### 4. Grant platform admin (first user)
 
