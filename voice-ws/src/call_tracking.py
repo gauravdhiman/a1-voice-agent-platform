@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 async def start_call_tracking(
     *,
     session_id: str,
+    call_sid: Optional[str] = None,
     organization_id: UUID,
     agent_id: UUID,
 ) -> Optional[str]:
@@ -26,6 +27,9 @@ async def start_call_tracking(
 
     Args:
         session_id: Voice session identifier (stored as ``call_sid``).
+        call_sid: Optional provider call identifier. For Twilio, reuse the
+            backend-created row keyed by this value instead of inserting a
+            second active row for the same call.
         organization_id: Owning organization UUID.
         agent_id: Voice agent UUID.
 
@@ -36,9 +40,26 @@ async def start_call_tracking(
     if client is None:
         return None
 
+    if call_sid:
+        try:
+            existing = (
+                client.table("call_logs")
+                .select("id")
+                .eq("call_sid", call_sid)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                return str(existing.data[0]["id"])
+        except Exception:
+            logger.exception(
+                "Failed to find existing call log for provider call_sid=%s",
+                call_sid,
+            )
+
     now = datetime.now(timezone.utc).isoformat()
     row = {
-        "call_sid": session_id,
+        "call_sid": call_sid or session_id,
         "organization_id": str(organization_id),
         "agent_id": str(agent_id),
         "status": "initiated",

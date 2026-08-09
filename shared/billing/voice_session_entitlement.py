@@ -52,6 +52,7 @@ async def assert_voice_session_allowed(
     organization_id: UUID,
     *,
     min_event_name: str = DEFAULT_VOICE_MINUTE_EVENT,
+    current_call_sid: Optional[str] = None,
 ) -> None:
     """Raise ``VoiceSessionEntitlementError`` if the org cannot start a call.
 
@@ -63,6 +64,9 @@ async def assert_voice_session_allowed(
     Args:
         organization_id: Tenant owning the voice agent.
         min_event_name: Credit event used to estimate minimum session cost.
+        current_call_sid: Optional provider call identifier for a PSTN call
+            already persisted by the backend webhook. That row is excluded
+            from the active count before admitting the same call.
 
     Raises:
         VoiceSessionEntitlementError: When concurrent or credit pre-check fails.
@@ -79,7 +83,11 @@ async def assert_voice_session_allowed(
         effective, is_unlimited = _parse_entitlement_value(concurrent)
         if not is_unlimited:
             limit = int(effective or 0)
-            active = await _count_active_calls(client, organization_id)
+            active = await _count_active_calls(
+                client,
+                organization_id,
+                current_call_sid=current_call_sid,
+            )
             if active + 1 > limit:
                 raise VoiceSessionEntitlementError(
                     "MAX_CONCURRENT_CALLS",
@@ -161,14 +169,25 @@ async def _resolve_org_entitlements(
     return {"limits": limits, "features": features}
 
 
-async def _count_active_calls(client: Any, organization_id: UUID) -> int:
+async def _count_active_calls(
+    client: Any,
+    organization_id: UUID,
+    *,
+    current_call_sid: Optional[str] = None,
+) -> int:
     result = (
         client.table("call_logs")
-        .select("id", count="exact")
+        .select("id, call_sid", count="exact")
         .eq("organization_id", str(organization_id))
         .in_("status", sorted(ACTIVE_VOICE_CALL_STATUSES))
         .execute()
     )
+    if current_call_sid is not None:
+        return sum(
+            1
+            for row in (result.data or [])
+            if row.get("call_sid") != current_call_sid
+        )
     count = getattr(result, "count", None)
     if isinstance(count, int):
         return count

@@ -106,6 +106,7 @@ class TestTwilioIncomingPipecat:
         kwargs = mock_sessions.create_session_token.call_args.kwargs
         assert kwargs["purpose"] == "phone"
         assert kwargs["agent_id"] == str(agent_id)
+        assert kwargs["call_sid"] == "CA123456789"
 
     async def test_pipecat_missing_twilio_url_returns_config_error(self) -> None:
         mock_request = MagicMock()

@@ -69,7 +69,10 @@ async def _precheck_voice_session(claims) -> None:
     agent, agent_error = await voice_agent_service.get_agent_by_id(UUID(claims.agent_id))
     if agent_error or agent is None or not agent.organization_id:
         return
-    await assert_voice_session_allowed(agent.organization_id)
+    await assert_voice_session_allowed(
+        agent.organization_id,
+        current_call_sid=claims.call_sid,
+    )
 
 
 @app.get("/health")

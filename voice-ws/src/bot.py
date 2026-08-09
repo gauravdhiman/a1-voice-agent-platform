@@ -110,6 +110,7 @@ async def run_bot(
     if bundle.agent.organization_id:
         call_log_id = await start_call_tracking(
             session_id=claims.session_id,
+            call_sid=claims.call_sid,
             organization_id=bundle.agent.organization_id,
             agent_id=bundle.agent.id,
         )

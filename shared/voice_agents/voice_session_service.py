@@ -32,6 +32,7 @@ class VoiceSessionClaims:
     user_id: str
     session_id: str
     purpose: str
+    call_sid: Optional[str] = None
     token_type: str = VOICE_SESSION_TOKEN_TYPE
 
 
@@ -65,6 +66,7 @@ class VoiceSessionService:
         purpose: VoiceSessionPurpose = "test_call",
         expires_in: Optional[timedelta] = None,
         session_id: Optional[str] = None,
+        call_sid: Optional[str] = None,
     ) -> tuple[str, str]:
         """Create a signed session JWT for the voice-ws WebSocket.
 
@@ -74,6 +76,7 @@ class VoiceSessionService:
             purpose: Call surface (test_call, embed, public, phone).
             expires_in: Optional TTL override.
             session_id: Optional pre-assigned session id; generated if omitted.
+            call_sid: Optional provider call identifier for phone sessions.
 
         Returns:
             Tuple of ``(jwt_token, session_id)``.
@@ -97,6 +100,8 @@ class VoiceSessionService:
             "exp": now + ttl,
             "jti": str(uuid.uuid4()),
         }
+        if call_sid:
+            payload["call_sid"] = call_sid
         token = jwt.encode(payload, self.jwt_secret, algorithm="HS256")
         logger.info(
             "Created voice_ws session token session_id=%s agent_id=%s purpose=%s",
@@ -135,6 +140,11 @@ class VoiceSessionService:
         user_id = payload.get("user_id")
         session_id = payload.get("session_id")
         purpose = payload.get("purpose")
+        call_sid = payload.get("call_sid")
+        if call_sid is not None and (
+            not isinstance(call_sid, str) or not call_sid
+        ):
+            return None
         if not all(
             isinstance(v, str) and v for v in (agent_id, user_id, session_id, purpose)
         ):
@@ -145,6 +155,7 @@ class VoiceSessionService:
             user_id=user_id,
             session_id=session_id,
             purpose=purpose,
+            call_sid=call_sid,
             token_type=VOICE_SESSION_TOKEN_TYPE,
         )
 

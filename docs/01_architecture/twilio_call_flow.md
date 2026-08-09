@@ -90,6 +90,14 @@ sequenceDiagram
 - `handle_twilio_incoming()` / `_handle_pipecat_incoming()`: Returns TwiML with `<Connect><Stream url="wss://…/twilio?token=…"/>`.
 - Backend requires **`VOICE_WS_TWILIO_URL`** (public `wss://` base, e.g. ngrok in dev) so Twilio can reach `voice-ws`.
 
+**Call-log lifecycle and concurrency:** The backend creates the Twilio
+`CallSid` row before returning TwiML so status callbacks have a record to
+update. The session JWT carries that same `CallSid`; `voice-ws` excludes it
+from the admission count while checking the current session and reuses the
+row for duration and credit tracking. This keeps one PSTN call represented by
+one active `call_logs` row and prevents a one-call plan from rejecting its own
+inbound call.
+
 There is **no LiveKit room or SIP bridge**. Audio flows directly between Twilio and `voice-ws` over Media Streams.
 
 ### Phase C: Agent Execution & Tool Usage

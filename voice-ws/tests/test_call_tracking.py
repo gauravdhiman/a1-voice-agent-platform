@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from src.call_tracking import end_call_tracking
+from src.call_tracking import end_call_tracking, start_call_tracking
 
 
 class _Query:
@@ -41,6 +41,8 @@ class _Query:
             return _Result(
                 [
                     {
+                        "id": "existing-call-log",
+                        "call_sid": "CA123",
                         "organization_id": str(self.client.organization_id),
                         "started_at": self.client.started_at.isoformat(),
                     }
@@ -58,6 +60,9 @@ class _Query:
         if self.operation == "insert" and self.table == "credit_transactions":
             self.client.transaction_payload = self.payload
             return _Result([{"id": str(self.client.transaction_id)}])
+        if self.operation == "insert" and self.table == "call_logs":
+            self.client.inserts.append(self.payload)
+            return _Result([])
         if self.operation == "update":
             self.client.updates.append((self.table, self.payload))
         return _Result([])
@@ -92,6 +97,7 @@ class _Client:
         self.transaction_id = uuid4()
         self.started_at = datetime.now(timezone.utc) - timedelta(seconds=61)
         self.updates = []
+        self.inserts = []
         self.rpc_args = None
         self.rpc_payload = None
 
@@ -101,6 +107,29 @@ class _Client:
     def rpc(self, *_args, **_kwargs):
         self.rpc_args = _kwargs or (_args[1] if len(_args) > 1 else {})
         return _Rpc(self)
+
+
+@pytest.mark.asyncio
+async def test_start_call_tracking_reuses_existing_twilio_call_log():
+    """PSTN sessions reuse the backend row instead of creating a duplicate."""
+    client = _Client()
+
+    from src import call_tracking
+
+    original_client = call_tracking.supabase_config._client
+    call_tracking.supabase_config._client = client
+    try:
+        call_log_id = await start_call_tracking(
+            session_id="voice-session-1",
+            call_sid="CA123",
+            organization_id=client.organization_id,
+            agent_id=uuid4(),
+        )
+    finally:
+        call_tracking.supabase_config._client = original_client
+
+    assert call_log_id == "existing-call-log"
+    assert client.inserts == []
 
 
 @pytest.mark.asyncio

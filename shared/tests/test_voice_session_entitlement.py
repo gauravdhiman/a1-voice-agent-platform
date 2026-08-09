@@ -62,7 +62,9 @@ async def test_assert_voice_session_allowed_raises_on_concurrent_limit(monkeypat
             }
         ]
     )
-    active_calls_execute = MagicMock(data=[{"id": "1"}], count=1)
+    active_calls_execute = MagicMock(
+        data=[{"id": "1"}, {"id": "2"}], count=2
+    )
 
     table = MagicMock()
     table.select.return_value = table
@@ -86,6 +88,67 @@ async def test_assert_voice_session_allowed_raises_on_concurrent_limit(monkeypat
     with pytest.raises(VoiceSessionEntitlementError) as exc_info:
         await assert_voice_session_allowed(org_id)
     assert exc_info.value.code == "MAX_CONCURRENT_CALLS"
+
+
+@pytest.mark.asyncio
+async def test_assert_voice_session_allowed_allows_current_pstn_call_log(
+    monkeypatch,
+):
+    """Allow the call already pre-logged by the PSTN webhook to start.
+
+    The backend creates the inbound Twilio call log before the voice-ws
+    entitlement check. That row represents the call being admitted and must
+    not consume an additional concurrency slot.
+    """
+    org_id = uuid4()
+    client = MagicMock()
+
+    sub_execute = MagicMock(
+        data=[{"status": "active", "plan_version_id": str(uuid4())}]
+    )
+    ent_execute = MagicMock(
+        data=[
+            {
+                "entitlement_key": "max_concurrent_calls",
+                "value": {"type": "integer", "value": 1},
+            }
+        ]
+    )
+    catalog_execute = MagicMock(
+        data=[
+            {
+                "key": "max_concurrent_calls",
+                "kind": "limit",
+                "default_when_absent": None,
+            }
+        ]
+    )
+    active_calls_execute = MagicMock(
+        data=[{"id": "current-call", "call_sid": "CA-current"}], count=1
+    )
+    min_cost_execute = MagicMock(data=[])
+
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.limit.return_value = table
+    table.in_.return_value = table
+    table.order.return_value = table
+    table.execute.side_effect = [
+        sub_execute,
+        ent_execute,
+        catalog_execute,
+        active_calls_execute,
+        min_cost_execute,
+    ]
+    client.table.return_value = table
+
+    monkeypatch.setattr(
+        "shared.billing.voice_session_entitlement.supabase_config",
+        MagicMock(client=client),
+    )
+
+    await assert_voice_session_allowed(org_id, current_call_sid="CA-current")
 
 
 @pytest.mark.asyncio
