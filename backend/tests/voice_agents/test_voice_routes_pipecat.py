@@ -8,6 +8,8 @@ from uuid import uuid4
 import pytest
 from fastapi import Response
 
+from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
+
 from src.voice_agents.voice_routes import (
     build_pipecat_stream_twiml,
     handle_twilio_incoming,
@@ -83,6 +85,10 @@ class TestTwilioIncomingPipecat:
             patch(
                 "src.voice_agents.voice_routes.voice_session_service"
             ) as mock_sessions,
+            patch(
+                "src.voice_agents.voice_routes.assert_voice_session_allowed",
+                new=AsyncMock(),
+            ),
             patch("src.call_logs.service.call_log_service") as mock_logs,
         ):
             mock_settings.voice_ws_twilio_url = "wss://tunnel.example.com"
@@ -172,3 +178,50 @@ class TestTwilioIncomingPipecat:
 
         content = response.body.decode()
         assert "not public" in content.lower()
+
+    async def test_pipecat_entitlement_denial_speaks_contact_business_message(
+        self,
+    ) -> None:
+        """A PSTN caller receives useful guidance without billing internals."""
+        mock_request = MagicMock()
+        mock_request.form = AsyncMock(
+            return_value={
+                "To": "+1234567890",
+                "From": "+0987654321",
+                "CallSid": "CA123",
+            }
+        )
+        mock_agent = MagicMock()
+        mock_agent.id = uuid4()
+        mock_agent.organization_id = uuid4()
+
+        with (
+            patch("src.voice_agents.voice_routes.settings") as mock_settings,
+            patch(
+                "src.voice_agents.voice_routes.voice_agent_service"
+            ) as mock_service,
+            patch("src.call_logs.service.call_log_service") as mock_logs,
+            patch(
+                "src.voice_agents.voice_routes.assert_voice_session_allowed",
+                new=AsyncMock(
+                    side_effect=VoiceSessionEntitlementError(
+                        "INSUFFICIENT_CREDITS",
+                        "Insufficient credits to start a voice call.",
+                    )
+                ),
+                create=True,
+            ),
+        ):
+            mock_settings.voice_ws_twilio_url = "wss://tunnel.example.com"
+            mock_settings.voice_ws_public_url = "ws://localhost:7860"
+            mock_service.get_agent_by_phone = AsyncMock(
+                return_value=(mock_agent, None)
+            )
+            mock_logs.create_call_log = AsyncMock()
+
+            response = await handle_twilio_incoming(mock_request)
+
+        content = response.body.decode()
+        assert "temporarily unavailable" in content.lower()
+        assert "contact the business" in content.lower()
+        assert "insufficient credits" not in content.lower()

@@ -11,7 +11,7 @@ export const AGENT_CREATE_E164_PHONE_REGEX = /^\+[1-9]\d{7,14}$/;
 export interface AgentCreatePromptFields {
   persona: string;
   mission: string;
-  custom_instructions: string;
+  custom_instructions?: string;
 }
 
 /**
@@ -30,7 +30,10 @@ export function resolveAgentCreatePromptFields(
   return {
     persona: applyTemplatePlaceholders(fields.persona, opts),
     mission: applyTemplatePlaceholders(fields.mission, opts),
-    custom_instructions: applyTemplatePlaceholders(fields.custom_instructions, opts),
+    custom_instructions: applyTemplatePlaceholders(
+      fields.custom_instructions ?? "",
+      opts,
+    ),
   };
 }
 

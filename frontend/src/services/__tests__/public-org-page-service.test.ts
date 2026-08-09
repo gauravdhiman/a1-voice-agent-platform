@@ -53,4 +53,22 @@ describe("publicOrgPageService", () => {
       }),
     );
   });
+
+  it("translates public call entitlement failures into helpful guidance", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "VOICE_ASSISTANT_UNAVAILABLE",
+            message: "This voice assistant is temporarily unavailable.",
+          },
+        }),
+        { status: 503 },
+      ),
+    );
+
+    await expect(
+      publicOrgPageService.getCallToken("acme", "agent-1"),
+    ).rejects.toThrow(/contact the business/i);
+  });
 });

@@ -15,6 +15,7 @@ import {
   connectPipecatVoiceCall,
   disconnectPipecatVoiceCall,
 } from "@/lib/pipecat-voice-client";
+import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
 
 function PublicCallContent() {
   const params = useParams<{ slug: string; agentId: string }>();
@@ -75,7 +76,7 @@ function PublicCallContent() {
 
   useEffect(() => {
     connect().catch((err) => {
-      setError(err instanceof Error ? err.message : "Failed to connect");
+      setError(getPublicVoiceCallErrorMessage(err));
       setIsConnecting(false);
     });
     return () => disconnect();

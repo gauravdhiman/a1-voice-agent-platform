@@ -14,6 +14,7 @@ import {
   PhoneOff,
   Loader2,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { useTestCall } from "@/hooks/use-test-call";
 import { AgentAudioVisualizerWave } from "@/components/agents-ui/agent-audio-visualizer-wave";
@@ -70,27 +71,47 @@ export function TestCallModal({
   }, [open, isConnected, isConnecting, startCall]);
 
   const handleHangUp = () => {
-    if (isConnected) {
-      endCall();
-    }
+    endCall();
     onOpenChange(false);
   };
 
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      handleHangUp();
+      return;
+    }
+    onOpenChange(true);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent 
         className="sm:max-w-md"
         hideCloseButton
         onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">Test Call with {agentName}</DialogTitle>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-4 top-4"
+          onClick={handleHangUp}
+          aria-label="Close test call"
+        >
+          <X className="h-4 w-4" />
+        </Button>
         <div className="flex flex-col items-center py-4 space-y-4">
           {error && (
-            <div className="flex items-center gap-2 text-destructive p-3 bg-destructive/10 rounded-md w-full">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <p className="text-sm">{error}</p>
-            </div>
+            <>
+              <div className="flex items-center gap-2 text-destructive p-3 bg-destructive/10 rounded-md w-full">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <p className="text-sm">{error}</p>
+              </div>
+              <Button type="button" variant="outline" onClick={handleHangUp}>
+                Close
+              </Button>
+            </>
           )}
 
           {!isConnected && !error && (

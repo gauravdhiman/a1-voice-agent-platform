@@ -8,7 +8,7 @@
  * the email address in Supabase.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
@@ -18,7 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type VerifyState = "loading" | "success" | "error";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams?.get("token") || "";
   const [state, setState] = useState<VerifyState>("loading");
@@ -96,5 +96,22 @@ export default function VerifyEmailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+          <div className="max-w-md w-full space-y-6 text-center">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto text-purple-600" />
+            <p className="text-gray-600">Verifying your email address...</p>
+          </div>
+        </div>
+      }
+    >
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

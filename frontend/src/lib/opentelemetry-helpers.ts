@@ -98,9 +98,10 @@ export function logWarning(message: string, attributes?: Attributes) {
 }
 
 // Specific function types for auth operations
-type SignUpFunction = (
+type SignUpResult = { error: { message?: string } | null };
+type SignUpFunction<TResult extends SignUpResult = SignUpResult> = (
   data: SignUpData,
-) => Promise<{ error: AuthError | null }>;
+) => Promise<TResult>;
 type SignInFunction = (
   data: SignInData,
 ) => Promise<{ error: AuthError | null }>;
@@ -116,11 +117,11 @@ type SignInWithLinkedInSessionFunction = (
 type SignOutFunction = () => Promise<{ error: AuthError | null }>;
 
 // Main telemetry wrapper functions for specific auth operations
-export function withTelemetrySignUp(
-  fn: SignUpFunction,
+export function withTelemetrySignUp<TResult extends SignUpResult>(
+  fn: SignUpFunction<TResult>,
   telemetryOptions: TelemetryOptions = {},
   logOptions: LogOptions = { operation: "operation" },
-): SignUpFunction {
+): SignUpFunction<TResult> {
   return async function (data: SignUpData) {
     // If tracer is not available, just execute the function
     if (!tracer) {

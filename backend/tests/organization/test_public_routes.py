@@ -7,6 +7,8 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
+
 from src.organization.public_routes import (
     PublicAccessRequest,
     generate_public_call_token,
@@ -123,6 +125,10 @@ async def test_generate_call_token_for_published_agent(mock_supabase):
     ), patch(
         "src.organization.public_routes.public_page_service.generate_call_token",
         return_value=("voice.jwt.token", "ws://localhost:7860/ws", "sess-public-1"),
+    ), patch(
+        "src.organization.public_routes.assert_voice_session_allowed",
+        new=AsyncMock(),
+        create=True,
     ):
         result = await generate_public_call_token(
             SLUG, AGENT_ID, x_public_access_token=None
@@ -131,3 +137,38 @@ async def test_generate_call_token_for_published_agent(mock_supabase):
     assert result.token == "voice.jwt.token"
     assert result.wsUrl == "ws://localhost:7860/ws"
     assert result.sessionId == "sess-public-1"
+
+
+@pytest.mark.asyncio
+async def test_public_call_token_returns_safe_unavailable_error(mock_supabase):
+    """Public-page visitors receive safe availability guidance."""
+    _org_svc, table = mock_supabase
+    chain = table.select.return_value.eq.return_value.limit.return_value
+    chain.execute.return_value = Mock(data=[_org_row()])
+
+    agent = SimpleNamespace(
+        id=AGENT_ID,
+        organization_id=ORG_ID,
+        is_active=True,
+        is_published_on_public_page=True,
+    )
+
+    with patch(
+        "src.organization.public_routes.voice_agent_service.get_agent_by_id",
+        new=AsyncMock(return_value=(agent, None)),
+    ), patch(
+        "src.organization.public_routes.assert_voice_session_allowed",
+        new=AsyncMock(
+            side_effect=VoiceSessionEntitlementError(
+                "INSUFFICIENT_CREDITS",
+                "Insufficient credits to start a voice call.",
+            )
+        ),
+        create=True,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await generate_public_call_token(SLUG, AGENT_ID, None)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "VOICE_ASSISTANT_UNAVAILABLE"
+    assert "contact the business" in exc.value.detail["message"].lower()
