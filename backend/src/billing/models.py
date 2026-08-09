@@ -50,6 +50,7 @@ class TransactionSource(str, Enum):
     EXPIRY = "expiry"
     REFUND = "refund"
     ADMIN_ADJUSTMENT = "admin_adjustment"
+    REFERRAL = "referral"
 
 
 class BillingStatus(str, Enum):
@@ -121,8 +122,9 @@ class OrganizationSubscriptionBase(BaseModel):
 
     organization_id: UUID
     subscription_plan_id: Optional[UUID] = None
+    plan_version_id: Optional[UUID] = None
     stripe_subscription_id: Optional[str] = Field(None, max_length=255)
-    stripe_customer_id: str = Field(..., max_length=255)
+    stripe_customer_id: Optional[str] = Field(None, max_length=255)
     status: SubscriptionStatus
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
@@ -145,6 +147,7 @@ class OrganizationSubscriptionUpdate(BaseModel):
     """Model for updating organization subscriptions."""
 
     subscription_plan_id: Optional[UUID] = None
+    plan_version_id: Optional[UUID] = None
     status: Optional[SubscriptionStatus] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
@@ -214,7 +217,10 @@ class CreditTransactionBase(BaseModel):
     amount: int = Field(
         ..., description="Positive for credits added, negative for consumed"
     )
-    balance_after: int = Field(..., ge=0)
+    balance_after: int = Field(
+        ...,
+        description="Organization balance after this transaction",
+    )
     source: TransactionSource
     source_id: Optional[UUID] = None
     credit_event_id: Optional[UUID] = None
@@ -378,6 +384,38 @@ class CreditBalance(BaseModel):
     expires_at: Optional[datetime] = None  # Next expiration date
 
 
+class CreditUsageCategory(BaseModel):
+    """Aggregated credit consumption for one event category."""
+
+    category: str
+    credits_consumed: int
+    transaction_count: int
+
+
+class CreditTransactionsResponse(BaseModel):
+    """Paginated credit ledger rows for an organization."""
+
+    items: list[CreditTransactionWithEvent]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class CreditUsageResponse(BaseModel):
+    """Dashboard-ready credit balance, period usage, and transaction details."""
+
+    organization_id: UUID
+    balance: CreditBalance
+    period_start: Optional[datetime] = None
+    period_end: Optional[datetime] = None
+    period_credits_granted: int
+    period_credits_used: int
+    period_credits_remaining: int
+    usage_by_category: list[CreditUsageCategory]
+    transactions: list[CreditTransactionWithEvent]
+
+
 class UsageStats(BaseModel):
     """Usage statistics for the current period."""
 
@@ -430,6 +468,7 @@ class TransactionSourceMapping:
         TransactionSource.REFUND: "billing_history",
         TransactionSource.EXPIRY: None,  # No source_id needed
         TransactionSource.ADMIN_ADJUSTMENT: None,  # No source_id needed
+        TransactionSource.REFERRAL: None,  # No source_id needed
     }
 
     # Sources that require a source_id
@@ -444,6 +483,7 @@ class TransactionSourceMapping:
     SOURCES_WITHOUT_ID = {
         TransactionSource.EXPIRY,
         TransactionSource.ADMIN_ADJUSTMENT,
+        TransactionSource.REFERRAL,
     }
 
     @classmethod

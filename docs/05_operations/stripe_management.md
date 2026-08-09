@@ -12,6 +12,13 @@ The Stripe Manager Tool consolidates all Stripe-related functionality into a sin
 - Seeding database with Stripe data
 - Viewing metadata requirements
 
+> **Current subscription design:** New founder signups use immutable platform
+> plan versions and explicit `billing_mode`; plan entitlements are resolved from
+> Supabase, not inferred from Stripe metadata. Use the platform-admin plan
+> catalog to publish paid versions and create/bind their Stripe Prices. This CLI
+> remains useful for diagnostics, one-time credit-product setup, and legacy
+> compatibility seeding. See [Subscription-Aware Onboarding and Credit Policy](../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md).
+
 ## Location
 
 **File**: `backend/scripts/stripe_manager.py`
@@ -40,7 +47,7 @@ The Stripe Manager Tool consolidates all Stripe-related functionality into a sin
 Ensure your `STRIPE_SECRET_KEY` is set:
 
 ```bash
-# In your .env file
+# In the selected root environment file (normally .env.local)
 STRIPE_SECRET_KEY=sk_test_your_secret_key_here
 ```
 
@@ -118,6 +125,8 @@ The seed command:
 - Intelligently detects subscription plans and credit products
 - Provides smart defaults when metadata is missing
 - Reports uncategorized items for manual review
+
+**Cloud staging:** `./scripts/bootstrap-staging-db.sh` runs migrations, then `stripe_manager seed`, then the entitlements migration. See [staging_environment.md](./staging_environment.md).
 
 ### 5. View Metadata Setup Instructions
 

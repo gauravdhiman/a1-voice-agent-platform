@@ -3,11 +3,12 @@ Stripe webhook event handler.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from shared.config import settings
 
+from .credit_grant_service import credit_grant_service
 from .models import (
     BillingHistoryCreate,
     BillingStatus,
@@ -16,10 +17,44 @@ from .models import (
     TransactionSource,
     TransactionType,
 )
+from .plan_version_service import plan_version_service
 from .service import billing_service
 from .stripe_service import stripe_service
+from .versioned_subscription_service import versioned_subscription_service
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_plan_from_stripe_price(price_id: str):
+    """Resolve plan version and legacy subscription plan from a Stripe price ID.
+
+    Prefers ``plan_versions`` (immutable version binding). Falls back to legacy
+    ``subscription_plans`` when no version row exists (pre-migration environments).
+
+    Args:
+        price_id: Stripe Price identifier.
+
+    Returns:
+        Tuple of (resolved_checkout_plan or None, legacy SubscriptionPlan or None).
+        At least one element is non-None when a match exists.
+
+    Raises:
+        ValueError: When no plan matches the price ID.
+    """
+    try:
+        resolved = await plan_version_service.resolve_checkout_plan(price_id)
+        legacy_plan = None
+        if resolved.subscription_plan_id:
+            legacy_plan = await billing_service.get_subscription_plan(
+                resolved.subscription_plan_id
+            )
+        return resolved, legacy_plan
+    except ValueError:
+        plans = await billing_service.get_subscription_plans(active_only=False)
+        legacy_plan = next((p for p in plans if p.stripe_price_id == price_id), None)
+        if not legacy_plan:
+            raise ValueError(f"No plan found for price ID {price_id}")
+        return None, legacy_plan
 
 
 async def handle_stripe_webhook(payload: bytes, signature: str):
@@ -123,14 +158,30 @@ async def handle_subscription_created(event):
             )
             return
 
-        # Get subscription plan from price ID
+        # Resolve plan version + legacy plan from Stripe price ID
         price_id = subscription["items"]["data"][0]["price"]["id"]
-        plans = await billing_service.get_subscription_plans(active_only=False)
-        plan = next((p for p in plans if p.stripe_price_id == price_id), None)
+        resolved, plan = await _resolve_plan_from_stripe_price(price_id)
+
+        if not plan and resolved and resolved.subscription_plan_id:
+            plan = await billing_service.get_subscription_plan(
+                resolved.subscription_plan_id
+            )
+
+        if not plan and resolved and not resolved.subscription_plan_id:
+            await versioned_subscription_service.record_paid_subscription_from_stripe(
+                UUID(organization_id), resolved, subscription
+            )
+            logger.info(
+                "Created version-bound subscription for organization %s",
+                organization_id,
+            )
+            return
 
         if not plan:
             logger.warning(f"No plan found for price ID {price_id}")
             return
+
+        plan_version_id = resolved.plan_version_id if resolved else None
 
         # Check if organization already has a subscription
         existing_subscription = await billing_service.get_organization_subscription(
@@ -153,6 +204,7 @@ async def handle_subscription_created(event):
 
             update_data = OrganizationSubscriptionUpdate(
                 subscription_plan_id=plan.id,
+                plan_version_id=plan_version_id,
                 stripe_subscription_id=subscription["id"],
                 status=_map_stripe_status(subscription["status"]),
             )
@@ -215,6 +267,7 @@ async def handle_subscription_created(event):
             update_data = OrganizationSubscriptionUpdate(
                 stripe_subscription_id=subscription["id"],
                 status=_map_stripe_status(subscription["status"]),
+                plan_version_id=plan_version_id,
             )
 
             # Only set period dates if they exist
@@ -270,20 +323,41 @@ async def handle_subscription_updated(event):
         # Check if plan changed (downgrade detection)
         plan_changed = False
         is_downgrade = False
-        if current_subscription and current_subscription.plan:
-            # Get the new plan from price ID
-            price_id = subscription["items"]["data"][0]["price"]["id"]
-            plans = await billing_service.get_subscription_plans(active_only=False)
-            new_plan = next((p for p in plans if p.stripe_price_id == price_id), None)
+        price_id = subscription["items"]["data"][0]["price"]["id"]
+        resolved = None
+        new_plan = None
 
-            if new_plan and new_plan.id != current_subscription.plan.id:
+        if current_subscription:
+            try:
+                resolved, new_plan = await _resolve_plan_from_stripe_price(price_id)
+            except ValueError:
+                logger.warning(f"No plan found for price ID {price_id}")
+                new_plan = None
+
+            compare_plan_id = (
+                new_plan.id
+                if new_plan
+                else (resolved.subscription_plan_id if resolved else None)
+            )
+            current_plan_id = (
+                current_subscription.plan.id if current_subscription.plan else None
+            )
+
+            if (
+                compare_plan_id
+                and current_plan_id
+                and compare_plan_id != current_plan_id
+            ):
                 plan_changed = True
-                is_downgrade = (
-                    new_plan.included_credits
-                    < current_subscription.plan.included_credits
-                )
+                if new_plan and current_subscription.plan:
+                    is_downgrade = (
+                        new_plan.included_credits
+                        < current_subscription.plan.included_credits
+                    )
                 logger.info(
-                    f"Plan change detected for organization {organization_id}: {current_subscription.plan.name} -> {new_plan.name}"
+                    f"Plan change detected for organization {organization_id}: "
+                    f"{current_subscription.plan.name if current_subscription.plan else 'unknown'} "
+                    f"-> {new_plan.name if new_plan else compare_plan_id}"
                 )
 
         # Update subscription details
@@ -291,6 +365,13 @@ async def handle_subscription_updated(event):
             status=_map_stripe_status(subscription["status"]),
             cancel_at_period_end=subscription.get("cancel_at_period_end", False),
         )
+
+        if plan_changed and resolved:
+            update_data.plan_version_id = resolved.plan_version_id
+            if resolved.subscription_plan_id:
+                update_data.subscription_plan_id = resolved.subscription_plan_id
+            elif new_plan:
+                update_data.subscription_plan_id = new_plan.id
 
         # Only set period dates if they exist
         if subscription.get("current_period_start"):
@@ -402,40 +483,46 @@ async def handle_invoice_payment_succeeded(event):
 
         await billing_service.create_billing_history(billing_data)
 
-        # If this is a subscription invoice, allocate credits
+        # If this is a subscription invoice, allocate credits through the
+        # shared policy-aware grant service. Stripe may retry this event, so
+        # the invoice id is the stable grant key.
         if invoice.get("subscription"):
             subscription = await stripe_service.get_subscription(
                 invoice["subscription"]
             )
             price_id = subscription["items"]["data"][0]["price"]["id"]
 
-            # Get plan for credit allocation
+            # Legacy plan fallback for credit amount
             plans = await billing_service.get_subscription_plans(active_only=False)
             plan = next((p for p in plans if p.stripe_price_id == price_id), None)
 
-            if plan and plan.included_credits > 0:
-                # Calculate credit expiry (end of current period)
-                expires_at = None
-                if subscription.get("current_period_end"):
-                    expires_at = datetime.fromtimestamp(
-                        subscription["current_period_end"]
+            org_subscription = await billing_service.get_organization_subscription(
+                UUID(organization_id)
+            )
+            if org_subscription:
+                grant_subscription = (
+                    org_subscription.model_dump(mode="json")
+                    if hasattr(org_subscription, "model_dump")
+                    else dict(org_subscription)
+                )
+                period_start = datetime.fromtimestamp(
+                    subscription.get("current_period_start", event["created"]),
+                    tz=timezone.utc,
+                )
+                period_end = (
+                    datetime.fromtimestamp(
+                        subscription["current_period_end"], tz=timezone.utc
                     )
-
-                # Get the actual subscription record to get its ID
-                org_subscription = await billing_service.get_organization_subscription(
-                    UUID(organization_id)
+                    if subscription.get("current_period_end")
+                    else None
                 )
-                subscription_id = org_subscription.id if org_subscription else None
-
-                await billing_service.add_subscription_credits(
-                    organization_id=UUID(organization_id),
-                    credits=plan.included_credits,
-                    subscription_id=subscription_id,
-                    expires_at=expires_at,
-                )
-
-                logger.info(
-                    f"Allocated {plan.included_credits} subscription credits to organization {organization_id}"
+                await credit_grant_service.grant_for_subscription(
+                    grant_subscription,
+                    grant_reason="invoice_paid",
+                    period_start=period_start,
+                    period_end=period_end,
+                    grant_key=f"stripe-invoice:{invoice['id']}",
+                    fallback_credits=plan.included_credits if plan else 0,
                 )
 
         logger.info(

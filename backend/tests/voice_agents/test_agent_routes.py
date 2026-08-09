@@ -900,3 +900,87 @@ class TestAgentPresetAssignment:
         assert result is not None
         # None is always valid — preset service must not be consulted.
         mock_preset.get_preset_by_id.assert_not_awaited()
+
+
+class TestAgentCreateEntitlementLimits:
+    """create_agent enforces plan-version max_agents via EntitlementService."""
+
+    @pytest.mark.asyncio
+    async def test_create_agent_returns_403_when_max_agents_exceeded(self):
+        """Agent create blocked with entitlement_denied when at plan limit."""
+        from shared.voice_agents.models import VoiceAgentCreate
+        from src.billing.entitlement_models import EntitlementDenied
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(CREATE_AGENT_TEST_ORG)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+        auth = (CREATE_AGENT_TEST_USER, _agent_profile(is_org_admin_on=str(CREATE_AGENT_TEST_ORG)))
+
+        with patch("src.voice_agents.routes.entitlement_service") as mock_entitlements, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_entitlements.assert_limit = AsyncMock(
+                side_effect=EntitlementDenied(
+                    "MAX_AGENTS",
+                    "Your plan allows 1 agent.",
+                    limit=1,
+                    current=1,
+                )
+            )
+            mock_svc.create_agent = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_agent(
+                    agent_data=agent_data,
+                    request=request,
+                    _auth=auth,
+                )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail["error"] == "entitlement_denied"
+        assert exc_info.value.detail["code"] == "MAX_AGENTS"
+        mock_svc.create_agent.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_proceeds_when_under_max_agents(self):
+        """Agent create proceeds when entitlement check passes."""
+        from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate
+        from src.voice_agents.routes import create_agent
+
+        body = _agent_create_body(CREATE_AGENT_TEST_ORG)
+        request = _make_post_request(body)
+        agent_data = VoiceAgentCreate(**body)
+        auth = (CREATE_AGENT_TEST_USER, _agent_profile(is_org_admin_on=str(CREATE_AGENT_TEST_ORG)))
+
+        with patch("src.voice_agents.routes.entitlement_service") as mock_entitlements, patch(
+            "src.voice_agents.routes.voice_agent_service"
+        ) as mock_svc:
+            mock_entitlements.assert_limit = AsyncMock(return_value=None)
+            created = VoiceAgent(
+                id=UUID("00000000-0000-0000-0000-0000000000d1"),
+                organization_id=CREATE_AGENT_TEST_ORG,
+                name=body["name"],
+                phone_number=body["phone_number"],
+                persona=body["persona"],
+                tone=body["tone"],
+                mission=body["mission"],
+                custom_instructions=None,
+                is_active=False,
+                preset_id=None,
+                created_at="2026-08-07T00:00:00",
+                updated_at="2026-08-07T00:00:00",
+            )
+            mock_svc.create_agent = AsyncMock(return_value=(created, None))
+
+            result = await create_agent(
+                agent_data=agent_data,
+                request=request,
+                _auth=auth,
+            )
+
+        assert result.id == created.id
+        mock_entitlements.assert_limit.assert_awaited_once_with(
+            CREATE_AGENT_TEST_ORG, "max_agents", increment=1
+        )
+        mock_svc.create_agent.assert_awaited_once()

@@ -6,8 +6,17 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import JSONResponse
+
 from src.auth.dependencies import (
     assert_billing_access,
     assert_platform_role,
@@ -15,6 +24,8 @@ from src.auth.dependencies import (
 )
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
+from src.billing.entitlement_models import OrgEntitlements
+from src.billing.entitlement_service import entitlement_service
 from src.billing.models import (
     BillingHistory,
     CreditBalance,
@@ -23,6 +34,8 @@ from src.billing.models import (
     CreditEvent,
     CreditProduct,
     CreditPurchaseResponse,
+    CreditTransactionsResponse,
+    CreditUsageResponse,
     OrganizationBillingSummary,
     OrganizationSubscriptionUpdate,
     OrganizationSubscriptionWithPlan,
@@ -30,9 +43,20 @@ from src.billing.models import (
     SubscriptionPlan,
     SubscriptionPlanCreate,
     SubscriptionPlanUpdate,
+    TransactionType,
 )
+from src.billing.plan_migration_service import plan_migration_service
 from src.billing.service import billing_service
 from src.billing.stripe_service import stripe_service
+from src.billing.versioned_subscription_models import (
+    CustomerPlanVersion,
+    FreePlanActivationRequest,
+    FreePlanActivationResponse,
+    SubscriptionActivationStatus,
+    VersionedSubscriptionCheckoutRequest,
+    VersionedSubscriptionCheckoutResponse,
+)
+from src.billing.versioned_subscription_service import versioned_subscription_service
 from src.billing.webhook_handler import handle_stripe_webhook
 from src.organization.service import organization_service
 from src.rbac.user_roles.service import user_role_service
@@ -53,6 +77,18 @@ async def get_subscription_plans(active_only: bool = True):
         raise HTTPException(
             status_code=500, detail="Failed to fetch subscription plans"
         )
+
+
+@router.get("/plans/available", response_model=list[CustomerPlanVersion])
+async def get_available_plan_versions():
+    """List the published plan versions currently available for signup."""
+    try:
+        return await versioned_subscription_service.list_available_plan_versions()
+    except Exception as e:
+        logger.error(f"Error fetching available plan versions: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch available plan versions"
+        ) from e
 
 
 @router.post("/plans", response_model=SubscriptionPlan)
@@ -125,6 +161,90 @@ async def update_subscription_plan(
 
 
 # Organization Subscriptions
+@router.post(
+    "/subscription/free",
+    response_model=FreePlanActivationResponse,
+)
+async def activate_free_plan(
+    request: FreePlanActivationRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Activate a published free plan for an organization without Stripe."""
+    try:
+        _, user_profile = user_auth
+        assert_billing_access(
+            user_profile,
+            request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+        return await versioned_subscription_service.activate_free_plan(
+            request.organization_id, request.plan_version_id
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error activating free plan: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to activate free plan"
+        ) from e
+
+
+@router.post(
+    "/checkout/versioned-subscription",
+    response_model=VersionedSubscriptionCheckoutResponse,
+)
+async def create_versioned_subscription_checkout(
+    request: VersionedSubscriptionCheckoutRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Create Stripe Checkout for a published paid plan version."""
+    try:
+        _, user_profile = user_auth
+        assert_billing_access(
+            user_profile,
+            request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+        return await versioned_subscription_service.create_paid_checkout(
+            request, customer_email=user_profile.email
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error creating versioned subscription checkout: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to create subscription checkout"
+        ) from e
+
+
+@router.get(
+    "/subscription/status/{organization_id}",
+    response_model=SubscriptionActivationStatus,
+)
+async def get_subscription_activation_status(
+    organization_id: UUID,
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Return the plan-selection state used by onboarding and dashboard routing."""
+    try:
+        return await versioned_subscription_service.get_activation_status(
+            organization_id
+        )
+    except Exception as e:
+        logger.error(
+            "Error fetching subscription activation status for %s: %s",
+            organization_id,
+            e,
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch subscription activation status"
+        ) from e
+
+
 @router.get(
     "/subscription/{organization_id}", response_model=OrganizationSubscriptionWithPlan
 )
@@ -153,6 +273,59 @@ async def get_organization_subscription(
         )
 
 
+@router.get("/entitlements/{organization_id}", response_model=OrgEntitlements)
+async def get_organization_entitlements(
+    organization_id: UUID,
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Get resolved plan-version entitlements and limits for an organization."""
+    try:
+        return await entitlement_service.get_org_entitlements(organization_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error(
+            f"Error fetching entitlements for organization {organization_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch organization entitlements"
+        ) from e
+
+
+@router.post("/subscription/migrate")
+async def migrate_subscription_plan(
+    request: dict[str, Any],
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Self-service migrate to a newer plan version before grace period ends."""
+    try:
+        user_id, user_profile = user_auth
+        organization_id = request.get("organization_id")
+        if not organization_id:
+            raise HTTPException(status_code=400, detail="organization_id is required")
+
+        org_id = UUID(str(organization_id))
+        assert_billing_access(
+            user_profile,
+            org_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+
+        result = await plan_migration_service.migrate_organization(org_id)
+        return {"success": True, **result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Error migrating subscription for org %s: %s", organization_id, exc
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to migrate subscription plan"
+        ) from exc
+
+
 @router.post("/subscription/checkout", response_model=SubscriptionCheckoutResponse)
 async def create_subscription_checkout(
     organization_id: UUID,
@@ -163,6 +336,7 @@ async def create_subscription_checkout(
 ):
     """Create a Stripe checkout session for subscription."""
     try:
+        _, user_profile = user_auth
         # Get subscription plan
         plan = await billing_service.get_subscription_plan(plan_id)
         if not plan:
@@ -189,7 +363,7 @@ async def create_subscription_checkout(
 
         # Create or get Stripe customer
         customer = await stripe_service.create_customer(
-            email=f"billing@{organization.slug}.example.com",  # TODO: Replace with actual email
+            email=user_profile.email,
             name=organization.name,
             organization_id=str(organization_id),
             metadata={"plan_id": str(plan_id)},
@@ -270,6 +444,17 @@ async def create_customer_portal(
                 status_code=404, detail="Organization subscription not found"
             )
 
+        if not subscription.stripe_customer_id:
+            if (subscription.metadata or {}).get("billing_mode") == "free":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Free plan subscriptions do not have a Stripe billing portal",
+                )
+            raise HTTPException(
+                status_code=404,
+                detail="No Stripe billing customer found for organization",
+            )
+
         logger.info(
             f"Found subscription {subscription.id} with customer {subscription.stripe_customer_id}"
         )
@@ -317,6 +502,49 @@ async def get_credit_balance(
     except Exception as e:
         logger.error(f"Error fetching credit balance for {organization_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch credit balance")
+
+
+@router.get(
+    "/credits/{organization_id}/transactions",
+    response_model=CreditTransactionsResponse,
+)
+async def get_credit_transactions(
+    organization_id: UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    transaction_type: TransactionType | None = Query(None),
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Return the organization's paginated, event-enriched credit ledger."""
+    try:
+        return await billing_service.get_credit_transactions(
+            organization_id,
+            page=page,
+            page_size=page_size,
+            transaction_type=transaction_type,
+        )
+    except Exception as e:
+        logger.error(
+            "Error fetching credit transactions for %s: %s", organization_id, e
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch credit transactions"
+        ) from e
+
+
+@router.get("/credits/{organization_id}/usage", response_model=CreditUsageResponse)
+async def get_credit_usage(
+    organization_id: UUID,
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Return dashboard-ready balances, current-period usage, and ledger rows."""
+    try:
+        return await billing_service.get_credit_usage(organization_id)
+    except Exception as e:
+        logger.error("Error fetching credit usage for %s: %s", organization_id, e)
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch credit usage"
+        ) from e
 
 
 @router.post("/credits/consume", response_model=CreditConsumptionResponse)
@@ -380,6 +608,18 @@ async def create_credit_purchase_checkout(
         product = next((p for p in products if p.id == product_id), None)
         if not product:
             raise HTTPException(status_code=404, detail="Credit product not found")
+
+        # Credit top-ups are gated on the plan's 'credit_topup_enabled' feature.
+        if not await entitlement_service.check_feature(
+            organization_id, "credit_topup_enabled"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Credit top-ups are not enabled for your current plan. "
+                    "Upgrade your plan to purchase additional credits."
+                ),
+            )
 
         # Get organization subscription for customer ID
         subscription = await billing_service.get_organization_subscription(
@@ -529,15 +769,11 @@ async def create_subscription_checkout(
         if existing_subscription and existing_subscription.stripe_customer_id:
             customer_id = existing_subscription.stripe_customer_id
         else:
-            # Get user email from auth service
-            from src.auth.service import auth_service
-
-            # We need to get the user email somehow - let's use a placeholder for now
-            user_email = f"billing@{org['slug']}.example.com"
-
             # Create new customer
             customer = await stripe_service.create_customer(
-                email=user_email, name=org["name"], organization_id=organization_id
+                email=user_profile.email,
+                name=org["name"],
+                organization_id=organization_id,
             )
             customer_id = customer.id
 
@@ -591,6 +827,16 @@ async def create_credits_checkout(
         if not product:
             raise HTTPException(status_code=404, detail="Credit product not found")
 
+        # Credit top-ups are gated on the plan's 'credit_topup_enabled' feature.
+        if not await entitlement_service.check_feature(org_id, "credit_topup_enabled"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Credit top-ups are not enabled for your current plan. "
+                    "Upgrade your plan to purchase additional credits."
+                ),
+            )
+
         # Get organization details
         org_result = (
             billing_service.supabase.table("organizations")
@@ -613,7 +859,7 @@ async def create_credits_checkout(
             customer_id = existing_subscription.stripe_customer_id
         else:
             customer = await stripe_service.create_customer(
-                email=f"billing@{org['slug']}.example.com",
+                email=user_profile.email,
                 name=org["name"],
                 organization_id=organization_id,
             )
@@ -663,9 +909,19 @@ async def create_customer_portal_session(
             UUID(organization_id)
         )
 
-        if not subscription or not subscription.stripe_customer_id:
+        if not subscription:
             raise HTTPException(
                 status_code=404, detail="No subscription found for organization"
+            )
+        if not subscription.stripe_customer_id:
+            if (subscription.metadata or {}).get("billing_mode") == "free":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Free plan subscriptions do not have a Stripe billing portal",
+                )
+            raise HTTPException(
+                status_code=404,
+                detail="No Stripe billing customer found for organization",
             )
 
         # Create customer portal session

@@ -4,6 +4,46 @@
 
 The billing system manages subscriptions, payments, and credit-based usage tracking through Stripe integration. Organizations purchase plans, receive credits, and consume credits through platform usage (voice agent calls, tool execution, etc.).
 
+## Current implementation: subscription-aware onboarding
+
+Founder onboarding is deliberately limited to organization details and plan
+activation. The flow is organization details → published plan-version selection
+→ free activation or paid Stripe Checkout → server-confirmed active/trial
+subscription → dashboard. Agent creation, phone purchase, tool setup, and test
+calls happen after onboarding. Invited users join their inviting organization
+and bypass the founder plan gate.
+
+The customer catalog exposes only published versions marked current for signup.
+`plan_versions.billing_mode` is authoritative: `free` activates without Stripe;
+`paid` requires a Stripe Price. The free path is idempotent and stores null
+Stripe identifiers. The paid path uses the authenticated user's email for the
+Stripe customer, binds the subscription to the selected `plan_version_id` from
+webhook data, and lets the onboarding page poll until the webhook has committed
+an active/trial subscription.
+
+Credit renewal is also explicit. `credit_grant_policy` distinguishes recurring
+from one-time grants. Paid recurring grants are triggered by successful invoice
+webhooks; free recurring grants use the application scheduler because there is
+no Stripe invoice. Both paths use stable grant keys and the
+`grant_subscription_credits` database function for atomic, idempotent updates.
+
+The current runtime model has two prepaid pools: expiring plan credits and
+non-expiring purchased credits. Consumption is plan-first and uses the atomic
+`debit_organization_credits` function. The source-aware credit-lot ledger,
+administrator grants, and referral rewards described in the architecture plan
+are future scope, not current billing behavior. See [Subscription-Aware
+Onboarding and Credit Policy](../../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
+for the complete decision record.
+
+The organization billing page is organized around three tasks: `Manage` (shown
+first for active subscriptions), `Plans`, and `Credits`. The duplicate
+`Overview` tab was removed because the summary cards already show the current
+plan, balance, and billing date. Free subscriptions are valid active
+subscriptions but intentionally have no Stripe customer or billing portal;
+the page shows that state explicitly instead of offering a failing Stripe
+action. Paid subscriptions keep the Stripe portal action, with its scope
+explained in a tooltip.
+
 ## What It Provides
 
 - ✅ **Stripe Integration**: Secure payment processing
@@ -59,7 +99,7 @@ graph TB
 
 ### Plans
 
-Plans define pricing and included resources:
+Plans define pricing and included resources. Each **plan product** (e.g. Starter, Growth) can have multiple **immutable versions**. New signups receive the current published version; existing subscribers remain on the version they subscribed to until they migrate (see [Plan Versioning](../03_implementation/plan_entitlements_and_limits.md)).
 
 | Plan           | Price/Month | Included Credits | Features                               |
 | -------------- | ----------- | ---------------- | -------------------------------------- |
@@ -68,14 +108,13 @@ Plans define pricing and included resources:
 | **Pro**        | $149        | 10,000           | Unlimited agents, all tools            |
 | **Enterprise** | Custom      | Custom           | Dedicated support, custom integrations |
 
-**Plan Attributes**:
+**Plan attributes (per version):**
 
-- Price (monthly/annual)
-- Included credits
-- Agent limit
-- Tool access level
-- Support tier
-- Billing interval (monthly/annual)
+- Price (monthly/annual) — new Stripe Price per published version
+- Included credits and any other limits (sparse — each plan only defines what applies)
+- Feature flags (premium tools, embed, credit top-ups, etc.)
+- Billing interval and trial days
+- Migration policy when superseded (grace period for legacy subscribers)
 
 ### Subscriptions
 
@@ -92,10 +131,34 @@ trialing → active → past_due → (cancel) → canceled
 **Status Descriptions**:
 
 - `trialing`: Free trial period
-- `active`: Subscription is active and payments are current
+- `active`: Subscription is active and payments are current (includes **pending cancel** when `cancel_at_period_end=true` — full access until period end)
 - `past_due`: Payment failed, subscription past due date
-- `canceled`: Subscription canceled, access ends at period end
+- `cancelled`: Subscription ended (after period end or dunning exhausted); entitlements revert to free tier
 - `incomplete`: Initial payment failed
+
+### Cancellation policy
+
+24x7 AI uses **cancel at period end, no refund**:
+
+- When a user cancels, they **keep full plan access** until `current_period_end`
+- **No prorated or full refund** for the current billing period
+- Stripe subscription is modified with `cancel_at_period_end=true` (already implemented)
+- User may **reactivate** before the period ends to continue renewing
+- After period end, webhook `customer.subscription.deleted` moves the org to cancelled / free-tier entitlements
+
+See [Plan Entitlements & Limits — §8.1](../../03_implementation/plan_entitlements_and_limits.md#81-subscription-cancellation-policy-no-refund-active-until-period-end) for full architecture detail.
+
+```mermaid
+stateDiagram-v2
+    active --> pending_cancel: User cancels
+    pending_cancel --> active: Reactivate
+    pending_cancel --> cancelled: Period ends
+    note right of pending_cancel
+        status still "active"
+        full entitlements until current_period_end
+        no refund
+    end note
+```
 
 ### Credits
 
@@ -103,9 +166,19 @@ Credits are consumed for platform usage:
 
 **Credit Sources**:
 
-- Plan renewal (monthly allocation)
+- Plan activation or renewal (monthly allocation, when the plan policy is recurring)
+- One-time free/trial plan allocation (when the plan policy is one-time)
 - Top-up purchases
-- Adjustments (manual/admin actions)
+- Adjustments (legacy ledger records; no current self-service admin grant flow)
+- Referral rewards (planned)
+
+Plan credits and purchased credits are tracked as separate pools. Plan credits
+are consumed first and expire at the period boundary; purchased credits do not
+expire. Subscription grants with a stable `grant_key` are applied through the
+`grant_subscription_credits` PostgreSQL function, which locks the organization
+row and commits expiry bookkeeping, balance updates, and the ledger row as one
+transaction. A retry therefore returns the existing grant instead of applying
+it twice.
 
 **Credit Consumption**:
 
@@ -118,12 +191,41 @@ Credits are consumed for platform usage:
 
 ```sql
 organizations.credit_balance       -- Current balance
+organizations.purchased_credit_balance -- Purchased top-up balance
 credit_transactions              -- Transaction history
   - amount (positive or negative)
   - type (usage, topup, adjustment)
   - reason
-  - metadata
+  - metadata (including subscription grant idempotency keys)
 ```
+
+**Administrator reporting**:
+
+- `GET /api/v1/billing/credits/{organization_id}/usage` returns the live plan
+  and purchased pools, current-period grants/consumption, category totals, and
+  recent ledger rows.
+- `GET /api/v1/billing/credits/{organization_id}/transactions` returns the
+  paginated event-enriched ledger.
+- Completed voice calls are linked to their consumption transaction through
+  `call_logs.credits_consumed` and `call_logs.credit_transaction_id`.
+- The billing UI exposes this reporting to org admins and platform admins. A
+  platform admin must select the organization being inspected; all API queries
+  remain organization-scoped.
+
+The Call Log report orders records by `created_at` and supports agent, status,
+and date filters. The `To` date picker cannot select a date before
+`From`; changing `From` clears an already-invalid `To` value. Because the call
+log table predates the reporting UI, historical rows may have no finalized
+duration. Those rows remain visible and display an em dash for unknown
+duration; the report can be refreshed explicitly and also refetches when the
+page is mounted so a newly completed call does not leave a stale empty list.
+
+Call recording and transcription metadata is stored in `call_artifacts`. Audio
+is planned for a private Supabase Storage bucket and is served only through
+short-lived signed URLs. The current voice worker still uses a no-op recording
+tee, so audio playback and transcription are not enabled until consent,
+retention, and the asynchronous processing worker are implemented. See
+[Call Recording, Transcription, and Playback](../../03_implementation/call_recording_and_transcription.md).
 
 ## Payment Flows
 
@@ -138,9 +240,11 @@ sequenceDiagram
     participant DB as Database
     participant Email as Email
 
-    Admin->>FE: Select plan and click "Subscribe"
-    FE->>Stripe: Create Stripe Checkout session
-    Stripe-->>FE: Checkout URL
+    Admin->>FE: Select paid plan and click "Subscribe"
+    FE->>BE: Request versioned checkout
+    BE->>Stripe: Create Checkout session with bound plan version
+    Stripe-->>BE: Checkout URL
+    BE-->>FE: Checkout URL
     FE->>Admin: Redirect to Stripe Checkout
     Admin->>Stripe: Enter payment details
     Stripe->>Stripe: Process payment
@@ -150,8 +254,15 @@ sequenceDiagram
     BE->>DB: Add credits to org
     BE->>Email: Send payment confirmation
     BE-->>Stripe: Return 200 OK
-    FE-->>Admin: Redirect to dashboard
+    FE-->>Admin: Return to onboarding
+    FE->>BE: Poll activation status
+    BE-->>FE: Active/trial after webhook binding
+    FE-->>Admin: Complete onboarding and redirect to dashboard
 ```
+
+Stripe Customer records created by authenticated checkout routes use the
+signed-in billing user's email. Stripe displays that customer email as a
+non-editable Checkout field; it is not supplied by the browser request.
 
 ### Webhook Handling
 
@@ -574,6 +685,8 @@ async def manual_credit_adjustment(
 
 ## Related Documentation
 
+- [Plan Entitlements & Limits (implementation plan)](../../03_implementation/plan_entitlements_and_limits.md) - Versioned plans, sparse limits/features, grandfathering, migration grace periods, enforcement
+- [ADR: Plan Versioning & Entitlements](../../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md) - Architecture decision record
 - [Payment Flow](../../03_implementation/payment_flow.md) - Detailed payment workflows
 - [Stripe Integration](../../03_implementation/stripe_integration.md) - Implementation details
 - [Product Requirements](../../05_business/prd.md) - Business requirements

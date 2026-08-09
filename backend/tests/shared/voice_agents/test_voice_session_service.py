@@ -54,6 +54,23 @@ class TestVoiceSessionService:
         )
         assert service_b.verify_session_token(token) is None
 
+    def test_phone_session_round_trips_twilio_call_sid(
+        self, session_service: VoiceSessionService
+    ) -> None:
+        """Phone claims preserve the provider CallSid for lifecycle tracking."""
+        call_sid = "CA123456789"
+        token, _ = session_service.create_session_token(
+            agent_id=str(uuid4()),
+            user_id="+15551234567",
+            purpose="phone",
+            call_sid=call_sid,
+        )
+
+        claims = session_service.verify_session_token(token)
+
+        assert claims is not None
+        assert claims.call_sid == call_sid
+
     def test_verify_rejects_wrong_token_type(
         self, session_service: VoiceSessionService
     ) -> None:

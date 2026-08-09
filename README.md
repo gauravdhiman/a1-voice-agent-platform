@@ -24,6 +24,9 @@ cd ai-voice-agent-platform
 # Run setup script
 ./scripts/setup.sh
 
+# The setup script creates the canonical local environment file if needed.
+# Edit .env.local with your local Supabase and shared provider credentials.
+
 # Run database migrations
 cd backend
 alembic upgrade head
@@ -31,7 +34,7 @@ alembic upgrade head
 # Seed notification events
 python scripts/seed_notification_events.py
 
-# Start development containers
+# Start development containers against local Supabase
 cd ..
 ./start.sh start dev
 ```
@@ -55,7 +58,7 @@ cd ..
    npm run dev
    ```
 
-3. **Backend Development (Non-containerized)**
+3. **Backend Development (Non-containerized, advanced)**
 
    ```bash
    cd backend
@@ -63,8 +66,8 @@ cd ..
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    pip install -r requirements.txt
-   cp .env.example .env
-   # Edit .env with your configuration
+   # Run from the repository root so shared settings can load .env.local.
+   ENV_FILE=.env.local python main.py
    python main.py
    ```
 
@@ -90,16 +93,19 @@ cd ..
 6. **Using Docker for Development (Containerized)**
 
     ```bash
-    # Copy and configure environment file
-    cp .env.example .env
-    # Edit .env with your configuration
-
-    # Run all services with development settings (hot reloading)
+    # Create .env.local once from .env.local.example, then run local Supabase.
     ./start.sh start dev
 
-    # Run all services with production settings
+    # Run the same local Docker services against cloud staging Supabase.
+    ./start.sh start dev --env staging
+
+    # Run the production Compose stack against .env.prod.
     ./start.sh start prod
     ```
+
+    See [Environment Configuration](docs/05_operations/environment_configuration.md)
+    for the environment-selection design, staging workflow, and deployment
+    defaults.
 
 ## 🏗️ Architecture
 
@@ -629,12 +635,12 @@ npx tsc --noEmit         # Type check
 ### Pre-Deployment
 
 - [ ] **Environment Configuration**
-  - [ ] Copy `.env.example` to `.env`
+  - [ ] Populate `.env.prod` from `.env.prod.example` for production deployment
   - [ ] Configure Supabase credentials (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
   - [ ] Configure OAuth provider credentials (Google, Microsoft, etc.)
   - [ ] Set `ENCRYPTION_KEY` for production
   - [ ] Configure token refresh timing (default: 5 min check, 15 min window)
-  - [ ] Review and adjust for environment (dev/staging/prod)
+  - [ ] Verify the selected environment with `./start.sh config --env production`
 
  - [ ] **Database Setup**
   - [ ] Run database migrations: `alembic upgrade head`

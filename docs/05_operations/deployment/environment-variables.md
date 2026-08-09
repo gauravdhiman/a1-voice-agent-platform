@@ -1,7 +1,7 @@
 # Production environment variables
 
-All production services read from **`.env.cloud`** at the repo root (gitignored).
-Template: **`.env.cloud.example`**. Deploy with **`./scripts/deploy.sh`**.
+All production services read from **`.env.prod`** at the repo root (gitignored).
+Template: **`.env.prod.example`**. Deploy with **`./scripts/deploy.sh`**.
 
 > **Index:** [deployment/README.md](README.md) · **Local dev config:** [environment_configuration.md](../environment_configuration.md)
 
@@ -12,9 +12,9 @@ Template: **`.env.cloud.example`**. Deploy with **`./scripts/deploy.sh`**.
 | Backend | `backend-247ai` | https://api.247ai.live |
 | Frontend | `frontend-247ai` | https://www.247ai.live |
 | voice-ws | OCI ARM VM + Caddy | wss://voice.247ai.live |
-| Database + Auth | Supabase | project URL in `.env.cloud` |
+| Database + Auth | Supabase | project URL in `.env.prod` |
 
-`gcp-env-from-cloud.py` filters `.env.cloud` into per-service env files for
+`gcp-env-from-cloud.py` filters `.env.prod` into per-service env files for
 Cloud Run (backend) and the OCI VM (voice-ws). Frontend `NEXT_PUBLIC_*` vars are
 passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
 
@@ -53,7 +53,7 @@ passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
 | `ENVIRONMENT` | `production` | No |
 | `DEBUG` | `false` | No |
 | `MCP_ALLOW_LOCAL_URLS` | Keep `false` in production | No |
-| `TOKEN_REFRESH_*` | OAuth token refresh tuning (see `.env.cloud.example`) | No |
+| `TOKEN_REFRESH_*` | OAuth token refresh tuning (see `.env.prod.example`) | No |
 
 ---
 
@@ -105,7 +105,7 @@ WebSocket env var is required on the frontend.
 
 ---
 
-## OCI SSH (not in `.env.cloud`)
+## OCI SSH (not in `.env.prod`)
 
 Set in the shell when deploying voice-ws:
 
@@ -119,14 +119,14 @@ Set in the shell when deploying voice-ws:
 
 ## Pre-deploy checklist
 
-- [ ] `.env.cloud` populated from `.env.cloud.example`
+- [ ] `.env.prod` populated from `.env.prod.example`
 - [ ] Supabase migrations applied: `./scripts/deploy.sh migrate`
 - [ ] `JWT_SECRET_KEY` identical on backend and voice-ws
 - [ ] `VOICE_WS_PUBLIC_URL` / `VOICE_WS_TWILIO_URL` point at production voice host
 - [ ] Stripe webhooks and OAuth redirect URIs use `https://api.247ai.live`
 - [ ] Google Cloud redirect URI: `https://api.247ai.live/api/v1/auth/google/callback`
 - [ ] LinkedIn Developer Portal redirect URI: `https://api.247ai.live/api/v1/auth/linkedin/callback`
-- [ ] Backend has `SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID` and `_SECRET` from `.env.cloud`
+- [ ] Backend has `SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID` and `_SECRET` from `.env.prod`
 - [ ] All **Secret?=Yes** values stored in a team password manager
 
 See [runbook.md](runbook.md) for full deployment steps.

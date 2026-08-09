@@ -2,6 +2,7 @@
 Tests for shared Tool Service.
 """
 import pytest
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -16,6 +17,37 @@ from shared.voice_agents.tool_models import (
     AuthStatus
 )
 from shared.voice_agents.tools.mcp.models import McpToolDef
+
+
+def _platform_tool_row(**over: Any) -> dict:
+    """Build a minimal raw ``platform_tools`` row dict (postgrest shape).
+
+    Shared by the publish-lifecycle and premium-flag test classes so both can
+    assert on the persisted payload without repeating the base row.
+    """
+    base = {
+        "id": str(uuid4()),
+        "name": "custom-mcp",
+        "description": "A custom remote MCP server",
+        "config_schema": None,
+        "auth_type": None,
+        "requires_auth": False,
+        "auth_config": None,
+        "tool_functions_schema": None,
+        "tool_source": "mcp",
+        "mcp_server_url": "https://example.com/mcp",
+        "mcp_server_headers": None,
+        "mcp_server_name": "custom",
+        "mcp_server_secret_headers": None,
+        "organization_id": None,
+        "is_published": True,  # backfilled / published by default
+        "is_active": True,
+        "is_premium": False,
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z",
+    }
+    base.update(over)
+    return base
 
 
 @pytest.fixture
@@ -361,36 +393,12 @@ class TestPlatformToolPublishLifecycle:
     template encrypted at rest. The org-scoped custom tier is retired.
     """
 
-    def _row(self, **over) -> dict:
-        base = {
-            "id": str(uuid4()),
-            "name": "custom-mcp",
-            "description": "A custom remote MCP server",
-            "config_schema": None,
-            "auth_type": None,
-            "requires_auth": False,
-            "auth_config": None,
-            "tool_functions_schema": None,
-            "tool_source": "mcp",
-            "mcp_server_url": "https://example.com/mcp",
-            "mcp_server_headers": None,
-            "mcp_server_name": "custom",
-            "mcp_server_secret_headers": None,
-            "organization_id": None,
-            "is_published": True,  # backfilled / published by default
-            "is_active": True,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z",
-        }
-        base.update(over)
-        return base
-
     async def test_get_platform_tools_filters_to_published_by_default(
         self, tool_service, mock_supabase_client
     ):
         """Default listing (org users) filters to is_published=True."""
         mock_response = MagicMock()
-        mock_response.data = [self._row()]
+        mock_response.data = [_platform_tool_row()]
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         tools, error = await tool_service.get_platform_tools(only_active=False)
@@ -407,7 +415,7 @@ class TestPlatformToolPublishLifecycle:
         """include_drafts=True (platform admin / internal) skips the
         is_published filter so drafts are returned too."""
         mock_response = MagicMock()
-        mock_response.data = [self._row(), self._row(is_published=False, name="draft")]
+        mock_response.data = [_platform_tool_row(), _platform_tool_row(is_published=False, name="draft")]
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         tools, error = await tool_service.get_platform_tools(
@@ -425,7 +433,7 @@ class TestPlatformToolPublishLifecycle:
     ):
         """only_active=True adds is_active=True alongside is_published=True."""
         mock_response = MagicMock()
-        mock_response.data = [self._row()]
+        mock_response.data = [_platform_tool_row()]
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         await tool_service.get_platform_tools(only_active=True)
@@ -452,7 +460,7 @@ class TestPlatformToolPublishLifecycle:
         mock_check = MagicMock()
         mock_check.data = []  # not existing
         mock_insert = MagicMock()
-        mock_insert.data = [self._row(mcp_server_secret_headers="encrypted-blob")]
+        mock_insert.data = [_platform_tool_row(mcp_server_secret_headers="encrypted-blob")]
         mock_supabase_client.table.return_value.execute.side_effect = [
             mock_check,
             mock_insert,
@@ -488,7 +496,7 @@ class TestPlatformToolPublishLifecycle:
         mock_check = MagicMock()
         mock_check.data = []
         mock_insert = MagicMock()
-        mock_insert.data = [self._row(name="no-secret-mcp", mcp_server_secret_headers=None)]
+        mock_insert.data = [_platform_tool_row(name="no-secret-mcp", mcp_server_secret_headers=None)]
         mock_supabase_client.table.return_value.execute.side_effect = [
             mock_check,
             mock_insert,
@@ -521,7 +529,7 @@ class TestPlatformToolPublishLifecycle:
         mock_check = MagicMock()
         mock_check.data = []
         mock_insert = MagicMock()
-        mock_insert.data = [self._row(name="custom-mcp")]
+        mock_insert.data = [_platform_tool_row(name="custom-mcp")]
         mock_supabase_client.table.return_value.execute.side_effect = [
             mock_check,
             mock_insert,
@@ -544,8 +552,8 @@ class TestPlatformToolPublishLifecycle:
         """Rows loaded with an encrypted blob must surface only the flag."""
         mock_response = MagicMock()
         mock_response.data = [
-            self._row(mcp_server_secret_headers="encrypted-blob"),
-            self._row(name="no-secret", mcp_server_secret_headers=None),
+            _platform_tool_row(mcp_server_secret_headers="encrypted-blob"),
+            _platform_tool_row(name="no-secret", mcp_server_secret_headers=None),
         ]
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
@@ -568,7 +576,7 @@ class TestPlatformToolPublishLifecycle:
         # call unsuitable for a unit test of the is_published flip).
         mock_update = MagicMock()
         mock_update.data = [
-            self._row(
+            _platform_tool_row(
                 id=str(tool_id),
                 is_published=True,
                 tool_functions_schema={"functions": [{"name": "t", "description": None, "parameters": {}}]},
@@ -589,7 +597,7 @@ class TestPlatformToolPublishLifecycle:
     async def test_unpublish_flips_is_published_false(self, tool_service, mock_supabase_client):
         tool_id = uuid4()
         mock_update = MagicMock()
-        mock_update.data = [self._row(id=str(tool_id), is_published=False)]
+        mock_update.data = [_platform_tool_row(id=str(tool_id), is_published=False)]
         mock_supabase_client.table.return_value.execute.return_value = mock_update
 
         result, error = await tool_service.publish_platform_tool(tool_id, False)
@@ -628,7 +636,7 @@ class TestPlatformToolPublishLifecycle:
         """Publishing an MCP row with null tool_functions_schema discovers live
         and persists the tool list so the drawer can render it."""
         tool_id = uuid4()
-        row = self._row(id=str(tool_id), is_published=True, tool_functions_schema=None)
+        row = _platform_tool_row(id=str(tool_id), is_published=True, tool_functions_schema=None)
         # First .execute() → is_published update returns the row; second .execute()
         # → the backfill's tool_functions_schema update returns the updated row.
         backfill_row = dict(row)
@@ -666,7 +674,7 @@ class TestPlatformToolPublishLifecycle:
     ):
         """A row that already has tool_functions_schema is not re-discovered."""
         tool_id = uuid4()
-        row = self._row(
+        row = _platform_tool_row(
             id=str(tool_id),
             is_published=True,
             tool_functions_schema={"functions": [{"name": "x", "description": None, "parameters": {}}]},
@@ -688,7 +696,7 @@ class TestPlatformToolPublishLifecycle:
     ):
         """Unpublishing (published=False) never triggers discovery."""
         tool_id = uuid4()
-        row = self._row(id=str(tool_id), is_published=False, tool_functions_schema=None)
+        row = _platform_tool_row(id=str(tool_id), is_published=False, tool_functions_schema=None)
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[row])
 
         with patch.object(tool_service, "_discover_functions_schema") as mock_discover:
@@ -705,7 +713,7 @@ class TestPlatformToolPublishLifecycle:
         """If live discovery fails (returns None), publish still succeeds with
         is_published=True and no backfill update is written."""
         tool_id = uuid4()
-        row = self._row(id=str(tool_id), is_published=True, tool_functions_schema=None)
+        row = _platform_tool_row(id=str(tool_id), is_published=True, tool_functions_schema=None)
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[row])
 
         with patch.object(tool_service, "_discover_functions_schema", return_value=None):
@@ -726,7 +734,7 @@ class TestPlatformToolPublishLifecycle:
         (no org key at platform-publish time). Then it lists tools and maps them
         to {functions: [{name, description, parameters}]}.
         """
-        row = self._row(
+        row = _platform_tool_row(
             tool_functions_schema=None,
             mcp_server_headers={"X-Public": "pub"},
             mcp_server_secret_headers="encrypted-blob",
@@ -765,7 +773,7 @@ class TestPlatformToolPublishLifecycle:
         self, tool_service, mock_supabase_client
     ):
         """A transport failure (list_tools raises) yields None — non-fatal."""
-        row = self._row(tool_functions_schema=None, mcp_server_headers={})
+        row = _platform_tool_row(tool_functions_schema=None, mcp_server_headers={})
         with patch(
             "shared.voice_agents.tools.mcp.json_http_client.list_tools_json_http",
             new_callable=AsyncMock,
@@ -929,7 +937,7 @@ class TestPlatformToolPublishLifecycle:
             mcp_secret_headers_input={"Authorization": "Bearer {{KEY}}"},
         )
         mock_update = MagicMock()
-        mock_update.data = [self._row(id=str(tool_id), mcp_server_secret_headers="enc")]
+        mock_update.data = [_platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")]
         mock_supabase_client.table.return_value.execute.return_value = mock_update
 
         with patch(
@@ -946,3 +954,270 @@ class TestPlatformToolPublishLifecycle:
         assert "organization_id" not in updated
         eq_call = mock_supabase_client.table.return_value.eq.call_args
         assert eq_call.args == ("id", str(tool_id))
+
+    async def test_update_platform_tool_clears_public_headers_when_empty(
+        self, tool_service, mock_supabase_client
+    ):
+        """Clearing public headers must persist as {} — not leave the old JSONB."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            mcp_server_headers=None,
+            description=None,
+            requires_auth=False,
+            auth_type=None,
+        )
+        mock_update = MagicMock()
+        mock_update.data = [
+            _platform_tool_row(
+                id=str(tool_id),
+                mcp_server_headers={},
+                description=None,
+                requires_auth=False,
+                auth_type=None,
+            )
+        ]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        assert result is not None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert updated["mcp_server_headers"] == {}
+        assert updated["description"] is None
+        assert updated["auth_type"] is None
+        assert updated["requires_auth"] is False
+
+    async def test_update_platform_tool_preserves_secrets_when_input_omitted(
+        self, tool_service, mock_supabase_client
+    ):
+        """Blank secret field on edit must not wipe stored mcp_server_secret_headers."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            requires_auth=True,
+            auth_type="api_key",
+            # mcp_secret_headers_input omitted → None
+        )
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        assert result is not None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert "mcp_server_secret_headers" not in updated
+
+    async def test_update_platform_tool_clears_secrets_when_auth_disabled(
+        self, tool_service, mock_supabase_client
+    ):
+        """Switching to No auth clears stored secret headers."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            requires_auth=False,
+            auth_type=None,
+        )
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id))]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert updated["mcp_server_secret_headers"] is None
+
+    async def test_merge_stored_mcp_secret_headers_literal(
+        self, tool_service, mock_supabase_client
+    ):
+        """Discover merge applies literal stored secrets when the form left them blank."""
+        tool_id = uuid4()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]
+        )
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"Authorization": "Bearer stored"},
+        ):
+            merged, error = await tool_service.merge_stored_mcp_secret_headers(
+                tool_id, {"X-Client": "ui"}
+            )
+
+        assert error is None
+        assert merged == {
+            "X-Client": "ui",
+            "Authorization": "Bearer stored",
+        }
+
+    async def test_merge_stored_mcp_secret_headers_requires_test_key_for_template(
+        self, tool_service, mock_supabase_client
+    ):
+        tool_id = uuid4()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]
+        )
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"Authorization": "Bearer {{KEY}}"},
+        ):
+            merged, error = await tool_service.merge_stored_mcp_secret_headers(
+                tool_id, {}
+            )
+
+        assert merged == {}
+        assert error is not None
+        assert "{{KEY}}" in error
+
+    async def test_merge_stored_mcp_secret_headers_fills_template(
+        self, tool_service, mock_supabase_client
+    ):
+        tool_id = uuid4()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]
+        )
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"Authorization": "Bearer {{KEY}}"},
+        ):
+            merged, error = await tool_service.merge_stored_mcp_secret_headers(
+                tool_id, {}, test_api_key="probe-key"
+            )
+
+        assert error is None
+        assert merged["Authorization"] == "Bearer probe-key"
+
+
+class TestSetPlatformToolPremium:
+    """set_platform_tool_premium flips is_premium on a row by id.
+
+    Mirrors publish_platform_tool: a single-column update keyed on the tool
+    id, so the platform-admin Premium toggle in the tools manager never has
+    to resubmit the full create payload.
+    """
+
+    async def test_set_premium_true_flips_flag(
+        self, tool_service, mock_supabase_client
+    ):
+        tool_id = uuid4()
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id), is_premium=True)]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.set_platform_tool_premium(tool_id, True)
+
+        assert error is None
+        assert result is not None
+        assert result.is_premium is True
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0] == {"is_premium": True}
+        eq_call = mock_supabase_client.table.return_value.eq.call_args
+        assert eq_call.args == ("id", str(tool_id))
+
+    async def test_set_premium_false_flips_flag(
+        self, tool_service, mock_supabase_client
+    ):
+        tool_id = uuid4()
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id), is_premium=False)]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.set_platform_tool_premium(tool_id, False)
+
+        assert error is None
+        assert result.is_premium is False
+
+    async def test_set_premium_unknown_tool_returns_not_found(
+        self, tool_service, mock_supabase_client
+    ):
+        mock_update = MagicMock()
+        mock_update.data = []
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.set_platform_tool_premium(uuid4(), True)
+
+        assert result is None
+        assert error == "Platform tool not found"
+
+
+class TestUpsertPreservesLegacyPremiumFlag:
+    """The worker startup sync must not clobber a premium flag set by a
+    platform admin on a legacy (code-backed) tool.
+
+    ``PlatformToolRegistry.sync_with_db`` upserts legacy rows WITHOUT
+    ``is_premium`` (the code registry carries no premium metadata), so an
+    update-by-name would otherwise reset the flag to the model default
+    (False) on every voice-ws restart. ``upsert_platform_tool`` therefore
+    drops ``is_premium`` from the update payload for existing LEGACY rows,
+    preserving whatever the admin set via the Premium toggle.
+    """
+
+    async def test_legacy_upsert_preserves_existing_premium_flag(
+        self, tool_service, mock_supabase_client
+    ):
+        """A legacy row with is_premium=True keeps the flag after a sync-style
+        upsert that does not mention is_premium."""
+        tool_id = uuid4()
+        mock_check = MagicMock()
+        mock_check.data = [_platform_tool_row(id=str(tool_id), tool_source="legacy", is_premium=True)]
+        mock_update = MagicMock()
+        mock_update.data = [
+            _platform_tool_row(id=str(tool_id), tool_source="legacy", is_premium=True)
+        ]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            mock_check,
+            mock_update,
+        ]
+
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.LEGACY,
+            description="re-seeded by the worker",
+        )
+
+        result, error = await tool_service.upsert_platform_tool(tool_data)
+
+        assert error is None
+        assert result.is_premium is True
+        # The update payload must NOT carry is_premium — the DB value wins.
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert "is_premium" not in update_call.args[0]
+
+    async def test_mcp_upsert_does_carry_premium_flag(
+        self, tool_service, mock_supabase_client
+    ):
+        """MCP rows are authored from the UI, which sends is_premium explicitly
+        (author-form checkbox) — the payload passes through unchanged."""
+        tool_id = uuid4()
+        mock_check = MagicMock()
+        mock_check.data = [_platform_tool_row(id=str(tool_id), is_premium=False)]
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id), is_premium=True)]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            mock_check,
+            mock_update,
+        ]
+
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            mcp_server_name="custom",
+            is_premium=True,
+        )
+
+        result, error = await tool_service.upsert_platform_tool(tool_data)
+
+        assert error is None
+        assert result.is_premium is True
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0]["is_premium"] is True

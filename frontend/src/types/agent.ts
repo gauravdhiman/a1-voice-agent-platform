@@ -123,6 +123,12 @@ export interface PlatformTool {
   } | null;
   is_active: boolean;
   /**
+   * Premium tools require the org's plan to entitle the ``premium_tools``
+   * feature. They remain visible in the catalog with a Premium badge; the
+   * attach action is blocked in the UI and enforced by the API.
+   */
+  is_premium?: boolean;
+  /**
    * Publish-lifecycle flag (RFC §6.6). `false` (draft) = platform-admin-only;
    * `true` (published) + `is_active=true` = visible to all org users in the
    * tool panel as a normal tool card they can attach. Platform admins author a

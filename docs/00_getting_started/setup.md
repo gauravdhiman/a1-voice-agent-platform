@@ -14,18 +14,18 @@ Before you begin, ensure you have the following installed:
 
 ## Environment Configuration
 
-The project uses different environment files depending on your development approach:
+The project has three canonical root environment files:
 
-### Local Development (Non-containerized)
+- `.env.local` — local Supabase; default for `./start.sh start dev`
+- `.env.staging` — cloud staging Supabase; use `./start.sh start dev --env staging`
+- `.env.prod` — production Supabase; default for `./start.sh start prod` and deployment
 
-- **Backend**: `backend/.env` (copy from `backend/.env.example`)
-- **Frontend**: `frontend/.env.local` (copy from `frontend/.env.local.example`)
+Create each from its matching `.example` template. Do not copy any file into a
+root `.env`; the startup script and Compose files select the correct file.
 
-### Containerized Development
-
-- **Root**: `.env` (copy from `.env.example`)
-
-**Important**: The service-specific environment files (`backend/.env` and `frontend/.env.local`) are **only for non-containerized local development**. When running services in Docker containers, the root `.env` file is used instead.
+The supported development workflow is containerized. The service-specific
+`backend/.env` and `frontend/.env.local` files are compatibility files for
+advanced non-containerized workflows only.
 
 ### Supabase Configuration
 
@@ -199,21 +199,24 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements-dev.txt
 
-# Copy environment configuration
-cp .env.example .env
-
-# Edit .env with your configuration
-nano .env  # or use your preferred editor
+# From the repository root, create .env.local once from .env.local.example.
+# Select staging instead with: ENV_FILE=.env.staging python backend/main.py
+cd ..
 
 # Run the application
-python main.py
+python backend/main.py
 ```
 
 The API will be available at [http://localhost:8000](http://localhost:8000)
 
 API documentation will be available at [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### Frontend Setup
+### Frontend Setup (advanced direct workflow)
+
+The recommended frontend workflow is to run the complete stack from the
+repository root with `./start.sh`. The nested file below is a Next.js
+compatibility file for running only the frontend outside Docker; it is not an
+environment selector.
 
 ```bash
 # Navigate to frontend directory
@@ -222,7 +225,7 @@ cd frontend
 # Install dependencies
 npm install
 
-# Copy environment configuration
+# Copy the frontend-only compatibility configuration
 cp .env.local.example .env.local
 
 # Edit .env.local with your configuration
@@ -247,11 +250,9 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements-dev.txt
 
-# Copy environment configuration
-cp .env.example .env
-
-# Edit .env with your configuration
-nano .env
+# Use the root selected environment file. The supported workflow is Docker;
+# for a direct worker process, export variables from that selected file first.
+# Example: ./start.sh start voice-ws dev --env local
 
 # Run voice-ws
 uvicorn src.main:app --host 0.0.0.0 --port 7860 --reload
@@ -364,7 +365,7 @@ To enable billing functionality:
    - Add endpoint: `https://your-domain.com/api/billing/webhooks`
    - Select events: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
 
-4. **Add keys to `.env`**:
+4. **Add keys to the selected environment file** (normally `.env.local`):
    ```bash
    STRIPE_PUBLISHABLE_KEY=pk_live_your_publishable_key
    STRIPE_SECRET_KEY=sk_live_your_secret_key
@@ -379,7 +380,7 @@ The platform uses **`voice-ws`** (Pipecat WebSocket) for browser test calls and 
 
 1. **Ensure voice-ws is running** (default with `./start.sh start dev`)
 
-2. **Add to `.env`** (backend + voice-ws share `JWT_SECRET_KEY`):
+2. **Add to the selected root environment file** (backend + voice-ws share `JWT_SECRET_KEY`):
 
    ```bash
    JWT_SECRET_KEY=<openssl rand -hex 32>
@@ -413,7 +414,7 @@ The platform uses Resend.com for email notifications.
    - Go to Resend Dashboard → API Keys
    - Create a new API key
 
-3. **Add key to `.env`**:
+3. **Add the key to the selected root environment file**:
    ```bash
    RESEND_API_KEY=re_your_api_key
    RESEND_FROM_EMAIL=noreply@yourdomain.com
@@ -483,7 +484,7 @@ If you encounter port conflicts on ports 3000, 8000, 54323, or 4318:
 # Find and kill the process using the port
 lsof -ti:3000 | xargs kill -9
 
-# Or use a different port by modifying .env
+# Or use a different port by modifying the selected root environment file
 ```
 
 #### Docker Issues
@@ -506,7 +507,7 @@ docker system prune -a
 
 If you can't connect to Supabase:
 
-- Verify DATABASE_URL in `.env` is correct
+- Verify DATABASE_URL in the selected root environment file is correct
 - Check Supabase project is active
 - Ensure your IP is allowed in Supabase settings
 - Verify database password is correct

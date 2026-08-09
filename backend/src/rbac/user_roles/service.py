@@ -983,9 +983,12 @@ class UserRoleService:
                         is_active=org_dict["is_active"],
                         industry=org_dict.get("industry"),
                         location=org_dict.get("location"),
+                        timezone=org_dict.get("timezone"),
                         business_details=org_dict.get("business_details"),
                         google_api_key=org_dict.get("google_api_key"),
-                        onboarding_completed=org_dict.get("onboarding_completed", False),
+                        onboarding_completed=org_dict.get(
+                            "onboarding_completed", False
+                        ),
                         created_at=org_dict["created_at"],
                         updated_at=org_dict["updated_at"],
                     )

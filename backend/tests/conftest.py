@@ -73,6 +73,7 @@ def mock_supabase_client():
     table_mock.gte.return_value = table_mock
     table_mock.lte.return_value = table_mock
     table_mock.is_.return_value = table_mock
+    table_mock.in_.return_value = table_mock
     table_mock.execute.return_value = MagicMock(data=[])
     client.table.return_value = table_mock
 

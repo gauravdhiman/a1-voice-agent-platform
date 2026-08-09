@@ -27,6 +27,7 @@ from pipecat.transports.websocket.fastapi import (
 
 from shared.voice_agents.voice_session_service import VoiceSessionClaims
 
+from src.call_tracking import end_call_tracking, start_call_tracking
 from src.recording import NoOpRecordingTee
 from src.session_setup import prepare_voice_session
 
@@ -105,7 +106,17 @@ async def run_bot(
         """Stop the active pipeline after its only participant leaves."""
         await task.cancel()
 
+    call_log_id = None
+    if bundle.agent.organization_id:
+        call_log_id = await start_call_tracking(
+            session_id=claims.session_id,
+            call_sid=claims.call_sid,
+            organization_id=bundle.agent.organization_id,
+            agent_id=bundle.agent.id,
+        )
+
     try:
         await PipelineRunner(handle_sigint=False).run(task)
     finally:
+        await end_call_tracking(call_log_id)
         await _close_mcp_clients(bundle.tools.mcp_clients)

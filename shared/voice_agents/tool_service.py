@@ -281,12 +281,37 @@ class ToolService:
             # org-scoped custom tier is retired; the column is dormant).
             if tool_data.tool_source is ToolSource.MCP:
                 data_dict.pop("organization_id", None)
+                # Cleared public headers arrive as None; persist as {} so an
+                # upsert-by-name edit does not leave stale JSONB in place.
+                data_dict["mcp_server_headers"] = (
+                    tool_data.mcp_server_headers or {}
+                )
 
-            # Encrypt plaintext server-level secret headers before persisting.
+            # Legacy (code-backed) tools carry NO premium metadata in the
+            # registry: ``PlatformToolRegistry.sync_with_db`` re-upserts them
+            # without ``is_premium`` on every worker startup, which would
+            # otherwise reset an admin-set premium flag to False. Preserve the
+            # DB value on updates of existing LEGACY rows (inserts keep the
+            # model default). MCP rows always send ``is_premium`` explicitly
+            # (author-form checkbox), so they pass through unchanged.
+            if tool_data.tool_source is ToolSource.LEGACY and existing.data:
+                data_dict.pop("is_premium", None)
+
+            # Always write clearable fields on update so blanking them in the UI
+            # is not a no-op (exclude_none would otherwise drop them).
+            if existing.data:
+                data_dict["description"] = tool_data.description
+                data_dict["auth_type"] = tool_data.auth_type
+                data_dict["requires_auth"] = tool_data.requires_auth
+
             if tool_data.mcp_secret_headers_input:
                 data_dict["mcp_server_secret_headers"] = encrypt_data(
                     tool_data.mcp_secret_headers_input
                 )
+            elif tool_data.requires_auth is False:
+                # Switching to "No auth" clears stored secret headers so a later
+                # discover/edit session does not keep sending stale credentials.
+                data_dict["mcp_server_secret_headers"] = None
 
             if existing.data:
                 response = (
@@ -362,6 +387,133 @@ class ToolService:
             logger.error(f"Error getting platform tools: {e}")
             return [], str(e)
 
+    @tracer.start_as_current_span("tool.get_platform_tool_by_id")
+    async def get_platform_tool_by_id(
+        self, tool_id: UUID
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Fetch a single platform tool row by id.
+
+        Used for attach-time checks (e.g. premium gating) without loading the
+        full catalog.
+
+        Args:
+            tool_id: ``platform_tools.id``.
+
+        Returns:
+            Tuple of (platform tool, error). ``(None, "not found")`` when the
+            row does not exist.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .select("*")
+                .eq("id", str(tool_id))
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(f"Error getting platform tool {tool_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("tool.merge_stored_mcp_secret_headers")
+    async def merge_stored_mcp_secret_headers(
+        self,
+        tool_id: UUID,
+        probe_headers: dict[str, str],
+        *,
+        test_api_key: Optional[str] = None,
+    ) -> tuple[dict[str, str], Optional[str]]:
+        """Merge encrypted stored secret headers into an in-memory MCP probe.
+
+        Used by ``POST /tools/mcp/discover`` when a platform admin re-tests an
+        existing tool without re-pasting secrets. Request headers win on key
+        conflicts so typed overrides still work. ``{{KEY}}`` placeholders in
+        stored values are filled from ``test_api_key``; if a placeholder remains
+        and no test key was provided, returns a clear 400-style error so the UI
+        can prompt for the transient Test API key.
+
+        Args:
+            tool_id: ``platform_tools`` row to load secrets from.
+            probe_headers: Headers already resolved by the UI (public + any
+                typed secret overrides for this probe).
+            test_api_key: Optional transient key for ``{{KEY}}`` substitution.
+                Never persisted.
+
+        Returns:
+            Tuple of ``(merged_headers, error)``. ``error`` is a user-facing
+            message when the tool is missing or a ``{{KEY}}`` cannot be filled.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .select("id, mcp_server_secret_headers")
+                .eq("id", str(tool_id))
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return probe_headers, "Platform tool not found"
+
+            encrypted = response.data[0].get("mcp_server_secret_headers")
+            if not encrypted:
+                return dict(probe_headers), None
+
+            try:
+                secret_headers = decrypt_data(encrypted)
+            except Exception as e:
+                logger.error(
+                    "Failed to decrypt mcp_server_secret_headers for discover "
+                    "probe on tool %s: %s",
+                    tool_id,
+                    e,
+                    exc_info=True,
+                )
+                return (
+                    probe_headers,
+                    "Could not decrypt stored secret headers for this tool.",
+                )
+
+            if not isinstance(secret_headers, dict):
+                return dict(probe_headers), None
+
+            merged = dict(probe_headers)
+            needs_test_key = False
+            for key, raw_value in secret_headers.items():
+                header_key = str(key)
+                # Typed overrides from the form win over stored values.
+                if any(k.lower() == header_key.lower() for k in merged):
+                    continue
+                value = str(raw_value)
+                if "{{KEY}}" in value:
+                    if test_api_key:
+                        merged[header_key] = value.replace(
+                            "{{KEY}}", str(test_api_key)
+                        )
+                    else:
+                        needs_test_key = True
+                else:
+                    merged[header_key] = value
+
+            if needs_test_key:
+                return (
+                    probe_headers,
+                    "Stored secret headers use {{KEY}}. Enter a Test API key "
+                    "to substitute it for this probe (it is never saved).",
+                )
+            return merged, None
+        except Exception as e:
+            logger.error(
+                f"Error merging stored MCP secret headers for {tool_id}: {e}",
+                exc_info=True,
+            )
+            return probe_headers, str(e)
+
     @tracer.start_as_current_span("tool.publish_platform_tool")
     async def publish_platform_tool(
         self, tool_id: UUID, published: bool
@@ -433,6 +585,48 @@ class ToolService:
             )
         except Exception as e:
             logger.error(f"Error publishing platform tool {tool_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("tool.set_platform_tool_premium")
+    async def set_platform_tool_premium(
+        self, tool_id: UUID, is_premium: bool
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Set or clear a platform tool's ``is_premium`` flag by id.
+
+        Mirrors :meth:`publish_platform_tool`: a single-column update keyed
+        on the tool id, so the platform-admin Premium toggle in the tools
+        manager never has to resubmit the full create payload. Premium tools
+        render with a Premium badge in every org's catalog and attach is
+        gated on the plan's ``premium_tools`` feature (the route layer
+        enforces the 403). Existing ``agent_tools`` attachments keep working
+        regardless of the flag.
+
+        Args:
+            tool_id: The ``platform_tools`` row id.
+            is_premium: True to gate the tool behind the ``premium_tools``
+                plan feature; False to make it available to all plans.
+
+        Returns:
+            Tuple of (updated PlatformTool, error). ``(None, "not found")``
+            if the row does not exist.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .update({"is_premium": is_premium})
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting premium flag on platform tool {tool_id}: {e}"
+            )
             return None, str(e)
 
     async def _discover_functions_schema(
@@ -545,10 +739,23 @@ class ToolService:
             data_dict = tool_data.model_dump(exclude_none=True, mode="json")
             if tool_data.tool_source is ToolSource.MCP:
                 data_dict.pop("organization_id", None)
+                # Cleared form fields arrive as None and would be dropped by
+                # exclude_none — write empty/null explicitly so edits persist.
+                data_dict["mcp_server_headers"] = (
+                    tool_data.mcp_server_headers or {}
+                )
+            # Always write these so clearing them in the UI is not a no-op.
+            data_dict["description"] = tool_data.description
+            data_dict["auth_type"] = tool_data.auth_type
+            data_dict["requires_auth"] = tool_data.requires_auth
             if tool_data.mcp_secret_headers_input:
                 data_dict["mcp_server_secret_headers"] = encrypt_data(
                     tool_data.mcp_secret_headers_input
                 )
+            elif tool_data.requires_auth is False:
+                # Switching to "No auth" clears stored secret headers so a later
+                # discover/edit session does not keep sending stale credentials.
+                data_dict["mcp_server_secret_headers"] = None
             response = (
                 self.supabase.table("platform_tools")
                 .update(data_dict)

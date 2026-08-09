@@ -41,7 +41,7 @@ the active roadmap.
 | Security Hardening | 2026-03-29 | Rate limiting, JWT signature verification, security headers, ES256 for local Supabase. |
 | SMB 5-step Onboarding Wizard | 2026-03-29 | Template selection, validation, activation gating. |
 | Landing Page Redesign | 2026-03-29 | Early-adopter CTA, 4-tier pricing, branding (24x7 AI). |
-| 247ai.live production deploy (GCP + OCI) | 2026-08 | `scripts/deploy.sh`, `docs/05_operations/deployment/`, `.env.cloud.example`. |
+| 247ai.live production deploy (GCP + OCI) | 2026-08 | `scripts/deploy.sh`, `docs/05_operations/deployment/`, `.env.prod.example`. |
 | N1 Epic A — Permission vocabulary lock-in | 2026-07-11 | Canonical resource × action matrix in `docs/02_features/authentication_rbac/permission-matrix.md`; `frontend/src/lib/permissions.ts` exports the `P` namespace + `isCanonicalPermission` validator; `permissions.test.ts` pins the contract (14 tests); the legacy `agent:write` / `member:invite` / `member:remove` / `settings:*` names are now rejected by the validator. |
 | N1 Epic B — Single FE permission API | 2026-07-11 | Page-level gates go through `useHasPermission(...)` (low-level) or `useUserPermissions()` (page facade); old role-only gates dropped where a permission is the right check; the `NODE_ENV === "development"` grant-all fallback removed (test `does NOT grant-all when NODE_ENV is development` guards the regression). `useMyPermissions` re-uses the auth context's `/me` query cache, invalidated on org switch. 17 facade tests + 14 `useHasPermission` tests pin the contract. |
 | N1 Epic D (partial) — Doc & IA cleanup | 2026-07-11 | `docs/tw-drafts/navigation-redesign.md` brought to as-implemented: §1, §2, §3, §4, §5, §6, §8, §9 all reflect the shipped product (canonical CRUD names, composite actions, regular-user-is-read-only rule, deferred-items list). `docs/tw-drafts/n1-architecture-review.md` is the as-built audit; the `/me` + permission-string test files were renamed to match the embedded-on-`/me` decision. Epic D still owns the `?org_id=` → `/{orgId}/` URL refactor (task #27) and the `OrganizationSkillsTab` URL-noise cleanup (§4.5 of the review). |
@@ -78,7 +78,10 @@ the active roadmap.
 
 ### Low-priority housekeeping
 - Prune merged/stale git branches (~7 fully-merged + several squash-merged remotes safe to delete) — deferred; needs per-branch confirmation.
-- Minor TODO: `backend/src/billing/routes.py:187` placeholder `billing@{slug}.example.com` email.
+- Checkout customer email now comes from the authenticated billing user across
+  onboarding, subscription, and credit checkout routes. The separate
+  webhook-only fallback in `BillingService.create_organization_subscription`
+  remains because that path has no authenticated request context.
 - `OrganizationPage` (`frontend/src/app/(dashboard)/organization/page.tsx`) is a "god page" with 4 tabs that duplicates top-level routes (Agents, Skills, Phone Numbers). Targeted for refactor in N1: collapse to a settings-only page (Profile / Members / Billing / Danger Zone), promote the other tabs to top-level routes.
 
 ### 🟣 Deferred / Speculative (build only when a real need appears)

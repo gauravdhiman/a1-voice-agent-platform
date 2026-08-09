@@ -6,6 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
+
+from shared.common.errors import ErrorCode
 from src.auth.dependencies import (
     assert_has_permission,
     assert_has_role,
@@ -13,6 +15,7 @@ from src.auth.dependencies import (
 )
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
+from src.billing.service import billing_service
 from src.organization.invitation_models import Invitation, InvitationCreate
 from src.organization.member_models import OrganizationMember
 from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
@@ -20,8 +23,6 @@ from src.organization.service import organization_service
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
-
-from shared.common.errors import ErrorCode
 
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)
@@ -394,6 +395,16 @@ async def complete_onboarding(
         org_id=org_id,
         error_message="Only organization administrators can complete onboarding",
     )
+
+    subscription = await billing_service.get_organization_subscription(org_id)
+    if not subscription or subscription.status not in {"active", "trial"}:
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, "Active subscription required")
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An active or trial subscription is required before completing onboarding",
+        )
 
     organization, error = await organization_service.complete_onboarding(org_id)
     if error:

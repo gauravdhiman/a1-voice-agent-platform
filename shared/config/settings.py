@@ -4,14 +4,48 @@ Uses Pydantic Settings for type-safe configuration handling.
 """
 
 import json
-from typing import Optional
+import os
+from pathlib import Path
+from typing import Any, Optional
 
 from pydantic import AliasChoices, Field, validator
 from pydantic_settings import BaseSettings
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_env_file() -> str:
+    """Resolve the environment file used by non-containerized application code.
+
+    ``ENV_FILE`` may contain an absolute path or a path relative to the project
+    root. When it is not provided, local development uses ``.env.local``. Docker
+    Compose injects the selected file's variables directly, so this fallback is
+    primarily for direct backend, worker, and Alembic commands.
+
+    Returns:
+        Absolute path to the selected environment file.
+    """
+    configured = os.getenv("ENV_FILE")
+    if configured:
+        path = Path(configured)
+        return str(path if path.is_absolute() else PROJECT_ROOT / path)
+    return str(PROJECT_ROOT / ".env.local")
+
+
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
+
+    def __init__(self, **values: Any) -> None:
+        """Initialize settings using the selected environment file.
+
+        Args:
+            **values: Explicit Pydantic setting overrides. The private
+                ``_env_file`` override is populated from ``ENV_FILE`` unless a
+                caller supplies it explicitly.
+        """
+        values.setdefault("_env_file", resolve_env_file())
+        super().__init__(**values)
 
     # Application Settings
     app_name: str = Field(default="24x7 AI", description="Application name")
@@ -248,7 +282,7 @@ class Settings(BaseSettings):
         return v
 
     class Config:
-        env_file = ".env"
+        env_file = str(PROJECT_ROOT / ".env.local")
         env_file_encoding = "utf-8"
         case_sensitive = False
         extra = "allow"  # Allow extra fields that are not explicitly defined

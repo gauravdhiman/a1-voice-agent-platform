@@ -1,19 +1,16 @@
 "use client";
 
 import React from "react";
-import { Building2, Check, Mic, Phone, Plug, Zap } from "lucide-react";
+import { BadgeDollarSign, Building2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
   { id: 1, label: "Organization", icon: Building2 },
-  { id: 2, label: "Agent", icon: Mic },
-  { id: 3, label: "Phone", icon: Phone },
-  { id: 4, label: "Tools", icon: Plug },
-  { id: 5, label: "Test", icon: Zap },
+  { id: 2, label: "Plan", icon: BadgeDollarSign },
 ] as const;
 
 /**
- * Horizontal step indicator for the founder onboarding wizard.
+ * Horizontal step indicator for the two-step founder onboarding wizard.
  *
  * @param currentStep Active 1-based step index
  */

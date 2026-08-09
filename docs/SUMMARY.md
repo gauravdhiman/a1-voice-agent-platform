@@ -60,8 +60,12 @@ Comprehensive documentation organized by feature.
 ### Billing & Payments
 
 1. **[Billing Overview](02_features/billing/overview.md)** - Stripe integration and credit management
-2. **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
-3. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
+2. **[Plan Entitlements & Limits (implementation plan)](03_implementation/plan_entitlements_and_limits.md)** - Flexible plan tiers, sparse limits/features, versioning, grandfathering, and enforcement
+3. **[Entitlements Implementation Tracker](03_implementation/ENTITLEMENTS_IMPLEMENTATION_TRACKER.md)** - Live progress checklist for entitlement rollout
+4. **[ADR: Plan Versioning & Entitlements](01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md)** - Architecture decision record for immutable plan versions
+5. **[ADR: Subscription-Aware Onboarding and Credit Policy](01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)** - Founder onboarding, explicit free/paid activation, credit policies, and implementation boundary
+6. **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
+7. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
 ### 05_operations/ - Operations
 
 #### Deployment (production — 247ai.live)
@@ -71,13 +75,14 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 1. **[Deployment index](05_operations/deployment/README.md)** — doc map, infrastructure overview, `./scripts/deploy.sh`
 2. **[Quick reference](05_operations/deployment/quick-reference.md)** — day-to-day deploy commands
 3. **[Runbook](05_operations/deployment/runbook.md)** — architecture, first-time setup, DNS, webhooks
-4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.cloud` reference
+4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.prod` reference
 5. **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
 6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — auto-deploy secrets and workflow
 
 #### Other operations
 
-1. **[Stripe Management](05_operations/stripe_management.md)** — CLI tool for managing Stripe products
+1. **[Cloud staging environment](05_operations/staging_environment.md)** — `gdzwiwukcwbqohfwxxrx` DB for local pre-prod validation
+2. **[Stripe Management](05_operations/stripe_management.md)** — CLI tool for managing Stripe products
 
 ### Phone Numbers
 

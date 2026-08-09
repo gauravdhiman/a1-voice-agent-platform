@@ -17,6 +17,13 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pipecat.runner.utils import parse_telephony_websocket
 
+from uuid import UUID
+
+from shared.billing.voice_session_entitlement import (
+    VoiceSessionEntitlementError,
+    assert_voice_session_allowed,
+)
+from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import VoiceSessionService
 
 from src.bot import run_bot
@@ -57,6 +64,17 @@ if instrument_fastapi is not None:
 session_service = VoiceSessionService()
 
 
+async def _precheck_voice_session(claims) -> None:
+    """Enforce concurrent and credit entitlements before accepting a session."""
+    agent, agent_error = await voice_agent_service.get_agent_by_id(UUID(claims.agent_id))
+    if agent_error or agent is None or not agent.organization_id:
+        return
+    await assert_voice_session_allowed(
+        agent.organization_id,
+        current_call_sid=claims.call_sid,
+    )
+
+
 @app.get("/health")
 async def health() -> JSONResponse:
     """Liveness probe for Docker / Cloud Run style checks."""
@@ -77,6 +95,18 @@ async def websocket_endpoint(
     if claims is None:
         logger.warning("Rejecting WebSocket: invalid or expired session token")
         await websocket.close(code=4401, reason="Invalid session token")
+        return
+
+    try:
+        await _precheck_voice_session(claims)
+    except VoiceSessionEntitlementError as exc:
+        logger.warning(
+            "Rejecting WebSocket session_id=%s code=%s: %s",
+            claims.session_id,
+            exc.code,
+            exc.message,
+        )
+        await websocket.close(code=4403, reason=exc.message[:120])
         return
 
     current_span = trace.get_current_span()
@@ -144,6 +174,18 @@ async def twilio_websocket_endpoint(
                 "Rejecting Twilio WebSocket: invalid or expired session token"
             )
             await websocket.close(code=4401, reason="Invalid session token")
+            return
+
+        try:
+            await _precheck_voice_session(claims)
+        except VoiceSessionEntitlementError as exc:
+            logger.warning(
+                "Rejecting Twilio WebSocket session_id=%s code=%s: %s",
+                claims.session_id,
+                exc.code,
+                exc.message,
+            )
+            await websocket.close(code=4403, reason=exc.message[:120])
             return
 
         serializer = build_twilio_serializer(call_data)

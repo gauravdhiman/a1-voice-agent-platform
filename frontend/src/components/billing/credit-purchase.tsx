@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Coins, Star } from "lucide-react";
-import { CreditProduct } from "@/types/billing";
+import { Loader2, Coins, Star, Lock } from "lucide-react";
+import { CreditProduct, OrgEntitlements } from "@/types/billing";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
 import { getStripe } from "@/lib/stripe";
@@ -24,6 +24,16 @@ interface CreditPurchaseProps {
   onCreditsPurchased?: (product: CreditProduct) => void;
 }
 
+/**
+ * CreditPurchase renders one-time credit top-up packages.
+ *
+ * Gated on the org's plan: when the ``credit_topup_enabled`` feature is off
+ * (or absent from the resolved entitlements), the packages are replaced with
+ * an upgrade prompt — the backend checkout routes enforce the same gate.
+ *
+ * @param organizationId - The UUID of the organization to purchase credits for
+ * @param onCreditsPurchased - Optional callback fired after a successful purchase
+ */
 export function CreditPurchase({
   organizationId,
   onCreditsPurchased,
@@ -31,8 +41,30 @@ export function CreditPurchase({
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(
     null,
   );
+  const [entitlements, setEntitlements] = useState<OrgEntitlements | null>(
+    null,
+  );
   const { user } = useAuth();
   const { data: products, isLoading: loading, error } = useCreditProducts();
+
+  useEffect(() => {
+    let cancelled = false;
+    billingService
+      .getOrganizationEntitlements(organizationId)
+      .then((data) => {
+        if (!cancelled) setEntitlements(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load entitlements:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
+
+  const topupEnabled = Boolean(
+    entitlements?.features["credit_topup_enabled"]?.effective_value,
+  );
 
   if (error) {
     toast.error(error.message);
@@ -104,12 +136,29 @@ export function CreditPurchase({
     });
   };
 
-  if (loading) {
+  if (loading || !entitlements) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin" />
         <span className="ml-2">Loading credit packages...</span>
       </div>
+    );
+  }
+
+  if (!topupEnabled) {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-2">
+            <Lock className="w-6 h-6 text-muted-foreground" />
+          </div>
+          <CardTitle>Credit top-ups not enabled</CardTitle>
+          <CardDescription>
+            Your current plan does not include credit top-ups. Upgrade your
+            plan to purchase additional credits.
+          </CardDescription>
+        </CardHeader>
+      </Card>
     );
   }
 

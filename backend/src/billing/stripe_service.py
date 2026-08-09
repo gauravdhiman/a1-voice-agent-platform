@@ -71,6 +71,82 @@ class StripeService:
             logger.error(f"Failed to update Stripe customer {customer_id}: {e}")
             raise
 
+    async def create_product(
+        self,
+        name: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> stripe.Product:
+        """Create a Stripe Product for a plan product family.
+
+        Args:
+            name: Customer-facing product name in Stripe.
+            metadata: Optional metadata (e.g. plan_product_id, slug).
+
+        Returns:
+            Created Stripe Product.
+
+        Raises:
+            ValueError: When Stripe is not configured.
+            stripe.error.StripeError: When Stripe API call fails.
+        """
+        if not stripe.api_key:
+            raise ValueError("Stripe is not configured")
+
+        try:
+            product = stripe.Product.create(
+                name=name,
+                metadata=metadata or {},
+            )
+            logger.info("Created Stripe product %s (%s)", product.id, name)
+            return product
+        except stripe.error.StripeError as e:
+            logger.error("Failed to create Stripe product %s: %s", name, e)
+            raise
+
+    async def create_price(
+        self,
+        product_id: str,
+        unit_amount: int,
+        currency: str = "USD",
+        interval: str = "month",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> stripe.Price:
+        """Create an immutable Stripe Price for a published plan version.
+
+        Args:
+            product_id: Stripe Product ID the price belongs to.
+            unit_amount: Price in smallest currency unit (cents).
+            currency: ISO currency code (default USD).
+            interval: Billing interval — ``month`` or ``year``.
+            metadata: Optional metadata stored on the Stripe Price.
+
+        Returns:
+            Created Stripe Price object.
+
+        Raises:
+            stripe.error.StripeError: When Stripe API call fails.
+        """
+        try:
+            price = stripe.Price.create(
+                product=product_id,
+                unit_amount=unit_amount,
+                currency=currency.lower(),
+                recurring={"interval": interval},
+                metadata=metadata or {},
+            )
+            logger.info(
+                "Created Stripe price %s for product %s (%s %s)",
+                price.id,
+                product_id,
+                unit_amount,
+                currency,
+            )
+            return price
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to create Stripe price for product {product_id}: {e}")
+            raise
+
     async def create_checkout_session(
         self,
         customer_id: str,
@@ -158,6 +234,56 @@ class StripeService:
             return stripe.Subscription.modify(subscription_id, **kwargs)
         except stripe.error.StripeError as e:
             logger.error(f"Failed to update subscription {subscription_id}: {e}")
+            raise
+
+    async def change_subscription_price(
+        self,
+        subscription_id: str,
+        new_price_id: str,
+        *,
+        at_period_end: bool = False,
+    ) -> stripe.Subscription:
+        """Swap the subscription line item to a new Stripe Price.
+
+        Used when migrating subscribers to a new plan version. When
+        ``at_period_end`` is True, the price change applies at the next billing
+        cycle with no proration.
+
+        Args:
+            subscription_id: Stripe subscription ID.
+            new_price_id: Target Stripe Price ID from the new plan version.
+            at_period_end: If True, defer price change to next renewal.
+
+        Returns:
+            Updated Stripe Subscription object.
+        """
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            items = subscription.get("items", {}).get("data", [])
+            if not items:
+                raise ValueError(
+                    f"Subscription {subscription_id} has no line items to update"
+                )
+            item_id = items[0]["id"]
+            modify_params: dict[str, Any] = {
+                "items": [{"id": item_id, "price": new_price_id}],
+                "proration_behavior": "none",
+            }
+            if at_period_end:
+                modify_params["billing_cycle_anchor"] = "unchanged"
+
+            updated = stripe.Subscription.modify(subscription_id, **modify_params)
+            logger.info(
+                "Changed Stripe subscription %s to price %s (at_period_end=%s)",
+                subscription_id,
+                new_price_id,
+                at_period_end,
+            )
+            return updated
+        except stripe.error.StripeError as e:
+            logger.error(
+                f"Failed to change subscription {subscription_id} price: {e}"
+            )
             raise
 
     async def cancel_subscription(

@@ -1,0 +1,66 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { ToolCard } from "@/components/tools/tool-card";
+import { AuthStatus, ConnectionStatus } from "@/types/agent";
+
+vi.mock("@/hooks/use-live-time", () => ({
+  useLiveTime: () => 1_700_000_000_000,
+  formatTimeUntilExpiry: (_expiresAt: number | null) => null,
+}));
+
+const baseTool = {
+  id: "tool-1",
+  name: "google_calendar",
+  description: "Calendar tool",
+  tool_source: "legacy" as const,
+  mcp_server_url: null,
+};
+
+function renderToolCard(props: Record<string, unknown> = {}) {
+  return render(
+    <ToolCard
+      tool={baseTool}
+      authStatus={AuthStatus.NOT_AUTHENTICATED}
+      tokenExpiresAt={null}
+      connectionStatus={ConnectionStatus.NOT_CONNECTED}
+      onClick={() => {}}
+      {...props}
+    />,
+  );
+}
+
+describe("ToolCard premium gating", () => {
+  it("renders a Premium badge for premium tools", () => {
+    renderToolCard({ tool: { ...baseTool, is_premium: true } });
+
+    expect(screen.getByText("Premium")).toBeInTheDocument();
+    expect(screen.getByText("Connect")).toBeInTheDocument();
+  });
+
+  it("renders a locked Premium action when the plan blocks premium tools", () => {
+    renderToolCard({
+      tool: { ...baseTool, is_premium: true },
+      premiumBlocked: true,
+    });
+
+    // The connect action is replaced with a locked upgrade hint.
+    expect(screen.queryByText("Connect")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Premium/i })).toBeInTheDocument();
+  });
+
+  it("keeps the normal Connect action when the plan entitles premium tools", () => {
+    renderToolCard({
+      tool: { ...baseTool, is_premium: true },
+      premiumBlocked: false,
+    });
+
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+  });
+
+  it("shows no Premium badge for non-premium tools", () => {
+    renderToolCard({ tool: { ...baseTool, is_premium: false } });
+
+    expect(screen.queryByText("Premium")).not.toBeInTheDocument();
+  });
+});

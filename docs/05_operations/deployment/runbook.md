@@ -47,7 +47,7 @@ flowchart LR
 | Frontend (Next.js) | GCP Cloud Run | `https://www.247ai.live` |
 | Backend (FastAPI) | GCP Cloud Run | `https://api.247ai.live` |
 | voice-ws (Pipecat WS) | Oracle ARM VM + Caddy | `wss://voice.247ai.live` |
-| Database + Auth | Supabase cloud | (project URL in `.env.cloud`) |
+| Database + Auth | Supabase cloud | (project URL in `.env.prod`) |
 
 The voice-ws worker is an **inbound WebSocket server** (port 7860; routes
 `/ws`, `/twilio`, `/health`). Browsers connect to `wss://voice.247ai.live/ws`
@@ -57,8 +57,8 @@ the VM terminates TLS (auto Let's Encrypt) and reverse-proxies to `voice-ws:7860
 ## Deploy script (single entry point)
 
 All production deploys go through **`./scripts/deploy.sh`**. Credentials stay in
-**`.env.cloud`** only (gitignored). Copy **`.env.cloud.example`** to `.env.cloud`
-and fill in values — never commit `.env.cloud`.
+**`.env.prod`** only (gitignored). Copy **`.env.prod.example`** to `.env.prod`
+and fill in values — never commit `.env.prod`.
 
 See [quick-reference.md](quick-reference.md) for the command cheat sheet.
 
@@ -83,9 +83,9 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | Path | Purpose |
 |------|---------|
 | **`scripts/deploy.sh`** | Single entry point |
-| `.env.cloud.example` | Production env template |
+| `.env.prod.example` | Production env template |
 | `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend to Cloud Run |
-| `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.cloud` per service |
+| `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
 | `scripts/deploy/gcp-map-domains.sh` | Cloud Run domain mappings |
 | `scripts/deploy/run-alembic-cloud.sh` | Alembic against Supabase |
 | `scripts/deploy/oci-deploy-voice-ws.sh` | Sync + build voice-ws on OCI VM |
@@ -96,11 +96,11 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 
 ## Environment configuration
 
-- **Production env file:** `.env.cloud` at repo root (gitignored). Never commit.
-- **Template:** `.env.cloud.example` (placeholders only).
+- **Production env file:** `.env.prod` at repo root (gitignored). Never commit.
+- **Template:** `.env.prod.example` (placeholders only).
 - **Variable reference:** [environment-variables.md](environment-variables.md)
 
-Production non-secret values (secrets stay in `.env.cloud` only):
+Production non-secret values (secrets stay in `.env.prod` only):
 
 | Variable | Production value |
 |----------|------------------|
@@ -120,7 +120,7 @@ via `gcp-env-from-cloud.py`.
 
 ## Quick resume checklist
 
-1. Confirm `.env.cloud` exists (from `.env.cloud.example`; gitignored).
+1. Confirm `.env.prod` exists (from `.env.prod.example`; gitignored).
 2. Verify cloud services:
    ```bash
    curl -s https://api.247ai.live/health
@@ -165,8 +165,8 @@ on the VM, then `docker compose up -d --build`.
 
 ## Security reminders
 
-- **Never commit** `.env.cloud` or credential copies.
-- Store production env in GitHub secret `ENV_CLOUD` for CI.
+- **Never commit** `.env.prod` or credential copies.
+- Store production env in GitHub secret `ENV_PROD` for CI.
 - Rotate secrets if any env file was ever pushed to a remote.
 
 ## Related documentation

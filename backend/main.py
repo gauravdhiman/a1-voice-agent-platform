@@ -26,6 +26,7 @@ from shared.config.opentelemetry import (
     setup_manual_opentelemetry,
 )
 from src.auth.routes import auth_router
+from src.billing.admin_plan_routes import router as admin_plan_router
 from src.billing.routes import router as billing_router
 from src.call_logs import call_logs_router
 from src.notifications.routes import router as notification_router
@@ -156,6 +157,7 @@ def create_app() -> FastAPI:
 
     # Include billing routes
     app.include_router(billing_router)
+    app.include_router(admin_plan_router)
 
     # Include notification routes
     app.include_router(notification_router)
@@ -222,7 +224,17 @@ async def lifespan(app: FastAPI):
         )
 
     from shared.voice_agents.tool_service import ToolService
-    from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
+    from shared.voice_agents.tools.base.platform_tool_registry import (
+        platform_tool_registry,
+    )
+    from src.billing.free_plan_renewal_scheduler import (
+        start_free_plan_renewal_scheduler,
+        stop_free_plan_renewal_scheduler,
+    )
+    from src.billing.plan_migration_scheduler import (
+        start_plan_migration_scheduler,
+        stop_plan_migration_scheduler,
+    )
     from src.services.token_refresh_service import (
         start_token_refresh_service,
         stop_token_refresh_service,
@@ -256,9 +268,25 @@ async def lifespan(app: FastAPI):
     await start_token_refresh_service(tool_service)
     logging.info("Token refresh service started")
 
+    logging.info("Starting plan migration scheduler...")
+    await start_plan_migration_scheduler()
+    logging.info("Plan migration scheduler started")
+
+    logging.info("Starting free-plan renewal scheduler...")
+    await start_free_plan_renewal_scheduler()
+    logging.info("Free-plan renewal scheduler started")
+
     yield
 
     # Shutdown
+    logging.info("Shutting down plan migration scheduler...")
+    await stop_plan_migration_scheduler()
+    logging.info("Plan migration scheduler stopped")
+
+    logging.info("Shutting down free-plan renewal scheduler...")
+    await stop_free_plan_renewal_scheduler()
+    logging.info("Free-plan renewal scheduler stopped")
+
     logging.info("Shutting down token refresh service...")
     await stop_token_refresh_service()
     logging.info("Token refresh service stopped")

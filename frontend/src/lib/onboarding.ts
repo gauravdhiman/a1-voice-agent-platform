@@ -5,8 +5,8 @@
 import type { VoiceTemplate } from "@/types/voice-template";
 import { validateOrganizationSlug } from "@/lib/organization-slug";
 
-/** Final wizard step (test call). Agent creation has already run by this point. */
-export const ONBOARDING_FINAL_STEP = 5;
+/** Final required founder-onboarding step (plan activation). */
+export const ONBOARDING_FINAL_STEP = 2;
 
 /** Preset industries shown in the org-details step. */
 export const ONBOARDING_INDUSTRIES = [
@@ -59,16 +59,18 @@ export interface OnboardingWizardState {
 }
 
 /**
- * Whether the user may abandon the wizard and go to the dashboard.
+ * Whether the user may abandon the founder onboarding flow.
  *
- * Skip is available on every step except the final test step, where the agent
- * has already been created and the only remaining action is to finish.
+ * Founder onboarding requires both organization details and plan activation;
+ * the page intentionally exposes no skip path because the dashboard contains
+ * gated actions that depend on a selected plan.
  *
  * @param step Current 1-based wizard step
  * @returns True when a widget-level skip control should be shown
  */
 export function canSkipOnboarding(step: number): boolean {
-  return step >= 1 && step < ONBOARDING_FINAL_STEP;
+  void step;
+  return false;
 }
 
 /**

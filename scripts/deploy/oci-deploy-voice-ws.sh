@@ -12,7 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
-ENV_FILE="${ENV_FILE:-.env.cloud}"
+ENV_FILE="${ENV_FILE:-.env.prod}"
 OCI_HOST="${OCI_SSH_HOST:?Set OCI_SSH_HOST (VM public IP)}"
 OCI_USER="${OCI_SSH_USER:-ubuntu}"
 SSH_KEY="${OCI_SSH_KEY:-${HOME}/.ssh/oci_voice_ws}"

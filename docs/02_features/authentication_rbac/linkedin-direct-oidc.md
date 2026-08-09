@@ -59,7 +59,8 @@ current sign-in flow. That URL was used by the legacy popup integration.
 
 ## Environment variables
 
-Root `.env` (Docker Compose):
+Selected root environment file (Docker Compose): use `.env.local` for local
+development, `.env.staging` for staging, or `.env.prod` for production.
 
 ```text
 APP_BASE_URL=http://localhost:3000
@@ -77,7 +78,7 @@ SUPABASE_SERVICE_KEY=...
 Legacy aliases `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` are also
 accepted by the backend settings layer.
 
-After updating `.env`, restart the dev stack:
+After updating the selected environment file, restart the dev stack:
 
 ```bash
 ./start.sh restart dev

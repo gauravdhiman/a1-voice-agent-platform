@@ -2,7 +2,7 @@ saas-platform/
 ├── README.md
 ├── .gitignore
 ├── docker-compose.yml
-├── .env.example
+├── .env.local.example
 ├── LICENSE
 │
 ├── docs/                          # Project documentation

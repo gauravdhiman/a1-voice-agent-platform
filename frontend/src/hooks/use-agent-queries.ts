@@ -177,12 +177,10 @@ export function useUpdateAgent() {
       );
 
       // Optimistically update agent in list
-      queryClient.setQueryData<VoiceAgent[]>(
-        agentQueryKeys.myAgents(),
-        (old) =>
-          old?.map((agent) =>
-            agent.id === agentId ? { ...agent, ...data } : agent,
-          ),
+      queryClient.setQueryData<VoiceAgent[]>(agentQueryKeys.myAgents(), (old) =>
+        old?.map((agent) =>
+          agent.id === agentId ? { ...agent, ...data } : agent,
+        ),
       );
 
       return { previousAgent, previousAgents };
@@ -232,9 +230,8 @@ export function useDeleteAgent() {
       );
 
       // Optimistically remove from list
-      queryClient.setQueryData<VoiceAgent[]>(
-        agentQueryKeys.myAgents(),
-        (old) => old?.filter((agent) => agent.id !== agentId),
+      queryClient.setQueryData<VoiceAgent[]>(agentQueryKeys.myAgents(), (old) =>
+        old?.filter((agent) => agent.id !== agentId),
       );
 
       return { previousAgents };
@@ -304,12 +301,10 @@ export function useUpdateAgentTool() {
 
       // Optimistically update
       queries.forEach((query) => {
-        queryClient.setQueryData<AgentTool[]>(
-          query.queryKey,
-          (old) =>
-            old?.map((tool) =>
-              tool.id === agentToolId ? { ...tool, ...data } : tool,
-            ),
+        queryClient.setQueryData<AgentTool[]>(query.queryKey, (old) =>
+          old?.map((tool) =>
+            tool.id === agentToolId ? { ...tool, ...data } : tool,
+          ),
         );
       });
 
@@ -360,14 +355,12 @@ export function useToggleFunction() {
 
       // Optimistically update
       queries.forEach((query) => {
-        queryClient.setQueryData<AgentTool[]>(
-          query.queryKey,
-          (old) =>
-            old?.map((tool) =>
-              tool.id === agentToolId
-                ? { ...tool, unselected_functions: unselectedFunctions }
-                : tool,
-            ),
+        queryClient.setQueryData<AgentTool[]>(query.queryKey, (old) =>
+          old?.map((tool) =>
+            tool.id === agentToolId
+              ? { ...tool, unselected_functions: unselectedFunctions }
+              : tool,
+          ),
         );
       });
 
@@ -466,8 +459,12 @@ export function useDeleteAgentTool() {
 // Used by the Add MCP Server dialog's "Test connection & discover tools" button.
 export function useDiscoverMcpTools() {
   return useMutation({
-    mutationFn: (payload: { url: string; headers?: Record<string, string> }) =>
-      agentService.discoverMcpTools(payload),
+    mutationFn: (payload: {
+      url: string;
+      headers?: Record<string, string>;
+      tool_id?: string;
+      test_api_key?: string;
+    }) => agentService.discoverMcpTools(payload),
     onError: () => {
       toast.error("Failed to discover MCP tools");
     },
@@ -492,7 +489,9 @@ export function useCreatePlatformTool() {
       agentService.createPlatformTool(payload),
     onSuccess: () => {
       toast.success("MCP server added");
-      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.platformTools(),
+      });
     },
     onError: () => {
       toast.error("Failed to add MCP server");
@@ -516,15 +515,52 @@ export function usePublishPlatformTool() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ toolId, published }: { toolId: string; published: boolean }) =>
-      agentService.publishPlatformTool(toolId, published),
+    mutationFn: ({
+      toolId,
+      published,
+    }: {
+      toolId: string;
+      published: boolean;
+    }) => agentService.publishPlatformTool(toolId, published),
     onSuccess: (_data, { published }) => {
-      toast.success(published ? "MCP server published" : "MCP server unpublished");
-      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+      toast.success(
+        published ? "MCP server published" : "MCP server unpublished",
+      );
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.platformTools(),
+      });
       queryClient.invalidateQueries({ queryKey: ["tools", "agent"] });
     },
     onError: () => {
       toast.error("Failed to update publish state");
+    },
+  });
+}
+
+// Mutation: Mark/unmark a platform tool as premium (platform-admin only).
+// Invalidates the platform tools list so the Premium badge and toggle state
+// refresh immediately.
+export function useSetPlatformToolPremium() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      toolId,
+      isPremium,
+    }: {
+      toolId: string;
+      isPremium: boolean;
+    }) => agentService.setPlatformToolPremium(toolId, isPremium),
+    onSuccess: (_data, { isPremium }) => {
+      toast.success(
+        isPremium ? "Tool marked as premium" : "Premium flag removed",
+      );
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.platformTools(),
+      });
+    },
+    onError: () => {
+      toast.error("Failed to update premium flag");
     },
   });
 }
@@ -535,11 +571,18 @@ export function useUpdatePlatformTool() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ toolId, payload }: { toolId: string; payload: Record<string, unknown> }) =>
-      agentService.updatePlatformTool(toolId, payload),
+    mutationFn: ({
+      toolId,
+      payload,
+    }: {
+      toolId: string;
+      payload: Record<string, unknown>;
+    }) => agentService.updatePlatformTool(toolId, payload),
     onSuccess: () => {
       toast.success("MCP server updated");
-      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.platformTools(),
+      });
     },
     onError: () => {
       toast.error("Failed to update MCP server");
@@ -558,11 +601,18 @@ export function useDeletePlatformTool() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ toolId, force = false }: { toolId: string; force?: boolean }) =>
-      agentService.deletePlatformTool(toolId, force),
+    mutationFn: ({
+      toolId,
+      force = false,
+    }: {
+      toolId: string;
+      force?: boolean;
+    }) => agentService.deletePlatformTool(toolId, force),
     onSuccess: () => {
       toast.success("MCP server deleted");
-      queryClient.invalidateQueries({ queryKey: agentQueryKeys.platformTools() });
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.platformTools(),
+      });
       // A force-delete cascade-detaches the tool from every using agent, so each
       // agent's Tools tab must refetch to drop the card. Partial key matches all
       // per-agent agent-tools queries.
@@ -586,4 +636,3 @@ export function usePlatformToolUsage(toolId: string, enabled = true) {
     staleTime: 0, // always refetch when the dialog opens — usage can change fast
   });
 }
-

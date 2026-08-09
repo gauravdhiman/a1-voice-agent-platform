@@ -24,7 +24,7 @@ ngrok http 7860
 # Copy the https host → convert to wss, e.g. wss://abc123.ngrok-free.app
 ```
 
-1. In `.env`:
+1. In the selected root environment file:
    - `VOICE_WS_PUBLIC_URL=ws://localhost:7860` (browser test calls)
    - `VOICE_WS_TWILIO_URL=wss://<your-ngrok-host>` (**required** for phone; localhost is rejected)
    - `JWT_SECRET_KEY` shared by backend + voice-ws

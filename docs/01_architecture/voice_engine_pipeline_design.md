@@ -378,7 +378,7 @@ flowchart TD
   offline `VAD.load` classmethod), table-driven dispatch + per-provider key
   guards in `registry.py`, conditional `vad`/`turn_detection` assembly in
   `session_builder.py`, env scaffolding (`DEEPGRAM_API_KEY` / `OPENAI_API_KEY` /
-  `CARTESIA_API_KEY` in `.env.example` + `docker-compose.dev.yml`). The registry
+  `CARTESIA_API_KEY` in `.env.local.example` + `docker-compose.dev.yml`). The registry
   always builds an explicit standalone Silero VAD for the pipeline (even when
   `config.vad` is `None`) to keep it off the bundled `livekit.agents.inference`
   VAD / missing-Pillow path (deferred bug #7). `turn_detection` is deferred to

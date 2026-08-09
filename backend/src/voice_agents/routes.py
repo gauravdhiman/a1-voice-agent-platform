@@ -19,6 +19,8 @@ from shared.voice_agents.voice_session_service import voice_session_service
 from src.auth.dependencies import assert_has_permission, require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
+from src.billing.entitlement_models import EntitlementDenied
+from src.billing.entitlement_service import entitlement_service
 from src.organization.service import OrganizationService
 
 logger = logging.getLogger(__name__)
@@ -103,6 +105,16 @@ async def create_agent(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=preset_error
         )
+
+    try:
+        await entitlement_service.assert_limit(
+            agent_data.organization_id, "max_agents", increment=1
+        )
+    except EntitlementDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=exc.to_detail(),
+        ) from exc
 
     agent, error = await voice_agent_service.create_agent(agent_data)
     if error:

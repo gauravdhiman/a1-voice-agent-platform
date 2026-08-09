@@ -2,19 +2,116 @@
 
 This document explains how to configure environment variables for different development scenarios.
 
+## Supabase projects
+
+| Environment | Project ref | Env file | Notes |
+|-------------|-------------|----------|-------|
+| **Local** | Local CLI (`127.0.0.1:54321`) | `.env.local` | Default dev; selected by `./start.sh start dev` |
+| **Staging** | `gdzwiwukcwbqohfwxxrx` | `.env.staging` | Cloud DB for pre-prod validation — [staging guide](./staging_environment.md) |
+| **Production** | `zymiyfilulmtrmyyhvzw` | `.env.prod` | 247ai.live — deploy/migrate only |
+
+> Do **not** use production Supabase for local feature testing. Use `.env.staging` instead.
+
 ## Environment Variable Files
 
-The project uses different environment files depending on your development approach:
+The root files are the source of truth for Docker, direct backend commands, and
+deployment:
 
-1. **Local Development (Non-containerized)**:
+1. `.env.local` — local Supabase and local application URLs.
+2. `.env.staging` — cloud staging Supabase with the application still running locally.
+3. `.env.prod` — production Supabase and production URLs; deployment defaults here.
 
-   - Backend: `backend/.env` (copy from `backend/.env.example`)
-   - Frontend: `frontend/.env.local` (copy from `frontend/.env.local.example`)
+Use `./start.sh start dev --env staging` to test staging. Do not copy any of
+these files into `.env`. The service-specific `backend/.env` and
+`frontend/.env.local` files are compatibility files for advanced
+non-containerized workflows only; the supported development path is Docker.
 
-2. **Containerized Development**:
-   - Root: `.env` (copy from `.env.example`)
+## Design record: canonical environment-file model
 
-**Important**: The service-specific environment files (`backend/.env` and `frontend/.env.local`) are **only for non-containerized local development**. When running services in Docker containers, the root `.env` file is used instead.
+**Status:** Adopted in August 2026
+
+### Context
+
+The project previously used a root `.env` as a mutable pointer to whichever
+Supabase project was being tested. Switching between local and staging meant
+copying one environment into `.env`, which made the active database ambiguous,
+made container restarts easy to misconfigure, and left old `.env.*` files with
+unclear ownership.
+
+### Decisions
+
+1. **Use exactly three canonical root runtime files.** `.env.local` selects the
+   local Supabase instance, `.env.staging` selects cloud staging while the app
+   still runs locally, and `.env.prod` selects the production Supabase project.
+2. **Use `.env.prod`, not `.env.cloud`, for production.** The name describes the
+   deployment lifecycle rather than the hosting provider and keeps the three
+   environment names symmetrical.
+3. **Select files at the command boundary.** `start.sh` defaults to `.env.local`
+   for development and `.env.prod` for production mode. Use `--env staging`
+   for staging or `--env-file PATH` for an explicit file. No file is copied into
+   a root `.env` during normal operation.
+4. **Keep Docker and direct processes on the same contract.** Compose receives
+   the selected file through `--env-file` and the service `env_file` setting.
+   Direct backend, worker, and Alembic commands use `ENV_FILE=...`.
+5. **Keep shared provider credentials reusable for now.** Google, LinkedIn,
+   Resend, Stripe, voice, and AI provider credentials are intentionally shared
+   across environments until real production users require separate accounts.
+   Database credentials, public URLs, runtime/debug settings, and telemetry
+   endpoints remain environment-specific where the deployment requires it.
+6. **Isolate Compose projects by environment.** The startup script uses
+   `247ai-local`, `247ai-staging`, and `247ai-production` so changing the
+   selected database cannot accidentally reuse containers from another
+   environment.
+7. **Keep real files private and templates complete.** The three runtime files
+   are gitignored; the three `.example` files are committed documentation and
+   must contain placeholders only. Their key sets are kept identical and are
+   checked by `scripts/tests/test_environment_contract.sh`.
+8. **Use `.env.prod` consistently in deployment automation.** The deploy script,
+   production Compose file, migration helpers, GitHub Actions workflow, and
+   deployment docs all use `.env.prod`. CI stores its contents in the
+   `ENV_PROD` repository secret.
+
+Deployment helper names that contain `cloud` (for example,
+`gcp-env-from-cloud.py` or `deploy-cloud.yml`) describe the cloud hosting
+target, not a fourth environment file. They consume the selected
+`.env.prod`/`ENV_FILE` contract.
+
+### Operational consequences
+
+- Start local development with `./start.sh start dev`.
+- Test cloud staging locally with `./start.sh start dev --env staging`.
+- Inspect the selected file and non-secret Supabase URL with
+  `./start.sh config --env NAME`.
+- Deploy with `./scripts/deploy.sh`, which defaults to `.env.prod`; use
+  `--env-file PATH` only for an explicit override.
+- Do not use `.env.prod` for local feature testing. Use `.env.staging` instead.
+- If the repository still has a GitHub secret named `ENV_CLOUD`, rename it to
+  `ENV_PROD` before running the deployment workflow.
+
+### Environment selection commands
+
+| Task | Command | Selected file |
+|------|---------|---------------|
+| Local Docker development | `./start.sh start dev` | `.env.local` |
+| Cloud staging validation | `./start.sh start dev --env staging` | `.env.staging` |
+| Production-like local Compose | `./start.sh start prod` | `.env.prod` |
+| Safe selection check | `./start.sh config --env staging` | `.env.staging` |
+| Direct backend process | `ENV_FILE=.env.staging python backend/main.py` | `.env.staging` |
+| Alembic migration | `ENV_FILE=.env.staging REVISION=head ./scripts/deploy/run-alembic.sh` | `.env.staging` |
+| Production deployment | `./scripts/deploy.sh` | `.env.prod` |
+
+`docker compose -f docker-compose.dev.yml` defaults to `.env.local`, while
+`docker compose -f docker-compose.yml` defaults to `.env.prod`. The `start.sh`
+workflow is preferred because it validates the file, passes it explicitly, and
+selects an isolated Compose project name.
+
+Run the environment contract checks after changing templates, startup defaults,
+or deployment references:
+
+```bash
+bash scripts/tests/test_environment_contract.sh
+bash scripts/tests/test_environment_selection.sh
+```
 
 ## Supabase Configuration
 
@@ -29,7 +126,8 @@ The Supabase configuration requires different environment variables for frontend
 5. **API_BASE_URL** / **APP_BASE_URL**: Backend OAuth redirect targets (see
    [Backend redirect OAuth](../02_features/authentication_rbac/backend-redirect-oauth.md))
 
-For local backend redirect OAuth, add these to the root `.env`:
+For local backend redirect OAuth, add these to the selected root file (normally
+`.env.local`):
 
 ```bash
 APP_BASE_URL=http://localhost:3000
@@ -99,7 +197,8 @@ If you also retain redirect-based OAuth providers, you additionally need to:
    - You can find this URL in your Supabase dashboard under Authentication → Settings
 
 For backend redirect OAuth (Google and LinkedIn), the backend mints Supabase
-sessions via the admin API. Provider credentials live in the root `.env`; the
+sessions via the admin API. Provider credentials live in the selected root
+environment file; the
 frontend only needs `NEXT_PUBLIC_API_URL` to build authorize links.
 
 Local Supabase can keep Google/LinkedIn providers enabled in `supabase/config.toml`
@@ -212,159 +311,17 @@ NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
 NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
 ```
 
-## Frontend (.env.local)
+## Direct service development (advanced)
 
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=24x7 AI
-NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+The supported Docker workflow uses the root canonical files described above.
+For a non-containerized process, select the same root file explicitly with
+`ENV_FILE=.env.local` or `ENV_FILE=.env.staging`; do not create a root `.env`.
 
-# New Relic Configuration for OpenTelemetry
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-
-# OpenTelemetry Configuration (Optional for local development)
-NEXT_PUBLIC_OTEL_ENABLED=true
-NEXT_PUBLIC_OTEL_SERVICE_NAME=saas-platform-frontend-dev
-
-# Frontend OpenTelemetry Configuration - Traces
-# Use HTTP/protobuf for frontend since it runs in browser
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-
-# Frontend OpenTelemetry Configuration - Metrics
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://127.0.0.1:4318/v1/metrics
-
-# Frontend OpenTelemetry Configuration - Logs
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs
-
-# Next.js OpenTelemetry Controls
-# Set to 1 to see more detailed Next.js internal spans (increases noise)
-# Set to 0 to reduce Next.js internal tracing (recommended for production)
-NEXT_OTEL_VERBOSE=0
-
-# Disable Next.js fetch instrumentation if using custom fetch tracing
-NEXT_OTEL_FETCH_DISABLED=1
-```
-
-## Backend (.env)
-
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key-here
-SUPABASE_ANON_KEY=your-anon-key-here
-
-# Database Migration Settings (Alembic)
-# IMPORTANT: Update 'your-database-password-here' with your actual Supabase database password
-DATABASE_URL=postgresql://postgres:your-database-password-here@your-project-ref.supabase.co:5432/postgres
-
-# New Relic Configuration for OpenTelemetry
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-
-# OpenTelemetry Configuration
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=saas-platform-backend
-# Traces
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-# Metrics
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-# Logs
-OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-
-# OpenTelemetry Configuration - FastAPI Instrumentation
-# Exclude health check endpoints from tracing to reduce noise
-OTEL_PYTHON_FASTAPI_EXCLUDED_URLS=/health,/health/ready,/health/live
-```
-
-## Containerized Development (.env)
-
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key-here
-SUPABASE_ANON_KEY=your-anon-key-here
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
-
-# Application Settings
-ENVIRONMENT=development
-DEBUG=true
-
-# Backend Specific Settings
-BACKEND_HOST=0.0.0.0
-BACKEND_PORT=8000
-CORS_ORIGINS=["http://localhost:3000", "http://127.0.0.1:3000", "http://frontend:3000", "http://frontend-dev:3000"]
-
-# Frontend Specific Settings
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=24x7 AI
-NEXT_PUBLIC_APP_DESCRIPTION=Multi-tenant SaaS application template
-
-# Database Migration Settings (Alembic)
-# Note: For migrations, use the postgres user with database password
-# Format: postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres
-# IMPORTANT: Update 'your-database-password-here' with your actual Supabase database password
-# Special characters in passwords must be URL-encoded:
-# # should be encoded as %23
-# @ should be encoded as %40
-# ! should be encoded as %21
-# etc.
-DATABASE_URL=postgresql://postgres:your-database-password-here@your-project-ref.supabase.co:5432/postgres
-
-# New Relic Configuration for OpenTelemetry
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=24x7 AI
-
-# OpenTelemetry Configuration - Traces
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=saas-platform
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-
-# OpenTelemetry Configuration - Metrics
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-
-# OpenTelemetry Configuration - Logs
-OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-
-# OpenTelemetry Configuration - FastAPI Instrumentation
-# Exclude health check endpoints from tracing to reduce noise
-OTEL_PYTHON_FASTAPI_EXCLUDED_URLS=/health,/health/ready,/health/live
-
-# Frontend OpenTelemetry Configuration - Traces
-# Use HTTP/protobuf for frontend since it runs in browser
-NEXT_PUBLIC_OTEL_ENABLED=true
-NEXT_PUBLIC_OTEL_SERVICE_NAME=saas-platform-frontend
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-
-# Frontend OpenTelemetry Configuration - Metrics
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
-
-# Frontend OpenTelemetry Configuration - Logs
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
-
-# Next.js OpenTelemetry Controls
-# Set to 1 to see more detailed Next.js internal spans (increases noise)
-# Set to 0 to reduce Next.js internal tracing (recommended for production)
-NEXT_OTEL_VERBOSE=0
-
-# Disable Next.js fetch instrumentation if using custom fetch tracing
-NEXT_OTEL_FETCH_DISABLED=1
-```
+The nested `frontend/.env.local` and `backend/.env` compatibility files exist
+only for service-local tooling that cannot read the root file. They are not
+environment selectors and must not be used to switch databases. Keep their
+public values aligned with the selected root file when using that advanced
+workflow.
 
 ## Docker Configuration
 
@@ -374,11 +331,11 @@ The project includes optimized Docker configurations:
 - **Development**: Volume mounting for hot reloading
 - **Standalone**: Next.js standalone output for optimal Docker performance
 
-Both [docker-compose.yml](file:///Users/gauravdhiman/projects/python/multi-tanent-saas-platform-python-supabase-nextjs/docker-compose.yml) and [docker-compose.dev.yml](file:///Users/gauravdhiman/projects/python/multi-tanent-saas-platform-python-supabase-nextjs/docker-compose.dev.yml) now use the `env_file` directive to load environment variables from the root `.env` file, ensuring consistency across development and production environments.
+Both [docker-compose.yml](../../docker-compose.yml) and [docker-compose.dev.yml](../../docker-compose.dev.yml) use the `env_file` directive with the selected root file. `start.sh` passes the selection explicitly; direct Compose commands default to `.env.prod` for production Compose and `.env.local` for development Compose.
 
 ## Next Steps
 
-1. Copy the appropriate example file to create your environment file
+1. Copy the appropriate example file to create `.env.local`, `.env.staging`, or `.env.prod`
 2. Update the values with your actual configuration
 3. For OAuth providers, configure them in your Supabase dashboard
 4. For database migrations, get your Supabase database password and update the DATABASE_URL

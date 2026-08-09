@@ -70,7 +70,9 @@ notification_logs
 
 ### 1. Environment Configuration
 
-Add the following to your `.env` file:
+Add the following to the selected root environment file: `.env.local` for local
+development, `.env.staging` for staging, or `.env.prod` for production. Do not
+copy an environment file into a root `.env`.
 
 ```bash
 # Resend Settings

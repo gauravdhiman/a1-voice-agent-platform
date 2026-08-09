@@ -22,13 +22,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-# Add the backend directory to the Python path
-backend_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(backend_dir))
+# Add repo root so ``shared.config`` resolves when run from the host (outside Docker).
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 import stripe
-from config.settings import settings
-from config.supabase import supabase_config
+from shared.config.settings import settings
+from shared.config.supabase import supabase_config
 
 # Initialize Stripe
 if not settings.stripe_secret_key:

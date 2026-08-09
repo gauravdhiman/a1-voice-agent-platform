@@ -9,6 +9,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Voice Agent Tables](#voice-agent-tables)
 - [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
+- [Plan Versioning & Entitlements Tables](#plan-versioning--entitlements-tables)
 - [Notification Tables](#notification-tables)
 - [Platform Skills Tables](#platform-skills-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
@@ -52,7 +53,9 @@ Stores tenant organization information. Each organization represents a separate 
 | description      | TEXT         | NULLABLE                | Organization description                                                    |
 | slug             | VARCHAR(100) | NOT NULL, UNIQUE        | URL-friendly identifier; also used for the public page at `/o/{slug}` |
 | is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Organization active status                                                  |
-| credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available credit balance                                                    |
+| credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available plan credits for the current billing period (expire at period end — migration 20260807000005) |
+| purchased_credit_balance | INTEGER | NOT NULL, DEFAULT 0     | Purchased top-up credits; never expire and are drained only after plan credits (migration 20260807000005) |
+| low_credit_threshold_notified | INTEGER | NULLABLE           | Highest low-balance threshold (20/10/5) already emailed this billing cycle; NULL = re-armed (migration 20260807000005) |
 | website          | VARCHAR(255) | NULLABLE                | Organization website URL                                                    |
 | industry         | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                    |
 | location         | VARCHAR(255) | NULLABLE                | Physical address or location                                                |
@@ -248,6 +251,7 @@ System-wide tools available for integration with voice agents.
 | config_schema         | JSONB         | NULLABLE                          | JSON schema for tool configuration                                          |
 | tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
 | is_active             | BOOLEAN       | NOT NULL, DEFAULT TRUE            | Tool active status                                                          |
+| is_premium            | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Premium tools require the plan's `premium_tools` feature to attach. Visible in the catalog with a badge; attach gated at the API (403) — migration 20260807000006 |
 | is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = visible in every org's tool catalog. Backfilled TRUE for existing rows — migration 20260726000001 |
 | auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
 | requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
@@ -466,6 +470,55 @@ Tracks usage of embed call buttons for analytics and rate limiting.
 
 ---
 
+### call_logs
+
+Tracks voice sessions for organization reporting and concurrent-call limits.
+
+| Column                | Type         | Constraints                              | Description |
+| --------------------- | ------------ | ---------------------------------------- | ----------- |
+| id                    | UUID         | PRIMARY KEY                              | Unique call log identifier |
+| call_sid              | VARCHAR(100) | NOT NULL, UNIQUE                         | Provider/session identifier |
+| organization_id       | UUID         | NOT NULL, FK → organizations.id          | Owning organization |
+| agent_id              | UUID         | NULLABLE, FK → voice_agents.id           | Agent used by the call |
+| status                | VARCHAR(50)  | NOT NULL, DEFAULT `initiated`            | Session status |
+| duration              | INTEGER      | NOT NULL, DEFAULT `0`                    | Duration in seconds |
+| credits_consumed      | INTEGER      | NOT NULL, DEFAULT `0`                    | Credits billed at teardown |
+| credit_transaction_id | UUID         | NULLABLE, FK → credit_transactions.id    | Ledger row explaining the call charge |
+| caller_number         | VARCHAR(30)  | NULLABLE                                 | Caller number; mask in UI |
+| called_number         | VARCHAR(30)  | NULLABLE                                 | Destination number |
+| started_at            | TIMESTAMPTZ  | NULLABLE                                 | Session start |
+| ended_at              | TIMESTAMPTZ  | NULLABLE                                 | Session end |
+| created_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
+| updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
+
+**Indexes**: organization, agent, created_at, status, credit_transaction_id.
+
+### call_artifacts
+
+Stores organization-scoped metadata for recordings, transcripts, and summaries.
+Audio bytes live in the private Supabase Storage bucket `call-recordings`; the
+database stores the bucket/path and text artifacts, never public audio URLs.
+
+| Column            | Type         | Constraints                              | Description |
+| ----------------- | ------------ | ---------------------------------------- | ----------- |
+| id                | UUID         | PRIMARY KEY                              | Artifact identifier |
+| call_log_id       | UUID         | NOT NULL, FK → call_logs.id              | Related call |
+| organization_id   | UUID         | NOT NULL, FK → organizations.id          | Tenant boundary |
+| artifact_type     | VARCHAR(30)  | NOT NULL, CHECK recording/transcript/summary | Artifact kind |
+| status            | VARCHAR(30)  | NOT NULL, DEFAULT `pending`              | Processing state |
+| storage_bucket    | VARCHAR(120) | NULLABLE                                 | Private object bucket |
+| storage_path      | TEXT         | NULLABLE                                 | `{org_id}/{call_id}/recording.wav` |
+| mime_type         | VARCHAR(120) | NULLABLE                                 | Audio or text MIME type |
+| size_bytes        | BIGINT       | NULLABLE                                 | Stored object size |
+| duration_seconds  | INTEGER      | NULLABLE                                 | Recording duration |
+| text_content      | TEXT         | NULLABLE                                 | Transcript or summary text |
+| metadata          | JSONB        | NULLABLE                                 | Provider/model/version/audit metadata |
+| created_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
+| updated_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
+
+**Unique Constraint**: `(call_log_id, artifact_type)`.
+**Indexes**: organization_id, call_log_id.
+
 ## Billing Tables
 
 ### subscription_plans
@@ -505,8 +558,9 @@ Tracks organization subscription status.
 | id                     | UUID         | PRIMARY KEY                          | Unique subscription identifier                      |
 | organization_id        | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                             |
 | subscription_plan_id   | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                     |
+| plan_version_id        | UUID         | NULLABLE, FK → plan_versions.id      | Immutable plan version selected for the subscription |
 | stripe_subscription_id | VARCHAR(255) | NULLABLE, UNIQUE                     | Stripe subscription identifier                      |
-| stripe_customer_id     | VARCHAR(255) | NOT NULL                             | Stripe customer identifier                          |
+| stripe_customer_id     | VARCHAR(255) | NULLABLE                             | Stripe customer identifier; null for free plans     |
 | status                 | VARCHAR(50)  | NOT NULL                             | Status: trial, active, past_due, cancelled, expired |
 | current_period_start   | TIMESTAMPTZ  | NULLABLE                             | Current billing period start                        |
 | current_period_end     | TIMESTAMPTZ  | NULLABLE                             | Current billing period end                          |
@@ -522,6 +576,7 @@ Tracks organization subscription status.
 
 - `organization_id` → `organizations.id` (CASCADE)
 - `subscription_plan_id` → `subscription_plans.id` (SET NULL)
+- `plan_version_id` → `plan_versions.id` (SET NULL)
 
 **RLS**: Enabled
 **Unique Constraints**: `(organization_id)`, `(stripe_subscription_id)`
@@ -565,13 +620,13 @@ Tracks all credit movements.
 | transaction_type         | VARCHAR(50)  | NOT NULL                        | Type: earned, purchased, consumed, expired                |
 | amount                   | INTEGER      | NOT NULL                        | Positive for credits added, negative for consumed         |
 | balance_after            | INTEGER      | NOT NULL                        | Balance after transaction                                 |
-| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry |
+| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry, admin_adjustment, referral |
 | source_id                | UUID         | NULLABLE                        | Reference to source record                                |
 | credit_event_id          | UUID         | NULLABLE, FK → credit_events.id | Event identifier (for consumption)                        |
-| expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for subscription credits             |
+| expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for plan (subscription) credits; **NULL for purchased credits** (never expire) — the two-pool backfill in migration 20260807000005 keys on `source='purchase'` + `transaction_type='purchased'` + `expires_at IS NULL` |
 | stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                          |
 | description              | TEXT         | NULLABLE                        | Transaction description                                   |
-| metadata                 | JSONB        | NULLABLE                        | Additional metadata                                       |
+| metadata                 | JSONB        | NULLABLE                        | Source/policy/period metadata; subscription grants include a stable `grant_key` for idempotency |
 | created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                                        |
 
 **Foreign Keys**:
@@ -585,6 +640,10 @@ Tracks all credit movements.
 
 - `idx_credit_transactions_org_id`
 - `idx_credit_transactions_created_at`
+
+**Atomic grant function**:
+
+- `grant_subscription_credits(organization_id, credits, subscription_id, expires_at, metadata, description, idempotency_key)` locks the organization row, reuses an existing grant with the same `metadata.grant_key`, expires leftover plan credits when a recurring grant is applied, updates the plan pool, and inserts the new ledger row in one transaction.
 
 ---
 
@@ -640,6 +699,40 @@ Tracks payment history and invoices.
 
 - `idx_billing_history_org_id`
 - `idx_billing_history_stripe_invoice_id`
+
+---
+
+### Plan Versioning & Entitlements Tables
+
+> **Status:** Implemented through migrations `20260807000002`–`20260808000012`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version. `billing_mode` explicitly separates free activation from paid Stripe checkout; `credit_grant_policy` separates recurring from one-time grants; and the latest migration adds the atomic/idempotent subscription-credit grant function.
+
+Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
+
+| Table | Purpose |
+| ----- | ------- |
+| `plan_products` | Plan families (`starter`, `growth`) — marketing identity |
+| `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price |
+| `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
+| `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB) |
+| `plan_version_publish_events` | Migration policy when a new version is published |
+| `organization_subscription_migrations` | Per-subscriber grace period and migration status |
+| `organization_usage_counters` | Fast usage counts for limit enforcement |
+| `organization_entitlement_overrides` | Optional enterprise per-org exceptions |
+| `organization_subscription_entitlement_snapshots` | Audit snapshots on subscribe/migrate/renew |
+
+**Key change to `organization_subscriptions`:** add `plan_version_id` FK → `plan_versions.id` (subscription locked to version at signup). Deprecate `subscription_plan_id` after backfill.
+
+**Billing mode:** `plan_versions.billing_mode` is constrained to `free` or `paid` and is the authoritative activation decision. Free versions may omit Stripe identifiers; paid versions require Stripe checkout metadata and a Stripe Price before checkout.
+
+**Credit cadence:** `plan_versions.credit_grant_policy` is constrained to
+`recurring` or `one_time`. Recurring plan grants expire at the current period
+end and renew from Stripe invoice events for paid plans or the application
+free-plan scheduler for free plans. One-time grants are issued at activation
+only and do not schedule a renewal.
+
+**Grandfathering rule:** Published `plan_versions` rows are immutable. Admin "edits" create a new draft version → publish → new signups only; existing subs keep old `plan_version_id` until migration job or self-service upgrade.
+
+See the implementation plan for full column definitions, ER diagram, and migration steps.
 
 ---
 
@@ -862,6 +955,8 @@ erDiagram
         varchar slug
         boolean is_active
         integer credit_balance
+        integer purchased_credit_balance
+        integer low_credit_threshold_notified
         varchar website
         varchar industry
         varchar location
@@ -905,6 +1000,7 @@ erDiagram
         jsonb config_schema
         jsonb tool_functions_schema
         boolean is_active
+        boolean is_premium
         timestamptz created_at
         timestamptz updated_at
     }
@@ -956,6 +1052,35 @@ erDiagram
         integer duration_seconds
         timestamptz ended_at
         timestamptz started_at
+    }
+
+    call_logs {
+        uuid id
+        varchar call_sid
+        uuid organization_id
+        uuid agent_id
+        varchar status
+        integer duration
+        integer credits_consumed
+        uuid credit_transaction_id
+        timestamptz started_at
+        timestamptz ended_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    call_artifacts {
+        uuid id
+        uuid call_log_id
+        uuid organization_id
+        varchar artifact_type
+        varchar status
+        varchar storage_bucket
+        text storage_path
+        text text_content
+        jsonb metadata
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     auth {
@@ -1166,6 +1291,11 @@ erDiagram
     voice_agents ||--o| agent_embed_configs : "has one"
     platform_tools ||--o{ agent_tools : "used by"
     agent_embed_configs ||--o{ embed_call_logs : "tracks"
+    organizations ||--o{ call_logs : "owns"
+    voice_agents ||--o{ call_logs : "handles"
+    credit_transactions ||--o| call_logs : "explains call charge"
+    call_logs ||--o{ call_artifacts : "produces"
+    organizations ||--o{ call_artifacts : "owns"
 
     organizations ||--o{ organization_skills : "has many"
     organization_skills ||--o{ organization_skill_files : "has many"
@@ -1237,6 +1367,18 @@ erDiagram
 30. `20260804000001` - Add `organizations.timezone` (VARCHAR(64) NULLABLE) for org-scoped IANA timezone used by `voice-ws` to anchor the CURRENT DATE AND TIME section in agent prompts. Resolution order: org timezone → platform `AGENT_DEFAULT_TIMEZONE` env → `UTC`. Validated on org update via `shared/organization/timezone.py`.
 31. `20260806000001` - Data migration: rewrite seeded `voice_templates` greetings/personas to use `[Agent Name]` instead of hard-coded names (Alex/Jordan/Taylor/Morgan/Casey) so onboarding can substitute the user-chosen agent name. Frontend also applies these replacements at runtime for older rows.
 32. `20260807000001` - Add `platform_notification_settings` singleton table for Resend verification sender overrides and encrypted Telegram bot credentials/chat ID for platform admin signup alerts.
+33. `20260807000002` - Plan versioning, entitlement catalog, sparse `plan_version_entitlements`, subscription `plan_version_id`.
+34. `20260807000003` - Rename entitlement `included_credits_monthly` → `included_credits_per_billing_period`; add `plan_products.stripe_product_id` for canonical Stripe Product linkage.
+35. `20260807000004` - Remove pay-as-you-go: delete `payg_enabled` / `payg_credit_cap` from `entitlement_definitions` (+ any `plan_version_entitlements` assignments). Runtime credit headroom is strictly prepaid (combined plan + purchased balance).
+36. `20260807000005` - Two-pool credits + low-balance alerts: add `organizations.purchased_credit_balance` (INTEGER NOT NULL DEFAULT 0) and `organizations.low_credit_threshold_notified` (INTEGER NULLABLE); backfill purchased pool as `LEAST(ledger_purchase_sum, credit_balance)` from `credit_transactions` where `source='purchase'` AND `transaction_type='purchased'` AND `expires_at IS NULL` (avoids inflating purchased above the live single-pool balance). Plan credits expire at period end (expire + replace on renewal); purchased credits never expire; consumption drains plan first, then purchased; low-balance emails fire at 20/10/5% of the period's included credits, once per threshold per cycle.
+37. `20260807000006` - Premium tools: add `platform_tools.is_premium` (BOOLEAN NOT NULL DEFAULT FALSE). Premium tools are gated on the `premium_tools` plan feature at attach time (`POST /api/v1/tools/agent` → 403 when off); the frontend shows a badge + locked connect action.
+38. `20260807000007` - Atomic credit consumption: add `debit_organization_credits(organization_id, credits_needed)` Postgres function. Locks the organization row (`SELECT … FOR UPDATE`), allocates plan-first then purchased, and updates both pools in one transaction so concurrent voice sessions cannot overspend prepaid balance.
+39. `20260807000008` - Add required `plan_versions.billing_mode` (`free` or `paid`), backfill existing versions from the current plan-product catalog during migration, and add a check constraint plus lookup index. Free versions no longer require Stripe Price creation at publish time.
+40. `20260807000009` - Make `organization_subscriptions.stripe_customer_id` nullable so explicitly free plan subscriptions can be represented without Stripe identifiers.
+41. `20260808000010` - Add constrained `plan_versions.credit_grant_policy` (`recurring` or `one_time`) to distinguish automatic recurring plan credits from one-time free/trial credits.
+42. `20260808000011` - Make the current free signup version usable after onboarding by allowing one agent and assigning 100 included credits per recurring period.
+43. `20260808000012` - Add the atomic, idempotent `grant_subscription_credits` PostgreSQL function so subscription balance changes and credit ledger rows cannot become partially applied.
+44. `20260809000001` - Add per-call credit linkage (`call_logs.credits_consumed` and `credit_transaction_id`) plus the organization-scoped `call_artifacts` metadata table for private recordings, transcripts, and summaries. Seed the `voice_call_minute` metering event at 10 credits per connected minute and add the idempotent `consume_voice_call_credits` RPC for atomic voice-call debit plus ledger insert.
 
 ---
 
@@ -1485,4 +1627,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-05-06
+**Last Updated**: 2026-08-08

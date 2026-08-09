@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useOrganization } from "@/contexts/organization-context";
 import { useMyAgents } from "@/hooks/use-agent-queries";
 import { useCallLogs } from "@/hooks/use-call-logs";
+import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { CallLogListParams } from "@/services/call-log-service";
 import {
   Card,
@@ -13,14 +15,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Phone,
   PhoneIncoming,
   PhoneMissed,
   PhoneOff,
+  Zap,
   ChevronLeft,
   ChevronRight,
   Loader2,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -37,18 +43,28 @@ const STATUS_OPTIONS = [
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    answered: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    initiated: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-    ringing: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-    missed: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+    completed:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    answered:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+    initiated:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    ringing:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    missed:
+      "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
     failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
     busy: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-    "no-answer": "bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400",
+    "no-answer":
+      "bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400",
   };
-  const cls = map[status] ?? "bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400";
+  const cls =
+    map[status] ??
+    "bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400";
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
+    >
       {status}
     </span>
   );
@@ -67,7 +83,7 @@ function StatusIcon({ status }: { status: string }) {
   return <Phone className="h-4 w-4 text-muted-foreground" />;
 }
 
-function formatDuration(seconds: number): string {
+function formatDuration(seconds: number | null): string {
   if (!seconds) return "—";
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -85,7 +101,15 @@ function formatDateTime(iso: string | null): string {
 }
 
 export default function CallsPage() {
-  const { currentOrganization } = useOrganization();
+  const { currentOrganization, setCurrentOrganization } = useOrganization();
+  const searchParams = useSearchParams();
+  const requestedOrgId = searchParams.get("org_id");
+  const orgId = requestedOrgId ?? currentOrganization?.id ?? "";
+  const {
+    isValid: isOrgValid,
+    loading: organizationLoading,
+    organization: validatedOrganization,
+  } = useOrganizationById(orgId || null);
   const { data: agents = [] } = useMyAgents();
 
   const [agentFilter, setAgentFilter] = useState("");
@@ -103,11 +127,22 @@ export default function CallsPage() {
       page,
       page_size: 25,
     }),
-    [agentFilter, statusFilter, dateFrom, dateTo, page]
+    [agentFilter, statusFilter, dateFrom, dateTo, page],
   );
 
-  const orgId = currentOrganization?.id ?? "";
-  const { data, isLoading, error } = useCallLogs(orgId, params);
+  useEffect(() => {
+    if (
+      validatedOrganization &&
+      validatedOrganization.id !== currentOrganization?.id
+    ) {
+      setCurrentOrganization(validatedOrganization);
+    }
+  }, [validatedOrganization, currentOrganization, setCurrentOrganization]);
+
+  const { data, isLoading, isFetching, error, refetch } = useCallLogs(
+    orgId,
+    params,
+  );
 
   const handleFilterChange = useCallback(() => {
     setPage(1);
@@ -116,16 +151,41 @@ export default function CallsPage() {
   // Agent name lookup map
   const agentNameMap = useMemo(
     () => Object.fromEntries(agents.map((a) => [a.id, a.name])),
-    [agents]
+    [agents],
   );
 
-  if (!currentOrganization) {
+  if (!orgId) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-muted-foreground">No organization selected.</p>
       </div>
     );
   }
+
+  if (organizationLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <p className="ml-2 text-muted-foreground">Loading organization…</p>
+      </div>
+    );
+  }
+
+  if (!isOrgValid) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          You do not have access to this organization&apos;s call reports.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const organizationName =
+    validatedOrganization?.name ??
+    currentOrganization?.name ??
+    "the organization";
 
   return (
     <div className="space-y-6">
@@ -137,7 +197,7 @@ export default function CallsPage() {
         <div>
           <h1 className="text-2xl font-bold">Call Log</h1>
           <p className="text-sm text-muted-foreground">
-            History of all incoming calls for {currentOrganization.name}
+            History of all incoming calls for {organizationName}
           </p>
         </div>
       </div>
@@ -194,14 +254,22 @@ export default function CallsPage() {
 
             {/* Date from */}
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">
+              <label
+                htmlFor="call-date-from"
+                className="block text-sm font-medium text-muted-foreground mb-1"
+              >
                 From
               </label>
               <input
+                id="call-date-from"
                 type="date"
                 value={dateFrom}
                 onChange={(e) => {
-                  setDateFrom(e.target.value);
+                  const nextFrom = e.target.value;
+                  setDateFrom(nextFrom);
+                  if (nextFrom && dateTo && dateTo < nextFrom) {
+                    setDateTo("");
+                  }
                   handleFilterChange();
                 }}
                 className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -210,12 +278,17 @@ export default function CallsPage() {
 
             {/* Date to */}
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">
+              <label
+                htmlFor="call-date-to"
+                className="block text-sm font-medium text-muted-foreground mb-1"
+              >
                 To
               </label>
               <input
+                id="call-date-to"
                 type="date"
                 value={dateTo}
+                min={dateFrom || undefined}
                 onChange={(e) => {
                   setDateTo(e.target.value);
                   handleFilterChange();
@@ -239,6 +312,18 @@ export default function CallsPage() {
                 </CardDescription>
               )}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              aria-label="Refresh"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+              />
+              <span className="ml-2">Refresh</span>
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -249,12 +334,16 @@ export default function CallsPage() {
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-16">
-              <p className="text-destructive text-sm">Failed to load call logs.</p>
+              <p className="text-destructive text-sm">
+                Failed to load call logs.
+              </p>
             </div>
           ) : !data || data.items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Phone className="h-12 w-12 text-muted-foreground opacity-30 mb-4" />
-              <p className="text-lg font-semibold text-foreground">No calls yet</p>
+              <p className="text-lg font-semibold text-foreground">
+                No calls yet
+              </p>
               <p className="text-sm text-muted-foreground mt-1">
                 Calls will appear here once your agents start receiving them.
               </p>
@@ -266,16 +355,32 @@ export default function CallsPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">Date &amp; Time</th>
-                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">Caller</th>
-                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">Agent</th>
-                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">Duration</th>
+                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">
+                        Date &amp; Time
+                      </th>
+                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">
+                        Caller
+                      </th>
+                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">
+                        Agent
+                      </th>
+                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">
+                        Status
+                      </th>
+                      <th className="text-left px-6 py-3 font-medium text-muted-foreground">
+                        Duration
+                      </th>
+                      <th className="text-right px-6 py-3 font-medium text-muted-foreground">
+                        Credits
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {data.items.map((call) => (
-                      <tr key={call.id} className="hover:bg-muted/20 transition-colors">
+                      <tr
+                        key={call.id}
+                        className="hover:bg-muted/20 transition-colors"
+                      >
                         <td className="px-6 py-3 text-foreground whitespace-nowrap">
                           {formatDateTime(call.created_at)}
                         </td>
@@ -288,13 +393,21 @@ export default function CallsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-3 text-muted-foreground">
-                          {call.agent_id ? (agentNameMap[call.agent_id] ?? "Unknown Agent") : "—"}
+                          {call.agent_id
+                            ? (agentNameMap[call.agent_id] ?? "Unknown Agent")
+                            : "—"}
                         </td>
                         <td className="px-6 py-3">
                           {statusBadge(call.status)}
                         </td>
                         <td className="px-6 py-3 text-muted-foreground">
                           {formatDuration(call.duration)}
+                        </td>
+                        <td className="px-6 py-3 text-right font-mono text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Zap className="h-3 w-3 text-amber-500" />
+                            {call.credits_consumed || 0}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -319,6 +432,8 @@ export default function CallsPage() {
                       <span>{formatDateTime(call.created_at)}</span>
                       <span>·</span>
                       <span>{formatDuration(call.duration)}</span>
+                      <span>·</span>
+                      <span>{call.credits_consumed || 0} credits</span>
                       {call.agent_id && (
                         <>
                           <span>·</span>
@@ -349,7 +464,9 @@ export default function CallsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage((p) => Math.min(data.total_pages, p + 1))}
+                      onClick={() =>
+                        setPage((p) => Math.min(data.total_pages, p + 1))
+                      }
                       disabled={page === data.total_pages}
                     >
                       Next

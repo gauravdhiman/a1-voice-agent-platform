@@ -21,7 +21,9 @@ import {
 } from "@/hooks/use-agent-queries";
 import { organizationService } from "@/services/organization-service";
 import { agentService } from "@/services/agent-service";
+import { billingService } from "@/services/billing-service";
 import type { PlatformTool, AgentTool } from "@/types/agent";
+import type { OrgEntitlements } from "@/types/billing";
 import type { Organization } from "@/types/organization";
 import { AuthStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
@@ -174,6 +176,30 @@ export default function AgentDetailPage() {
     usePlatformTools(true);
   const { data: agentTools = [], refetch: refetchAgentTools } =
     useAgentTools(agentId);
+
+  // Org plan entitlements drive the premium-tool gate (blocked connect when
+  // the 'premium_tools' feature is off). Fetched once the agent resolves its
+  // organization; the API enforces the same gate.
+  const [orgEntitlements, setOrgEntitlements] =
+    React.useState<OrgEntitlements | null>(null);
+  React.useEffect(() => {
+    if (!agent?.organization_id) return;
+    let cancelled = false;
+    billingService
+      .getOrganizationEntitlements(agent.organization_id)
+      .then((data) => {
+        if (!cancelled) setOrgEntitlements(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load organization entitlements:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent?.organization_id]);
+
+  const premiumToolsBlocked = !orgEntitlements?.features["premium_tools"]
+    ?.effective_value;
 
   // Fetch system prompt preview
   const {
@@ -506,6 +532,17 @@ export default function AgentDetailPage() {
       );
 
       if (!existingAgentTool) {
+        // Premium tools are gated on the plan's 'premium_tools' feature: keep
+        // the card visible with a badge but block the attach action (the API
+        // enforces the same gate server-side). Already-connected premium tools
+        // keep working and remain editable.
+        if (tool.is_premium && premiumToolsBlocked) {
+          toast.error("Premium Tool", {
+            description:
+              "Premium tools are not included in your current plan. Upgrade your plan to connect this tool.",
+          });
+          return;
+        }
         try {
           setConnectingToolId(tool.id);
           setPendingToolToOpen(tool);
@@ -524,7 +561,7 @@ export default function AgentDetailPage() {
         setToolDrawerOpen(true);
       }
     },
-    [agentId, localAgentTools, configureAgentToolMutation],
+    [agentId, localAgentTools, configureAgentToolMutation, premiumToolsBlocked],
   );
 
   const handleCloseToolDrawer = useCallback(() => {
@@ -1361,6 +1398,7 @@ and confirm someone will call back the next business day.`}
                             onClick={() => handleToolCardClick(tool)}
                             disabled={!canEdit}
                             isUnpublished={unpublishedConnectedIds.has(tool.id)}
+                            premiumBlocked={premiumToolsBlocked}
                           />
                         );
                       })}

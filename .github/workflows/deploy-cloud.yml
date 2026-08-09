@@ -29,8 +29,8 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Write .env.cloud from GitHub secret
-        run: printf '%s\n' "${{ secrets.ENV_CLOUD }}" > .env.cloud
+      - name: Write .env.prod from GitHub secret
+        run: printf '%s\n' "${{ secrets.ENV_PROD }}" > .env.prod
 
       - name: Deploy backend and frontend to Cloud Run
         run: |
@@ -45,9 +45,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare .env.cloud and SSH key
+      - name: Prepare .env.prod and SSH key
         run: |
-          printf '%s\n' "${{ secrets.ENV_CLOUD }}" > .env.cloud
+          printf '%s\n' "${{ secrets.ENV_PROD }}" > .env.prod
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/oci_voice_ws
           chmod 600 ~/.ssh/oci_voice_ws

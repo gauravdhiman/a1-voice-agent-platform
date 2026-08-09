@@ -17,14 +17,13 @@ deploys use GCP Cloud Run + OCI — see [deployment/README.md](README.md).
 ## docker-compose
 
 ```bash
-cp .env.example .env
-# Edit .env with your credentials
+# Create .env.local once from .env.local.example and edit it with credentials.
+# For staging instead, use: ./start.sh start dev --env staging
 
-docker-compose up --build              # all services
-docker-compose up backend              # one service
-docker-compose up --build voice-ws
-docker-compose logs -f backend
-docker-compose down
+./start.sh start dev                   # all services, local Supabase
+./start.sh start dev --env staging     # all services, cloud staging Supabase
+./start.sh logs dev
+./start.sh stop dev
 ```
 
 ## Manual image builds
@@ -32,7 +31,7 @@ docker-compose down
 ```bash
 # Backend
 docker build -t backend-dev -f backend/Dockerfile .
-docker run -p 8000:8000 --env-file .env backend-dev
+docker run -p 8000:8000 --env-file .env.local backend-dev
 
 # Frontend
 docker build -t frontend-dev \
@@ -47,7 +46,7 @@ docker run -p 3000:3000 frontend-dev
 
 # voice-ws
 docker build -t voice-ws-dev -f voice-ws/Dockerfile .
-docker run -p 7860:7860 --env-file .env voice-ws-dev
+docker run -p 7860:7860 --env-file .env.local voice-ws-dev
 ```
 
 ## Health checks

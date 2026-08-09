@@ -13,11 +13,7 @@ export type SubscriptionStatus =
   | "incomplete_expired";
 
 export type TransactionType =
-  | "earned"
-  | "purchased"
-  | "consumed"
-  | "expired"
-  | "refunded";
+  "earned" | "purchased" | "consumed" | "expired" | "refunded";
 
 export type TransactionSource =
   | "subscription"
@@ -28,13 +24,11 @@ export type TransactionSource =
   | "admin_adjustment";
 
 export type BillingStatus =
-  | "pending"
-  | "paid"
-  | "failed"
-  | "refunded"
-  | "cancelled";
+  "pending" | "paid" | "failed" | "refunded" | "cancelled";
 
 export type PlanInterval = "monthly" | "annual";
+export type BillingMode = "free" | "paid";
+export type CreditGrantPolicy = "recurring" | "one_time";
 
 // Subscription Plan interfaces
 export interface SubscriptionPlan {
@@ -88,8 +82,9 @@ export interface OrganizationSubscription {
   id: string;
   organization_id: string;
   subscription_plan_id: string | null;
+  plan_version_id: string | null;
   stripe_subscription_id: string | null;
-  stripe_customer_id: string;
+  stripe_customer_id: string | null;
   status: SubscriptionStatus;
   current_period_start: string | null;
   current_period_end: string | null;
@@ -102,8 +97,7 @@ export interface OrganizationSubscription {
   updated_at: string;
 }
 
-export interface OrganizationSubscriptionWithPlan
-  extends OrganizationSubscription {
+export interface OrganizationSubscriptionWithPlan extends OrganizationSubscription {
   plan: SubscriptionPlan | null;
 }
 
@@ -111,6 +105,78 @@ export interface OrganizationSubscriptionCreate {
   organization_id: string;
   subscription_plan_id: string;
   stripe_customer_id?: string;
+}
+
+/** Published immutable plan version displayed during founder onboarding. */
+export interface CustomerPlanVersion {
+  id: string;
+  plan_product_id: string;
+  product_slug: string;
+  product_name: string;
+  product_description: string | null;
+  version_number: number;
+  display_label: string | null;
+  billing_mode: BillingMode;
+  credit_grant_policy: CreditGrantPolicy;
+  price_amount_cents: number;
+  currency: string;
+  billing_interval: PlanInterval | string;
+  trial_period_days: number | null;
+  stripe_price_id: string | null;
+  entitlements: Record<string, Record<string, unknown>>;
+}
+
+/** Subscription row returned after a versioned free activation. */
+export interface VersionedSubscriptionRecord {
+  id: string;
+  organization_id: string;
+  subscription_plan_id: string | null;
+  plan_version_id: string;
+  stripe_subscription_id: string | null;
+  stripe_customer_id: string | null;
+  status: SubscriptionStatus;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  metadata: Record<string, unknown>;
+}
+
+/** Result of an idempotent free-plan activation. */
+export interface FreePlanActivationResponse {
+  subscription: VersionedSubscriptionRecord;
+  created: boolean;
+}
+
+/** Request sent to the versioned paid checkout endpoint. */
+export interface VersionedSubscriptionCheckoutRequest {
+  organization_id: string;
+  plan_version_id: string;
+  success_url: string;
+  cancel_url: string;
+}
+
+/** Redirect details returned by Stripe Checkout creation. */
+export interface VersionedSubscriptionCheckoutResponse {
+  checkout_url: string;
+  session_id: string;
+  plan_version_id: string;
+}
+
+export type SubscriptionActivationState =
+  | "unselected"
+  | "checkout_pending"
+  | "active"
+  | "trial"
+  | "past_due"
+  | "cancelled";
+
+/** Status used to decide whether the onboarding flow may finish. */
+export interface SubscriptionActivationStatus {
+  organization_id: string;
+  state: SubscriptionActivationState;
+  subscription_id: string | null;
+  plan_version_id: string | null;
+  billing_mode: BillingMode | null;
+  subscription_status: SubscriptionStatus | null;
 }
 
 // Credit Event interfaces
@@ -154,6 +220,32 @@ export interface CreditTransaction {
 
 export interface CreditTransactionWithEvent extends CreditTransaction {
   credit_event: CreditEvent | null;
+}
+
+export interface CreditUsageCategory {
+  category: string;
+  credits_consumed: number;
+  transaction_count: number;
+}
+
+export interface CreditTransactionsResponse {
+  items: CreditTransactionWithEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface CreditUsageResponse {
+  organization_id: string;
+  balance: CreditBalance;
+  period_start: string | null;
+  period_end: string | null;
+  period_credits_granted: number;
+  period_credits_used: number;
+  period_credits_remaining: number;
+  usage_by_category: CreditUsageCategory[];
+  transactions: CreditTransactionWithEvent[];
 }
 
 // Credit Product interfaces
@@ -266,6 +358,52 @@ export interface CreditConsumptionResponse {
   credits_consumed: number;
   balance_after: number;
   transaction_id: string;
+}
+
+// Plan entitlements (version-bound limits and migration status)
+export type PlanMigrationStatus =
+  "pending" | "grace_active" | "migrated" | "declined_legacy" | "cancelled";
+
+export interface OrgPlanMigrationInfo {
+  migration_id: string;
+  from_plan_version_id: string;
+  to_plan_version_id: string;
+  status: PlanMigrationStatus;
+  grace_period_ends_at: string | null;
+  target_plan_version_label: string | null;
+  allow_indefinite_legacy: boolean;
+  can_self_migrate: boolean;
+}
+
+export interface ResolvedEntitlement {
+  key: string;
+  kind: "limit" | "feature";
+  assigned: boolean;
+  raw_value: Record<string, unknown> | null;
+  effective_value: unknown;
+  is_unlimited: boolean;
+}
+
+export interface OrgEntitlements {
+  organization_id: string;
+  plan_version_id: string;
+  plan_product_slug: string;
+  plan_version_number: number;
+  plan_version_label: string | null;
+  is_legacy_version: boolean;
+  is_entitled: boolean;
+  cancel_at_period_end: boolean;
+  access_until: string | null;
+  limits: Record<string, ResolvedEntitlement>;
+  features: Record<string, ResolvedEntitlement>;
+  migration: OrgPlanMigrationInfo | null;
+}
+
+export interface PlanMigrationResponse {
+  success: boolean;
+  migration_id: string;
+  to_plan_version_id: string;
+  status: string;
 }
 
 // UI Helper interfaces

@@ -7,8 +7,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from shared.config import supabase_config
+from shared.config import settings, supabase_config
 
+from .credit_entitlement_service import (
+    CreditEntitlementService,
+    credit_entitlement_service,
+)
 from .models import (
     BillingHistory,
     BillingHistoryCreate,
@@ -24,7 +28,10 @@ from .models import (
     CreditProductUpdate,
     CreditTransaction,
     CreditTransactionCreate,
+    CreditTransactionsResponse,
     CreditTransactionWithEvent,
+    CreditUsageCategory,
+    CreditUsageResponse,
     OrganizationBillingSummary,
     OrganizationSubscription,
     OrganizationSubscriptionCreate,
@@ -316,12 +323,18 @@ class BillingService:
 
     # Credit Management
     async def get_credit_balance(self, organization_id: UUID) -> CreditBalance:
-        """Get detailed credit balance for an organization."""
+        """Get detailed credit balance for an organization.
+
+        Two-pool model: ``organizations.credit_balance`` holds plan credits
+        (granted per billing period, expire at period end) and
+        ``organizations.purchased_credit_balance`` holds one-off purchased
+        credit packs (never expire). ``total_credits`` is their sum.
+        """
         try:
-            # Get organization's current credit balance
+            # Get organization's current credit balances (plan + purchased pools)
             org_result = (
                 self.supabase.table("organizations")
-                .select("credit_balance")
+                .select("credit_balance, purchased_credit_balance")
                 .eq("id", str(organization_id))
                 .execute()
             )
@@ -329,45 +342,17 @@ class BillingService:
             if not org_result.data:
                 raise ValueError(f"Organization {organization_id} not found")
 
-            total_credits = org_result.data[0]["credit_balance"]
+            plan_credits = int(org_result.data[0].get("credit_balance") or 0)
+            purchased_credits = int(
+                org_result.data[0].get("purchased_credit_balance") or 0
+            )
+            total_credits = plan_credits + purchased_credits
 
-            # Get breakdown of subscription vs purchased credits
+            # Credits expiring soon (plan credits carry an expiry per period)
             thirty_days_from_now = (
                 datetime.now(timezone.utc) + timedelta(days=30)
             ).isoformat()
 
-            # Subscription credits (with expiry)
-            subscription_credits_result = (
-                self.supabase.table("credit_transactions")
-                .select("amount")
-                .eq("organization_id", str(organization_id))
-                .eq("source", TransactionSource.SUBSCRIPTION.value)
-                .eq("transaction_type", TransactionType.EARNED.value)
-                .not_.is_("expires_at", "null")
-                .gte("expires_at", datetime.now(timezone.utc).isoformat())
-                .execute()
-            )
-
-            subscription_credits = sum(
-                tx["amount"] for tx in subscription_credits_result.data
-            )
-
-            # Purchased credits (no expiry)
-            purchased_credits_result = (
-                self.supabase.table("credit_transactions")
-                .select("amount")
-                .eq("organization_id", str(organization_id))
-                .eq("source", TransactionSource.PURCHASE.value)
-                .eq("transaction_type", TransactionType.PURCHASED.value)
-                .is_("expires_at", "null")
-                .execute()
-            )
-
-            purchased_credits = sum(
-                tx["amount"] for tx in purchased_credits_result.data
-            )
-
-            # Credits expiring soon
             expiring_soon_result = (
                 self.supabase.table("credit_transactions")
                 .select("amount, expires_at")
@@ -388,7 +373,7 @@ class BillingService:
 
             return CreditBalance(
                 total_credits=total_credits,
-                subscription_credits=subscription_credits,
+                subscription_credits=plan_credits,
                 purchased_credits=purchased_credits,
                 expiring_soon=expiring_soon,
                 expires_at=next_expiry,
@@ -398,20 +383,178 @@ class BillingService:
             logger.error(f"Error getting credit balance for {organization_id}: {e}")
             raise
 
+    @staticmethod
+    def _credit_transaction_from_row(row: dict[str, Any]) -> CreditTransactionWithEvent:
+        """Normalize Supabase's embedded ``credit_events`` field."""
+        payload = dict(row)
+        event_data = payload.pop("credit_events", None) or payload.pop(
+            "credit_event", None
+        )
+        if isinstance(event_data, list):
+            event_data = event_data[0] if event_data else None
+        payload["credit_event"] = (
+            CreditEvent(**event_data) if isinstance(event_data, dict) else None
+        )
+        return CreditTransactionWithEvent(**payload)
+
+    async def get_credit_transactions(
+        self,
+        organization_id: UUID,
+        *,
+        page: int = 1,
+        page_size: int = 25,
+        transaction_type: Optional[TransactionType] = None,
+    ) -> CreditTransactionsResponse:
+        """Return a paginated, event-enriched credit ledger for an organization.
+
+        Args:
+            organization_id: Organization whose ledger is requested.
+            page: One-based page number.
+            page_size: Number of rows to return, capped by the API route.
+            transaction_type: Optional movement filter such as ``consumed``.
+
+        Returns:
+            Paginated ledger rows including the event category and unit cost
+            when a transaction was caused by a credit event.
+        """
+        try:
+            query = (
+                self.supabase.table("credit_transactions")
+                .select("*, credit_events(*)", count="exact")
+                .eq("organization_id", str(organization_id))
+                .order("created_at", desc=True)
+            )
+            if transaction_type:
+                query = query.eq("transaction_type", transaction_type.value)
+
+            offset = (page - 1) * page_size
+            result = query.range(offset, offset + page_size - 1).execute()
+            total = int(result.count or 0)
+            items = [
+                self._credit_transaction_from_row(row) for row in (result.data or [])
+            ]
+            return CreditTransactionsResponse(
+                items=items,
+                total=total,
+                page=page,
+                page_size=page_size,
+                total_pages=max(1, (total + page_size - 1) // page_size),
+            )
+        except Exception as e:
+            logger.error(
+                "Error fetching credit transactions for %s: %s",
+                organization_id,
+                e,
+            )
+            raise
+
+    async def get_credit_usage(
+        self, organization_id: UUID, *, transaction_limit: int = 50
+    ) -> CreditUsageResponse:
+        """Build the organization credit dashboard payload.
+
+        The response intentionally keeps the two live pools visible while
+        aggregating current-period ledger movements by event category. This
+        lets administrators distinguish available plan credits from purchased
+        credits and see exactly what consumed the balance.
+        """
+        try:
+            balance = await self.get_credit_balance(organization_id)
+            subscription = await self.get_organization_subscription(organization_id)
+            period_start = subscription.current_period_start if subscription else None
+            period_end = subscription.current_period_end if subscription else None
+
+            query = (
+                self.supabase.table("credit_transactions")
+                .select("*, credit_events(*)")
+                .eq("organization_id", str(organization_id))
+                .order("created_at", desc=True)
+            )
+            if period_start:
+                query = query.gte("created_at", period_start.isoformat())
+            rows = query.execute().data or []
+
+            period_granted = 0
+            period_used = 0
+            category_totals: dict[str, CreditUsageCategory] = {}
+            for row in rows:
+                transaction_type = row.get("transaction_type")
+                amount = int(row.get("amount") or 0)
+                if (
+                    transaction_type
+                    in {
+                        TransactionType.EARNED.value,
+                        TransactionType.PURCHASED.value,
+                    }
+                    and amount > 0
+                ):
+                    period_granted += amount
+                if transaction_type != TransactionType.CONSUMED.value:
+                    continue
+
+                consumed = abs(amount)
+                period_used += consumed
+                event = row.get("credit_events") or row.get("credit_event") or {}
+                if isinstance(event, list):
+                    event = event[0] if event else {}
+                category = str(
+                    event.get("category")
+                    or (row.get("metadata") or {}).get("category")
+                    or row.get("source")
+                    or "other"
+                )
+                existing = category_totals.get(category)
+                if existing:
+                    existing.credits_consumed += consumed
+                    existing.transaction_count += 1
+                else:
+                    category_totals[category] = CreditUsageCategory(
+                        category=category,
+                        credits_consumed=consumed,
+                        transaction_count=1,
+                    )
+
+            recent = [
+                self._credit_transaction_from_row(row)
+                for row in rows[:transaction_limit]
+            ]
+            return CreditUsageResponse(
+                organization_id=organization_id,
+                balance=balance,
+                period_start=period_start,
+                period_end=period_end,
+                period_credits_granted=period_granted,
+                period_credits_used=period_used,
+                period_credits_remaining=max(0, period_granted - period_used),
+                usage_by_category=sorted(
+                    category_totals.values(),
+                    key=lambda item: item.credits_consumed,
+                    reverse=True,
+                ),
+                transactions=recent,
+            )
+        except Exception as e:
+            logger.error("Error building credit usage for %s: %s", organization_id, e)
+            raise
+
     async def add_subscription_credits(
         self,
         organization_id: UUID,
         credits: int,
         subscription_id: UUID,
         expires_at: Optional[datetime] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> CreditTransaction:
-        """Add subscription credits to an organization."""
+        """Add subscription credits to an organization exactly once per key."""
         return await self._add_credits(
             organization_id=organization_id,
             credits=credits,
             source=TransactionSource.SUBSCRIPTION,
             source_id=subscription_id,
             expires_at=expires_at,
+            metadata=metadata,
+            idempotency_key=idempotency_key,
             description=f"Subscription credits allocation",
         )
 
@@ -422,12 +565,17 @@ class BillingService:
         subscription_id: UUID,
         expires_at: Optional[datetime] = None,
     ) -> CreditTransaction:
-        """Reset subscription credits to a specific amount (for plan changes)."""
+        """Reset subscription (plan) credits to a specific amount (for plan changes).
+
+        Only the plan pool (``organizations.credit_balance``) is reset to the
+        target; purchased credits are user-bought and never touched by plan
+        changes.
+        """
         try:
-            # Get current balance
+            # Get current balances
             org_result = (
                 self.supabase.table("organizations")
-                .select("credit_balance")
+                .select("credit_balance, purchased_credit_balance")
                 .eq("id", str(organization_id))
                 .execute()
             )
@@ -435,12 +583,11 @@ class BillingService:
             if not org_result.data:
                 raise ValueError(f"Organization {organization_id} not found")
 
-            current_balance = org_result.data[0]["credit_balance"]
+            current_plan_balance = org_result.data[0]["credit_balance"]
+            current_purchased_balance = org_result.data[0]["purchased_credit_balance"]
 
-            # Calculate the difference needed to reach the target credit amount
-            # If current balance is 100 and we want 500, we need to add 400
-            # If current balance is 600 and we want 100, we need to subtract 500
-            credit_difference = credits - current_balance
+            # Calculate the difference needed to reach the target plan credit amount
+            credit_difference = credits - current_plan_balance
 
             if credit_difference == 0:
                 # No change needed
@@ -449,7 +596,8 @@ class BillingService:
                 )
                 return None
 
-            # Update organization balance to the exact target amount
+            # Update organization plan balance to the exact target amount
+            # (purchased pool untouched)
             self.supabase.table("organizations").update(
                 {
                     "credit_balance": credits,
@@ -484,8 +632,8 @@ class BillingService:
             if "source_id" in transaction_dict and transaction_dict["source_id"]:
                 transaction_dict["source_id"] = str(transaction_dict["source_id"])
 
-            # Set balance_after field (required by database)
-            transaction_dict["balance_after"] = credits
+            # Set balance_after field (combined total; required by database)
+            transaction_dict["balance_after"] = credits + current_purchased_balance
 
             # Convert datetime objects to ISO strings
             if "expires_at" in transaction_dict and transaction_dict["expires_at"]:
@@ -502,7 +650,7 @@ class BillingService:
 
             if result.data:
                 logger.info(
-                    f"Reset credits to {credits} for organization {organization_id} (was {current_balance})"
+                    f"Reset credits to {credits} for organization {organization_id} (was {current_plan_balance})"
                 )
                 return CreditTransaction(**result.data[0])
 
@@ -539,13 +687,52 @@ class BillingService:
         expires_at: Optional[datetime] = None,
         stripe_payment_intent_id: Optional[str] = None,
         description: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> CreditTransaction:
-        """Internal method to add credits."""
+        """Internal method to add credits to the correct pool.
+
+        Two-pool model:
+        - SUBSCRIPTION grants land in ``organizations.credit_balance`` (plan
+          pool). When a grant carries an ``expires_at`` (renewal), any leftover
+          plan credits from the previous period are first expired (logged as an
+          EXPIRED transaction) and the new grant replaces them.
+        - PURCHASE grants land in ``organizations.purchased_credit_balance``
+          (purchased pool, never expires).
+
+        Any grant/purchase re-arms low-balance notifications for the cycle.
+        """
         try:
-            # Get current balance
+            if idempotency_key:
+                existing_result = (
+                    self.supabase.table("credit_transactions")
+                    .select("*")
+                    .eq("organization_id", str(organization_id))
+                    .contains("metadata", {"grant_key": idempotency_key})
+                    .limit(1)
+                    .execute()
+                )
+                if existing_result.data:
+                    return CreditTransaction(**existing_result.data[0])
+
+            # Versioned subscription grants always carry a stable key. Route
+            # those grants through Postgres so the balance update, expiry
+            # bookkeeping, and ledger insert commit or roll back together.
+            if source == TransactionSource.SUBSCRIPTION and idempotency_key:
+                return await self._grant_subscription_credits_locked(
+                    organization_id=organization_id,
+                    credits=credits,
+                    source_id=source_id,
+                    expires_at=expires_at,
+                    metadata=metadata,
+                    description=description,
+                    idempotency_key=idempotency_key,
+                )
+
+            # Get current balances
             org_result = (
                 self.supabase.table("organizations")
-                .select("credit_balance")
+                .select("credit_balance, purchased_credit_balance")
                 .eq("id", str(organization_id))
                 .execute()
             )
@@ -553,18 +740,14 @@ class BillingService:
             if not org_result.data:
                 raise ValueError(f"Organization {organization_id} not found")
 
-            current_balance = org_result.data[0]["credit_balance"]
-            new_balance = current_balance + credits
+            current_plan = int(org_result.data[0].get("credit_balance") or 0)
+            current_purchased = int(
+                org_result.data[0].get("purchased_credit_balance") or 0
+            )
 
-            # Update organization balance
-            self.supabase.table("organizations").update(
-                {
-                    "credit_balance": new_balance,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", str(organization_id)).execute()
-
-            # Create transaction record using the validated model
+            # Validate and serialize the ledger payload before any balance
+            # mutation. Pydantic's default model_dump leaves datetime objects
+            # in Python mode, which Supabase cannot encode as JSON.
             transaction_data = CreditTransactionCreate(
                 organization_id=organization_id,
                 transaction_type=(
@@ -578,28 +761,41 @@ class BillingService:
                 expires_at=expires_at,
                 stripe_payment_intent_id=stripe_payment_intent_id,
                 description=description,
+                metadata=metadata,
             )
+            transaction_dict = transaction_data.model_dump(mode="json")
 
-            # Convert UUID objects to strings for JSON serialization
-            transaction_dict = transaction_data.model_dump()
-            if (
-                "organization_id" in transaction_dict
-                and transaction_dict["organization_id"]
-            ):
-                transaction_dict["organization_id"] = str(
-                    transaction_dict["organization_id"]
-                )
-            if "source_id" in transaction_dict and transaction_dict["source_id"]:
-                transaction_dict["source_id"] = str(transaction_dict["source_id"])
-            if (
-                "credit_event_id" in transaction_dict
-                and transaction_dict["credit_event_id"]
-            ):
-                transaction_dict["credit_event_id"] = str(
-                    transaction_dict["credit_event_id"]
-                )
+            # Expire leftover plan credits from the previous period when a new
+            # expiring grant lands (renewal / invoice paid).
+            if source == TransactionSource.SUBSCRIPTION and expires_at is not None:
+                if current_plan > 0:
+                    current_purchased = await self._expire_plan_credits(
+                        organization_id, current_plan, current_purchased
+                    )
+                    current_plan = 0
 
-            # Set balance_after field (required by database)
+            if source == TransactionSource.SUBSCRIPTION:
+                new_plan = current_plan + credits
+                new_purchased = current_purchased
+                self.supabase.table("organizations").update(
+                    {
+                        "credit_balance": new_plan,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                ).eq("id", str(organization_id)).execute()
+            else:
+                new_plan = current_plan
+                new_purchased = current_purchased + credits
+                self.supabase.table("organizations").update(
+                    {
+                        "purchased_credit_balance": new_purchased,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                ).eq("id", str(organization_id)).execute()
+
+            new_balance = new_plan + new_purchased
+
+            # Set balance_after field (combined total; required by database)
             transaction_dict["balance_after"] = new_balance
 
             # Log the polymorphic relationship for debugging
@@ -618,6 +814,8 @@ class BillingService:
                 logger.info(
                     f"Added {credits} credits to organization {organization_id} (source: {source.value})"
                 )
+                # Re-arm low-balance warnings for the new cycle
+                await self._reset_low_credit_notification(organization_id)
                 return CreditTransaction(**result.data[0])
 
             raise Exception("Failed to create credit transaction")
@@ -626,10 +824,122 @@ class BillingService:
             logger.error(f"Error adding credits to {organization_id}: {e}")
             raise
 
+    async def _grant_subscription_credits_locked(
+        self,
+        organization_id: UUID,
+        credits: int,
+        source_id: Optional[UUID],
+        expires_at: Optional[datetime],
+        metadata: Optional[dict[str, Any]],
+        description: Optional[str],
+        idempotency_key: str,
+    ) -> CreditTransaction:
+        """Apply an idempotent subscription grant inside one database transaction.
+
+        The backing PostgreSQL function locks the organization row, checks the
+        grant key, expires leftover plan credits when appropriate, updates the
+        plan pool, and inserts the ledger row before returning. Keeping these
+        writes together prevents a failed ledger serialization or insert from
+        leaving a balance that cannot be audited or safely retried.
+
+        Args:
+            organization_id: Organization receiving the included credits.
+            credits: Positive number of credits to grant.
+            source_id: Subscription UUID that owns the grant.
+            expires_at: Optional period boundary for recurring plan credits.
+            metadata: JSON-compatible grant metadata, including ``grant_key``.
+            description: Human-readable ledger description.
+            idempotency_key: Stable key for activation, invoice, or renewal.
+
+        Returns:
+            The inserted or previously applied credit transaction.
+
+        Raises:
+            ValueError: If the organization or grant is invalid.
+            RuntimeError: If the database function returns no transaction.
+        """
+        result = self.supabase.rpc(
+            "grant_subscription_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits": credits,
+                "p_subscription_id": str(source_id) if source_id else None,
+                "p_expires_at": expires_at.isoformat() if expires_at else None,
+                "p_metadata": metadata,
+                "p_description": description,
+                "p_idempotency_key": idempotency_key,
+            },
+        ).execute()
+        payload = result.data
+        if isinstance(payload, list):
+            payload = payload[0] if payload else {}
+        if not payload:
+            raise RuntimeError("Subscription credit grant returned no result")
+        if payload.get("error"):
+            error = payload["error"]
+            if error == "organization_not_found":
+                raise ValueError(f"Organization {organization_id} not found")
+            raise ValueError(f"Subscription credit grant failed: {error}")
+
+        transaction_payload = payload.get("transaction")
+        if not transaction_payload:
+            raise RuntimeError("Subscription credit grant returned no transaction")
+        return CreditTransaction(**transaction_payload)
+
+    async def _expire_plan_credits(
+        self,
+        organization_id: UUID,
+        amount: int,
+        current_purchased: int,
+    ) -> int:
+        """Void leftover plan credits at period end and log an EXPIRED transaction.
+
+        Returns the purchased balance unchanged (used to record a combined
+        ``balance_after`` on the expiry row).
+        """
+        try:
+            expire_tx = CreditTransactionCreate(
+                organization_id=organization_id,
+                transaction_type=TransactionType.EXPIRED,
+                amount=-amount,
+                source=TransactionSource.EXPIRY,
+                description="Plan credits expired at period end",
+            )
+            expire_dict = expire_tx.model_dump(mode="json")
+            expire_dict["balance_after"] = current_purchased
+            self.supabase.table("credit_transactions").insert(expire_dict).execute()
+            logger.info(
+                f"Expired {amount} leftover plan credits for organization {organization_id}"
+            )
+            return current_purchased
+        except Exception as e:
+            # Expiry bookkeeping must not block the new grant.
+            logger.error(f"Error logging plan credit expiry for {organization_id}: {e}")
+            return current_purchased
+
+    async def _reset_low_credit_notification(self, organization_id: UUID) -> None:
+        """Clear the notified threshold so warnings re-arm after a grant/purchase."""
+        try:
+            self.supabase.table("organizations").update(
+                {"low_credit_threshold_notified": None}
+            ).eq("id", str(organization_id)).execute()
+        except Exception as e:
+            logger.error(
+                f"Error resetting low-credit notification marker for {organization_id}: {e}"
+            )
+
     async def consume_credits(
         self, consumption_request: CreditConsumptionRequest
     ) -> CreditConsumptionResponse:
-        """Consume credits for an event."""
+        """Consume credits for an event (two-pool, strictly prepaid).
+
+        Plan credits (``organizations.credit_balance``) are drained first,
+        then purchased credits (``organizations.purchased_credit_balance``).
+        No pay-as-you-go: consumption is denied when the combined balance is
+        insufficient. The per-pool allocation is recorded in the consumption
+        transaction metadata for audit, and a low-balance notification may be
+        triggered (20/10/5% of the period's included credits).
+        """
         try:
             # Get credit event details
             event_result = (
@@ -648,38 +958,31 @@ class BillingService:
             credit_event = CreditEvent(**event_result.data[0])
             credits_needed = credit_event.credit_cost * consumption_request.quantity
 
-            # Get current balance
-            org_result = (
-                self.supabase.table("organizations")
-                .select("credit_balance")
-                .eq("id", str(consumption_request.organization_id))
-                .execute()
+            debit_result = await self._debit_organization_credits_locked(
+                consumption_request.organization_id, credits_needed
             )
 
-            if not org_result.data:
+            if debit_result.get("error") == "organization_not_found":
                 raise ValueError(
                     f"Organization {consumption_request.organization_id} not found"
                 )
 
-            current_balance = int(org_result.data[0]["credit_balance"])
-
-            if current_balance < credits_needed:
+            if not debit_result.get("success"):
                 return CreditConsumptionResponse(
                     success=False,
                     credits_consumed=0,
-                    balance_after=current_balance,
+                    balance_after=int(debit_result.get("balance_after") or 0),
                     transaction_id=UUID("00000000-0000-0000-0000-000000000000"),
                 )
 
-            new_balance = current_balance - credits_needed
+            new_balance = int(debit_result["balance_after"])
+            plan_used = int(debit_result.get("plan_used") or 0)
+            purchased_used = int(debit_result.get("purchased_used") or 0)
 
-            # Update organization balance
-            self.supabase.table("organizations").update(
-                {
-                    "credit_balance": new_balance,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", str(consumption_request.organization_id)).execute()
+            # Record per-pool allocation for audit
+            consumption_metadata = dict(consumption_request.metadata or {})
+            consumption_metadata["plan_credits"] = plan_used
+            consumption_metadata["purchased_credits"] = purchased_used
 
             # Create consumption transaction using validated model
             transaction_data = CreditTransactionCreate(
@@ -690,7 +993,7 @@ class BillingService:
                 source_id=credit_event.id,  # References credit_events table
                 credit_event_id=credit_event.id,
                 description=f"Consumed {consumption_request.quantity}x {consumption_request.event_name}",
-                metadata=consumption_request.metadata,
+                metadata=consumption_metadata or None,
             )
 
             # Log the polymorphic relationship
@@ -739,7 +1042,13 @@ class BillingService:
             if result.data:
                 transaction = CreditTransaction(**result.data[0])
                 logger.info(
-                    f"Consumed {credits_needed} credits for {consumption_request.event_name}"
+                    f"Consumed {credits_needed} credits for {consumption_request.event_name} "
+                    f"(plan={plan_used}, purchased={purchased_used})"
+                )
+
+                # Low-balance warnings never block consumption
+                await self._maybe_notify_low_balance(
+                    consumption_request.organization_id, new_balance
                 )
 
                 return CreditConsumptionResponse(
@@ -754,6 +1063,159 @@ class BillingService:
         except Exception as e:
             logger.error(f"Error consuming credits: {e}")
             raise
+
+    async def _debit_organization_credits_locked(
+        self, organization_id: UUID, credits_needed: int
+    ) -> dict[str, Any]:
+        """Atomically debit plan + purchased pools under a row lock.
+
+        Calls the ``debit_organization_credits`` Postgres function so concurrent
+        consumers serialize on the organization row (``SELECT … FOR UPDATE``).
+
+        Args:
+            organization_id: Organization UUID.
+            credits_needed: Positive credits to consume.
+
+        Returns:
+            JSON payload from the RPC with ``success``, balances, and pool usage.
+        """
+        result = self.supabase.rpc(
+            "debit_organization_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits_needed": credits_needed,
+            },
+        ).execute()
+        payload = result.data
+        if isinstance(payload, list):
+            payload = payload[0] if payload else {}
+        if payload is None:
+            payload = {}
+        return payload
+
+    @staticmethod
+    def allocate_consumption(
+        plan_balance: int,
+        purchased_balance: int,
+        credits_needed: int,
+    ) -> tuple[int, int]:
+        """Allocate a consumption across the plan pool first, then purchased.
+
+        Args:
+            plan_balance: Current plan credits (expire at period end).
+            purchased_balance: Current purchased credits (never expire).
+            credits_needed: Credits to consume (positive integer).
+
+        Returns:
+            Tuple ``(plan_used, purchased_used)``. Sums to ``credits_needed``
+            when the combined balance covers it, otherwise drains whatever is
+            available (caller denies when the sum is short).
+
+        Example:
+            ```python
+            allocate_consumption(30, 50, 60)  # -> (30, 30)
+            allocate_consumption(0, 50, 60)   # -> (0, 50)
+            allocate_consumption(100, 0, 60)  # -> (60, 0)
+            ```
+        """
+        plan_used = max(0, min(plan_balance, credits_needed))
+        remaining = credits_needed - plan_used
+        purchased_used = max(0, min(purchased_balance, remaining))
+        return plan_used, purchased_used
+
+    async def _maybe_notify_low_balance(
+        self, organization_id: UUID, remaining_total: int
+    ) -> None:
+        """Email org admins when the balance crosses a low-credit threshold.
+
+        Uses the ``credits.low_balance`` template at 20/10/5% of the period's
+        included credits. Each threshold fires at most once per billing cycle
+        (``organizations.low_credit_threshold_notified``), re-armed by any
+        grant or purchase. Failures are logged and never break consumption.
+        """
+        try:
+            from src.notifications.models import SendNotificationRequest
+            from src.notifications.service import notification_service
+            from src.rbac.user_roles.service import user_role_service
+
+            included = await credit_entitlement_service.get_included_credits_per_billing_period(
+                organization_id
+            )
+            if included <= 0:
+                return
+
+            org_result = (
+                self.supabase.table("organizations")
+                .select("name, low_credit_threshold_notified")
+                .eq("id", str(organization_id))
+                .limit(1)
+                .execute()
+            )
+            if not org_result.data:
+                return
+            org_row = org_result.data[0]
+            last_notified = org_row.get("low_credit_threshold_notified")
+
+            threshold = CreditEntitlementService.low_credit_threshold_to_notify(
+                remaining_total, included, last_notified
+            )
+            if threshold is None:
+                return
+
+            # Mark first so a partial email failure does not resend
+            self.supabase.table("organizations").update(
+                {"low_credit_threshold_notified": threshold}
+            ).eq("id", str(organization_id)).execute()
+
+            members, error = await user_role_service.get_users_by_organization(
+                organization_id
+            )
+            if error or not members:
+                logger.warning(
+                    f"No members to notify for low credit org {organization_id}: {error}"
+                )
+                return
+
+            # Prefer org admins; fall back to all members
+            admins = [
+                m for m in members if any(role.name == "org_admin" for role in m.roles)
+            ]
+            recipients = admins or members
+
+            purchase_url = (
+                f"{settings.app_base_url or 'http://localhost:3000'}"
+                "/organization/billing"
+            )
+
+            for member in recipients:
+                try:
+                    request = SendNotificationRequest(
+                        event_key="credits.low_balance",
+                        recipient_email=member.email,
+                        recipient_name=f"{member.first_name} {member.last_name}".strip(),
+                        organization_id=organization_id,
+                        user_id=member.id,
+                        template_variables={
+                            "user_name": f"{member.first_name} {member.last_name}".strip(),
+                            "current_credits": str(remaining_total),
+                            "organization_name": org_row.get(
+                                "name", "your organization"
+                            ),
+                            "purchase_credits_url": purchase_url,
+                            "app_name": getattr(settings, "app_name", "24x7 AI"),
+                        },
+                    )
+                    await notification_service.send_notification(request)
+                except Exception as email_error:
+                    logger.error(
+                        f"Failed to send low-credit email to {member.email}: {email_error}",
+                        exc_info=True,
+                    )
+        except Exception as e:
+            logger.error(
+                f"Error evaluating low-credit notification for {organization_id}: {e}",
+                exc_info=True,
+            )
 
     # Credit Events Management
     async def get_credit_events(self, active_only: bool = True) -> list[CreditEvent]:

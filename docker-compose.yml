@@ -22,10 +22,10 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.prod}
     environment:
-      - ENVIRONMENT=production
-      - DEBUG=false
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
       - PYTHONPATH=/app:$PYTHONPATH
       # Stripe Configuration
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
@@ -83,11 +83,11 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.prod}
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-      - NEXT_PUBLIC_APP_NAME=SaaS Platform
+      - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
       # Explicitly set Supabase environment variables
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
@@ -114,10 +114,10 @@ services:
     ports:
       - "7860:7860"
     env_file:
-      - .env
+      - ${ENV_FILE:-.env.prod}
     environment:
-      - ENVIRONMENT=production
-      - DEBUG=false
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
       - PYTHONPATH=/app:/app/shared
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - SUPABASE_URL=${SUPABASE_URL}

@@ -171,7 +171,8 @@ class GoogleOAuthService:
             raise GoogleOAuthConfigurationError(
                 "Google OAuth is not configured. Missing: "
                 f"{', '.join(missing)}. Set SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID "
-                "and SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET in the root .env file."
+                "and SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET in the selected "
+                "root environment file."
             )
 
     @staticmethod

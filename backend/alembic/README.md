@@ -16,7 +16,9 @@ This directory contains database migration files for the multi-tenant SaaS platf
    export DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres"
    ```
 
-   You can also add this to your `.env` file (see below).
+   You can also add this to the selected root environment file, normally
+   `.env.local` for local work or `.env.staging` / `.env.prod` for cloud
+   migrations.
 
 ## Getting Your Supabase Database URL
 
@@ -39,7 +41,7 @@ Note: For migration purposes, you'll need to use the `postgres` user with the da
 export DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
 alembic upgrade head
 
-# Or using your .env file
+# Or using DATABASE_URL from the selected root environment file
 alembic upgrade head
 
 # Or using Docker (development environment)
@@ -112,5 +114,7 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic revision -
 - The initial migration (`91759229c32b_add_initial_rbac_tables.py`) sets up the RBAC tables
 - Always test migrations in a development environment before applying to production
 - Alembic and SQLAlchemy are development dependencies only and not included in the production requirements
-- For local development, you can add DATABASE_URL to your `.env` file
-- When using Docker, the environment variables are loaded from the root `.env` file via the `env_file` directive in docker-compose files
+- For local development, add DATABASE_URL to the selected root environment file
+  (`.env.local` by default; use `ENV_FILE=.env.staging` when appropriate)
+- When using Docker, the environment variables are loaded from the selected root
+  environment file via the `env_file` directive in the Compose files

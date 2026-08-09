@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Single entry point for production deployment (247ai.live).
 #
-# Credentials live only in .env.cloud (gitignored). This script never prints secrets.
+# Credentials live only in .env.prod (gitignored). This script never prints secrets.
 #
 # Usage:
 #   ./scripts/deploy.sh [component] [options]
@@ -16,10 +16,10 @@
 #   domains     Map api/www custom domains to Cloud Run services
 #
 # Options:
-#   --env-file PATH   Env file (default: .env.cloud at repo root)
+#   --env-file PATH   Env file (default: .env.prod at repo root)
 #   -h, --help        Show this help
 #
-# voice-ws requires OCI SSH env vars (not stored in .env.cloud):
+# voice-ws requires OCI SSH env vars (not stored in .env.prod):
 #   OCI_SSH_HOST      VM public IP
 #   OCI_SSH_USER      SSH user (default: ubuntu)
 #   OCI_SSH_KEY       Path to private key (default: ~/.ssh/oci_voice_ws)
@@ -39,7 +39,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_DIR="${ROOT}/scripts/deploy"
 
 COMPONENT="all"
-ENV_FILE="${ENV_FILE:-${ROOT}/.env.cloud}"
+ENV_FILE="${ENV_FILE:-${ROOT}/.env.prod}"
 
 usage() {
   sed -n '3,33p' "$0" | sed 's/^# \{0,1\}//'
@@ -76,7 +76,7 @@ export ENV_FILE
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2
-  echo "Copy .env.cloud.example to .env.cloud and fill in your production values." >&2
+  echo "Copy .env.prod.example to .env.prod and fill in your production values." >&2
   exit 1
 fi
 

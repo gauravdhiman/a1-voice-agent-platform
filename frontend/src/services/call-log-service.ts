@@ -8,7 +8,9 @@ export interface CallLog {
   caller_number: string | null;
   called_number: string | null;
   status: string;
-  duration: number;
+  duration: number | null;
+  credits_consumed: number;
+  credit_transaction_id: string | null;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
@@ -44,7 +46,10 @@ export interface CallLogListParams {
 class CallLogService {
   private base = "/api/v1/calls";
 
-  async listCallLogs(orgId: string, params: CallLogListParams = {}): Promise<CallLogsResponse> {
+  async listCallLogs(
+    orgId: string,
+    params: CallLogListParams = {},
+  ): Promise<CallLogsResponse> {
     const query = new URLSearchParams();
     if (params.agent_id) query.set("agent_id", params.agent_id);
     if (params.status) query.set("status", params.status);
@@ -60,7 +65,7 @@ class CallLogService {
 
   async getAnalytics(orgId: string): Promise<CallAnalytics> {
     const response = await apiClient.get<CallAnalytics>(
-      `${this.base}/organization/${orgId}/analytics`
+      `${this.base}/organization/${orgId}/analytics`,
     );
     return response.data;
   }

@@ -36,7 +36,7 @@ http://localhost:8000/api/v1/auth/google/callback
 https://api.247ai.live/api/v1/auth/google/callback
 ```
 
-4. Copy the Client ID and Client Secret into the root `.env`:
+4. Copy the Client ID and Client Secret into the selected root environment file (normally `.env.local`):
 
 ```text
 SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=...
@@ -57,7 +57,7 @@ https://www.247ai.live
 
 ### 4. Configure environment variables
 
-Add to the root `.env` (Docker Compose):
+Add to the selected root environment file (Docker Compose):
 
 ```text
 APP_BASE_URL=http://localhost:3000
@@ -105,7 +105,7 @@ http://localhost:8000/api/v1/auth/linkedin/callback
 https://api.247ai.live/api/v1/auth/linkedin/callback
 ```
 
-3. Add credentials to root `.env`:
+3. Add credentials to the selected root environment file:
 
 ```text
 SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=...

@@ -146,6 +146,7 @@ async def _handle_pipecat_incoming(
             agent_id=str(agent.id),
             user_id=str(from_number or "anonymous"),
             purpose="phone",
+            call_sid=call_sid,
         )
     except ValueError as exc:
         logger.error("Failed to create voice session token: %s", exc)
