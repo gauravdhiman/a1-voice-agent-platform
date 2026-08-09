@@ -2,6 +2,17 @@
 
 This document provides comprehensive guidance for setting up Stripe products and managing them using the consolidated Stripe management tool.
 
+> **Canonical subscription setup:** New signups use the platform plan catalog,
+> not Stripe product metadata as the entitlement source. Create or edit plan
+> products and immutable versions in the platform-admin catalog, set explicit
+> `billing_mode` and `credit_grant_policy`, save the Stripe Product ID for paid
+> products, and publish the version. Publishing a paid version creates or binds
+> its immutable Stripe Price and stores `stripe_price_id`; free versions do not
+> require a Stripe Price. See [Subscription-Aware Onboarding and Credit Policy](../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md).
+
+The metadata examples later in this document describe the legacy Stripe seed
+and compatibility path. They are not used to enforce current plan limits.
+
 ## Table of Contents
 
 1. [Stripe Configuration](#stripe-configuration)
@@ -19,7 +30,7 @@ Before using the management tool, you need to properly configure your Stripe pro
 Ensure your `STRIPE_SECRET_KEY` is set in your environment variables:
 
 ```bash
-# In your .env file
+# In the selected root environment file (normally .env.local)
 STRIPE_SECRET_KEY=sk_test_your_secret_key_here
 ```
 

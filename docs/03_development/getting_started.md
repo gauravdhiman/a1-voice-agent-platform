@@ -281,6 +281,7 @@ python main.py
 # Frontend (new terminal)
 cd frontend
 npm install
+# Direct frontend development only: this nested file is compatibility-only.
 cp .env.local.example .env.local
 # Edit .env.local with configuration
 npm run dev

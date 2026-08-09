@@ -56,7 +56,8 @@ an old deployment.
 
 ## Environment variables
 
-Root `.env` (Docker Compose):
+Selected root environment file (Docker Compose): use `.env.local` for local
+development, `.env.staging` for staging, or `.env.prod` for production.
 
 ```text
 APP_BASE_URL=http://localhost:3000

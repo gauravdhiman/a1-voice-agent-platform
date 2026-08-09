@@ -24,16 +24,15 @@ cd ai-voice-agent-platform
 # Run setup script
 ./scripts/setup.sh
 
+# The setup script creates the canonical local environment file if needed.
+# Edit .env.local with your local Supabase and shared provider credentials.
+
 # Run database migrations
 cd backend
 alembic upgrade head
 
 # Seed notification events
 python scripts/seed_notification_events.py
-
-# Create the canonical local environment file once
-cp .env.local.example .env.local
-# Edit .env.local with your local Supabase and shared provider credentials
 
 # Start development containers against local Supabase
 cd ..
@@ -103,6 +102,10 @@ cd ..
     # Run the production Compose stack against .env.prod.
     ./start.sh start prod
     ```
+
+    See [Environment Configuration](docs/05_operations/environment_configuration.md)
+    for the environment-selection design, staging workflow, and deployment
+    defaults.
 
 ## 🏗️ Architecture
 

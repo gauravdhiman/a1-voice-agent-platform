@@ -12,6 +12,10 @@ must be created locally from the committed templates:
 Do not create or maintain a root `.env` file. The Compose files and scripts
 select the appropriate canonical file directly.
 
+The design rationale, selection commands, direct-process behavior, Compose
+project isolation, and production-secret migration notes are documented in
+[environment configuration](05_operations/environment_configuration.md).
+
 Production environment variables are documented at:
 
 **[05_operations/deployment/environment-variables.md](05_operations/deployment/environment-variables.md)**

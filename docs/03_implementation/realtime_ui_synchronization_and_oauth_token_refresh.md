@@ -209,7 +209,7 @@ class AuthConfig(BaseAuthConfig):
 
 **Configuration Variables**:
 ```bash
-# backend/.env
+# backend/.env (advanced direct-service compatibility file)
 
 # Interval in minutes to check for tokens needing refresh (default: 5)
 TOKEN_REFRESH_CHECK_INTERVAL_MINUTES=5
@@ -224,8 +224,9 @@ TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES=15
 - Application fails to start with invalid values
 
 **Docker Configuration Priority** (highest to lowest):
-1. `.env` file (explicit values)
-2. Docker Compose defaults (`${VAR:-default}` syntax)
+1. The selected root environment file (`.env.local`, `.env.staging`, or `.env.prod`)
+2. Nested `backend/.env` only for advanced direct-service development
+3. Docker Compose defaults (`${VAR:-default}` syntax)
 
 ### 4. Lifespan Context Manager vs Startup Event
 
@@ -542,7 +543,8 @@ function AgentDetailPage({ params }: { params: { agentId: string } }) {
 
 #### Backend Configuration
 
-**File**: `backend/.env`
+**File**: `backend/.env` for the advanced direct-service workflow; the
+recommended Docker workflow reads the selected root environment file.
 
 ```bash
 # Token Refresh Service Configuration
@@ -730,4 +732,3 @@ npm run dev
 - `README.md` - Added Supabase setup references
 
 ---
-

@@ -1,9 +1,18 @@
 # Plan: Subscription Entitlements, Limits & Plan Versioning
 
-**Status:** Draft (architecture plan — v2 with versioning & grandfathering)  
-**Last updated:** 2026-08-07  
-**ADR:** [ADR: Plan Versioning & Entitlements](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md)  
+**Status:** Accepted; baseline implemented (future extensions are marked below)
+**Last updated:** 2026-08-08
+**ADR:** [ADR: Plan Versioning & Entitlements](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md)
+**Onboarding ADR:** [Subscription-Aware Onboarding and Credit Policy](../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 **Related:** [Billing Overview](../02_features/billing/overview.md), [Billing System](../02_core_systems/billing_system.md), [Stripe Integration](./stripe_integration.md), [DATABASE_SCHEMA.md](../DATABASE_SCHEMA.md)
+
+> **Implementation boundary (2026-08-08):** Plan products, immutable plan
+> versions, explicit `billing_mode`, `credit_grant_policy`, free and paid
+> activation, migration scheduling, admin catalog management, two-pool
+> prepaid credits, and the primary entitlement gates are implemented. A full
+> source-aware credit-lot ledger, administrator credit grants, referral rewards,
+> Stripe Billing Meters, and cloud E2E billing validation remain future or
+> deferred work. See the onboarding ADR for the rationale and exact boundary.
 
 ---
 
@@ -823,19 +832,24 @@ Published versions are cache-friendly forever.
 
 ## 14. Migration from Current Schema
 
+> **Status (2026-08-08):** The additive schema migration, plan-version
+> binding, admin catalog, webhook resolution, and compatibility path are in
+> place. The legacy `subscription_plans` model remains for older records and
+> APIs; new founder signup uses published plan versions.
+
 ### 14.1 Phase A — Additive
 
-1. Create new tables alongside `subscription_plans`
-2. Backfill each `subscription_plans` row → `plan_products` + `plan_versions` v1
-3. Copy `included_credits`, `max_users`, parse `features` → `plan_version_entitlements`
-4. Add `plan_version_id` to `organization_subscriptions`; backfill from `subscription_plan_id`
-5. Dual-read in `EntitlementService` (feature flag)
+1. ✅ Create new tables alongside `subscription_plans`
+2. ✅ Backfill each `subscription_plans` row → `plan_products` + `plan_versions` v1
+3. ✅ Copy legacy limits/features → `plan_version_entitlements`
+4. ✅ Add `plan_version_id` to `organization_subscriptions`; backfill from `subscription_plan_id`
+5. ✅ Resolve new entitlement requests from the bound version while retaining legacy compatibility reads where required
 
 ### 14.2 Phase B — Cutover
 
-1. Admin UI uses new model only
-2. Webhooks resolve via `plan_versions.stripe_price_id`
-3. Drop dual-read; deprecate `subscription_plans`
+1. ✅ Admin UI manages products, versions, and entitlement definitions
+2. ✅ Webhooks resolve versioned subscriptions via `plan_versions.stripe_price_id`
+3. ⏳ Retire remaining legacy `subscription_plans` writes after downstream compatibility consumers have migrated
 
 ### 14.3 Seed entitlement catalog
 
@@ -845,53 +859,66 @@ Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurr
 
 ## 15. Implementation Phases
 
+The original phase estimates are retained as a delivery history. Checkboxes
+below reflect the current implementation, not future work.
+
 ### Phase 0 — Schema & catalog (1–2 weeks)
 
-- [ ] Alembic: all tables in §11
-- [ ] Seed entitlement definitions + handlers registry skeleton
-- [ ] Backfill from `subscription_plans`
-- [ ] Update `DATABASE_SCHEMA.md`
+- [x] Alembic: all tables in §11
+- [x] Seed entitlement definitions + handlers registry skeleton
+- [x] Backfill from `subscription_plans`
+- [x] Update `DATABASE_SCHEMA.md`
 
 ### Phase 1 — EntitlementService + versioning (2 weeks)
 
-- [ ] `EntitlementService` resolves via `plan_version_id`
-- [ ] `GET /organizations/{id}/entitlements` (+ migration/grace info)
-- [ ] Enforce `max_agents`
-- [ ] Unit tests: sparse limits, absent keys, defaults
+- [x] `EntitlementService` resolves via `plan_version_id`
+- [x] `GET /organizations/{id}/entitlements` (+ migration/grace info)
+- [x] Enforce `max_agents`
+- [x] Unit tests: sparse limits, absent keys, defaults
 
 ### Phase 2 — Publish & grandfathering (2 weeks)
 
-- [ ] Draft / publish / deprecate API
-- [ ] Stripe Price creation on publish
-- [ ] `plan_version_publish_events` + migration rows
-- [ ] Webhook binds `plan_version_id`
-- [ ] Tests: existing sub unchanged after new publish
+- [x] Draft / publish / deprecate API
+- [x] Stripe Price creation on publish for paid versions
+- [x] `plan_version_publish_events` + migration rows
+- [x] Webhook binds `plan_version_id`
+- [x] Tests: existing sub unchanged after new publish
 
 ### Phase 3 — Migration scheduler & UX (1–2 weeks)
 
-- [ ] Daily job: grace expiry → auto-migrate
-- [ ] Stripe subscription price swap
-- [ ] Billing UI: legacy badge, grace countdown, self-migrate CTA
-- [ ] Email notifications
+- [x] Daily job: grace expiry → auto-migrate
+- [x] Stripe subscription price swap
+- [x] Billing UI: legacy badge, grace countdown, self-migrate CTA
+- [ ] Email notifications for every migration state (future enhancement)
 
 ### Phase 4 — Admin UI (2 weeks)
 
-- [ ] Entitlement catalog admin
-- [ ] Plan product / version editor (dynamic form)
-- [ ] Publish dialog with migration policy
-- [ ] Subscriber list per version
+- [x] Entitlement catalog admin
+- [x] Plan product / version editor (dynamic form)
+- [x] Publish dialog with migration policy
+- [ ] Subscriber list per version (future admin reporting)
 
 ### Phase 5 — Credits, credit pools, voice-ws (2 weeks)
 
-- [ ] Credit grant from version entitlement on renewal
-- [ ] Two-pool consumption (plan first, purchased second) + expiry on renewal
-- [ ] Low-balance alerts (20/10/5%) + `credit_topup_enabled` + `premium_tools` gates
-- [ ] voice-ws concurrent + credit pre-check
+- [x] Credit grant from version policy on activation/renewal
+- [x] Two-pool consumption (plan first, purchased second) + expiry on renewal
+- [x] Low-balance alerts (20/10/5%) + `credit_topup_enabled` + `premium_tools` gates
+- [x] voice-ws concurrent + credit pre-check
+
+### Phase 5.1 — Subscription-aware onboarding
+
+- [x] Save organization details before plan selection
+- [x] Activate free versions without Stripe
+- [x] Route paid versions through versioned Checkout and webhook-confirmed polling
+- [x] Require active/trial subscription before completing founder onboarding
+- [x] Defer agent creation and test-call setup to the dashboard
+- [x] Preserve invited-user bypass behavior
 
 ### Phase 6 — Extended limits & enterprise (ongoing)
 
 - [ ] More handlers as product grows
 - [ ] Org overrides UI
+- [ ] Source-aware credit-lot ledger with admin/referral grant sources
 - [ ] Stripe Billing Meters (optional, future)
 
 ---
@@ -910,6 +937,11 @@ Initial keys: `max_agents`, `max_org_members`, `max_phone_numbers`, `max_concurr
 | Downgrade agents 5→3 with soft_block | Existing agents remain; create blocked |
 | Draft edit before publish | Allowed |
 | Edit published version | API returns 409; must clone |
+| Free version activation | No Stripe call; active subscription has null Stripe identifiers |
+| Paid version activation | Requires `billing_mode=paid` and Stripe Price; webhook binds version |
+| Duplicate grant retry | Stable grant key returns existing grant without double crediting |
+| Concurrent credit debit | Database lock prevents overspending; plan pool drains before purchased pool |
+| Founder onboarding completion | Active/trial required; no agent is created by the founder flow |
 
 ---
 
@@ -956,6 +988,7 @@ Still optional display sync only. Platform remains enforcement source for flexib
 ## 19. References
 
 - ADR: [ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md)
+- Onboarding and credit policy: [ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md](../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 - Current models: `backend/src/billing/models.py`
 - Credit consumption: `backend/src/billing/service.py`
 - Stripe sync: `backend/scripts/stripe_manager.py`

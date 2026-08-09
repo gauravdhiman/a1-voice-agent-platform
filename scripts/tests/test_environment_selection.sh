@@ -51,4 +51,23 @@ default_config="$("$ROOT/start.sh" config)"
 assert_contains "$default_config" "Environment: local"
 assert_contains "$default_config" "Env file: $ROOT/.env.local"
 
+custom_dir="$(mktemp -d)"
+trap 'rm -rf "$custom_dir"' EXIT
+custom_file="$custom_dir/custom.env"
+cat > "$custom_file" <<'EOF'
+NEXT_PUBLIC_SUPABASE_URL=https://custom.example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=custom-anon-key
+SUPABASE_SERVICE_KEY=custom-service-key
+EOF
+
+custom_config="$("$ROOT/start.sh" config --env-file "$custom_file")"
+assert_contains "$custom_config" "Environment: custom"
+assert_contains "$custom_config" "Env file: $custom_file"
+assert_contains "$custom_config" "Supabase: https://custom.example.supabase.co"
+
+if "$ROOT/start.sh" config --env does-not-exist >/dev/null 2>&1; then
+  echo "Invalid environment should fail" >&2
+  exit 1
+fi
+
 echo "Environment selection tests passed."

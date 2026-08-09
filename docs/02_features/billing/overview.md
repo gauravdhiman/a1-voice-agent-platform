@@ -4,6 +4,37 @@
 
 The billing system manages subscriptions, payments, and credit-based usage tracking through Stripe integration. Organizations purchase plans, receive credits, and consume credits through platform usage (voice agent calls, tool execution, etc.).
 
+## Current implementation: subscription-aware onboarding
+
+Founder onboarding is deliberately limited to organization details and plan
+activation. The flow is organization details → published plan-version selection
+→ free activation or paid Stripe Checkout → server-confirmed active/trial
+subscription → dashboard. Agent creation, phone purchase, tool setup, and test
+calls happen after onboarding. Invited users join their inviting organization
+and bypass the founder plan gate.
+
+The customer catalog exposes only published versions marked current for signup.
+`plan_versions.billing_mode` is authoritative: `free` activates without Stripe;
+`paid` requires a Stripe Price. The free path is idempotent and stores null
+Stripe identifiers. The paid path uses the authenticated user's email for the
+Stripe customer, binds the subscription to the selected `plan_version_id` from
+webhook data, and lets the onboarding page poll until the webhook has committed
+an active/trial subscription.
+
+Credit renewal is also explicit. `credit_grant_policy` distinguishes recurring
+from one-time grants. Paid recurring grants are triggered by successful invoice
+webhooks; free recurring grants use the application scheduler because there is
+no Stripe invoice. Both paths use stable grant keys and the
+`grant_subscription_credits` database function for atomic, idempotent updates.
+
+The current runtime model has two prepaid pools: expiring plan credits and
+non-expiring purchased credits. Consumption is plan-first and uses the atomic
+`debit_organization_credits` function. The source-aware credit-lot ledger,
+administrator grants, and referral rewards described in the architecture plan
+are future scope, not current billing behavior. See [Subscription-Aware
+Onboarding and Credit Policy](../../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
+for the complete decision record.
+
 ## What It Provides
 
 - ✅ **Stripe Integration**: Secure payment processing
@@ -129,7 +160,7 @@ Credits are consumed for platform usage:
 - Plan activation or renewal (monthly allocation, when the plan policy is recurring)
 - One-time free/trial plan allocation (when the plan policy is one-time)
 - Top-up purchases
-- Adjustments (manual/admin actions)
+- Adjustments (legacy ledger records; no current self-service admin grant flow)
 - Referral rewards (planned)
 
 Plan credits and purchased credits are tracked as separate pools. Plan credits
@@ -172,9 +203,11 @@ sequenceDiagram
     participant DB as Database
     participant Email as Email
 
-    Admin->>FE: Select plan and click "Subscribe"
-    FE->>Stripe: Create Stripe Checkout session
-    Stripe-->>FE: Checkout URL
+    Admin->>FE: Select paid plan and click "Subscribe"
+    FE->>BE: Request versioned checkout
+    BE->>Stripe: Create Checkout session with bound plan version
+    Stripe-->>BE: Checkout URL
+    BE-->>FE: Checkout URL
     FE->>Admin: Redirect to Stripe Checkout
     Admin->>Stripe: Enter payment details
     Stripe->>Stripe: Process payment
@@ -184,7 +217,10 @@ sequenceDiagram
     BE->>DB: Add credits to org
     BE->>Email: Send payment confirmation
     BE-->>Stripe: Return 200 OK
-    FE-->>Admin: Redirect to dashboard
+    FE-->>Admin: Return to onboarding
+    FE->>BE: Poll activation status
+    BE-->>FE: Active/trial after webhook binding
+    FE-->>Admin: Complete onboarding and redirect to dashboard
 ```
 
 Stripe Customer records created by authenticated checkout routes use the

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create .env.staging from an existing production/cloud env file.
+"""Create .env.staging from an existing production environment file.
 
 Copies Stripe, OAuth, and other shared keys from the source file and swaps
 Supabase URLs/keys to the staging project (gdzwiwukcwbqohfwxxrx).

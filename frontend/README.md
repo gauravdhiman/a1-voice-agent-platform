@@ -15,17 +15,36 @@ Next.js frontend for the multi-tenant SaaS platform.
 npm install
 ```
 
-### Development
+### Development (recommended Docker workflow)
 
 ```bash
-# Copy environment template
+# Run from the repository root. The root .env.local file is canonical.
+cd ..
 cp .env.local.example .env.local
-
-# Start development server
-npm run dev
+./start.sh start dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+For cloud staging validation, use the same local Docker services with:
+
+```bash
+./start.sh start dev --env staging
+```
+
+### Direct frontend development (advanced compatibility workflow)
+
+When running Next.js outside Docker, the nested `frontend/.env.local` file is
+still supported because Next.js loads service-local files. It is a compatibility
+file, not one of the environment selectors. Keep its public values aligned
+with the selected root file and never use it to switch the database.
+
+```bash
+cd frontend
+cp .env.local.example .env.local
+
+npm run dev
+```
 
 ## 🏗️ Architecture
 
@@ -94,7 +113,9 @@ npx shadcn@latest add [component-name]
 
 ### Environment Variables
 
-Create `.env.local` from `.env.local.example`:
+For the supported Docker workflow, create the root `.env.local` from
+`.env.local.example`. The nested compatibility template is only for the
+advanced direct-frontend workflow described above:
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000

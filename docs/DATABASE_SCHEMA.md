@@ -655,7 +655,7 @@ Tracks payment history and invoices.
 
 ### Plan Versioning & Entitlements Tables
 
-> **Status:** Implemented through migrations `20260807000002`–`20260808000011`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version.
+> **Status:** Implemented through migrations `20260807000002`–`20260808000012`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version. `billing_mode` explicitly separates free activation from paid Stripe checkout; `credit_grant_policy` separates recurring from one-time grants; and the latest migration adds the atomic/idempotent subscription-credit grant function.
 
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 

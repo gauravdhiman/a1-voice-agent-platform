@@ -4,6 +4,12 @@
 
 This document provides a comprehensive overview of the billing system implemented for the multi-tenant SaaS platform, including Stripe integration, subscription management, and credit-based usage tracking.
 
+> **Current architecture:** New signups use immutable `plan_versions` and
+> subscription-aware onboarding. `subscription_plans` remains for compatibility
+> and grandfathered data; it is not the source of truth for new plan selection.
+> See [Subscription-Aware Onboarding and Credit Policy](../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
+> and [Plan Versioning & Entitlements](../01_architecture/ADR_PLAN_VERSIONING_AND_ENTITLEMENTS.md).
+
 ## Architecture
 
 ### Database Schema
@@ -12,8 +18,9 @@ The billing system uses the following database tables:
 
 #### Core Tables
 
-- **subscription_plans**: Available subscription tiers with pricing and features.
-- **organization_subscriptions**: Organization subscription status and details.
+- **plan_products / plan_versions**: Admin-managed catalog and immutable terms for new signups.
+- **organization_subscriptions**: Organization subscription status and bound plan version.
+- **subscription_plans**: Legacy compatibility catalog used by older records and APIs.
 - **credit_events**: Configurable events that consume credits.
 - **credit_transactions**: All credit movements (earned, consumed, purchased).
 - **credit_products**: Standalone credit packages for purchase.
@@ -88,7 +95,9 @@ The billing system uses the following database tables:
 
 ### Environment Variables
 
-Add the following to your `.env` file:
+Add the following to the selected root environment file. Use `.env.local` for
+local Supabase, `.env.staging` for cloud staging, and `.env.prod` for production.
+Do not copy an environment file into a root `.env`.
 
 ```bash
 # Stripe Configuration
@@ -212,12 +221,19 @@ INSERT INTO credit_events (name, description, credit_cost, category) VALUES
 
 Credits are consumed in the following order:
 
-1.  **Purchased Credits** (no expiry) - consumed first.
-2.  **Subscription Credits** (expire at period end) - consumed second.
+1.  **Plan Credits** (expire at the plan period boundary) - consumed first.
+2.  **Purchased Credits** (no expiry) - consumed second.
+
+The order is enforced by the shared billing service and the atomic
+`debit_organization_credits` PostgreSQL function. This prevents concurrent voice
+sessions from overspending either prepaid pool. Pay-as-you-go headroom is not
+part of the current model.
 
 ### Credit Allocation
 
-- **Subscription Credits**: Allocated at the start of each billing period.
+- **Plan Credits**: Allocated according to the plan version's explicit
+  `credit_grant_policy`; paid recurring grants come from invoice webhooks and
+  free recurring grants come from the application scheduler.
 - **Purchased Credits**: Added immediately upon successful payment.
 - **Expiry**: Only subscription credits expire at the end of billing period.
 

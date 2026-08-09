@@ -14,7 +14,7 @@ Ensure you have **Docker & Docker Compose** installed on your system.
    cp .env.local.example .env.local
    ```
 
-2. **Update `.env` with your Supabase credentials**:
+2. **Update `.env.local` with your local Supabase credentials**:
 
    - `SUPABASE_URL` - Your Supabase project URL
    - `SUPABASE_SERVICE_KEY` - Backend service role key (admin access)
@@ -23,7 +23,7 @@ Ensure you have **Docker & Docker Compose** installed on your system.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Frontend anon key
    - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` - Google web OAuth client ID for popup sign-in
 
-3. **Update `DATABASE_URL` in `.env` for Alembic migrations**:
+3. **Update `DATABASE_URL` in `.env.local` for Alembic migrations**:
    Replace `your-database-password-here` and `your-project-ref` with your actual Supabase database password and project reference.
 
    ```
@@ -163,7 +163,7 @@ Once the application is running:
 
 ### Database Issues
 
-- **Connection Failures**: Verify DATABASE_URL in `.env` is correct
+- **Connection Failures**: Verify DATABASE_URL in the selected environment file is correct
 - **Migration Failures**: Check Supabase is accessible and credentials are valid
 - **RLS Issues**: Ensure Row-Level Security policies are applied
 

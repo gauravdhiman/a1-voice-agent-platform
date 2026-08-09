@@ -351,7 +351,8 @@ write tools — `create_event` / `update_event` / `delete_event` — also work).
 **One-time GCP setup checklist (operator — required before live test):**
 
 > The dev OAuth client already exists (`427746670167-….apps.googleusercontent.com`,
-> read from `GOOGLE_OAUTH_TOOL_CLIENT_ID/SECRET` in `.env`). The only remaining
+> read from `GOOGLE_OAUTH_TOOL_CLIENT_ID/SECRET` in the selected root environment
+> file). The only remaining
 > steps are on the GCP console side.
 
 1. **Enable the APIs** in the GCP project that owns the OAuth client:
@@ -368,7 +369,8 @@ write tools — `create_event` / `update_event` / `delete_event` — also work).
    web client → Authorized redirect URIs): add
    `http://localhost:8000/api/v1/tools/callback`
    (this is the backend `oauth_callback` route; must equal
-   `GOOGLE_OAUTH_TOOL_REDIRECT_URI` in `.env`, already corrected). For a
+   `GOOGLE_OAUTH_TOOL_REDIRECT_URI` in the selected root environment file,
+   already corrected). For a
    non-local deploy, add the public equivalent
    (`https://<backend-host>/api/v1/tools/callback`).
 4. **Restart the backend container** so the corrected `GOOGLE_OAUTH_TOOL_REDIRECT_URI`

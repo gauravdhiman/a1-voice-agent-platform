@@ -1,9 +1,9 @@
 # ADR: Plan Versioning, Entitlements & Grandfathering
 
-**Status:** Accepted (draft for implementation)  
-**Date:** 2026-08-07  
-**Deciders:** Platform architecture  
-**Related:** [Plan Entitlements & Limits](../03_implementation/plan_entitlements_and_limits.md)
+**Status:** Accepted; baseline implemented
+**Date:** 2026-08-07
+**Deciders:** Platform architecture
+**Related:** [Plan Entitlements & Limits](../03_implementation/plan_entitlements_and_limits.md), [Subscription-Aware Onboarding and Credit Policy](./ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 
 ---
 
@@ -112,4 +112,9 @@ flowchart TB
 
 ## Implementation note
 
-Full schema, APIs, admin flows, and enforcement details are in [Plan Entitlements & Limits](../03_implementation/plan_entitlements_and_limits.md).
+The baseline schema, APIs, admin flows, and enforcement paths are implemented
+through migration `20260808000012`. The subscription-aware onboarding and
+credit-policy decisions that complete this ADR are recorded in [Subscription-
+Aware Onboarding and Credit Policy](./ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md).
+
+Full implementation details remain in [Plan Entitlements & Limits](../03_implementation/plan_entitlements_and_limits.md).

@@ -16,7 +16,9 @@ This directory contains database migration files for the multi-tenant SaaS platf
    export DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres"
    ```
 
-   You can also add this to your `.env` file (see below).
+   You can also add this to the selected root environment file, normally
+   `.env.local` for local work or `.env.staging` / `.env.prod` for cloud
+   migrations.
 
 ## Getting Your Supabase Database URL
 
@@ -39,7 +41,7 @@ Note: For migration purposes, you'll need to use the `postgres` user with the da
 export DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
 alembic upgrade head
 
-# Or using your .env file
+# Or using DATABASE_URL from the selected root environment file
 alembic upgrade head
 
 # Or using Docker (development environment)

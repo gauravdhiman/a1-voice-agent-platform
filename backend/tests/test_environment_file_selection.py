@@ -2,7 +2,21 @@
 
 from pathlib import Path
 
-from shared.config.settings import Settings
+from shared.config.settings import PROJECT_ROOT, Settings, resolve_env_file
+
+
+def test_default_env_file_is_local(monkeypatch) -> None:
+    """Direct application settings should default to the local root file."""
+    monkeypatch.delenv("ENV_FILE", raising=False)
+
+    assert resolve_env_file() == str(PROJECT_ROOT / ".env.local")
+
+
+def test_relative_env_file_override_resolves_from_project_root(monkeypatch) -> None:
+    """Relative ENV_FILE values should be resolved from the repository root."""
+    monkeypatch.setenv("ENV_FILE", ".env.staging")
+
+    assert resolve_env_file() == str(PROJECT_ROOT / ".env.staging")
 
 
 def test_settings_honors_env_file_override(monkeypatch, tmp_path: Path) -> None:

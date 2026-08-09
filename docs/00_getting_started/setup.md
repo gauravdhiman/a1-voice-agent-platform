@@ -211,7 +211,12 @@ The API will be available at [http://localhost:8000](http://localhost:8000)
 
 API documentation will be available at [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### Frontend Setup
+### Frontend Setup (advanced direct workflow)
+
+The recommended frontend workflow is to run the complete stack from the
+repository root with `./start.sh`. The nested file below is a Next.js
+compatibility file for running only the frontend outside Docker; it is not an
+environment selector.
 
 ```bash
 # Navigate to frontend directory
@@ -220,7 +225,7 @@ cd frontend
 # Install dependencies
 npm install
 
-# Copy environment configuration
+# Copy the frontend-only compatibility configuration
 cp .env.local.example .env.local
 
 # Edit .env.local with your configuration
@@ -375,7 +380,7 @@ The platform uses **`voice-ws`** (Pipecat WebSocket) for browser test calls and 
 
 1. **Ensure voice-ws is running** (default with `./start.sh start dev`)
 
-2. **Add to `.env`** (backend + voice-ws share `JWT_SECRET_KEY`):
+2. **Add to the selected root environment file** (backend + voice-ws share `JWT_SECRET_KEY`):
 
    ```bash
    JWT_SECRET_KEY=<openssl rand -hex 32>
@@ -409,7 +414,7 @@ The platform uses Resend.com for email notifications.
    - Go to Resend Dashboard → API Keys
    - Create a new API key
 
-3. **Add key to `.env`**:
+3. **Add the key to the selected root environment file**:
    ```bash
    RESEND_API_KEY=re_your_api_key
    RESEND_FROM_EMAIL=noreply@yourdomain.com
@@ -479,7 +484,7 @@ If you encounter port conflicts on ports 3000, 8000, 54323, or 4318:
 # Find and kill the process using the port
 lsof -ti:3000 | xargs kill -9
 
-# Or use a different port by modifying .env
+# Or use a different port by modifying the selected root environment file
 ```
 
 #### Docker Issues
@@ -502,7 +507,7 @@ docker system prune -a
 
 If you can't connect to Supabase:
 
-- Verify DATABASE_URL in `.env` is correct
+- Verify DATABASE_URL in the selected root environment file is correct
 - Check Supabase project is active
 - Ensure your IP is allowed in Supabase settings
 - Verify database password is correct

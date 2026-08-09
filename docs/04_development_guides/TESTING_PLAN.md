@@ -1,17 +1,30 @@
-# Comprehensive Testing Plan for AI Voice Agent Platform
+# Comprehensive Testing Plan for 24x7 AI Platform
+
+> **Maintenance note (2026-08-08):** This document began as a coverage roadmap.
+> The inventory below is the current repository state; older module-by-module
+> tables and estimated counts remain useful as coverage targets, but must not be
+> interpreted as a report that the repository still has only one backend test
+> file or zero frontend tests.
 
 ## Executive Summary
 
-This document outlines a systematic approach to achieve **95% test coverage** for the AI Voice Agent Platform. The platform currently has minimal test coverage (~1 test file) across ~165+ source files. This plan prioritizes backend unit tests with full mocking of external services.
+This document outlines a systematic approach to maintain **95% test coverage**
+for the AI Voice Agent Platform. It prioritizes backend unit tests with mocked
+external services, focused frontend behavior tests, and isolated E2E workflows.
 
-### Current State Analysis
+### Current State Analysis (2026-08-08)
 
 | Component | Source Files | Existing Tests | Current Coverage |
 |-----------|--------------|----------------|------------------|
-| **Backend** | ~42 Python files | 1 file (`test_rbac.py`) | Minimal |
-| **Shared** | ~21 Python files | 0 | None |
-| **Worker** | 2 Python files | 0 | None |
-| **Frontend** | ~100+ TypeScript files | 0 | None |
+| **Backend** | Repository-wide | 105 test files | Maintained by focused suites |
+| **Backend billing** | Billing services/routes | 14 test files | Includes versioning, grants, pools, gates, and webhooks |
+| **Shared** | Shared services and voice logic | Covered by focused shared tests | Run with relevant backend suites |
+| **Frontend** | Repository-wide | 396 `.test.ts`/`.test.tsx` files | Vitest component/service coverage |
+| **Onboarding/billing UI** | Plan activation and onboarding | 8 related test files | Free, paid, cancellation, polling, and entitlement states |
+
+The counts are an inventory of files, not a replacement for coverage reports.
+When reporting coverage, run the focused suite and record the command, result,
+and date.
 
 ### Testing Strategy Decisions
 
@@ -825,11 +838,19 @@ After Phase 1 achieves 80%+ coverage:
 
 ## Phase 3: Frontend Tests
 
-### Current State
+### Current State (2026-08-08)
 
 | Component | Source Files | Existing Tests | Current Coverage |
 |-----------|--------------|----------------|------------------|
-| **Frontend** | ~100+ TypeScript/TSX files | 0 | None |
+| **Frontend** | Repository-wide TypeScript/TSX files | 396 test files | Vitest coverage is tracked by the relevant package/suite |
+
+The most important recent frontend contract is subscription-aware founder
+onboarding. Tests must verify that organization details are saved before plan
+selection, free plans never call Stripe, paid returns poll until webhook-backed
+activation, cancellation returns to plan selection, onboarding completion is
+guarded, and agent creation is deferred to the dashboard. Invited-user bypass
+behavior is covered at the routing/service boundary and should remain part of
+the regression suite.
 
 ### Testing Strategy
 
@@ -1513,7 +1534,7 @@ npm install -D vitest @vitest/ui @testing-library/react @testing-library/jest-do
 
 ---
 
-## Phase 4: End-to-End (E2E) Tests (Current Focus)
+## Phase 4: End-to-End (E2E) Tests
 
 ### Strategy
 E2E tests will use **Playwright** (Python-based) to verify critical user journeys across the entire stack (Frontend, Backend, and Database). Tests will run against a live development environment (Docker).
@@ -1521,7 +1542,11 @@ E2E tests will use **Playwright** (Python-based) to verify critical user journey
 ### Critical User Journeys
 1.  **Authentication & Onboarding**
     *   New user signup -> Email confirmation (mocked) -> Sign in.
-    *   Initial organization creation during onboarding.
+    *   Save organization details -> select a published plan version.
+    *   Free activation completes without Stripe.
+    *   Paid Checkout return waits for webhook-backed active/trial status.
+    *   Cancellation/failure returns to plan selection; no agent is created in founder onboarding.
+    *   Invited users join the inviting organization and bypass the founder plan gate.
 2.  **Organization & Member Management**
     *   Create/Edit/Delete organizations.
     *   Invite new members -> Accept invitation -> Verify role-based access.
@@ -1535,7 +1560,9 @@ E2E tests will use **Playwright** (Python-based) to verify critical user journey
 5.  **Billing & Credits**
     *   Subscribe to a plan (Stripe Test Mode).
     *   Purchase credit products.
-    *   Verify credit balance updates after actions.
+    *   Verify plan credits are consumed before purchased credits.
+    *   Verify concurrent debit and duplicate grant attempts remain idempotent.
+    *   Verify max-agent, premium-tool, top-up, and voice-session entitlement gates.
 
 ### Implementation Plan
 1.  **Framework Setup**: Consolidate E2E tests into a unified structure using `pytest-playwright`.
@@ -1546,6 +1573,26 @@ E2E tests will use **Playwright** (Python-based) to verify critical user journey
 ---
 
 ## Running Tests
+
+### Current focused validation commands
+
+```bash
+# Environment-file contract and selector behavior
+bash scripts/tests/test_environment_contract.sh
+bash scripts/tests/test_environment_selection.sh
+
+# Versioned billing, entitlement, credit, and webhook behavior
+(cd backend && pytest -q tests/billing)
+
+# Founder onboarding and plan activation behavior
+(cd frontend && npm run test:run -- \
+  src/app/onboarding/page.test.tsx \
+  src/components/onboarding/__tests__/step-plan-selection.test.tsx)
+```
+
+The focused suites are the minimum regression set for changes to plan catalog,
+onboarding, credits, or environment selection. Run the broader backend/frontend
+suite before merging when shared code or route contracts change.
 
 ```bash
 # Add to requirements-dev.txt
@@ -1573,6 +1620,7 @@ httpx==0.26.0  # For async HTTP client testing
 | Date | Version | Changes |
 |------|---------|---------|
 | January 2026 | 1.0 | Initial testing plan created |
+| 2026-08-08 | 1.1 | Updated repository inventory, subscription-aware onboarding journeys, credit idempotency/entitlement checks, and current focused validation commands |
 
 ---
 

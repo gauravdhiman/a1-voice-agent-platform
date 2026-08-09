@@ -15,7 +15,7 @@
 
 ## How to test
 
-1. Ensure `.env` has:
+1. Ensure the selected root environment file has:
    - `VOICE_WS_PUBLIC_URL=ws://localhost:7860`
    - `JWT_SECRET_KEY` (same value backend + voice-ws use)
    - `GEMINI_API_KEY`

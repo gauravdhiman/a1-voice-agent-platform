@@ -906,7 +906,9 @@ ai-voice-agent-platform/
 ├── docker-compose.yml          # Service orchestration
 ├── docker-compose.dev.yml      # Development config
 ├── Dockerfile                 # Backend Docker config
-└── .env                      # Environment variables
+├── .env.local                # Local Supabase environment variables
+├── .env.staging              # Cloud staging environment variables
+└── .env.prod                 # Production environment variables
 ```
 
 ---
