@@ -79,6 +79,24 @@ class VersionedSubscriptionService:
             if str(existing.get("plan_version_id")) == str(
                 plan_version_id
             ) and existing.get("status") in {"active", "trial"}:
+                retry_now = datetime.now(timezone.utc)
+                period_start = self._coerce_datetime(
+                    existing.get("current_period_start"), retry_now
+                )
+                period_end = self._coerce_optional_datetime(
+                    existing.get("current_period_end")
+                )
+                # The subscription row may have committed before a transient
+                # credit-grant failure. The grant service and database RPC are
+                # idempotent, so replaying this key repairs that state without
+                # creating another subscription or double-crediting success.
+                await self.credit_grant_service.grant_for_subscription(
+                    existing,
+                    grant_reason="activation",
+                    period_start=period_start,
+                    period_end=period_end,
+                    grant_key=f"free-subscription:{existing['id']}:activation",
+                )
                 return FreePlanActivationResponse(
                     subscription=self._to_subscription_record(existing), created=False
                 )
@@ -358,6 +376,26 @@ class VersionedSubscriptionService:
             next_year += 1
         next_day = min(start.day, calendar.monthrange(next_year, next_month)[1])
         return start.replace(year=next_year, month=next_month, day=next_day)
+
+    @staticmethod
+    def _coerce_datetime(value: Any, fallback: datetime) -> datetime:
+        """Parse a stored subscription timestamp, falling back safely."""
+        parsed = VersionedSubscriptionService._coerce_optional_datetime(value)
+        return parsed or fallback
+
+    @staticmethod
+    def _coerce_optional_datetime(value: Any) -> Optional[datetime]:
+        """Convert a database timestamp to a timezone-aware datetime."""
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            logger.warning("Invalid subscription period timestamp: %s", value)
+            return None
 
     @staticmethod
     def _to_customer_plan_version(

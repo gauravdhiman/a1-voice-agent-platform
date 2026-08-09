@@ -2,9 +2,10 @@
 Billing Service Tests
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -17,6 +18,7 @@ from src.billing.models import (
     SubscriptionPlan,
     SubscriptionPlanCreate,
     SubscriptionStatus,
+    TransactionSource,
 )
 
 
@@ -827,3 +829,118 @@ class TestBillingServiceCreditGrantIdempotency:
         query.contains.assert_called_once_with(
             "metadata", {"grant_key": "stripe-invoice:in_123"}
         )
+
+    @pytest.mark.asyncio
+    async def test_add_subscription_credits_uses_atomic_rpc_for_new_grant(
+        self, billing_service, mock_supabase_client
+    ):
+        """New idempotent grants use the database transaction boundary."""
+        organization_id = uuid4()
+        subscription_id = uuid4()
+        transaction = {
+            "id": str(uuid4()),
+            "organization_id": str(organization_id),
+            "transaction_type": "earned",
+            "amount": 100,
+            "balance_after": 100,
+            "source": "subscription",
+            "source_id": str(subscription_id),
+            "credit_event_id": None,
+            "expires_at": "2026-09-01T00:00:00+00:00",
+            "stripe_payment_intent_id": None,
+            "description": "Subscription credits allocation",
+            "metadata": {"grant_key": "free-subscription:activation"},
+            "created_at": "2026-08-01T00:00:00+00:00",
+        }
+        existing_query = MagicMock()
+        existing_query.select.return_value = existing_query
+        existing_query.eq.return_value = existing_query
+        existing_query.contains.return_value = existing_query
+        existing_query.limit.return_value = existing_query
+        existing_query.execute.return_value = MagicMock(data=[])
+        mock_supabase_client.table.return_value = existing_query
+        mock_supabase_client.rpc.return_value.execute.return_value = MagicMock(
+            data={"success": True, "transaction": transaction}
+        )
+
+        result = await billing_service.add_subscription_credits(
+            organization_id=organization_id,
+            credits=100,
+            subscription_id=subscription_id,
+            expires_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            metadata={"grant_key": "free-subscription:activation"},
+            idempotency_key="free-subscription:activation",
+        )
+
+        assert result.id == UUID(transaction["id"])
+        mock_supabase_client.rpc.assert_called_once_with(
+            "grant_subscription_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits": 100,
+                "p_subscription_id": str(subscription_id),
+                "p_expires_at": "2026-09-01T00:00:00+00:00",
+                "p_metadata": {"grant_key": "free-subscription:activation"},
+                "p_description": "Subscription credits allocation",
+                "p_idempotency_key": "free-subscription:activation",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_subscription_credit_insert_payload_is_json_serializable(
+        self, billing_service, mock_supabase_client
+    ):
+        """Legacy non-idempotent grants still serialize expiry timestamps safely."""
+        organization_id = uuid4()
+        subscription_id = uuid4()
+        org_query = MagicMock()
+        org_query.select.return_value = org_query
+        org_query.eq.return_value = org_query
+        org_query.execute.return_value = MagicMock(
+            data=[{"credit_balance": 0, "purchased_credit_balance": 0}]
+        )
+        update_query = MagicMock()
+        update_query.eq.return_value = update_query
+        update_query.execute.return_value = MagicMock(data=[])
+        transaction_query = MagicMock()
+        transaction_query.insert.return_value = transaction_query
+        transaction_query.execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": str(uuid4()),
+                    "organization_id": str(organization_id),
+                    "transaction_type": "earned",
+                    "amount": 100,
+                    "balance_after": 100,
+                    "source": "subscription",
+                    "source_id": str(subscription_id),
+                    "credit_event_id": None,
+                    "expires_at": "2026-09-01T00:00:00+00:00",
+                    "stripe_payment_intent_id": None,
+                    "description": "Subscription credits allocation",
+                    "metadata": None,
+                    "created_at": "2026-08-01T00:00:00+00:00",
+                }
+            ]
+        )
+        notification_query = MagicMock()
+        notification_query.update.return_value = notification_query
+        notification_query.eq.return_value = notification_query
+        notification_query.execute.return_value = MagicMock(data=[])
+        mock_supabase_client.table.side_effect = [
+            org_query,
+            update_query,
+            transaction_query,
+            notification_query,
+        ]
+
+        await billing_service._add_credits(
+            organization_id=organization_id,
+            credits=100,
+            source=TransactionSource.SUBSCRIPTION,
+            source_id=subscription_id,
+            expires_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )
+
+        inserted_payload = transaction_query.insert.call_args.args[0]
+        json.dumps(inserted_payload)

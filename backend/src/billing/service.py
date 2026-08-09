@@ -558,6 +558,20 @@ class BillingService:
                 if existing_result.data:
                     return CreditTransaction(**existing_result.data[0])
 
+            # Versioned subscription grants always carry a stable key. Route
+            # those grants through Postgres so the balance update, expiry
+            # bookkeeping, and ledger insert commit or roll back together.
+            if source == TransactionSource.SUBSCRIPTION and idempotency_key:
+                return await self._grant_subscription_credits_locked(
+                    organization_id=organization_id,
+                    credits=credits,
+                    source_id=source_id,
+                    expires_at=expires_at,
+                    metadata=metadata,
+                    description=description,
+                    idempotency_key=idempotency_key,
+                )
+
             # Get current balances
             org_result = (
                 self.supabase.table("organizations")
@@ -573,6 +587,26 @@ class BillingService:
             current_purchased = int(
                 org_result.data[0].get("purchased_credit_balance") or 0
             )
+
+            # Validate and serialize the ledger payload before any balance
+            # mutation. Pydantic's default model_dump leaves datetime objects
+            # in Python mode, which Supabase cannot encode as JSON.
+            transaction_data = CreditTransactionCreate(
+                organization_id=organization_id,
+                transaction_type=(
+                    TransactionType.EARNED
+                    if source == TransactionSource.SUBSCRIPTION
+                    else TransactionType.PURCHASED
+                ),
+                amount=credits,
+                source=source,
+                source_id=source_id,
+                expires_at=expires_at,
+                stripe_payment_intent_id=stripe_payment_intent_id,
+                description=description,
+                metadata=metadata,
+            )
+            transaction_dict = transaction_data.model_dump(mode="json")
 
             # Expire leftover plan credits from the previous period when a new
             # expiring grant lands (renewal / invoice paid).
@@ -604,42 +638,6 @@ class BillingService:
 
             new_balance = new_plan + new_purchased
 
-            # Create transaction record using the validated model
-            transaction_data = CreditTransactionCreate(
-                organization_id=organization_id,
-                transaction_type=(
-                    TransactionType.EARNED
-                    if source == TransactionSource.SUBSCRIPTION
-                    else TransactionType.PURCHASED
-                ),
-                amount=credits,
-                source=source,
-                source_id=source_id,
-                expires_at=expires_at,
-                stripe_payment_intent_id=stripe_payment_intent_id,
-                description=description,
-                metadata=metadata,
-            )
-
-            # Convert UUID objects to strings for JSON serialization
-            transaction_dict = transaction_data.model_dump()
-            if (
-                "organization_id" in transaction_dict
-                and transaction_dict["organization_id"]
-            ):
-                transaction_dict["organization_id"] = str(
-                    transaction_dict["organization_id"]
-                )
-            if "source_id" in transaction_dict and transaction_dict["source_id"]:
-                transaction_dict["source_id"] = str(transaction_dict["source_id"])
-            if (
-                "credit_event_id" in transaction_dict
-                and transaction_dict["credit_event_id"]
-            ):
-                transaction_dict["credit_event_id"] = str(
-                    transaction_dict["credit_event_id"]
-                )
-
             # Set balance_after field (combined total; required by database)
             transaction_dict["balance_after"] = new_balance
 
@@ -669,6 +667,68 @@ class BillingService:
             logger.error(f"Error adding credits to {organization_id}: {e}")
             raise
 
+    async def _grant_subscription_credits_locked(
+        self,
+        organization_id: UUID,
+        credits: int,
+        source_id: Optional[UUID],
+        expires_at: Optional[datetime],
+        metadata: Optional[dict[str, Any]],
+        description: Optional[str],
+        idempotency_key: str,
+    ) -> CreditTransaction:
+        """Apply an idempotent subscription grant inside one database transaction.
+
+        The backing PostgreSQL function locks the organization row, checks the
+        grant key, expires leftover plan credits when appropriate, updates the
+        plan pool, and inserts the ledger row before returning. Keeping these
+        writes together prevents a failed ledger serialization or insert from
+        leaving a balance that cannot be audited or safely retried.
+
+        Args:
+            organization_id: Organization receiving the included credits.
+            credits: Positive number of credits to grant.
+            source_id: Subscription UUID that owns the grant.
+            expires_at: Optional period boundary for recurring plan credits.
+            metadata: JSON-compatible grant metadata, including ``grant_key``.
+            description: Human-readable ledger description.
+            idempotency_key: Stable key for activation, invoice, or renewal.
+
+        Returns:
+            The inserted or previously applied credit transaction.
+
+        Raises:
+            ValueError: If the organization or grant is invalid.
+            RuntimeError: If the database function returns no transaction.
+        """
+        result = self.supabase.rpc(
+            "grant_subscription_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits": credits,
+                "p_subscription_id": str(source_id) if source_id else None,
+                "p_expires_at": expires_at.isoformat() if expires_at else None,
+                "p_metadata": metadata,
+                "p_description": description,
+                "p_idempotency_key": idempotency_key,
+            },
+        ).execute()
+        payload = result.data
+        if isinstance(payload, list):
+            payload = payload[0] if payload else {}
+        if not payload:
+            raise RuntimeError("Subscription credit grant returned no result")
+        if payload.get("error"):
+            error = payload["error"]
+            if error == "organization_not_found":
+                raise ValueError(f"Organization {organization_id} not found")
+            raise ValueError(f"Subscription credit grant failed: {error}")
+
+        transaction_payload = payload.get("transaction")
+        if not transaction_payload:
+            raise RuntimeError("Subscription credit grant returned no transaction")
+        return CreditTransaction(**transaction_payload)
+
     async def _expire_plan_credits(
         self,
         organization_id: UUID,
@@ -688,8 +748,7 @@ class BillingService:
                 source=TransactionSource.EXPIRY,
                 description="Plan credits expired at period end",
             )
-            expire_dict = expire_tx.model_dump()
-            expire_dict["organization_id"] = str(organization_id)
+            expire_dict = expire_tx.model_dump(mode="json")
             expire_dict["balance_after"] = current_purchased
             self.supabase.table("credit_transactions").insert(expire_dict).execute()
             logger.info(

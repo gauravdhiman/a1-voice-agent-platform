@@ -51,12 +51,8 @@ export function useTestCall({
 
   const pipecatRef = useRef<PipecatClient | null>(null);
 
-  const endCall = useCallback(() => {
-    void disconnectPipecatVoiceCall(pipecatRef.current);
-    pipecatRef.current = null;
-
+  const resetCallState = useCallback(() => {
     setIsMuted(false);
-
     setState({
       isConnecting: false,
       isConnected: false,
@@ -64,9 +60,32 @@ export function useTestCall({
       isAgentSpeaking: false,
       isUserSpeaking: false,
     });
+  }, []);
 
+  const endCall = useCallback(() => {
+    // Clear the ref before disconnecting. Pipecat can synchronously emit
+    // onDisconnected during disconnect(), and the callback must not attempt
+    // to send a second close message on an already-closed socket.
+    const client = pipecatRef.current;
+    pipecatRef.current = null;
+    if (client) {
+      void disconnectPipecatVoiceCall(client);
+    }
+
+    resetCallState();
+    if (client) onDisconnected?.();
+  }, [onDisconnected, resetCallState]);
+
+  const handleTransportDisconnected = useCallback(() => {
+    // A server/network close has already completed transport teardown. Do not
+    // call client.disconnect() again; just release the client and update UI.
+    const client = pipecatRef.current;
+    pipecatRef.current = null;
+    if (!client) return;
+
+    resetCallState();
     onDisconnected?.();
-  }, [onDisconnected]);
+  }, [onDisconnected, resetCallState]);
 
   const toggleMute = useCallback(() => {
     if (!pipecatRef.current) return;
@@ -107,7 +126,7 @@ export function useTestCall({
             onConnected?.();
           },
           onDisconnected: () => {
-            endCall();
+            handleTransportDisconnected();
           },
           onError: (error) => {
             setState((prev) => ({
@@ -147,6 +166,7 @@ export function useTestCall({
     state.isConnecting,
     state.isConnected,
     endCall,
+    handleTransportDisconnected,
     onConnected,
     onError,
   ]);

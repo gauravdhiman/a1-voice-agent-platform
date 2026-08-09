@@ -162,9 +162,10 @@ class TestVersionedSubscriptionService:
 
     @pytest.mark.asyncio
     async def test_free_activation_is_idempotent_for_same_active_version(self):
-        """Refreshing onboarding does not create a second subscription."""
+        """Refreshing onboarding retries a missing grant without a new subscription."""
         service = VersionedSubscriptionService()
         service._get_signup_plan_version = AsyncMock(return_value=_free_version())
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
         service._get_existing_subscription = AsyncMock(
             return_value={
                 "id": str(SUBSCRIPTION_ID),
@@ -172,6 +173,8 @@ class TestVersionedSubscriptionService:
                 "plan_version_id": str(FREE_VERSION_ID),
                 "status": "active",
                 "stripe_customer_id": None,
+                "current_period_start": "2026-08-01T00:00:00+00:00",
+                "current_period_end": "2026-09-01T00:00:00+00:00",
             }
         )
 
@@ -179,6 +182,12 @@ class TestVersionedSubscriptionService:
 
         assert result.created is False
         assert result.subscription.id == SUBSCRIPTION_ID
+        service.credit_grant_service.grant_for_subscription.assert_awaited_once()
+        grant = service.credit_grant_service.grant_for_subscription.await_args
+        assert grant.kwargs["grant_reason"] == "activation"
+        assert grant.kwargs["grant_key"] == (
+            f"free-subscription:{SUBSCRIPTION_ID}:activation"
+        )
 
     @pytest.mark.asyncio
     async def test_free_activation_rejects_paid_version(self):

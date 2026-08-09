@@ -126,9 +126,19 @@ Credits are consumed for platform usage:
 
 **Credit Sources**:
 
-- Plan renewal (monthly allocation)
+- Plan activation or renewal (monthly allocation, when the plan policy is recurring)
+- One-time free/trial plan allocation (when the plan policy is one-time)
 - Top-up purchases
 - Adjustments (manual/admin actions)
+- Referral rewards (planned)
+
+Plan credits and purchased credits are tracked as separate pools. Plan credits
+are consumed first and expire at the period boundary; purchased credits do not
+expire. Subscription grants with a stable `grant_key` are applied through the
+`grant_subscription_credits` PostgreSQL function, which locks the organization
+row and commits expiry bookkeeping, balance updates, and the ledger row as one
+transaction. A retry therefore returns the existing grant instead of applying
+it twice.
 
 **Credit Consumption**:
 
@@ -141,11 +151,12 @@ Credits are consumed for platform usage:
 
 ```sql
 organizations.credit_balance       -- Current balance
+organizations.purchased_credit_balance -- Purchased top-up balance
 credit_transactions              -- Transaction history
   - amount (positive or negative)
   - type (usage, topup, adjustment)
   - reason
-  - metadata
+  - metadata (including subscription grant idempotency keys)
 ```
 
 ## Payment Flows
