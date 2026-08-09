@@ -6,7 +6,15 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import JSONResponse
 
 from src.auth.dependencies import (
@@ -26,6 +34,8 @@ from src.billing.models import (
     CreditEvent,
     CreditProduct,
     CreditPurchaseResponse,
+    CreditTransactionsResponse,
+    CreditUsageResponse,
     OrganizationBillingSummary,
     OrganizationSubscriptionUpdate,
     OrganizationSubscriptionWithPlan,
@@ -33,6 +43,7 @@ from src.billing.models import (
     SubscriptionPlan,
     SubscriptionPlanCreate,
     SubscriptionPlanUpdate,
+    TransactionType,
 )
 from src.billing.plan_migration_service import plan_migration_service
 from src.billing.service import billing_service
@@ -433,6 +444,17 @@ async def create_customer_portal(
                 status_code=404, detail="Organization subscription not found"
             )
 
+        if not subscription.stripe_customer_id:
+            if (subscription.metadata or {}).get("billing_mode") == "free":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Free plan subscriptions do not have a Stripe billing portal",
+                )
+            raise HTTPException(
+                status_code=404,
+                detail="No Stripe billing customer found for organization",
+            )
+
         logger.info(
             f"Found subscription {subscription.id} with customer {subscription.stripe_customer_id}"
         )
@@ -480,6 +502,49 @@ async def get_credit_balance(
     except Exception as e:
         logger.error(f"Error fetching credit balance for {organization_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch credit balance")
+
+
+@router.get(
+    "/credits/{organization_id}/transactions",
+    response_model=CreditTransactionsResponse,
+)
+async def get_credit_transactions(
+    organization_id: UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    transaction_type: TransactionType | None = Query(None),
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Return the organization's paginated, event-enriched credit ledger."""
+    try:
+        return await billing_service.get_credit_transactions(
+            organization_id,
+            page=page,
+            page_size=page_size,
+            transaction_type=transaction_type,
+        )
+    except Exception as e:
+        logger.error(
+            "Error fetching credit transactions for %s: %s", organization_id, e
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch credit transactions"
+        ) from e
+
+
+@router.get("/credits/{organization_id}/usage", response_model=CreditUsageResponse)
+async def get_credit_usage(
+    organization_id: UUID,
+    _: tuple[UUID, UserProfile] = Depends(check_billing_permissions),
+):
+    """Return dashboard-ready balances, current-period usage, and ledger rows."""
+    try:
+        return await billing_service.get_credit_usage(organization_id)
+    except Exception as e:
+        logger.error("Error fetching credit usage for %s: %s", organization_id, e)
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch credit usage"
+        ) from e
 
 
 @router.post("/credits/consume", response_model=CreditConsumptionResponse)
@@ -844,9 +909,19 @@ async def create_customer_portal_session(
             UUID(organization_id)
         )
 
-        if not subscription or not subscription.stripe_customer_id:
+        if not subscription:
             raise HTTPException(
                 status_code=404, detail="No subscription found for organization"
+            )
+        if not subscription.stripe_customer_id:
+            if (subscription.metadata or {}).get("billing_mode") == "free":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Free plan subscriptions do not have a Stripe billing portal",
+                )
+            raise HTTPException(
+                status_code=404,
+                detail="No Stripe billing customer found for organization",
             )
 
         # Create customer portal session

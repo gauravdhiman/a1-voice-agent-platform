@@ -13,6 +13,7 @@ import type {
   BillingHistory,
   OrganizationBillingSummary,
   CreditBalance,
+  CreditUsageResponse,
   CreditConsumptionRequest,
   CreditConsumptionResponse,
   CreditPurchaseResponse,
@@ -190,6 +191,20 @@ class BillingService {
   async getCreditBalance(organizationId: string): Promise<CreditBalance> {
     const response = await apiClient.get<CreditBalance>(
       `${this.baseUrl}/credits/${organizationId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Fetches the organization's current credit pools, period usage, category
+   * breakdown, and recent ledger entries for the reporting dashboard.
+   *
+   * @param organizationId Organization whose credit usage is requested
+   * @returns Promise resolving to the dashboard-ready credit usage payload
+   */
+  async getCreditUsage(organizationId: string): Promise<CreditUsageResponse> {
+    const response = await apiClient.get<CreditUsageResponse>(
+      `${this.baseUrl}/credits/${organizationId}/usage`,
     );
     return response.data;
   }

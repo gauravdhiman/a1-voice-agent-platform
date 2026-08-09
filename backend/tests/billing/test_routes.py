@@ -493,6 +493,38 @@ class TestCustomerPortalPermission:
             )
             assert result["portal_url"] == "https://portal.example.com/sub"
 
+    @pytest.mark.asyncio
+    async def test_free_subscription_does_not_call_stripe_portal(self):
+        """Free subscriptions have no Stripe customer and need no portal."""
+        from src.billing.routes import create_customer_portal
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        request = {
+            "organization_id": str(TEST_ORG_ID),
+            "return_url": "https://app.example.com",
+        }
+        free_subscription = _subscription_mock(stripe_customer_id=None)
+        free_subscription.plan_version_id = UUID(int=99)
+        free_subscription.metadata = {"billing_mode": "free"}
+
+        with (
+            patch("src.billing.routes.billing_service") as mock_svc,
+            patch("src.billing.routes.stripe_service") as mock_stripe,
+        ):
+            mock_svc.get_organization_subscription = AsyncMock(
+                return_value=free_subscription
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_customer_portal(
+                    request=request, user_auth=(TEST_USER_ID, profile)
+                )
+
+            assert exc_info.value.status_code == 409
+            assert "free plan" in exc_info.value.detail.lower()
+            mock_stripe.get_customer.assert_not_called()
+            mock_stripe.create_portal_session.assert_not_called()
+
 
 class TestCheckoutRoutesPermission:
     """``create_subscription_checkout`` (POST /checkout/subscription) and

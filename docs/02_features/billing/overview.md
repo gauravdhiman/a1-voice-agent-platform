@@ -35,6 +35,15 @@ are future scope, not current billing behavior. See [Subscription-Aware
 Onboarding and Credit Policy](../../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 for the complete decision record.
 
+The organization billing page is organized around three tasks: `Manage` (shown
+first for active subscriptions), `Plans`, and `Credits`. The duplicate
+`Overview` tab was removed because the summary cards already show the current
+plan, balance, and billing date. Free subscriptions are valid active
+subscriptions but intentionally have no Stripe customer or billing portal;
+the page shows that state explicitly instead of offering a failing Stripe
+action. Paid subscriptions keep the Stripe portal action, with its scope
+explained in a tooltip.
+
 ## What It Provides
 
 - ✅ **Stripe Integration**: Secure payment processing
@@ -189,6 +198,34 @@ credit_transactions              -- Transaction history
   - reason
   - metadata (including subscription grant idempotency keys)
 ```
+
+**Administrator reporting**:
+
+- `GET /api/v1/billing/credits/{organization_id}/usage` returns the live plan
+  and purchased pools, current-period grants/consumption, category totals, and
+  recent ledger rows.
+- `GET /api/v1/billing/credits/{organization_id}/transactions` returns the
+  paginated event-enriched ledger.
+- Completed voice calls are linked to their consumption transaction through
+  `call_logs.credits_consumed` and `call_logs.credit_transaction_id`.
+- The billing UI exposes this reporting to org admins and platform admins. A
+  platform admin must select the organization being inspected; all API queries
+  remain organization-scoped.
+
+The Call Log report orders records by `created_at` and supports agent, status,
+and date filters. The `To` date picker cannot select a date before
+`From`; changing `From` clears an already-invalid `To` value. Because the call
+log table predates the reporting UI, historical rows may have no finalized
+duration. Those rows remain visible and display an em dash for unknown
+duration; the report can be refreshed explicitly and also refetches when the
+page is mounted so a newly completed call does not leave a stale empty list.
+
+Call recording and transcription metadata is stored in `call_artifacts`. Audio
+is planned for a private Supabase Storage bucket and is served only through
+short-lived signed URLs. The current voice worker still uses a no-op recording
+tee, so audio playback and transcription are not enabled until consent,
+retention, and the asynchronous processing worker are implemented. See
+[Call Recording, Transcription, and Playback](../../03_implementation/call_recording_and_transcription.md).
 
 ## Payment Flows
 

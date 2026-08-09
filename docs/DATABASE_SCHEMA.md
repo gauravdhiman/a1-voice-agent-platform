@@ -470,6 +470,55 @@ Tracks usage of embed call buttons for analytics and rate limiting.
 
 ---
 
+### call_logs
+
+Tracks voice sessions for organization reporting and concurrent-call limits.
+
+| Column                | Type         | Constraints                              | Description |
+| --------------------- | ------------ | ---------------------------------------- | ----------- |
+| id                    | UUID         | PRIMARY KEY                              | Unique call log identifier |
+| call_sid              | VARCHAR(100) | NOT NULL, UNIQUE                         | Provider/session identifier |
+| organization_id       | UUID         | NOT NULL, FK → organizations.id          | Owning organization |
+| agent_id              | UUID         | NULLABLE, FK → voice_agents.id           | Agent used by the call |
+| status                | VARCHAR(50)  | NOT NULL, DEFAULT `initiated`            | Session status |
+| duration              | INTEGER      | NOT NULL, DEFAULT `0`                    | Duration in seconds |
+| credits_consumed      | INTEGER      | NOT NULL, DEFAULT `0`                    | Credits billed at teardown |
+| credit_transaction_id | UUID         | NULLABLE, FK → credit_transactions.id    | Ledger row explaining the call charge |
+| caller_number         | VARCHAR(30)  | NULLABLE                                 | Caller number; mask in UI |
+| called_number         | VARCHAR(30)  | NULLABLE                                 | Destination number |
+| started_at            | TIMESTAMPTZ  | NULLABLE                                 | Session start |
+| ended_at              | TIMESTAMPTZ  | NULLABLE                                 | Session end |
+| created_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
+| updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
+
+**Indexes**: organization, agent, created_at, status, credit_transaction_id.
+
+### call_artifacts
+
+Stores organization-scoped metadata for recordings, transcripts, and summaries.
+Audio bytes live in the private Supabase Storage bucket `call-recordings`; the
+database stores the bucket/path and text artifacts, never public audio URLs.
+
+| Column            | Type         | Constraints                              | Description |
+| ----------------- | ------------ | ---------------------------------------- | ----------- |
+| id                | UUID         | PRIMARY KEY                              | Artifact identifier |
+| call_log_id       | UUID         | NOT NULL, FK → call_logs.id              | Related call |
+| organization_id   | UUID         | NOT NULL, FK → organizations.id          | Tenant boundary |
+| artifact_type     | VARCHAR(30)  | NOT NULL, CHECK recording/transcript/summary | Artifact kind |
+| status            | VARCHAR(30)  | NOT NULL, DEFAULT `pending`              | Processing state |
+| storage_bucket    | VARCHAR(120) | NULLABLE                                 | Private object bucket |
+| storage_path      | TEXT         | NULLABLE                                 | `{org_id}/{call_id}/recording.wav` |
+| mime_type         | VARCHAR(120) | NULLABLE                                 | Audio or text MIME type |
+| size_bytes        | BIGINT       | NULLABLE                                 | Stored object size |
+| duration_seconds  | INTEGER      | NULLABLE                                 | Recording duration |
+| text_content      | TEXT         | NULLABLE                                 | Transcript or summary text |
+| metadata          | JSONB        | NULLABLE                                 | Provider/model/version/audit metadata |
+| created_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
+| updated_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
+
+**Unique Constraint**: `(call_log_id, artifact_type)`.
+**Indexes**: organization_id, call_log_id.
+
 ## Billing Tables
 
 ### subscription_plans
@@ -1005,6 +1054,35 @@ erDiagram
         timestamptz started_at
     }
 
+    call_logs {
+        uuid id
+        varchar call_sid
+        uuid organization_id
+        uuid agent_id
+        varchar status
+        integer duration
+        integer credits_consumed
+        uuid credit_transaction_id
+        timestamptz started_at
+        timestamptz ended_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    call_artifacts {
+        uuid id
+        uuid call_log_id
+        uuid organization_id
+        varchar artifact_type
+        varchar status
+        varchar storage_bucket
+        text storage_path
+        text text_content
+        jsonb metadata
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     auth {
         uuid id
         varchar email
@@ -1213,6 +1291,11 @@ erDiagram
     voice_agents ||--o| agent_embed_configs : "has one"
     platform_tools ||--o{ agent_tools : "used by"
     agent_embed_configs ||--o{ embed_call_logs : "tracks"
+    organizations ||--o{ call_logs : "owns"
+    voice_agents ||--o{ call_logs : "handles"
+    credit_transactions ||--o| call_logs : "explains call charge"
+    call_logs ||--o{ call_artifacts : "produces"
+    organizations ||--o{ call_artifacts : "owns"
 
     organizations ||--o{ organization_skills : "has many"
     organization_skills ||--o{ organization_skill_files : "has many"
@@ -1295,6 +1378,7 @@ erDiagram
 41. `20260808000010` - Add constrained `plan_versions.credit_grant_policy` (`recurring` or `one_time`) to distinguish automatic recurring plan credits from one-time free/trial credits.
 42. `20260808000011` - Make the current free signup version usable after onboarding by allowing one agent and assigning 100 included credits per recurring period.
 43. `20260808000012` - Add the atomic, idempotent `grant_subscription_credits` PostgreSQL function so subscription balance changes and credit ledger rows cannot become partially applied.
+44. `20260809000001` - Add per-call credit linkage (`call_logs.credits_consumed` and `credit_transaction_id`) plus the organization-scoped `call_artifacts` metadata table for private recordings, transcripts, and summaries. Seed the `voice_call_minute` metering event at 10 credits per connected minute and add the idempotent `consume_voice_call_credits` RPC for atomic voice-call debit plus ledger insert.
 
 ---
 

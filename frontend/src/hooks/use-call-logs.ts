@@ -14,6 +14,7 @@ export function useCallLogs(orgId: string, params: CallLogListParams = {}) {
     queryKey: callLogQueryKeys.list(orgId, params),
     queryFn: () => callLogService.listCallLogs(orgId, params),
     staleTime: 30 * 1000,
+    refetchOnMount: "always",
     enabled: !!orgId,
   });
 }

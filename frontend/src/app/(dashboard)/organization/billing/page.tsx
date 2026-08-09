@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -31,10 +30,12 @@ import { useBillingSummary } from "@/hooks/use-billing-summary";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { PlanSelection } from "@/components/billing/plan-selection";
 import { CreditPurchase } from "@/components/billing/credit-purchase";
+import { CreditUsagePanel } from "@/components/billing/credit-usage-panel";
 import { SubscriptionManagement } from "@/components/billing/subscription-management";
 import { toast } from "sonner";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
+import { useCreditUsage } from "@/hooks/use-credit-usage";
 import { AccessDenied } from "@/components/ui/access-denied";
 
 export default function BillingPage() {
@@ -86,6 +87,12 @@ export default function BillingPage() {
     refetch,
     isRefetching,
   } = useBillingSummary(orgId || undefined);
+  const {
+    data: creditUsage,
+    isLoading: creditUsageLoading,
+    error: creditUsageError,
+    refetch: refetchCreditUsage,
+  } = useCreditUsage(orgId || undefined);
 
   const [userSelectedTab, setUserSelectedTab] = useState<string | null>(null);
 
@@ -99,15 +106,21 @@ export default function BillingPage() {
     billingSummary?.subscription &&
     ["active", "trial"].includes(billingSummary.subscription.status);
 
+  const isFreePlan =
+    billingSummary?.subscription?.metadata?.billing_mode === "free";
+  const currentPlanName =
+    billingSummary?.subscription?.plan?.name ??
+    (isFreePlan ? "Free plan" : "No Plan");
+
   const activeTab =
-    userSelectedTab ?? (hasActiveSubscription ? "overview" : "plans");
+    userSelectedTab ?? (hasActiveSubscription ? "manage" : "plans");
 
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     if (
       tabParam &&
-      ["overview", "plans", "credits", "manage"].includes(tabParam)
+      ["manage", "plans", "credits"].includes(tabParam)
     ) {
       setUserSelectedTab(tabParam);
     }
@@ -143,7 +156,7 @@ export default function BillingPage() {
   }
 
   const refresh = async () => {
-    await refetch();
+    await Promise.all([refetch(), refetchCreditUsage()]);
     toast.success("Billing data refreshed");
   };
 
@@ -162,7 +175,13 @@ export default function BillingPage() {
     });
   };
 
-  if (authLoading || orgLoading || validationLoading || loading) {
+  if (
+    authLoading ||
+    orgLoading ||
+    validationLoading ||
+    loading ||
+    creditUsageLoading
+  ) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin mr-2 text-muted-foreground" />
@@ -245,7 +264,7 @@ export default function BillingPage() {
             </CardHeader>
             <CardContent className="p-4 pt-0">
               <div className="text-2xl font-bold">
-                {billingSummary.subscription?.plan?.name || "No Plan"}
+                {currentPlanName}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {billingSummary.subscription?.status && (
@@ -306,97 +325,12 @@ export default function BillingPage() {
         className="space-y-6"
       >
         <TabsList className="w-full">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="plans">Plans</TabsTrigger>
-          <TabsTrigger value="credits">Credits</TabsTrigger>
           {hasActiveSubscription && (
             <TabsTrigger value="manage">Manage</TabsTrigger>
           )}
+          <TabsTrigger value="plans">Plans</TabsTrigger>
+          <TabsTrigger value="credits">Credits</TabsTrigger>
         </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          {hasActiveSubscription ? (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader className="p-5 pb-3">
-                  <CardTitle className="text-lg">
-                    Subscription Overview
-                  </CardTitle>
-                  <CardDescription>
-                    Current subscription details and usage information
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-5 pt-0">
-                  {billingSummary?.subscription && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <h4 className="font-semibold text-sm mb-2">
-                            Plan Details
-                          </h4>
-                          <div className="space-y-1 text-sm">
-                            <p>
-                              <span className="text-muted-foreground">
-                                Plan:
-                              </span>{" "}
-                              {billingSummary.subscription.plan?.name}
-                            </p>
-                            <p>
-                              <span className="text-muted-foreground">
-                                Status:
-                              </span>{" "}
-                              {billingSummary.subscription.status}
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-sm mb-2">
-                            Usage This Period
-                          </h4>
-                          <div className="space-y-1 text-sm">
-                            <p>
-                              <span className="text-muted-foreground">
-                                Credits Used:
-                              </span>{" "}
-                              {billingSummary.current_period_usage?.toLocaleString() ||
-                                "0"}
-                            </p>
-                            <p>
-                              <span className="text-muted-foreground">
-                                Credits Remaining:
-                              </span>{" "}
-                              {billingSummary.credit_balance?.toLocaleString() ||
-                                "0"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <Card>
-              <CardHeader className="p-5 pb-3">
-                <CardTitle className="text-lg">Welcome to Billing</CardTitle>
-                <CardDescription>
-                  Choose a plan to get started with your subscription
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <p className="text-muted-foreground mb-4 text-sm">
-                  You don&apos;t have an active subscription yet. Browse our
-                  plans to get started.
-                </p>
-                <Button onClick={() => handleTabChange("plans")} size="sm">
-                  View Plans
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         {/* Plans Tab */}
         <TabsContent value="plans" className="space-y-6">
@@ -412,10 +346,25 @@ export default function BillingPage() {
         {/* Credits Tab */}
         <TabsContent value="credits" className="space-y-6">
           {validatedOrg && (
-            <CreditPurchase
-              organizationId={validatedOrg.id}
-              onCreditsPurchased={() => refetch()}
-            />
+            <>
+              {creditUsageError ? (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Unable to load credit usage reporting. Please refresh and
+                    try again.
+                  </AlertDescription>
+                </Alert>
+              ) : creditUsage ? (
+                <CreditUsagePanel usage={creditUsage} />
+              ) : null}
+              <CreditPurchase
+                organizationId={validatedOrg.id}
+                onCreditsPurchased={() => {
+                  void Promise.all([refetch(), refetchCreditUsage()]);
+                }}
+              />
+            </>
           )}
         </TabsContent>
 

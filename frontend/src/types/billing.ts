@@ -222,6 +222,32 @@ export interface CreditTransactionWithEvent extends CreditTransaction {
   credit_event: CreditEvent | null;
 }
 
+export interface CreditUsageCategory {
+  category: string;
+  credits_consumed: number;
+  transaction_count: number;
+}
+
+export interface CreditTransactionsResponse {
+  items: CreditTransactionWithEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface CreditUsageResponse {
+  organization_id: string;
+  balance: CreditBalance;
+  period_start: string | null;
+  period_end: string | null;
+  period_credits_granted: number;
+  period_credits_used: number;
+  period_credits_remaining: number;
+  usage_by_category: CreditUsageCategory[];
+  transactions: CreditTransactionWithEvent[];
+}
+
 // Credit Product interfaces
 export interface CreditProduct {
   id: string;

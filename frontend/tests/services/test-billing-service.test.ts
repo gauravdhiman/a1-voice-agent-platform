@@ -243,6 +243,41 @@ describe("BillingService", () => {
     });
   });
 
+  describe("Credit usage reporting", () => {
+    it("gets the organization credit usage ledger", async () => {
+      server.use(
+        http.get(
+          `${API_BASE_URL}/api/v1/billing/credits/org-1/usage`,
+          () =>
+            HttpResponse.json({
+              organization_id: "org-1",
+              balance: {
+                total_credits: 80,
+                subscription_credits: 60,
+                purchased_credits: 20,
+                expiring_soon: 0,
+                expires_at: null,
+              },
+              period_start: null,
+              period_end: null,
+              period_credits_granted: 100,
+              period_credits_used: 20,
+              period_credits_remaining: 80,
+              usage_by_category: [],
+              transactions: [],
+            }),
+        ),
+      );
+
+      const result = await billingService.getCreditUsage("org-1");
+
+      expect(result).toMatchObject({
+        organization_id: "org-1",
+        period_credits_used: 20,
+      });
+    });
+  });
+
   describe("Credits", () => {
     it("getCreditBalance returns balance", async () => {
       const result = await billingService.getCreditBalance("org-1");

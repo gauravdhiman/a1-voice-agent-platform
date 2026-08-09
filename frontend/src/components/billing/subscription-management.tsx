@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Calendar,
-  CreditCard,
   Users,
   Zap,
   AlertTriangle,
@@ -21,6 +20,7 @@ import {
   ExternalLink,
   Settings,
   Loader2,
+  Info,
 } from "lucide-react";
 import { billingService } from "@/services/billing-service";
 import { CancelSubscriptionDialog } from "@/components/billing/cancel-subscription-dialog";
@@ -29,6 +29,12 @@ import { OrganizationSubscriptionWithPlan } from "@/types/billing";
 import type { OrgEntitlements } from "@/types/billing";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface SubscriptionManagementProps {
   organizationId: string;
@@ -168,6 +174,9 @@ export function SubscriptionManagement({
   const isSubscriptionActive = ["active", "trial"].includes(
     subscription.status,
   );
+  const isFreePlan = subscription.metadata?.billing_mode === "free";
+  const planName = subscription.plan?.name ?? (isFreePlan ? "Free plan" : "No plan");
+  const canManageBilling = Boolean(subscription.stripe_customer_id) && !isFreePlan;
 
   return (
     <div className="space-y-6">
@@ -208,50 +217,71 @@ export function SubscriptionManagement({
                 Manage your subscription plan and billing settings
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              onClick={handleOpenCustomerPortal}
-              disabled={openingPortal}
-            >
-              {openingPortal ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Settings className="w-4 h-4 mr-2" />
-              )}
-              Manage Billing
-              <ExternalLink className="w-4 h-4 ml-2" />
-            </Button>
+            {canManageBilling ? (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      onClick={handleOpenCustomerPortal}
+                      disabled={openingPortal}
+                    >
+                      {openingPortal ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Settings className="w-4 h-4 mr-2" />
+                      )}
+                      Manage Billing
+                      <ExternalLink className="w-4 h-4 ml-2" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-sm">
+                    Open Stripe to update payment methods, invoices, billing
+                    address, or the subscription.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : isFreePlan ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Info className="h-4 w-4" />
+                <span>Free plan does not require a payment method.</span>
+              </div>
+            ) : null}
           </div>
         </CardHeader>
 
         <CardContent className="space-y-6">
           {/* Plan Details */}
-          {subscription.plan && (
+          {subscription.plan || isFreePlan ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">Plan</div>
-                <div className="font-semibold">{subscription.plan.name}</div>
+                <div className="font-semibold">{planName}</div>
               </div>
 
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Price</div>
-                <div className="font-semibold">
-                  ${(subscription.plan.price_amount / 100).toFixed(2)}/
-                  {subscription.plan.interval}
+              {subscription.plan ? (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Price</div>
+                  <div className="font-semibold">
+                    ${(subscription.plan.price_amount / 100).toFixed(2)}/
+                    {subscription.plan.interval}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Zap className="w-4 h-4" />
-                  Credits Included
+              {subscription.plan ? (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Zap className="w-4 h-4" />
+                    Credits Included
+                  </div>
+                  <div className="font-semibold">
+                    {subscription.plan.included_credits.toLocaleString()}
+                  </div>
                 </div>
-                <div className="font-semibold">
-                  {subscription.plan.included_credits.toLocaleString()}
-                </div>
-              </div>
+              ) : null}
 
-              {subscription.plan.max_users && (
+              {subscription.plan?.max_users && (
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground flex items-center gap-1">
                     <Users className="w-4 h-4" />
@@ -263,7 +293,7 @@ export function SubscriptionManagement({
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           {/* Billing Dates */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -346,34 +376,6 @@ export function SubscriptionManagement({
                 Reactivate Subscription
               </Button>
             )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Payment Method Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5" />
-            Payment & Billing
-          </CardTitle>
-          <CardDescription>
-            Manage your payment methods and view billing history
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Use the &quot;Manage Billing&quot; button above to:
-            </p>
-            <ul className="text-sm space-y-1 ml-4">
-              <li>• Update payment methods</li>
-              <li>• Download invoices</li>
-              <li>• View billing history</li>
-              <li>• Update billing address</li>
-              <li>• Change subscription plan</li>
-            </ul>
           </div>
         </CardContent>
       </Card>

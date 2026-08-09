@@ -384,6 +384,38 @@ class CreditBalance(BaseModel):
     expires_at: Optional[datetime] = None  # Next expiration date
 
 
+class CreditUsageCategory(BaseModel):
+    """Aggregated credit consumption for one event category."""
+
+    category: str
+    credits_consumed: int
+    transaction_count: int
+
+
+class CreditTransactionsResponse(BaseModel):
+    """Paginated credit ledger rows for an organization."""
+
+    items: list[CreditTransactionWithEvent]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class CreditUsageResponse(BaseModel):
+    """Dashboard-ready credit balance, period usage, and transaction details."""
+
+    organization_id: UUID
+    balance: CreditBalance
+    period_start: Optional[datetime] = None
+    period_end: Optional[datetime] = None
+    period_credits_granted: int
+    period_credits_used: int
+    period_credits_remaining: int
+    usage_by_category: list[CreditUsageCategory]
+    transactions: list[CreditTransactionWithEvent]
+
+
 class UsageStats(BaseModel):
     """Usage statistics for the current period."""
 

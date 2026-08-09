@@ -28,7 +28,10 @@ from .models import (
     CreditProductUpdate,
     CreditTransaction,
     CreditTransactionCreate,
+    CreditTransactionsResponse,
     CreditTransactionWithEvent,
+    CreditUsageCategory,
+    CreditUsageResponse,
     OrganizationBillingSummary,
     OrganizationSubscription,
     OrganizationSubscriptionCreate,
@@ -378,6 +381,160 @@ class BillingService:
 
         except Exception as e:
             logger.error(f"Error getting credit balance for {organization_id}: {e}")
+            raise
+
+    @staticmethod
+    def _credit_transaction_from_row(row: dict[str, Any]) -> CreditTransactionWithEvent:
+        """Normalize Supabase's embedded ``credit_events`` field."""
+        payload = dict(row)
+        event_data = payload.pop("credit_events", None) or payload.pop(
+            "credit_event", None
+        )
+        if isinstance(event_data, list):
+            event_data = event_data[0] if event_data else None
+        payload["credit_event"] = (
+            CreditEvent(**event_data) if isinstance(event_data, dict) else None
+        )
+        return CreditTransactionWithEvent(**payload)
+
+    async def get_credit_transactions(
+        self,
+        organization_id: UUID,
+        *,
+        page: int = 1,
+        page_size: int = 25,
+        transaction_type: Optional[TransactionType] = None,
+    ) -> CreditTransactionsResponse:
+        """Return a paginated, event-enriched credit ledger for an organization.
+
+        Args:
+            organization_id: Organization whose ledger is requested.
+            page: One-based page number.
+            page_size: Number of rows to return, capped by the API route.
+            transaction_type: Optional movement filter such as ``consumed``.
+
+        Returns:
+            Paginated ledger rows including the event category and unit cost
+            when a transaction was caused by a credit event.
+        """
+        try:
+            query = (
+                self.supabase.table("credit_transactions")
+                .select("*, credit_events(*)", count="exact")
+                .eq("organization_id", str(organization_id))
+                .order("created_at", desc=True)
+            )
+            if transaction_type:
+                query = query.eq("transaction_type", transaction_type.value)
+
+            offset = (page - 1) * page_size
+            result = query.range(offset, offset + page_size - 1).execute()
+            total = int(result.count or 0)
+            items = [
+                self._credit_transaction_from_row(row) for row in (result.data or [])
+            ]
+            return CreditTransactionsResponse(
+                items=items,
+                total=total,
+                page=page,
+                page_size=page_size,
+                total_pages=max(1, (total + page_size - 1) // page_size),
+            )
+        except Exception as e:
+            logger.error(
+                "Error fetching credit transactions for %s: %s",
+                organization_id,
+                e,
+            )
+            raise
+
+    async def get_credit_usage(
+        self, organization_id: UUID, *, transaction_limit: int = 50
+    ) -> CreditUsageResponse:
+        """Build the organization credit dashboard payload.
+
+        The response intentionally keeps the two live pools visible while
+        aggregating current-period ledger movements by event category. This
+        lets administrators distinguish available plan credits from purchased
+        credits and see exactly what consumed the balance.
+        """
+        try:
+            balance = await self.get_credit_balance(organization_id)
+            subscription = await self.get_organization_subscription(organization_id)
+            period_start = subscription.current_period_start if subscription else None
+            period_end = subscription.current_period_end if subscription else None
+
+            query = (
+                self.supabase.table("credit_transactions")
+                .select("*, credit_events(*)")
+                .eq("organization_id", str(organization_id))
+                .order("created_at", desc=True)
+            )
+            if period_start:
+                query = query.gte("created_at", period_start.isoformat())
+            rows = query.execute().data or []
+
+            period_granted = 0
+            period_used = 0
+            category_totals: dict[str, CreditUsageCategory] = {}
+            for row in rows:
+                transaction_type = row.get("transaction_type")
+                amount = int(row.get("amount") or 0)
+                if (
+                    transaction_type
+                    in {
+                        TransactionType.EARNED.value,
+                        TransactionType.PURCHASED.value,
+                    }
+                    and amount > 0
+                ):
+                    period_granted += amount
+                if transaction_type != TransactionType.CONSUMED.value:
+                    continue
+
+                consumed = abs(amount)
+                period_used += consumed
+                event = row.get("credit_events") or row.get("credit_event") or {}
+                if isinstance(event, list):
+                    event = event[0] if event else {}
+                category = str(
+                    event.get("category")
+                    or (row.get("metadata") or {}).get("category")
+                    or row.get("source")
+                    or "other"
+                )
+                existing = category_totals.get(category)
+                if existing:
+                    existing.credits_consumed += consumed
+                    existing.transaction_count += 1
+                else:
+                    category_totals[category] = CreditUsageCategory(
+                        category=category,
+                        credits_consumed=consumed,
+                        transaction_count=1,
+                    )
+
+            recent = [
+                self._credit_transaction_from_row(row)
+                for row in rows[:transaction_limit]
+            ]
+            return CreditUsageResponse(
+                organization_id=organization_id,
+                balance=balance,
+                period_start=period_start,
+                period_end=period_end,
+                period_credits_granted=period_granted,
+                period_credits_used=period_used,
+                period_credits_remaining=max(0, period_granted - period_used),
+                usage_by_category=sorted(
+                    category_totals.values(),
+                    key=lambda item: item.credits_consumed,
+                    reverse=True,
+                ),
+                transactions=recent,
+            )
+        except Exception as e:
+            logger.error("Error building credit usage for %s: %s", organization_id, e)
             raise
 
     async def add_subscription_credits(

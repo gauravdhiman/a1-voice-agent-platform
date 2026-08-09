@@ -39,6 +39,7 @@ const mockUseOrganization = vi.fn();
 const mockUseUserPermissions = vi.fn();
 const mockUseOrganizationById = vi.fn();
 const mockUseBillingSummary = vi.fn();
+const mockUseCreditUsage = vi.fn();
 const mockSetCurrentOrganization = vi.fn();
 
 declare global {
@@ -77,6 +78,10 @@ vi.mock("@/hooks/use-organization-by-id", () => ({
 
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: (...args: unknown[]) => mockUseBillingSummary(...args),
+}));
+
+vi.mock("@/hooks/use-credit-usage", () => ({
+  useCreditUsage: (...args: unknown[]) => mockUseCreditUsage(...args),
 }));
 
 // Stub the heavy children — we just want to assert the gate.
@@ -144,6 +149,12 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
       error: null,
       refetch: vi.fn(),
       isRefetching: false,
+    });
+    mockUseCreditUsage.mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
     });
   });
 
@@ -285,5 +296,57 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
         screen.getByText(/Billing & Subscriptions/i),
       ).toBeInTheDocument();
     });
+  });
+
+  it("orders the useful billing tabs first and removes the redundant overview tab", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+        "Manage",
+        "Plans",
+        "Credits",
+      ]);
+    });
+    expect(screen.getByRole("tab", { name: "Manage" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
+  });
+
+  it("shows the active free plan instead of falling back to no plan", async () => {
+    mockUseBillingSummary.mockReturnValue({
+      data: {
+        subscription: {
+          status: "active",
+          plan: null,
+          metadata: { billing_mode: "free" },
+        },
+        credit_balance: 1000,
+        next_billing_date: "2026-08-01",
+        amount_due: null,
+        current_period_usage: 200,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isRefetching: false,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(screen.getByText("Free plan")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("No Plan")).not.toBeInTheDocument();
   });
 });

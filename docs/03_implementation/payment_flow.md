@@ -114,7 +114,11 @@ selection; new signup must use the versioned endpoints above.
 #### 6. **Updated Main Billing Page** (`frontend/src/app/(dashboard)/billing/page.tsx`)
 
 - Integrated all new components
-- Tabbed interface (Overview, Plans, Credits, Manage)
+- Tabbed interface (Manage, Plans, Credits); the redundant Overview tab was
+  removed because the page summary cards already expose those details
+- Free subscriptions do not open Stripe Customer Portal because they have no
+  Stripe customer; the UI explains this inline and the API rejects portal
+  requests with a clear conflict response
 - Responsive design
 - Real-time data refresh
 
