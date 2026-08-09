@@ -6,7 +6,8 @@ import { useOrganization } from "@/contexts/organization-context";
 import { useMyAgents } from "@/hooks/use-agent-queries";
 import { useCallLogs } from "@/hooks/use-call-logs";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
-import { CallLogListParams } from "@/services/call-log-service";
+import { callLogService, CallLogListParams } from "@/services/call-log-service";
+import { ApiRequestError } from "@/lib/api/client";
 import {
   Card,
   CardContent,
@@ -27,7 +28,17 @@ import {
   Loader2,
   AlertTriangle,
   RefreshCw,
+  Headphones,
+  ShieldCheck,
 } from "lucide-react";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All Statuses" },
@@ -111,12 +122,23 @@ export default function CallsPage() {
     organization: validatedOrganization,
   } = useOrganizationById(orgId || null);
   const { data: agents = [] } = useMyAgents();
+  const { isOrgAdmin, isPlatformAdmin } = useUserPermissions();
 
   const [agentFilter, setAgentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+  const [recordingOpen, setRecordingOpen] = useState(false);
+  const [recordingCallId, setRecordingCallId] = useState<string | null>(null);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingLoadingId, setRecordingLoadingId] = useState<string | null>(
+    null,
+  );
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [recordingUnavailableIds, setRecordingUnavailableIds] = useState<
+    Set<string>
+  >(() => new Set());
 
   const params: CallLogListParams = useMemo(
     () => ({
@@ -147,6 +169,54 @@ export default function CallsPage() {
   const handleFilterChange = useCallback(() => {
     setPage(1);
   }, []);
+
+  const handleListen = useCallback(async (callId: string) => {
+    setRecordingCallId(callId);
+    setRecordingLoadingId(callId);
+    setRecordingError(null);
+    try {
+      const blob = await callLogService.downloadRecording(callId);
+      setRecordingUrl((previousUrl) => {
+        if (previousUrl) URL.revokeObjectURL(previousUrl);
+        return URL.createObjectURL(blob);
+      });
+      setRecordingOpen(true);
+    } catch (error) {
+      const recordingUnavailable =
+        error instanceof ApiRequestError && [404, 410].includes(error.status);
+      if (recordingUnavailable) {
+        setRecordingUnavailableIds((previous) => {
+          const next = new Set(previous);
+          next.add(callId);
+          return next;
+        });
+      }
+      setRecordingUrl(null);
+      setRecordingOpen(true);
+      setRecordingError(
+        recordingUnavailable
+          ? "This recording is no longer available. It may have reached the retention limit or been removed from storage."
+          : "This recording could not be loaded. Please try again later.",
+      );
+    } finally {
+      setRecordingLoadingId(null);
+    }
+  }, []);
+
+  const handleRecordingOpenChange = useCallback((open: boolean) => {
+    setRecordingOpen(open);
+    if (!open) {
+      setRecordingUrl(null);
+      setRecordingCallId(null);
+      setRecordingError(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    };
+  }, [recordingUrl]);
 
   // Agent name lookup map
   const agentNameMap = useMemo(
@@ -201,6 +271,28 @@ export default function CallsPage() {
           </p>
         </div>
       </div>
+
+      {isOrgAdmin || isPlatformAdmin ? (
+        <Alert className="border-primary/20 bg-primary/5">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <AlertDescription>
+            <p className="font-medium text-foreground">
+              Recording privacy, security, and retention
+            </p>
+            <p className="mt-1">
+              Recordings are private and available only to organization and
+              platform admins through authenticated access. Staging and
+              production recordings use private, provider-encrypted storage;
+              local development recordings stay in the ignored local data
+              directory. Recordings are retained according to the configured
+              policy, which defaults to 90 days, and may be removed earlier.
+              Ensure callers are notified and consent requirements are met
+              before using recordings, including any applicable regulatory
+              requirements for your jurisdiction.
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Filters */}
       <Card>
@@ -373,6 +465,11 @@ export default function CallsPage() {
                       <th className="text-right px-6 py-3 font-medium text-muted-foreground">
                         Credits
                       </th>
+                      {isOrgAdmin || isPlatformAdmin ? (
+                        <th className="text-right px-6 py-3 font-medium text-muted-foreground">
+                          Recording
+                        </th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -409,6 +506,31 @@ export default function CallsPage() {
                             {call.credits_consumed || 0}
                           </span>
                         </td>
+                        {isOrgAdmin || isPlatformAdmin ? (
+                          <td className="px-6 py-3 text-right">
+                            {call.recording_available &&
+                            !recordingUnavailableIds.has(call.id) ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleListen(call.id)}
+                                disabled={recordingLoadingId === call.id}
+                                aria-label={`Listen to recording for call ${call.id}`}
+                              >
+                                {recordingLoadingId === call.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Headphones className="h-4 w-4" />
+                                )}
+                                <span className="ml-1">Listen</span>
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                Unavailable
+                              </span>
+                            )}
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
@@ -434,6 +556,31 @@ export default function CallsPage() {
                       <span>{formatDuration(call.duration)}</span>
                       <span>·</span>
                       <span>{call.credits_consumed || 0} credits</span>
+                      {isOrgAdmin || isPlatformAdmin ? (
+                        <>
+                          <span>·</span>
+                          {call.recording_available &&
+                          !recordingUnavailableIds.has(call.id) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-1 text-xs"
+                              onClick={() => void handleListen(call.id)}
+                              disabled={recordingLoadingId === call.id}
+                              aria-label={`Listen to recording for call ${call.id}`}
+                            >
+                              {recordingLoadingId === call.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Headphones className="h-3 w-3" />
+                              )}
+                              <span className="ml-1">Listen</span>
+                            </Button>
+                          ) : (
+                            <span>Recording unavailable</span>
+                          )}
+                        </>
+                      ) : null}
                       {call.agent_id && (
                         <>
                           <span>·</span>
@@ -479,6 +626,43 @@ export default function CallsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={recordingOpen} onOpenChange={handleRecordingOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Headphones className="h-5 w-5 text-primary" />
+              Call recording
+            </DialogTitle>
+            <DialogDescription>
+              {recordingCallId
+                ? `Private recording for call ${recordingCallId}`
+                : "Private call recording"}
+            </DialogDescription>
+          </DialogHeader>
+          {recordingError ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{recordingError}</AlertDescription>
+            </Alert>
+          ) : recordingUrl ? (
+            <audio
+              key={recordingUrl}
+              className="w-full"
+              controls
+              autoPlay
+              src={recordingUrl}
+            >
+              Your browser does not support audio playback.
+            </audio>
+          ) : (
+            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading recording…
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

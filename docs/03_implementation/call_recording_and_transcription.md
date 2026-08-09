@@ -7,33 +7,43 @@ Call usage reporting is now wired to the existing `call_logs` and
 debits the `voice_call_minute` event using a one-minute minimum and rounded-up
 minutes, and links the ledger row back to the call.
 
-Audio capture is intentionally not enabled yet. `voice-ws/src/recording.py`
-still contains a pass-through tee; it does not persist audio. The new
-`call_artifacts` table is the metadata boundary for the next phase, not proof
-that recordings already exist.
+Recording capture and authenticated playback are now implemented. The feature
+is opt-in through `VOICE_RECORDING_ENABLED` and remains disabled by default
+until consent and disclosure have been configured for the jurisdiction in
+which the organization operates. Transcription and summaries remain a later
+processing phase.
 
 ## Storage decision
 
-Use Supabase Storage for audio bytes and Postgres for searchable metadata and
-text artifacts:
+Use a private object store for audio bytes and Postgres for searchable metadata
+and text artifacts. Local development uses an ignored filesystem directory;
+staging and production use two environment-specific buckets in one Cloudflare
+R2 account:
 
 | Artifact | Storage | Reason |
 | --- | --- | --- |
-| Mixed call audio | Private Supabase Storage bucket `call-recordings` | Durable object storage, private by default, signed playback URLs |
+| Mixed call audio (local) | `.local-data/call-recordings/` | Fast local testing; ignored by Git and mounted into backend/voice-ws |
+| Mixed call audio (staging/prod) | Private R2 bucket per environment | Durable object storage, provider-encrypted at rest, short-lived signed playback URLs |
 | Recording metadata | `call_artifacts` row | Organization/call ownership, status, path, MIME type, size, duration |
 | Transcript | `call_artifacts.text_content` | Searchable and directly available to the reporting UI |
 | Summary and key takeaways | `call_artifacts.text_content` plus JSON `metadata` | Small, structured, and easy to render/export |
 
-Objects must use an organization-scoped path:
+Objects must use an organization-scoped, date-partitioned path:
 
 ```text
-{organization_id}/{call_log_id}/recording.wav
+{organization_id}/calls/{yyyy}/{mm}/{dd}/{call_log_id}/recording.wav
 ```
 
-Never return the object path as a public URL. The backend should verify
-organization access, create a short-lived signed URL (for example, five
-minutes), and return it only to an org admin or platform admin viewing that
-organization.
+Never return the object path as a public URL. The backend verifies organization
+ownership, and R2 playback uses a five-minute presigned GET URL. Local playback
+is streamed through the same authenticated backend endpoint. Only an org admin
+or platform admin can request a recording.
+
+The Cloudflare account is shared for operational simplicity, but the buckets
+remain separate (`247ai-call-recordings-staging` and
+`247ai-call-recordings-production`) and credentials are bucket-scoped. This
+keeps accidental cross-environment access out of normal application paths;
+Cloudflare account-level access is still a shared administrative blast radius.
 
 ## Processing flow
 
@@ -41,7 +51,7 @@ organization.
 sequenceDiagram
     participant Caller
     participant Worker as voice-ws
-    participant Storage as Supabase Storage
+    participant Storage as Cloudflare R2 / local store
     participant Database as Postgres
     participant Transcriber as Transcription Worker
     participant Admin as Admin Dashboard
@@ -55,20 +65,20 @@ sequenceDiagram
     Transcriber->>Storage: Read recording with service credentials
     Transcriber->>Database: Save transcript and summary artifacts
     Admin->>Database: Request call and artifact metadata
-    Admin->>Storage: Request short-lived signed URL
+    Admin->>Worker: Request authenticated recording endpoint
+    Worker->>Storage: Create short-lived R2 URL or read local object
     Storage-->>Admin: Signed playback URL
     Admin->>Database: Read transcript and summary
 ```
 
 ## Runtime implementation plan
 
-1. Add a real Pipecat audio processor in place of the current no-op tee. Keep
-   separate input/output buffers until the final mux so debugging can tell the
-   caller and agent channels apart.
-2. On normal or abnormal session teardown, flush the buffer to a temporary
-   file/stream, upload it to the private bucket, and upsert the `recording`
-   artifact row. Recording failures must not prevent call finalization or credit
-   accounting.
+1. `AudioBufferProcessor` captures the inbound and outbound audio observed by
+   the Pipecat pipeline and emits one mixed PCM buffer at teardown.
+2. On normal or abnormal session teardown, encode the buffer as WAV, upload it
+   through the configured local/R2 adapter, and upsert the `recording` artifact
+   row. Recording failures do not prevent call finalization or credit
+   accounting; the artifact is marked `failed` for support/retry tooling.
 3. Enqueue transcription after the recording row is committed. The worker
    should retry transient provider failures and make the artifact status
    visible as `pending`, `processing`, `completed`, or `failed`.
@@ -87,13 +97,49 @@ sequenceDiagram
   production.
 - Keep the bucket private and enforce organization ownership in the API. Do not
   rely on a client-supplied organization id or storage path for authorization.
+- Use bucket-scoped R2 Object Read/Write credentials, never a public bucket or
+  a browser-held secret. The browser receives only a short-lived playback
+  redirect through the authenticated endpoint.
 - Store only the minimum phone-number and provider metadata needed for support;
   mask numbers in list views.
-- Define a retention policy before launch (for example, 30 or 90 days for
-  audio, longer for transcripts only if the customer opts in). A scheduled
-  cleanup job should delete both the object and its artifact row together.
+- The default retention window is 90 days and is stored on each artifact as
+  `retention_expires_at`. A scheduled cleanup job should delete both the object
+  and its artifact row together before production recording is enabled.
 - Record provider, model, prompt/version, and processing timestamps in
   `call_artifacts.metadata` so summaries can be audited or regenerated.
+
+## Encryption decision
+
+Provider-managed encryption is the default. R2 encrypts objects and metadata at
+rest, and all access is over TLS. This gives small and medium organizations
+durable recovery without making them responsible for key custody. The
+configuration already records `encryption_mode` on each artifact and routes
+storage through a strategy boundary, but `customer_managed` is intentionally
+rejected until we implement key provisioning, rotation, access recovery,
+deletion, and a documented lost-key policy. That avoids a dangerous mode that
+silently behaves like provider-managed encryption.
+
+If customer-managed keys become necessary later, add the key provider behind
+the same storage/encryption boundary and require an explicit organization-level
+opt-in. Customer-managed encryption should be an enterprise/compliance feature,
+not the default for SMB customers.
+
+## Platform-managed key operations
+
+There is no customer-facing or platform-admin UI for R2 key management today.
+Platform-managed recording encryption is enabled by setting
+`RECORDING_ENCRYPTION_MODE=provider_managed`; the application does not receive
+or rotate an R2 encryption key because R2 manages encryption at rest. Operators
+configure the private R2 endpoint, environment bucket, bucket-scoped access key,
+secret key, and presigned URL lifetime through the deployment secret store or
+the environment variables documented in the local, staging, and production
+templates. `ENCRYPTION_KEY` remains the application Fernet key for database
+secrets and is not an R2 recording-encryption key.
+
+Customer-managed keys are intentionally not selectable until provisioning,
+rotation, recovery, revocation, and lost-key behavior can be managed end to
+end. A future admin workflow should never expose R2 secrets to browsers or
+organization admins.
 
 ## Credit semantics
 

@@ -3,12 +3,18 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 from uuid import UUID
 
 from shared.config import supabase_config
 
-from .models import CallAnalytics, CallLog, CallLogCreate, CallLogUpdate, CallLogsResponse
+from .models import (
+    CallAnalytics,
+    CallLog,
+    CallLogCreate,
+    CallLogsResponse,
+    CallLogUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +26,9 @@ class CallLogService:
     def supabase(self):
         return supabase_config.client
 
-    async def create_call_log(self, data: CallLogCreate) -> Tuple[Optional[CallLog], Optional[str]]:
+    async def create_call_log(
+        self, data: CallLogCreate
+    ) -> Tuple[Optional[CallLog], Optional[str]]:
         """Insert a new call log record."""
         try:
             payload = {
@@ -98,16 +106,45 @@ class CallLogService:
 
             result = query.execute()
             total = result.count or 0
-            items = [CallLog(**row) for row in (result.data or [])]
+            rows = result.data or []
+            recording_call_ids: set[str] = set()
+            if rows:
+                try:
+                    artifact_result = (
+                        self.supabase.table("call_artifacts")
+                        .select("call_log_id")
+                        .in_("call_log_id", [str(row["id"]) for row in rows])
+                        .eq("artifact_type", "recording")
+                        .eq("status", "completed")
+                        .execute()
+                    )
+                    recording_call_ids = {
+                        str(row["call_log_id"]) for row in (artifact_result.data or [])
+                    }
+                except Exception:  # noqa: BLE001 - old DBs may not have artifacts yet
+                    logger.warning(
+                        "Could not load recording availability; returning call logs",
+                        exc_info=True,
+                    )
+            items = [
+                CallLog(
+                    **row,
+                    recording_available=str(row["id"]) in recording_call_ids,
+                )
+                for row in rows
+            ]
             total_pages = max(1, (total + page_size - 1) // page_size)
 
-            return CallLogsResponse(
-                items=items,
-                total=total,
-                page=page,
-                page_size=page_size,
-                total_pages=total_pages,
-            ), None
+            return (
+                CallLogsResponse(
+                    items=items,
+                    total=total,
+                    page=page,
+                    page_size=page_size,
+                    total_pages=total_pages,
+                ),
+                None,
+            )
         except Exception as e:
             logger.error(f"Error listing call logs: {e}", exc_info=True)
             return None, str(e)
@@ -134,12 +171,16 @@ class CallLogService:
             total_calls_week = 0
             total_calls_month = len(rows)
             total_duration = 0
-            calls_by_agent: dict = defaultdict(lambda: {"count": 0, "agent_id": None, "agent_name": "Unknown"})
+            calls_by_agent: dict = defaultdict(
+                lambda: {"count": 0, "agent_id": None, "agent_name": "Unknown"}
+            )
             calls_by_hour: dict = defaultdict(int)
             calls_by_status: dict = defaultdict(int)
 
             for row in rows:
-                created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+                created = datetime.fromisoformat(
+                    row["created_at"].replace("Z", "+00:00")
+                )
                 if created >= week_ago:
                     total_calls_week += 1
 
@@ -156,7 +197,9 @@ class CallLogService:
                 status = row.get("status", "unknown")
                 calls_by_status[status] += 1
 
-            avg_duration = (total_duration / total_calls_month) if total_calls_month > 0 else 0.0
+            avg_duration = (
+                (total_duration / total_calls_month) if total_calls_month > 0 else 0.0
+            )
 
             # Fetch agent names for the IDs we have
             agent_ids = [k for k in calls_by_agent if k != "unknown"]
@@ -174,18 +217,27 @@ class CallLogService:
                 data["agent_name"] = agent_names.get(agent_id, "Unknown")
 
             # Build hour-by-hour list (0-23)
-            hour_list = [{"hour": h, "calls": calls_by_hour.get(h, 0)} for h in range(24)]
-            status_list = [{"status": s, "count": c} for s, c in calls_by_status.items()]
-            agent_list = sorted(calls_by_agent.values(), key=lambda x: x["count"], reverse=True)
+            hour_list = [
+                {"hour": h, "calls": calls_by_hour.get(h, 0)} for h in range(24)
+            ]
+            status_list = [
+                {"status": s, "count": c} for s, c in calls_by_status.items()
+            ]
+            agent_list = sorted(
+                calls_by_agent.values(), key=lambda x: x["count"], reverse=True
+            )
 
-            return CallAnalytics(
-                total_calls_week=total_calls_week,
-                total_calls_month=total_calls_month,
-                avg_duration_seconds=round(avg_duration, 1),
-                calls_by_agent=agent_list,
-                calls_by_hour=hour_list,
-                calls_by_status=status_list,
-            ), None
+            return (
+                CallAnalytics(
+                    total_calls_week=total_calls_week,
+                    total_calls_month=total_calls_month,
+                    avg_duration_seconds=round(avg_duration, 1),
+                    calls_by_agent=agent_list,
+                    calls_by_hour=hour_list,
+                    calls_by_status=status_list,
+                ),
+                None,
+            )
         except Exception as e:
             logger.error(f"Error computing analytics: {e}", exc_info=True)
             return None, str(e)

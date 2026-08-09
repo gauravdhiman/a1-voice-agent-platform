@@ -20,6 +20,7 @@ class CallLog(BaseModel):
     duration: Optional[int] = None
     credits_consumed: int = 0
     credit_transaction_id: Optional[UUID] = None
+    recording_available: bool = False
     started_at: Optional[datetime]
     ended_at: Optional[datetime]
     created_at: datetime

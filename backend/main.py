@@ -15,19 +15,10 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-
-from shared.config import settings, supabase_config
-
-# Import OpenTelemetry setup function first to ensure proper logging configuration
-from shared.config.opentelemetry import (
-    emit_log,
-    emit_metric,
-    logging_level,
-    setup_manual_opentelemetry,
-)
 from src.auth.routes import auth_router
 from src.billing.admin_plan_routes import router as admin_plan_router
 from src.billing.routes import router as billing_router
+from src.call_artifacts import call_artifacts_router
 from src.call_logs import call_logs_router
 from src.notifications.routes import router as notification_router
 from src.organization.public_routes import public_org_router
@@ -51,6 +42,16 @@ from src.voice_agents import (
     voice_router,
 )
 from src.voice_templates import voice_templates_router
+
+from shared.config import settings, supabase_config
+
+# Import OpenTelemetry setup function first to ensure proper logging configuration
+from shared.config.opentelemetry import (
+    emit_log,
+    emit_metric,
+    logging_level,
+    setup_manual_opentelemetry,
+)
 
 # Configure logging to ensure it outputs to stdout with proper formatting
 # The OpenTelemetry logging handler is added in the setup_manual_opentelemetry function
@@ -187,6 +188,9 @@ def create_app() -> FastAPI:
     # Include call logs routes
     app.include_router(call_logs_router)
 
+    # Include authenticated recording and artifact routes
+    app.include_router(call_artifacts_router)
+
     return app
 
 
@@ -223,10 +227,6 @@ async def lifespan(app: FastAPI):
             "Set it to your Supabase JWT secret (Dashboard → Settings → API → JWT Secret)."
         )
 
-    from shared.voice_agents.tool_service import ToolService
-    from shared.voice_agents.tools.base.platform_tool_registry import (
-        platform_tool_registry,
-    )
     from src.billing.free_plan_renewal_scheduler import (
         start_free_plan_renewal_scheduler,
         stop_free_plan_renewal_scheduler,
@@ -238,6 +238,11 @@ async def lifespan(app: FastAPI):
     from src.services.token_refresh_service import (
         start_token_refresh_service,
         stop_token_refresh_service,
+    )
+
+    from shared.voice_agents.tool_service import ToolService
+    from shared.voice_agents.tools.base.platform_tool_registry import (
+        platform_tool_registry,
     )
 
     # Register in-tree platform tools and sync schemas to the database.
