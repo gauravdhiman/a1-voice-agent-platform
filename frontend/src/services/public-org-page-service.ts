@@ -7,6 +7,7 @@ import type {
   PublicOrgAgentsResponse,
   PublicOrgSummary,
 } from "@/types/public-org-page";
+import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -77,8 +78,8 @@ class PublicOrgPageService {
       },
     );
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || "Failed to start call");
+      const error = await response.json().catch(() => null);
+      throw new Error(getPublicVoiceCallErrorMessage(error));
     }
     return response.json();
   }

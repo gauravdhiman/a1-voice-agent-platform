@@ -53,6 +53,11 @@ curl -s https://www.247ai.live
 curl -s https://voice.247ai.live/health
 ```
 
+These are liveness checks only. Before calling a deployment complete, follow
+the [mandatory browser and PSTN voice release gate](runbook.md#mandatory-release-gate-ai-agent-calling)
+with a release-test organization that has active voice entitlements and
+prepaid credit headroom.
+
 ## Prerequisites
 
 - **gcloud** CLI — project `project-bb848762-18cb-4cd6-858`, region `us-central1`

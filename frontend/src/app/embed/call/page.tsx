@@ -10,6 +10,7 @@ import {
   connectPipecatVoiceCall,
   disconnectPipecatVoiceCall,
 } from "@/lib/pipecat-voice-client";
+import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -46,8 +47,8 @@ function EmbedCallContent() {
       );
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || "Failed to get embed token");
+        const errData = await response.json().catch(() => null);
+        throw new Error(getPublicVoiceCallErrorMessage(errData));
       }
 
       const { token, wsUrl, sessionId } = await response.json();
@@ -57,6 +58,9 @@ function EmbedCallContent() {
       }
 
       const client = await connectPipecatVoiceCall(token, wsUrl, {
+        onError: (voiceError) => {
+          setError(getPublicVoiceCallErrorMessage(voiceError));
+        },
         onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
           setIsAgentSpeaking(isAgentSpeaking);
           setIsUserSpeaking(isUserSpeaking);
@@ -66,8 +70,9 @@ function EmbedCallContent() {
       pipecatRef.current = client;
       setIsConnecting(false);
     } catch (err) {
+      const publicMessage = getPublicVoiceCallErrorMessage(err);
       console.error("Embed call error:", err);
-      throw err;
+      throw new Error(publicMessage);
     }
   }, [agentId]);
 

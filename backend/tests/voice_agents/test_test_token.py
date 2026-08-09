@@ -39,14 +39,21 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch.object(
-            _routes_mod.settings, "voice_ws_public_url", "ws://localhost:7860"
-        ), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with (
+            patch.object(
+                _routes_mod.settings, "voice_ws_public_url", "ws://localhost:7860"
+            ),
+            patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service,
+        ):
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with patch(
-                "src.voice_agents.routes.voice_session_service"
-            ) as mock_sessions:
+            with (
+                patch("src.voice_agents.routes.voice_session_service") as mock_sessions,
+                patch(
+                    "src.voice_agents.routes.assert_voice_session_allowed",
+                    new=AsyncMock(),
+                ),
+            ):
                 mock_sessions.create_session_token.return_value = (
                     "test_token",
                     "sess-123",
@@ -156,14 +163,21 @@ class TestTestTokenEndpoint:
         mock_user_profile = Mock()
         mock_user_profile.has_role = Mock(return_value=True)
 
-        with patch.object(
-            _routes_mod.settings, "voice_ws_public_url", "ws://localhost:7860"
-        ), patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
+        with (
+            patch.object(
+                _routes_mod.settings, "voice_ws_public_url", "ws://localhost:7860"
+            ),
+            patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service,
+        ):
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with patch(
-                "src.voice_agents.routes.voice_session_service"
-            ) as mock_sessions:
+            with (
+                patch("src.voice_agents.routes.voice_session_service") as mock_sessions,
+                patch(
+                    "src.voice_agents.routes.assert_voice_session_allowed",
+                    new=AsyncMock(),
+                ),
+            ):
                 mock_sessions.create_session_token.side_effect = ValueError(
                     "JWT secret is not configured"
                 )
@@ -206,9 +220,13 @@ class TestTestTokenEndpoint:
         with patch("src.voice_agents.routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
-            with patch(
-                "src.voice_agents.routes.voice_session_service"
-            ) as mock_sessions:
+            with (
+                patch("src.voice_agents.routes.voice_session_service") as mock_sessions,
+                patch(
+                    "src.voice_agents.routes.assert_voice_session_allowed",
+                    new=AsyncMock(),
+                ),
+            ):
                 mock_sessions.create_session_token.side_effect = ValueError(
                     "JWT secret is not configured"
                 )

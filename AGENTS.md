@@ -749,6 +749,39 @@ Run `pre-commit run --all-files` manually before pushing.
 
 After implementing any fix or new feature, you MUST:
 
+#### Production release gate: AI agent calling
+
+AI agent calling is the core production functionality and is a release
+blocker. Before deploying or pushing a release to production, validate both
+call surfaces end to end against staging, then repeat them after deployment:
+
+- **Browser:** authenticated dashboard test call obtains a test token, connects
+  to the configured public `wss://` voice host, receives agent audio, and
+  finalizes its call log.
+- **PSTN:** a Twilio call reaches the incoming webhook, receives a public
+  `wss://.../twilio` Media Stream URL, connects to voice-ws, reaches the agent,
+  and updates the Twilio status/call log.
+- The release-test organization must have an active voice entitlement and
+  prepaid credit headroom for at least one billable voice minute. A zero-credit
+  test account is expected to receive `INSUFFICIENT_CREDITS` and cannot validate
+  calling.
+- `/health` responses alone are insufficient. Inspect backend and voice-ws
+  logs for accepted sessions and block the release on `1006`, `401`, `403`,
+  `4401`, `4403`, `INSUFFICIENT_CREDITS`, or `MAX_CONCURRENT_CALLS` during the
+  release calls.
+- For a browser `WEBSOCKET_ERROR ... (1006)`, check voice-ws logs first. A
+  matching `INSUFFICIENT_CREDITS` entry is a billing/entitlement failure, not a
+  public-URL or TLS failure.
+- Public embed, public-page, and PSTN callers must not see internal plan or
+  credit details. Use safe guidance such as “The voice assistant is temporarily
+  unavailable. Please try again later or contact the business for assistance.”
+  Authenticated platform users may receive the specific entitlement reason.
+
+The complete deploy procedure is in
+`docs/05_operations/deployment/runbook.md` under **Mandatory release gate: AI
+agent calling**. Do not declare a production deployment complete until this
+gate passes for both browser and PSTN calling.
+
 1. **Add or update tests** for every code change, BEFORE raising a PR:
    - **Unit tests** (Python `pytest`): Test models, validators, service methods, PromptBuilder logic
    - **Route/integration tests** (Python `pytest`): Test API endpoints with mocked dependencies

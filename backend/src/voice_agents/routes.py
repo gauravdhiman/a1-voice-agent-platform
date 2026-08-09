@@ -10,6 +10,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
 
+from shared.billing.voice_session_entitlement import (
+    VoiceSessionEntitlementError,
+    assert_voice_session_allowed,
+)
 from shared.config.settings import settings
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
@@ -35,6 +39,29 @@ class TestTokenResponse(BaseModel):
     token: str
     wsUrl: str
     sessionId: str
+
+
+def _voice_session_http_exception(exc: VoiceSessionEntitlementError) -> HTTPException:
+    """Translate a voice-session entitlement denial into an API error.
+
+    Browser callers should receive the same actionable billing or concurrency
+    reason that the voice worker would use to reject the WebSocket. This avoids
+    issuing a token that can only fail later as a generic browser close code.
+
+    Args:
+        exc: Shared entitlement error raised during the pre-check.
+
+    Returns:
+        HTTPException with a stable error code and user-facing message.
+    """
+    status_code = {
+        "INSUFFICIENT_CREDITS": status.HTTP_402_PAYMENT_REQUIRED,
+        "MAX_CONCURRENT_CALLS": status.HTTP_409_CONFLICT,
+    }.get(exc.code, status.HTTP_403_FORBIDDEN)
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": exc.code, "message": exc.message},
+    )
 
 
 async def _validate_preset_assignment(preset_id: Optional[UUID]) -> Optional[str]:
@@ -243,6 +270,18 @@ async def get_test_token(
         agent.organization_id,
         error_message="Insufficient permissions to test this agent",
     )
+
+    try:
+        await assert_voice_session_allowed(agent.organization_id)
+    except VoiceSessionEntitlementError as exc:
+        logger.info(
+            "Browser voice session denied before token creation agent_id=%s "
+            "organization_id=%s code=%s",
+            agent_id,
+            agent.organization_id,
+            exc.code,
+        )
+        raise _voice_session_http_exception(exc) from exc
 
     try:
         token, session_id = voice_session_service.create_session_token(

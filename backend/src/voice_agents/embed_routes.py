@@ -13,8 +13,13 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
+from shared.billing.voice_session_entitlement import (
+    VoiceSessionEntitlementError,
+    assert_voice_session_allowed,
+)
 from shared.voice_agents.embed_service import embed_service
 from shared.voice_agents.service import voice_agent_service
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +208,20 @@ async def generate_public_embed_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to check rate limits",
         )
+
+    try:
+        await assert_voice_session_allowed(agent.organization_id)
+    except VoiceSessionEntitlementError as exc:
+        public_code, public_message = get_public_voice_session_error(exc.code)
+        logger.info(
+            "Public embed voice session denied agent_id=%s code=%s",
+            agent_id,
+            exc.code,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": public_code, "message": public_message},
+        ) from exc
 
     # Generate embed token
     domain = request.headers.get("origin", "")

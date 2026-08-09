@@ -118,6 +118,50 @@ Production non-secret values (secrets stay in `.env.prod` only):
 `JWT_SECRET_KEY` is shared by backend and voice-ws. Both services receive it
 via `gcp-env-from-cloud.py`.
 
+## Mandatory release gate: AI agent calling
+
+AI agent calling is a production-critical path. A deployment is **not
+healthy** until both call surfaces have been exercised with a release-test
+organization that has an active plan and enough prepaid credits for at least
+one billable voice minute (`credit_balance + purchased_credit_balance`). Do
+not use a zero-credit organization as the release test account: the expected
+result is an entitlement rejection, not a WebSocket/network failure.
+
+### Before production deployment
+
+1. Deploy the candidate to staging and confirm the release-test organization
+   has voice entitlements and prepaid credit headroom.
+2. From the authenticated web application, start a browser test call. Verify
+   the backend test-token request succeeds, the browser connects to
+   `wss://<voice-host>/ws`, the agent responds with audio, and the call log is
+   finalized.
+3. Place a PSTN call through the configured Twilio number. Verify the incoming
+   webhook returns TwiML with a public `wss://<voice-host>/twilio` Stream URL,
+   the Twilio Media Stream connects, the agent answers, and the status/call
+   log is updated.
+4. Check backend and voice-ws logs for accepted sessions and confirm there are
+   no `1006`, `401`, `403`, `4401`, `4403`, `INSUFFICIENT_CREDITS`, or
+   `MAX_CONCURRENT_CALLS` failures for the release-test calls.
+
+### After production deployment
+
+Repeat the browser and PSTN calls against `www.247ai.live` and the production
+Twilio number. The three `/health` endpoints are liveness checks only; they do
+not prove that an authenticated, billed voice session can connect. Roll back
+or stop the release if either call surface fails.
+
+If a browser reports `WEBSOCKET_ERROR: ... (1006)`, inspect voice-ws logs
+before changing URLs or TLS. A worker log containing
+`INSUFFICIENT_CREDITS` means the session was deliberately rejected by billing;
+the account needs an active entitlement/credits. A 1006 without a corresponding
+worker request indicates a transport, DNS, TLS, or routing problem.
+
+Public callers should not be shown internal billing or plan details. Embed and
+public-page visitors receive a safe availability message that asks them to
+retry or contact the business; PSTN callers hear the same guidance through
+TwiML. Authenticated platform users may receive the specific credit or
+concurrency reason so an organization administrator can resolve it.
+
 ## Quick resume checklist
 
 1. Confirm `.env.prod` exists (from `.env.prod.example`; gitignored).
@@ -133,6 +177,7 @@ via `gcp-env-from-cloud.py`.
    ./scripts/deploy.sh gcp
    OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh voice-ws
    ```
+5. Complete the [mandatory AI agent calling release gate](#mandatory-release-gate-ai-agent-calling).
 
 ## voice-ws on OCI (ARM VM)
 

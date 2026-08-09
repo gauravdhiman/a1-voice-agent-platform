@@ -14,9 +14,14 @@ from urllib.parse import quote, urlparse
 from fastapi import APIRouter, Request, Response
 from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 
+from shared.billing.voice_session_entitlement import (
+    VoiceSessionEntitlementError,
+    assert_voice_session_allowed,
+)
 from shared.config.settings import settings
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import voice_session_service
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 logger = logging.getLogger(__name__)
 voice_router = APIRouter(prefix="/api/v1/voice", tags=["Voice Webhooks"])
@@ -140,6 +145,21 @@ async def _handle_pipecat_incoming(
         return _say_response(
             "Internal configuration error. Voice stream URL is not public."
         )
+
+    try:
+        await assert_voice_session_allowed(
+            agent.organization_id,
+            current_call_sid=call_sid,
+        )
+    except VoiceSessionEntitlementError as exc:
+        _public_code, public_message = get_public_voice_session_error(exc.code)
+        logger.info(
+            "Twilio voice session denied agent_id=%s call_sid=%s code=%s",
+            agent.id,
+            call_sid,
+            exc.code,
+        )
+        return _say_response(public_message)
 
     try:
         token, session_id = voice_session_service.create_session_token(

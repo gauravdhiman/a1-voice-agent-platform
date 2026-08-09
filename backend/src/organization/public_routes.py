@@ -13,12 +13,17 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from shared.billing.voice_session_entitlement import (
+    VoiceSessionEntitlementError,
+    assert_voice_session_allowed,
+)
 from shared.organization.public_page_security import verify_public_page_passphrase
 from shared.voice_agents.public_page_service import (
     PublicPageAccessError,
     public_page_service,
 )
 from shared.voice_agents.service import voice_agent_service
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
 from src.organization.service import organization_service
 
 logger = logging.getLogger(__name__)
@@ -219,6 +224,20 @@ async def generate_public_call_token(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Agent is not available on the public page",
         )
+
+    try:
+        await assert_voice_session_allowed(agent.organization_id)
+    except VoiceSessionEntitlementError as exc:
+        public_code, public_message = get_public_voice_session_error(exc.code)
+        logger.info(
+            "Public page voice session denied agent_id=%s code=%s",
+            agent_id,
+            exc.code,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": public_code, "message": public_message},
+        ) from exc
 
     voice_token, ws_url, session_id = public_page_service.generate_call_token(
         agent_id=str(agent_id)

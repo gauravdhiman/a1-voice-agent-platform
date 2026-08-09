@@ -37,6 +37,18 @@ describe("normalizeOptionalPhone", () => {
 });
 
 describe("resolveAgentCreatePromptFields", () => {
+  it("defaults omitted custom instructions to an empty string", () => {
+    const result = resolveAgentCreatePromptFields(
+      {
+        persona: "You are a receptionist.",
+        mission: "Help callers at [Business Name].",
+      },
+      { businessName: "Acme Plumbing", agentName: "Riley" },
+    );
+
+    expect(result.custom_instructions).toBe("");
+  });
+
   it("replaces template agent name placeholders before create", () => {
     const result = resolveAgentCreatePromptFields(
       {

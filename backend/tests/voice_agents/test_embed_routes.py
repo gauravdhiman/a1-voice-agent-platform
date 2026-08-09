@@ -6,6 +6,8 @@ import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
+from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
+
 
 class TestEmbedRoutes:
     """Test cases for embed routes."""
@@ -35,7 +37,10 @@ class TestEmbedRoutes:
         with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
             mock_supabase = Mock()
-            mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = Mock(
+            mock_execute = (
+                mock_supabase.table.return_value.select.return_value.eq.return_value.execute
+            )
+            mock_execute.return_value = Mock(
                 data=[{
                     "id": str(UUID("00000000-0000-0000-0000-000000000003")),
                     "agent_id": str(test_agent_id),
@@ -196,13 +201,81 @@ class TestEmbedRoutes:
                     "sess-embed-123",
                 )
 
-                result = await generate_public_embed_token(
-                    agent_id=test_agent_id, request=mock_request
-                )
+                with patch(
+                    "src.voice_agents.embed_routes.assert_voice_session_allowed",
+                    new=AsyncMock(),
+                    create=True,
+                ):
+                    result = await generate_public_embed_token(
+                        agent_id=test_agent_id, request=mock_request
+                    )
 
                 assert result.token == "voice.jwt.token"
                 assert result.wsUrl == "ws://localhost:7860/ws"
                 assert result.sessionId == "sess-embed-123"
+
+    @pytest.mark.asyncio
+    async def test_generate_public_embed_token_returns_safe_unavailable_error(self):
+        """Public callers receive contact-business guidance, not billing details."""
+        from src.voice_agents.embed_routes import generate_public_embed_token
+        from shared.voice_agents.models import VoiceAgent
+        from fastapi import HTTPException, Request
+
+        test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+        test_config_id = UUID("00000000-0000-0000-0000-000000000003")
+        agent = VoiceAgent(
+            id=test_agent_id,
+            organization_id=UUID("00000000-0000-0000-0000-000000000002"),
+            name="Test Agent",
+            phone_number="+1234567890",
+            is_active=True,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+        mock_request = Mock(spec=Request)
+        mock_request.headers = {"origin": "https://example.com"}
+        mock_request.client = Mock(host="127.0.0.1")
+
+        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_service:
+            mock_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_supabase = Mock()
+            mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = Mock(
+                data=[
+                    {
+                        "id": str(test_config_id),
+                        "agent_id": str(test_agent_id),
+                        "is_active": True,
+                        "allowed_domains": None,
+                        "daily_call_limit": 100,
+                    }
+                ],
+                count=0,
+            )
+            mock_service.supabase = mock_supabase
+
+            with patch("src.voice_agents.embed_routes.embed_service") as mock_embed:
+                mock_embed.check_rate_limit.return_value = True
+                with patch(
+                    "src.voice_agents.embed_routes.assert_voice_session_allowed",
+                    new=AsyncMock(
+                        side_effect=VoiceSessionEntitlementError(
+                            "INSUFFICIENT_CREDITS",
+                            "Insufficient credits to start a voice call.",
+                        )
+                    ),
+                    create=True,
+                ):
+                    with pytest.raises(HTTPException) as exc_info:
+                        await generate_public_embed_token(
+                            agent_id=test_agent_id, request=mock_request
+                        )
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == {
+            "code": "VOICE_ASSISTANT_UNAVAILABLE",
+            "message": "This voice assistant is temporarily unavailable. "
+            "Please try again later or contact the business for assistance.",
+        }
 
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_rate_limited(self):

@@ -44,6 +44,7 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
   custom_instructions: null,
   use_platform_credits: true,
   instructions_markdown: null,
+  preset_id: null,
   ...overrides,
 })
 

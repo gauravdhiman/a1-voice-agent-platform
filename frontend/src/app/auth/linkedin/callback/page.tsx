@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { linkedinAuthService } from "@/services/linkedin-auth-service";
@@ -14,7 +14,7 @@ type CallbackStatus = "processing" | "error" | "complete";
  * immediately removes the code from the address bar, asks the backend to
  * exchange it, and posts the resulting Supabase session to the opening window.
  */
-export default function LinkedInCallbackPage() {
+function LinkedInCallbackContent() {
   const [status, setStatus] = useState<CallbackStatus>("processing");
   const [message, setMessage] = useState("");
 
@@ -120,5 +120,30 @@ export default function LinkedInCallbackPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LinkedInCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-secondary/30 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg">
+            <Loader2
+              className="mx-auto mb-4 h-8 w-8 animate-spin text-primary"
+              aria-label="Completing LinkedIn sign in"
+            />
+            <h1 className="mb-2 text-2xl font-bold text-foreground">
+              Completing LinkedIn sign in...
+            </h1>
+            <p className="text-muted-foreground">
+              Please wait while we securely finish authentication in the app.
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <LinkedInCallbackContent />
+    </Suspense>
   );
 }
