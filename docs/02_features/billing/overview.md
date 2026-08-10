@@ -242,10 +242,12 @@ duration; the report can be refreshed explicitly and also refetches when the
 page is mounted so a newly completed call does not leave a stale empty list.
 
 Call recording and transcription metadata is stored in `call_artifacts`. Audio
-is planned for a private Supabase Storage bucket and is served only through
-short-lived signed URLs. The current voice worker still uses a no-op recording
-tee, so audio playback and transcription are not enabled until consent,
-retention, and the asynchronous processing worker are implemented. See
+is stored in private, environment-specific Cloudflare R2 buckets and is served
+only through the authenticated backend in bounded streaming chunks. This keeps
+playback independent of whether the frontend is running locally, in staging, or
+in production, without requiring browser CORS rules on the private R2 bucket.
+Recording capture and playback are implemented behind the recording consent,
+retention, and environment configuration described in
 [Call Recording, Transcription, and Playback](../../03_implementation/call_recording_and_transcription.md).
 
 ## Payment Flows

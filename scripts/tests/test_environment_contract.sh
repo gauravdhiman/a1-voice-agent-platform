@@ -56,6 +56,21 @@ assert_contains "$ROOT/docker-compose.dev.yml" '${ENV_FILE:-.env.local}'
 assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
 
+for compose_file in docker-compose.dev.yml docker-compose.yml; do
+  assert_contains "$ROOT/$compose_file" 'VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}'
+  assert_contains "$ROOT/$compose_file" 'RECORDING_STORAGE_BACKEND=${RECORDING_STORAGE_BACKEND:-local}'
+  assert_contains "$ROOT/$compose_file" 'RECORDING_R2_ENDPOINT=${RECORDING_R2_ENDPOINT:-}'
+  assert_contains "$ROOT/$compose_file" 'RECORDING_R2_BUCKET=${RECORDING_R2_BUCKET:-}'
+  assert_contains "$ROOT/$compose_file" 'RECORDING_R2_ACCESS_KEY_ID=${RECORDING_R2_ACCESS_KEY_ID:-}'
+  assert_contains "$ROOT/$compose_file" 'RECORDING_R2_SECRET_ACCESS_KEY=${RECORDING_R2_SECRET_ACCESS_KEY:-}'
+  assert_contains "$ROOT/$compose_file" 'RECORDING_R2_PRESIGN_TTL_SECONDS=${RECORDING_R2_PRESIGN_TTL_SECONDS:-300}'
+done
+
+assert_contains "$ROOT/.env.staging.example" 'RECORDING_R2_ENDPOINT=https://e168c1bca6abb23e49bae87a6a8ea38b.r2.cloudflarestorage.com'
+assert_contains "$ROOT/.env.staging.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-staging'
+assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_ENDPOINT=https://e168c1bca6abb23e49bae87a6a8ea38b.r2.cloudflarestorage.com'
+assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-production'
+
 # The startup guide must describe selection, never copy-to-.env switching.
 assert_contains "$ROOT/README_STARTUP.md" './start.sh start dev --env staging'
 assert_contains "$ROOT/README_STARTUP.md" './start.sh config --env staging'

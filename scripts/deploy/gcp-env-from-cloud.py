@@ -25,6 +25,55 @@ def parse_env_file(path: Path) -> dict[str, str]:
     return env
 
 
+def validate_recording_configuration(env: dict[str, str]) -> None:
+    """Fail deployment early when enabled R2 recording lacks credentials.
+
+    Args:
+        env: Parsed environment values that will be emitted to a service.
+
+    Raises:
+        ValueError: If recording is enabled with the R2 backend but one or
+            more required bucket connection values are empty.
+    """
+    recording_enabled = any(
+        env.get(key, "").strip().lower() == "true"
+        for key in ("VOICE_RECORDING_ENABLED", "VOICE_RECORDING_TEE")
+    )
+    if not recording_enabled or env.get("RECORDING_STORAGE_BACKEND", "local") != "r2":
+        return
+
+    required = (
+        "RECORDING_R2_ENDPOINT",
+        "RECORDING_R2_BUCKET",
+        "RECORDING_R2_ACCESS_KEY_ID",
+        "RECORDING_R2_SECRET_ACCESS_KEY",
+    )
+    missing = [key for key in required if not env.get(key, "").strip()]
+    if missing:
+        raise ValueError(
+            "enabled R2 recording requires: " + ", ".join(missing)
+        )
+
+
+# Recording configuration must be available to both the backend (playback and
+# artifact metadata) and voice-ws (capture and upload). Keep this shared set in
+# one place so a new deployment target cannot silently omit part of the
+# storage contract.
+RECORDING_KEYS = {
+    "VOICE_RECORDING_ENABLED",
+    "VOICE_RECORDING_TEE",
+    "RECORDING_STORAGE_BACKEND",
+    "RECORDING_STORAGE_LOCAL_ROOT",
+    "RECORDING_ENCRYPTION_MODE",
+    "RECORDING_RETENTION_DAYS",
+    "RECORDING_R2_ENDPOINT",
+    "RECORDING_R2_BUCKET",
+    "RECORDING_R2_ACCESS_KEY_ID",
+    "RECORDING_R2_SECRET_ACCESS_KEY",
+    "RECORDING_R2_PRESIGN_TTL_SECONDS",
+}
+
+
 BACKEND_KEYS = {
     "APP_NAME",
     "APP_BASE_URL",
@@ -63,7 +112,7 @@ BACKEND_KEYS = {
     "OTEL_PYTHON_FASTAPI_EXCLUDED_URLS",
     "MCP_ALLOW_LOCAL_URLS",
     "PYTHONPATH",
-}
+} | RECORDING_KEYS
 
 # voice-ws (Pipecat WebSocket worker) env keys.
 # voice-ws verifies the voice_ws_session JWT issued by the backend, so it MUST
@@ -88,7 +137,7 @@ WORKER_KEYS = {
     "FISH_API_KEY",
     "MCP_ALLOW_LOCAL_URLS",
     "PYTHONPATH",
-}
+} | RECORDING_KEYS
 
 
 def to_yaml(env: dict[str, str], keys: set[str]) -> str:
@@ -118,6 +167,11 @@ def main() -> int:
         print(f"Missing {path}", file=sys.stderr)
         return 1
     env = parse_env_file(path)
+    try:
+        validate_recording_configuration(env)
+    except ValueError as exc:
+        print(f"Invalid recording configuration: {exc}", file=sys.stderr)
+        return 2
     keys = BACKEND_KEYS if args.service == "backend" else WORKER_KEYS
     sys.stdout.write(to_yaml(env, keys))
     return 0

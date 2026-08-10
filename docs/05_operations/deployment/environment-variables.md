@@ -1,7 +1,15 @@
 # Production environment variables
 
-All production services read from **`.env.prod`** at the repo root (gitignored).
-Template: **`.env.prod.example`**. Deploy with **`./scripts/deploy.sh`**.
+Manual production deployments read from **`.env.prod`** at the repo root
+(gitignored). The template is **`.env.prod.example`**. Deploy manually with
+**`./scripts/deploy.sh`**.
+
+The GitHub Actions deployment uses the same file format, but does not read a
+developer's local `.env.prod`. The workflow reads the Repository secret
+`ENV_PROD`, writes its contents to a temporary `.env.prod` in the CI runner,
+and then runs the same deployment script. Therefore, changing a local
+`.env.prod` affects manual deployments only; changing `ENV_PROD` affects CI
+deployments.
 
 > **Index:** [deployment/README.md](README.md) · **Local dev config:** [environment_configuration.md](../environment_configuration.md)
 
@@ -28,9 +36,13 @@ browser endpoints from the same values.
 | voice-ws | OCI ARM VM + Caddy | wss://voice.247ai.live |
 | Database + Auth | Supabase | project URL in `.env.prod` |
 
-`gcp-env-from-cloud.py` filters `.env.prod` into per-service env files for
-Cloud Run (backend) and the OCI VM (voice-ws). Frontend `NEXT_PUBLIC_*` vars are
-passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
+`gcp-env-from-cloud.py` filters the selected `.env.prod` into per-service env
+files for Cloud Run (backend) and the OCI VM (voice-ws). Frontend
+`NEXT_PUBLIC_*` vars are passed as Docker build args during
+`./scripts/deploy.sh frontend` or `gcp`.
+
+For CI, the selected file is the temporary file generated from `ENV_PROD`; for
+manual deployment, it is the local `.env.prod` file.
 
 ---
 
@@ -68,6 +80,15 @@ passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
 | `DEBUG` | `false` | No |
 | `MCP_ALLOW_LOCAL_URLS` | Keep `false` in production | No |
 | `TOKEN_REFRESH_*` | OAuth token refresh tuning (see `.env.prod.example`) | No |
+| `VOICE_RECORDING_ENABLED` | Persist mixed call audio when recording is enabled | No |
+| `RECORDING_STORAGE_BACKEND` | `r2` for staging/production; `local` for local development | No |
+| `RECORDING_R2_ENDPOINT` | Shared account S3 endpoint: `https://<account-id>.r2.cloudflarestorage.com` | No |
+| `RECORDING_R2_BUCKET` | Environment-specific private bucket name | No |
+| `RECORDING_R2_ACCESS_KEY_ID` | Bucket-scoped R2 object read/write access key | Yes |
+| `RECORDING_R2_SECRET_ACCESS_KEY` | Bucket-scoped R2 object read/write secret | Yes |
+| `RECORDING_R2_PRESIGN_TTL_SECONDS` | Reserved lifetime for optional direct playback; current playback streams through the backend | No |
+| `RECORDING_ENCRYPTION_MODE` | `provider_managed` | No |
+| `RECORDING_RETENTION_DAYS` | Recording retention window, default 90 | No |
 
 ---
 
@@ -92,7 +113,7 @@ passed as Docker build args during `./scripts/deploy.sh frontend` or `gcp`.
 | `RECORDING_ENCRYPTION_MODE` | `provider_managed` (customer-managed reserved) | No |
 | `RECORDING_R2_ENDPOINT` / `RECORDING_R2_BUCKET` | Environment-specific R2 object store | No |
 | `RECORDING_R2_ACCESS_KEY_ID` / `RECORDING_R2_SECRET_ACCESS_KEY` | Bucket-scoped R2 credentials | Yes |
-| `RECORDING_R2_PRESIGN_TTL_SECONDS` | Private playback URL lifetime | No |
+| `RECORDING_R2_PRESIGN_TTL_SECONDS` | Reserved for optional direct playback; current playback streams through the backend | No |
 | `RECORDING_RETENTION_DAYS` | Recording retention window, default 90 | No |
 | `TWILIO_ACCOUNT_SID` | Optional — Media Streams hang-up | No |
 | `TWILIO_AUTH_TOKEN` | Pairs with account SID | **Yes** |
@@ -143,6 +164,9 @@ Set in the shell when deploying voice-ws:
 - [ ] Supabase migrations applied: `./scripts/deploy.sh migrate`
 - [ ] `JWT_SECRET_KEY` identical on backend and voice-ws
 - [ ] `VOICE_WS_PUBLIC_URL` / `VOICE_WS_TWILIO_URL` point at production voice host
+- [ ] R2 has two private buckets in the shared account: `247ai-call-recordings-staging` and `247ai-call-recordings-production`
+- [ ] Staging and production each use separate bucket-scoped R2 object read/write credentials
+- [ ] `VOICE_RECORDING_ENABLED=true`, `RECORDING_STORAGE_BACKEND=r2`, and the matching R2 endpoint/bucket/credentials are set in the selected environment file
 - [ ] Stripe webhooks and OAuth redirect URIs use `https://api.247ai.live`
 - [ ] Google Cloud redirect URI: `https://api.247ai.live/api/v1/auth/google/callback`
 - [ ] LinkedIn Developer Portal redirect URI: `https://api.247ai.live/api/v1/auth/linkedin/callback`

@@ -11,7 +11,13 @@ Triggers on **push to `main`** (auto-deploy) and manual **`workflow_dispatch`**.
 | `deploy-gcp` | Writes `.env.prod` from secret, runs `./scripts/deploy.sh gcp` |
 | `deploy-voice-ws` | Runs `./scripts/deploy.sh voice-ws` on the OCI VM (after GCP job) |
 
-## GitHub secrets (repository settings)
+## GitHub secrets (Repository secrets)
+
+Create these under **Repository Settings → Secrets and variables → Actions →
+Repository secrets**. The current workflow does not declare a GitHub Environment
+such as `production`, so Environment secrets are not used by this workflow.
+If we later add `environment: production` to the jobs, the secrets could instead
+be moved to that protected Environment.
 
 | Secret | Required | Notes |
 |--------|----------|-------|
@@ -19,6 +25,11 @@ Triggers on **push to `main`** (auto-deploy) and manual **`workflow_dispatch`**.
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes | Workload Identity Federation provider |
 | `GCP_SERVICE_ACCOUNT` | Yes | e.g. `github-deploy@....iam.gserviceaccount.com` |
 | `OCI_SSH_KEY` | Yes (voice-ws) | Private SSH key PEM — must match VM `authorized_keys` |
+
+`ENV_PROD` contains the full production environment-file contents, including
+the R2 endpoint, production bucket name, and production R2 credentials. GitHub
+Actions materializes it as a temporary `.env.prod` file in the runner; it is
+never committed to the repository.
 
 If the repository previously used the secret name `ENV_CLOUD`, rename it to
 `ENV_PROD` before running this workflow. The workflow now writes `.env.prod`.
@@ -56,7 +67,7 @@ GitHub → **Actions** → **Deploy Cloud (main)** → **Run workflow**.
 
 | Concern | Local | CI |
 |---------|-------|-----|
-| App credentials | `.env.prod` | `ENV_PROD` secret |
+| App credentials | `.env.prod` | Repository secret `ENV_PROD`, written temporarily as `.env.prod` |
 | GCP auth | `gcloud auth login` | Workload Identity |
 | OCI VM host | `export OCI_SSH_HOST=132.145.130.61` or rely on workflow default | Hardcoded in workflow |
 | OCI VM SSH key | `~/.ssh/oci_voice_ws` | `OCI_SSH_KEY` secret |
