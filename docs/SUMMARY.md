@@ -51,6 +51,7 @@ Comprehensive documentation organized by feature.
 8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 9. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
 10. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
+11. **[Free-Tier Credit Refresh](03_implementation/free_tier_credit_refresh.md)** - pg_cron-triggered monthly credit renewal; atomic RPC race hardening
 
 ### Multi-Tenancy & RBAC
 
