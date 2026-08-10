@@ -55,7 +55,9 @@ def _debit_success(
     balance_after: int,
     plan_used: int,
     purchased_used: int,
+    admin_used: int = 0,
     plan_balance: int | None = None,
+    admin_balance: int | None = None,
     purchased_balance: int | None = None,
 ):
     """Build a debit_organization_credits RPC payload for a successful debit."""
@@ -63,8 +65,10 @@ def _debit_success(
         "success": True,
         "balance_after": balance_after,
         "plan_used": plan_used,
+        "admin_used": admin_used,
         "purchased_used": purchased_used,
         "plan_balance": plan_balance,
+        "admin_balance": admin_balance,
         "purchased_balance": purchased_balance,
     }
 
@@ -332,14 +336,56 @@ class TestAllocateConsumption:
         ],
     )
     def test_allocation(self, plan, purchased, needed, expected):
-        assert (
-            BillingService.allocate_consumption(plan, purchased, needed)
-            == expected
-        )
+        assert BillingService.allocate_consumption(plan, purchased, needed) == expected
 
     def test_never_negative(self):
         assert BillingService.allocate_consumption(-5, 0, 10) == (0, 0)
         assert BillingService.allocate_consumption(0, -5, 10) == (0, 0)
+
+    def test_admin_pool_is_drained_before_purchased_pool(self):
+        """The three-pool allocator preserves the documented debit order."""
+        assert BillingService.allocate_consumption_with_bonus(0, 20, 40, 40) == (
+            0,
+            20,
+            20,
+        )
+
+
+@pytest.mark.asyncio
+async def test_consume_credits_drains_admin_pool_before_purchased_pool(
+    billing_service, mock_supabase_client, sample_org_id
+):
+    """Platform-granted credits are used before customer-purchased credits."""
+    request = CreditConsumptionRequest(
+        organization_id=sample_org_id,
+        event_name="voice_call_minute",
+        quantity=1,
+    )
+    table_mock, _rpc_mock = _setup_consume_mocks(
+        mock_supabase_client,
+        [_event_response(), _tx_response(sample_org_id, -10, 55)],
+        _debit_success(
+            balance_after=55,
+            plan_used=0,
+            admin_used=10,
+            purchased_used=0,
+            plan_balance=0,
+            admin_balance=15,
+            purchased_balance=40,
+        ),
+    )
+
+    with patch.object(
+        credit_entitlement_service,
+        "get_included_credits_per_billing_period",
+        new=AsyncMock(return_value=0),
+    ):
+        result = await billing_service.consume_credits(request)
+
+    assert result.success is True
+    tx_inserted = table_mock.insert.call_args[0][0]
+    assert tx_inserted["metadata"]["admin_credits"] == 10
+    assert tx_inserted["metadata"]["purchased_credits"] == 0
 
 
 @pytest.mark.asyncio
@@ -406,9 +452,10 @@ async def test_consume_credits_triggers_low_balance_notification(
     assert request_sent.recipient_email == "admin@example.com"
     assert request_sent.template_variables["current_credits"] == "20"
     assert request_sent.template_variables["organization_name"] == "Acme Corp"
-    assert "/organization/billing" in request_sent.template_variables[
-        "purchase_credits_url"
-    ]
+    assert (
+        "/organization/billing"
+        in request_sent.template_variables["purchase_credits_url"]
+    )
 
     mark_call = table_mock.update.call_args_list[-1]
     assert mark_call[0][0]["low_credit_threshold_notified"] == 20

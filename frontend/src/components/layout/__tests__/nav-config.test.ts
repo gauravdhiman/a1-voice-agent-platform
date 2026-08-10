@@ -48,7 +48,10 @@ describe("nav-config", () => {
     const sections: NavSection[] = ["workspace", "org_admin", "platform_admin"];
     for (const section of sections) {
       const items = NAV_SECTIONS[section];
-      expect(items.length, `section ${section} should have items`).toBeGreaterThan(0);
+      expect(
+        items.length,
+        `section ${section} should have items`,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -148,8 +151,9 @@ describe("nav-config", () => {
     expect(names).toContain("Organization");
   });
 
-  it("platform_admin section contains All Users, Platform Skills, Platform Tools, Voice Presets, Notifications, Plan Catalog, and Entitlements", () => {
+  it("platform_admin section contains Organizations and the platform catalogs", () => {
     const names = NAV_SECTIONS.platform_admin.map((i) => i.name);
+    expect(names).toContain("Organizations");
     expect(names).toContain("All Users");
     expect(names).toContain("Platform Skills");
     expect(names).toContain("Platform Tools");

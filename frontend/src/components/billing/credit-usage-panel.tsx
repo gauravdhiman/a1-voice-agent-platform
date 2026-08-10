@@ -8,6 +8,7 @@ import {
   Coins,
   Database,
   Sparkles,
+  ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,7 @@ function transactionLabel(transaction: CreditTransactionWithEvent): string {
 /**
  * Credit observatory for organization administrators and platform admins.
  *
- * Shows the live two-pool balance, current-period burn, category breakdown,
+ * Shows the live three-pool balance, current-period burn, category breakdown,
  * and the transaction-level explanation behind every movement.
  */
 export function CreditUsagePanel({
@@ -91,6 +92,13 @@ export function CreditUsagePanel({
       tone: "text-sky-600 dark:text-sky-400",
     },
     {
+      label: "Platform bonus",
+      value: balance.admin_granted_credits ?? 0,
+      detail: "non-expiring admin grants",
+      icon: ShieldCheck,
+      tone: "text-indigo-600 dark:text-indigo-400",
+    },
+    {
       label: "Purchased pool",
       value: balance.purchased_credits,
       detail: "does not expire",
@@ -109,7 +117,7 @@ export function CreditUsagePanel({
   return (
     <div className="space-y-5" data-testid={`credit-usage-panel-${variant}`}>
       {variant !== "details" ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {statCards.map(({ label, value, detail, icon: Icon, tone }) => (
             <Card key={label} className="overflow-hidden border-border/70">
               <CardContent className="relative p-4">

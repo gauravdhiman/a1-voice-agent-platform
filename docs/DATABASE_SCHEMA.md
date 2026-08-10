@@ -54,7 +54,8 @@ Stores tenant organization information. Each organization represents a separate 
 | slug             | VARCHAR(100) | NOT NULL, UNIQUE        | URL-friendly identifier; also used for the public page at `/o/{slug}` |
 | is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Organization active status                                                  |
 | credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available plan credits for the current billing period (expire at period end — migration 20260807000005) |
-| purchased_credit_balance | INTEGER | NOT NULL, DEFAULT 0     | Purchased top-up credits; never expire and are drained only after plan credits (migration 20260807000005) |
+| admin_credit_balance | INTEGER | NOT NULL, DEFAULT 0 | Non-expiring platform-admin bonus credits; consumed after plan credits and before purchased credits (migration 20260809000003) |
+| purchased_credit_balance | INTEGER | NOT NULL, DEFAULT 0     | Purchased top-up credits; never expire and are drained after plan and platform bonus credits (migration 20260807000005, precedence updated by 20260809000003) |
 | low_credit_threshold_notified | INTEGER | NULLABLE           | Highest low-balance threshold (20/10/5) already emailed this billing cycle; NULL = re-armed (migration 20260807000005) |
 | website          | VARCHAR(255) | NULLABLE                | Organization website URL                                                    |
 | industry         | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                    |
@@ -647,6 +648,32 @@ Tracks all credit movements.
 **Atomic grant function**:
 
 - `grant_subscription_credits(organization_id, credits, subscription_id, expires_at, metadata, description, idempotency_key)` locks the organization row, reuses an existing grant with the same `metadata.grant_key`, expires leftover plan credits when a recurring grant is applied, updates the plan pool, and inserts the new ledger row in one transaction.
+- `grant_admin_credits(organization_id, credits, created_by, reason, idempotency_key)` locks the organization row, increments only `admin_credit_balance`, and inserts the ledger and audit rows atomically. A repeated organization/idempotency key returns the original grant.
+- `debit_organization_credits(organization_id, credits_needed)` consumes plan → platform bonus → purchased credits under the organization row lock.
+
+---
+
+### platform_credit_grants
+
+Immutable audit record for a platform administrator allocation. The table is
+not a customer purchase and does not represent an entitlement or plan change.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Grant identifier |
+| organization_id | UUID | NOT NULL, FK → organizations.id | Target organization |
+| transaction_id | UUID | NOT NULL, UNIQUE, FK → credit_transactions.id | Matching ledger row |
+| amount | INTEGER | NOT NULL, CHECK > 0 | Bonus credits allocated |
+| reason | TEXT | NOT NULL | Required support/business reason |
+| created_by | UUID | NOT NULL | Authenticated platform-admin actor |
+| idempotency_key | VARCHAR(120) | NULLABLE, UNIQUE per organization | Retry key |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Allocation time |
+
+**RLS**: Enabled. Writes are performed by the backend service role after the
+route-level `platform_admin` check.
+
+**Indexes**: `ix_platform_credit_grants_organization_id`,
+`ix_platform_credit_grants_created_at`.
 
 ---
 
@@ -958,6 +985,7 @@ erDiagram
         varchar slug
         boolean is_active
         integer credit_balance
+        integer admin_credit_balance
         integer purchased_credit_balance
         integer low_credit_threshold_notified
         varchar website
@@ -1297,6 +1325,8 @@ erDiagram
     organizations ||--o{ call_logs : "owns"
     voice_agents ||--o{ call_logs : "handles"
     credit_transactions ||--o| call_logs : "explains call charge"
+    organizations ||--o{ platform_credit_grants : "receives platform grants"
+    credit_transactions ||--o| platform_credit_grants : "audited by"
     call_logs ||--o{ call_artifacts : "produces"
     organizations ||--o{ call_artifacts : "owns"
 
@@ -1383,6 +1413,7 @@ erDiagram
 43. `20260808000012` - Add the atomic, idempotent `grant_subscription_credits` PostgreSQL function so subscription balance changes and credit ledger rows cannot become partially applied.
 44. `20260809000001` - Add per-call credit linkage (`call_logs.credits_consumed` and `credit_transaction_id`) plus the organization-scoped `call_artifacts` metadata table for private recordings, transcripts, and summaries. Seed the `voice_call_minute` metering event at 10 credits per connected minute and add the idempotent `consume_voice_call_credits` RPC for atomic voice-call debit plus ledger insert.
 45. `20260809000002` - Add `call_artifacts.encryption_mode` and `retention_expires_at` plus a cleanup lookup index for recording key-strategy audits and retention enforcement.
+46. `20260809000003` - Add `organizations.admin_credit_balance` and the audited `platform_credit_grants` table. Add atomic `grant_admin_credits`, and update the debit, voice-call consumption, and subscription grant functions to account for plan → platform bonus → purchased credit precedence.
 
 ---
 

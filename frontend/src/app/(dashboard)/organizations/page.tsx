@@ -14,6 +14,7 @@ import { OrganizationDeleteDialog } from "@/components/organizations/organizatio
 import { DataTable } from "@/components/data-table/data-table";
 import { organizationsColumns } from "@/components/organizations/organizations-data-table-columns";
 import type { Organization } from "@/types/organization";
+import { AccessDenied } from "@/components/ui/access-denied";
 
 export default function OrganizationsPage() {
   const {
@@ -31,6 +32,16 @@ export default function OrganizationsPage() {
     useState<Organization | null>(null);
 
   const { refreshOrganizations } = useOrganization();
+
+  if (!isPlatformAdmin) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        description="Only platform administrators can manage organizations."
+        redirectPath="/dashboard"
+      />
+    );
+  }
 
   const handleCreateSuccess = () => {
     refreshOrganizations();

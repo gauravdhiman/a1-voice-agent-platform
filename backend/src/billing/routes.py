@@ -26,6 +26,8 @@ from src.auth.models import UserProfile
 from src.billing.entitlement_models import OrgEntitlements
 from src.billing.entitlement_service import entitlement_service
 from src.billing.models import (
+    AdminCreditGrantRequest,
+    AdminCreditGrantResponse,
     BillingHistory,
     CreditBalance,
     CreditConsumptionRequest,
@@ -607,6 +609,41 @@ async def get_credit_usage(
         logger.error("Error fetching credit usage for %s: %s", organization_id, e)
         raise HTTPException(
             status_code=500, detail="Failed to fetch credit usage"
+        ) from e
+
+
+@router.post(
+    "/credits/{organization_id}/admin-grants",
+    response_model=AdminCreditGrantResponse,
+)
+async def allocate_admin_credits(
+    organization_id: UUID,
+    request: AdminCreditGrantRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Allocate non-expiring bonus credits (platform admin only)."""
+    try:
+        user_id, user_profile = user_auth
+        assert_platform_role(
+            user_profile,
+            "platform_admin",
+            error_message="Platform admin access required to allocate credits",
+        )
+        return await billing_service.grant_admin_credits(
+            organization_id=organization_id,
+            credits=request.credits,
+            created_by=user_id,
+            reason=request.reason.strip(),
+            idempotency_key=request.idempotency_key,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error allocating admin credits to %s: %s", organization_id, e)
+        raise HTTPException(
+            status_code=500, detail="Failed to allocate organization credits"
         ) from e
 
 

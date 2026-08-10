@@ -4,12 +4,7 @@ import React, { useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
-import {
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-} from "lucide-react";
+import { Settings, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -101,7 +96,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (pathname === "/dashboard") {
       breadcrumbs.push({ name: "Dashboard", href: null });
     } else if (pathname === "/organizations") {
-      breadcrumbs.push({ name: "Organizations", href: null });
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Organizations", href: null });
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
+    } else if (pathname === "/organizations/credits") {
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Organizations", href: "/organizations" });
+        breadcrumbs.push({ name: "Credits & entitlements", href: null });
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
     } else if (pathname === "/organization") {
       breadcrumbs.push({ name: "Organization", href: null });
     } else if (pathname === "/organization/members") {
@@ -241,9 +247,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             minimal. */}
         {!sidebarCollapsed && (
           <div className="px-3 pt-3">
-            <OrganizationSwitcher
-              currentRole={currentOrganizationRole}
-            />
+            <OrganizationSwitcher currentRole={currentOrganizationRole} />
           </div>
         )}
 

@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, Users, CreditCard } from "lucide-react";
+import { MoreHorizontal, Eye, Users, CreditCard, Coins } from "lucide-react";
 import Link from "next/link";
 export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
   {
@@ -173,6 +173,15 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
               >
                 <CreditCard className="h-4 w-4 mr-2" />
                 <span>Billing</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link
+                href={`/organizations/credits?org_id=${org.id}`}
+                className="flex items-center"
+              >
+                <Coins className="h-4 w-4 mr-2" />
+                <span>Credits &amp; entitlements</span>
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>

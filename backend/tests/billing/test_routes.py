@@ -44,6 +44,7 @@ TEST_PLAN_ID = UUID("00000000-0000-0000-0000-0000000000b3")
 TEST_PRODUCT_ID = UUID("00000000-0000-0000-0000-0000000000b4")
 
 
+
 def _make_profile(
     is_platform_admin: bool = False,
     is_org_admin_on: str | None = None,
@@ -178,6 +179,7 @@ class TestConsumeCreditsPermission:
             assert exc_info.value.status_code == 403
             mock_svc.consume_credits.assert_not_called()
 
+
     @pytest.mark.asyncio
     async def test_org_admin_on_target_org_passes(self):
         from src.billing.routes import consume_credits
@@ -262,6 +264,54 @@ class TestConsumeCreditsPermission:
                 )
             assert exc_info.value.status_code == 403
             mock_svc.consume_credits.assert_not_called()
+
+
+class TestAdminCreditGrantPermission:
+    """Only a platform administrator may allocate organization credits."""
+
+    @pytest.mark.asyncio
+    async def test_org_admin_cannot_allocate_platform_credits(self):
+        from src.billing.routes import allocate_admin_credits
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        request = Mock(credits=250, reason="Support", idempotency_key="case-1")
+
+        with patch("src.billing.routes.billing_service") as mock_svc:
+            mock_svc.grant_admin_credits = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await allocate_admin_credits(
+                    organization_id=TEST_ORG_ID,
+                    request=request,
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+            assert exc_info.value.status_code == 403
+            mock_svc.grant_admin_credits.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_can_allocate_platform_credits(self):
+        from src.billing.routes import allocate_admin_credits
+
+        profile = _make_profile(is_platform_admin=True)
+        request = Mock(credits=250, reason="Support", idempotency_key="case-1")
+        result = Mock()
+
+        with patch("src.billing.routes.billing_service") as mock_svc:
+            mock_svc.grant_admin_credits = AsyncMock(return_value=result)
+            response = await allocate_admin_credits(
+                organization_id=TEST_ORG_ID,
+                request=request,
+                user_auth=(TEST_USER_ID, profile),
+            )
+
+            assert response is result
+            mock_svc.grant_admin_credits.assert_awaited_once_with(
+                organization_id=TEST_ORG_ID,
+                credits=request.credits,
+                created_by=TEST_USER_ID,
+                reason="Support",
+                idempotency_key=request.idempotency_key,
+            )
 
 
 def _subscription_mock(stripe_subscription_id="sub_123", stripe_customer_id="cus_123"):

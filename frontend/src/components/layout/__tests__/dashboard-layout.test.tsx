@@ -58,10 +58,9 @@ vi.mock("@/contexts/organization-context", () => ({
 
 const mockUseMyPermissions = vi.fn();
 vi.mock("@/hooks/use-has-permission", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/hooks/use-has-permission")>(
-      "@/hooks/use-has-permission",
-    );
+  const actual = await vi.importActual<
+    typeof import("@/hooks/use-has-permission")
+  >("@/hooks/use-has-permission");
   return {
     ...actual,
     useMyPermissions: () => mockUseMyPermissions(),
@@ -100,11 +99,7 @@ import { DashboardLayout } from "../dashboard-layout";
 
 function makeWrapper(queryClient: QueryClient) {
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      children,
-    );
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
 function defaultUser(orgId = "org-1") {
@@ -511,7 +506,10 @@ describe("DashboardLayout - permission-aware nav", () => {
     // fell through to "Dashboard".
     function renderAsPlatformAdmin() {
       mockUseAuth.mockReturnValue({
-        user: { ...defaultUser(), hasRole: (r: string) => r === "platform_admin" },
+        user: {
+          ...defaultUser(),
+          hasRole: (r: string) => r === "platform_admin",
+        },
         isAuthenticated: true,
         signOut: vi.fn().mockResolvedValue({ error: null }),
       });
@@ -552,16 +550,26 @@ describe("DashboardLayout - permission-aware nav", () => {
     it("shows 'Platform Skills' for /platform/skills (parity baseline)", () => {
       mockUsePathname.mockReturnValue("/platform/skills");
       renderAsPlatformAdmin();
-      const breadcrumb = screen.getByRole("navigation", { name: /breadcrumb/i });
-      expect(within(breadcrumb).getByText("Platform Skills")).toBeInTheDocument();
+      const breadcrumb = screen.getByRole("navigation", {
+        name: /breadcrumb/i,
+      });
+      expect(
+        within(breadcrumb).getByText("Platform Skills"),
+      ).toBeInTheDocument();
     });
 
     it("shows 'Platform Tools' for /platform/tools (not 'Dashboard')", () => {
       mockUsePathname.mockReturnValue("/platform/tools");
       renderAsPlatformAdmin();
-      const breadcrumb = screen.getByRole("navigation", { name: /breadcrumb/i });
-      expect(within(breadcrumb).getByText("Platform Tools")).toBeInTheDocument();
-      expect(within(breadcrumb).queryByText("Dashboard")).not.toBeInTheDocument();
+      const breadcrumb = screen.getByRole("navigation", {
+        name: /breadcrumb/i,
+      });
+      expect(
+        within(breadcrumb).getByText("Platform Tools"),
+      ).toBeInTheDocument();
+      expect(
+        within(breadcrumb).queryByText("Dashboard"),
+      ).not.toBeInTheDocument();
     });
   });
 });

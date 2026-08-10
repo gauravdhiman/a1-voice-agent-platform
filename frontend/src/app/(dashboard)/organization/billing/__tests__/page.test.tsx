@@ -93,6 +93,10 @@ vi.mock("@/components/billing/credit-purchase", () => ({
   CreditPurchase: () => <div data-testid="credit-purchase" />,
 }));
 
+vi.mock("@/components/billing/admin-credit-grant", () => ({
+  AdminCreditGrant: () => <div data-testid="admin-credit-grant" />,
+}));
+
 vi.mock("@/components/billing/subscription-management", () => ({
   SubscriptionManagement: () => <div data-testid="subscription-management" />,
 }));
@@ -270,7 +274,8 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
     });
   });
 
-  it("platform admin can see the billing page (org_admin === platform_admin is the design)", async () => {
+  it("platform admin can see billing reporting without platform allocation controls", async () => {
+    globalThis.__orgBillingSearchParams = "tab=credits";
     mockUseUserPermissions.mockReturnValue({
       isPlatformAdmin: true,
       isOrgAdmin: false,
@@ -286,6 +291,21 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
     await waitFor(() => {
       expect(screen.getByText(/Billing & Subscriptions/i)).toBeInTheDocument();
     });
+    expect(screen.queryByTestId("admin-credit-grant")).not.toBeInTheDocument();
+  });
+
+  it("does not expose platform credit allocation to organization admins", async () => {
+    globalThis.__orgBillingSearchParams = "tab=credits";
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Billing & Subscriptions/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("admin-credit-grant")).not.toBeInTheDocument();
   });
 
   it("orders the useful billing tabs with Overview first", async () => {

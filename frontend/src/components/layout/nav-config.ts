@@ -154,6 +154,13 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
   ],
   platform_admin: [
     {
+      name: "Organizations",
+      href: "/organizations",
+      icon: Building2,
+      requiredPermission: "platform:admin",
+      section: "platform_admin",
+    },
+    {
       name: "All Users",
       href: "/users",
       icon: Users,
