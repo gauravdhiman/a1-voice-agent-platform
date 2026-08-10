@@ -14,6 +14,7 @@ from .credit_entitlement_service import (
     credit_entitlement_service,
 )
 from .models import (
+    AdminCreditGrantResponse,
     BillingHistory,
     BillingHistoryCreate,
     BillingStatus,
@@ -325,16 +326,19 @@ class BillingService:
     async def get_credit_balance(self, organization_id: UUID) -> CreditBalance:
         """Get detailed credit balance for an organization.
 
-        Two-pool model: ``organizations.credit_balance`` holds plan credits
-        (granted per billing period, expire at period end) and
-        ``organizations.purchased_credit_balance`` holds one-off purchased
-        credit packs (never expire). ``total_credits`` is their sum.
+        Three-pool model: ``organizations.credit_balance`` holds plan credits
+        (granted per billing period, expire at period end),
+        ``organizations.admin_credit_balance`` holds non-expiring platform
+        grants, and ``organizations.purchased_credit_balance`` holds one-off
+        purchased credit packs. ``total_credits`` is their sum.
         """
         try:
-            # Get organization's current credit balances (plan + purchased pools)
+            # Get organization's current credit balances across all pools.
             org_result = (
                 self.supabase.table("organizations")
-                .select("credit_balance, purchased_credit_balance")
+                .select(
+                    "credit_balance, admin_credit_balance, purchased_credit_balance"
+                )
                 .eq("id", str(organization_id))
                 .execute()
             )
@@ -343,10 +347,11 @@ class BillingService:
                 raise ValueError(f"Organization {organization_id} not found")
 
             plan_credits = int(org_result.data[0].get("credit_balance") or 0)
+            admin_credits = int(org_result.data[0].get("admin_credit_balance") or 0)
             purchased_credits = int(
                 org_result.data[0].get("purchased_credit_balance") or 0
             )
-            total_credits = plan_credits + purchased_credits
+            total_credits = plan_credits + admin_credits + purchased_credits
 
             # Credits expiring soon (plan credits carry an expiry per period)
             thirty_days_from_now = (
@@ -374,6 +379,7 @@ class BillingService:
             return CreditBalance(
                 total_credits=total_credits,
                 subscription_credits=plan_credits,
+                admin_granted_credits=admin_credits,
                 purchased_credits=purchased_credits,
                 expiring_soon=expiring_soon,
                 expires_at=next_expiry,
@@ -572,10 +578,12 @@ class BillingService:
         changes.
         """
         try:
-            # Get current balances
+            # Get current balances across all pools.
             org_result = (
                 self.supabase.table("organizations")
-                .select("credit_balance, purchased_credit_balance")
+                .select(
+                    "credit_balance, admin_credit_balance, purchased_credit_balance"
+                )
                 .eq("id", str(organization_id))
                 .execute()
             )
@@ -584,6 +592,9 @@ class BillingService:
                 raise ValueError(f"Organization {organization_id} not found")
 
             current_plan_balance = org_result.data[0]["credit_balance"]
+            current_admin_balance = int(
+                org_result.data[0].get("admin_credit_balance") or 0
+            )
             current_purchased_balance = org_result.data[0]["purchased_credit_balance"]
 
             # Calculate the difference needed to reach the target plan credit amount
@@ -633,7 +644,9 @@ class BillingService:
                 transaction_dict["source_id"] = str(transaction_dict["source_id"])
 
             # Set balance_after field (combined total; required by database)
-            transaction_dict["balance_after"] = credits + current_purchased_balance
+            transaction_dict["balance_after"] = (
+                credits + current_admin_balance + current_purchased_balance
+            )
 
             # Convert datetime objects to ISO strings
             if "expires_at" in transaction_dict and transaction_dict["expires_at"]:
@@ -732,7 +745,9 @@ class BillingService:
             # Get current balances
             org_result = (
                 self.supabase.table("organizations")
-                .select("credit_balance, purchased_credit_balance")
+                .select(
+                    "credit_balance, admin_credit_balance, purchased_credit_balance"
+                )
                 .eq("id", str(organization_id))
                 .execute()
             )
@@ -741,6 +756,7 @@ class BillingService:
                 raise ValueError(f"Organization {organization_id} not found")
 
             current_plan = int(org_result.data[0].get("credit_balance") or 0)
+            current_admin = int(org_result.data[0].get("admin_credit_balance") or 0)
             current_purchased = int(
                 org_result.data[0].get("purchased_credit_balance") or 0
             )
@@ -770,7 +786,10 @@ class BillingService:
             if source == TransactionSource.SUBSCRIPTION and expires_at is not None:
                 if current_plan > 0:
                     current_purchased = await self._expire_plan_credits(
-                        organization_id, current_plan, current_purchased
+                        organization_id,
+                        current_plan,
+                        current_admin,
+                        current_purchased,
                     )
                     current_plan = 0
 
@@ -793,7 +812,7 @@ class BillingService:
                     }
                 ).eq("id", str(organization_id)).execute()
 
-            new_balance = new_plan + new_purchased
+            new_balance = new_plan + current_admin + new_purchased
 
             # Set balance_after field (combined total; required by database)
             transaction_dict["balance_after"] = new_balance
@@ -886,10 +905,88 @@ class BillingService:
             raise RuntimeError("Subscription credit grant returned no transaction")
         return CreditTransaction(**transaction_payload)
 
+    async def grant_admin_credits(
+        self,
+        *,
+        organization_id: UUID,
+        credits: int,
+        created_by: UUID,
+        reason: str,
+        idempotency_key: Optional[str] = None,
+    ) -> AdminCreditGrantResponse:
+        """Atomically allocate non-expiring bonus credits to an organization.
+
+        The Postgres function locks the organization row, increments only the
+        dedicated platform-grant pool, and writes both the immutable credit
+        ledger row and the grant audit record in one transaction. A supplied
+        idempotency key makes retries return the original grant without adding
+        credits a second time.
+
+        Args:
+            organization_id: Organization receiving the platform allocation.
+            credits: Positive number of bonus credits to allocate.
+            created_by: Authenticated platform administrator performing the action.
+            reason: Human-readable support or business reason retained for audit.
+            idempotency_key: Optional stable retry key from the caller.
+
+        Returns:
+            The grant result with the created transaction and all live pools.
+
+        Raises:
+            ValueError: If the organization is missing or the database rejects
+                the grant input.
+            RuntimeError: If the database function does not return a transaction.
+        """
+        result = self.supabase.rpc(
+            "grant_admin_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits": credits,
+                "p_created_by": str(created_by),
+                "p_reason": reason,
+                "p_idempotency_key": idempotency_key,
+            },
+        ).execute()
+        payload = result.data
+        if isinstance(payload, list):
+            payload = payload[0] if payload else {}
+        if not payload:
+            raise RuntimeError("Admin credit grant returned no result")
+        if payload.get("error"):
+            error = payload["error"]
+            if error == "organization_not_found":
+                raise ValueError(f"Organization {organization_id} not found")
+            raise ValueError(f"Admin credit grant failed: {error}")
+
+        transaction_payload = payload.get("transaction")
+        if not transaction_payload:
+            raise RuntimeError("Admin credit grant returned no transaction")
+
+        transaction = CreditTransaction(**transaction_payload)
+        plan_balance = int(payload.get("plan_balance") or 0)
+        admin_balance = int(payload.get("admin_balance") or 0)
+        purchased_balance = int(payload.get("purchased_balance") or 0)
+        return AdminCreditGrantResponse(
+            organization_id=organization_id,
+            credits=credits,
+            created=bool(payload.get("created", not payload.get("already_applied"))),
+            grant_id=UUID(payload["grant_id"]) if payload.get("grant_id") else None,
+            balance=CreditBalance(
+                total_credits=plan_balance + admin_balance + purchased_balance,
+                subscription_credits=plan_balance,
+                admin_granted_credits=admin_balance,
+                purchased_credits=purchased_balance,
+                expiring_soon=0,
+                expires_at=None,
+            ),
+            transaction=transaction,
+        )
+
     async def _expire_plan_credits(
         self,
         organization_id: UUID,
         amount: int,
+        current_admin: int,
         current_purchased: int,
     ) -> int:
         """Void leftover plan credits at period end and log an EXPIRED transaction.
@@ -906,7 +1003,7 @@ class BillingService:
                 description="Plan credits expired at period end",
             )
             expire_dict = expire_tx.model_dump(mode="json")
-            expire_dict["balance_after"] = current_purchased
+            expire_dict["balance_after"] = current_admin + current_purchased
             self.supabase.table("credit_transactions").insert(expire_dict).execute()
             logger.info(
                 f"Expired {amount} leftover plan credits for organization {organization_id}"
@@ -931,14 +1028,12 @@ class BillingService:
     async def consume_credits(
         self, consumption_request: CreditConsumptionRequest
     ) -> CreditConsumptionResponse:
-        """Consume credits for an event (two-pool, strictly prepaid).
+        """Consume credits for an event across three strictly prepaid pools.
 
-        Plan credits (``organizations.credit_balance``) are drained first,
-        then purchased credits (``organizations.purchased_credit_balance``).
-        No pay-as-you-go: consumption is denied when the combined balance is
-        insufficient. The per-pool allocation is recorded in the consumption
-        transaction metadata for audit, and a low-balance notification may be
-        triggered (20/10/5% of the period's included credits).
+        Plan credits are drained first, followed by platform-granted bonus
+        credits, then purchased credits. No pay-as-you-go: consumption is
+        denied when the combined balance is insufficient. The per-pool
+        allocation is recorded in transaction metadata for audit.
         """
         try:
             # Get credit event details
@@ -977,11 +1072,13 @@ class BillingService:
 
             new_balance = int(debit_result["balance_after"])
             plan_used = int(debit_result.get("plan_used") or 0)
+            admin_used = int(debit_result.get("admin_used") or 0)
             purchased_used = int(debit_result.get("purchased_used") or 0)
 
             # Record per-pool allocation for audit
             consumption_metadata = dict(consumption_request.metadata or {})
             consumption_metadata["plan_credits"] = plan_used
+            consumption_metadata["admin_credits"] = admin_used
             consumption_metadata["purchased_credits"] = purchased_used
 
             # Create consumption transaction using validated model
@@ -1043,7 +1140,7 @@ class BillingService:
                 transaction = CreditTransaction(**result.data[0])
                 logger.info(
                     f"Consumed {credits_needed} credits for {consumption_request.event_name} "
-                    f"(plan={plan_used}, purchased={purchased_used})"
+                    f"(plan={plan_used}, admin={admin_used}, purchased={purchased_used})"
                 )
 
                 # Low-balance warnings never block consumption
@@ -1067,7 +1164,7 @@ class BillingService:
     async def _debit_organization_credits_locked(
         self, organization_id: UUID, credits_needed: int
     ) -> dict[str, Any]:
-        """Atomically debit plan + purchased pools under a row lock.
+        """Atomically debit plan, platform-grant, and purchased pools.
 
         Calls the ``debit_organization_credits`` Postgres function so concurrent
         consumers serialize on the organization row (``SELECT … FOR UPDATE``).
@@ -1099,13 +1196,16 @@ class BillingService:
         purchased_balance: int,
         credits_needed: int,
     ) -> tuple[int, int]:
-        """Allocate a consumption across the plan pool first, then purchased.
+        """Allocate a legacy two-pool consumption in plan-first order.
+
+        This helper remains available for callers that only model the legacy
+        plan/purchased pools. New three-pool code should use
+        :meth:`allocate_consumption_with_bonus`.
 
         Args:
             plan_balance: Current plan credits (expire at period end).
             purchased_balance: Current purchased credits (never expire).
             credits_needed: Credits to consume (positive integer).
-
         Returns:
             Tuple ``(plan_used, purchased_used)``. Sums to ``credits_needed``
             when the combined balance covers it, otherwise drains whatever is
@@ -1114,7 +1214,7 @@ class BillingService:
         Example:
             ```python
             allocate_consumption(30, 50, 60)  # -> (30, 30)
-            allocate_consumption(0, 50, 60)   # -> (0, 50)
+            allocate_consumption(0, 50, 60)  # -> (0, 50)
             allocate_consumption(100, 0, 60)  # -> (60, 0)
             ```
         """
@@ -1122,6 +1222,32 @@ class BillingService:
         remaining = credits_needed - plan_used
         purchased_used = max(0, min(purchased_balance, remaining))
         return plan_used, purchased_used
+
+    @staticmethod
+    def allocate_consumption_with_bonus(
+        plan_balance: int,
+        admin_balance: int,
+        purchased_balance: int,
+        credits_needed: int,
+    ) -> tuple[int, int, int]:
+        """Allocate consumption in plan, platform-bonus, purchased order.
+
+        Args:
+            plan_balance: Current expiring plan credits.
+            admin_balance: Current non-expiring platform-granted credits.
+            purchased_balance: Current non-expiring purchased credits.
+            credits_needed: Positive credits to consume.
+
+        Returns:
+            Tuple ``(plan_used, admin_used, purchased_used)``. The tuple drains
+            all available pools in precedence order when the total is short.
+        """
+        plan_used = max(0, min(plan_balance, credits_needed))
+        remaining = credits_needed - plan_used
+        admin_used = max(0, min(admin_balance, remaining))
+        remaining -= admin_used
+        purchased_used = max(0, min(purchased_balance, remaining))
+        return plan_used, admin_used, purchased_used
 
     async def _maybe_notify_low_balance(
         self, organization_id: UUID, remaining_total: int

@@ -26,6 +26,8 @@ import type {
   VersionedSubscriptionCheckoutResponse,
   PlanChangePreview,
   PlanChangeConfirmationResponse,
+  AdminCreditGrantRequest,
+  AdminCreditGrantResponse,
 } from "@/types/billing";
 
 class BillingService {
@@ -252,6 +254,27 @@ class BillingService {
   async getCreditUsage(organizationId: string): Promise<CreditUsageResponse> {
     const response = await apiClient.get<CreditUsageResponse>(
       `${this.baseUrl}/credits/${organizationId}/usage`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Allocates non-expiring platform bonus credits to an organization.
+   *
+   * The backend restricts this endpoint to platform administrators and records
+   * the actor, reason, and idempotency key in the audited credit ledger.
+   *
+   * @param organizationId Organization receiving the bonus credits
+   * @param request Credit amount, audit reason, and optional retry key
+   * @returns The accepted grant and refreshed credit balance
+   */
+  async allocateAdminCredits(
+    organizationId: string,
+    request: AdminCreditGrantRequest,
+  ): Promise<AdminCreditGrantResponse> {
+    const response = await apiClient.post<AdminCreditGrantResponse>(
+      `${this.baseUrl}/credits/${organizationId}/admin-grants`,
+      request,
     );
     return response.data;
   }

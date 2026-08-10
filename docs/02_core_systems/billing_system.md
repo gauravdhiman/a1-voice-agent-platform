@@ -23,6 +23,8 @@ The billing system uses the following database tables:
 - **subscription_plans**: Legacy compatibility catalog used by older records and APIs.
 - **credit_events**: Configurable events that consume credits.
 - **credit_transactions**: All credit movements (earned, consumed, purchased).
+- **platform_credit_grants**: Immutable audit records for platform-admin bonus
+  allocations, including actor, reason, and idempotency key.
 - **credit_products**: Standalone credit packages for purchase.
 - **billing_history**: Payment history and invoices.
 
@@ -31,6 +33,7 @@ The billing system uses the following database tables:
 - Multi-tiered subscription plans (monthly/annual).
 - Credit-based usage system with configurable events.
 - Independent credit purchases with no expiry.
+- Platform-admin bonus credits with no expiry and a dedicated balance pool.
 - Subscription credits that expire per billing period.
 - Comprehensive audit trail for all transactions.
 
@@ -68,6 +71,8 @@ The billing system uses the following database tables:
 - Billing history retrieval.
 - Stripe checkout sessions.
 - Customer portal access.
+- Platform-admin credit allocation for any organization through the platform
+  organization controls.
 
 ### Frontend Implementation
 
@@ -80,13 +85,21 @@ The billing system uses the following database tables:
     - Credit purchase and tracking.
     - Billing history display.
 
-2.  **Billing Service** (`frontend/src/services/billing-service.ts`)
+2.  **Platform Organization Credits**
+    (`frontend/src/app/(dashboard)/organizations/credits/page.tsx`)
+
+    - Platform-admin-only organization credit controls.
+    - Credit usage and ledger reporting for the selected organization.
+    - Audited, non-expiring platform credit allocations.
+    - Future home for organization-specific entitlement overrides.
+
+3.  **Billing Service** (`frontend/src/services/billing-service.ts`)
 
     - API integration layer.
     - Stripe checkout handling.
     - Data formatting utilities.
 
-3.  **Type Definitions** (`frontend/src/types/billing.ts`)
+4.  **Type Definitions** (`frontend/src/types/billing.ts`)
     - TypeScript interfaces.
     - Utility functions.
     - Status enumerations.
@@ -222,12 +235,14 @@ INSERT INTO credit_events (name, description, credit_cost, category) VALUES
 Credits are consumed in the following order:
 
 1.  **Plan Credits** (expire at the plan period boundary) - consumed first.
-2.  **Purchased Credits** (no expiry) - consumed second.
+2.  **Platform Bonus Credits** (non-expiring platform-admin allocations) -
+    consumed second.
+3.  **Purchased Credits** (no expiry) - consumed third.
 
 The order is enforced by the shared billing service and the atomic
 `debit_organization_credits` PostgreSQL function. This prevents concurrent voice
-sessions from overspending either prepaid pool. Pay-as-you-go headroom is not
-part of the current model.
+sessions from overspending any prepaid pool. Pay-as-you-go headroom is not part
+of the current model.
 
 ### Credit Allocation
 
@@ -235,7 +250,20 @@ part of the current model.
   `credit_grant_policy`; paid recurring grants come from invoice webhooks and
   free recurring grants come from the application scheduler.
 - **Purchased Credits**: Added immediately upon successful payment.
+- **Platform Bonus Credits**: Added only through
+  `POST /api/v1/billing/credits/{organization_id}/admin-grants`. The route is
+  platform-admin-only and requires a positive amount plus an audit reason. The
+  database function records the actor, reason, ledger row, and audit row
+  atomically; it does not change the subscribed plan or purchased pool.
 - **Expiry**: Only subscription credits expire at the end of billing period.
+
+### Future entitlement overrides
+
+Credit allocations are deliberately separate from plan entitlements. A future
+platform-admin override should be implemented as an audited, time-bounded
+overlay on resolved plan entitlements, with precedence `active override →
+immutable plan version → catalog default`. It should never edit a published
+plan version or mutate the subscription row.
 
 ## Subscription Lifecycle
 

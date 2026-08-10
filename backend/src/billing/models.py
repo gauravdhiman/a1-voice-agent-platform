@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SubscriptionStatus(str, Enum):
@@ -375,13 +375,51 @@ class OrganizationBillingSummary(BaseModel):
 
 
 class CreditBalance(BaseModel):
-    """Credit balance breakdown."""
+    """Credit balance breakdown across all prepaid credit pools."""
 
     total_credits: int
     subscription_credits: int
+    admin_granted_credits: int = 0
     purchased_credits: int
     expiring_soon: int  # Credits expiring in next 30 days
     expires_at: Optional[datetime] = None  # Next expiration date
+
+
+class AdminCreditGrantRequest(BaseModel):
+    """Validated request for a platform administrator credit allocation."""
+
+    credits: int = Field(..., gt=0, le=10_000_000)
+    reason: str = Field(..., min_length=3, max_length=500)
+    idempotency_key: Optional[str] = Field(None, min_length=1, max_length=120)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        """Reject whitespace-only reasons and persist a trimmed audit value."""
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("reason must contain at least 3 non-whitespace characters")
+        return normalized
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def normalize_idempotency_key(cls, value: Optional[str]) -> Optional[str]:
+        """Normalize optional retry keys before they reach the database."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+class AdminCreditGrantResponse(BaseModel):
+    """Result of an atomic, audited platform credit allocation."""
+
+    organization_id: UUID
+    credits: int
+    created: bool
+    grant_id: Optional[UUID] = None
+    balance: CreditBalance
+    transaction: CreditTransaction
 
 
 class CreditUsageCategory(BaseModel):

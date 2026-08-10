@@ -190,6 +190,65 @@ class TestBillingServiceSubscriptionPlans:
         assert result.description is None
         assert result.features is None
 
+
+class TestAdminCreditGrant:
+    """Tests for the atomic, audited platform credit grant operation."""
+
+    @pytest.mark.asyncio
+    async def test_grant_admin_credits_calls_atomic_rpc(
+        self, billing_service, mock_supabase_client
+    ):
+        """A grant is delegated to Postgres with actor and audit fields."""
+        org_id = uuid4()
+        actor_id = uuid4()
+        transaction_id = uuid4()
+        mock_supabase_client.rpc.return_value.execute.return_value.data = {
+            "created": True,
+            "grant_id": str(uuid4()),
+            "transaction": {
+                "id": str(transaction_id),
+                "organization_id": str(org_id),
+                "transaction_type": "earned",
+                "amount": 250,
+                "balance_after": 350,
+                "source": "admin_adjustment",
+                "source_id": None,
+                "credit_event_id": None,
+                "expires_at": None,
+                "stripe_payment_intent_id": None,
+                "description": "Platform admin credit allocation",
+                "metadata": {"reason": "Support compensation"},
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "plan_balance": 100,
+            "admin_balance": 250,
+            "purchased_balance": 0,
+            "balance_after": 350,
+        }
+
+        response = await billing_service.grant_admin_credits(
+            organization_id=org_id,
+            credits=250,
+            created_by=actor_id,
+            reason="Support compensation",
+            idempotency_key="support-case-123",
+        )
+
+        assert response.created is True
+        assert response.credits == 250
+        assert response.balance.total_credits == 350
+        assert response.balance.admin_granted_credits == 250
+        mock_supabase_client.rpc.assert_called_once_with(
+            "grant_admin_credits",
+            {
+                "p_organization_id": str(org_id),
+                "p_credits": 250,
+                "p_created_by": str(actor_id),
+                "p_reason": "Support compensation",
+                "p_idempotency_key": "support-case-123",
+            },
+        )
+
     @pytest.mark.asyncio
     async def test_get_subscription_plans_all(
         self,

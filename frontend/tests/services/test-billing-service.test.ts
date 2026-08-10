@@ -246,26 +246,24 @@ describe("BillingService", () => {
   describe("Credit usage reporting", () => {
     it("gets the organization credit usage ledger", async () => {
       server.use(
-        http.get(
-          `${API_BASE_URL}/api/v1/billing/credits/org-1/usage`,
-          () =>
-            HttpResponse.json({
-              organization_id: "org-1",
-              balance: {
-                total_credits: 80,
-                subscription_credits: 60,
-                purchased_credits: 20,
-                expiring_soon: 0,
-                expires_at: null,
-              },
-              period_start: null,
-              period_end: null,
-              period_credits_granted: 100,
-              period_credits_used: 20,
-              period_credits_remaining: 80,
-              usage_by_category: [],
-              transactions: [],
-            }),
+        http.get(`${API_BASE_URL}/api/v1/billing/credits/org-1/usage`, () =>
+          HttpResponse.json({
+            organization_id: "org-1",
+            balance: {
+              total_credits: 80,
+              subscription_credits: 60,
+              purchased_credits: 20,
+              expiring_soon: 0,
+              expires_at: null,
+            },
+            period_start: null,
+            period_end: null,
+            period_credits_granted: 100,
+            period_credits_used: 20,
+            period_credits_remaining: 80,
+            usage_by_category: [],
+            transactions: [],
+          }),
         ),
       );
 
@@ -279,6 +277,56 @@ describe("BillingService", () => {
   });
 
   describe("Credits", () => {
+    it("allocates audited platform credits for an organization", async () => {
+      let requestBody: unknown;
+      server.use(
+        http.post(
+          `${API_BASE_URL}/api/v1/billing/credits/org-1/admin-grants`,
+          async ({ request }) => {
+            requestBody = await request.json();
+            return HttpResponse.json({
+              organization_id: "org-1",
+              credits: 250,
+              created: true,
+              balance: {
+                total_credits: 350,
+                subscription_credits: 100,
+                admin_granted_credits: 250,
+                purchased_credits: 0,
+                expiring_soon: 0,
+                expires_at: null,
+              },
+              transaction: {
+                id: "tx-1",
+                organization_id: "org-1",
+                transaction_type: "earned",
+                amount: 250,
+                balance_after: 350,
+                source: "admin_adjustment",
+              },
+            });
+          },
+        ),
+      );
+
+      const result = await billingService.allocateAdminCredits("org-1", {
+        credits: 250,
+        reason: "Support compensation",
+        idempotency_key: "case-1",
+      });
+
+      expect(requestBody).toEqual({
+        credits: 250,
+        reason: "Support compensation",
+        idempotency_key: "case-1",
+      });
+      expect(result).toMatchObject({
+        organization_id: "org-1",
+        credits: 250,
+        balance: { admin_granted_credits: 250 },
+      });
+    });
+
     it("getCreditBalance returns balance", async () => {
       const result = await billingService.getCreditBalance("org-1");
 

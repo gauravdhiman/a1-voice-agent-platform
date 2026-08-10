@@ -356,9 +356,25 @@ export interface OrganizationBillingSummary {
 export interface CreditBalance {
   total_credits: number;
   subscription_credits: number;
+  admin_granted_credits?: number;
   purchased_credits: number;
   expiring_soon: number;
   expires_at: string | null;
+}
+
+export interface AdminCreditGrantRequest {
+  credits: number;
+  reason: string;
+  idempotency_key?: string;
+}
+
+export interface AdminCreditGrantResponse {
+  organization_id: string;
+  credits: number;
+  created: boolean;
+  grant_id?: string | null;
+  balance: CreditBalance;
+  transaction: CreditTransaction;
 }
 
 export interface UsageStats {

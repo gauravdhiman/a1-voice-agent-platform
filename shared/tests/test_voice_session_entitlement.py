@@ -205,7 +205,13 @@ async def test_assert_voice_session_allowed_allows_with_purchased_credits(monkey
     catalog_execute = MagicMock(data=[])
     min_cost_execute = MagicMock(data=[{"credit_cost": 10, "is_active": True}])
     org_execute = MagicMock(
-        data=[{"credit_balance": 0, "purchased_credit_balance": 50}]
+        data=[
+            {
+                "credit_balance": 0,
+                "admin_credit_balance": 50,
+                "purchased_credit_balance": 0,
+            }
+        ]
     )
 
     table = MagicMock()

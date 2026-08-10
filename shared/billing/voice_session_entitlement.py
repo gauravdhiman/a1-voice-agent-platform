@@ -6,8 +6,8 @@ Resolves plan-version entitlements from Supabase (same binding rules as backend
 headroom before a WebSocket session starts.
 
 Credits are strictly prepaid (no pay-as-you-go): the pre-check passes when the
-combined balance (plan credits + purchased credits) covers at least one
-billable voice minute.
+combined balance (plan credits + platform-granted credits + purchased credits)
+covers at least one billable voice minute.
 """
 
 from __future__ import annotations
@@ -120,7 +120,10 @@ async def _resolve_org_entitlements(
         .execute()
     )
     plan_version_id: Optional[str] = None
-    if sub_result.data and sub_result.data[0].get("status") in ACTIVE_SUBSCRIPTION_STATUSES:
+    if (
+        sub_result.data
+        and sub_result.data[0].get("status") in ACTIVE_SUBSCRIPTION_STATUSES
+    ):
         plan_version_id = sub_result.data[0].get("plan_version_id")
 
     if not plan_version_id:
@@ -151,8 +154,7 @@ async def _resolve_org_entitlements(
         .execute()
     )
     assigned_by_key = {
-        row["entitlement_key"]: row["value"]
-        for row in (assigned_result.data or [])
+        row["entitlement_key"]: row["value"] for row in (assigned_result.data or [])
     }
     limits: dict[str, Any] = {}
     features: dict[str, Any] = {}
@@ -184,9 +186,7 @@ async def _count_active_calls(
     )
     if current_call_sid is not None:
         return sum(
-            1
-            for row in (result.data or [])
-            if row.get("call_sid") != current_call_sid
+            1 for row in (result.data or []) if row.get("call_sid") != current_call_sid
         )
     count = getattr(result, "count", None)
     if isinstance(count, int):
@@ -195,10 +195,10 @@ async def _count_active_calls(
 
 
 async def _get_credit_balance(client: Any, organization_id: UUID) -> int:
-    """Return combined prepaid balance (plan credits + purchased credits)."""
+    """Return combined prepaid balance across all credit pools."""
     result = (
         client.table("organizations")
-        .select("credit_balance, purchased_credit_balance")
+        .select("credit_balance, admin_credit_balance, purchased_credit_balance")
         .eq("id", str(organization_id))
         .limit(1)
         .execute()
@@ -206,8 +206,9 @@ async def _get_credit_balance(client: Any, organization_id: UUID) -> int:
     if not result.data:
         return 0
     plan_credits = int(result.data[0].get("credit_balance") or 0)
+    admin_credits = int(result.data[0].get("admin_credit_balance") or 0)
     purchased_credits = int(result.data[0].get("purchased_credit_balance") or 0)
-    return plan_credits + purchased_credits
+    return plan_credits + admin_credits + purchased_credits
 
 
 async def _minimum_voice_credit_cost(client: Any, event_name: str) -> int:

@@ -27,11 +27,12 @@ webhooks; free recurring grants use the application scheduler because there is
 no Stripe invoice. Both paths use stable grant keys and the
 `grant_subscription_credits` database function for atomic, idempotent updates.
 
-The current runtime model has two prepaid pools: expiring plan credits and
-non-expiring purchased credits. Consumption is plan-first and uses the atomic
-`debit_organization_credits` function. The source-aware credit-lot ledger,
-administrator grants, and referral rewards described in the architecture plan
-are future scope, not current billing behavior. See [Subscription-Aware
+The current runtime model has three prepaid pools: expiring plan credits,
+non-expiring platform bonus credits, and non-expiring purchased credits.
+Consumption is plan-first, then platform bonus, then purchased, and uses the
+atomic `debit_organization_credits` function. The source-aware credit-lot
+ledger and referral rewards described in the architecture plan remain future
+scope. See [Subscription-Aware
 Onboarding and Credit Policy](../../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 for the complete decision record.
 
@@ -180,12 +181,13 @@ Credits are consumed for platform usage:
 - Plan activation or renewal (monthly allocation, when the plan policy is recurring)
 - One-time free/trial plan allocation (when the plan policy is one-time)
 - Top-up purchases
-- Adjustments (legacy ledger records; no current self-service admin grant flow)
+- Platform-admin bonus allocations (non-expiring and separately reported)
 - Referral rewards (planned)
 
-Plan credits and purchased credits are tracked as separate pools. Plan credits
-are consumed first and expire at the period boundary; purchased credits do not
-expire. Subscription grants with a stable `grant_key` are applied through the
+Plan, platform bonus, and purchased credits are tracked as separate pools. Plan
+credits are consumed first and expire at the period boundary; platform bonus
+and purchased credits do not expire. Subscription grants with a stable
+`grant_key` are applied through the
 `grant_subscription_credits` PostgreSQL function, which locks the organization
 row and commits expiry bookkeeping, balance updates, and the ledger row as one
 transaction. A retry therefore returns the existing grant instead of applying
@@ -202,26 +204,34 @@ it twice.
 
 ```sql
 organizations.credit_balance       -- Current balance
+organizations.admin_credit_balance -- Platform-admin bonus balance
 organizations.purchased_credit_balance -- Purchased top-up balance
 credit_transactions              -- Transaction history
   - amount (positive or negative)
   - type (usage, topup, adjustment)
   - reason
   - metadata (including subscription grant idempotency keys)
+platform_credit_grants            -- Actor/reason audit record for each platform grant
 ```
 
 **Administrator reporting**:
 
-- `GET /api/v1/billing/credits/{organization_id}/usage` returns the live plan
-  and purchased pools, current-period grants/consumption, category totals, and
-  recent ledger rows.
+- `GET /api/v1/billing/credits/{organization_id}/usage` returns the live plan,
+  platform bonus, and purchased pools, current-period grants/consumption,
+  category totals, and recent ledger rows.
 - `GET /api/v1/billing/credits/{organization_id}/transactions` returns the
   paginated event-enriched ledger.
 - Completed voice calls are linked to their consumption transaction through
   `call_logs.credits_consumed` and `call_logs.credit_transaction_id`.
-- The billing UI exposes this reporting to org admins and platform admins. A
-  platform admin must select the organization being inspected; all API queries
-  remain organization-scoped.
+- The organization Billing page exposes this reporting to org admins and
+  platform admins, while platform mutations remain separate from org-admin
+  operations.
+- Platform admins open **Platform Admin → Organizations**, use an organization
+  row's **Credits & entitlements** action, and receive a dedicated
+  `/organizations/credits?org_id=...` workspace. It shows the selected
+  organization's usage report and the allocation dialog. Each allocation
+  requires an amount and reason and refreshes the balance and ledger after the
+  atomic grant completes.
 
 The Call Log report orders records by `created_at` and supports agent, status,
 and date filters. The `To` date picker cannot select a date before
