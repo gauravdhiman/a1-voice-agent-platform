@@ -15,8 +15,17 @@ from shared.call_recordings.storage import (
 class _Body:
     """Minimal response body for the R2 client test double."""
 
-    def read(self):
+    def __init__(self):
+        self._read = False
+
+    def read(self, _size=None):
+        if self._read:
+            return b""
+        self._read = True
         return b"r2-audio"
+
+    def close(self):
+        """Match the close operation on a boto3 streaming body."""
 
 
 class _R2Client:
@@ -113,6 +122,8 @@ async def test_r2_storage_uses_private_bucket_and_short_lived_get_url():
     )
     assert stored.bucket == "staging-recordings"
     assert await storage.read_object(stored.key) == b"r2-audio"
+    chunks = [chunk async for chunk in storage.stream_object(stored.key)]
+    assert b"".join(chunks) == b"r2-audio"
     assert await storage.object_exists(stored.key) is True
     assert await storage.get_download_url(stored.key, expires_in=300) == (
         "https://r2.example/signed"

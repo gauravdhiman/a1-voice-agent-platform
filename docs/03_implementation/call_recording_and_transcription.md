@@ -23,7 +23,7 @@ R2 account:
 | Artifact | Storage | Reason |
 | --- | --- | --- |
 | Mixed call audio (local) | `.local-data/call-recordings/` | Fast local testing; ignored by Git and mounted into backend/voice-ws |
-| Mixed call audio (staging/prod) | Private R2 bucket per environment | Durable object storage, provider-encrypted at rest, short-lived signed playback URLs |
+| Mixed call audio (staging/prod) | Private R2 bucket per environment | Durable object storage, provider-encrypted at rest, authenticated backend streaming |
 | Recording metadata | `call_artifacts` row | Organization/call ownership, status, path, MIME type, size, duration |
 | Transcript | `call_artifacts.text_content` | Searchable and directly available to the reporting UI |
 | Summary and key takeaways | `call_artifacts.text_content` plus JSON `metadata` | Small, structured, and easy to render/export |
@@ -35,9 +35,10 @@ Objects must use an organization-scoped, date-partitioned path:
 ```
 
 Never return the object path as a public URL. The backend verifies organization
-ownership, and R2 playback uses a five-minute presigned GET URL. Local playback
-is streamed through the same authenticated backend endpoint. Only an org admin
-or platform admin can request a recording.
+ownership and streams both local and R2 recordings through the authenticated
+backend endpoint in bounded chunks. This avoids requiring browser CORS rules on
+the private R2 buckets and works for localhost, staging, and production
+frontends. Only an org admin or platform admin can request a recording.
 
 The Cloudflare account is shared for operational simplicity, but the buckets
 remain separate (`247ai-call-recordings-staging` and
@@ -66,8 +67,8 @@ sequenceDiagram
     Transcriber->>Database: Save transcript and summary artifacts
     Admin->>Database: Request call and artifact metadata
     Admin->>Worker: Request authenticated recording endpoint
-    Worker->>Storage: Create short-lived R2 URL or read local object
-    Storage-->>Admin: Signed playback URL
+    Worker->>Storage: Read private object in bounded chunks
+    Storage-->>Admin: Authenticated audio stream
     Admin->>Database: Read transcript and summary
 ```
 
@@ -85,9 +86,8 @@ sequenceDiagram
 4. Generate a concise summary, key takeaways, and action items from the
    transcript. Store those as separate `summary` content with model/version
    metadata for reproducibility.
-5. Add an authorized artifact endpoint that returns metadata, transcript, and a
-   signed recording URL. Do not proxy or expose service-role credentials in the
-   browser.
+5. Add an authorized artifact endpoint that returns metadata and streams the
+   recording. Do not proxy storage credentials or object paths to the browser.
 
 ## Security, consent, and retention
 
@@ -98,8 +98,8 @@ sequenceDiagram
 - Keep the bucket private and enforce organization ownership in the API. Do not
   rely on a client-supplied organization id or storage path for authorization.
 - Use bucket-scoped R2 Object Read/Write credentials, never a public bucket or
-  a browser-held secret. The browser receives only a short-lived playback
-  redirect through the authenticated endpoint.
+  a browser-held secret. The browser receives only an authenticated audio
+  stream through the backend.
 - Store only the minimum phone-number and provider metadata needed for support;
   mask numbers in list views.
 - The default retention window is 90 days and is stored on each artifact as

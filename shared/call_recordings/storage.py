@@ -15,7 +15,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping, Optional, Protocol
+from typing import Any, AsyncIterator, Mapping, Optional, Protocol
 
 
 class RecordingStorageConfigurationError(ValueError):
@@ -39,6 +39,9 @@ class RecordingStorage(Protocol):
 
     async def read_object(self, key: str) -> bytes:
         """Read a private object by its internal key."""
+
+    def stream_object(self, key: str) -> AsyncIterator[bytes]:
+        """Yield a private object in bounded chunks for HTTP playback."""
 
     async def object_exists(self, key: str) -> bool:
         """Check whether a private object is currently available."""
@@ -181,6 +184,10 @@ class LocalRecordingStorage:
         destination = _safe_relative_path(self.root, key)
         return await asyncio.to_thread(destination.read_bytes)
 
+    async def stream_object(self, key: str) -> AsyncIterator[bytes]:
+        """Yield a local recording as one chunk through the authenticated API."""
+        yield await self.read_object(key)
+
     async def object_exists(self, key: str) -> bool:
         """Check local object availability without reading the audio bytes."""
         destination = _safe_relative_path(self.root, key)
@@ -287,6 +294,23 @@ class R2RecordingStorage:
             self._client.get_object, Bucket=self.bucket, Key=key
         )
         return await asyncio.to_thread(response["Body"].read)
+
+    async def stream_object(self, key: str) -> AsyncIterator[bytes]:
+        """Yield an R2 object in bounded chunks without buffering full audio."""
+        response = await asyncio.to_thread(
+            self._client.get_object, Bucket=self.bucket, Key=key
+        )
+        body = response["Body"]
+        try:
+            while True:
+                chunk = await asyncio.to_thread(body.read, 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            close = getattr(body, "close", None)
+            if close:
+                await asyncio.to_thread(close)
 
     async def object_exists(self, key: str) -> bool:
         """Check R2 object availability with a metadata-only HEAD request."""

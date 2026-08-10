@@ -6,7 +6,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
@@ -73,7 +73,7 @@ async def download_call_recording(
     call_log_id: UUID,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Stream local audio or redirect to a short-lived private R2 URL."""
+    """Stream a private recording through the authenticated backend."""
     _, user_profile = user_data
     artifact, error = await call_artifact_service.get_recording(call_log_id)
     if error or artifact is None:
@@ -99,17 +99,15 @@ async def download_call_recording(
                 status_code=status.HTTP_410_GONE,
                 detail="Recording is no longer available",
             )
-        download_url = await storage.get_download_url(
-            object_key,
-            expires_in=settings.recording_r2_presign_ttl_seconds,
-        )
-        if not download_url:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Recording playback URL could not be created",
-            )
-        return RedirectResponse(
-            download_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
+        # Stream through the authenticated API instead of redirecting the
+        # browser to R2. This works for localhost, a future staging origin,
+        # and production without requiring per-bucket browser CORS rules.
+        # TODO: [Performance] Revisit direct signed playback with explicit R2
+        # CORS when recording traffic justifies bypassing backend bandwidth.
+        return StreamingResponse(
+            storage.stream_object(object_key),
+            media_type=artifact.get("mime_type") or "audio/wav",
+            headers={"Content-Disposition": "inline; filename=recording.wav"},
         )
 
     try:

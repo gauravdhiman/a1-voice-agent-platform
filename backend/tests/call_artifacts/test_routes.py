@@ -82,8 +82,8 @@ async def test_local_recording_is_streamed_after_admin_authorization(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_r2_recording_redirects_to_short_lived_private_url(monkeypatch):
-    """R2 playback returns a provider URL without exposing storage credentials."""
+async def test_r2_recording_streams_through_authenticated_backend(monkeypatch):
+    """R2 playback avoids browser CORS by streaming through the backend."""
     call_id = uuid4()
     org_id = uuid4()
     admin = _profile("platform_admin")
@@ -103,14 +103,22 @@ async def test_r2_recording_redirects_to_short_lived_private_url(monkeypatch):
     )
     storage = Mock()
     storage.object_exists = AsyncMock(return_value=True)
-    storage.get_download_url = AsyncMock(return_value="https://r2.example/signed")
+
+    async def stream_object(_key):
+        """Yield a small recording body like the storage adapter."""
+        yield b"RIFF-"
+        yield b"audio"
+
+    storage.stream_object = stream_object
     monkeypatch.setattr(routes, "get_recording_storage", lambda: storage)
     monkeypatch.setattr(routes.settings, "recording_storage_backend", "r2")
 
     response = await routes.download_call_recording(call_id, (uuid4(), admin))
 
-    assert response.status_code == 307
-    assert response.headers["location"] == "https://r2.example/signed"
+    assert response.status_code == 200
+    assert response.media_type == "audio/wav"
+    chunks = [chunk async for chunk in response.body_iterator]
+    assert b"".join(chunks) == b"RIFF-audio"
 
 
 @pytest.mark.asyncio

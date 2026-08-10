@@ -17,7 +17,7 @@ Production infrastructure for **247ai.live**:
 |----------|-----------------|
 | **[Quick reference](quick-reference.md)** | Day-to-day deploy commands, prerequisites, smoke checks |
 | **[Runbook](runbook.md)** | Full architecture, first-time setup, DNS, webhooks, security |
-| **[Environment variables](environment-variables.md)** | Every env var by service; `.env.prod` is the single credentials file |
+| **[Environment variables](environment-variables.md)** | Every env var by service; `.env.prod` is the manual-deploy file and `ENV_PROD` is its CI equivalent |
 | **[Local Docker](local-docker.md)** | docker-compose and manual image builds for development |
 | **[CI / GitHub Actions](ci-github-actions.md)** | Auto-deploy workflow and required secrets |
 
@@ -35,7 +35,7 @@ Production infrastructure for **247ai.live**:
 
 ## Credentials
 
-- **Application secrets:** `.env.prod` at repo root (never commit).
+- **Application secrets:** `.env.prod` for manual deployment, or the GitHub Repository secret `ENV_PROD` for CI (never commit the file).
 - **OCI VM SSH:** `~/.ssh/oci_voice_ws` (default). Set `OCI_SSH_HOST` when deploying voice-ws.
 - **OCI API / GCP:** local CLI config; CI uses GitHub secrets — see [CI](ci-github-actions.md).
 
