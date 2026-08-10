@@ -84,7 +84,6 @@ deploy_backend() {
     --image="$BACKEND_IMAGE" \
     --region="$REGION" \
     --platform=managed \
-    --allow-unauthenticated \
     --port=8000 \
     --memory=1Gi \
     --cpu=1 \
@@ -115,7 +114,6 @@ deploy_frontend() {
     --image="$FRONTEND_IMAGE" \
     --region="$REGION" \
     --platform=managed \
-    --allow-unauthenticated \
     --port=3000 \
     --memory=512Mi \
     --cpu=1 \

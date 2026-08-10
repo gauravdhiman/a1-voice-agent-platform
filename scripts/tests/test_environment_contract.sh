@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 assert_contains() {
   local file="$1"
   local expected="$2"
-  if ! grep -Fq "$expected" "$file"; then
+  if ! grep -Fq -- "$expected" "$file"; then
     echo "Expected $file to contain: $expected" >&2
     exit 1
   fi
@@ -16,7 +16,7 @@ assert_contains() {
 assert_not_contains() {
   local file="$1"
   local unexpected="$2"
-  if grep -Fq "$unexpected" "$file"; then
+  if grep -Fq -- "$unexpected" "$file"; then
     echo "Expected $file not to contain: $unexpected" >&2
     exit 1
   fi
@@ -56,6 +56,7 @@ assert_contains "$ROOT/docker-compose.dev.yml" '${ENV_FILE:-.env.local}'
 assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet'
+assert_not_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--allow-unauthenticated'
 
 for compose_file in docker-compose.dev.yml docker-compose.yml; do
   assert_contains "$ROOT/$compose_file" 'VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}'
