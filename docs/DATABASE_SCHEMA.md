@@ -713,7 +713,7 @@ Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan
 
 | Table | Purpose |
 | ----- | ------- |
-| `plan_products` | Plan families (`starter`, `growth`) — marketing identity |
+| `plan_products` | Plan families (`starter`, `growth`) — marketing identity; `sort_order` is the customer-facing tier rank and does not restrict transitions |
 | `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price |
 | `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
 | `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB) |

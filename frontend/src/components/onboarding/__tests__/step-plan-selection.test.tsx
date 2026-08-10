@@ -21,6 +21,7 @@ vi.mock("sonner", () => ({
 const freePlan: CustomerPlanVersion = {
   id: "version-free",
   plan_product_id: "product-free",
+  tier_rank: 0,
   product_slug: "free",
   product_name: "Free",
   product_description: "Explore the platform",
@@ -42,6 +43,7 @@ const paidPlan: CustomerPlanVersion = {
   ...freePlan,
   id: "version-paid",
   plan_product_id: "product-paid",
+  tier_rank: 20,
   product_slug: "growth",
   product_name: "Growth",
   display_label: "Growth",

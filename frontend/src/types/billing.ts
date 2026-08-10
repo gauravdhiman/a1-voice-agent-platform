@@ -111,6 +111,8 @@ export interface OrganizationSubscriptionCreate {
 export interface CustomerPlanVersion {
   id: string;
   plan_product_id: string;
+  /** Catalog display order; does not determine whether a target is eligible. */
+  tier_rank: number;
   product_slug: string;
   product_name: string;
   product_description: string | null;
@@ -124,6 +126,29 @@ export interface CustomerPlanVersion {
   trial_period_days: number | null;
   stripe_price_id: string | null;
   entitlements: Record<string, Record<string, unknown>>;
+}
+
+export type PlanChangeEffectiveMode = "checkout" | "immediate" | "period_end";
+
+export interface PlanChangePreview {
+  transition_id: string;
+  organization_id: string;
+  current_plan: CustomerPlanVersion;
+  target_plan: CustomerPlanVersion;
+  effective_mode: PlanChangeEffectiveMode;
+  effective_at: string | null;
+  price_delta_cents: number;
+  credit_delta: number | null;
+  proration_behavior: string;
+  purchased_credits_preserved: boolean;
+}
+
+export interface PlanChangeConfirmationResponse {
+  status: "checkout_pending" | "applied" | "scheduled";
+  target_plan_version_id: string;
+  effective_at: string | null;
+  checkout_url?: string | null;
+  session_id?: string | null;
 }
 
 /** Subscription row returned after a versioned free activation. */

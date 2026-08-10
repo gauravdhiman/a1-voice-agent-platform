@@ -16,7 +16,6 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse
-
 from src.auth.dependencies import (
     assert_billing_access,
     assert_platform_role,
@@ -52,6 +51,10 @@ from src.billing.versioned_subscription_models import (
     CustomerPlanVersion,
     FreePlanActivationRequest,
     FreePlanActivationResponse,
+    PlanChangeConfirmationResponse,
+    PlanChangeConfirmRequest,
+    PlanChangePreview,
+    PlanChangePreviewRequest,
     SubscriptionActivationStatus,
     VersionedSubscriptionCheckoutRequest,
     VersionedSubscriptionCheckoutResponse,
@@ -218,6 +221,66 @@ async def create_versioned_subscription_checkout(
         logger.error("Error creating versioned subscription checkout: %s", e)
         raise HTTPException(
             status_code=500, detail="Failed to create subscription checkout"
+        ) from e
+
+
+@router.post(
+    "/subscription/plan-change/preview",
+    response_model=PlanChangePreview,
+)
+async def preview_plan_change(
+    request: PlanChangePreviewRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Return a read-only explanation of a target plan transition."""
+    try:
+        _, user_profile = user_auth
+        assert_billing_access(
+            user_profile,
+            request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+        return await versioned_subscription_service.preview_plan_change(
+            request.organization_id, request.target_plan_version_id
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error previewing plan change: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to preview plan change"
+        ) from e
+
+
+@router.post(
+    "/subscription/plan-change/confirm",
+    response_model=PlanChangeConfirmationResponse,
+)
+async def confirm_plan_change(
+    request: PlanChangeConfirmRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Apply a confirmed plan transition through Stripe and local state."""
+    try:
+        _, user_profile = user_auth
+        assert_billing_access(
+            user_profile,
+            request.organization_id,
+            error_message="Insufficient permissions for billing operations in this organization",
+        )
+        return await versioned_subscription_service.confirm_plan_change(
+            request, customer_email=user_profile.email
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error confirming plan change: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to confirm plan change"
         ) from e
 
 

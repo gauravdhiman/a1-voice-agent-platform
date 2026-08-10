@@ -1,9 +1,11 @@
 # Payment Flow Implementation
 
 This document describes the payment flows currently implemented for 24x7 AI.
-The original billing dashboard flow remains available for post-onboarding billing
-management and credit purchases. New founder signup uses the versioned,
-subscription-aware onboarding flow documented below.
+The organization billing page and founder signup use the same versioned,
+subscription-aware customer catalog documented below. The original flat
+`subscription_plans` checkout remains available only as a compatibility path
+for grandfathered records and webhook fallback handling; it is not used to
+render or start new customer subscriptions.
 
 > **Current source of truth:** [Subscription-Aware Onboarding and Credit Policy](../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 > defines the decisions. This page is an implementation reference; it should
@@ -29,6 +31,8 @@ The versioned customer endpoints are:
 - `GET /api/v1/billing/plans/available`
 - `POST /api/v1/billing/subscription/free`
 - `POST /api/v1/billing/checkout/versioned-subscription`
+- `POST /api/v1/billing/subscription/plan-change/preview`
+- `POST /api/v1/billing/subscription/plan-change/confirm`
 - `GET /api/v1/billing/subscription/status/{organization_id}`
 - `POST /api/v1/organizations/{organization_id}/complete-onboarding`
 
@@ -36,7 +40,9 @@ Free activation requires a published version with `billing_mode = free` and
 stores null Stripe identifiers. Paid checkout requires `billing_mode = paid`
 and a Stripe Price. The authenticated user's email is used for the Stripe
 customer. A successful browser return is not payment confirmation; the UI waits
-for the webhook-backed activation status.
+for the webhook-backed activation status. Active subscriptions use the
+plan-change preview/confirm pair so a target internal plan is validated before
+Stripe is changed.
 
 ## 🚀 What Was Implemented
 
@@ -50,10 +56,12 @@ for the webhook-backed activation status.
 - `POST /api/v1/billing/subscription/portal` - Stripe Customer Portal session
 - `POST /api/v1/billing/subscription/cancel` - Cancel at period end
 - `POST /api/v1/billing/subscription/reactivate` - Reactivate before period end
+- `POST /api/v1/billing/subscription/plan-change/preview` - Preview an internal plan transition
+- `POST /api/v1/billing/subscription/plan-change/confirm` - Confirm an internal plan transition
 
-The older non-versioned subscription checkout endpoints remain for the existing
-billing dashboard compatibility path. Do not use them for founder plan
-selection; new signup must use the versioned endpoints above.
+The older non-versioned subscription checkout endpoints remain for grandfathered
+legacy records and webhook fallback handling. The organization billing page and
+new signup must use the versioned endpoints above.
 
 #### 2. **Enhanced Stripe Service** (`backend/src/billing/stripe_service.py`)
 
@@ -78,11 +86,14 @@ selection; new signup must use the versioned endpoints above.
 
 #### 1. **Plan Selection Component** (`frontend/src/components/billing/plan-selection.tsx`)
 
-- Beautiful plan comparison cards
+- Loads published internal `plan_products`/`plan_versions` through
+  `GET /api/v1/billing/plans/available`
+- Displays entitlements authored in the platform catalog
 - Monthly vs Annual plan separation
-- Trial period highlighting
-- Popular plan badges
-- Direct Stripe Checkout integration
+- Tier-rank ordering with current-plan highlighting and unrestricted eligible target selection
+- Preview dialog showing effective timing, proration, price/credit deltas, and purchased-credit preservation
+- Trial period metadata when supplied by the catalog
+- Free activation or backend-created Stripe Checkout for paid versions
 
 #### 2. **Credit Purchase Component** (`frontend/src/components/billing/credit-purchase.tsx`)
 
@@ -90,10 +101,12 @@ selection; new signup must use the versioned endpoints above.
 - Best value highlighting
 - Cost per credit calculation
 - Usage tips and guidance
+- Optional navigation focus when opened from the Overview tab's Buy credits action
 
 #### 3. **Subscription Management** (`frontend/src/components/billing/subscription-management.tsx`)
 
 - Current subscription overview
+- Overview-level Change plan action
 - Cancellation/reactivation controls
 - Customer Portal integration
 - Billing date information
@@ -101,7 +114,9 @@ selection; new signup must use the versioned endpoints above.
 
 #### 4. **Enhanced Billing Service** (`frontend/src/services/billing-service.ts`)
 
-- `createSubscriptionCheckout()` - Initiates subscription purchase
+- `getAvailablePlanVersions()` - Loads the internal published plan catalog
+- `activateFreePlan()` - Activates a free internal plan without Stripe
+- `createVersionedSubscriptionCheckout()` - Resolves the internal version to its Stripe Price
 - `createCreditsCheckout()` - Initiates credit purchase
 - `cancelSubscription()` - Cancels subscription
 - `reactivateSubscription()` - Reactivates subscription
@@ -111,11 +126,13 @@ selection; new signup must use the versioned endpoints above.
 - `/billing/success` - Payment success confirmation
 - `/billing/cancel` - Payment cancellation handling
 
-#### 6. **Updated Main Billing Page** (`frontend/src/app/(dashboard)/billing/page.tsx`)
+#### 6. **Updated Main Billing Page** (`frontend/src/app/(dashboard)/organization/billing/page.tsx`)
 
 - Integrated all new components
-- Tabbed interface (Manage, Plans, Credits); the redundant Overview tab was
-  removed because the page summary cards already expose those details
+- Tabbed interface (Overview, Plans, Credits); Overview contains the current
+  subscription controls plus Change plan and Buy credits actions
+- Credits tab renders the balance summary first, credit purchase packages second,
+  and detailed usage and the full ledger after the purchase action
 - Free subscriptions do not open Stripe Customer Portal because they have no
   Stripe customer; the UI explains this inline and the API rejects portal
   requests with a clear conflict response
@@ -136,15 +153,17 @@ onboarding completion guard → dashboard
 ### 2. **Post-Onboarding Billing Flow**
 
 ```
-User visits /billing → Views plan/credit management →
-Uses Stripe Checkout or Customer Portal → webhook updates billing state →
+User visits /organization/billing → Views internal plan/credit management →
+Selects a published internal plan version → free activation or backend-created
+Stripe Checkout → webhook updates billing state →
 Billing UI refreshes subscription and credit balances
 ```
 
 ### 3. **Credit Purchase Flow**
 
 ```
-User visits /billing → Credits tab → Selects credit package →
+User visits /billing → Overview Buy credits action or Credits tab →
+Selects credit package →
 Redirected to Stripe Checkout → Completes payment →
 Credits added to account → Success confirmation
 ```
@@ -152,7 +171,7 @@ Credits added to account → Success confirmation
 ### 4. **Subscription Management Flow**
 
 ```
-User with active subscription → Manage tab →
+User with active subscription → Overview tab →
 Can cancel/reactivate → Access Customer Portal →
 Self-service billing management
 ```

@@ -6,10 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-
 from src.billing.plan_version_models import BillingMode
+from src.billing.stripe_service import StripeService
 from src.billing.versioned_subscription_models import (
     FreePlanActivationRequest,
+    PlanChangeConfirmRequest,
+    PlanChangePreviewRequest,
     SubscriptionActivationState,
     VersionedSubscriptionCheckoutRequest,
 )
@@ -76,14 +78,14 @@ def _paid_version():
         **_free_version(),
         "id": str(PAID_VERSION_ID),
         "plan_product_id": "00000000-0000-0000-0000-000000000106",
-        "display_label": "Growth",
+        "display_label": "Starter",
         "billing_mode": "paid",
         "price_amount_cents": 2900,
         "stripe_product_id": "prod_growth",
         "stripe_price_id": "price_growth",
         "plan_products": {
-            "slug": "growth",
-            "display_name": "Growth",
+            "slug": "starter",
+            "display_name": "Starter",
             "description": "For growing teams",
             "sort_order": 10,
         },
@@ -117,6 +119,8 @@ class TestVersionedSubscriptionService:
 
         assert [plan.id for plan in result] == [FREE_VERSION_ID, PAID_VERSION_ID]
         assert result[0].billing_mode is BillingMode.FREE
+        assert result[0].tier_rank == 0
+        assert result[1].tier_rank == 10
         assert result[0].stripe_price_id is None
         assert result[0].entitlements["included_credits_monthly"]["value"] == 100
 
@@ -159,6 +163,23 @@ class TestVersionedSubscriptionService:
         assert payload["stripe_customer_id"] is None
         stripe.create_customer.assert_not_called()
         service.credit_grant_service.grant_for_subscription.assert_awaited_once()
+
+    def test_legacy_tier_slug_repairs_default_catalog_rank(self):
+        """Known legacy slugs still render in the intended tier order."""
+        service = VersionedSubscriptionService()
+        legacy_enterprise = {
+            **_paid_version(),
+            "plan_products": {
+                "slug": "enterprise-plan-month",
+                "display_name": "Enterprise Plan:Month",
+                "description": "For enterprise teams",
+                "sort_order": 10,
+            },
+        }
+
+        result = service._to_customer_plan_version(legacy_enterprise, {})
+
+        assert result.tier_rank == 30
 
     @pytest.mark.asyncio
     async def test_free_activation_is_idempotent_for_same_active_version(self):
@@ -256,6 +277,148 @@ class TestVersionedSubscriptionService:
                 customer_email="owner@erp-cosmos.com",
             )
 
+
+class TestStripePlanChanges:
+    """Tests for Stripe-backed subscription plan transitions."""
+
+    @pytest.mark.asyncio
+    async def test_period_end_price_change_starts_target_phase_at_renewal(self):
+        """A scheduled price change must join phases at the current period end."""
+        service = StripeService()
+        subscription = {
+            "id": "sub_growth",
+            "current_period_end": 1_800_000_000,
+            "items": {
+                "data": [
+                    {
+                        "id": "si_growth",
+                        "price": {"id": "price_growth"},
+                    }
+                ]
+            },
+        }
+        schedule = MagicMock()
+        schedule.id = "sched_growth"
+        schedule.get.side_effect = lambda key, default=None: {
+            "phases": [
+                {
+                    "items": [{"price": {"id": "price_growth"}}],
+                    "end_date": 1_800_000_000,
+                }
+            ]
+        }.get(key, default)
+
+        with patch("src.billing.stripe_service.stripe") as stripe:
+            stripe.Subscription.retrieve.return_value = subscription
+            stripe.SubscriptionSchedule.create.return_value = schedule
+
+            await service.change_subscription_price(
+                "sub_growth",
+                "price_pro",
+                at_period_end=True,
+            )
+
+        stripe.SubscriptionSchedule.modify.assert_called_once()
+        phases = stripe.SubscriptionSchedule.modify.call_args.kwargs["phases"]
+        assert phases[0]["end_date"] == 1_800_000_000
+        assert phases[1]["start_date"] == 1_800_000_000
+        assert phases[1]["items"][0]["price"] == "price_pro"
+
+    @pytest.mark.asyncio
+    async def test_plan_change_preview_uses_catalog_rank_for_timing(self):
+        """A higher-ranked target is previewed as an immediate upgrade."""
+        service = VersionedSubscriptionService()
+        current = service._to_customer_plan_version(_paid_version(), {})
+        target_row = {
+            **_paid_version(),
+            "id": str(UUID("00000000-0000-0000-0000-000000000107")),
+            "plan_version_id": None,
+            "price_amount_cents": 9900,
+            "stripe_price_id": "price_pro",
+            "plan_products": {
+                "slug": "pro",
+                "display_name": "Pro",
+                "description": "For larger teams",
+                "sort_order": 20,
+            },
+        }
+        target = service._to_customer_plan_version(target_row, {})
+        service._get_existing_subscription = AsyncMock(
+            return_value={
+                "id": str(SUBSCRIPTION_ID),
+                "organization_id": str(ORG_ID),
+                "plan_version_id": str(PAID_VERSION_ID),
+                "stripe_subscription_id": "sub_acme",
+                "status": "active",
+                "current_period_end": "2026-09-01T00:00:00+00:00",
+            }
+        )
+        service._get_customer_plan_version = AsyncMock(side_effect=[current, target])
+
+        result = await service.preview_plan_change(
+            ORG_ID, UUID("00000000-0000-0000-0000-000000000107")
+        )
+
+        assert result.current_plan.tier_rank == 10
+        assert result.target_plan.tier_rank == 20
+        assert result.effective_mode.value == "immediate"
+        assert result.proration_behavior == "create_prorations"
+
+    @pytest.mark.asyncio
+    async def test_confirm_plan_change_updates_local_version_after_stripe_success(self):
+        """An immediate paid change updates local state only after Stripe succeeds."""
+        service = VersionedSubscriptionService()
+        current = service._to_customer_plan_version(_paid_version(), {})
+        target_row = {
+            **_paid_version(),
+            "id": str(UUID("00000000-0000-0000-0000-000000000107")),
+            "price_amount_cents": 9900,
+            "stripe_price_id": "price_pro",
+            "plan_products": {
+                "slug": "pro",
+                "display_name": "Pro",
+                "description": "For larger teams",
+                "sort_order": 20,
+            },
+        }
+        target = service._to_customer_plan_version(target_row, {})
+        existing = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "plan_version_id": str(PAID_VERSION_ID),
+            "stripe_subscription_id": "sub_acme",
+            "status": "active",
+            "metadata": {"billing_mode": "paid"},
+        }
+        service._get_existing_subscription = AsyncMock(return_value=existing)
+        service._get_customer_plan_version = AsyncMock(side_effect=[current, target])
+        service.supabase = MagicMock()
+        updates = _query([])
+        service.supabase.table.return_value = updates
+
+        with patch(
+            "src.billing.versioned_subscription_service.stripe_service"
+        ) as stripe:
+            stripe.change_subscription_price = AsyncMock()
+            result = await service.confirm_plan_change(
+                PlanChangeConfirmRequest(
+                    organization_id=ORG_ID,
+                    transition_id=UUID("00000000-0000-0000-0000-000000000108"),
+                    target_plan_version_id=UUID("00000000-0000-0000-0000-000000000107"),
+                ),
+                customer_email="owner@example.com",
+            )
+
+        assert result.status == "applied"
+        stripe.change_subscription_price.assert_awaited_once_with(
+            "sub_acme",
+            "price_pro",
+            proration_behavior="create_prorations",
+        )
+        assert updates.update.call_args.args[0]["plan_version_id"] == str(
+            UUID("00000000-0000-0000-0000-000000000107")
+        )
+
     @pytest.mark.asyncio
     async def test_status_is_unselected_without_subscription(self):
         """Organizations without a plan have an explicit onboarding state."""
@@ -275,7 +438,6 @@ class TestVersionedSubscriptionRoutes:
     async def test_free_activation_requires_billing_access(self):
         """A user without org billing access cannot activate a plan."""
         from fastapi import HTTPException
-
         from src.billing.routes import activate_free_plan
 
         request = FreePlanActivationRequest(
@@ -299,7 +461,6 @@ class TestVersionedSubscriptionRoutes:
     async def test_paid_checkout_maps_catalog_validation_to_bad_request(self):
         """Catalog validation errors are returned as a client-facing 400."""
         from fastapi import HTTPException
-
         from src.billing.routes import create_versioned_subscription_checkout
 
         request = VersionedSubscriptionCheckoutRequest(
@@ -324,5 +485,54 @@ class TestVersionedSubscriptionRoutes:
         assert exc_info.value.status_code == 400
         assert "Stripe Price" in exc_info.value.detail
         service.create_paid_checkout.assert_awaited_once_with(
+            request, customer_email="owner@erp-cosmos.com"
+        )
+
+    @pytest.mark.asyncio
+    async def test_plan_change_preview_requires_billing_access(self):
+        """Plan previews cannot disclose billing details without org access."""
+        from fastapi import HTTPException
+        from src.billing.routes import preview_plan_change
+
+        request = PlanChangePreviewRequest(
+            organization_id=ORG_ID,
+            target_plan_version_id=PAID_VERSION_ID,
+        )
+        with (
+            patch(
+                "src.billing.routes.assert_billing_access",
+                side_effect=HTTPException(status_code=403, detail="forbidden"),
+            ),
+            patch("src.billing.routes.versioned_subscription_service") as service,
+        ):
+            service.preview_plan_change = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await preview_plan_change(request, (UUID(int=1), MagicMock()))
+
+        assert exc_info.value.status_code == 403
+        service.preview_plan_change.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_plan_change_confirmation_passes_authenticated_email(self):
+        """Confirmation uses the authenticated profile for Checkout identity."""
+        from src.billing.routes import confirm_plan_change
+
+        request = PlanChangeConfirmRequest(
+            organization_id=ORG_ID,
+            transition_id=UUID("00000000-0000-0000-0000-000000000108"),
+            target_plan_version_id=PAID_VERSION_ID,
+        )
+        response = {"status": "scheduled", "target_plan_version_id": PAID_VERSION_ID}
+        profile = MagicMock(email="owner@erp-cosmos.com")
+        with (
+            patch("src.billing.routes.assert_billing_access"),
+            patch("src.billing.routes.versioned_subscription_service") as service,
+        ):
+            service.confirm_plan_change = AsyncMock(return_value=response)
+
+            result = await confirm_plan_change(request, (UUID(int=1), profile))
+
+        assert result == response
+        service.confirm_plan_change.assert_awaited_once_with(
             request, customer_email="owner@erp-cosmos.com"
         )

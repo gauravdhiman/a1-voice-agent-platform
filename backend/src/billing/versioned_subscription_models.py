@@ -1,5 +1,6 @@
 """API models for immutable plan selection and subscription activation."""
 
+from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
@@ -26,6 +27,11 @@ class CustomerPlanVersion(BaseModel):
 
     id: UUID
     plan_product_id: UUID
+    tier_rank: int = Field(
+        default=0,
+        ge=0,
+        description="Customer-facing catalog position; it never restricts eligibility",
+    )
     product_slug: str
     product_name: str
     product_description: Optional[str] = None
@@ -85,6 +91,56 @@ class VersionedSubscriptionCheckoutResponse(BaseModel):
     checkout_url: str
     session_id: str
     plan_version_id: UUID
+
+
+class PlanChangeEffectiveMode(str, Enum):
+    """When a confirmed plan transition becomes effective."""
+
+    CHECKOUT = "checkout"
+    IMMEDIATE = "immediate"
+    PERIOD_END = "period_end"
+
+
+class PlanChangePreviewRequest(BaseModel):
+    """Request a read-only preview for a published target plan version."""
+
+    organization_id: UUID
+    target_plan_version_id: UUID
+
+
+class PlanChangePreview(BaseModel):
+    """Customer-safe explanation of the consequences of a plan change."""
+
+    transition_id: UUID
+    organization_id: UUID
+    current_plan: CustomerPlanVersion
+    target_plan: CustomerPlanVersion
+    effective_mode: PlanChangeEffectiveMode
+    effective_at: Optional[datetime] = None
+    price_delta_cents: int
+    credit_delta: Optional[int] = None
+    proration_behavior: str
+    purchased_credits_preserved: bool = True
+
+
+class PlanChangeConfirmRequest(BaseModel):
+    """Confirm a previously previewed plan change."""
+
+    organization_id: UUID
+    transition_id: UUID
+    target_plan_version_id: UUID
+    success_url: Optional[str] = None
+    cancel_url: Optional[str] = None
+
+
+class PlanChangeConfirmationResponse(BaseModel):
+    """Result of applying or scheduling a confirmed plan change."""
+
+    status: str
+    target_plan_version_id: UUID
+    effective_at: Optional[datetime] = None
+    checkout_url: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class SubscriptionActivationStatus(BaseModel):

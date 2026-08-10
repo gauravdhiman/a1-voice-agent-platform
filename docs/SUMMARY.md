@@ -66,6 +66,7 @@ Comprehensive documentation organized by feature.
 5. **[ADR: Subscription-Aware Onboarding and Credit Policy](01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)** - Founder onboarding, explicit free/paid activation, credit policies, and implementation boundary
 6. **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
 7. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
+8. **[Billing Plan Management and Credit Purchase UX](03_implementation/billing_plan_management_ux.md)** - Plan changes, transition previews, cancellation, and credit purchases
 ### 05_operations/ - Operations
 
 #### Deployment (production — 247ai.live)

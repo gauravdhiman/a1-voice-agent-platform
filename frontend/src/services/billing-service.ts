@@ -24,12 +24,22 @@ import type {
   SubscriptionActivationStatus,
   VersionedSubscriptionCheckoutRequest,
   VersionedSubscriptionCheckoutResponse,
+  PlanChangePreview,
+  PlanChangeConfirmationResponse,
 } from "@/types/billing";
 
 class BillingService {
   private baseUrl = "/api/v1/billing";
 
   // Subscription Plans
+  /**
+   * Fetches the legacy flat subscription catalog.
+   *
+   * @deprecated Customer-facing plan selection must use
+   * `getAvailablePlanVersions`, which resolves platform plan products and
+   * immutable versions. This method remains for compatibility with legacy
+   * records and webhook fallback handling.
+   */
   async getSubscriptionPlans(
     activeOnly: boolean = true,
   ): Promise<SubscriptionPlan[]> {
@@ -101,6 +111,43 @@ class BillingService {
         `${this.baseUrl}/checkout/versioned-subscription`,
         request,
       );
+    return response.data;
+  }
+
+  /**
+   * Previews an active subscription transition without mutating billing state.
+   *
+   * @param organizationId Organization whose subscription is changing
+   * @param targetPlanVersionId Published internal target version
+   */
+  async previewPlanChange(
+    organizationId: string,
+    targetPlanVersionId: string,
+  ): Promise<PlanChangePreview> {
+    const response = await apiClient.post<PlanChangePreview>(
+      `${this.baseUrl}/subscription/plan-change/preview`,
+      {
+        organization_id: organizationId,
+        target_plan_version_id: targetPlanVersionId,
+      },
+    );
+    return response.data;
+  }
+
+  /**
+   * Confirms a previewed plan transition after the user reviews its effects.
+   */
+  async confirmPlanChange(request: {
+    organization_id: string;
+    transition_id: string;
+    target_plan_version_id: string;
+    success_url?: string;
+    cancel_url?: string;
+  }): Promise<PlanChangeConfirmationResponse> {
+    const response = await apiClient.post<PlanChangeConfirmationResponse>(
+      `${this.baseUrl}/subscription/plan-change/confirm`,
+      request,
+    );
     return response.data;
   }
 
@@ -410,6 +457,12 @@ class BillingService {
   }
 
   // Checkout and payment methods
+  /**
+   * Starts the legacy flat-plan checkout flow.
+   *
+   * @deprecated Use `createVersionedSubscriptionCheckout` so the backend
+   * resolves the Stripe Price from the selected internal plan version.
+   */
   async createSubscriptionCheckout(
     planId: string,
     organizationId: string,
