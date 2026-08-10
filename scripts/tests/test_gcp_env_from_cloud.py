@@ -72,6 +72,21 @@ class GcpEnvironmentGenerationTests(unittest.TestCase):
                 }
             )
 
+    def test_cors_origins_is_emitted_as_valid_json_string(self) -> None:
+        """Cloud Run must receive JSON, even when the source list is loosely formatted."""
+        for source_value in (
+            '["https://www.247ai.live"]',
+            "[https://www.247ai.live]",
+        ):
+            rendered = gcp_env.to_yaml(
+                {"CORS_ORIGINS": source_value},
+                {"CORS_ORIGINS"},
+            )
+            self.assertIn(
+                "CORS_ORIGINS: '[\"https://www.247ai.live\"]'",
+                rendered,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ the OCI VM (Pipecat WebSocket worker). Both read from the same ``.env.prod``.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -53,6 +54,40 @@ def validate_recording_configuration(env: dict[str, str]) -> None:
         raise ValueError(
             "enabled R2 recording requires: " + ", ".join(missing)
         )
+
+
+def normalize_cors_origins(value: str) -> str:
+    """Normalize CORS origins to the JSON string expected by Pydantic settings.
+
+    GitHub multiline environment secrets can contain either a valid JSON list
+    or a loosely formatted bracketed list. Cloud Run must receive the list as
+    a string containing quoted JSON values, so normalize both forms before
+    rendering the deployment environment file.
+
+    Args:
+        value: Raw CORS_ORIGINS value from the deployment environment file.
+
+    Returns:
+        A JSON-encoded list when the value is a list, otherwise the original
+        value unchanged.
+    """
+    stripped = value.strip()
+    if not (stripped.startswith("[") and stripped.endswith("]")):
+        return value
+
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        items = [
+            item.strip().strip("\\\"'")
+            for item in stripped[1:-1].split(",")
+            if item.strip()
+        ]
+        return json.dumps(items)
+
+    if isinstance(parsed, list):
+        return json.dumps(parsed)
+    return value
 
 
 # Recording configuration must be available to both the backend (playback and
@@ -146,7 +181,11 @@ def to_yaml(env: dict[str, str], keys: set[str]) -> str:
         if key not in env or env[key] == "":
             continue
         value = env[key].replace('"', '\\"')
-        lines.append(f'{key}: "{value}"')
+        if key == "CORS_ORIGINS":
+            value = normalize_cors_origins(env[key]).replace("'", "''")
+            lines.append(f"{key}: '{value}'")
+        else:
+            lines.append(f'{key}: "{value}"')
     # Cloud Run backend/worker use /app with shared module
     if "PYTHONPATH" in keys and "PYTHONPATH" not in env:
         lines.append('PYTHONPATH: "/app"')
