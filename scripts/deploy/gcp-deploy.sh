@@ -31,6 +31,9 @@ case "$COMPONENT" in
 esac
 
 gcloud config set project "$PROJECT_ID" >/dev/null
+# The GitHub Actions auth step provides gcloud credentials, but Docker does not
+# use them until the Artifact Registry credential helper is configured.
+gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null
 
 read_env() {
   python3 - "$1" "$ENV_FILE" <<'PY'
