@@ -40,12 +40,25 @@ jobs:
   deploy-voice-ws:
     runs-on: ubuntu-latest
     needs: deploy-gcp
-    # Skips when the VM SSH private key is not configured in repo secrets.
-    if: ${{ secrets.OCI_SSH_KEY != '' }}
     steps:
+      - name: Check OCI SSH configuration
+        id: check-oci-ssh-key
+        env:
+          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+        shell: bash
+        run: |
+          if [[ -n "${OCI_SSH_KEY:-}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "OCI_SSH_KEY is not configured; skipping voice-ws deployment."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.check-oci-ssh-key.outputs.configured == 'true'
 
       - name: Prepare .env.prod and SSH key
+        if: steps.check-oci-ssh-key.outputs.configured == 'true'
         run: |
           printf '%s\n' "${{ secrets.ENV_PROD }}" > .env.prod
           mkdir -p ~/.ssh
@@ -53,6 +66,7 @@ jobs:
           chmod 600 ~/.ssh/oci_voice_ws
 
       - name: Deploy voice-ws to OCI VM
+        if: steps.check-oci-ssh-key.outputs.configured == 'true'
         env:
           OCI_SSH_KEY: ~/.ssh/oci_voice_ws
         run: |

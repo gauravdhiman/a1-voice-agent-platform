@@ -71,6 +71,12 @@ assert_contains "$ROOT/.env.staging.example" 'RECORDING_R2_BUCKET=247ai-call-rec
 assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_ENDPOINT=https://e168c1bca6abb23e49bae87a6a8ea38b.r2.cloudflarestorage.com'
 assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-production'
 
+workflow="$ROOT/.github/workflows/deploy-cloud.yml"
+assert_not_contains "$workflow" 'if: ${{ secrets.OCI_SSH_KEY != '\'''\'' }}'
+assert_contains "$workflow" 'id: check-oci-ssh-key'
+assert_contains "$workflow" 'OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}'
+assert_contains "$workflow" 'if: steps.check-oci-ssh-key.outputs.configured == '\''true'\'''
+
 # The startup guide must describe selection, never copy-to-.env switching.
 assert_contains "$ROOT/README_STARTUP.md" './start.sh start dev --env staging'
 assert_contains "$ROOT/README_STARTUP.md" './start.sh config --env staging'
