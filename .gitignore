@@ -110,6 +110,8 @@ npm-debug.log*
 out/
 parts/
 sdist/
+temp/
+tmp/
 Thumbs.db
 var/
 venv/

@@ -46,6 +46,7 @@ Comprehensive documentation organized by feature.
 4. **[voice-ws README](../voice-ws/README.md)** - Pipecat WebSocket voice voice-ws (browser + Twilio Media Streams)
 5. **[Shared Module README](../shared/README.md)** - Shared code for backend and voice-ws
 6. **[Outbound phone calls](03_implementation/outbound_phone_calls.md)** - Planned outbound PSTN design (reuses Media Streams)
+7. **[Call transfer to a human](03_implementation/call_transfer_to_human.md)** - AI routes calls to human agents; silent-monitor + single-call recording design
 7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 9. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
