@@ -18,7 +18,7 @@ OCI_USER="${OCI_SSH_USER:-ubuntu}"
 SSH_KEY="${OCI_SSH_KEY:-${HOME}/.ssh/oci_voice_ws}"
 # Expand leading ~ (env vars from .bashrc often keep a literal tilde).
 if [[ "$SSH_KEY" == "~/"* ]]; then
-  SSH_KEY="${HOME}/${SSH_KEY#~/}"
+  SSH_KEY="${HOME}/${SSH_KEY#\~/}"
 elif [[ "$SSH_KEY" == "~" ]]; then
   SSH_KEY="$HOME"
 fi

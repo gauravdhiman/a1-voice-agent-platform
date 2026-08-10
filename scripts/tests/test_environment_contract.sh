@@ -57,6 +57,7 @@ assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet'
 assert_not_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--allow-unauthenticated'
+assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'SSH_KEY="${HOME}/${SSH_KEY#\~/}"'
 
 for compose_file in docker-compose.dev.yml docker-compose.yml; do
   assert_contains "$ROOT/$compose_file" 'VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}'
