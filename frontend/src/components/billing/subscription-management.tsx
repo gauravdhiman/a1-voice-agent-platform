@@ -17,10 +17,12 @@ import {
   Zap,
   AlertTriangle,
   CheckCircle,
+  Coins,
   ExternalLink,
   Settings,
   Loader2,
   Info,
+  ArrowRight,
 } from "lucide-react";
 import { billingService } from "@/services/billing-service";
 import { CancelSubscriptionDialog } from "@/components/billing/cancel-subscription-dialog";
@@ -40,19 +42,27 @@ interface SubscriptionManagementProps {
   organizationId: string;
   subscription: OrganizationSubscriptionWithPlan;
   onSubscriptionUpdated?: () => void;
+  /** Opens the internal plan catalog for any eligible plan change. */
+  onChangePlan?: () => void;
+  /** Opens the Credits tab at the purchase section. */
+  onBuyCredits?: () => void;
 }
 
 export function SubscriptionManagement({
   organizationId,
   subscription,
   onSubscriptionUpdated,
+  onChangePlan,
+  onBuyCredits,
 }: SubscriptionManagementProps) {
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
   const [reactivatingSubscription, setReactivatingSubscription] =
     useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [entitlements, setEntitlements] = useState<OrgEntitlements | null>(null);
+  const [entitlements, setEntitlements] = useState<OrgEntitlements | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +83,9 @@ export function SubscriptionManagement({
     billingService
       .getOrganizationEntitlements(organizationId)
       .then(setEntitlements)
-      .catch((error) => console.error("Failed to refresh entitlements:", error));
+      .catch((error) =>
+        console.error("Failed to refresh entitlements:", error),
+      );
   };
 
   const handleCancelSubscription = async () => {
@@ -175,8 +187,10 @@ export function SubscriptionManagement({
     subscription.status,
   );
   const isFreePlan = subscription.metadata?.billing_mode === "free";
-  const planName = subscription.plan?.name ?? (isFreePlan ? "Free plan" : "No plan");
-  const canManageBilling = Boolean(subscription.stripe_customer_id) && !isFreePlan;
+  const planName =
+    subscription.plan?.name ?? (isFreePlan ? "Free plan" : "No plan");
+  const canManageBilling =
+    Boolean(subscription.stripe_customer_id) && !isFreePlan;
 
   return (
     <div className="space-y-6">
@@ -217,36 +231,45 @@ export function SubscriptionManagement({
                 Manage your subscription plan and billing settings
               </CardDescription>
             </div>
-            {canManageBilling ? (
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      onClick={handleOpenCustomerPortal}
-                      disabled={openingPortal}
-                    >
-                      {openingPortal ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Settings className="w-4 h-4 mr-2" />
-                      )}
-                      Manage Billing
-                      <ExternalLink className="w-4 h-4 ml-2" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-sm">
-                    Open Stripe to update payment methods, invoices, billing
-                    address, or the subscription.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : isFreePlan ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Info className="h-4 w-4" />
-                <span>Free plan does not require a payment method.</span>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {onChangePlan ? (
+                <Button onClick={onChangePlan}>
+                  Change plan
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : null}
+              {onBuyCredits ? (
+                <Button variant="outline" onClick={onBuyCredits}>
+                  <Coins className="mr-2 h-4 w-4" />
+                  Buy credits
+                </Button>
+              ) : null}
+              {canManageBilling ? (
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        onClick={handleOpenCustomerPortal}
+                        disabled={openingPortal}
+                      >
+                        {openingPortal ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Settings className="w-4 h-4 mr-2" />
+                        )}
+                        Manage billing
+                        <ExternalLink className="w-4 h-4 ml-2" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-sm">
+                      Open Stripe to update payment methods, invoices, billing
+                      address, or the subscription.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : null}
+            </div>
           </div>
         </CardHeader>
 
@@ -350,17 +373,19 @@ export function SubscriptionManagement({
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
-            {isSubscriptionActive && !isSubscriptionCancelled && (
-              <Button
-                variant="outline"
-                onClick={handleCancelSubscription}
-                disabled={cancelingSubscription}
-                className="text-red-600 border-red-200 hover:bg-red-50"
-              >
-                <AlertTriangle className="w-4 h-4 mr-2" />
-                Cancel Subscription
-              </Button>
-            )}
+            {isSubscriptionActive &&
+              !isFreePlan &&
+              !isSubscriptionCancelled && (
+                <Button
+                  variant="outline"
+                  onClick={handleCancelSubscription}
+                  disabled={cancelingSubscription}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Cancel Subscription
+                </Button>
+              )}
 
             {isSubscriptionCancelled && (
               <Button
@@ -377,6 +402,13 @@ export function SubscriptionManagement({
               </Button>
             )}
           </div>
+
+          {isFreePlan ? (
+            <div className="flex items-center gap-2 border-t pt-4 text-xs text-muted-foreground">
+              <Info className="h-4 w-4" />
+              <span>No payment method required for the Free plan.</span>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

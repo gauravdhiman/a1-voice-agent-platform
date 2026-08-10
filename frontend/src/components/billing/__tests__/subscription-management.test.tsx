@@ -78,8 +78,34 @@ describe("SubscriptionManagement", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Payment & Billing")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/does not require a payment method/i),
+      screen.getByText(/no payment method required for the free plan/i),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /cancel subscription/i }),
+    ).not.toBeInTheDocument();
     expect(mocks.mockCreateCustomerPortal).not.toHaveBeenCalled();
+  });
+
+  it("offers separate plan and credit actions from the overview", async () => {
+    const onChangePlan = vi.fn();
+    const onBuyCredits = vi.fn();
+
+    render(
+      <SubscriptionManagement
+        organizationId="org-1"
+        subscription={freeSubscription}
+        onChangePlan={onChangePlan}
+        onBuyCredits={onBuyCredits}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /change plan/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /buy credits/i }),
+      ).toBeInTheDocument();
+    });
   });
 });

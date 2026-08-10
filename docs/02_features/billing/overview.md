@@ -35,14 +35,25 @@ are future scope, not current billing behavior. See [Subscription-Aware
 Onboarding and Credit Policy](../../01_architecture/ADR_SUBSCRIPTION_AWARE_ONBOARDING_AND_CREDIT_POLICY.md)
 for the complete decision record.
 
-The organization billing page is organized around three tasks: `Manage` (shown
-first for active subscriptions), `Plans`, and `Credits`. The duplicate
-`Overview` tab was removed because the summary cards already show the current
-plan, balance, and billing date. Free subscriptions are valid active
-subscriptions but intentionally have no Stripe customer or billing portal;
-the page shows that state explicitly instead of offering a failing Stripe
-action. Paid subscriptions keep the Stripe portal action, with its scope
-explained in a tooltip.
+The organization billing page is organized around three tasks: `Overview` (shown
+first for active subscriptions), `Plans`, and `Credits`. The `Plans` tab reads
+the published `plan_products`/`plan_versions` customer catalog, displays
+platform entitlements, sorts cards by the catalog `tier_rank`, and submits the
+selected internal version to the backend. The Overview tab exposes a Change
+plan action; selecting a different plan opens a preview before any billing
+mutation. For paid versions the backend uses that version's mapped Stripe Price
+to create Checkout; the browser does not select Stripe products directly. The
+old Manage surface is now the Overview tab. Free subscriptions
+are valid active subscriptions but intentionally have no Stripe customer,
+billing portal, or cancellation action; the page shows that state explicitly
+instead of offering a failing Stripe action. Paid subscriptions keep the Stripe
+portal action, with its scope explained in a tooltip.
+
+The Overview tab also provides a direct **Buy credits** action. It opens the
+Credits tab at the purchase packages, while the Credits tab itself is ordered
+for actionability: current balance summary first, credit packages next, and
+period usage, category totals, and the full ledger below. The full ledger stays
+available without pushing the purchase action below the initial viewport.
 
 ## What It Provides
 

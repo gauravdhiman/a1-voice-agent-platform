@@ -103,11 +103,7 @@ const { FIXTURE_ORG, OTHER_ORG } = mocks;
 
 function makeWrapper(queryClient: QueryClient) {
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      children,
-    );
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
 describe("/organization/billing page (N1 — fallback + page-level admin gate)", () => {
@@ -181,9 +177,7 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
 
     // The page header should be "Billing & Subscriptions".
     await waitFor(() => {
-      expect(
-        screen.getByText(/Billing & Subscriptions/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Billing & Subscriptions/i)).toBeInTheDocument();
     });
     expect(
       screen.queryByText(/organization id required/i),
@@ -231,9 +225,7 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
     render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/organization id required/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/organization id required/i)).toBeInTheDocument();
     });
   });
 
@@ -292,13 +284,11 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
     render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Billing & Subscriptions/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Billing & Subscriptions/i)).toBeInTheDocument();
     });
   });
 
-  it("orders the useful billing tabs first and removes the redundant overview tab", async () => {
+  it("orders the useful billing tabs with Overview first", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -307,16 +297,15 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
 
     await waitFor(() => {
       expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-        "Manage",
+        "Overview",
         "Plans",
         "Credits",
       ]);
     });
-    expect(screen.getByRole("tab", { name: "Manage" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
       "data-state",
       "active",
     );
-    expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
   });
 
   it("shows the active free plan instead of falling back to no plan", async () => {

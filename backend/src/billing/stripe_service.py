@@ -242,17 +242,19 @@ class StripeService:
         new_price_id: str,
         *,
         at_period_end: bool = False,
+        proration_behavior: str = "none",
     ) -> stripe.Subscription:
         """Swap the subscription line item to a new Stripe Price.
 
-        Used when migrating subscribers to a new plan version. When
-        ``at_period_end`` is True, the price change applies at the next billing
-        cycle with no proration.
+        Used when migrating subscribers to a new plan version. Immediate
+        changes use the requested Stripe proration behavior. Period-end
+        changes are scheduled through Stripe Subscription Schedules.
 
         Args:
             subscription_id: Stripe subscription ID.
             new_price_id: Target Stripe Price ID from the new plan version.
             at_period_end: If True, defer price change to next renewal.
+            proration_behavior: Stripe proration behavior for immediate changes.
 
         Returns:
             Updated Stripe Subscription object.
@@ -265,14 +267,52 @@ class StripeService:
                     f"Subscription {subscription_id} has no line items to update"
                 )
             item_id = items[0]["id"]
-            modify_params: dict[str, Any] = {
-                "items": [{"id": item_id, "price": new_price_id}],
-                "proration_behavior": "none",
-            }
             if at_period_end:
-                modify_params["billing_cycle_anchor"] = "unchanged"
-
-            updated = stripe.Subscription.modify(subscription_id, **modify_params)
+                schedule = stripe.SubscriptionSchedule.create(
+                    from_subscription=subscription_id
+                )
+                phases = schedule.get("phases", [])
+                if not phases:
+                    raise ValueError(
+                        f"Subscription schedule for {subscription_id} has no phases"
+                    )
+                current_phase = phases[0]
+                current_price = current_phase.get("items", [{}])[0].get("price")
+                current_price_id = (
+                    current_price.get("id")
+                    if isinstance(current_price, dict)
+                    else current_price
+                )
+                phase_end = current_phase.get(
+                    "end_date", subscription.get("current_period_end")
+                )
+                stripe.SubscriptionSchedule.modify(
+                    schedule.id,
+                    phases=[
+                        {
+                            "items": [
+                                {
+                                    "price": current_price_id or new_price_id,
+                                    "quantity": 1,
+                                }
+                            ],
+                            "end_date": phase_end,
+                        },
+                        {
+                            "start_date": phase_end,
+                            "items": [{"price": new_price_id, "quantity": 1}],
+                            "proration_behavior": "none",
+                        },
+                    ],
+                    proration_behavior="none",
+                )
+                updated = subscription
+            else:
+                modify_params: dict[str, Any] = {
+                    "items": [{"id": item_id, "price": new_price_id}],
+                    "proration_behavior": proration_behavior,
+                }
+                updated = stripe.Subscription.modify(subscription_id, **modify_params)
             logger.info(
                 "Changed Stripe subscription %s to price %s (at_period_end=%s)",
                 subscription_id,
@@ -281,9 +321,7 @@ class StripeService:
             )
             return updated
         except stripe.error.StripeError as e:
-            logger.error(
-                f"Failed to change subscription {subscription_id} price: {e}"
-            )
+            logger.error(f"Failed to change subscription {subscription_id} price: {e}")
             raise
 
     async def cancel_subscription(

@@ -106,10 +106,10 @@ export function StepPlanSelection({
   const sortedPlans = useMemo(
     () =>
       [...plans].sort((left, right) => {
-        if (left.billing_mode !== right.billing_mode) {
-          return left.billing_mode === "free" ? -1 : 1;
+        if (left.tier_rank !== right.tier_rank) {
+          return left.tier_rank - right.tier_rank;
         }
-        return left.price_amount_cents - right.price_amount_cents;
+        return left.billing_interval.localeCompare(right.billing_interval);
       }),
     [plans],
   );

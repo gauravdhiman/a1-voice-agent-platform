@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -19,518 +19,494 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Check,
-  Loader2,
-  Star,
-  Zap,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-} from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle, ArrowRight, Check, Loader2 } from "lucide-react";
 import { billingService } from "@/services/billing-service";
-import {
-  SubscriptionPlan,
+import type {
+  CustomerPlanVersion,
   OrganizationSubscriptionWithPlan,
+  PlanChangePreview,
 } from "@/types/billing";
-import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
-import { getStripe } from "@/lib/stripe";
-import { useSubscriptionPlans } from "@/hooks/use-subscription-plans";
-import { useCreditBalance } from "@/hooks/use-credit-balance";
 
-interface PlanSelectionProps {
+type BillingIntervalTab = "monthly" | "annual";
+
+/**
+ * Props for the customer-facing internal plan catalog.
+ */
+export interface PlanSelectionProps {
+  /** Organization that will receive the selected plan. */
   organizationId: string;
+  /** Current organization subscription, when one exists. */
   currentSubscription?: OrganizationSubscriptionWithPlan | null;
-  onPlanSelected?: (plan: SubscriptionPlan) => void;
+  /** Called after a free plan is activated or checkout is prepared. */
+  onPlanSelected?: (plan: CustomerPlanVersion) => void;
+  /** Optional redirect seam for tests or hosts that own navigation. */
+  onRedirectToCheckout?: (checkoutUrl: string) => void;
+  /** Optional callback after a plan transition is applied or scheduled. */
+  onPlanChangeConfirmed?: () => void;
 }
 
+/**
+ * Format a published internal plan version for display.
+ *
+ * @param plan - Published plan version returned by the customer catalog API
+ * @returns Localized price text without the billing interval suffix
+ */
+function formatPrice(plan: CustomerPlanVersion): string {
+  if (plan.billing_mode === "free" || plan.price_amount_cents === 0) {
+    return "Free";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: plan.currency,
+  }).format(plan.price_amount_cents / 100);
+}
+
+/**
+ * Turn a sparse entitlement assignment into a short customer-facing feature.
+ *
+ * @param key - Catalog entitlement key
+ * @param rawValue - Stored entitlement value object
+ * @returns Human-readable feature text, or an empty string for disabled flags
+ */
+function formatEntitlement(
+  key: string,
+  rawValue: Record<string, unknown>,
+): string {
+  const label = key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+  const value = rawValue.value;
+
+  if (typeof value === "boolean") return value ? label : "";
+  if (typeof value === "number") return `${value.toLocaleString()} ${label}`;
+  if (typeof value === "string" && value.trim()) return `${value} ${label}`;
+  return label;
+}
+
+/**
+ * Customer plan selector backed by the platform plan product/version catalog.
+ *
+ * Free plans are activated directly in the application. Paid plans use the
+ * immutable published version's Stripe Price through the version-aware
+ * checkout endpoint; the browser never chooses a Stripe product or price.
+ */
 export function PlanSelection({
   organizationId,
   currentSubscription,
   onPlanSelected,
+  onRedirectToCheckout,
+  onPlanChangeConfirmed,
 }: PlanSelectionProps) {
-  const {
-    data: plans,
-    isLoading: loadingPlans,
-    error: plansError,
-  } = useSubscriptionPlans();
-  const {
-    data: currentCreditBalance,
-    isLoading: loadingCredits,
-    error: creditsError,
-  } = useCreditBalance();
-  const [subscribingToPlan, setSubscribingToPlan] = useState<string | null>(
-    null,
-  );
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
-    null,
-  );
-  const { user } = useAuth();
+  const [plans, setPlans] = useState<CustomerPlanVersion[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PlanChangePreview | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [activeInterval, setActiveInterval] =
+    useState<BillingIntervalTab>("monthly");
 
-  const loading = loadingPlans || loadingCredits;
-  const error = plansError || creditsError;
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPlans(true);
+    setError(null);
 
-  if (error) {
-    toast.error(error.message);
-  }
-
-  const handleSubscribe = async (plan: SubscriptionPlan) => {
-    if (!user) {
-      toast.error("Please sign in to subscribe");
-      return;
-    }
-
-    // Show confirmation dialog for plan changes
-    if (currentSubscription && currentSubscription.plan) {
-      setSelectedPlan(plan);
-      setShowConfirmation(true);
-      return;
-    }
-
-    // Direct subscription for new users
-    await proceedWithSubscription(plan);
-  };
-
-  const proceedWithSubscription = async (plan: SubscriptionPlan) => {
-    setSubscribingToPlan(plan.id);
-    setShowConfirmation(false);
-
-    try {
-      // Create Stripe checkout session
-      const { session_id } = await billingService.createSubscriptionCheckout(
-        plan.id,
-        organizationId,
-      );
-
-      // Get Stripe instance
-      const stripe = await getStripe();
-
-      if (!stripe) {
-        throw new Error("Failed to load Stripe");
-      }
-
-      // Redirect to Stripe Checkout using Stripe.js
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: session_id,
+    void billingService
+      .getAvailablePlanVersions()
+      .then((availablePlans) => {
+        if (!cancelled) setPlans(availablePlans);
+      })
+      .catch((requestError) => {
+        if (cancelled) return;
+        const message =
+          requestError instanceof Error
+            ? requestError.message
+            : "We could not load the available plans.";
+        setError(message);
+        toast.error(message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPlans(false);
       });
 
-      if (error) {
-        throw new Error(error.message);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sortedPlans = useMemo(
+    () =>
+      [...plans].sort((left, right) => {
+        if (left.tier_rank !== right.tier_rank) {
+          return left.tier_rank - right.tier_rank;
+        }
+        if (left.product_slug !== right.product_slug) {
+          return left.product_slug.localeCompare(right.product_slug);
+        }
+        return left.billing_interval.localeCompare(right.billing_interval);
+      }),
+    [plans],
+  );
+
+  const plansByInterval = useMemo(
+    () => ({
+      monthly: sortedPlans.filter((plan) => plan.billing_interval !== "annual"),
+      annual: sortedPlans.filter((plan) => plan.billing_interval === "annual"),
+    }),
+    [sortedPlans],
+  );
+
+  useEffect(() => {
+    if (
+      plansByInterval.monthly.length === 0 &&
+      plansByInterval.annual.length > 0
+    ) {
+      setActiveInterval("annual");
+    }
+  }, [plansByInterval]);
+
+  const hasActiveSubscription = ["active", "trial"].includes(
+    currentSubscription?.status ?? "",
+  );
+
+  const isCurrentPlan = (plan: CustomerPlanVersion): boolean =>
+    currentSubscription?.plan_version_id === plan.id;
+
+  const planLabel = (plan: CustomerPlanVersion): string =>
+    plan.display_label || plan.product_name;
+
+  const handlePlanSelection = async (plan: CustomerPlanVersion) => {
+    if (isCurrentPlan(plan)) return;
+
+    setLoadingPlanId(plan.id);
+    setError(null);
+
+    try {
+      if (hasActiveSubscription) {
+        const nextPreview = await billingService.previewPlanChange(
+          organizationId,
+          plan.id,
+        );
+        setPreview(nextPreview);
+        return;
       }
 
+      if (plan.billing_mode === "free") {
+        await billingService.activateFreePlan(organizationId, plan.id);
+        toast.success("Your free plan is active.");
+        onPlanSelected?.(plan);
+        return;
+      }
+
+      const origin = window.location.origin;
+      const result = await billingService.createVersionedSubscriptionCheckout({
+        organization_id: organizationId,
+        plan_version_id: plan.id,
+        success_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=manage&payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=plans&payment=cancelled`,
+      });
+
       onPlanSelected?.(plan);
-    } catch (error) {
-      console.error("Failed to create checkout session:", error);
-      toast.error("Failed to start checkout process");
-      setSubscribingToPlan(null);
+      if (onRedirectToCheckout) {
+        onRedirectToCheckout(result.checkout_url);
+      } else {
+        window.location.assign(result.checkout_url);
+      }
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "We could not start plan activation.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoadingPlanId(null);
     }
   };
 
-  const getCreditImpact = (newPlan: SubscriptionPlan) => {
-    if (!currentSubscription?.plan || !currentCreditBalance) return null;
+  const handlePlanChangeConfirmation = async () => {
+    if (!preview) return;
 
-    const currentCredits = currentSubscription.plan.included_credits;
-    const newCredits = newPlan.included_credits;
-    const currentBalance = currentCreditBalance.total_credits;
+    setConfirming(true);
+    setError(null);
+    try {
+      const origin = window.location.origin;
+      const result = await billingService.confirmPlanChange({
+        organization_id: organizationId,
+        transition_id: preview.transition_id,
+        target_plan_version_id: preview.target_plan.id,
+        success_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=overview&payment=success`,
+        cancel_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=plans&payment=cancelled`,
+      });
 
-    return {
-      currentCredits,
-      newCredits,
-      currentBalance,
-      difference: newCredits - currentBalance,
-      isUpgrade: newCredits > currentCredits,
-      isDowngrade: newCredits < currentCredits,
-    };
-  };
+      setPreview(null);
+      onPlanSelected?.(preview.target_plan);
+      onPlanChangeConfirmed?.();
 
-  const formatPrice = (amount: number, currency: string, interval: string) => {
-    const price = (amount / 100).toFixed(2);
-    return `$${price}/${interval}`;
-  };
-
-  const formatFeatures = (features: unknown) => {
-    if (!features || typeof features !== "object") return [];
-
-    return Object.entries(features)
-      .map(([key, value]) => {
-        const label = key
-          .replace(/_/g, " ")
-          .replace(/\b\w/g, (l) => l.toUpperCase());
-
-        // Handle boolean values
-        if (typeof value === "boolean") {
-          return value ? label : null;
+      if (result.checkout_url) {
+        if (onRedirectToCheckout) {
+          onRedirectToCheckout(result.checkout_url);
+        } else {
+          window.location.assign(result.checkout_url);
         }
+        return;
+      }
 
-        // Handle null, undefined, or empty string values (after trimming whitespace)
-        if (
-          value === null ||
-          value === undefined ||
-          (typeof value === "string" && value.trim() === "")
-        ) {
-          return label;
-        }
-
-        // For all other values, show label with value
-        return `${label}: ${value}`;
-      })
-      .filter(Boolean);
+      toast.success(
+        result.status === "scheduled"
+          ? "Your plan change is scheduled."
+          : "Your plan has been changed.",
+      );
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "We could not confirm this plan change.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setConfirming(false);
+    }
   };
 
-  const isPlanCurrent = (plan: SubscriptionPlan) => {
-    return currentSubscription?.plan?.id === plan.id;
-  };
-
-  const isTrialPlan = (plan: SubscriptionPlan) => {
-    return plan.trial_period_days && plan.trial_period_days > 0;
-  };
-
-  const getPopularPlan = () => {
-    if (!plans) return null;
-    // Mark the middle-priced plan as popular
-    const sortedPlans = [...plans].sort(
-      (a, b) => a.price_amount - b.price_amount,
-    );
-    return sortedPlans[Math.floor(sortedPlans.length / 2)]?.id;
-  };
-
-  if (loading) {
+  if (loadingPlans) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading subscription plans...</span>
+        <span className="ml-2">Loading available plans...</span>
       </div>
     );
   }
 
-  if (!plans || plans.length === 0) {
+  if (error) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">No subscription plans available</p>
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (plans.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-muted-foreground">
+          No published plans are available right now.
+        </p>
       </div>
     );
   }
 
-  // Separate monthly and annual plans and sort by price (lowest to highest)
-  const monthlyPlans = plans
-    .filter((plan) => plan.interval === "monthly")
-    .sort((a, b) => a.price_amount - b.price_amount);
-  const annualPlans = plans
-    .filter((plan) => plan.interval === "annual")
-    .sort((a, b) => a.price_amount - b.price_amount);
-
+  const plansForInterval = plansByInterval[activeInterval];
   return (
     <div className="space-y-8">
-      {/* Monthly Plans */}
-      {monthlyPlans.length > 0 && (
-        <div>
-          <div className="text-center mb-6">
-            <h3 className="text-2xl font-bold">Monthly Plans</h3>
-            <p className="text-muted-foreground">Pay monthly, cancel anytime</p>
+      <div>
+        <h2 className="text-xl font-semibold">Manage your plan</h2>
+        <p className="text-sm text-muted-foreground">
+          Plans are shown from the smallest to the most capable. You can choose
+          any eligible plan, and we&apos;ll explain the timing and billing
+          impact before confirming it.
+        </p>
+      </div>
+
+      {plansByInterval.monthly.length > 0 &&
+        plansByInterval.annual.length > 0 && (
+          <div className="flex justify-center gap-2">
+            <Button
+              variant={activeInterval === "monthly" ? "default" : "outline"}
+              onClick={() => setActiveInterval("monthly")}
+            >
+              Monthly
+            </Button>
+            <Button
+              variant={activeInterval === "annual" ? "default" : "outline"}
+              onClick={() => setActiveInterval("annual")}
+            >
+              Annual
+            </Button>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {monthlyPlans.map((plan) => (
-              <Card
-                key={plan.id}
-                className={`relative ${
-                  getPopularPlan() === plan.id ? "border-primary shadow-lg" : ""
-                }`}
-              >
-                {getPopularPlan() === plan.id && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <Badge variant="default" className="bg-primary">
-                      <Star className="w-3 h-3 mr-1" />
-                      Most Popular
-                    </Badge>
-                  </div>
-                )}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {plansForInterval.map((plan) => {
+          const isLoading = loadingPlanId === plan.id;
+          const current = isCurrentPlan(plan);
+          const features = Object.entries(plan.entitlements)
+            .map(([key, value]) => formatEntitlement(key, value))
+            .filter(Boolean)
+            .slice(0, 6);
 
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {plan.name.split(":")[0]}
-                    {isTrialPlan(plan) && (
-                      <Badge variant="secondary">
-                        <Zap className="w-3 h-3 mr-1" />
-                        Free Trial
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>{plan.description}</CardDescription>
-                  <div className="text-3xl font-bold">
-                    {formatPrice(
-                      plan.price_amount,
-                      plan.currency,
-                      plan.interval,
-                    )}
-                  </div>
-                  {isTrialPlan(plan) && (
-                    <p className="text-sm text-muted-foreground">
-                      {plan.trial_period_days} days free trial
-                    </p>
+          return (
+            <Card
+              key={plan.id}
+              className={`relative ${current ? "border-primary shadow-lg" : ""}`}
+              data-testid={`billing-plan-card-${plan.id}`}
+            >
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between gap-2">
+                  <span>{planLabel(plan)}</span>
+                  {current ? (
+                    <Badge variant="default">Current plan</Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>
+                  {plan.product_description || "A plan for your organization."}
+                </CardDescription>
+                <div className="text-3xl font-bold">
+                  {formatPrice(plan)}
+                  {plan.billing_mode === "paid" && (
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">
+                      / {plan.billing_interval}
+                    </span>
                   )}
-                </CardHeader>
-
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <Check className="w-4 h-4 mr-2 text-green-500" />
-                      <span>
-                        {plan.included_credits.toLocaleString()} credits
-                        included
-                      </span>
-                    </div>
-
-                    {plan.max_users && (
-                      <div className="flex items-center">
-                        <Check className="w-4 h-4 mr-2 text-green-500" />
-                        <span>Up to {plan.max_users} users</span>
-                      </div>
-                    )}
-
-                    {formatFeatures(plan.features).map((feature, index) => (
-                      <div key={index} className="flex items-center">
-                        <Check className="w-4 h-4 mr-2 text-green-500" />
-                        <span className="text-sm">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-
-                <CardFooter>
-                  {isPlanCurrent(plan) ? (
-                    <Button disabled className="w-full">
-                      Current Plan
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => handleSubscribe(plan)}
-                      disabled={subscribingToPlan === plan.id}
-                      className="w-full"
-                    >
-                      {subscribingToPlan === plan.id ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        `Subscribe`
-                      )}
-                    </Button>
-                  )}
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Annual Plans */}
-      {annualPlans.length > 0 && (
-        <div>
-          <div className="text-center mb-6">
-            <h3 className="text-2xl font-bold">Annual Plans</h3>
-            <p className="text-muted-foreground">Save with yearly billing</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {annualPlans.map((plan) => (
-              <Card key={plan.id} className="relative">
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <Badge variant="default" className="bg-green-600">
-                    Save 17%
-                  </Badge>
                 </div>
+              </CardHeader>
 
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {plan.name.split(":")[0]}
-                    {isTrialPlan(plan) && (
-                      <Badge variant="secondary">
-                        <Zap className="w-3 h-3 mr-1" />
-                        Free Trial
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>{plan.description}</CardDescription>
-                  <div className="space-y-1">
-                    <div className="text-3xl font-bold">
-                      {formatPrice(
-                        plan.price_amount,
-                        plan.currency,
-                        plan.interval,
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      ${(plan.price_amount / 100 / 12).toFixed(2)}/month billed
-                      annually
-                    </div>
-                  </div>
-                  {isTrialPlan(plan) && (
-                    <p className="text-sm text-muted-foreground">
-                      {plan.trial_period_days} days free trial
-                    </p>
-                  )}
-                </CardHeader>
-
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <Check className="w-4 h-4 mr-2 text-green-500" />
-                      <span>
-                        {plan.included_credits.toLocaleString()} credits
-                        included
-                      </span>
-                    </div>
-
-                    {plan.max_users && (
-                      <div className="flex items-center">
-                        <Check className="w-4 h-4 mr-2 text-green-500" />
-                        <span>Up to {plan.max_users} users</span>
-                      </div>
-                    )}
-
-                    {formatFeatures(plan.features).map((feature, index) => (
-                      <div key={index} className="flex items-center">
-                        <Check className="w-4 h-4 mr-2 text-green-500" />
-                        <span className="text-sm">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-
-                <CardFooter>
-                  {isPlanCurrent(plan) ? (
-                    <Button disabled className="w-full">
-                      Current Plan
-                    </Button>
+              <CardContent>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {features.length > 0 ? (
+                    features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-emerald-600" />
+                        {feature}
+                      </li>
+                    ))
                   ) : (
-                    <Button
-                      onClick={() => handleSubscribe(plan)}
-                      disabled={subscribingToPlan === plan.id}
-                      className="w-full"
-                    >
-                      {subscribingToPlan === plan.id ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        `Subscribe`
-                      )}
-                    </Button>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-600" />
+                      Core workspace access
+                    </li>
                   )}
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
+                </ul>
+              </CardContent>
 
-      {/* Plan Change Confirmation Dialog */}
-      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="sm:max-w-md">
+              <CardFooter className="flex-col gap-2">
+                <Button
+                  className="w-full"
+                  disabled={loadingPlanId !== null || confirming || current}
+                  onClick={() => void handlePlanSelection(plan)}
+                  data-testid={`billing-plan-select-${plan.id}`}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {hasActiveSubscription
+                        ? "Loading preview..."
+                        : plan.billing_mode === "free"
+                          ? "Activating..."
+                          : "Opening checkout..."}
+                    </>
+                  ) : current ? (
+                    "Current plan"
+                  ) : hasActiveSubscription ? (
+                    "Review plan change"
+                  ) : (
+                    <>
+                      {plan.billing_mode === "free"
+                        ? "Start with Free"
+                        : "Continue to payment"}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+                {plan.billing_mode === "free" ? (
+                  <p className="text-center text-xs text-muted-foreground">
+                    No payment method required
+                  </p>
+                ) : null}
+              </CardFooter>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Dialog
+        open={Boolean(preview)}
+        onOpenChange={(open) => {
+          if (!open && !confirming) setPreview(null);
+        }}
+      >
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedPlan && getCreditImpact(selectedPlan)?.isUpgrade && (
-                <TrendingUp className="w-5 h-5 text-green-600" />
-              )}
-              {selectedPlan && getCreditImpact(selectedPlan)?.isDowngrade && (
-                <TrendingDown className="w-5 h-5 text-orange-600" />
-              )}
-              Confirm Plan Change
-            </DialogTitle>
+            <DialogTitle>Review plan change</DialogTitle>
             <DialogDescription>
-              You&apos;re about to change from{" "}
-              <strong>{currentSubscription?.plan?.name}</strong> to{" "}
-              <strong>{selectedPlan?.name}</strong>
+              {preview
+                ? `Change from ${planLabel(preview.current_plan)} to ${planLabel(preview.target_plan)}`
+                : "Review the plan change before confirming."}
             </DialogDescription>
           </DialogHeader>
 
-          {selectedPlan && currentCreditBalance && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                <h4 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">
-                  Credit Impact
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-gray-700 dark:text-gray-300">
-                    <span>Current plan credits:</span>
-                    <span className="text-gray-900 dark:text-gray-100">
-                      {currentSubscription?.plan?.included_credits.toLocaleString()}
-                    </span>
+          {preview ? (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-3 rounded-lg border p-4">
+                <div>
+                  <div className="text-muted-foreground">Current price</div>
+                  <div className="font-medium">
+                    {formatPrice(preview.current_plan)}
                   </div>
-                  <div className="flex justify-between text-gray-700 dark:text-gray-300">
-                    <span>New plan credits:</span>
-                    <span className="text-gray-900 dark:text-gray-100">
-                      {selectedPlan.included_credits.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-gray-700 dark:text-gray-300">
-                    <span>Current balance:</span>
-                    <span className="text-gray-900 dark:text-gray-100">
-                      {currentCreditBalance.total_credits.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
-                    <div className="flex justify-between font-semibold text-gray-900 dark:text-gray-100">
-                      <span>After change:</span>
-                      <span
-                        className={
-                          getCreditImpact(selectedPlan)?.isUpgrade
-                            ? "text-green-600 dark:text-green-400"
-                            : getCreditImpact(selectedPlan)?.isDowngrade
-                              ? "text-orange-600 dark:text-orange-400"
-                              : "text-gray-900 dark:text-gray-100"
-                        }
-                      >
-                        {selectedPlan.included_credits.toLocaleString()} credits
-                      </span>
-                    </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">New price</div>
+                  <div className="font-medium">
+                    {formatPrice(preview.target_plan)}
                   </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                      Important
-                    </h4>
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      Your credits will be reset to the new plan amount and you
-                      will lose any existing unused credits. This change takes
-                      effect immediately.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <Alert>
+                <AlertDescription>
+                  {preview.effective_mode === "checkout"
+                    ? "You will continue to secure checkout. Your new plan starts after payment succeeds and the billing webhook confirms it."
+                    : preview.effective_mode === "immediate"
+                      ? "Your new plan starts now. Stripe will prorate the remaining billing period."
+                      : `Your current plan stays active until ${preview.effective_at ? new Date(preview.effective_at).toLocaleDateString("en-US") : "the end of the billing period"}.`}
+                </AlertDescription>
+              </Alert>
+
+              {preview.credit_delta !== null ? (
+                <p>
+                  Included credits will{" "}
+                  {preview.credit_delta >= 0 ? "increase" : "decrease"} by{" "}
+                  <strong>
+                    {Math.abs(preview.credit_delta).toLocaleString()}
+                  </strong>{" "}
+                  at the effective time. Purchased credits remain available.
+                </p>
+              ) : (
+                <p>
+                  Purchased credits remain available and are not changed by this
+                  plan transition.
+                </p>
+              )}
             </div>
-          )}
+          ) : null}
 
-          <DialogFooter className="flex gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowConfirmation(false)}
+              onClick={() => setPreview(null)}
+              disabled={confirming}
             >
-              Cancel
+              Keep current plan
             </Button>
             <Button
-              onClick={() =>
-                selectedPlan && proceedWithSubscription(selectedPlan)
-              }
-              disabled={subscribingToPlan !== null}
+              onClick={() => void handlePlanChangeConfirmation()}
+              disabled={confirming}
             >
-              {subscribingToPlan ? (
+              {confirming ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Confirming...
                 </>
+              ) : preview?.effective_mode === "checkout" ? (
+                "Continue to payment"
+              ) : preview?.effective_mode === "period_end" ? (
+                "Schedule change"
               ) : (
-                "Confirm Change"
+                "Confirm plan change"
               )}
             </Button>
           </DialogFooter>

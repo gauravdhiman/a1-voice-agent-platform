@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -22,6 +22,8 @@ import { billingService } from "@/services/billing-service";
 interface CreditPurchaseProps {
   organizationId: string;
   onCreditsPurchased?: (product: CreditProduct) => void;
+  /** Scrolls and focuses the purchase section after navigation from Overview. */
+  autoFocusPurchase?: boolean;
 }
 
 /**
@@ -33,10 +35,12 @@ interface CreditPurchaseProps {
  *
  * @param organizationId - The UUID of the organization to purchase credits for
  * @param onCreditsPurchased - Optional callback fired after a successful purchase
+ * @param autoFocusPurchase - Scrolls to and focuses the purchase section when true
  */
 export function CreditPurchase({
   organizationId,
   onCreditsPurchased,
+  autoFocusPurchase = false,
 }: CreditPurchaseProps) {
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(
     null,
@@ -44,6 +48,7 @@ export function CreditPurchase({
   const [entitlements, setEntitlements] = useState<OrgEntitlements | null>(
     null,
   );
+  const purchaseSectionRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { data: products, isLoading: loading, error } = useCreditProducts();
 
@@ -61,6 +66,28 @@ export function CreditPurchase({
       cancelled = true;
     };
   }, [organizationId]);
+
+  useEffect(() => {
+    if (
+      !autoFocusPurchase ||
+      loading ||
+      !entitlements ||
+      !products ||
+      products.length === 0
+    ) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      purchaseSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      purchaseSectionRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [autoFocusPurchase, entitlements, loading, products]);
 
   const topupEnabled = Boolean(
     entitlements?.features["credit_topup_enabled"]?.effective_value,
@@ -154,8 +181,8 @@ export function CreditPurchase({
           </div>
           <CardTitle>Credit top-ups not enabled</CardTitle>
           <CardDescription>
-            Your current plan does not include credit top-ups. Upgrade your
-            plan to purchase additional credits.
+            Your current plan does not include credit top-ups. Upgrade your plan
+            to purchase additional credits.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -174,7 +201,13 @@ export function CreditPurchase({
   const bestValueProduct = getBestValueProduct();
 
   return (
-    <div className="space-y-6">
+    <div
+      id="credit-purchase"
+      ref={purchaseSectionRef}
+      tabIndex={-1}
+      className="scroll-mt-6 space-y-6 outline-none"
+      data-testid="credit-purchase-section"
+    >
       <div className="text-center">
         <h3 className="text-2xl font-bold">Purchase Additional Credits</h3>
         <p className="text-muted-foreground">

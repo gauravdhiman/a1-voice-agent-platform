@@ -1,12 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,8 +45,7 @@ export default function BillingPage() {
   // Fall back to currentOrganization.id when ?org_id= is missing.
   // The sidebar nav links to bare /organization/billing (no ?org_id=),
   // and the org admin should see the page, not "Access Denied".
-  const orgId =
-    searchParams.get("org_id") ?? currentOrganization?.id ?? null;
+  const orgId = searchParams.get("org_id") ?? currentOrganization?.id ?? null;
 
   // Validate organization access when orgId is provided
   const {
@@ -113,16 +107,18 @@ export default function BillingPage() {
     (isFreePlan ? "Free plan" : "No Plan");
 
   const activeTab =
-    userSelectedTab ?? (hasActiveSubscription ? "manage" : "plans");
+    userSelectedTab ?? (hasActiveSubscription ? "overview" : "plans");
+  const focusCreditPurchase =
+    activeTab === "credits" && searchParams.get("section") === "purchase";
 
   // Sync tab state with URL
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     if (
       tabParam &&
-      ["manage", "plans", "credits"].includes(tabParam)
+      ["overview", "manage", "plans", "credits"].includes(tabParam)
     ) {
-      setUserSelectedTab(tabParam);
+      setUserSelectedTab(tabParam === "manage" ? "overview" : tabParam);
     }
   }, [searchParams]);
 
@@ -131,6 +127,14 @@ export default function BillingPage() {
     router.push(`/organization/billing?org_id=${orgId}&tab=${value}`, {
       scroll: false,
     });
+  };
+
+  const handleBuyCredits = () => {
+    setUserSelectedTab("credits");
+    router.push(
+      `/organization/billing?org_id=${orgId}&tab=credits&section=purchase`,
+      { scroll: false },
+    );
   };
 
   // Make orgId mandatory - if not provided, redirect to organizations page
@@ -263,9 +267,7 @@ export default function BillingPage() {
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="p-4 pt-0">
-              <div className="text-2xl font-bold">
-                {currentPlanName}
-              </div>
+              <div className="text-2xl font-bold">{currentPlanName}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {billingSummary.subscription?.status && (
                   <Badge variant="outline" className="capitalize font-normal">
@@ -325,9 +327,7 @@ export default function BillingPage() {
         className="space-y-6"
       >
         <TabsList className="w-full">
-          {hasActiveSubscription && (
-            <TabsTrigger value="manage">Manage</TabsTrigger>
-          )}
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
           <TabsTrigger value="credits">Credits</TabsTrigger>
         </TabsList>
@@ -347,6 +347,18 @@ export default function BillingPage() {
         <TabsContent value="credits" className="space-y-6">
           {validatedOrg && (
             <>
+              {creditUsage ? (
+                <CreditUsagePanel usage={creditUsage} variant="summary" />
+              ) : null}
+
+              <CreditPurchase
+                organizationId={validatedOrg.id}
+                autoFocusPurchase={focusCreditPurchase}
+                onCreditsPurchased={() => {
+                  void Promise.all([refetch(), refetchCreditUsage()]);
+                }}
+              />
+
               {creditUsageError ? (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
@@ -356,30 +368,30 @@ export default function BillingPage() {
                   </AlertDescription>
                 </Alert>
               ) : creditUsage ? (
-                <CreditUsagePanel usage={creditUsage} />
+                <CreditUsagePanel usage={creditUsage} variant="details" />
               ) : null}
-              <CreditPurchase
-                organizationId={validatedOrg.id}
-                onCreditsPurchased={() => {
-                  void Promise.all([refetch(), refetchCreditUsage()]);
-                }}
-              />
             </>
           )}
         </TabsContent>
 
-        {/* Manage Tab */}
-        {hasActiveSubscription && (
-          <TabsContent value="manage" className="space-y-6">
-            {billingSummary?.subscription && validatedOrg && (
-              <SubscriptionManagement
-                organizationId={validatedOrg.id}
-                subscription={billingSummary.subscription}
-                onSubscriptionUpdated={() => refetch()}
-              />
-            )}
-          </TabsContent>
-        )}
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          {billingSummary?.subscription && validatedOrg ? (
+            <SubscriptionManagement
+              organizationId={validatedOrg.id}
+              subscription={billingSummary.subscription}
+              onSubscriptionUpdated={() => refetch()}
+              onChangePlan={() => handleTabChange("plans")}
+              onBuyCredits={handleBuyCredits}
+            />
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Choose a plan to start billing for this organization.
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
       </AnimatedTabs>
     </div>
   );
