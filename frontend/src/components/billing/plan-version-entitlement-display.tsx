@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CatalogHelpTooltip } from "@/components/billing/catalog-help-tooltip";
@@ -11,51 +12,259 @@ import {
   parseAssignedEntitlements,
   type AssignedPlanEntitlement,
 } from "@/lib/billing/plan-version-entitlements";
-import type { EntitlementDefinition, PlanVersionDetail } from "@/types/admin-plans";
+import type {
+  EntitlementDefinition,
+  PlanVersionDetail,
+} from "@/types/admin-plans";
+import { motion, useReducedMotion } from "framer-motion";
+import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 
 interface PlanVersionEntitlementDisplayProps {
   version: PlanVersionDetail;
   definitions: EntitlementDefinition[];
+  onReorder?: (next: AssignedPlanEntitlement[]) => void;
+  reordering?: boolean;
 }
 
 /**
- * Read-only presentation of entitlements on a published or immutable plan version.
+ * Presentation of entitlements on a published or immutable plan version.
+ * Entitlement values remain read-only, while an optional reorder callback enables
+ * administrators to maintain the plan-card display sequence.
  */
 export function PlanVersionEntitlementDisplay({
   version,
   definitions,
+  onReorder,
+  reordering = false,
 }: PlanVersionEntitlementDisplayProps) {
-  const assigned = parseAssignedEntitlements(version);
+  const parsedAssigned = React.useMemo(
+    () => parseAssignedEntitlements(version),
+    [version],
+  );
+  const [assigned, setAssigned] = React.useState(parsedAssigned);
+  const [draggedKey, setDraggedKey] = React.useState<string | null>(null);
+  const [lastDragOverKey, setLastDragOverKey] = React.useState<string | null>(
+    null,
+  );
+  const dragStartOrder = React.useRef<string[]>([]);
+  const dragCommitted = React.useRef(false);
   const defByKey = React.useMemo(
     () => new Map(definitions.map((d) => [d.key, d])),
     [definitions],
   );
 
+  React.useEffect(() => {
+    setAssigned(parsedAssigned);
+  }, [parsedAssigned]);
+
   if (assigned.length === 0) {
     return (
       <p className="text-sm text-muted-foreground rounded-md border border-dashed p-4">
-        No explicit entitlements on this version. Runtime uses catalog defaults for
-        omitted keys.
+        No explicit entitlements on this version. Runtime uses catalog defaults
+        for omitted keys.
       </p>
     );
   }
 
+  const moveDraggedItemTo = (targetKey: string) => {
+    if (
+      !onReorder ||
+      !draggedKey ||
+      draggedKey === targetKey ||
+      lastDragOverKey === targetKey
+    ) {
+      return null;
+    }
+    const fromIndex = assigned.findIndex((entry) => entry.key === draggedKey);
+    const targetIndex = assigned.findIndex((entry) => entry.key === targetKey);
+    if (fromIndex < 0 || targetIndex < 0) return null;
+    const next = [...assigned];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(targetIndex, 0, moved);
+    setAssigned(next);
+    setLastDragOverKey(targetKey);
+    return next;
+  };
+
+  const hasOrderChanged = (next: AssignedPlanEntitlement[]) => {
+    return next.some(
+      (item, index) => item.key !== dragStartOrder.current[index],
+    );
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Label className="text-sm font-medium">Entitlements on this version</Label>
+        <Label className="text-sm font-medium">
+          Entitlements on this version
+        </Label>
         <CatalogHelpTooltip content="Values stored on this version. Keys not listed fall back to catalog defaults at runtime." />
       </div>
-      <div className="space-y-2">
-        {assigned.map((item) => (
-          <EntitlementReadOnlyRow
+      {onReorder ? (
+        <p className="text-xs text-muted-foreground">
+          Entitlement values are immutable on published plans. Drag rows to
+          change their display order on the plan card.
+        </p>
+      ) : null}
+      <div
+        className="space-y-2"
+        role="list"
+        aria-label="Entitlements in display order"
+      >
+        {assigned.map((item, index) => (
+          <OrderedEntitlementRow
             key={item.key}
             item={item}
+            index={index}
+            total={assigned.length}
             definition={defByKey.get(item.key)}
+            draggable={Boolean(onReorder)}
+            dragging={draggedKey === item.key}
+            reordering={reordering}
+            onMove={(toIndex) => {
+              if (!onReorder || toIndex < 0 || toIndex >= assigned.length)
+                return;
+              const next = [...assigned];
+              const [moved] = next.splice(index, 1);
+              next.splice(toIndex, 0, moved);
+              setAssigned(next);
+              onReorder(next);
+            }}
+            onDragStart={() => {
+              setDraggedKey(item.key);
+              setLastDragOverKey(null);
+              dragStartOrder.current = assigned.map((entry) => entry.key);
+              dragCommitted.current = false;
+            }}
+            onDragEnd={() => {
+              if (!dragCommitted.current && dragStartOrder.current.length > 0) {
+                const original = dragStartOrder.current
+                  .map((key) => assigned.find((entry) => entry.key === key))
+                  .filter(
+                    (entry): entry is AssignedPlanEntitlement =>
+                      entry !== undefined,
+                  );
+                setAssigned(original);
+              }
+              setDraggedKey(null);
+              setLastDragOverKey(null);
+              dragStartOrder.current = [];
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              moveDraggedItemTo(item.key);
+            }}
+            onDrop={() => {
+              const next = moveDraggedItemTo(item.key) ?? assigned;
+              if (hasOrderChanged(next)) {
+                onReorder?.(next);
+              }
+              dragCommitted.current = true;
+              setDraggedKey(null);
+              setLastDragOverKey(null);
+            }}
           />
         ))}
       </div>
     </div>
+  );
+}
+
+function OrderedEntitlementRow({
+  item,
+  index,
+  total,
+  definition,
+  draggable,
+  dragging,
+  reordering,
+  onMove,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
+}: {
+  item: AssignedPlanEntitlement;
+  index: number;
+  total: number;
+  definition?: EntitlementDefinition;
+  draggable: boolean;
+  dragging: boolean;
+  reordering: boolean;
+  onMove: (toIndex: number) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDrop: () => void;
+}) {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      data-testid={`entitlement-item-${item.key}`}
+      data-reorder-animated="true"
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      role="listitem"
+      layout
+      transition={
+        reducedMotion
+          ? { duration: 0 }
+          : {
+              layout: {
+                duration: 0.24,
+                ease: [0.22, 1, 0.36, 1],
+              },
+            }
+      }
+      animate={{
+        scale: dragging ? 1.015 : 1,
+        opacity: dragging ? 0.92 : 1,
+      }}
+      aria-grabbed={dragging}
+      className={`relative flex items-start gap-2 ${
+        dragging
+          ? "z-10 rounded-lg border border-primary/50 bg-background shadow-xl ring-2 ring-primary/20"
+          : ""
+      }`}
+    >
+      {draggable ? (
+        <GripVertical
+          className="mt-3 h-4 w-4 shrink-0 cursor-grab text-muted-foreground"
+          aria-hidden="true"
+        />
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <EntitlementReadOnlyRow item={item} definition={definition} />
+      </div>
+      {draggable ? (
+        <div className="flex shrink-0 items-center gap-1 pt-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`Move ${definition?.display_name ?? item.key} up`}
+            onClick={() => onMove(index - 1)}
+            disabled={index === 0 || reordering}
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`Move ${definition?.display_name ?? item.key} down`}
+            onClick={() => onMove(index + 1)}
+            disabled={index === total - 1 || reordering}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
+    </motion.div>
   );
 }
 

@@ -11,6 +11,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from src.auth.dependencies import assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -26,6 +27,7 @@ from src.billing.admin_plan_models import (
     PlanVersionDetail,
     PlanVersionDraftCreate,
     PlanVersionDraftUpdate,
+    PlanVersionEntitlementOrderRequest,
 )
 from src.billing.entitlement_models import EntitlementDefinition
 from src.billing.plan_version_models import (
@@ -84,9 +86,7 @@ async def update_entitlement_definition(
     _, user_profile = user_auth
     _require_platform_admin(user_profile)
     try:
-        return await admin_plan_catalog_service.update_entitlement_definition(
-            key, body
-        )
+        return await admin_plan_catalog_service.update_entitlement_definition(key, body)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
@@ -182,9 +182,7 @@ async def create_draft_plan_version(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
-        logger.error(
-            "Error creating draft version for product %s: %s", product_id, exc
-        )
+        logger.error("Error creating draft version for product %s: %s", product_id, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create draft plan version",
@@ -254,6 +252,36 @@ async def delete_draft_plan_version(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete plan version",
+        )
+
+
+@router.patch(
+    "/plan-versions/{plan_version_id}/entitlements/order",
+    response_model=PlanVersionDetail,
+)
+async def reorder_plan_version_entitlements(
+    plan_version_id: UUID,
+    body: PlanVersionEntitlementOrderRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Reorder a plan's entitlement rows without changing their values."""
+    _, user_profile = user_auth
+    _require_platform_admin(user_profile)
+    try:
+        return await admin_plan_catalog_service.reorder_plan_version_entitlements(
+            plan_version_id, body.entitlement_keys
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.error(
+            "Error reordering entitlements for plan version %s: %s",
+            plan_version_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reorder plan entitlements",
         )
 
 

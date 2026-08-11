@@ -19,12 +19,14 @@ import {
 } from "@/components/billing/plan-product-create-sheet";
 import { PlanProductsListPanel } from "@/components/billing/plan-products-list-panel";
 import { PlanPublishDialog } from "@/components/billing/plan-publish-dialog";
+import { PlanCard, type PlanCardData } from "@/components/billing/plan-card";
 import { StripeSyncAlert } from "@/components/billing/stripe-sync-alert";
 import { PlanVersionEntitlementDisplay } from "@/components/billing/plan-version-entitlement-display";
 import { PlanVersionEntitlementEditor } from "@/components/billing/plan-version-entitlement-editor";
 import { PLAN_CATALOG_FIELD_HELP } from "@/lib/billing/entitlement-catalog-help";
 import {
   defaultBillingInterval,
+  isFreePlanProduct,
   productHasDraft,
   type BillingCadence,
 } from "@/lib/billing/plan-catalog-utils";
@@ -42,7 +44,16 @@ import type {
   PlanVersionDetail,
   PlanVersionSummary,
 } from "@/types/admin-plans";
-import { Copy, Loader2, Plus, Save, Trash2, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Copy,
+  Eye,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 function statusBadgeVariant(
@@ -58,6 +69,85 @@ function statusBadgeVariant(
     default:
       return "destructive";
   }
+}
+
+interface PlanVersionPreviewProps {
+  plan: PlanCardData | null;
+  version: PlanVersionDetail;
+  onBack: () => void;
+  onPublish?: () => void;
+}
+
+/**
+ * Renders the shared customer-facing plan card inside the admin version flip view.
+ * Drafts can continue to publishing from this face; immutable versions only return
+ * to their details because their lifecycle cannot be changed here.
+ */
+function PlanVersionPreview({
+  plan,
+  version,
+  onBack,
+  onPublish,
+}: PlanVersionPreviewProps) {
+  const subscriptionActionLabel =
+    plan?.billing_mode === "free" ? "Start with Free" : "Continue to payment";
+
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">User-facing preview</p>
+          <p className="text-xs text-muted-foreground">
+            This is the same card customers see on billing.
+          </p>
+        </div>
+        <Badge variant="outline">
+          {version.status === "draft" ? "Draft preview" : "Published preview"}
+        </Badge>
+      </div>
+      {plan ? (
+        <PlanCard
+          plan={plan}
+          testId={`plan-preview-card-${version.id}`}
+          className="mx-auto w-full max-w-md shadow-lg"
+          footer={
+            <div className="w-full space-y-2">
+              <Button
+                className="w-full"
+                disabled
+                title="Preview only — no subscription action will be taken"
+                data-testid={`plan-preview-action-${version.id}`}
+              >
+                {subscriptionActionLabel}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Preview only — this action is disabled in the admin preview.
+              </p>
+              {plan.billing_mode === "free" ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  No payment method required
+                </p>
+              ) : null}
+            </div>
+          }
+        />
+      ) : null}
+      <div className="flex w-full flex-wrap items-center justify-between gap-2">
+        <Button variant="outline" size="sm" onClick={onBack}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {version.status === "draft"
+            ? "Back to edit"
+            : "Back to version details"}
+        </Button>
+        {onPublish ? (
+          <Button size="sm" onClick={onPublish}>
+            Publish
+          </Button>
+        ) : null}
+      </div>
+    </>
+  );
 }
 
 /**
@@ -95,8 +185,10 @@ export function PlatformPlansManager() {
     AssignedPlanEntitlement[]
   >([]);
   const [saving, setSaving] = React.useState(false);
+  const [reordering, setReordering] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
+  const [previewing, setPreviewing] = React.useState(false);
   const [productBillingBySlug, setProductBillingBySlug] = React.useState<
     Record<string, BillingCadence>
   >({});
@@ -125,6 +217,7 @@ export function PlatformPlansManager() {
   const applyVersionToForm = React.useCallback(
     (version: PlanVersionDetail, productStripeId?: string | null) => {
       setSelectedVersion(version);
+      setPreviewing(false);
       setDisplayLabel(version.display_label ?? "");
       setBillingMode(version.billing_mode);
       setCreditGrantPolicy(version.credit_grant_policy);
@@ -132,8 +225,14 @@ export function PlatformPlansManager() {
       setBillingInterval(
         version.billing_interval === "annual" ? "annual" : "monthly",
       );
-      setStripeProductId(version.stripe_product_id ?? productStripeId ?? "");
-      setStripePriceId(version.stripe_price_id ?? "");
+      setStripeProductId(
+        version.billing_mode === "free"
+          ? ""
+          : (version.stripe_product_id ?? productStripeId ?? ""),
+      );
+      setStripePriceId(
+        version.billing_mode === "free" ? "" : (version.stripe_price_id ?? ""),
+      );
       setAssignedEntitlements(parseAssignedEntitlements(version));
     },
     [],
@@ -179,8 +278,10 @@ export function PlatformPlansManager() {
           credit_grant_policy: creditGrantPolicy,
           price_amount_cents: Number(priceCents) || 0,
           billing_interval: billingInterval,
-          stripe_product_id: stripeProductId.trim() || null,
-          stripe_price_id: stripePriceId.trim() || null,
+          stripe_product_id:
+            billingMode === "paid" ? stripeProductId.trim() || null : null,
+          stripe_price_id:
+            billingMode === "paid" ? stripePriceId.trim() || null : null,
           entitlements,
         },
       );
@@ -205,12 +306,36 @@ export function PlatformPlansManager() {
       toast.success("Draft deleted");
       setSelectedVersionId(null);
       setSelectedVersion(null);
+      setPreviewing(false);
       await loadCatalog();
     } catch (error) {
       console.error("Delete draft failed:", error);
       toast.error("Failed to delete draft");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleReorderEntitlements = async (next: AssignedPlanEntitlement[]) => {
+    if (!selectedVersion || selectedVersion.status === "draft") return;
+    try {
+      setReordering(true);
+      const updated = await adminPlanService.reorderPlanVersionEntitlements(
+        selectedVersion.id,
+        next.map((item) => item.key),
+      );
+      setSelectedVersion(updated);
+      setAssignedEntitlements(parseAssignedEntitlements(updated));
+      toast.success("Entitlement display order updated");
+    } catch (error) {
+      console.error("Reorder entitlements failed:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update entitlement display order",
+      );
+    } finally {
+      setReordering(false);
     }
   };
 
@@ -225,7 +350,9 @@ export function PlatformPlansManager() {
         [payload.slug]: payload.billing_interval,
       }));
       setCadenceTab(payload.billing_interval);
-      if (result.stripe_auto_create_error) {
+      if (isFreePlanProduct(payload.slug)) {
+        toast.success("Free plan product created without Stripe");
+      } else if (result.stripe_auto_create_error) {
         toast.warning("Plan product created — link Stripe Product manually", {
           description: result.stripe_auto_create_error,
         });
@@ -249,10 +376,59 @@ export function PlatformPlansManager() {
   );
 
   const productStripeLinked = Boolean(
-    stripeProductId.trim() ||
-    selectedProduct?.stripe_product_id ||
-    selectedVersion?.stripe_product_id,
+    billingMode === "paid" &&
+    (stripeProductId.trim() ||
+      selectedProduct?.stripe_product_id ||
+      selectedVersion?.stripe_product_id),
   );
+
+  const previewPlan = React.useMemo<PlanCardData | null>(() => {
+    if (!selectedVersion) return null;
+    const definitionsByKey = new Map(
+      definitions.map((definition) => [definition.key, definition]),
+    );
+    return {
+      id: selectedVersion.id,
+      display_label: displayLabel.trim() || null,
+      product_name: selectedProduct?.display_name ?? "Plan",
+      product_description: selectedProduct?.description ?? null,
+      billing_mode: billingMode,
+      price_amount_cents: Number(priceCents) || 0,
+      currency: selectedVersion.currency,
+      billing_interval: billingInterval,
+      entitlements: assignedEntitlements.map((entitlement) => ({
+        key: entitlement.key,
+        label:
+          definitionsByKey.get(entitlement.key)?.display_name ??
+          entitlement.key,
+        description:
+          definitionsByKey.get(entitlement.key)?.description?.trim() || null,
+        value: entitlement.unlimited
+          ? { type: "unlimited" }
+          : entitlement.booleanValue !== undefined
+            ? { type: "boolean", value: entitlement.booleanValue }
+            : { type: "integer", value: entitlement.integerValue ?? 0 },
+      })),
+    };
+  }, [
+    assignedEntitlements,
+    billingInterval,
+    billingMode,
+    definitions,
+    displayLabel,
+    priceCents,
+    selectedProduct,
+    selectedVersion,
+  ]);
+
+  const handleBillingModeChange = (mode: BillingMode) => {
+    setBillingMode(mode);
+    if (mode === "free") {
+      setPriceCents("0");
+      setStripeProductId("");
+      setStripePriceId("");
+    }
+  };
 
   const handleCreateDraft = async (product: PlanProductWithVersions) => {
     if (productHasDraft(product)) {
@@ -266,7 +442,7 @@ export function PlatformPlansManager() {
         productBillingBySlug[product.slug] ?? defaultBillingInterval(product);
       const draft = await adminPlanService.createDraftVersion(product.id, {
         display_label: "New draft",
-        billing_mode: "paid",
+        billing_mode: isFreePlanProduct(product) ? "free" : "paid",
         credit_grant_policy: "recurring",
         price_amount_cents: 0,
         billing_interval: interval,
@@ -367,239 +543,320 @@ export function PlatformPlansManager() {
                 </div>
 
                 {selectedVersion.status === "draft" ? (
-                  <>
-                    <div className="space-y-2">
-                      <CatalogFieldLabel htmlFor="billing-mode">
-                        Billing mode
-                      </CatalogFieldLabel>
-                      <Select
-                        value={billingMode}
-                        onValueChange={(v) => setBillingMode(v as BillingMode)}
+                  <div className="[perspective:1200px]">
+                    <div
+                      className={`grid [transform-style:preserve-3d] transition-transform duration-500 motion-reduce:transition-none ${
+                        previewing ? "[transform:rotateY(180deg)]" : ""
+                      }`}
+                    >
+                      <div
+                        className={`col-start-1 row-start-1 space-y-4 [backface-visibility:hidden] ${
+                          previewing ? "pointer-events-none" : ""
+                        }`}
+                        aria-hidden={previewing}
                       >
-                        <SelectTrigger id="billing-mode" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="free">
-                            Free — activate without Stripe
-                          </SelectItem>
-                          <SelectItem value="paid">
-                            Paid — activate through Stripe
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <CatalogFieldLabel htmlFor="credit-grant-policy">
-                        Included credit cadence
-                      </CatalogFieldLabel>
-                      <Select
-                        value={creditGrantPolicy}
-                        onValueChange={(v) =>
-                          setCreditGrantPolicy(v as CreditGrantPolicy)
-                        }
-                      >
-                        <SelectTrigger
-                          id="credit-grant-policy"
-                          className="w-full"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="recurring">
-                            Recurring each billing period
-                          </SelectItem>
-                          <SelectItem value="one_time">
-                            One-time activation grant
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Recurring grants renew from Stripe invoices for paid
-                        plans or the application scheduler for free plans.
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <CatalogFieldLabel
-                        htmlFor="display-label"
-                        help={PLAN_CATALOG_FIELD_HELP.displayLabel}
-                      >
-                        Display label
-                      </CatalogFieldLabel>
-                      <Input
-                        id="display-label"
-                        value={displayLabel}
-                        onChange={(e) => setDisplayLabel(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <CatalogFieldLabel
-                        htmlFor="billing-interval"
-                        help={PLAN_CATALOG_FIELD_HELP.billingInterval}
-                      >
-                        Billing interval
-                      </CatalogFieldLabel>
-                      <Select
-                        value={billingInterval}
-                        onValueChange={(v) =>
-                          setBillingInterval(v as BillingCadence)
-                        }
-                      >
-                        <SelectTrigger id="billing-interval" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="annual">Annual</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <CatalogFieldLabel
-                        htmlFor="price-cents"
-                        help={PLAN_CATALOG_FIELD_HELP.priceCents}
-                      >
-                        Price (cents)
-                      </CatalogFieldLabel>
-                      <Input
-                        id="price-cents"
-                        type="number"
-                        min={0}
-                        value={priceCents}
-                        onChange={(e) => setPriceCents(e.target.value)}
-                      />
-                    </div>
-
-                    {!productStripeLinked ? (
-                      <StripeSyncAlert
-                        title="Stripe Product not linked"
-                        message="Auto-create may have failed when this plan product was added. Create a Product in Stripe Dashboard, paste prod_… below, save the draft, then publish."
-                      />
-                    ) : null}
-
-                    <div className="space-y-2">
-                      <CatalogFieldLabel
-                        htmlFor="stripe-product-id"
-                        help={PLAN_CATALOG_FIELD_HELP.stripeProductId}
-                      >
-                        Stripe product ID
-                      </CatalogFieldLabel>
-                      <Input
-                        id="stripe-product-id"
-                        value={stripeProductId}
-                        onChange={(e) => setStripeProductId(e.target.value)}
-                        placeholder="prod_…"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <CatalogFieldLabel
-                        htmlFor="stripe-price-id"
-                        help={PLAN_CATALOG_FIELD_HELP.stripePriceId}
-                      >
-                        Stripe price ID (optional fallback)
-                      </CatalogFieldLabel>
-                      <Input
-                        id="stripe-price-id"
-                        value={stripePriceId}
-                        onChange={(e) => setStripePriceId(e.target.value)}
-                        placeholder="price_…"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Leave empty to auto-create on publish. Set manually if
-                        Stripe Price creation fails.
-                      </p>
-                    </div>
-
-                    <PlanVersionEntitlementEditor
-                      definitions={definitions}
-                      assigned={assignedEntitlements}
-                      onChange={setAssignedEntitlements}
-                    />
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => void handleSaveDraft()}
-                        disabled={saving}
-                      >
-                        {saving ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Save className="mr-2 h-4 w-4" />
-                        )}
-                        Save draft
-                      </Button>
-                      <Button
-                        variant="default"
-                        onClick={() => setPublishOpen(true)}
-                      >
-                        <Upload className="mr-2 h-4 w-4" />
-                        Publish
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => void handleDeleteDraft()}
-                        disabled={deleting}
-                      >
-                        {deleting ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="mr-2 h-4 w-4" />
-                        )}
-                        Delete draft
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Display label</p>
-                        <p className="font-medium">
-                          {selectedVersion.display_label ?? "—"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Price</p>
-                        <p className="font-medium">
-                          {new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: selectedVersion.currency || "USD",
-                          }).format(selectedVersion.price_amount_cents / 100)}
-                        </p>
-                      </div>
-                      {selectedVersion.stripe_price_id ? (
-                        <div className="sm:col-span-2">
-                          <p className="text-muted-foreground">
-                            Stripe price ID
-                          </p>
-                          <p className="font-mono text-xs">
-                            {selectedVersion.stripe_price_id}
+                        <div className="space-y-2">
+                          <CatalogFieldLabel htmlFor="billing-mode">
+                            Billing mode
+                          </CatalogFieldLabel>
+                          <Select
+                            value={billingMode}
+                            onValueChange={(v) =>
+                              handleBillingModeChange(v as BillingMode)
+                            }
+                          >
+                            <SelectTrigger id="billing-mode" className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="free">
+                                Free — activate without Stripe
+                              </SelectItem>
+                              <SelectItem value="paid">
+                                Paid — activate through Stripe
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <CatalogFieldLabel htmlFor="credit-grant-policy">
+                            Included credit cadence
+                          </CatalogFieldLabel>
+                          <Select
+                            value={creditGrantPolicy}
+                            onValueChange={(v) =>
+                              setCreditGrantPolicy(v as CreditGrantPolicy)
+                            }
+                          >
+                            <SelectTrigger
+                              id="credit-grant-policy"
+                              className="w-full"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="recurring">
+                                Recurring each billing period
+                              </SelectItem>
+                              <SelectItem value="one_time">
+                                One-time activation grant
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Recurring grants renew from Stripe invoices for paid
+                            plans or the application scheduler for free plans.
                           </p>
                         </div>
-                      ) : null}
+                        <div className="space-y-2">
+                          <CatalogFieldLabel
+                            htmlFor="display-label"
+                            help={PLAN_CATALOG_FIELD_HELP.displayLabel}
+                          >
+                            Display label
+                          </CatalogFieldLabel>
+                          <Input
+                            id="display-label"
+                            value={displayLabel}
+                            onChange={(e) => setDisplayLabel(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <CatalogFieldLabel
+                            htmlFor="billing-interval"
+                            help={PLAN_CATALOG_FIELD_HELP.billingInterval}
+                          >
+                            Billing interval
+                          </CatalogFieldLabel>
+                          <Select
+                            value={billingInterval}
+                            onValueChange={(v) =>
+                              setBillingInterval(v as BillingCadence)
+                            }
+                          >
+                            <SelectTrigger
+                              id="billing-interval"
+                              className="w-full"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="annual">Annual</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <CatalogFieldLabel
+                            htmlFor="price-cents"
+                            help={PLAN_CATALOG_FIELD_HELP.priceCents}
+                          >
+                            Price (cents)
+                          </CatalogFieldLabel>
+                          <Input
+                            id="price-cents"
+                            type="number"
+                            min={0}
+                            value={priceCents}
+                            onChange={(e) => setPriceCents(e.target.value)}
+                          />
+                        </div>
+
+                        {billingMode === "paid" ? (
+                          <>
+                            {!productStripeLinked ? (
+                              <StripeSyncAlert
+                                title="Stripe Product not linked"
+                                message="Auto-create may have failed when this plan product was added. Create a Product in Stripe Dashboard, paste prod_… below, save the draft, then publish."
+                              />
+                            ) : null}
+
+                            <div className="space-y-2">
+                              <CatalogFieldLabel
+                                htmlFor="stripe-product-id"
+                                help={PLAN_CATALOG_FIELD_HELP.stripeProductId}
+                              >
+                                Stripe product ID
+                              </CatalogFieldLabel>
+                              <Input
+                                id="stripe-product-id"
+                                value={stripeProductId}
+                                onChange={(e) =>
+                                  setStripeProductId(e.target.value)
+                                }
+                                placeholder="prod_…"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <CatalogFieldLabel
+                                htmlFor="stripe-price-id"
+                                help={PLAN_CATALOG_FIELD_HELP.stripePriceId}
+                              >
+                                Stripe price ID (optional fallback)
+                              </CatalogFieldLabel>
+                              <Input
+                                id="stripe-price-id"
+                                value={stripePriceId}
+                                onChange={(e) =>
+                                  setStripePriceId(e.target.value)
+                                }
+                                placeholder="price_…"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Leave empty to auto-create on publish. Set
+                                manually if Stripe Price creation fails.
+                              </p>
+                            </div>
+                          </>
+                        ) : null}
+
+                        <PlanVersionEntitlementEditor
+                          definitions={definitions}
+                          assigned={assignedEntitlements}
+                          onChange={setAssignedEntitlements}
+                        />
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            onClick={() => void handleSaveDraft()}
+                            disabled={saving}
+                          >
+                            {saving ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Save className="mr-2 h-4 w-4" />
+                            )}
+                            Save draft
+                          </Button>
+                          <Button onClick={() => setPreviewing(true)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Preview
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => void handleDeleteDraft()}
+                            disabled={deleting}
+                          >
+                            {deleting ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-2 h-4 w-4" />
+                            )}
+                            Delete draft
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`col-start-1 row-start-1 flex min-h-full flex-col justify-center gap-4 [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+                          previewing ? "" : "pointer-events-none"
+                        }`}
+                        aria-hidden={!previewing}
+                      >
+                        <PlanVersionPreview
+                          plan={previewPlan}
+                          version={selectedVersion}
+                          onBack={() => setPreviewing(false)}
+                          onPublish={() => setPublishOpen(true)}
+                        />
+                      </div>
                     </div>
-
-                    <PlanVersionEntitlementDisplay
-                      version={selectedVersion}
-                      definitions={definitions}
-                    />
-
-                    <p className="text-sm text-muted-foreground">
-                      Published versions are immutable. Clone to create a new
-                      draft.
-                    </p>
-                    <Button
-                      variant="outline"
-                      disabled={products.some(
-                        (p) =>
-                          p.id === selectedVersion.plan_product_id &&
-                          productHasDraft(p),
-                      )}
-                      onClick={() => void handleClone(selectedVersion.id)}
+                  </div>
+                ) : (
+                  <div className="[perspective:1200px]">
+                    <div
+                      className={`grid [transform-style:preserve-3d] transition-transform duration-500 motion-reduce:transition-none ${
+                        previewing ? "[transform:rotateY(180deg)]" : ""
+                      }`}
                     >
-                      <Copy className="mr-2 h-4 w-4" />
-                      Clone to draft
-                    </Button>
+                      <div
+                        className={`col-start-1 row-start-1 space-y-4 [backface-visibility:hidden] ${
+                          previewing ? "pointer-events-none" : ""
+                        }`}
+                        aria-hidden={previewing}
+                      >
+                        <div className="grid gap-3 text-sm sm:grid-cols-2">
+                          <div>
+                            <p className="text-muted-foreground">
+                              Display label
+                            </p>
+                            <p className="font-medium">
+                              {selectedVersion.display_label ?? "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Price</p>
+                            <p className="font-medium">
+                              {new Intl.NumberFormat("en-US", {
+                                style: "currency",
+                                currency: selectedVersion.currency || "USD",
+                              }).format(
+                                selectedVersion.price_amount_cents / 100,
+                              )}
+                            </p>
+                          </div>
+                          {selectedVersion.stripe_price_id ? (
+                            <div className="sm:col-span-2">
+                              <p className="text-muted-foreground">
+                                Stripe price ID
+                              </p>
+                              <p className="font-mono text-xs">
+                                {selectedVersion.stripe_price_id}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <PlanVersionEntitlementDisplay
+                          version={selectedVersion}
+                          definitions={definitions}
+                          onReorder={(next) =>
+                            void handleReorderEntitlements(next)
+                          }
+                          reordering={reordering}
+                        />
+
+                        <p className="text-sm text-muted-foreground">
+                          Entitlement values on published versions are
+                          immutable. You can still change their display order
+                          above; clone the version to create a new draft for
+                          value changes.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setPreviewing(true)}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            Preview
+                          </Button>
+                          <Button
+                            variant="outline"
+                            disabled={products.some(
+                              (p) =>
+                                p.id === selectedVersion.plan_product_id &&
+                                productHasDraft(p),
+                            )}
+                            onClick={() => void handleClone(selectedVersion.id)}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Clone to draft
+                          </Button>
+                        </div>
+                      </div>
+                      <div
+                        className={`col-start-1 row-start-1 flex min-h-full flex-col justify-center gap-4 [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+                          previewing ? "" : "pointer-events-none"
+                        }`}
+                        aria-hidden={!previewing}
+                      >
+                        <PlanVersionPreview
+                          plan={previewPlan}
+                          version={selectedVersion}
+                          onBack={() => setPreviewing(false)}
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
@@ -622,6 +879,7 @@ export function PlatformPlansManager() {
           void loadCatalog();
           setSelectedVersionId(null);
           setSelectedVersion(null);
+          setPreviewing(false);
         }}
       />
     </div>

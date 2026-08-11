@@ -56,18 +56,30 @@ class VersionedSubscriptionService:
         version_ids = [str(row["id"]) for row in rows]
         entitlements_result = (
             self.supabase.table("plan_version_entitlements")
-            .select("plan_version_id, entitlement_key, value")
+            .select(
+                "plan_version_id, entitlement_key, value, display_order, "
+                "entitlement_definitions!inner(display_name, description)"
+            )
             .in_("plan_version_id", version_ids)
+            .order("display_order")
             .execute()
         )
         entitlements: dict[str, dict[str, dict[str, Any]]] = {}
-        for row in entitlements_result.data or []:
-            entitlements.setdefault(str(row["plan_version_id"]), {})[
-                row["entitlement_key"]
-            ] = row["value"]
+        entitlement_metadata: dict[str, dict[str, dict[str, Optional[str]]]] = {}
+        for _, row in self._ordered_entitlement_rows(entitlements_result.data or []):
+            key = row["entitlement_key"]
+            version_id = str(row["plan_version_id"])
+            entitlements.setdefault(version_id, {})[key] = row["value"]
+            definition = self._embedded_entitlement_definition(row)
+            if definition:
+                entitlement_metadata.setdefault(version_id, {})[key] = definition
 
         plans = [
-            self._to_customer_plan_version(row, entitlements.get(str(row["id"]), {}))
+            self._to_customer_plan_version(
+                row,
+                entitlements.get(str(row["id"]), {}),
+                entitlement_metadata.get(str(row["id"]), {}),
+            )
             for row in rows
         ]
         return sorted(
@@ -566,14 +578,25 @@ class VersionedSubscriptionService:
         row = result.data[0]
         entitlements_result = (
             self.supabase.table("plan_version_entitlements")
-            .select("plan_version_id, entitlement_key, value")
+            .select(
+                "plan_version_id, entitlement_key, value, display_order, "
+                "entitlement_definitions!inner(display_name, description)"
+            )
             .eq("plan_version_id", str(plan_version_id))
+            .order("display_order")
             .execute()
         )
         entitlements: dict[str, dict[str, Any]] = {}
-        for entitlement in entitlements_result.data or []:
-            entitlements[entitlement["entitlement_key"]] = entitlement["value"]
-        return self._to_customer_plan_version(row, entitlements)
+        entitlement_metadata: dict[str, dict[str, Optional[str]]] = {}
+        for _, entitlement in self._ordered_entitlement_rows(
+            entitlements_result.data or []
+        ):
+            key = entitlement["entitlement_key"]
+            entitlements[key] = entitlement["value"]
+            definition = self._embedded_entitlement_definition(entitlement)
+            if definition:
+                entitlement_metadata[key] = definition
+        return self._to_customer_plan_version(row, entitlements, entitlement_metadata)
 
     async def _get_existing_subscription(
         self, organization_id: UUID
@@ -631,8 +654,49 @@ class VersionedSubscriptionService:
             return None
 
     @staticmethod
+    def _embedded_entitlement_definition(
+        row: dict[str, Any],
+    ) -> Optional[dict[str, Optional[str]]]:
+        """Extract public entitlement display metadata from a joined row.
+
+        Supabase returns a one-to-one embedded relation as an object, but the
+        list form is accepted as a defensive fallback for alternate clients.
+        Internal enforcement fields are intentionally not exposed.
+        """
+        definition = row.get("entitlement_definitions")
+        if isinstance(definition, list):
+            definition = definition[0] if definition else None
+        if not isinstance(definition, dict):
+            return None
+        return {
+            "display_name": str(
+                definition.get("display_name") or row["entitlement_key"]
+            ),
+            "description": definition.get("description"),
+        }
+
+    @staticmethod
+    def _ordered_entitlement_rows(
+        rows: list[dict[str, Any]],
+    ) -> list[tuple[int, dict[str, Any]]]:
+        """Return entitlement rows ordered for customer-facing plan cards."""
+        return sorted(
+            enumerate(rows),
+            key=lambda pair: (
+                (
+                    int(pair[1]["display_order"])
+                    if pair[1].get("display_order") is not None
+                    else pair[0]
+                ),
+                pair[0],
+            ),
+        )
+
+    @staticmethod
     def _to_customer_plan_version(
-        row: dict[str, Any], entitlements: dict[str, dict[str, Any]]
+        row: dict[str, Any],
+        entitlements: dict[str, dict[str, Any]],
+        entitlement_metadata: Optional[dict[str, dict[str, Optional[str]]]] = None,
     ) -> CustomerPlanVersion:
         """Map a database row to the safe customer-facing catalog shape."""
         product = row.get("plan_products") or {}
@@ -666,6 +730,7 @@ class VersionedSubscriptionService:
             trial_period_days=row.get("trial_period_days"),
             stripe_price_id=row.get("stripe_price_id"),
             entitlements=entitlements,
+            entitlement_metadata=entitlement_metadata or {},
         )
 
     @staticmethod

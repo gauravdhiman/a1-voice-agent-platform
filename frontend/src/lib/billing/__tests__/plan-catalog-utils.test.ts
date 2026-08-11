@@ -98,6 +98,22 @@ describe("plan-catalog-utils", () => {
     ]);
   });
 
+  it("sorts products from the smallest catalog tier to the largest", () => {
+    const products = [
+      { ...product("enterprise", []), sort_order: 10 },
+      { ...product("starter", []), sort_order: 10 },
+      { ...product("free", []), sort_order: 10 },
+      { ...product("pro", []), sort_order: 10 },
+    ];
+
+    expect(filterProductsByCadence(products, "monthly").map((p) => p.slug)).toEqual([
+      "free",
+      "starter",
+      "pro",
+      "enterprise",
+    ]);
+  });
+
   it("detects draft on product", () => {
     const p = product("x", [
       {

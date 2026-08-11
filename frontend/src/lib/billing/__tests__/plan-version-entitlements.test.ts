@@ -37,18 +37,20 @@ const integerDef: EntitlementDefinition = {
 };
 
 describe("plan-version-entitlements", () => {
-  it("parseAssignedEntitlements maps version rows", () => {
+  it("parseAssignedEntitlements maps version rows in display order", () => {
     const version = {
       entitlements: [
         {
           id: "1",
-          entitlement_key: "max_agents",
-          value: { type: "integer", value: 3 },
+          entitlement_key: "payg_enabled",
+          value: { type: "boolean", value: true },
+          display_order: 1,
         },
         {
           id: "2",
-          entitlement_key: "payg_enabled",
-          value: { type: "boolean", value: true },
+          entitlement_key: "max_agents",
+          value: { type: "integer", value: 3 },
+          display_order: 0,
         },
       ],
     } as unknown as PlanVersionDetail;
@@ -71,10 +73,12 @@ describe("plan-version-entitlements", () => {
       {
         entitlement_key: "max_agents",
         value: { type: "integer", value: 2 },
+        display_order: 0,
       },
       {
         entitlement_key: "payg_enabled",
         value: { type: "boolean", value: false },
+        display_order: 1,
       },
     ]);
   });

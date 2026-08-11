@@ -64,6 +64,7 @@ export interface PlanVersionEntitlement {
   id: string;
   entitlement_key: string;
   value: Record<string, unknown>;
+  display_order?: number;
 }
 
 /** Version metadata returned in plan product list (entitlements loaded on demand). */
@@ -106,6 +107,7 @@ export interface PlanProductCreate {
 export interface PlanVersionEntitlementInput {
   entitlement_key: string;
   value: Record<string, unknown>;
+  display_order?: number;
 }
 
 export interface PlanVersionDraftCreate {

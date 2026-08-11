@@ -1,16 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  formatPlanPrice,
+  PlanCard,
+  toPlanCardData,
+} from "@/components/billing/plan-card";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle, ArrowRight, Check, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { billingService } from "@/services/billing-service";
 import type {
   CustomerPlanVersion,
@@ -45,45 +42,6 @@ export interface PlanSelectionProps {
   onRedirectToCheckout?: (checkoutUrl: string) => void;
   /** Optional callback after a plan transition is applied or scheduled. */
   onPlanChangeConfirmed?: () => void;
-}
-
-/**
- * Format a published internal plan version for display.
- *
- * @param plan - Published plan version returned by the customer catalog API
- * @returns Localized price text without the billing interval suffix
- */
-function formatPrice(plan: CustomerPlanVersion): string {
-  if (plan.billing_mode === "free" || plan.price_amount_cents === 0) {
-    return "Free";
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: plan.currency,
-  }).format(plan.price_amount_cents / 100);
-}
-
-/**
- * Turn a sparse entitlement assignment into a short customer-facing feature.
- *
- * @param key - Catalog entitlement key
- * @param rawValue - Stored entitlement value object
- * @returns Human-readable feature text, or an empty string for disabled flags
- */
-function formatEntitlement(
-  key: string,
-  rawValue: Record<string, unknown>,
-): string {
-  const label = key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-  const value = rawValue.value;
-
-  if (typeof value === "boolean") return value ? label : "";
-  if (typeof value === "number") return `${value.toLocaleString()} ${label}`;
-  if (typeof value === "string" && value.trim()) return `${value} ${label}`;
-  return label;
 }
 
 /**
@@ -334,56 +292,18 @@ export function PlanSelection({
         {plansForInterval.map((plan) => {
           const isLoading = loadingPlanId === plan.id;
           const current = isCurrentPlan(plan);
-          const features = Object.entries(plan.entitlements)
-            .map(([key, value]) => formatEntitlement(key, value))
-            .filter(Boolean)
-            .slice(0, 6);
 
           return (
-            <Card
+            <PlanCard
               key={plan.id}
-              className={`relative ${current ? "border-primary shadow-lg" : ""}`}
-              data-testid={`billing-plan-card-${plan.id}`}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between gap-2">
-                  <span>{planLabel(plan)}</span>
-                  {current ? (
-                    <Badge variant="default">Current plan</Badge>
-                  ) : null}
-                </CardTitle>
-                <CardDescription>
-                  {plan.product_description || "A plan for your organization."}
-                </CardDescription>
-                <div className="text-3xl font-bold">
-                  {formatPrice(plan)}
-                  {plan.billing_mode === "paid" && (
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">
-                      / {plan.billing_interval}
-                    </span>
-                  )}
-                </div>
-              </CardHeader>
-
-              <CardContent>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  {features.length > 0 ? (
-                    features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-emerald-600" />
-                        {feature}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-600" />
-                      Core workspace access
-                    </li>
-                  )}
-                </ul>
-              </CardContent>
-
-              <CardFooter className="flex-col gap-2">
+              plan={toPlanCardData(plan)}
+              badge={
+                current ? <Badge variant="default">Current plan</Badge> : null
+              }
+              className={current ? "border-primary shadow-lg" : undefined}
+              testId={`billing-plan-card-${plan.id}`}
+              footer={
+                <>
                 <Button
                   className="w-full"
                   disabled={loadingPlanId !== null || confirming || current}
@@ -417,8 +337,9 @@ export function PlanSelection({
                     No payment method required
                   </p>
                 ) : null}
-              </CardFooter>
-            </Card>
+                </>
+              }
+            />
           );
         })}
       </div>
@@ -445,13 +366,13 @@ export function PlanSelection({
                 <div>
                   <div className="text-muted-foreground">Current price</div>
                   <div className="font-medium">
-                    {formatPrice(preview.current_plan)}
+                    {formatPlanPrice(toPlanCardData(preview.current_plan))}
                   </div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">New price</div>
                   <div className="font-medium">
-                    {formatPrice(preview.target_plan)}
+                    {formatPlanPrice(toPlanCardData(preview.target_plan))}
                   </div>
                 </div>
               </div>

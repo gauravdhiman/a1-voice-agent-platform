@@ -18,7 +18,14 @@ export interface AssignedPlanEntitlement {
 export function parseAssignedEntitlements(
   version: PlanVersionDetail,
 ): AssignedPlanEntitlement[] {
-  return version.entitlements.map((ent) => {
+  return version.entitlements
+    .map((ent, index) => ({ ent, index }))
+    .sort(
+      (left, right) =>
+        (left.ent.display_order ?? left.index) -
+        (right.ent.display_order ?? right.index),
+    )
+    .map(({ ent }) => {
     const value = ent.value;
     if (value?.type === "boolean") {
       return { key: ent.entitlement_key, booleanValue: Boolean(value.value) };
@@ -30,7 +37,7 @@ export function parseAssignedEntitlements(
       key: ent.entitlement_key,
       integerValue: Number(value?.value ?? 0),
     };
-  });
+    });
 }
 
 /**
@@ -42,7 +49,7 @@ export function buildEntitlementInputs(
 ): PlanVersionEntitlementInput[] {
   const defByKey = new Map(definitions.map((d) => [d.key, d]));
 
-  return assigned.map((item) => {
+  return assigned.map((item, displayOrder) => {
     const def = defByKey.get(item.key);
     if (!def) {
       throw new Error(`Unknown entitlement key: ${item.key}`);
@@ -51,12 +58,14 @@ export function buildEntitlementInputs(
       return {
         entitlement_key: item.key,
         value: { type: "boolean", value: item.booleanValue === true },
+        display_order: displayOrder,
       };
     }
     if (item.unlimited || def.value_type === "unlimited") {
       return {
         entitlement_key: item.key,
         value: { type: "unlimited" },
+        display_order: displayOrder,
       };
     }
     const intValue = item.integerValue ?? 0;
@@ -66,6 +75,7 @@ export function buildEntitlementInputs(
     return {
       entitlement_key: item.key,
       value: { type: "integer", value: intValue },
+      display_order: displayOrder,
     };
   });
 }

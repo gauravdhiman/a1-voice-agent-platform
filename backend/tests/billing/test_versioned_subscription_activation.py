@@ -105,8 +105,23 @@ class TestVersionedSubscriptionService:
             [
                 {
                     "plan_version_id": str(FREE_VERSION_ID),
+                    "entitlement_key": "max_agents",
+                    "value": {"type": "integer", "value": 1},
+                    "display_order": 1,
+                    "entitlement_definitions": {
+                        "display_name": "Maximum agents",
+                        "description": "Agents available to the organization.",
+                    },
+                },
+                {
+                    "plan_version_id": str(FREE_VERSION_ID),
                     "entitlement_key": "included_credits_monthly",
                     "value": {"type": "integer", "value": 100},
+                    "display_order": 0,
+                    "entitlement_definitions": {
+                        "display_name": "Included credits",
+                        "description": "Credits granted each billing period.",
+                    },
                 }
             ]
         )
@@ -123,6 +138,18 @@ class TestVersionedSubscriptionService:
         assert result[1].tier_rank == 10
         assert result[0].stripe_price_id is None
         assert result[0].entitlements["included_credits_monthly"]["value"] == 100
+        assert list(result[0].entitlements) == [
+            "included_credits_monthly",
+            "max_agents",
+        ]
+        assert (
+            result[0].entitlement_metadata["included_credits_monthly"].display_name
+            == "Included credits"
+        )
+        assert (
+            result[0].entitlement_metadata["included_credits_monthly"].description
+            == "Credits granted each billing period."
+        )
 
     @pytest.mark.asyncio
     async def test_free_activation_creates_non_stripe_subscription(self):
@@ -180,6 +207,32 @@ class TestVersionedSubscriptionService:
         result = service._to_customer_plan_version(legacy_enterprise, {})
 
         assert result.tier_rank == 30
+
+    def test_customer_metadata_extraction_handles_embedded_relation_shapes(self):
+        """Joined entitlement metadata remains safe across Supabase row shapes."""
+        row = {
+            "entitlement_key": "max_agents",
+            "entitlement_definitions": [
+                {
+                    "display_name": "Maximum agents",
+                    "description": "Voice agents available to the organization.",
+                    "enforcement_handler": "internal.only",
+                }
+            ],
+        }
+
+        metadata = VersionedSubscriptionService._embedded_entitlement_definition(row)
+
+        assert metadata == {
+            "display_name": "Maximum agents",
+            "description": "Voice agents available to the organization.",
+        }
+        assert (
+            VersionedSubscriptionService._embedded_entitlement_definition(
+                {"entitlement_key": "missing"}
+            )
+            is None
+        )
 
     @pytest.mark.asyncio
     async def test_free_activation_is_idempotent_for_same_active_version(self):

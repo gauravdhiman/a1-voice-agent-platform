@@ -1,33 +1,49 @@
 import * as React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { PlatformPlansManager } from "../platform-plans-manager";
 
-const { version, detail } = vi.hoisted(() => {
-  const version = {
-    id: "version-1",
-    plan_product_id: "product-1",
-    version_number: 1,
-    status: "draft" as const,
-    display_label: "Free trial",
-    billing_mode: "free" as const,
-    credit_grant_policy: "recurring" as const,
-    price_amount_cents: 0,
-    currency: "USD",
-    billing_interval: "monthly",
-    trial_period_days: null,
-    stripe_product_id: null,
-    stripe_price_id: null,
-    is_current_for_signup: false,
-    published_at: null,
-    legacy_subscription_plan_id: null,
-    created_at: "2026-08-08T00:00:00Z",
-    updated_at: "2026-08-08T00:00:00Z",
-  } as const;
+const { version, detail, publishedVersion, publishedDetail } = vi.hoisted(
+  () => {
+    const version = {
+      id: "version-1",
+      plan_product_id: "product-1",
+      version_number: 1,
+      status: "draft" as const,
+      display_label: "Free trial",
+      billing_mode: "free" as const,
+      credit_grant_policy: "recurring" as const,
+      price_amount_cents: 0,
+      currency: "USD",
+      billing_interval: "monthly",
+      trial_period_days: null,
+      stripe_product_id: null,
+      stripe_price_id: null,
+      is_current_for_signup: false,
+      published_at: null,
+      legacy_subscription_plan_id: null,
+      created_at: "2026-08-08T00:00:00Z",
+      updated_at: "2026-08-08T00:00:00Z",
+    } as const;
 
-  return { version, detail: { ...version, entitlements: [] } };
-});
+    const publishedVersion = {
+      ...version,
+      id: "version-2",
+      version_number: 2,
+      status: "published" as const,
+      display_label: "Published free trial",
+      published_at: "2026-08-09T00:00:00Z",
+    } as const;
+
+    return {
+      version,
+      detail: { ...version, entitlements: [] },
+      publishedVersion,
+      publishedDetail: { ...publishedVersion, entitlements: [] },
+    };
+  },
+);
 
 vi.mock("@/services/admin-plan-service", () => ({
   adminPlanService: {
@@ -42,11 +58,17 @@ vi.mock("@/services/admin-plan-service", () => ({
         stripe_product_id: null,
         created_at: "2026-08-08T00:00:00Z",
         updated_at: "2026-08-08T00:00:00Z",
-        versions: [version],
+        versions: [version, publishedVersion],
       },
     ]),
     listEntitlementDefinitions: vi.fn().mockResolvedValue([]),
-    getPlanVersion: vi.fn().mockResolvedValue(detail),
+    getPlanVersion: vi
+      .fn()
+      .mockImplementation((versionId: string) =>
+        Promise.resolve(
+          versionId === publishedVersion.id ? publishedDetail : detail,
+        ),
+      ),
     updateDraftVersion: vi.fn().mockResolvedValue(detail),
     createDraftVersion: vi.fn(),
     deleteDraftVersion: vi.fn(),
@@ -57,12 +79,31 @@ vi.mock("@/services/admin-plan-service", () => ({
 vi.mock("@/components/billing/plan-products-list-panel", () => ({
   PlanProductsListPanel: ({
     onSelectVersion,
+    onCreateDraft,
   }: {
-    onSelectVersion: (v: typeof version) => void;
+    onSelectVersion: (v: typeof version | typeof publishedVersion) => void;
+    onCreateDraft: (product: {
+      id: string;
+      slug: string;
+      versions: never[];
+    }) => void;
   }) => (
-    <button type="button" onClick={() => onSelectVersion(version)}>
-      Select version
-    </button>
+    <>
+      <button type="button" onClick={() => onSelectVersion(version)}>
+        Select version
+      </button>
+      <button type="button" onClick={() => onSelectVersion(publishedVersion)}>
+        Select published version
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onCreateDraft({ id: "product-1", slug: "free", versions: [] })
+        }
+      >
+        Create draft
+      </button>
+    </>
   ),
 }));
 
@@ -127,7 +168,112 @@ describe("PlatformPlansManager", () => {
       expect.objectContaining({
         billing_mode: "free",
         credit_grant_policy: "one_time",
+        stripe_product_id: null,
+        stripe_price_id: null,
       }),
     );
+  });
+
+  it("hides Stripe controls for free drafts", async () => {
+    const user = userEvent.setup();
+
+    render(<PlatformPlansManager />);
+    await user.click(
+      await screen.findByRole("button", { name: "Select version" }),
+    );
+
+    expect(screen.queryByText("Stripe product ID")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Stripe Product not linked"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("creates the free product draft in free billing mode", async () => {
+    const user = userEvent.setup();
+    const { adminPlanService } = await import("@/services/admin-plan-service");
+    vi.mocked(adminPlanService.createDraftVersion).mockResolvedValue(detail);
+
+    render(<PlatformPlansManager />);
+    await user.click(
+      await screen.findByRole("button", { name: "Create draft" }),
+    );
+
+    expect(adminPlanService.createDraftVersion).toHaveBeenCalledWith(
+      "product-1",
+      expect.objectContaining({ billing_mode: "free", price_amount_cents: 0 }),
+    );
+  });
+
+  it("previews a draft card and can return to editing", async () => {
+    const user = userEvent.setup();
+
+    render(<PlatformPlansManager />);
+    await user.click(
+      await screen.findByRole("button", { name: "Select version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(
+      await screen.findByTestId("plan-preview-card-version-1"),
+    ).toBeInTheDocument();
+    const draftCard = screen.getByTestId("plan-preview-card-version-1");
+    expect(
+      within(draftCard).getByRole("button", { name: "Start with Free" }),
+    ).toBeDisabled();
+    expect(
+      within(draftCard).queryByRole("button", { name: "Back to edit" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
+    const draftBack = screen.getByRole("button", { name: "Back to edit" });
+    expect(draftBack).toBeInTheDocument();
+    expect(
+      draftCard.compareDocumentPosition(draftBack) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Back to edit" }));
+
+    expect(
+      screen.getByTestId("plan-preview-card-version-1").parentElement,
+    ).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
+  });
+
+  it("previews a published card and can return to version details", async () => {
+    const user = userEvent.setup();
+
+    render(<PlatformPlansManager />);
+    await user.click(
+      await screen.findByRole("button", { name: "Select published version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(
+      await screen.findByTestId("plan-preview-card-version-2"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Published preview")).toBeInTheDocument();
+    const publishedCard = screen.getByTestId("plan-preview-card-version-2");
+    expect(
+      within(publishedCard).getByRole("button", { name: "Start with Free" }),
+    ).toBeDisabled();
+    expect(
+      within(publishedCard).queryByRole("button", {
+        name: "Back to version details",
+      }),
+    ).not.toBeInTheDocument();
+
+    const publishedBack = screen.getByRole("button", {
+      name: "Back to version details",
+    });
+    expect(
+      publishedCard.compareDocumentPosition(publishedBack) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(publishedBack);
+
+    expect(
+      screen.getByTestId("plan-preview-card-version-2").parentElement,
+    ).toHaveAttribute("aria-hidden", "true");
   });
 });
