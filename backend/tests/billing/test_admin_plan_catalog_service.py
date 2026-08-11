@@ -238,6 +238,27 @@ class TestAdminPlanCatalogService:
         assert result.stripe_auto_create_error is not None
 
     @pytest.mark.asyncio
+    async def test_create_free_plan_product_skips_stripe_product_creation(
+        self, catalog_service, mock_supabase_client, product_id
+    ):
+        row = _product_row(product_id, slug="free")
+        mock_supabase_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        with patch(
+            "src.billing.admin_plan_catalog_service.stripe_service.create_product",
+            new_callable=AsyncMock,
+        ) as mock_stripe:
+            result = await catalog_service.create_plan_product(
+                PlanProductCreate(slug="free", display_name="Free")
+            )
+
+        mock_stripe.assert_not_awaited()
+        assert result.product.slug == "free"
+        assert result.product.stripe_product_id is None
+        assert result.stripe_auto_create_error is None
+
+    @pytest.mark.asyncio
     async def test_create_draft_version_increments_version_number(
         self, catalog_service, product_id, version_id
     ):
@@ -254,7 +275,9 @@ class TestAdminPlanCatalogService:
             return PlanVersionDetail(**new_row, entitlements=[])
 
         with patch.object(
-            catalog_service, "_get_product", return_value=_product_row(product_id)
+            catalog_service,
+            "_get_product",
+            return_value={**_product_row(product_id), "stripe_product_id": "prod_paid"},
         ), patch.object(
             catalog_service, "_get_draft_version_for_product", return_value=None
         ), patch.object(
@@ -283,6 +306,7 @@ class TestAdminPlanCatalogService:
         )
         assert inserted_row["billing_mode"] == BillingMode.FREE.value
         assert inserted_row["credit_grant_policy"] == CreditGrantPolicy.ONE_TIME.value
+        assert inserted_row["stripe_product_id"] is None
 
     @pytest.mark.asyncio
     async def test_update_draft_version_rejects_published(
@@ -304,6 +328,40 @@ class TestAdminPlanCatalogService:
                 await catalog_service.update_draft_version(
                     version_id, PlanVersionDraftUpdate(display_label="Nope")
                 )
+
+    @pytest.mark.asyncio
+    async def test_switching_draft_to_free_clears_stripe_metadata(
+        self, catalog_service, product_id, version_id
+    ):
+        from src.billing.admin_plan_models import PlanVersionDetail
+
+        current = {
+            **_version_row(version_id, product_id),
+            "stripe_product_id": "prod_paid",
+            "stripe_price_id": "price_paid",
+        }
+        updated = {**current, "billing_mode": BillingMode.FREE.value}
+        call_count = {"n": 0}
+
+        async def fake_get_plan_version(_vid):
+            call_count["n"] += 1
+            row = current if call_count["n"] == 1 else updated
+            return PlanVersionDetail(**row, entitlements=[])
+
+        with patch.object(
+            catalog_service, "get_plan_version", side_effect=fake_get_plan_version
+        ):
+            catalog_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[updated]
+            )
+            await catalog_service.update_draft_version(
+                version_id,
+                PlanVersionDraftUpdate(billing_mode=BillingMode.FREE),
+            )
+
+        fields = catalog_service.supabase.table.return_value.update.call_args.args[0]
+        assert fields["stripe_product_id"] is None
+        assert fields["stripe_price_id"] is None
 
     @pytest.mark.asyncio
     async def test_clone_preserves_credit_grant_policy(
@@ -382,6 +440,73 @@ class TestAdminPlanCatalogService:
             )
         assert len(result.entitlements) == 1
         assert result.entitlements[0].entitlement_key == "max_agents"
+
+    @pytest.mark.asyncio
+    async def test_replace_entitlements_persists_display_order(
+        self, catalog_service, version_id
+    ):
+        """Draft entitlement replacement stores the editor's display sequence."""
+        await catalog_service._replace_entitlements(
+            version_id,
+            [
+                PlanVersionEntitlementInput(
+                    entitlement_key="max_agents",
+                    value={"type": "integer", "value": 5},
+                ),
+                PlanVersionEntitlementInput(
+                    entitlement_key="payg_enabled",
+                    value={"type": "boolean", "value": True},
+                ),
+            ],
+        )
+
+        inserted_rows = (
+            catalog_service.supabase.table.return_value.insert.call_args.args[0]
+        )
+        assert [row["display_order"] for row in inserted_rows] == [0, 1]
+
+    @pytest.mark.asyncio
+    async def test_reorder_published_version_changes_order_only(
+        self, catalog_service, product_id, version_id
+    ):
+        """Published reordering updates order columns without changing values."""
+        from src.billing.admin_plan_models import PlanVersionDetail, PlanVersionEntitlement
+
+        first_id = uuid4()
+        second_id = uuid4()
+        published = PlanVersionDetail(
+            **_version_row(
+                version_id,
+                product_id,
+                status=PlanVersionStatus.PUBLISHED.value,
+            ),
+            entitlements=[
+                PlanVersionEntitlement(
+                    id=first_id,
+                    entitlement_key="max_agents",
+                    value={"type": "integer", "value": 5},
+                    display_order=0,
+                ),
+                PlanVersionEntitlement(
+                    id=second_id,
+                    entitlement_key="payg_enabled",
+                    value={"type": "boolean", "value": True},
+                    display_order=1,
+                ),
+            ],
+        )
+
+        with patch.object(catalog_service, "get_plan_version", return_value=published):
+            await catalog_service.reorder_plan_version_entitlements(
+                version_id, ["payg_enabled", "max_agents"]
+            )
+
+        update_calls = catalog_service.supabase.table.return_value.update.call_args_list
+        assert [call.args[0] for call in update_calls] == [
+            {"display_order": 0},
+            {"display_order": 1},
+        ]
+        assert all("value" not in call.args[0] for call in update_calls)
 
     @pytest.mark.asyncio
     async def test_create_draft_version_rejects_second_draft(

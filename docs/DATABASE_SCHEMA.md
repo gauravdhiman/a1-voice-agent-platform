@@ -734,7 +734,7 @@ Tracks payment history and invoices.
 
 ### Plan Versioning & Entitlements Tables
 
-> **Status:** Implemented through migrations `20260807000002`–`20260808000012`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version. `billing_mode` explicitly separates free activation from paid Stripe checkout; `credit_grant_policy` separates recurring from one-time grants; and the latest migration adds the atomic/idempotent subscription-credit grant function.
+> **Status:** Implemented through migrations `20260807000002`–`20260810000001`. These tables replace the flat `subscription_plans` model for new signups while grandfathering existing subscribers on their bound version. `billing_mode` explicitly separates free activation from paid Stripe checkout; `credit_grant_policy` separates recurring from one-time grants; and `plan_version_entitlements.display_order` controls the customer-facing card sequence without changing entitlement values.
 
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 
@@ -743,7 +743,7 @@ Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan
 | `plan_products` | Plan families (`starter`, `growth`) — marketing identity; `sort_order` is the customer-facing tier rank and does not restrict transitions |
 | `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price |
 | `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
-| `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB) |
+| `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB), with explicit `display_order` for customer-facing cards |
 | `plan_version_publish_events` | Migration policy when a new version is published |
 | `organization_subscription_migrations` | Per-subscriber grace period and migration status |
 | `organization_usage_counters` | Fast usage counts for limit enforcement |
@@ -761,6 +761,25 @@ free-plan scheduler for free plans. One-time grants are issued at activation
 only and do not schedule a renewal.
 
 **Grandfathering rule:** Published `plan_versions` rows are immutable. Admin "edits" create a new draft version → publish → new signups only; existing subs keep old `plan_version_id` until migration job or self-service upgrade.
+
+**Entitlement ordering:** `plan_version_entitlements.display_order` is a zero-based sequence scoped to each plan version. Draft saves replace rows in editor order; published plan administration may update only this column so entitlement membership and values remain immutable. The customer plan API orders rows by this column before building the plan-card response.
+
+#### plan_version_entitlements
+
+Stores the sparse entitlement assignments for an immutable plan version. The
+`display_order` column controls presentation only; it does not affect runtime
+entitlement evaluation.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Assignment identifier |
+| plan_version_id | UUID | NOT NULL, FK → `plan_versions.id` CASCADE | Version containing the assignment |
+| entitlement_key | VARCHAR(100) | NOT NULL, FK → `entitlement_definitions.key` RESTRICT; unique with `plan_version_id` | Assigned catalog entitlement |
+| value | JSONB | NOT NULL | Immutable value for this version |
+| display_order | INTEGER | NOT NULL | Zero-based customer-facing card sequence |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Assignment creation time |
+
+**Indexes:** `idx_plan_version_entitlements_display_order`
 
 See the implementation plan for full column definitions, ER diagram, and migration steps.
 
@@ -1414,6 +1433,7 @@ erDiagram
 44. `20260809000001` - Add per-call credit linkage (`call_logs.credits_consumed` and `credit_transaction_id`) plus the organization-scoped `call_artifacts` metadata table for private recordings, transcripts, and summaries. Seed the `voice_call_minute` metering event at 10 credits per connected minute and add the idempotent `consume_voice_call_credits` RPC for atomic voice-call debit plus ledger insert.
 45. `20260809000002` - Add `call_artifacts.encryption_mode` and `retention_expires_at` plus a cleanup lookup index for recording key-strategy audits and retention enforcement.
 46. `20260809000003` - Add `organizations.admin_credit_balance` and the audited `platform_credit_grants` table. Add atomic `grant_admin_credits`, and update the debit, voice-call consumption, and subscription grant functions to account for plan → platform bonus → purchased credit precedence.
+47. `20260810000001` - Add `plan_version_entitlements.display_order` with a `(plan_version_id, display_order)` lookup index and backfill existing entitlement rows in creation order so admin drag-and-drop ordering is stable.
 
 ---
 

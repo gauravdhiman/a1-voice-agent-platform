@@ -5,6 +5,50 @@ import type {
 
 export type BillingCadence = "monthly" | "annual";
 
+/** Return true when a plan product is the platform's non-Stripe free tier. */
+export function isFreePlanProduct(
+  product: Pick<PlanProductWithVersions, "slug"> | string,
+): boolean {
+  return (
+    (typeof product === "string" ? product : product.slug).trim().toLowerCase() ===
+    "free"
+  );
+}
+
+/** Sort catalog products from the smallest tier to the largest tier. */
+export function sortProductsByCatalogOrder(
+  products: PlanProductWithVersions[],
+): PlanProductWithVersions[] {
+  return [...products].sort(
+    (left, right) =>
+      catalogTierRank(left) - catalogTierRank(right) ||
+      left.display_name.localeCompare(right.display_name) ||
+      left.slug.localeCompare(right.slug),
+  );
+}
+
+/**
+ * Resolve the legacy default rank used by the initial plan backfill.
+ *
+ * New custom ranks remain authoritative. Legacy paid rows all used 10, so the
+ * known plan names need the same compatibility ordering as the customer API.
+ */
+function catalogTierRank(product: PlanProductWithVersions): number {
+  if (product.sort_order !== 10) return product.sort_order;
+
+  const slug = product.slug.toLowerCase();
+  for (const [keyword, rank] of [
+    ["enterprise", 30],
+    ["pro", 20],
+    ["growth", 20],
+    ["starter", 10],
+    ["free", 0],
+  ] as const) {
+    if (slug.includes(keyword)) return rank;
+  }
+  return product.sort_order;
+}
+
 /**
  * Resolve whether a plan product belongs in the monthly or annual catalog tab.
  */
@@ -32,8 +76,10 @@ export function filterProductsByCadence(
   cadence: BillingCadence,
   overrides: Record<string, BillingCadence> = {},
 ): PlanProductWithVersions[] {
-  return products.filter(
-    (product) => resolveProductBillingCadence(product, overrides) === cadence,
+  return sortProductsByCatalogOrder(
+    products.filter(
+      (product) => resolveProductBillingCadence(product, overrides) === cadence,
+    ),
   );
 }
 

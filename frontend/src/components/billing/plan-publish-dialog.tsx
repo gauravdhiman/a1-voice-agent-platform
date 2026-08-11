@@ -55,6 +55,8 @@ const STRIPE_TIMINGS: { value: StripeMigrationTiming; label: string }[] = [
   { value: "immediate", label: "Immediately" },
 ];
 
+export const PUBLISH_CONFIRMATION_PHRASE = "PUBLISH PLAN";
+
 /**
  * Dialog for publishing a draft plan version with migration policy controls.
  */
@@ -71,6 +73,7 @@ export function PlanPublishDialog({
   const [allowIndefiniteLegacy, setAllowIndefiniteLegacy] = React.useState(true);
   const [stripeTiming, setStripeTiming] =
     React.useState<StripeMigrationTiming>("at_period_end");
+  const [confirmationText, setConfirmationText] = React.useState("");
   const [publishing, setPublishing] = React.useState(false);
 
   React.useEffect(() => {
@@ -80,21 +83,24 @@ export function PlanPublishDialog({
       setAutoMigrateOnExpiry(false);
       setAllowIndefiniteLegacy(true);
       setStripeTiming("at_period_end");
+      setConfirmationText("");
     }
   }, [open, version?.id]);
 
   const needsGrace =
     migrationMode === "grace_then_optional" ||
     migrationMode === "grace_then_required";
+  const isPaidPlan = version?.billing_mode !== "free";
+  const confirmationMatches = confirmationText === PUBLISH_CONFIRMATION_PHRASE;
 
   const handlePublish = async () => {
-    if (!version) return;
+    if (!version || !confirmationMatches) return;
     const body: PlanVersionPublishRequest = {
       migration_mode: migrationMode,
       grace_period_days: needsGrace ? Number(gracePeriodDays) || 0 : null,
       auto_migrate_on_expiry: autoMigrateOnExpiry,
       allow_indefinite_legacy: allowIndefiniteLegacy,
-      stripe_migration_timing: stripeTiming,
+      stripe_migration_timing: isPaidPlan ? stripeTiming : "at_period_end",
       compliance_policy: "soft_block",
     };
 
@@ -123,14 +129,38 @@ export function PlanPublishDialog({
           <DialogTitle>Publish plan version</DialogTitle>
           <DialogDescription>
             {version
-              ? `Publish v${version.version_number}${
-                  version.display_label ? ` (${version.display_label})` : ""
-                }. A Stripe Price is created automatically unless you saved price_… on the draft. Existing subscribers keep their current version unless migration policy requires a change.`
+              ? version.billing_mode === "free"
+                ? `Publish v${version.version_number}${
+                    version.display_label ? ` (${version.display_label})` : ""
+                  }. Free plans activate in the application without payment processing. Existing subscribers keep their current version unless migration policy requires a change.`
+                : `Publish v${version.version_number}${
+                    version.display_label ? ` (${version.display_label})` : ""
+                  }. A Stripe Price is created automatically unless you saved price_… on the draft. Existing subscribers keep their current version unless migration policy requires a change.`
               : "Select a draft version to publish."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+            <p className="font-medium text-destructive">Publishing is irreversible.</p>
+            <p className="mt-1 text-muted-foreground">
+              Type <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{PUBLISH_CONFIRMATION_PHRASE}</code> to confirm you are ready to publish this version.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="publish-confirmation">
+              Type {PUBLISH_CONFIRMATION_PHRASE} to confirm
+            </Label>
+            <Input
+              id="publish-confirmation"
+              value={confirmationText}
+              onChange={(event) => setConfirmationText(event.target.value)}
+              placeholder={PUBLISH_CONFIRMATION_PHRASE}
+              autoComplete="off"
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="migration-mode">Migration policy</Label>
             <Select
@@ -163,24 +193,26 @@ export function PlanPublishDialog({
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <Label htmlFor="stripe-timing">Stripe price change timing</Label>
-            <Select
-              value={stripeTiming}
-              onValueChange={(v) => setStripeTiming(v as StripeMigrationTiming)}
-            >
-              <SelectTrigger id="stripe-timing">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STRIPE_TIMINGS.map((timing) => (
-                  <SelectItem key={timing.value} value={timing.value}>
-                    {timing.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {isPaidPlan ? (
+            <div className="space-y-2">
+              <Label htmlFor="stripe-timing">Stripe price change timing</Label>
+              <Select
+                value={stripeTiming}
+                onValueChange={(v) => setStripeTiming(v as StripeMigrationTiming)}
+              >
+                <SelectTrigger id="stripe-timing">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRIPE_TIMINGS.map((timing) => (
+                    <SelectItem key={timing.value} value={timing.value}>
+                      {timing.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -205,7 +237,10 @@ export function PlanPublishDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handlePublish} disabled={!version || publishing}>
+          <Button
+            onClick={handlePublish}
+            disabled={!version || publishing || !confirmationMatches}
+          >
             {publishing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

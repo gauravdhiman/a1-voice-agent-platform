@@ -107,6 +107,12 @@ export interface OrganizationSubscriptionCreate {
   stripe_customer_id?: string;
 }
 
+/** Customer-safe display metadata for one plan entitlement. */
+export interface CustomerEntitlementMetadata {
+  display_name: string;
+  description: string | null;
+}
+
 /** Published immutable plan version displayed during founder onboarding. */
 export interface CustomerPlanVersion {
   id: string;
@@ -126,6 +132,7 @@ export interface CustomerPlanVersion {
   trial_period_days: number | null;
   stripe_price_id: string | null;
   entitlements: Record<string, Record<string, unknown>>;
+  entitlement_metadata?: Record<string, CustomerEntitlementMetadata>;
 }
 
 export type PlanChangeEffectiveMode = "checkout" | "immediate" | "period_end";

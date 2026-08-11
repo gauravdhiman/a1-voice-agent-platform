@@ -22,6 +22,13 @@ class SubscriptionActivationState(str, Enum):
     CANCELLED = "cancelled"
 
 
+class CustomerEntitlementMetadata(BaseModel):
+    """Customer-safe display metadata for one plan entitlement."""
+
+    display_name: str
+    description: Optional[str] = None
+
+
 class CustomerPlanVersion(BaseModel):
     """Published plan version shown in the customer plan selector."""
 
@@ -45,6 +52,10 @@ class CustomerPlanVersion(BaseModel):
     trial_period_days: Optional[int] = None
     stripe_price_id: Optional[str] = None
     entitlements: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    entitlement_metadata: dict[str, CustomerEntitlementMetadata] = Field(
+        default_factory=dict,
+        description="Customer-safe display metadata keyed by entitlement key",
+    )
 
 
 class FreePlanActivationRequest(BaseModel):

@@ -156,7 +156,6 @@ export function PlatformEntitlementsManager() {
                 <CardContent className="p-0">
                   <ul className="max-h-[calc(100vh-320px)] overflow-y-auto divide-y">
                     {(kind === "limit" ? limits : features).map((def) => {
-                      const draft = drafts[def.key];
                       const isSelected = selectedKey === def.key;
                       return (
                         <li key={def.key}>
@@ -278,8 +277,12 @@ function EntitlementDefinitionEditor({
 
       <div className="space-y-2">
         <CatalogFieldLabel htmlFor={`desc-${definition.key}`}>
-          Description (admin UI)
+          Description
         </CatalogFieldLabel>
+        <p className="text-xs text-muted-foreground">
+          Explain what this entitlement allows customers to do. This appears in
+          the details tooltip on plan cards.
+        </p>
         <Input
           id={`desc-${definition.key}`}
           value={draft.description}

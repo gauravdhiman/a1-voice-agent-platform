@@ -99,6 +99,24 @@ class AdminPlanService {
     return response.data;
   }
 
+  /**
+   * Updates only the entitlement presentation order for a plan version.
+   *
+   * @param versionId - Plan version whose card order should change
+   * @param entitlementKeys - All assigned keys in their desired display order
+   * @returns The updated plan version detail
+   */
+  async reorderPlanVersionEntitlements(
+    versionId: string,
+    entitlementKeys: string[],
+  ): Promise<PlanVersionDetail> {
+    const response = await apiClient.patch<PlanVersionDetail>(
+      `${this.baseUrl}/plan-versions/${versionId}/entitlements/order`,
+      { entitlement_keys: entitlementKeys },
+    );
+    return response.data;
+  }
+
   async deleteDraftVersion(versionId: string): Promise<void> {
     await apiClient.delete(`${this.baseUrl}/plan-versions/${versionId}`);
   }

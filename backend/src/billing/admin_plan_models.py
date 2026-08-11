@@ -71,6 +71,13 @@ class PlanVersionEntitlementInput(BaseModel):
 
     entitlement_key: str
     value: dict[str, Any]
+    display_order: Optional[int] = Field(default=None, ge=0)
+
+
+class PlanVersionEntitlementOrderRequest(BaseModel):
+    """Ordered entitlement keys for changing card presentation sequence."""
+
+    entitlement_keys: list[str] = Field(default_factory=list)
 
 
 class PlanVersionDraftCreate(BaseModel):
@@ -108,6 +115,7 @@ class PlanVersionEntitlement(BaseModel):
     id: UUID
     entitlement_key: str
     value: dict[str, Any]
+    display_order: int = Field(default=0, ge=0)
 
 
 class PlanVersionSummary(BaseModel):

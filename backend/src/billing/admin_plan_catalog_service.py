@@ -1,8 +1,9 @@
 """
 Platform-admin CRUD for plan products, versions, and entitlement catalog.
 
-Draft versions are editable; published versions are immutable (clone to edit).
-Publish flow delegates to ``PlanVersionService.publish_plan_version``.
+Draft versions are editable; published entitlement values are immutable while
+their display order remains administratively maintainable. Publish flow delegates
+to ``PlanVersionService.publish_plan_version``.
 
 See ``docs/03_implementation/plan_entitlements_and_limits.md`` §10.3.
 """
@@ -29,7 +30,7 @@ from .admin_plan_models import (
     PlanVersionSummary,
 )
 from .entitlement_models import EntitlementDefinition
-from .plan_version_models import PlanVersionStatus
+from .plan_version_models import BillingMode, PlanVersionStatus
 from .stripe_service import stripe_service
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ class AdminPlanCatalogService:
     async def create_plan_product(
         self, data: PlanProductCreate
     ) -> PlanProductCreateResult:
-        """Create a new plan product family and auto-create a Stripe Product when configured."""
+        """Create a plan product, linking Stripe only for paid product families."""
         slug = data.slug.strip().lower()
         row = {
             "slug": slug,
@@ -115,36 +116,37 @@ class AdminPlanCatalogService:
         product_id = UUID(str(product_row["id"]))
         stripe_auto_create_error: Optional[str] = None
 
-        try:
-            stripe_product = await stripe_service.create_product(
-                data.display_name,
-                metadata={
-                    "plan_product_id": str(product_id),
-                    "plan_product_slug": slug,
-                },
-            )
-            product_row = await self._update_plan_product_fields(
-                product_id,
-                {"stripe_product_id": stripe_product.id},
-            )
-        except ValueError as exc:
-            stripe_auto_create_error = str(exc)
-            logger.warning(
-                "Plan product %s created without Stripe Product: %s",
-                product_id,
-                exc,
-            )
-        except Exception as exc:
-            stripe_auto_create_error = (
-                f"Stripe Product auto-create failed: {exc}. "
-                "Link prod_… manually from the plan catalog."
-            )
-            logger.warning(
-                "Plan product %s created without Stripe Product: %s",
-                product_id,
-                exc,
-                exc_info=True,
-            )
+        if slug != "free":
+            try:
+                stripe_product = await stripe_service.create_product(
+                    data.display_name,
+                    metadata={
+                        "plan_product_id": str(product_id),
+                        "plan_product_slug": slug,
+                    },
+                )
+                product_row = await self._update_plan_product_fields(
+                    product_id,
+                    {"stripe_product_id": stripe_product.id},
+                )
+            except ValueError as exc:
+                stripe_auto_create_error = str(exc)
+                logger.warning(
+                    "Plan product %s created without Stripe Product: %s",
+                    product_id,
+                    exc,
+                )
+            except Exception as exc:
+                stripe_auto_create_error = (
+                    f"Stripe Product auto-create failed: {exc}. "
+                    "Link prod_… manually from the plan catalog."
+                )
+                logger.warning(
+                    "Plan product %s created without Stripe Product: %s",
+                    product_id,
+                    exc,
+                    exc_info=True,
+                )
 
         return PlanProductCreateResult(
             product=PlanProduct(**product_row),
@@ -212,8 +214,10 @@ class AdminPlanCatalogService:
         await self._ensure_no_existing_draft(product_id)
         version_number = await self._next_version_number(product_id)
         product = await self._get_product(product_id)
-        inherited_stripe_product_id = data.stripe_product_id or product.get(
-            "stripe_product_id"
+        inherited_stripe_product_id = (
+            data.stripe_product_id or product.get("stripe_product_id")
+            if data.billing_mode == BillingMode.PAID
+            else None
         )
         now_iso = datetime.now(timezone.utc).isoformat()
         version_row = {
@@ -273,7 +277,9 @@ class AdminPlanCatalogService:
         await self._ensure_no_existing_draft(source.plan_product_id)
         entitlements = [
             PlanVersionEntitlementInput(
-                entitlement_key=e.entitlement_key, value=e.value
+                entitlement_key=e.entitlement_key,
+                value=e.value,
+                display_order=e.display_order,
             )
             for e in source.entitlements
         ]
@@ -325,6 +331,12 @@ class AdminPlanCatalogService:
             ).items()
             if v is not None
         }
+        if (
+            fields.get("billing_mode", current.billing_mode.value)
+            == BillingMode.FREE.value
+        ):
+            fields["stripe_product_id"] = None
+            fields["stripe_price_id"] = None
         if "currency" in fields:
             fields["currency"] = str(fields["currency"]).upper()
         if fields:
@@ -341,6 +353,49 @@ class AdminPlanCatalogService:
 
         if data.entitlements is not None:
             await self._replace_entitlements(version_id, data.entitlements)
+
+        return await self.get_plan_version(version_id)
+
+    async def reorder_plan_version_entitlements(
+        self, version_id: UUID, ordered_keys: list[str]
+    ) -> PlanVersionDetail:
+        """Change entitlement presentation order without changing membership or values.
+
+        Draft editors normally persist order with their regular save request. This
+        focused operation is used by the published-version UI so published plan
+        values remain immutable while card presentation can still be maintained.
+
+        Args:
+            version_id: Plan version whose entitlement order should change.
+            ordered_keys: Every currently assigned entitlement key exactly once,
+                in the desired card display order.
+
+        Returns:
+            The updated plan version detail with entitlements in display order.
+
+        Raises:
+            ValueError: If the version is missing or the requested keys do not
+                exactly match the version's current entitlement membership.
+        """
+        current = await self.get_plan_version(version_id)
+        current_keys = [
+            entitlement.entitlement_key for entitlement in current.entitlements
+        ]
+        if len(ordered_keys) != len(set(ordered_keys)):
+            raise ValueError("Entitlement order must not contain duplicate keys")
+        if set(ordered_keys) != set(current_keys):
+            raise ValueError(
+                "Entitlement order must include exactly the entitlements on this version"
+            )
+
+        row_by_key = {
+            entitlement.entitlement_key: entitlement
+            for entitlement in current.entitlements
+        }
+        for display_order, key in enumerate(ordered_keys):
+            self.supabase.table("plan_version_entitlements").update(
+                {"display_order": display_order}
+            ).eq("id", str(row_by_key[key].id)).execute()
 
         return await self.get_plan_version(version_id)
 
@@ -407,9 +462,21 @@ class AdminPlanCatalogService:
             self.supabase.table("plan_version_entitlements")
             .select("*")
             .eq("plan_version_id", str(version_id))
+            .order("display_order")
+            .order("created_at")
             .execute()
         )
-        return [PlanVersionEntitlement(**row) for row in (result.data or [])]
+        rows = result.data or []
+        # Keep legacy/test rows deterministic when the migration has not yet
+        # added display_order to the returned shape.
+        rows = sorted(
+            enumerate(rows),
+            key=lambda pair: (
+                int(pair[1].get("display_order", pair[0])),
+                pair[0],
+            ),
+        )
+        return [PlanVersionEntitlement(**row) for _, row in rows]
 
     async def _replace_entitlements(
         self,
@@ -427,8 +494,9 @@ class AdminPlanCatalogService:
                 "plan_version_id": str(version_id),
                 "entitlement_key": item.entitlement_key,
                 "value": item.value,
+                "display_order": display_order,
             }
-            for item in entitlements
+            for display_order, item in enumerate(entitlements)
         ]
         self.supabase.table("plan_version_entitlements").insert(rows).execute()
 

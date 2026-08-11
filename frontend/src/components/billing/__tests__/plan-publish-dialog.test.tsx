@@ -49,7 +49,8 @@ describe("PlanPublishDialog", () => {
 
     expect(screen.getByText("Publish plan version")).toBeInTheDocument();
     expect(screen.getByLabelText("Migration policy")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(screen.getByLabelText(/type publish plan/i)).toBeInTheDocument();
   });
 
   it("calls publish service when Publish is clicked", async () => {
@@ -65,11 +66,49 @@ describe("PlanPublishDialog", () => {
       />,
     );
 
+    await user.type(screen.getByLabelText(/type publish plan/i), "PUBLISH PLAN");
     await user.click(screen.getByRole("button", { name: "Publish" }));
 
     expect(adminPlanService.publishPlanVersion).toHaveBeenCalledWith(
       draftVersion.id,
       expect.objectContaining({ migration_mode: "new_signups_only" }),
     );
+  });
+
+  it("keeps Publish disabled until the exact confirmation phrase is entered", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PlanPublishDialog
+        version={draftVersion}
+        open
+        onOpenChange={() => undefined}
+      />,
+    );
+
+    const confirmation = screen.getByLabelText(/type publish plan/i);
+    const publishButton = screen.getByRole("button", { name: "Publish" });
+
+    await user.type(confirmation, "publish plan");
+    expect(publishButton).toBeDisabled();
+
+    await user.clear(confirmation);
+    await user.type(confirmation, "PUBLISH PLAN");
+    expect(publishButton).toBeEnabled();
+  });
+
+  it("omits Stripe timing controls for a free version", () => {
+    render(
+      <PlanPublishDialog
+        version={{ ...draftVersion, billing_mode: "free", price_amount_cents: 0 }}
+        open
+        onOpenChange={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.queryByLabelText("Stripe price change timing"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/without payment processing/i)).toBeInTheDocument();
   });
 });
