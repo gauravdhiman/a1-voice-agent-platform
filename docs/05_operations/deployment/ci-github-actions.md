@@ -8,8 +8,14 @@ Triggers on **push to `main`** (auto-deploy) and manual **`workflow_dispatch`**.
 
 | Job | What it does |
 |-----|----------------|
-| `deploy-gcp` | Writes `.env.prod` from secret, runs `./scripts/deploy.sh gcp` |
+| `migrate-production` | Writes `.env.prod`, installs the pinned migration runtime, and runs `./scripts/deploy.sh migrate` against production |
+| `deploy-gcp` | Runs only after `migrate-production` succeeds, then writes `.env.prod` from secret and runs `./scripts/deploy.sh gcp` |
 | `deploy-voice-ws` | Runs `./scripts/deploy.sh voice-ws` on the OCI VM (after GCP job) |
+
+The migration job is a required dependency of the application deployment. This
+keeps the database schema ahead of the backend code that depends on it. If a
+migration fails, Cloud Run deployment is skipped and the existing production
+application remains in place for investigation.
 
 ## GitHub secrets (Repository secrets)
 
