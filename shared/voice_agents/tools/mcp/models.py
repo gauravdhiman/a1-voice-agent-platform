@@ -4,6 +4,7 @@ These models are intentionally narrow: they carry only what the worker and the
 backend schema-discovery path need from an MCP server. They are decoupled from
 the ``mcp`` SDK's own types so callers do not depend on SDK internals.
 """
+
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -18,16 +19,33 @@ class McpServerConfig(BaseModel):
             ``/mcp``).
         name: Human-readable server name, used for logging and for the
             ``platform_tools`` row label. Optional.
-        headers: Static headers sent on every request (e.g. an API key or an
-            ``Authorization`` bearer for client-injected-credential servers).
-            Per-org user OAuth tokens are injected separately at call time in
-            later phases; this field is for server-level auth only.
+        headers: Static headers sent on every request (e.g. a public tenant
+            identifier). Per-org OAuth/API-key credentials are injected
+            separately at call time.
+        secret_headers: Credential header templates extracted from a pasted
+            host configuration. ``{{KEY}}`` is the platform's canonical
+            placeholder and is resolved only after an org admin connects the
+            server.
+        transport: Normalized remote transport. The hosted runtime currently
+            executes ``streamable_http``; other transports are reported by the
+            parser instead of being silently misconfigured.
+        auth_type: Normalized authentication mode (``api_key`` or ``oauth2``)
+            when the source configuration declares one.
+        requires_auth: Whether an end-user credential is needed to connect.
+        auth_config: Normalized OAuth metadata when the source configuration
+            includes it. MCP itself does not define a universal config-file
+            schema, so this field intentionally accepts provider extensions.
         timeout: Per-request timeout in seconds.
     """
 
     url: str
     name: Optional[str] = None
     headers: dict[str, str] = Field(default_factory=dict)
+    secret_headers: dict[str, str] = Field(default_factory=dict)
+    transport: str = "streamable_http"
+    auth_type: Optional[str] = None
+    requires_auth: bool = False
+    auth_config: dict[str, Any] = Field(default_factory=dict)
     timeout: float = 30.0
 
 

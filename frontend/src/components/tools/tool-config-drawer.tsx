@@ -23,11 +23,17 @@ import {
   Settings,
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   Loader2,
   EyeOff,
 } from "lucide-react";
 import { AuthStatus, PlatformTool, AgentTool } from "@/types/agent";
 import { DeleteButton } from "@/components/ui/delete-button";
+import {
+  filterMcpFunctions,
+  McpFunctionSearch,
+} from "@/components/tools/mcp-function-search";
+import { ExpandableDescription } from "@/components/tools/expandable-description";
 
 export interface ToolConfigDrawerProps {
   open: boolean;
@@ -73,6 +79,13 @@ export function ToolConfigDrawer({
   const [showApiKeyInput, setShowApiKeyInput] = React.useState(false);
   const [apiKey, setApiKey] = React.useState("");
   const [isSavingApiKey, setIsSavingApiKey] = React.useState(false);
+  const [expandedFunctionName, setExpandedFunctionName] = React.useState<
+    string | null
+  >(null);
+  const [expandedDescriptionName, setExpandedDescriptionName] = React.useState<
+    string | null
+  >(null);
+  const [functionSearch, setFunctionSearch] = React.useState("");
   const currentTime = useLiveTime();
 
   React.useEffect(() => {
@@ -81,6 +94,17 @@ export function ToolConfigDrawer({
       setHasUnsavedChanges(false);
     }
   }, [agentTool?.config, open]);
+
+  React.useEffect(() => {
+    setExpandedFunctionName(null);
+    setExpandedDescriptionName(null);
+    setFunctionSearch("");
+  }, [open, tool.id]);
+
+  React.useEffect(() => {
+    setExpandedFunctionName(null);
+    setExpandedDescriptionName(null);
+  }, [functionSearch]);
 
   const schema = tool.config_schema as {
     requires_auth?: boolean;
@@ -95,12 +119,15 @@ export function ToolConfigDrawer({
   } | null;
 
   const functions = tool.tool_functions_schema?.functions || [];
+  const filteredFunctions = filterMcpFunctions(functions, functionSearch);
   const toolUnselectedFunctions = agentTool?.unselected_functions || [];
   const isToolEnabled = agentTool?.is_enabled ?? false;
   const hasFunctions = functions.length > 0;
 
   const isOAuth = tool.auth_type === "oauth2";
   const isApiKey = tool.auth_type === "api_key";
+  const platformApiKeyFallbackAvailable =
+    isApiKey && tool.requires_auth === false;
 
   const handleConfigChange = (key: string, value: string) => {
     const newConfig = { ...localConfig, [key]: value };
@@ -146,8 +173,12 @@ export function ToolConfigDrawer({
   };
 
   // Check if token is locally expired (client-side detection)
-  const isTokenExpired = !!(agentTool?.token_expires_at && (agentTool.token_expires_at * 1000) < currentTime);
-  const authenticated = agentTool?.auth_status === AuthStatus.AUTHENTICATED && !isTokenExpired;
+  const isTokenExpired = !!(
+    agentTool?.token_expires_at &&
+    agentTool.token_expires_at * 1000 < currentTime
+  );
+  const authenticated =
+    agentTool?.auth_status === AuthStatus.AUTHENTICATED && !isTokenExpired;
 
   const getAuthStatusConfig = () => {
     if (!agentTool) {
@@ -158,7 +189,8 @@ export function ToolConfigDrawer({
         showButton: true,
         buttonText: "Authenticate",
         showExpiry: false,
-        bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+        bgColor:
+          "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
       };
     }
 
@@ -173,11 +205,15 @@ export function ToolConfigDrawer({
             showButton: true,
             buttonText: "Authenticate",
             showExpiry: false,
-            bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+            bgColor:
+              "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
           };
         }
 
-        const timeLeft = formatTimeUntilExpiry(agentTool.token_expires_at, currentTime);
+        const timeLeft = formatTimeUntilExpiry(
+          agentTool.token_expires_at,
+          currentTime,
+        );
         return {
           message: "Connected",
           icon: CheckCircle2,
@@ -186,7 +222,8 @@ export function ToolConfigDrawer({
           buttonText: "Refresh",
           showExpiry: !!timeLeft && timeLeft !== "Expired",
           expiryText: timeLeft,
-          bgColor: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
+          bgColor:
+            "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
         };
       case AuthStatus.EXPIRED:
         return {
@@ -196,7 +233,8 @@ export function ToolConfigDrawer({
           showButton: true,
           buttonText: "Authenticate",
           showExpiry: false,
-          bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+          bgColor:
+            "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
         };
       case AuthStatus.NOT_AUTHENTICATED:
       default:
@@ -207,7 +245,8 @@ export function ToolConfigDrawer({
           showButton: true,
           buttonText: "Authenticate",
           showExpiry: false,
-          bgColor: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+          bgColor:
+            "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
         };
     }
   };
@@ -226,8 +265,12 @@ export function ToolConfigDrawer({
               <SheetTitle className="text-lg">
                 {tool.name.replace(/_/g, " ")}
               </SheetTitle>
-              <SheetDescription className="text-xs">
-                {tool.description}
+              <SheetDescription asChild>
+                <ExpandableDescription
+                  description={tool.description}
+                  descriptionId={`tool-drawer-description-${tool.id}`}
+                  textClassName="text-xs text-muted-foreground"
+                />
               </SheetDescription>
             </div>
           </div>
@@ -238,7 +281,9 @@ export function ToolConfigDrawer({
             <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
               <EyeOff className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
               <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
-                <p className="font-medium">Unpublished — still mapped to this agent</p>
+                <p className="font-medium">
+                  Unpublished — still mapped to this agent
+                </p>
                 <p>
                   This tool was unpublished from the platform catalog, so new
                   agents can no longer add it. This agent keeps using it until
@@ -249,10 +294,12 @@ export function ToolConfigDrawer({
           )}
 
           {isOAuth && (
-            <div className={cn(
-              "flex items-center justify-between gap-4 p-4 rounded-lg border",
-              authConfig.bgColor
-            )}>
+            <div
+              className={cn(
+                "flex items-center justify-between gap-4 p-4 rounded-lg border",
+                authConfig.bgColor,
+              )}
+            >
               <div className="flex flex-col gap-2">
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className={`h-4 w-4 ${authConfig.iconColor}`} />
@@ -308,15 +355,32 @@ export function ToolConfigDrawer({
           )}
 
           {isApiKey && (
-            <div className={cn(
-              "space-y-3 p-4 rounded-lg border",
-              authenticated ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
-            )}>
+            <div
+              className={cn(
+                "space-y-3 p-4 rounded-lg border",
+                authenticated
+                  ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  : platformApiKeyFallbackAvailable
+                    ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                    : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+              )}
+            >
               {!authenticated && !showApiKeyInput && (
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center space-x-2">
-                    <ShieldCheck className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    <span className="text-sm font-medium">API Key Required</span>
+                    <ShieldCheck
+                      className={cn(
+                        "h-4 w-4",
+                        platformApiKeyFallbackAvailable
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-red-600 dark:text-red-400",
+                      )}
+                    />
+                    <span className="text-sm font-medium">
+                      {platformApiKeyFallbackAvailable
+                        ? "Organization API Key (optional)"
+                        : "Organization API Key Required"}
+                    </span>
                   </div>
                   <Button
                     size="sm"
@@ -331,12 +395,25 @@ export function ToolConfigDrawer({
                 </div>
               )}
 
+              {!authenticated &&
+                platformApiKeyFallbackAvailable &&
+                !showApiKeyInput && (
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    Your organization key overrides the platform fallback. Leave
+                    it blank to use the platform key when one is configured.
+                  </p>
+                )}
+
               {authenticated && (
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center space-x-2">
                     <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <span className="text-sm font-medium">API Key Configured</span>
-                    <Badge variant="secondary" className="h-5 text-[10px]">Active</Badge>
+                    <span className="text-sm font-medium">
+                      API Key Configured
+                    </span>
+                    <Badge variant="secondary" className="h-5 text-[10px]">
+                      Active
+                    </Badge>
                   </div>
                   <Button
                     size="sm"
@@ -387,6 +464,23 @@ export function ToolConfigDrawer({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {tool.tool_source === "mcp" && !hasFunctions && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="space-y-1 text-xs text-amber-800 dark:text-amber-200">
+                <p className="font-medium">Tool catalog unavailable</p>
+                <p>
+                  The MCP server&apos;s functions have not been discovered yet.
+                  Ask a platform administrator to{" "}
+                  {isOAuth
+                    ? "complete OAuth discovery"
+                    : "run Test connection & discover tools"}{" "}
+                  before configuring individual functions.
+                </p>
+              </div>
             </div>
           )}
 
@@ -451,8 +545,10 @@ export function ToolConfigDrawer({
                 <div className="text-xs text-amber-800 space-y-1">
                   <p className="font-medium">Select Only Required Functions</p>
                   <p>
-                    Enabling all functions can confuse the agent. Disable functions that are not needed for the specific role of this agent.
-                    For example, a scheduling agent only needs calendar functions, not email management.
+                    Enabling all functions can confuse the agent. Disable
+                    functions that are not needed for the specific role of this
+                    agent. For example, a scheduling agent only needs calendar
+                    functions, not email management.
                   </p>
                 </div>
               </div>
@@ -467,73 +563,198 @@ export function ToolConfigDrawer({
                   {functions.length}
                 </Badge>
               </div>
+              <McpFunctionSearch
+                value={functionSearch}
+                onChange={setFunctionSearch}
+                matchCount={filteredFunctions.length}
+                totalCount={functions.length}
+              />
               <div className="space-y-2">
-                {functions.map((func) => {
+                {filteredFunctions.map((func) => {
                   const isUnselected = toolUnselectedFunctions.includes(
                     func.name,
                   );
                   const isEnabled = !isUnselected;
+                  const isExpanded = expandedFunctionName === func.name;
+                  const properties = func.parameters?.properties || {};
+                  const propertyEntries = Object.entries(properties);
+                  const required = new Set(func.parameters?.required || []);
+                  const description =
+                    func.description || "No description provided.";
+                  const hasLongDescription = description.length > 180;
+                  const descriptionExpanded =
+                    expandedDescriptionName === func.name;
+                  const descriptionPreview = hasLongDescription
+                    ? `${description.slice(0, 180).trimEnd()}…`
+                    : description;
+                  const detailsId = `agent-tool-function-details-${func.name.replace(
+                    /[^a-zA-Z0-9_-]/g,
+                    "-",
+                  )}`;
+                  const descriptionId = `${detailsId}-description`;
 
                   return (
                     <div
                       key={func.name}
                       className={cn(
-                        "flex items-start justify-between p-3 rounded-lg border transition-colors",
+                        "rounded-lg border transition-colors",
                         isEnabled
                           ? "border-primary/20 bg-primary/5"
                           : "border-muted/60 bg-muted/20",
                       )}
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <div
-                            className={cn(
-                              "p-1 rounded",
-                              isEnabled ? "bg-primary" : "bg-muted",
-                            )}
-                          >
-                            <span
+                      <div className="flex items-start justify-between gap-3 p-3">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                          aria-expanded={isExpanded}
+                          aria-controls={detailsId}
+                          onClick={() =>
+                            setExpandedFunctionName((current) =>
+                              current === func.name ? null : func.name,
+                            )
+                          }
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
                               className={cn(
-                                "text-[10px] font-medium",
-                                isEnabled
-                                  ? "text-white"
-                                  : "text-muted-foreground",
+                                "rounded p-1",
+                                isEnabled ? "bg-primary" : "bg-muted",
                               )}
                             >
-                              {func.name}
-                            </span>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-medium",
+                                  isEnabled
+                                    ? "text-white"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                {func.name}
+                              </span>
+                            </div>
+                            {!isEnabled && (
+                              <Badge
+                                variant="secondary"
+                                className="h-5 text-[10px]"
+                              >
+                                Disabled
+                              </Badge>
+                            )}
                           </div>
-                          {!isEnabled && (
-                            <Badge
-                              variant="secondary"
-                              className="h-5 text-[10px]"
-                            >
-                              Disabled
-                            </Badge>
+                          <p
+                            id={descriptionId}
+                            className={cn(
+                              "mt-1 text-xs text-muted-foreground",
+                              !descriptionExpanded && "line-clamp-2",
+                            )}
+                          >
+                            {descriptionExpanded
+                              ? description
+                              : descriptionPreview}
+                          </p>
+                          <p className="mt-2 text-[10px] text-muted-foreground">
+                            {propertyEntries.length > 0
+                              ? `${propertyEntries.length} parameter${propertyEntries.length === 1 ? "" : "s"}`
+                              : "No input parameters"}
+                            <span className="mx-1.5 text-border">·</span>
+                            {isExpanded ? "Hide details" : "View details"}
+                          </p>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Switch
+                            id={`drawer-func-${func.name}`}
+                            checked={isEnabled}
+                            onCheckedChange={(checked) =>
+                              onToggleFunction(tool.id, func.name, checked)
+                            }
+                            disabled={!isToolEnabled || !canEdit}
+                            className="mt-1"
+                          />
+                          <ChevronDown
+                            className={cn(
+                              "mt-1 h-4 w-4 text-muted-foreground transition-transform",
+                              isExpanded && "rotate-180 text-primary",
+                            )}
+                          />
+                        </div>
+                      </div>
+                      {hasLongDescription && (
+                        <div className="px-3 pb-3 -mt-1">
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            aria-controls={descriptionId}
+                            aria-expanded={descriptionExpanded}
+                            onClick={() =>
+                              setExpandedDescriptionName((current) =>
+                                current === func.name ? null : func.name,
+                              )
+                            }
+                          >
+                            {descriptionExpanded
+                              ? "Hide full description"
+                              : "Show full description"}
+                          </button>
+                        </div>
+                      )}
+                      {isExpanded && (
+                        <div
+                          id={detailsId}
+                          className="border-t px-3 pb-3 pt-2.5"
+                        >
+                          {propertyEntries.length > 0 ? (
+                            <div className="space-y-2">
+                              {propertyEntries.map(([name, property]) => (
+                                <div
+                                  key={name}
+                                  className="rounded-md border bg-background/70 px-2.5 py-2"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-[11px] font-medium">
+                                      {name}
+                                    </span>
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-5 text-[10px]"
+                                    >
+                                      {property.type || "any"}
+                                    </Badge>
+                                    {required.has(name) && (
+                                      <Badge
+                                        variant="outline"
+                                        className="h-5 border-amber-300 bg-amber-50 text-[10px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                                      >
+                                        required
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {property.description && (
+                                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                                      {property.description}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                              This function does not declare input parameters.
+                            </p>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {func.description}
-                        </p>
-                        {func.parameters?.properties && (
-                          <div className="mt-2 text-[10px] text-muted-foreground">
-                            <span className="font-medium">Parameters:</span>{" "}
-                            {Object.keys(func.parameters.properties).join(", ")}
-                          </div>
-                        )}
-                      </div>
-                      <Switch
-                        id={`drawer-func-${func.name}`}
-                        checked={isEnabled}
-                        onCheckedChange={(checked) =>
-                          onToggleFunction(tool.id, func.name, checked)
-                        }
-                        disabled={!isToolEnabled || !canEdit}
-                        className="mt-1"
-                      />
+                      )}
                     </div>
                   );
                 })}
+                {filteredFunctions.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-6 text-center">
+                    <p className="text-sm font-medium">No functions found</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Try a different name, description, or parameter.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -549,7 +770,11 @@ export function ToolConfigDrawer({
 
         <SheetFooter className="px-6 pb-6 space-y-3">
           {agentTool && (
-            <DeleteButton onClick={onDisconnect} disabled={!canEdit} className="w-full">
+            <DeleteButton
+              onClick={onDisconnect}
+              disabled={!canEdit}
+              className="w-full"
+            >
               Disconnect Tool
             </DeleteButton>
           )}

@@ -14,10 +14,8 @@ configure from the UI (``docs/03_implementation/mcp_integration_rfc.md``):
 Red-green: written FIRST. Both helpers live in
 ``shared.voice_agents.tools.mcp.security`` which does not exist yet.
 """
-import ipaddress
-from unittest.mock import patch
 
-import pytest
+from unittest.mock import patch
 
 from shared.voice_agents.tools.mcp.models import McpServerConfig
 from shared.voice_agents.tools.mcp.security import (
@@ -213,3 +211,141 @@ class TestParseMcpServersJson:
         raw = '{"url": "https://example.com/mcp"}'
         result = parse_mcp_servers_json(raw)
         assert isinstance(result.servers[0], McpServerConfig)
+
+    def test_accepts_vscode_servers_and_server_url_aliases(self):
+        """Parse VS Code-style ``servers`` entries and vendor URL aliases."""
+        raw = (
+            '{"servers": {'
+            '"remote": {"type": "http", "url": "https://remote.example/mcp"},'
+            '"named": {"type": "streamableHttp", "serverUrl": "https://named.example/mcp"}'
+            "}}"
+        )
+
+        result = parse_mcp_servers_json(raw)
+
+        assert result.errors == []
+        assert {server.name for server in result.servers} == {"remote", "named"}
+        assert {server.url for server in result.servers} == {
+            "https://remote.example/mcp",
+            "https://named.example/mcp",
+        }
+
+    def test_normalizes_api_key_placeholders_without_requiring_a_platform_key(self):
+        """Credential placeholders become org-owned secret templates."""
+        raw = (
+            '{"mcpServers": {"weather": {'
+            '"url": "https://weather.example/mcp",'
+            '"headers": {"X-API-Key": "${input:weather_key}"}'
+            "}}}"
+        )
+
+        result = parse_mcp_servers_json(raw)
+
+        server = result.servers[0]
+        assert server.auth_type == "api_key"
+        assert server.requires_auth is True
+        assert server.headers == {}
+        assert server.secret_headers == {"X-API-Key": "{{KEY}}"}
+
+    def test_requires_org_key_for_explicit_api_key_auth_without_header(self):
+        """An auth declaration alone must not make an API key optional."""
+        raw = (
+            '{"servers": {"weather": {'
+            '"url": "https://weather.example/mcp",'
+            '"authentication": {"type": "api_key", "header": "X-API-Key"}'
+            "}}}"
+        )
+
+        server = parse_mcp_servers_json(raw).servers[0]
+
+        assert server.auth_type == "api_key"
+        assert server.requires_auth is True
+
+    def test_redacts_literal_api_key_from_parse_result(self):
+        """Pasting a real key must not echo it back to the browser."""
+        raw = (
+            '{"mcpServers": {"weather": {'
+            '"url": "https://weather.example/mcp",'
+            '"headers": {"X-API-Key": "real-secret"}'
+            "}}}"
+        )
+
+        server = parse_mcp_servers_json(raw).servers[0]
+
+        assert server.secret_headers == {"X-API-Key": "{{KEY}}"}
+        assert server.requires_auth is True
+
+    def test_accepts_nested_mcp_servers_wrapper(self):
+        """Handle host exports that nest their server collection under mcp."""
+        raw = (
+            '{"mcp": {"servers": {"calendar": {'
+            '"endpoint": "https://calendar.example/mcp"'
+            "}}}}"
+        )
+
+        result = parse_mcp_servers_json(raw)
+
+        assert result.errors == []
+        assert result.servers[0].name == "calendar"
+        assert result.servers[0].url == "https://calendar.example/mcp"
+
+    def test_extracts_mcp_oauth_configuration_from_host_config(self):
+        """Normalize common non-standard OAuth config aliases for persistence."""
+        raw = (
+            '{"mcpServers": {"calendar": {'
+            '"url": "https://calendar.example/mcp",'
+            '"auth": {"type": "oauth2",'
+            '"authorization_endpoint": "https://auth.example/authorize",'
+            '"token_endpoint": "https://auth.example/token",'
+            '"scopes": "calendar.read calendar.write"}'
+            "}}}"
+        )
+
+        result = parse_mcp_servers_json(raw)
+
+        server = result.servers[0]
+        assert server.auth_type == "oauth2"
+        assert server.requires_auth is True
+        assert server.auth_config == {
+            "provider": "mcp",
+            "auth_url": "https://auth.example/authorize",
+            "token_url": "https://auth.example/token",
+            "scopes": ["calendar.read", "calendar.write"],
+        }
+
+    def test_extracts_oauth_client_and_registration_metadata(self):
+        """Preserve public-client and DCR metadata from nested OAuth blocks."""
+        raw = (
+            '{"servers": {"calendar": {'
+            '"url": "https://calendar.example/mcp",'
+            '"oauth": {"type": "oauth2", "clientId": "public-client",'
+            '"registrationEndpoint": "https://auth.example/register",'
+            '"resource_uri": "https://calendar.example/resource"}'
+            "}}}"
+        )
+
+        server = parse_mcp_servers_json(raw).servers[0]
+
+        assert server.auth_config["client_id"] == "public-client"
+        assert (
+            server.auth_config["registration_endpoint"]
+            == "https://auth.example/register"
+        )
+        assert server.auth_config["resource"] == "https://calendar.example/resource"
+
+    def test_reports_disabled_and_unsupported_transport_entries_individually(self):
+        """A mixed paste reports non-runnable entries without dropping valid ones."""
+        raw = (
+            '{"mcpServers": {'
+            '"disabled": {"url": "https://disabled.example/mcp", "disabled": true},'
+            '"local": {"type": "stdio", "command": "npx", "args": ["server"]},'
+            '"valid": {"url": "https://valid.example/mcp"}'
+            "}}"
+        )
+
+        result = parse_mcp_servers_json(raw)
+
+        assert [server.name for server in result.servers] == ["valid"]
+        assert {error.name for error in result.errors} == {"disabled", "local"}
+        assert any("disabled" in error.message.lower() for error in result.errors)
+        assert any("stdio" in error.message.lower() for error in result.errors)

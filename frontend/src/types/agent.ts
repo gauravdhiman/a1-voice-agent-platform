@@ -202,6 +202,16 @@ export interface ParsedMcpServer {
   name: string;
   url: string;
   headers: Record<string, string>;
+  /** Credential templates extracted from host config and encrypted on save. */
+  secret_headers?: Record<string, string>;
+  /** Normalized auth mode: api_key, oauth2, or null for anonymous HTTP. */
+  auth_type?: string | null;
+  /** True when the org admin must provide a credential at attach time. */
+  requires_auth?: boolean;
+  /** Provider-neutral OAuth metadata when present in the source config. */
+  auth_config?: Record<string, unknown>;
+  /** Normalized transport; currently streamable_http for hosted entries. */
+  transport?: string;
 }
 
 /** Per-entry parse error (e.g. a stdio entry was rejected). */

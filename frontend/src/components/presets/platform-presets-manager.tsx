@@ -1,12 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, SlidersHorizontal, Upload, Pencil, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  SlidersHorizontal,
+  Upload,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import type { Preset } from "@/types/preset";
 import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
 import {
@@ -20,10 +33,10 @@ import { PresetConfigForm } from "@/components/presets/preset-config-form";
 import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
 
 /**
- * PlatformPresetsManager — inline platform-admin surface for the voice-engine
+ * PlatformPresetsManager — platform-admin surface for the voice-engine
  * preset catalog (`/platform/presets`). Mirrors
- * `platform-tools-manager.tsx`: a two-view inline toggle (manage list / author
- * form), plain `.map()` row-cards with `Badge` Published/Draft + type badge +
+ * `platform-tools-manager.tsx`: a manage catalog with a right-side create/edit
+ * drawer, plain `.map()` row-cards with `Badge` Published/Draft + type badge +
  * Publish/Unpublish + Edit + Delete buttons. No DataTable.
  *
  * A platform admin authors a preset's `SpeechConfig` here (the power-user
@@ -34,8 +47,9 @@ import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
  * submit). The backend re-validates the discriminated union on write
  * (`extra="forbid"`), so a 400 surfaces inline.
  *
- * Two views share one panel (inline toggle — no Sheet/drawer):
- *  - **Author / edit preset** (`view === "author"`): name + description +
+ * The manage catalog stays on the page while create/edit opens in the shared
+ * right-side Sheet pattern:
+ *  - **Create / edit preset** (`view === "author"`): name + description +
  *    `<PresetConfigForm/>` + "Save draft" / "Publish". In edit mode
  *    (`editingId` set) the form is seeded from the selected preset and submit
  *    issues `PUT /{id}`; otherwise `POST /` (upsert by name). On success the
@@ -44,7 +58,7 @@ import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
  *    published presets with publish/unpublish, edit, and delete actions.
  *
  * Conventions match `platform-tools-manager.tsx`: plain useState, no
- * react-hook-form, no window.* dialogs.
+ * react-hook-form, no window.* dialogs, and a right-side drawer for create/edit.
  */
 export interface PlatformPresetsManagerProps {
   /** Initial view shown when the panel mounts. Defaults to "manage". */
@@ -71,9 +85,10 @@ export function PlatformPresetsManager({
   // config passed to the form as `initialConfig` on mount (set when entering
   // author mode so the form seeds from the right preset / a blank realtime
   // default). The form owns its own state and only reports built config up.
-  const [seedConfig, setSeedConfig] = React.useState<
-    Record<string, unknown> | null
-  >(null);
+  const [seedConfig, setSeedConfig] = React.useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [config, setConfig] = React.useState<Record<string, unknown> | null>(
     null,
   );
@@ -89,8 +104,8 @@ export function PlatformPresetsManager({
   // Platform-admin-only surface: list drafts + published for the manage view.
   const { data: presets = [] } = usePresets({ includeDrafts: true });
 
-  // Clear every author-form field so the admin can author another preset after
-  // a successful save (an inline panel has no dialog to close, so it resets).
+  // Clear every author-form field when starting a fresh preset or after a
+  // successful save before returning to the catalog.
   const resetForm = React.useCallback(() => {
     setEditingId(null);
     setEditingDefault(false);
@@ -192,16 +207,14 @@ export function PlatformPresetsManager({
           is_published: isPublished,
         });
       }
-      // Inline panel has no dialog to close — reset the form so the admin can
-      // author another preset. The create/update hooks invalidate the preset
-      // list, so the manage view refetches with the new/edited row.
+      // Close the authoring drawer after save. The create/update hooks
+      // invalidate the preset list, so the manage view refetches with the
+      // new/edited row.
       resetForm();
       setView("manage");
     } catch (e) {
       // Backend 400 (invalid SpeechConfig) detail surfaces here.
-      setInlineError(
-        e instanceof Error ? e.message : "Failed to save preset.",
-      );
+      setInlineError(e instanceof Error ? e.message : "Failed to save preset.");
     }
   };
 
@@ -239,164 +252,176 @@ export function PlatformPresetsManager({
 
   return (
     <div className="space-y-6">
-      {/* View toggle (plain state — inline panel). Manage is first and the
-          default — the page lands the admin on the preset list; authoring a
-          new preset is opt-in via the second toggle. */}
-      <div className="inline-flex items-center rounded-lg border bg-muted/40 p-1">
-        <button
-          type="button"
-          className={cn(
-            "px-3 py-1.5 text-sm rounded-md transition-colors",
-            view === "manage"
-              ? "bg-background shadow-sm font-medium"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onClick={() => setView("manage")}
-        >
-          Manage existing presets ({presets.length})
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "px-3 py-1.5 text-sm rounded-md transition-colors",
-            view === "author"
-              ? "bg-background shadow-sm font-medium"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onClick={startCreate}
-        >
-          {editingId && view === "author"
-            ? editingDefault
-              ? "Editing system default"
-              : "Editing preset"
-            : "Author preset"}
-        </button>
-      </div>
-
       {view === "author" ? (
-        <div className="space-y-5">
-          {editingDefault ? (
-            <p className="text-xs text-muted-foreground">
-              Editing the <span className="font-medium">System Default</span> —
-              the fallback voice profile used when an agent has no voice profile
-              selected. Only the config is editable; the name stays fixed and
-              the default is never publishable or deletable. Changes take effect
-              on each agent&apos;s next call.
-            </p>
-          ) : editingId ? (
-            <p className="text-xs text-muted-foreground">
-              Editing <span className="font-medium">{name}</span>. Save draft or
-              publish to apply changes (takes effect on each agent&apos;s next
-              call).
-            </p>
-          ) : null}
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label
-                htmlFor="preset-name"
-                className="text-xs uppercase text-muted-foreground"
-              >
-                Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="preset-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Realtime (Gemini) default"
-                className="h-9 text-sm"
-                disabled={editingDefault}
-                readOnly={editingDefault}
-              />
-            </div>
-            {!editingDefault && (
-              <div className="space-y-1">
-                <Label
-                  htmlFor="preset-description"
-                  className="text-xs uppercase text-muted-foreground"
-                >
-                  Description (optional — shown to org admins in the picker)
-                </Label>
-                <Input
-                  id="preset-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What this voice profile is for"
-                  className="h-9 text-sm"
-                />
-              </div>
-            )}
-          </div>
+        <Sheet
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              resetForm();
+              setView("manage");
+            }
+          }}
+        >
+          <SheetContent className="form-drawer flex w-full flex-col overflow-hidden sm:max-w-2xl">
+            <SheetHeader className="shrink-0 border-b px-6 pb-5 pt-6">
+              <SheetTitle>
+                {editingDefault
+                  ? "Edit system default"
+                  : editingId
+                    ? "Edit voice preset"
+                    : "Create voice preset"}
+              </SheetTitle>
+              <SheetDescription>
+                {editingDefault
+                  ? "Update the fallback voice profile used when an agent has no profile selected."
+                  : editingId
+                    ? "Update this voice profile without leaving the preset catalog."
+                    : "Create a reusable voice profile for Org Admins to select on their agents."}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <div className="form-surface space-y-5">
+                {editingDefault ? (
+                  <p className="text-xs text-muted-foreground">
+                    Editing the{" "}
+                    <span className="font-medium">System Default</span> — the
+                    fallback voice profile used when an agent has no voice
+                    profile selected. Only the config is editable; the name
+                    stays fixed and the default is never publishable or
+                    deletable. Changes take effect on each agent&apos;s next
+                    call.
+                  </p>
+                ) : editingId ? (
+                  <p className="text-xs text-muted-foreground">
+                    Editing <span className="font-medium">{name}</span>. Save
+                    draft or publish to apply changes (takes effect on each
+                    agent&apos;s next call).
+                  </p>
+                ) : null}
+                <div className="form-section space-y-3">
+                  <div className="form-field space-y-1">
+                    <Label
+                      htmlFor="preset-name"
+                      className="text-xs uppercase text-muted-foreground"
+                    >
+                      Name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="preset-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Realtime (Gemini) default"
+                      className="form-control h-9 text-sm"
+                      disabled={editingDefault}
+                      readOnly={editingDefault}
+                    />
+                  </div>
+                  {!editingDefault && (
+                    <div className="form-field space-y-1">
+                      <Label
+                        htmlFor="preset-description"
+                        className="text-xs uppercase text-muted-foreground"
+                      >
+                        Description (optional — shown to org admins in the
+                        picker)
+                      </Label>
+                      <Input
+                        id="preset-description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="What this voice profile is for"
+                        className="form-control h-9 text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
 
-          {/* The SpeechConfig authoring sub-form. `key` forces a fresh mount
+                {/* The SpeechConfig authoring sub-form. `key` forces a fresh mount
               whenever the seed changes (new preset vs editing a different row)
               so the form's internal state re-seeds from `initialConfig`. */}
-          <PresetConfigForm
-            key={editingId ?? "new"}
-            initialConfig={seedConfig}
-            onChange={setConfig}
-            onValidityChange={setConfigValid}
-          />
+                <PresetConfigForm
+                  key={editingId ?? "new"}
+                  initialConfig={seedConfig}
+                  onChange={setConfig}
+                  onValidityChange={setConfigValid}
+                />
 
-          {inlineError && (
-            <div className="flex items-start gap-2 p-3 rounded-lg border bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
-              <div className="text-xs text-red-700 dark:text-red-300">
-                {inlineError}
+                {inlineError && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
+                    <div className="text-xs text-red-700 dark:text-red-300">
+                      {inlineError}
+                    </div>
+                  </div>
+                )}
+
+                {editingDefault ? (
+                  // Default: config-only write via useUpdateDefaultPreset. No
+                  // Save-draft/Publish — the default is never publishable.
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      onClick={handleSaveDefault}
+                      disabled={!configValid || !config || isBusy}
+                      className="w-full sm:w-auto"
+                    >
+                      {updateDefaultMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <SlidersHorizontal className="h-4 w-4 mr-2" />
+                      )}
+                      Save config
+                    </Button>
+                  </div>
+                ) : (
+                  // Drawer footer. Buttons are w-full on mobile, auto-width
+                  // side-by-side at sm+ so they never overflow the panel.
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      onClick={() => handleSave(false)}
+                      disabled={!canSubmit || isBusy}
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                    >
+                      {createMutation.isPending || updateMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4 mr-2" />
+                      )}
+                      Save draft
+                    </Button>
+                    <Button
+                      onClick={() => handleSave(true)}
+                      disabled={!canSubmit || isBusy}
+                      className="w-full sm:w-auto"
+                    >
+                      {createMutation.isPending || updateMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Publish
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-
-          {editingDefault ? (
-            // Default: config-only write via useUpdateDefaultPreset. No
-            // Save-draft/Publish — the default is never publishable.
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button
-                onClick={handleSaveDefault}
-                disabled={!configValid || !config || isBusy}
-                className="w-full sm:w-auto"
-              >
-                {updateDefaultMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <SlidersHorizontal className="h-4 w-4 mr-2" />
-                )}
-                Save config
-              </Button>
-            </div>
-          ) : (
-            // Inline footer. Buttons are w-full on mobile, auto-width side-by-side
-            // at sm+ so they never overflow the panel.
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button
-                onClick={() => handleSave(false)}
-                disabled={!canSubmit || isBusy}
-                variant="outline"
-                className="w-full sm:w-auto"
-              >
-                {createMutation.isPending || updateMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4 mr-2" />
-                )}
-                Save draft
-              </Button>
-              <Button
-                onClick={() => handleSave(true)}
-                disabled={!canSubmit || isBusy}
-                className="w-full sm:w-auto"
-              >
-                {createMutation.isPending || updateMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                Publish
-              </Button>
-            </div>
-          )}
-        </div>
+          </SheetContent>
+        </Sheet>
       ) : (
         // Manage view: drafts + published, with publish/unpublish/edit/delete.
         <div className="space-y-3">
+          <div className="flex flex-col gap-3 rounded-2xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">Voice preset catalog</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Create reusable voice profiles or manage the presets already
+                available to Org Admins.
+              </p>
+            </div>
+            <Button onClick={startCreate} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Create new preset
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             Drafts are visible only to platform admins. Publishing surfaces a
             preset in every org&apos;s agent picker; unpublishing hides it from
@@ -458,7 +483,9 @@ export function PlatformPresetsManager({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium">{preset.name}</span>
+                        <span className="text-sm font-medium">
+                          {preset.name}
+                        </span>
                         <Badge variant="secondary" className="h-5 text-[10px]">
                           {preset.preset_type === "realtime"
                             ? "Realtime"
@@ -484,7 +511,9 @@ export function PlatformPresetsManager({
                         onClick={() => handlePublishToggle(preset)}
                         disabled={isBusy}
                       >
-                        {preset.is_published ? "Unpublish" : (
+                        {preset.is_published ? (
+                          "Unpublish"
+                        ) : (
                           <>
                             <Upload className="h-3.5 w-3.5 mr-1" />
                             Publish

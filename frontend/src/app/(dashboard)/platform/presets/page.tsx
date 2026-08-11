@@ -6,8 +6,9 @@
  * Dedicated home for the global voice-engine preset catalog — parallel to
  * `/platform/tools` and `/platform/skills`. Platform admins author a preset's
  * `SpeechConfig` (realtime or pipeline), save it as a draft or publish it to
- * the global catalog, and manage every preset (edit / publish / unpublish /
- * delete) via the inline `<PlatformPresetsManager>`.
+ * the global catalog, and manage every preset (create / edit / publish /
+ * unpublish / delete) via the catalog and right-side drawer in
+ * `<PlatformPresetsManager>`.
  *
  * Published presets surface in every org admin's agent picker ("voice
  * profile") — the org user picks by name + description only and never sees

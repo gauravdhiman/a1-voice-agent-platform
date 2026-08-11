@@ -116,6 +116,20 @@ class AgentService {
   }
 
   /**
+   * Starts a platform-admin-only OAuth discovery flow for an MCP catalog row.
+   * The callback uses the token once to refresh the public tool catalog and
+   * does not create an agent connection.
+   */
+  async startPlatformMcpOAuth(
+    toolId: string,
+  ): Promise<{ auth_url: string }> {
+    const response = await apiClient.get<{ auth_url: string }>(
+      `${this.toolBaseUrl}/platform/${toolId}/oauth`,
+    );
+    return response.data;
+  }
+
+  /**
    * Mark or unmark a platform tool as premium (platform-admin only).
    *
    * Premium tools require the org's plan to entitle the ``premium_tools``

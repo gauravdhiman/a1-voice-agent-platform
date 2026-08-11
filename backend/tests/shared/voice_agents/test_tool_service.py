@@ -88,7 +88,6 @@ class TestToolService:
 
     async def test_validate_token_status_authenticated(self, tool_service):
         """Test token status validation for authenticated token."""
-        from shared.common.security import decrypt_data
         from unittest.mock import patch
 
         sensitive_config = {
@@ -105,7 +104,6 @@ class TestToolService:
 
     async def test_validate_token_status_expired(self, tool_service):
         """Test token status validation for expired token."""
-        from shared.common.security import decrypt_data
         from unittest.mock import patch
 
         sensitive_config = {
@@ -129,7 +127,6 @@ class TestToolService:
 
     async def test_validate_token_status_api_key_authenticated(self, tool_service):
         """Test token status validation for API key auth."""
-        from shared.common.security import decrypt_data
         from unittest.mock import patch
 
         sensitive_config = {
@@ -145,7 +142,6 @@ class TestToolService:
 
     async def test_validate_token_status_api_key_not_authenticated(self, tool_service):
         """Test token status validation for missing API key."""
-        from shared.common.security import decrypt_data
         from unittest.mock import patch
 
         sensitive_config = {
@@ -618,6 +614,34 @@ class TestPlatformToolPublishLifecycle:
         assert result is None
         assert error == "Platform tool not found"
 
+    async def test_update_platform_tool_functions_schema_persists_catalog(
+        self, tool_service, mock_supabase_client
+    ):
+        """OAuth discovery updates only the public tool catalog metadata."""
+        tool_id = uuid4()
+        schema = {
+            "functions": [
+                {"name": "list_issues", "description": "List issues", "parameters": {}}
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.data = [_platform_tool_row(id=str(tool_id), tool_functions_schema=schema)]
+        mock_supabase_client.table.return_value.execute.return_value = mock_response
+
+        result, error = await tool_service.update_platform_tool_functions_schema(
+            tool_id, schema
+        )
+
+        assert error is None
+        assert result is not None
+        assert result.tool_functions_schema == schema
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0] == {"tool_functions_schema": schema}
+        assert mock_supabase_client.table.return_value.eq.call_args.args == (
+            "id",
+            str(tool_id),
+        )
+
     # --- publish-time tool_functions_schema backfill ------------------------
     # A published catalog entry should carry its tool list so the agent
     # tool-config drawer can render each tool with an enable/disable toggle
@@ -990,6 +1014,7 @@ class TestPlatformToolPublishLifecycle:
         assert updated["description"] is None
         assert updated["auth_type"] is None
         assert updated["requires_auth"] is False
+        assert updated["auth_config"] is None
 
     async def test_update_platform_tool_preserves_secrets_when_input_omitted(
         self, tool_service, mock_supabase_client
@@ -1014,6 +1039,7 @@ class TestPlatformToolPublishLifecycle:
         assert result is not None
         updated = mock_supabase_client.table.return_value.update.call_args.args[0]
         assert "mcp_server_secret_headers" not in updated
+        assert updated["auth_config"] is None
 
     async def test_update_platform_tool_clears_secrets_when_auth_disabled(
         self, tool_service, mock_supabase_client
@@ -1034,6 +1060,30 @@ class TestPlatformToolPublishLifecycle:
         result, error = await tool_service.update_platform_tool(tool_id, tool_data)
 
         assert error is None
+        updated = mock_supabase_client.table.return_value.update.call_args.args[0]
+        assert updated["mcp_server_secret_headers"] is None
+
+    async def test_update_platform_tool_clears_api_key_when_switching_to_oauth(
+        self, tool_service, mock_supabase_client
+    ):
+        """Switching auth modes must not retain an old API-key template."""
+        tool_id = uuid4()
+        tool_data = PlatformToolCreate(
+            name="custom-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            requires_auth=True,
+            auth_type="oauth2",
+            auth_config={"provider": "mcp"},
+        )
+        mock_update = MagicMock()
+        mock_update.data = [_platform_tool_row(id=str(tool_id))]
+        mock_supabase_client.table.return_value.execute.return_value = mock_update
+
+        result, error = await tool_service.update_platform_tool(tool_id, tool_data)
+
+        assert error is None
+        assert result is not None
         updated = mock_supabase_client.table.return_value.update.call_args.args[0]
         assert updated["mcp_server_secret_headers"] is None
 

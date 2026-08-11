@@ -604,6 +604,117 @@ class TestPremiumToolGate:
 
             assert result is configured
             mock_ent.check_feature.assert_not_called()
+
+
+class TestMcpAttachCredentialGate:
+    """Require org credentials before attaching key-required MCP tools."""
+
+    def _make_required_mcp_tool(self, requires_auth: bool = True):
+        from shared.voice_agents.tool_models import PlatformTool
+
+        return PlatformTool(
+            id=TEST_TOOL_ID,
+            name="Required MCP",
+            description="Test",
+            is_active=True,
+            tool_source="mcp",
+            mcp_server_url="https://mcp.example.com/mcp",
+            auth_type="api_key",
+            requires_auth=requires_auth,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+
+    @pytest.mark.asyncio
+    async def test_required_mcp_key_is_rejected_before_attach(self):
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(agent_id=TEST_AGENT_ID, tool_id=TEST_TOOL_ID)
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(self._make_required_mcp_tool(), None)
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await configure_agent_tool(
+                    agent_tool_data=tool_data,
+                    user_data=(TEST_USER_ID, profile),
+                )
+
+            assert exc_info.value.status_code == 400
+            assert "Organization API key is required" in str(exc_info.value.detail)
+            mock_ts.configure_agent_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_required_mcp_key_allows_attach_with_org_key(self):
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(
+            agent_id=TEST_AGENT_ID,
+            tool_id=TEST_TOOL_ID,
+            sensitive_config={"api_key": "org-key"},
+        )
+        configured = _make_agent_tool_response()
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(self._make_required_mcp_tool(), None)
+            )
+            mock_ts.configure_agent_tool = AsyncMock(return_value=(configured, None))
+
+            result = await configure_agent_tool(
+                agent_tool_data=tool_data,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+            assert result is configured
+            mock_ts.configure_agent_tool.assert_awaited_once_with(tool_data)
+
+    @pytest.mark.asyncio
+    async def test_mcp_platform_fallback_allows_attach_without_org_key(self):
+        from src.voice_agents.tool_routes import configure_agent_tool
+        from shared.voice_agents.tool_models import AgentToolCreate
+
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
+        agent = _make_agent()
+        tool_data = AgentToolCreate(agent_id=TEST_AGENT_ID, tool_id=TEST_TOOL_ID)
+        configured = _make_agent_tool_response()
+
+        with (
+            patch("src.voice_agents.tool_routes.voice_agent_service") as mock_vas,
+            patch("src.voice_agents.tool_routes.tool_service") as mock_ts,
+        ):
+            mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            mock_ts.get_platform_tool_by_id = AsyncMock(
+                return_value=(
+                    self._make_required_mcp_tool(requires_auth=False),
+                    None,
+                )
+            )
+            mock_ts.configure_agent_tool = AsyncMock(return_value=(configured, None))
+
+            result = await configure_agent_tool(
+                agent_tool_data=tool_data,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+            assert result is configured
+            mock_ts.configure_agent_tool.assert_awaited_once_with(tool_data)
             mock_ts.configure_agent_tool.assert_awaited_once()
 
     @pytest.mark.asyncio

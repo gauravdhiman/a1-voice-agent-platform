@@ -1,4 +1,4 @@
-"""JSON-only Streamable HTTP MCP client.
+"""Minimal Streamable HTTP MCP client.
 
 Some MCP servers (notably Twenty CRM's built-in ``/mcp``) behave reliably with
 plain ``application/json`` POST exchanges but trip strict SSE clients when
@@ -6,15 +6,17 @@ plain ``application/json`` POST exchanges but trip strict SSE clients when
 because they either negotiate JSON or handle SSE differently than the Python
 ``mcp`` SDK's streamable HTTP transport.
 
-This module implements the minimal JSON-RPC handshake:
+This module implements the minimal JSON-RPC handshake while accepting either
+JSON or server-sent-events responses:
 
     1. ``initialize`` (request/response)
     2. ``notifications/initialized`` (notification, no response body)
-    3. ``tools/list`` or ``tools/call`` (request/response)
+    3. ``tools/list`` or ``tools/call`` (request/response or SSE)
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -22,12 +24,17 @@ from typing import Any
 
 import httpx
 
-from shared.voice_agents.tools.mcp.models import McpServerConfig, McpToolDef, McpToolResult
+from shared.voice_agents.tools.mcp.models import (
+    McpServerConfig,
+    McpToolDef,
+    McpToolResult,
+)
 
 logger = logging.getLogger(__name__)
 
 _CLIENT_INFO = {"name": "247ai-platform", "version": "1.0"}
-_PROTOCOL_VERSION = "2024-11-05"
+_PROTOCOL_VERSION = "2025-06-18"
+_STREAMABLE_ACCEPT = "application/json, text/event-stream"
 
 
 class McpJsonRpcError(RuntimeError):
@@ -50,7 +57,9 @@ def _unwrap_input_schema(schema: Any) -> dict[str, Any]:
 
 
 def _tool_from_dict(raw: dict[str, Any]) -> McpToolDef:
-    schema = _unwrap_input_schema(raw.get("inputSchema") or raw.get("input_schema") or {})
+    schema = _unwrap_input_schema(
+        raw.get("inputSchema") or raw.get("input_schema") or {}
+    )
     return McpToolDef(
         name=str(raw["name"]),
         description=raw.get("description"),
@@ -68,12 +77,67 @@ def _rpc_error_message(body: dict[str, Any]) -> str:
 
 
 def _request_headers(config: McpServerConfig) -> dict[str, str]:
-    return {
+    headers = {
         "Content-Type": "application/json",
-        # JSON only — avoids Twenty's SSE path (matches curl/Cursor).
-        "Accept": "application/json",
+        # Streamable HTTP requires clients to advertise both response formats.
+        # Servers such as DeepWiki and Context7 reject JSON-only negotiation
+        # with HTTP 406, while other servers legitimately choose SSE.
+        "Accept": _STREAMABLE_ACCEPT,
+        "MCP-Protocol-Version": _PROTOCOL_VERSION,
         **(config.headers or {}),
     }
+    # A pasted host config may contain its own Accept value. Keep it, but make
+    # the required Streamable HTTP formats available as well.
+    custom_accept = next(
+        (
+            value
+            for key, value in (config.headers or {}).items()
+            if key.lower() == "accept"
+        ),
+        None,
+    )
+    if custom_accept:
+        accept_values = [
+            part.strip() for part in custom_accept.split(",") if part.strip()
+        ]
+        for required in ("application/json", "text/event-stream"):
+            if not any(value.lower() == required for value in accept_values):
+                accept_values.append(required)
+        headers["Accept"] = ", ".join(dict.fromkeys(accept_values))
+    return headers
+
+
+def _response_json(response: httpx.Response) -> dict[str, Any]:
+    """Decode a JSON or server-sent-events Streamable HTTP response.
+
+    Streamable HTTP allows a server to return a single JSON-RPC response as
+    ``application/json`` or to wrap that response in a ``text/event-stream``.
+    The platform only needs the first JSON-RPC message for the stateless
+    initialize/list/call requests, so this parser intentionally ignores SSE
+    comments and unrelated event fields while accepting multiline ``data:``
+    payloads.
+    """
+    content_type = response.headers.get("content-type", "").lower()
+    if "text/event-stream" not in content_type:
+        body = response.json()
+        if not isinstance(body, dict):
+            raise McpJsonRpcError("MCP response was not a JSON object")
+        return body
+
+    for event in response.text.replace("\r\n", "\n").split("\n\n"):
+        data_lines = [
+            line[5:].lstrip() for line in event.split("\n") if line.startswith("data:")
+        ]
+        if not data_lines:
+            continue
+        try:
+            body = json.loads("\n".join(data_lines))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(body, dict):
+            return body
+
+    raise McpJsonRpcError("MCP SSE response did not contain a JSON-RPC message")
 
 
 def _result_from_body(body: dict[str, Any]) -> McpToolResult:
@@ -97,6 +161,10 @@ async def _json_http_session(
 ) -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
     """Open httpx client and complete MCP initialize handshake."""
     request_headers = _request_headers(config)
+    # The MCP-Protocol-Version header is negotiated during initialize and is
+    # required on subsequent requests. Do not pin the initialize request to a
+    # possibly stale version supplied by a host config or an older client.
+    request_headers.pop("MCP-Protocol-Version", None)
     timeout = httpx.Timeout(config.timeout, read=config.timeout)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         init_response = await client.post(
@@ -114,9 +182,22 @@ async def _json_http_session(
             },
         )
         init_response.raise_for_status()
-        init_body = init_response.json()
+        init_body = _response_json(init_response)
         if init_body.get("error"):
             raise McpJsonRpcError(_rpc_error_message(init_body))
+
+        negotiated_version = (
+            init_body.get("result", {}).get("protocolVersion")
+            if isinstance(init_body.get("result"), dict)
+            else None
+        )
+        request_headers["MCP-Protocol-Version"] = str(
+            negotiated_version or _PROTOCOL_VERSION
+        )
+
+        session_id = init_response.headers.get("mcp-session-id")
+        if session_id:
+            request_headers["Mcp-Session-Id"] = session_id
 
         await client.post(
             config.url,
@@ -130,7 +211,7 @@ async def _json_http_session(
 
 
 async def list_tools_json_http(config: McpServerConfig) -> list[McpToolDef]:
-    """Discover tools via JSON POSTs (no MCP SDK / no SSE)."""
+    """Discover tools via Streamable HTTP JSON POSTs or SSE responses."""
     async with _json_http_session(config) as (client, request_headers):
         tools_response = await client.post(
             config.url,
@@ -143,13 +224,17 @@ async def list_tools_json_http(config: McpServerConfig) -> list[McpToolDef]:
             },
         )
         tools_response.raise_for_status()
-        tools_body = tools_response.json()
+        tools_body = _response_json(tools_response)
         if tools_body.get("error"):
             raise McpJsonRpcError(_rpc_error_message(tools_body))
 
         result = tools_body.get("result") or {}
         raw_tools = result.get("tools") or []
-        tools = [_tool_from_dict(t) for t in raw_tools if isinstance(t, dict) and t.get("name")]
+        tools = [
+            _tool_from_dict(t)
+            for t in raw_tools
+            if isinstance(t, dict) and t.get("name")
+        ]
         logger.info(
             "JSON HTTP MCP discover url=%s tools=%d",
             config.url,
@@ -163,7 +248,7 @@ async def call_tool_json_http(
     name: str,
     arguments: dict[str, Any] | None = None,
 ) -> McpToolResult:
-    """Invoke a tool via JSON POSTs (no MCP SDK / no SSE)."""
+    """Invoke a tool via Streamable HTTP JSON POSTs or SSE responses."""
     async with _json_http_session(config) as (client, request_headers):
         call_response = await client.post(
             config.url,
@@ -179,7 +264,7 @@ async def call_tool_json_http(
             },
         )
         call_response.raise_for_status()
-        call_body = call_response.json()
+        call_body = _response_json(call_response)
         result = _result_from_body(call_body)
         logger.info(
             "JSON HTTP MCP call url=%s tool=%s is_error=%s",

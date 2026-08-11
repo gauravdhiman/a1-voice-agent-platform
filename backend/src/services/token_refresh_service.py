@@ -19,19 +19,17 @@ is configurable via ``TOKEN_REFRESH_MAX_CONCURRENT_REFRESHES`` (default: 5).
 
 import asyncio
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from uuid import UUID
 
 import httpx
 
-from shared.voice_agents.tool_service import ToolService
-from shared.voice_agents.tool_models import AgentTool
-from shared.voice_agents.tools.base.oauth_provider_utils import (
-    get_oauth_manager,
-)
 from shared.config import settings
+from shared.voice_agents.tool_models import AgentTool
+from shared.voice_agents.tool_service import ToolService
+from shared.voice_agents.tools.base.oauth_provider_utils import get_oauth_manager
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +283,8 @@ class TokenRefreshService:
         return True, minutes_until_expiry
 
     def _resolve_oauth_config(
-        self, agent_tool: AgentTool,
+        self,
+        agent_tool: AgentTool,
     ) -> tuple[Optional[Dict[str, str]], Optional[str]]:
         """Resolve OAuth provider, token URL and build the refresh request payload.
 
@@ -320,8 +319,34 @@ class TokenRefreshService:
         try:
             oauth_manager.get_credentials(provider)
         except ValueError as e:
-            logger.error(f"Error getting OAuth credentials: {e}")
-            return None, None
+            if provider.lower() != "mcp":
+                logger.error(f"Error getting OAuth credentials: {e}")
+                return None, None
+
+        if provider.lower() == "mcp":
+            client_id = (
+                sensitive_config.get("oauth_client_id")
+                or auth_config.get("client_id")
+                or os.getenv("MCP_OAUTH_CLIENT_ID")
+            )
+            if not client_id:
+                logger.error(
+                    "No MCP OAuth client_id available for tool %s",
+                    agent_tool.tool.name,
+                )
+                return None, None
+            oauth_data = {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "resource": sensitive_config.get("resource")
+                or auth_config.get("resource")
+                or agent_tool.tool.mcp_server_url
+                or "",
+            }
+            if os.getenv("MCP_OAUTH_CLIENT_SECRET"):
+                oauth_data["client_secret"] = os.getenv("MCP_OAUTH_CLIENT_SECRET", "")
+            return oauth_data, token_url
 
         oauth_data = oauth_manager.get_auth_data(
             provider=provider,
@@ -439,7 +464,10 @@ class TokenRefreshService:
             return response.json()
 
     async def _update_agent_tool(
-        self, agent_tool_id: UUID, sensitive_config: dict[str, str | float], tool_name: str
+        self,
+        agent_tool_id: UUID,
+        sensitive_config: dict[str, str | float],
+        tool_name: str,
     ) -> bool:
         """Update agent tool with new tokens.
 

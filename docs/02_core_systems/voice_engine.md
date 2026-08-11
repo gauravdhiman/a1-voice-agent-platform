@@ -180,8 +180,10 @@ warmup) are **future hardening**, not prerequisites for the core capability.
   browser-validated:
   - **(A) Platform-admin preset management** — `/platform/presets` page (gated on
     `user.hasRole("platform_admin")`, `AccessDenied` otherwise) +
-    `PlatformPresetsManager` two-view inline toggle (manage list / author form)
-    mirroring `/platform/tools`. Authoring a preset uses `PresetConfigForm`, which
+    `PlatformPresetsManager` catalog with a right-side create/edit drawer,
+    matching the application-wide entity-management pattern. The drawer uses
+    the shared `form-drawer` / `form-section` / `form-field` / `form-control`
+    hierarchy from `globals.css`. Authoring a preset uses `PresetConfigForm`, which
     emits **exactly** the `speech_config.py` discriminated-union shape
     (`extra="forbid"` on the server, so no stray keys). Publish allowed once a
     valid config is authored; backend 400 (invalid config) shown inline. A nav
