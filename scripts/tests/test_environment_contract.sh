@@ -75,6 +75,14 @@ assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_ENDPOINT=https://e168c1b
 assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-production'
 
 workflow="$ROOT/.github/workflows/deploy-cloud.yml"
+migration_requirements="$ROOT/scripts/deploy/requirements-migrations.txt"
+[[ -f "$migration_requirements" ]] || { echo "Missing migration requirements: $migration_requirements" >&2; exit 1; }
+assert_contains "$migration_requirements" 'alembic==1.14.0'
+assert_contains "$migration_requirements" 'psycopg2-binary==2.9.11'
+assert_contains "$workflow" 'migrate-production:'
+assert_contains "$workflow" 'Run production database migrations'
+assert_contains "$workflow" './scripts/deploy.sh migrate'
+assert_contains "$workflow" 'needs: migrate-production'
 assert_not_contains "$workflow" 'if: ${{ secrets.OCI_SSH_KEY != '\'''\'' }}'
 assert_contains "$workflow" 'id: check-oci-ssh-key'
 assert_contains "$workflow" 'OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}'

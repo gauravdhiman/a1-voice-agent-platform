@@ -74,7 +74,7 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | 2 | Cloud Run domain mappings (`api` + `www`) | `./scripts/deploy.sh domains` |
 | 3 | Cloudflare DNS CNAMEs (`api`, `www`) + A record (`voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
-| 5 | Production DB migrations | `./scripts/deploy.sh migrate` |
+| 5 | Production DB migrations | Required migration job in GitHub Actions; manual recovery: `./scripts/deploy.sh migrate` |
 | 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
 | 7 | Vendor webhooks (Stripe, Twilio, Google OAuth) | You |
 
@@ -171,7 +171,7 @@ concurrency reason so an organization administrator can resolve it.
    curl -s https://www.247ai.live
    curl -s https://voice.247ai.live/health
    ```
-3. Migrations (only when new migrations land): `./scripts/deploy.sh migrate`
+3. Migrations run automatically as a required GitHub Actions job before Cloud Run deployment. For manual recovery, run `./scripts/deploy.sh migrate`.
 4. Redeploy after code changes:
    ```bash
    ./scripts/deploy.sh gcp
