@@ -82,7 +82,7 @@ sign-off.
 | 3a — voice-ws dispatch branch | ✅ Additive MCP branch in `worker.py` (`_integrate_mcp_agent_tool`), `mcp/dispatch.py` (`mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`); legacy `BaseTool`/`LiveKitToolRegistry` path unchanged; fail-soft (a broken MCP server never blocks other tools). **MCP client lifecycle (fixed 2026-07-16):** the entrypoint returns right after `agent_session.start()` while the session runs on, so clients are handed to the job lifecycle via `ctx.add_shutdown_callback` (`_hand_off_mcp_clients_to_session`) and closed on job shutdown — NOT in the entrypoint `finally`, which now only closes clients when setup failed before handoff (`_cleanup_mcp_clients`). (Earlier the `finally` closed them at return time, so every MCP tool failed with `RuntimeError: McpClient is closed` at call time.) 13 tests green (dispatch + voice-ws branch incl. fail-soft + lifecycle). |
 | 3b — First working MCP tool (Google Calendar, in-memory) | ✅ In-memory Google Calendar MCP reference server at `shared/voice_agents/tools/mcp/reference_servers/google_calendar.py` (`list_events` / `create_event` / `get_event` / `check_availability`); full-pipeline e2e (discover → synthesize → invoke) green. Proves the platform plumbing with no third-party OAuth. |
 | 3c — Real Google Calendar MCP (remote server + DB-driven OAuth) | ✅ `Google_calendar_mcp` row repointed at Google's official remote server `https://calendarmcp.googleapis.com/mcp/v1` with `auth_type=oauth2`, `requires_auth=true`, and a real Google OAuth `auth_config` (4 scopes). `start_oauth` / `oauth_callback` in `tool_routes.py` made **DB-driven** (`_resolve_tool_auth_config`: DB-first, legacy registry fallback) so MCP-sourced tools reuse the existing OAuth endpoints; `TokenRefreshService` already reads the same `auth_config` column, so MCP tokens auto-refresh with no extra wiring. 5 new backend tests (`test_tool_oauth_mcp.py`) + 14 existing tool_routes tests green (19 total); 305 green across voice_agents + token-refresh + tool-service suites. Frontend `PlatformTool` type extended with `tool_source` / `mcp_server_url` / `mcp_server_name` / `mcp_server_headers` (3 vitest tests). End-to-end against the real Google API pending the one-time GCP client config (§6.4). |
-| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-07-26 to the publish-lifecycle model:** custom MCP authoring is now **platform-admin-only** (author → test → publish to global catalog); org admins **attach** published servers with their **own** API key (`{{KEY}}` template, org key overrides platform test key at runtime). The org-scoped custom tier is **retired**. Migration `20260726000001` adds `is_published` (backfills existing rows TRUE); `20260725000001` (encrypted secret headers) already applied. SSRF guard + `mcpServers` parser unchanged; new publish/unpublish/edit/delete endpoints + platform-admin gating on discover/parse/create; dispatch substitutes `{{KEY}}` (no platform fallback). Frontend `/platform/tools` nav page (parallel to `/platform/skills`) rendering an inline `<PlatformToolsManager>` (Configure MCP server + Manage existing tools views, no catalog tab); platform-admin-gated. 62 backend route/service + 18 voice-ws dispatch + 67 frontend vitest green. |
+| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-08-10:** custom MCP authoring is platform-admin-only (author → test → publish to global catalog); Org Admins are always offered an organization API-key override, while a literal platform key remains an optional fallback. OAuth-enabled servers use the Org Admin's OAuth connection at runtime, and platform-admin OAuth is available separately for catalog discovery. The parser accepts common host-config wrappers and URL aliases, while hosted discovery/runtime support Streamable HTTP JSON and SSE responses. OAuth discovery, PKCE, resource indicators, dynamic client registration, callback handling, and token refresh are supported for generic MCP servers. |
 | 4–5 | Not started (gated per §7). |
 
 **What shipped (no legacy code touched):**
@@ -521,7 +521,7 @@ returns `is_published=true AND is_active=true` by default (the org-user
 catalog); all rows (drafts + published) when `include_drafts=True`. The
 org-scoped per-org filter is **gone** — all published servers are global.
 
-#### Org-level static keys override platform test keys (the core auth refinement)
+#### Org-level static keys override platform credentials (the core auth refinement)
 
 For static-key MCP servers, **the platform owns the integration (URL, header
 mapping); each org owns its keys.** This mirrors how per-user OAuth already
@@ -534,27 +534,69 @@ works for Google Calendar. The mechanism reuses existing storage and UX —
    `mcp_server_secret_headers` (Fernet via `shared/common/security.py`). A
    transient **Test API key** is substituted into `{{KEY}}` for the one-shot
    in-memory `McpClient` discover call. The test key is **never persisted**.
-2. **Publish** — stores the template (with `{{KEY}}`) encrypted, sets
-   `auth_type="api_key"`, `requires_auth=true`.
-3. **Attach** — an org admin attaches the published tool and supplies their
-   **own** API key via the existing tool-config-drawer "Configure API Key"
+2. **Publish** — stores the optional platform fallback/template encrypted and
+   sets `auth_type="api_key"`. `requires_auth=true` only when no platform
+   fallback exists and the Org Admin key is needed for runtime calls.
+3. **Attach** — an Org Admin attaches the published tool and is always offered
+   an **own** API key via the existing tool-config-drawer "Configure API Key"
    path → `POST /tools/agent/{id}/api-key` →
    `agent_tools.sensitive_config = {"api_key": "<org-key>"}` (existing
    endpoint, reused).
 4. **Runtime** — `shared/voice_agents/tools/mcp/dispatch.py::
    mcp_server_config_from_agent_tool` substitutes `{{KEY}}` → the org key
    from `sensitive_config["api_key"]` into the template. Precedence:
-   public `mcp_server_headers` → `{{KEY}}`-templated
-   `mcp_server_secret_headers` (org key) → per-user OAuth bearer (only if no
-   `Authorization` is set). **A templated header with no org key is DROPPED —
-   there is no platform-fallback**: the tool is left in an "API key required"
-   state rather than sending the bare `{{KEY}}` marker or a stale platform
-   test key. The platform test key is **never** used at runtime.
+   Org API key → literal platform fallback → per-user OAuth bearer (only if no
+   `Authorization` is set). The org key always wins. If no org key is present,
+   a literal platform-owned secret header remains as the fallback; a templated
+   header with no org key is dropped rather than sending the bare `{{KEY}}`
+   marker or a stale platform test key. The platform test key is **never** used
+   at runtime.
 
 Literal secret-header values (no `{{KEY}}`) pass through unchanged as fixed
 shared headers (optional shared-key mode, platform-admin's responsibility).
 
 Per-user OAuth (Google Calendar) is unchanged for native/seeded servers.
+
+#### OAuth MCP catalog discovery and runtime ownership
+
+OAuth MCPs have two deliberately separate flows because the platform admin and
+the Org Admin have different responsibilities:
+
+| Flow | Endpoint | Credential purpose | Persistence |
+|---|---|---|---|
+| Platform catalog discovery | `GET /api/v1/tools/platform/{tool_id}/oauth` → `/api/v1/tools/callback` | One-time platform-admin authorization used only for `tools/list` | Only the sanitized public `tool_functions_schema` is stored on `platform_tools`; no OAuth token and no `agent_tools` row |
+| Agent connection | `GET /api/v1/tools/auth/{tool_name}?agent_id=…` → `/api/v1/tools/callback` | Org Admin's OAuth authorization for the specific agent | Encrypted access/refresh tokens are stored in that agent's `agent_tools.sensitive_config` and are the only OAuth credentials used at runtime |
+
+The platform OAuth token is never a runtime fallback. It exists only to make the
+server's exposed functions visible to platform admins and Org Admins before an
+agent connection is configured. The Manage view labels an OAuth MCP with no
+stored schema as **Catalog unavailable — authenticate to discover** and offers
+**Discover with OAuth**. Once the callback completes, the function names and
+schemas appear in the platform list, agent cards, and agent configuration drawer.
+
+The platform admin may save or publish an OAuth MCP without a client secret or
+API key. The OAuth configuration can provide authorization/token endpoints,
+scopes, and a public client ID, or the backend can use MCP protected-resource
+metadata and Dynamic Client Registration. The Org Admin still completes their
+own OAuth flow before attaching the integration to an agent; that per-agent
+credential is independent of the platform discovery authorization.
+
+#### Streamable HTTP negotiation and schema visibility
+
+The discovery client follows the MCP Streamable HTTP transport requirements:
+
+- every POST advertises both `application/json` and `text/event-stream` in
+  `Accept`, avoiding HTTP 406 responses from strict servers such as DeepWiki and
+  Context7;
+- the client accepts either a JSON-RPC JSON response or an SSE `data:` event;
+- after `initialize`, subsequent requests carry the protocol version negotiated
+  by the server and any returned `Mcp-Session-Id`;
+- the original server JSON Schema is preserved in the MCP model. The worker's
+  Gemini adapter performs its own provider-specific schema sanitization later.
+
+This keeps the UI catalog useful even when a server's transport response format
+differs from another server's, while avoiding the unsafe practice of persisting
+the platform discovery token as an agent credential.
 
 #### UI
 
@@ -564,8 +606,11 @@ in the `platform_admin` section of `nav-config.ts` (`requiredPermission:
 "platform:admin"`). The page renders an inline `<PlatformToolsManager>` —
 **authoring + management only**, no "From catalog" tab (published servers
 already render as normal `ToolCard`s in the main tool panel for everyone,
-with the MCP badge; org admins attach via the existing card connect flow and
-supply their key via the existing drawer).
+with the MCP badge; org admins attach via the existing card connect flow. If
+the MCP has no platform fallback, the card requires the organization key first
+and collects it in a pre-connection dialog; the agent-tool row is not created
+until the key is supplied. Existing connected tools can still update their key
+from the drawer).
 
 This surface was previously a Sheet dialog opened by a "Manage MCP servers"
 button on every agent's Tools tab. That conflated a global, platform-admin
@@ -574,37 +619,52 @@ concern (catalog authoring/publishing) with a per-agent, org-admin concern
 tab keeps only the attachment UI (published-tool cards + connect drawer),
 unchanged for org/regular admins. The page H1 is "Platform Tools" because the
 **Manage existing tools** view lists *every* platform tool (legacy
-code-backed + authored MCP), not just MCP servers. The manager has two views,
-toggled inline (no Sheet/drawer). **Manage existing tools is the first toggle
-and the default active view** (`initialView` defaults to `manage`) — the page
-lands the admin on the tool list; authoring a new server is opt-in via the
-second toggle:
+code-backed + authored MCP), not just MCP servers. The manage catalog is the
+default page surface (`initialView` defaults to `manage`). Create and edit
+actions open the shared right-side Sheet pattern, so authoring does not become
+a second page-level mode and the catalog remains visible behind the drawer:
 
 - **Manage existing tools** (internal state `manage`, default): drafts +
   published list (native + MCP) with Draft/Published badges and
-  publish/unpublish/delete actions.
-- **Configure MCP server** (internal state `author`): auth-mode select
-  (No auth / Static API key), Name, URL, public Headers (JSON), `{{KEY}}`
-  secret-header template + transient Test API key (api-key mode only),
-  `mcpServers` JSON paste + parse, "Test & discover", "Save draft"
+  publish/unpublish/delete actions, plus a **Create new platform tool** button.
+- **Create/edit MCP server** (internal state `author`, rendered in a Sheet):
+  auth-mode select
+  (No auth / API key / OAuth), Name, URL, public Headers (JSON), optional
+  `{{KEY}}` secret-header template + transient Test API key (api-key mode only),
+  OAuth endpoint/scope/client-id fields (OAuth mode only),
+  host-config JSON paste + parse, "Test & discover" / "Authorize & discover
+  tools", "Save draft"
   (`is_published=false`) / "Publish" (`is_published=true`). On a successful
-  save the inline form resets so the admin can author another (the dialog
-  predecessor closed itself on save; an inline panel has no dialog to close).
+  save the drawer closes and the manager returns to the catalog. Closing the
+  drawer without saving cancels the current create/edit session.
+  For OAuth MCPs, the authoring discovery action persists a draft first, opens
+  the platform-admin OAuth flow, and writes the sanitized public catalog when
+  the callback completes. Editing an existing OAuth MCP saves its metadata
+  while preserving its current publish state before opening the same flow.
   The "Save draft" / "Publish" buttons are `w-full sm:w-auto` so they sit
   side-by-side at `sm+` (two `w-full` buttons in a `sm:flex-row` row overflow
   horizontally — they used to render outside the panel).
   - **Mandatory fields are marked**: Name and Server URL (the save guard) carry
     a red `*`; optional fields (Public headers, Description) do not.
-  - **Publish is gated on a successful "Test & discover"**: the Publish button
-    stays disabled (`canPublish = discoveredTools.length > 0`) until the admin
-    runs "Test connection & discover tools" and at least one tool is found,
-    with an inline hint "Run Test connection & discover tools before
-    publishing so the tool list is captured." Publishing without discover left
-    the agent tool-config drawer empty (`tool_functions_schema` null → no tool
-    list on the published card). Save draft remains allowed without discover
-    (drafts aren't shown to org users, so an empty tool list is fine for a
-    work-in-progress draft). A defense-in-depth guard in `handleSave` rejects a
-    publish with zero discovered tools even if the button is bypassed.
+  - **Publish is gated on a discovered catalog**: public/no-auth servers must
+    pass "Test connection & discover tools" and expose at least one function;
+    OAuth servers must complete "Authorize & discover tools" and expose at
+    least one function. This prevents an OAuth MCP from entering the org
+    catalog with no visible functions. API-key servers remain publishable
+    without a platform key because an Org Admin may supply the key later.
+    OAuth MCPs also expose a Manage-view **Discover with OAuth** action for
+    existing drafts and published rows; it uses the same platform discovery
+    route without making that token an agent runtime credential.
+    Save draft remains allowed without discover, and a defense-in-depth guard
+    rejects a public or OAuth publish with zero discovered tools even if the
+    button is bypassed.
+- **Shared form theme.** The MCP drawer uses the same layered visual contract
+  now adopted by the Voice Preset drawer: `form-drawer` is the canvas,
+  `form-section` groups related controls, `form-field` separates individual
+  fields, and `form-control` gives inputs/selects/textareas an elevated fill,
+  border, and focus ring. These classes are defined centrally in
+  `frontend/src/app/globals.css` so future complex forms can adopt the same
+  hierarchy without inventing page-specific colors.
 
 #### Delete guardrails (implemented 2026-07-28)
 
@@ -691,7 +751,10 @@ Two follow-ups to the publish lifecycle that close the gap between custom MCP
 tool cards and native tool cards:
 
 - **Persist the discovered tool list at author time.** The Author view's "Test
-  & discover" button probes the server and renders the tool list in-memory;
+  & discover" button probes public/API-key servers and renders the tool list
+  in-memory; OAuth's "Authorize & discover tools" saves the row as a draft,
+  opens interactive platform OAuth, and hydrates the same catalog after the
+  callback;
   `buildSavePayload` now maps those discovered tools into
   `platform_tools.tool_functions_schema = {functions: [{name, description,
   parameters: input_schema}]}` on save/publish. The agent `tool-config-drawer`
@@ -701,6 +764,29 @@ tool cards and native tool cards:
   `agent_tools.unselected_functions` — the stored schema is display-only, but
   must be present for the drawer to show anything. Omitted when no tools were
   discovered (the drawer then shows no list, as before).
+- **Progressive function disclosure.** The platform Manage view opens the
+  discovered catalog in a right-side drawer with one accordion row per
+  function. Each row keeps the function name, two-line description, and
+  parameter count visible; full parameter types, required markers, and
+  descriptions appear only when expanded. Long function descriptions have an
+  explicit **Show full description** control rather than becoming inaccessible
+  after truncation. The parameter detail panel uses a tinted surface with
+  contrasting parameter cards so the two hierarchy levels remain visually
+  distinct. The Org Admin agent drawer uses the same one-at-a-time disclosure
+  pattern while keeping each function's enable/disable switch visible in the
+  collapsed state; parameter descriptions remain fully readable.
+- **Readable platform catalog inspection.** Manage rows expose a clickable
+  **N exposed functions** summary that opens a right-side function catalog
+  drawer. The drawer shows each function's name, description, parameter types,
+  and required parameters without forcing the admin to read a truncated inline
+  comma-separated list. Both the platform catalog and Org Admin function
+  drawers provide client-side search across function names only, with match
+  counts, clear actions, and an explicit empty state; the drawer is already
+  scoped to the selected MCP toolset, so the platform tool name is not treated
+  as a function match. Function and tool descriptions use the same explicit
+  expand/collapse affordance when their compact preview is truncated. OAuth
+  discovery loading is row-scoped, so starting Linear discovery does not
+  disable or spin Notion or Google Calendar.
 - **Publish-time self-heal.** `publish_platform_tool` best-effort backfills
   `tool_functions_schema` via a live `tools/list` when an MCP row is published
   with a null schema (rows authored before the authoring-dialog fix, or
@@ -722,26 +808,76 @@ tool cards and native tool cards:
   `unexpected_keyword_argument`, and the model gave up. The accepted-args hint
   lets it recover.
 
-#### Accepted `mcpServers` JSON format (unchanged)
+#### Accepted MCP JSON configuration formats
 
-Parsed by the backend (single source of truth):
+MCP standardizes the protocol and transports; it does **not** define one
+universal host configuration file. Hosts therefore use different wrappers
+(`mcpServers`, `servers`, or a bare server object) and sometimes different URL
+property names. The backend parser is the single source of truth and accepts
+the following equivalent shapes:
 
 ```json
 {
   "mcpServers": {
     "my-server": {
       "url": "https://example.com/mcp",
-      "headers": { "Authorization": "Bearer ..." }
+      "headers": { "Authorization": "Bearer {{KEY}}" }
     }
   }
 }
 ```
 
-A bare single-server object is also accepted. Entries with `command`/`args`
-(**stdio**) are rejected with a per-entry error — arbitrary subprocess
-execution is not supported in a hosted multi-tenant SaaS. Only `url`/`headers`
-(HTTP Streamable transport) entries are accepted. If multiple servers are
-pasted, the first is used (v1).
+```json
+{
+  "servers": [
+    {
+      "name": "my-server",
+      "serverUrl": "https://example.com/mcp",
+      "transport": { "type": "streamable_http" },
+      "auth": {
+        "type": "oauth2",
+        "scopes": ["tools:read"]
+      }
+    }
+  ]
+}
+```
+
+The parser also handles `mcp_servers`, root-level single-server objects, and
+URL aliases such as `server_url`, `httpUrl`, `endpoint`, and `mcpUrl`. Headers
+are normalized to strings. Credential-looking headers and placeholders such as
+`${input:apiKey}`, `${env:API_KEY}`, `<API_KEY>`, and `{{anything}}` become the
+canonical `{{KEY}}` template so a platform admin can save the integration
+without supplying a real credential. Literal fixed headers remain platform-
+supplied fallbacks, but the Org Admin still receives an optional override
+field.
+
+Each entry is validated independently. Disabled entries and malformed or
+unsupported transports return an entry-specific error while valid entries are
+preserved. The hosted runtime currently accepts Streamable HTTP (`http` and
+`streamable_http` aliases); stdio (`command`/`args`) and legacy SSE entries are
+reported clearly rather than silently misparsed, because arbitrary subprocess
+execution and legacy SSE are not enabled in the multi-tenant runtime. If
+multiple entries are pasted, the first valid entry is selected for authoring.
+
+#### Generic MCP OAuth
+
+An OAuth entry may provide `authorization_endpoint`/`auth_url`,
+`token_endpoint`/`token_url`, `scopes`, `client_id`, `resource`, and optional
+`registration_endpoint`. If endpoints are omitted, the backend discovers
+Protected Resource Metadata and OAuth/OIDC authorization-server metadata from
+the MCP URL. Authorization uses a signed short-lived state, PKCE, and the MCP
+resource indicator. When a public client ID is not configured, the backend can
+use dynamic client registration when the server advertises a registration
+endpoint.
+
+The platform admin never needs to provide an OAuth access token or API key to
+save/publish an integration. When an org admin attaches an OAuth MCP, the
+existing agent drawer starts the OAuth flow and stores the resulting tokens
+encrypted on the agent-tool connection. Refresh uses the MCP client ID and
+resource captured during the connection. Static API-key MCPs follow the same
+principle: the platform stores only an optional template; the org admin enters
+their own key before the agent can call the server.
 
 #### Security model
 
@@ -803,20 +939,21 @@ pasted, the first is used (v1).
 
 #### Auth modes supported in v1
 
-No-auth, static-API-key (per-org, `{{KEY}}` template), and per-user OAuth
-(existing flow, for native/seeded servers like Google Calendar where we hold
-the OAuth config). **Per-user OAuth authoring for custom remote servers is
-Phase B** — v1 custom authoring is No-auth + Static-API-key only; the native
-Google Calendar connector already demonstrates per-user OAuth end-to-end and
-the existing `start_oauth`/`oauth_callback` reads `auth_config` from the row.
-**Server-side OAuth** (the platform does the OAuth dance with the MCP server)
-is on the back burner.
+No-auth, static API key, and per-user OAuth are supported for platform-defined
+MCP integrations. For static API keys, the platform admin may optionally save
+a literal platform-owned header as a fallback or define an optional
+`{{KEY}}` template. The Org Admin is always offered an organization-key field;
+their key is stored on that agent-tool connection and selected at runtime
+without overwriting the platform fallback. When no platform fallback exists,
+the card blocks attachment and requires the Org Admin to supply a key before
+the agent-tool row is created. For OAuth, the platform admin may provide
+explicit endpoints or rely on MCP metadata discovery; the org admin completes
+the authorization flow for the specific agent connection.
 
 #### Deferred / out of scope
 
-Per-user OAuth authoring for custom servers (Phase B), server-side OAuth,
-stdio servers, and a future org-private-publish tier (the dormant
-`organization_id` column).
+stdio servers, legacy SSE servers, and a future org-private-publish tier (the
+dormant `organization_id` column) remain out of scope for the hosted runtime.
 
 #### Build note
 

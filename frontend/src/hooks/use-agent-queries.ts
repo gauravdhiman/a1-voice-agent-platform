@@ -403,6 +403,9 @@ export function useStartOAuth() {
         queryClient.invalidateQueries({
           queryKey: agentQueryKeys.agentTools(agentId),
         });
+        queryClient.invalidateQueries({
+          queryKey: agentQueryKeys.platformTools(),
+        });
       }, 3000);
     },
     onError: () => {
@@ -533,6 +536,38 @@ export function usePublishPlatformTool() {
     },
     onError: () => {
       toast.error("Failed to update publish state");
+    },
+  });
+}
+
+// Mutation: Start a platform-admin OAuth discovery flow for an MCP catalog row.
+// The OAuth callback stores only the public tools/list schema on platform_tools;
+// it never creates an agent_tools connection or supplies runtime credentials.
+export function useStartPlatformMcpOAuth() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (toolId: string) => agentService.startPlatformMcpOAuth(toolId),
+    onSuccess: ({ auth_url }) => {
+      window.open(auth_url, "_blank");
+      toast.info("Opening OAuth discovery. The tool catalog will refresh after authorization.");
+
+      // OAuth completion time is user-controlled. Refresh the platform catalog
+      // for a short window so the new function list appears without a manual
+      // page reload after the callback finishes.
+      let attempts = 0;
+      const refresh = () => {
+        queryClient.invalidateQueries({
+          queryKey: agentQueryKeys.platformTools(),
+        });
+        queryClient.invalidateQueries({ queryKey: ["tools", "agent"] });
+        attempts += 1;
+        if (attempts < 15) window.setTimeout(refresh, 2000);
+      };
+      window.setTimeout(refresh, 2000);
+    },
+    onError: () => {
+      toast.error("Failed to start OAuth catalog discovery");
     },
   });
 }

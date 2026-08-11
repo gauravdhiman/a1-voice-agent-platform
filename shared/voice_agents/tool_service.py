@@ -286,6 +286,10 @@ class ToolService:
                 data_dict["mcp_server_headers"] = (
                     tool_data.mcp_server_headers or {}
                 )
+                if tool_data.auth_type != "oauth2":
+                    # OAuth metadata must not survive a switch to no-auth or
+                    # API-key mode and accidentally re-enable the OAuth route.
+                    data_dict["auth_config"] = None
 
             # Legacy (code-backed) tools carry NO premium metadata in the
             # registry: ``PlatformToolRegistry.sync_with_db`` re-upserts them
@@ -308,9 +312,10 @@ class ToolService:
                 data_dict["mcp_server_secret_headers"] = encrypt_data(
                     tool_data.mcp_secret_headers_input
                 )
-            elif tool_data.requires_auth is False:
-                # Switching to "No auth" clears stored secret headers so a later
-                # discover/edit session does not keep sending stale credentials.
+            elif tool_data.auth_type == "oauth2" or tool_data.requires_auth is False:
+                # Switching to OAuth or "No auth" clears stored API-key headers
+                # so a later discover/runtime session does not send stale
+                # credentials alongside the new auth mode.
                 data_dict["mcp_server_secret_headers"] = None
 
             if existing.data:
@@ -587,6 +592,47 @@ class ToolService:
             logger.error(f"Error publishing platform tool {tool_id}: {e}")
             return None, str(e)
 
+    @tracer.start_as_current_span("tool.update_platform_tool_functions_schema")
+    async def update_platform_tool_functions_schema(
+        self, tool_id: UUID, schema: dict
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Persist the public tool catalog discovered from an MCP server.
+
+        OAuth discovery may be performed by a platform admin or by an Org
+        Admin's agent connection. The resulting function names and JSON
+        Schemas are public catalog metadata; OAuth tokens are deliberately not
+        accepted by this method and remain scoped to the agent connection.
+
+        Args:
+            tool_id: Platform MCP row to update.
+            schema: ``{functions: [...]}`` metadata returned by ``tools/list``.
+
+        Returns:
+            The updated sanitized platform tool, or an error string when the
+            row does not exist or the database update fails.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .update({"tool_functions_schema": schema})
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
+        except Exception as e:
+            logger.error(
+                "Error updating tool catalog for platform tool %s: %s",
+                tool_id,
+                e,
+                exc_info=True,
+            )
+            return None, str(e)
+
     @tracer.start_as_current_span("tool.set_platform_tool_premium")
     async def set_platform_tool_premium(
         self, tool_id: UUID, is_premium: bool
@@ -744,6 +790,10 @@ class ToolService:
                 data_dict["mcp_server_headers"] = (
                     tool_data.mcp_server_headers or {}
                 )
+                if tool_data.auth_type != "oauth2":
+                    # OAuth metadata must not survive a switch to no-auth or
+                    # API-key mode and accidentally re-enable the OAuth route.
+                    data_dict["auth_config"] = None
             # Always write these so clearing them in the UI is not a no-op.
             data_dict["description"] = tool_data.description
             data_dict["auth_type"] = tool_data.auth_type
@@ -752,9 +802,10 @@ class ToolService:
                 data_dict["mcp_server_secret_headers"] = encrypt_data(
                     tool_data.mcp_secret_headers_input
                 )
-            elif tool_data.requires_auth is False:
-                # Switching to "No auth" clears stored secret headers so a later
-                # discover/edit session does not keep sending stale credentials.
+            elif tool_data.auth_type == "oauth2" or tool_data.requires_auth is False:
+                # Switching to OAuth or "No auth" clears stored API-key headers
+                # so a later discover/runtime session does not send stale
+                # credentials alongside the new auth mode.
                 data_dict["mcp_server_secret_headers"] = None
             response = (
                 self.supabase.table("platform_tools")

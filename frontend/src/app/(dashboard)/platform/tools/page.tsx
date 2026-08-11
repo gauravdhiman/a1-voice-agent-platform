@@ -4,9 +4,9 @@
  * Platform Tools management page (platform admin only).
  *
  * Dedicated home for the global tool catalog — parallel to `/platform/skills`.
- * Platform admins configure custom MCP servers (author → test → save
- * draft / publish) and manage every published platform tool (legacy +
- * MCP) via the inline `<PlatformToolsManager>`.
+ * Platform admins configure custom MCP servers (create/edit drawer → test →
+ * save draft / publish) and manage every published platform tool (legacy +
+ * MCP) via the catalog in `<PlatformToolsManager>`.
  *
  * This surface was previously crammed onto every agent's Tools tab as a
  * "Manage MCP servers" button. That conflated a global, platform-admin

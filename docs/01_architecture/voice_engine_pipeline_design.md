@@ -424,8 +424,9 @@ flowchart TD
   engines/configure stages (deferred decision — wiring point only). E2E + browser
   validation. **✅ Done** — three workstreams landed:
   - **(A) `/platform/presets`** platform-admin management page (`useAuth()` gate on
-    `platform_admin`, `AccessDenied` otherwise) + `PlatformPresetsManager` two-view
-    inline toggle (manage list / author form) mirroring `/platform/tools`. The
+    `platform_admin`, `AccessDenied` otherwise) + `PlatformPresetsManager` catalog
+    with a right-side create/edit drawer, matching the rest of the application.
+    The
     `PresetConfigForm` authoring sub-form emits **exactly** the `speech_config.py`
     discriminated-union shape (server `extra="forbid"` rejects stray keys): a
     `realtime | pipeline` type selector, realtime defaults reproduced from

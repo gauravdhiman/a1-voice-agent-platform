@@ -4,6 +4,7 @@ Builds an :class:`McpServerConfig` from an MCP-sourced ``agent_tools`` row by
 merging server-level static headers with the per-user OAuth bearer from the
 decrypted ``sensitive_config``.
 """
+
 import logging
 
 from shared.common.security import decrypt_data
@@ -11,6 +12,33 @@ from shared.voice_agents.tool_models import AgentTool
 from shared.voice_agents.tools.mcp.models import McpServerConfig
 
 logger = logging.getLogger(__name__)
+
+_API_KEY_HEADER_NAMES = {
+    "authorization",
+    "proxy-authorization",
+    "api-key",
+    "x-api-key",
+    "x-auth-token",
+    "x-access-token",
+}
+
+
+def _is_api_key_header(name: str) -> bool:
+    """Return whether a header conventionally carries an API credential."""
+    normalized = name.strip().lower()
+    return normalized in _API_KEY_HEADER_NAMES or normalized.endswith(
+        ("-api-key", "-auth-token", "-access-token")
+    )
+
+
+def _apply_org_key(value: str, org_api_key: str) -> str:
+    """Apply an org key while preserving common Authorization schemes."""
+    if "{{KEY}}" in value:
+        return value.replace("{{KEY}}", org_api_key)
+    scheme, separator, _ = value.partition(" ")
+    if separator and scheme.lower() in {"bearer", "basic", "token"}:
+        return f"{scheme} {org_api_key}"
+    return org_api_key
 
 
 def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
@@ -25,9 +53,8 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
        ``{{KEY}}`` placeholder is filled with the **org admin's** API key from
        the agent_tool's decrypted ``sensitive_config["api_key"]`` — never the
        platform admin's transient test key. A literal value (no ``{{KEY}}``)
-       passes through unchanged (fixed shared header). A templated header with
-       no org key is dropped (no platform fallback) so the tool is left in an
-       "API key required" state rather than sending the bare marker.
+       passes through unchanged as the platform fallback. A templated header
+       with no org key is dropped rather than sending the bare marker.
     3. the per-user OAuth bearer from the agent_tool's decrypted
        ``sensitive_config`` (``access_token``), injected as
        ``Authorization: Bearer <token>`` only when the merged headers do not
@@ -52,11 +79,20 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
         )
 
     sensitive = agent_tool.sensitive_config
-    org_api_key = (
-        sensitive.get("api_key") if isinstance(sensitive, dict) else None
-    )
+    org_api_key = sensitive.get("api_key") if isinstance(sensitive, dict) else None
 
-    headers = dict(platform_tool.mcp_server_headers or {})
+    headers: dict[str, str] = {}
+    for key, raw_value in (platform_tool.mcp_server_headers or {}).items():
+        value = str(raw_value)
+        if "{{KEY}}" in value:
+            if org_api_key:
+                headers[str(key)] = _apply_org_key(value, str(org_api_key))
+            # Never send a literal placeholder or a platform test credential.
+            continue
+        if org_api_key and _is_api_key_header(str(key)):
+            headers[str(key)] = _apply_org_key(value, str(org_api_key))
+            continue
+        headers[str(key)] = value
 
     if platform_tool.mcp_server_secret_headers:
         try:
@@ -66,9 +102,9 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
                     value = str(v)
                     if "{{KEY}}" in value:
                         if org_api_key:
-                            headers[str(k)] = value.replace(
-                                "{{KEY}}", str(org_api_key)
-                            )
+                            headers[str(k)] = _apply_org_key(value, str(org_api_key))
+                    elif org_api_key and _is_api_key_header(str(k)):
+                        headers[str(k)] = _apply_org_key(value, str(org_api_key))
                     else:
                         headers[str(k)] = value
         except Exception as e:
@@ -79,8 +115,11 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
                 exc_info=True,
             )
 
-    access_token = sensitive.get("access_token") if isinstance(sensitive, dict) else None
-    if access_token and "Authorization" not in headers:
+    access_token = (
+        sensitive.get("access_token") if isinstance(sensitive, dict) else None
+    )
+    has_authorization = any(key.lower() == "authorization" for key in headers)
+    if access_token and not has_authorization:
         headers["Authorization"] = f"Bearer {access_token}"
 
     return McpServerConfig(

@@ -1,13 +1,15 @@
 """
 Tests for token refresh service.
 """
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timezone, timedelta
+
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from shared.voice_agents.tool_service import ToolService
+import pytest
+
 from shared.voice_agents.tool_models import AgentTool, PlatformTool
+from shared.voice_agents.tool_service import ToolService
 from src.services.token_refresh_service import TokenRefreshService
 
 
@@ -34,7 +36,7 @@ def sample_agent_tool():
     platform_tool.auth_config = {
         "client_id": "test_client_id",
         "client_secret": "test_client_secret",
-        "token_url": "https://oauth.example.com/token"
+        "token_url": "https://oauth.example.com/token",
     }
 
     agent_tool = MagicMock(spec=AgentTool)
@@ -93,21 +95,27 @@ class TestTokenRefreshService:
         await token_refresh_service.stop()
         assert token_refresh_service.running is False
 
-    async def test_check_and_refresh_token_no_sensitive_config(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_no_sensitive_config(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test token check with no sensitive config."""
         sample_agent_tool.sensitive_config = None
 
         result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
         assert result is False
 
-    async def test_check_and_refresh_token_no_expires_at(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_no_expires_at(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test token check with no expires_at."""
         sample_agent_tool.sensitive_config = {"access_token": "test"}
 
         result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
         assert result is False
 
-    async def test_check_and_refresh_token_expired(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_expired(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test token check with already expired token."""
         now = datetime.now(timezone.utc)
         expired_time = now - timedelta(minutes=30)
@@ -116,7 +124,9 @@ class TestTokenRefreshService:
         result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
         assert result is False
 
-    async def test_check_and_refresh_token_valid_long_time(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_valid_long_time(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test token check with token valid for long time."""
         now = datetime.now(timezone.utc)
         far_future = now + timedelta(hours=2)  # Valid for 2 hours
@@ -125,44 +135,65 @@ class TestTokenRefreshService:
         result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
         assert result is False
 
-    async def test_check_and_refresh_token_no_refresh_token(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_no_refresh_token(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test token check with no refresh token."""
         sample_agent_tool.sensitive_config["refresh_token"] = None
 
         result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
         assert result is False
 
-    async def test_check_and_refresh_token_no_auth_config(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_no_auth_config(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test token check with no auth config."""
         sample_agent_tool.tool.auth_config = None
 
         result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
         assert result is False
 
-    async def test_check_and_refresh_token_success(self, token_refresh_service, sample_agent_tool):
+    async def test_check_and_refresh_token_success(
+        self, token_refresh_service, sample_agent_tool
+    ):
         """Test successful token refresh."""
         # Mock the distributed refresh lock (acquired -> refresh proceeds -> released).
-        token_refresh_service.tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
-        token_refresh_service.tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        token_refresh_service.tool_service.claim_refresh_lock = AsyncMock(
+            return_value="claim-1"
+        )
+        token_refresh_service.tool_service.release_refresh_lock = AsyncMock(
+            return_value=True
+        )
 
         # Mock the OAuth manager
-        with patch('src.services.token_refresh_service.get_oauth_manager') as mock_get_manager:
+        with patch(
+            "src.services.token_refresh_service.get_oauth_manager"
+        ) as mock_get_manager:
             mock_manager = MagicMock()
-            mock_manager.extract_oauth_config.return_value = ("google", "https://oauth.example.com/token")
+            mock_manager.extract_oauth_config.return_value = (
+                "google",
+                "https://oauth.example.com/token",
+            )
             mock_get_manager.return_value = mock_manager
 
             # Mock the token refresh
             new_tokens = {
                 "access_token": "new_access_token",
                 "refresh_token": "new_refresh_token",
-                "expires_in": 3600
+                "expires_in": 3600,
             }
 
-            with patch.object(token_refresh_service, '_refresh_oauth_token', new_callable=AsyncMock) as mock_refresh:
+            with patch.object(
+                token_refresh_service, "_refresh_oauth_token", new_callable=AsyncMock
+            ) as mock_refresh:
                 mock_refresh.return_value = new_tokens
 
-                with patch.object(token_refresh_service, '_update_agent_tool', new_callable=AsyncMock) as mock_update:
-                    result = await token_refresh_service._check_and_refresh_token(sample_agent_tool)
+                with patch.object(
+                    token_refresh_service, "_update_agent_tool", new_callable=AsyncMock
+                ) as mock_update:
+                    result = await token_refresh_service._check_and_refresh_token(
+                        sample_agent_tool
+                    )
                     assert result is True
 
                     # Verify refresh was called
@@ -173,6 +204,50 @@ class TestTokenRefreshService:
                     token_refresh_service.tool_service.claim_refresh_lock.assert_awaited_once()
                     token_refresh_service.tool_service.release_refresh_lock.assert_awaited_once()
 
+    async def test_resolve_mcp_oauth_refresh_config(self, token_refresh_service):
+        """Build a generic MCP refresh request without provider credentials."""
+        platform_tool = MagicMock(spec=PlatformTool)
+        platform_tool.name = "Generic MCP"
+        platform_tool.mcp_server_url = "https://mcp.example.com"
+        platform_tool.auth_config = {
+            "provider": "mcp",
+            "client_id": "registered-client",
+            "token_url": "https://mcp.example.com/oauth/token",
+            "resource": "https://mcp.example.com",
+        }
+        agent_tool = MagicMock(spec=AgentTool)
+        agent_tool.tool = platform_tool
+        agent_tool.sensitive_config = {
+            "refresh_token": "refresh-token",
+            "oauth_client_id": "stored-client",
+            "resource": "https://mcp.example.com/resource",
+        }
+
+        with patch(
+            "src.services.token_refresh_service.get_oauth_manager"
+        ) as get_manager:
+            manager = MagicMock()
+            manager.extract_oauth_config.return_value = (
+                "mcp",
+                "https://mcp.example.com/oauth/token",
+            )
+            manager.get_credentials.side_effect = ValueError(
+                "MCP uses dynamic credentials"
+            )
+            get_manager.return_value = manager
+
+            oauth_data, token_url = token_refresh_service._resolve_oauth_config(
+                agent_tool
+            )
+
+        assert token_url == "https://mcp.example.com/oauth/token"
+        assert oauth_data == {
+            "grant_type": "refresh_token",
+            "refresh_token": "refresh-token",
+            "client_id": "stored-client",
+            "resource": "https://mcp.example.com/resource",
+        }
+
     async def test_refresh_oauth_token_success(self, token_refresh_service):
         """Test successful OAuth token refresh."""
         token_url = "https://oauth.example.com/token"
@@ -180,27 +255,29 @@ class TestTokenRefreshService:
             "grant_type": "refresh_token",
             "refresh_token": "test_refresh_token",
             "client_id": "test_client_id",
-            "client_secret": "test_client_secret"
+            "client_secret": "test_client_secret",
         }
 
         expected_response = {
             "access_token": "new_access_token",
             "refresh_token": "new_refresh_token",
-            "expires_in": 3600
+            "expires_in": 3600,
         }
 
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = expected_response
 
-        with patch('httpx.AsyncClient') as mock_client_class:
+        with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.__aenter__.return_value = mock_client
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
 
-            result = await token_refresh_service._refresh_oauth_token(token_url, oauth_data)
+            result = await token_refresh_service._refresh_oauth_token(
+                token_url, oauth_data
+            )
             assert result == expected_response
 
             mock_client.post.assert_called_once_with(token_url, data=oauth_data)
@@ -214,14 +291,16 @@ class TestTokenRefreshService:
         mock_response.status_code = 400
         mock_response.text = "Invalid refresh token"
 
-        with patch('httpx.AsyncClient') as mock_client_class:
+        with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.__aenter__.return_value = mock_client
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
 
-            result = await token_refresh_service._refresh_oauth_token(token_url, oauth_data)
+            result = await token_refresh_service._refresh_oauth_token(
+                token_url, oauth_data
+            )
             assert result is None
 
     async def test_update_agent_tool_success(self, token_refresh_service, tool_service):
@@ -230,13 +309,15 @@ class TestTokenRefreshService:
         sensitive_config = {
             "access_token": "new_token",
             "refresh_token": "new_refresh",
-            "expires_at": 1234567890.0
+            "expires_at": 1234567890.0,
         }
         tool_name = "Test Tool"
 
         tool_service.update_agent_tool = AsyncMock(return_value=(None, None))
 
-        await token_refresh_service._update_agent_tool(agent_tool_id, sensitive_config, tool_name)
+        await token_refresh_service._update_agent_tool(
+            agent_tool_id, sensitive_config, tool_name
+        )
 
         tool_service.update_agent_tool.assert_called_once()
         call_args = tool_service.update_agent_tool.call_args
@@ -252,23 +333,33 @@ class TestTokenRefreshService:
 
         tool_service.update_agent_tool = AsyncMock(return_value=(None, "Update failed"))
 
-        await token_refresh_service._update_agent_tool(agent_tool_id, sensitive_config, tool_name)
+        await token_refresh_service._update_agent_tool(
+            agent_tool_id, sensitive_config, tool_name
+        )
 
         tool_service.update_agent_tool.assert_called_once()
 
-    async def test_get_tools_requiring_auth_success(self, token_refresh_service, tool_service):
+    async def test_get_tools_requiring_auth_success(
+        self, token_refresh_service, tool_service
+    ):
         """Test successful retrieval of tools requiring auth."""
         mock_tools = [MagicMock(spec=AgentTool), MagicMock(spec=AgentTool)]
-        tool_service.get_all_agent_tools_with_auth = AsyncMock(return_value=(mock_tools, None))
+        tool_service.get_all_agent_tools_with_auth = AsyncMock(
+            return_value=(mock_tools, None)
+        )
 
         result = await token_refresh_service._get_tools_requiring_auth()
         assert result == mock_tools
 
         tool_service.get_all_agent_tools_with_auth.assert_called_once()
 
-    async def test_get_tools_requiring_auth_failure(self, token_refresh_service, tool_service):
+    async def test_get_tools_requiring_auth_failure(
+        self, token_refresh_service, tool_service
+    ):
         """Test retrieval of tools requiring auth failure."""
-        tool_service.get_all_agent_tools_with_auth = AsyncMock(return_value=(None, "Database error"))
+        tool_service.get_all_agent_tools_with_auth = AsyncMock(
+            return_value=(None, "Database error")
+        )
 
         result = await token_refresh_service._get_tools_requiring_auth()
         assert result == []

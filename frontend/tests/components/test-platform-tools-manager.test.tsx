@@ -200,7 +200,7 @@ describe("PlatformToolsManager", () => {
       expect(screen.getByText("multiply")).toBeInTheDocument();
     });
 
-    it("Save draft posts is_published=false with no organization_id, then resets the form", async () => {
+    it("Save draft posts is_published=false and returns to the catalog", async () => {
       const { userEvent } = await import("@testing-library/user-event");
       const user = userEvent.setup();
       const getBody = captureCreateBody();
@@ -226,14 +226,10 @@ describe("PlatformToolsManager", () => {
       });
       // Global row — the org-scoped custom tier is retired (RFC §6.6).
       expect(body.organization_id).toBeUndefined();
-      // Inline panel (no dialog to close) resets the form so the admin can
-      // author another server.
-      expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe(
-        "",
-      );
       expect(
-        (screen.getByLabelText(/server url/i) as HTMLInputElement).value,
-      ).toBe("");
+        screen.getByRole("button", { name: /Create new platform tool/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^name/i)).not.toBeInTheDocument();
     });
 
     it("Publish posts is_published=true after a successful discover", async () => {
@@ -298,6 +294,31 @@ describe("PlatformToolsManager", () => {
       expect(body.mcp_secret_headers_input.Authorization).toContain("{{KEY}}");
     });
 
+    it("allows a platform API key fallback while still offering org override", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      const getBody = captureCreateBody();
+      render(<PlatformToolsManager {...authorProps()} />);
+
+      await user.selectOptions(
+        screen.getByLabelText(/authentication/i),
+        "api_key",
+      );
+      await user.type(screen.getByLabelText(/^name/i), "platform-key-mcp");
+      await user.type(
+        screen.getByLabelText(/server url/i),
+        "https://example.com/mcp",
+      );
+      fireEvent.change(screen.getByLabelText(/secret header template/i), {
+        target: { value: '{ "X-API-Key": "platform-key" }' },
+      });
+      await user.click(screen.getByRole("button", { name: /^save draft/i }));
+
+      await waitFor(() => expect(getBody()).not.toBeNull());
+      expect(getBody()!.requires_auth).toBe(false);
+      expect(getBody()!.auth_type).toBe("api_key");
+    });
+
     it("api-key mode: discover substitutes the test key into {{KEY}}", async () => {
       // Capture the discover request body to confirm the test key is substituted
       // into the {{KEY}} placeholder for the one-shot discover call.
@@ -357,6 +378,176 @@ describe("PlatformToolsManager", () => {
       expect(discoverBody!.headers).toEqual({
         Authorization: "Bearer test-secret-123",
       });
+    });
+
+    it("supports OAuth MCP configs without asking the platform admin for a key", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      let captured: Record<string, any> | null = null;
+      server.use(
+        http.post(
+          `${API_BASE_URL}/api/v1/tools/platform`,
+          async ({ request }) => {
+            captured = (await request.json()) as Record<string, any>;
+            return HttpResponse.json({
+              id: "oauth-mcp-tool",
+              name: captured.name,
+              tool_source: "mcp",
+              auth_type: "oauth2",
+              requires_auth: true,
+              is_published: false,
+            });
+          },
+        ),
+      );
+      render(<PlatformToolsManager {...authorProps()} />);
+
+      await user.selectOptions(
+        screen.getByLabelText(/authentication/i),
+        "oauth2",
+      );
+      await user.type(screen.getByLabelText(/^name/i), "oauth-mcp");
+      await user.type(
+        screen.getByLabelText(/server url/i),
+        "https://oauth.example/mcp",
+      );
+      await user.click(screen.getByRole("button", { name: /^save draft/i }));
+
+      await waitFor(() => expect(captured).not.toBeNull());
+      expect(captured).toMatchObject({
+        auth_type: "oauth2",
+        requires_auth: true,
+      });
+      expect(captured).not.toHaveProperty("mcp_secret_headers_input");
+      expect(screen.queryByLabelText(/test api key/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps OAuth publish disabled until the function catalog is discovered", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...authorProps()} />);
+
+      await user.selectOptions(
+        screen.getByLabelText(/authentication/i),
+        "oauth2",
+      );
+      await user.type(screen.getByLabelText(/^name/i), "oauth-mcp");
+      await user.type(
+        screen.getByLabelText(/server url/i),
+        "https://oauth.example/mcp",
+      );
+
+      expect(screen.getByRole("button", { name: /^publish$/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /authorize & discover tools/i }),
+      ).toBeEnabled();
+    });
+
+    it("saves an OAuth draft and opens discovery from the author form", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      let createBody: Record<string, any> | null = null;
+      server.use(
+        http.post(
+          `${API_BASE_URL}/api/v1/tools/platform`,
+          async ({ request }) => {
+            createBody = (await request.json()) as Record<string, any>;
+            return HttpResponse.json(
+              createMockPlatformTool({
+                id: "oauth-draft-tool",
+                name: createBody.name,
+                tool_source: "mcp",
+                auth_type: "oauth2",
+                requires_auth: true,
+                is_published: false,
+              }),
+            );
+          },
+        ),
+        http.get(
+          `${API_BASE_URL}/api/v1/tools/platform/:toolId/oauth`,
+          ({ params }) => {
+            expect(params.toolId).toBe("oauth-draft-tool");
+            return HttpResponse.json({
+              auth_url: "https://auth.example/authorize",
+            });
+          },
+        ),
+      );
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+
+      render(<PlatformToolsManager {...authorProps()} />);
+      await user.selectOptions(
+        screen.getByLabelText(/authentication/i),
+        "oauth2",
+      );
+      await user.type(screen.getByLabelText(/^name/i), "oauth-mcp");
+      await user.type(
+        screen.getByLabelText(/server url/i),
+        "https://oauth.example/mcp",
+      );
+      await user.click(
+        screen.getByRole("button", { name: /authorize & discover tools/i }),
+      );
+
+      await waitFor(() => expect(createBody).not.toBeNull());
+      expect(createBody).toMatchObject({
+        is_published: false,
+        auth_type: "oauth2",
+        requires_auth: true,
+      });
+      await waitFor(() => {
+        expect(openSpy).toHaveBeenCalledWith(
+          "https://auth.example/authorize",
+          "_blank",
+        );
+      });
+      openSpy.mockRestore();
+    });
+
+    it("maps parsed OAuth and secret-header metadata into the structured form", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      server.use(
+        http.post(`${API_BASE_URL}/api/v1/tools/mcp/parse`, () =>
+          HttpResponse.json({
+            servers: [
+              {
+                name: "calendar",
+                url: "https://calendar.example/mcp",
+                headers: { "X-Client": "24x7-ai" },
+                secret_headers: {},
+                auth_type: "oauth2",
+                requires_auth: true,
+                auth_config: {
+                  provider: "mcp",
+                  auth_url: "https://auth.example/authorize",
+                  token_url: "https://auth.example/token",
+                  scopes: ["calendar.read"],
+                },
+              },
+            ],
+            errors: [],
+          }),
+        ),
+      );
+      render(<PlatformToolsManager {...authorProps()} />);
+
+      fireEvent.change(screen.getByPlaceholderText(/mcpServers/i), {
+        target: {
+          value:
+            '{"servers":{"calendar":{"url":"https://calendar.example/mcp"}}}',
+        },
+      });
+      await user.click(screen.getByRole("button", { name: /parse config/i }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/authentication/i)).toHaveValue("oauth2");
+      });
+      expect(screen.getByLabelText(/authorization endpoint/i)).toHaveValue(
+        "https://auth.example/authorize",
+      );
+      expect(screen.getByLabelText(/scopes/i)).toHaveValue("calendar.read");
     });
 
     it("requires name + url before saving (draft + publish disabled)", async () => {
@@ -546,8 +737,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
-
       // The mock platform tool 'test_tool' renders as 'test tool'. The default
       // mock has no is_published, so it shows as a Draft badge with a Publish button.
       await waitFor(() => {
@@ -560,6 +749,358 @@ describe("PlatformToolsManager", () => {
       expect(
         screen.getByRole("button", { name: /delete/i }),
       ).toBeInTheDocument();
+    });
+
+    it("shows the MCP catalog state and starts platform OAuth discovery", async () => {
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                auth_type: "oauth2",
+                requires_auth: true,
+                tool_functions_schema: null,
+                is_published: true,
+              }),
+            ],
+          }),
+        ),
+        http.get(`${API_BASE_URL}/api/v1/tools/platform/:toolId/oauth`, () =>
+          HttpResponse.json({ auth_url: "https://auth.example/authorize" }),
+        ),
+      );
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Catalog unavailable — authenticate to discover/i),
+        ).toBeInTheDocument();
+      });
+      const discoverButton = screen.getByRole("button", {
+        name: /discover with oauth/i,
+      });
+      expect(discoverButton).toBeInTheDocument();
+
+      await user.click(discoverButton);
+
+      await waitFor(() => {
+        expect(openSpy).toHaveBeenCalledWith(
+          "https://auth.example/authorize",
+          "_blank",
+        );
+      });
+      openSpy.mockRestore();
+    });
+
+    it("opens the exposed function catalog drawer with function details", async () => {
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                name: "Linear",
+                auth_type: "oauth2",
+                is_published: true,
+                tool_functions_schema: {
+                  functions: [
+                    {
+                      type: "function",
+                      name: "list_issues",
+                      description: "List issues for a team",
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          team_id: {
+                            type: "string",
+                            description: "Linear team identifier",
+                          },
+                        },
+                        required: ["team_id"],
+                      },
+                    },
+                  ],
+                },
+              }),
+            ],
+          }),
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      const exposedFunctions = await screen.findByRole("button", {
+        name: /exposed functions/i,
+      });
+      await user.click(exposedFunctions);
+
+      expect(
+        await screen.findByRole("heading", { name: /linear functions/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("List issues for a team")).toBeInTheDocument();
+      expect(screen.queryByText("team_id")).not.toBeInTheDocument();
+      const functionToggle = screen.getByRole("button", {
+        name: /list_issues/i,
+      });
+      expect(functionToggle).toHaveAttribute("aria-expanded", "false");
+      await user.click(functionToggle);
+      expect(functionToggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("list_issues")).toBeInTheDocument();
+      expect(screen.getByText("team_id")).toBeInTheDocument();
+      expect(screen.getByText(/required/i)).toBeInTheDocument();
+    });
+
+    it("filters the exposed function catalog from the drawer search", async () => {
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                name: "Linear",
+                auth_type: "oauth2",
+                is_published: true,
+                tool_functions_schema: {
+                  functions: [
+                    {
+                      type: "function",
+                      name: "list_issues",
+                      description: "List issues for a team",
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          team_id: {
+                            type: "string",
+                            description: "Linear team identifier",
+                          },
+                        },
+                      },
+                    },
+                    {
+                      type: "function",
+                      name: "create_comment",
+                      description: "Add a comment to an issue",
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          body: {
+                            type: "string",
+                            description: "Comment body",
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              }),
+            ],
+          }),
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(
+        await screen.findByRole("button", { name: /exposed functions/i }),
+      );
+
+      const search = screen.getByRole("searchbox", {
+        name: /search functions/i,
+      });
+      expect(screen.getByText("list_issues")).toBeInTheDocument();
+      expect(screen.getByText("create_comment")).toBeInTheDocument();
+
+      await user.type(search, "comment");
+
+      expect(screen.queryByText("list_issues")).not.toBeInTheDocument();
+      expect(screen.getByText("create_comment")).toBeInTheDocument();
+      expect(screen.getByText(/1 of 2 functions/i)).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /clear function search/i }),
+      );
+      expect(search).toHaveValue("");
+      expect(screen.getByText("list_issues")).toBeInTheDocument();
+
+      await user.type(search, "team identifier");
+      expect(screen.getByText("No functions found")).toBeInTheDocument();
+    });
+
+    it("lets platform admins expand long tool descriptions in the catalog", async () => {
+      const longDescription =
+        "Connects the workspace to the remote MCP server and exposes the functions needed to search, inspect, and update records for this organization. ".repeat(
+          2,
+        );
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                name: "Linear",
+                description: longDescription,
+                auth_type: "oauth2",
+                is_published: true,
+                tool_functions_schema: { functions: [] },
+              }),
+            ],
+          }),
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      const showDescription = await screen.findByRole("button", {
+        name: /show full description/i,
+      });
+      expect(showDescription).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByText(longDescription)).not.toBeInTheDocument();
+
+      await user.click(showDescription);
+
+      expect(showDescription).toHaveAttribute("aria-expanded", "true");
+      const description = document.getElementById(
+        showDescription.getAttribute("aria-controls") || "",
+      );
+      expect(description).toHaveTextContent(longDescription.trim());
+    });
+
+    it("lets platform admins expand long descriptions and separates parameter surfaces", async () => {
+      const longDescription =
+        "Searches the workspace for issues matching the supplied filters, then returns a paginated result set with the fields needed to triage, prioritize, and route work to the right team. ".repeat(
+          2,
+        );
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                name: "Linear",
+                auth_type: "oauth2",
+                is_published: true,
+                tool_functions_schema: {
+                  functions: [
+                    {
+                      type: "function",
+                      name: "search_issues",
+                      description: longDescription,
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          query: {
+                            type: "string",
+                            description: "Search expression",
+                          },
+                        },
+                        required: ["query"],
+                      },
+                    },
+                  ],
+                },
+              }),
+            ],
+          }),
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(
+        await screen.findByRole("button", { name: /exposed functions/i }),
+      );
+
+      const showDescription = screen.getByRole("button", {
+        name: /show full description/i,
+      });
+      expect(showDescription).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByText(longDescription)).not.toBeInTheDocument();
+
+      await user.click(showDescription);
+
+      expect(showDescription).toHaveAttribute("aria-expanded", "true");
+      const description = document.getElementById(
+        showDescription.getAttribute("aria-controls") || "",
+      );
+      expect(description).toHaveTextContent(longDescription.trim());
+
+      const functionToggle = screen.getByRole("button", {
+        name: /search_issues/i,
+      });
+      await user.click(functionToggle);
+      expect(
+        screen.getByText("Parameters").closest("div.border-t"),
+      ).toHaveClass("bg-slate-100/70");
+      expect(screen.getByText("query").closest("div.rounded-xl")).toHaveClass(
+        "bg-white",
+      );
+    });
+
+    it("only marks the MCP row being discovered as busy", async () => {
+      let resolveOAuth: (() => void) | undefined;
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                id: "linear-tool",
+                name: "Linear",
+                tool_source: "mcp",
+                auth_type: "oauth2",
+                is_published: true,
+              }),
+              createMockPlatformTool({
+                id: "notion-tool",
+                name: "Notion",
+                tool_source: "mcp",
+                auth_type: "oauth2",
+                is_published: true,
+              }),
+            ],
+          }),
+        ),
+        http.get(
+          `${API_BASE_URL}/api/v1/tools/platform/linear-tool/oauth`,
+          async () => {
+            await new Promise<void>((resolve) => {
+              resolveOAuth = resolve;
+            });
+            return HttpResponse.json({
+              auth_url: "https://auth.example/linear",
+            });
+          },
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      const linearButton = await screen.findByRole("button", {
+        name: /discover with oauth for linear/i,
+      });
+      const notionButton = screen.getByRole("button", {
+        name: /discover with oauth for notion/i,
+      });
+      await user.click(linearButton);
+
+      await waitFor(() => expect(linearButton).toBeDisabled());
+      expect(notionButton).not.toBeDisabled();
+      resolveOAuth?.();
     });
 
     it("publish button calls the publish endpoint", async () => {
@@ -577,7 +1118,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /publish/i }),
@@ -605,7 +1145,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /delete/i }),
@@ -642,7 +1181,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(screen.getByText("Draft")).toBeInTheDocument();
       });
@@ -671,7 +1209,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /unpublish/i }),
@@ -729,7 +1266,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(screen.getAllByRole("button", { name: /delete/i })).toHaveLength(
           2,
@@ -781,7 +1317,6 @@ describe("PlatformToolsManager", () => {
       const { userEvent } = await import("@testing-library/user-event");
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
-      await user.click(screen.getByRole("button", { name: /manage/i }));
 
       await waitFor(() => {
         expect(screen.getByText("test tool")).toBeInTheDocument();
@@ -804,7 +1339,6 @@ describe("PlatformToolsManager", () => {
       const { userEvent } = await import("@testing-library/user-event");
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
-      await user.click(screen.getByRole("button", { name: /manage/i }));
 
       await waitFor(() => {
         expect(screen.getByText("Premium")).toBeInTheDocument();
@@ -833,7 +1367,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /mark premium/i }),
@@ -869,7 +1402,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /unmark premium/i }),
@@ -916,7 +1448,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /edit/i }),
@@ -1021,7 +1552,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /edit/i }),
@@ -1048,6 +1578,117 @@ describe("PlatformToolsManager", () => {
       expect(discoverBody!.tool_id).toBe("tool-1");
       expect(discoverBody!.url).toBe("https://mcp.example.com");
       expect(discoverBody!.headers).toEqual({ "X-Client": "24x7" });
+    });
+
+    it("saves OAuth metadata before starting discovery from edit mode", async () => {
+      let putBody: Record<string, any> | null = null;
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                id: "linear-tool",
+                name: "Linear",
+                tool_source: "mcp",
+                mcp_server_url: "https://mcp.linear.app/mcp",
+                auth_type: "oauth2",
+                requires_auth: true,
+                is_published: true,
+              }),
+            ],
+          }),
+        ),
+        http.put(
+          `${API_BASE_URL}/api/v1/tools/platform/linear-tool`,
+          async ({ request }) => {
+            putBody = (await request.json()) as Record<string, any>;
+            return HttpResponse.json(
+              createMockPlatformTool({
+                id: "linear-tool",
+                name: "Linear",
+                tool_source: "mcp",
+                auth_type: "oauth2",
+                requires_auth: true,
+                is_published: true,
+              }),
+            );
+          },
+        ),
+        http.get(
+          `${API_BASE_URL}/api/v1/tools/platform/linear-tool/oauth`,
+          () =>
+            HttpResponse.json({
+              auth_url: "https://auth.example/linear",
+            }),
+        ),
+      );
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(await screen.findByRole("button", { name: /edit/i }));
+      await user.click(
+        screen.getByRole("button", { name: /authorize & discover tools/i }),
+      );
+
+      await waitFor(() => expect(putBody).not.toBeNull());
+      expect(putBody).toMatchObject({
+        auth_type: "oauth2",
+        requires_auth: true,
+        is_published: true,
+      });
+      await waitFor(() =>
+        expect(openSpy).toHaveBeenCalledWith(
+          "https://auth.example/linear",
+          "_blank",
+        ),
+      );
+      openSpy.mockRestore();
+    });
+
+    it("preserves a platform-owned API key without requiring an org key on edit", async () => {
+      let putBody: Record<string, any> | null = null;
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "mcp",
+                mcp_server_url: "https://mcp.example.com",
+                auth_type: "api_key",
+                requires_auth: false,
+                mcp_secret_headers_configured: true,
+                is_published: true,
+              }),
+            ],
+          }),
+        ),
+        http.put(
+          `${API_BASE_URL}/api/v1/tools/platform/:toolId`,
+          async ({ request }) => {
+            putBody = (await request.json()) as Record<string, any>;
+            return HttpResponse.json({ id: "tool-1", ...putBody });
+          },
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /edit/i }),
+        ).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("button", { name: /edit/i }));
+      await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => expect(putBody).not.toBeNull());
+      expect(putBody!.auth_type).toBe("api_key");
+      expect(putBody!.requires_auth).toBe(false);
     });
 
     it("Edit clearing public headers PUTs empty object so the clear persists", async () => {
@@ -1079,7 +1720,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /edit/i }),
@@ -1117,7 +1757,6 @@ describe("PlatformToolsManager", () => {
       const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
 
-      await user.click(screen.getByRole("button", { name: /manage/i }));
       await waitFor(() => {
         expect(
           screen.getByRole("button", { name: /edit/i }),
@@ -1147,26 +1786,51 @@ describe("PlatformToolsManager", () => {
   });
 
   describe("platform-admin messaging", () => {
-    // The panel manages ALL platform tools (native + MCP), not just MCP
-    // servers, so the tab labels reflect the broader scope. (The "Platform
-    // Tools" H1 lives on the /platform/tools PAGE, not the component.)
-    //   - author tab: "Configure MCP server" (was "Author server")
-    //   - manage tab: "Manage existing tools (N)" (was "Manage (N)")
-    it("renders the two reworded view tabs", () => {
+    it("opens MCP configuration from a create button instead of a tab", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
       render(<PlatformToolsManager {...baseProps()} />);
+
       expect(
-        screen.getByRole("button", { name: /Configure MCP server/i }),
+        screen.getByRole("button", { name: /Create new platform tool/i }),
       ).toBeInTheDocument();
-      // The manage tab carries the live platform-tools count.
       expect(
-        screen.getByRole("button", { name: /Manage existing tools/i }),
+        screen.queryByRole("button", { name: /Configure MCP server/i }),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /Create new platform tool/i }),
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: /Configure MCP server/i }),
       ).toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("uses layered form surfaces to separate the MCP controls", async () => {
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(
+        screen.getByRole("button", { name: /Create new platform tool/i }),
+      );
+
+      expect(screen.getByRole("dialog")).toHaveClass("form-drawer");
+      expect(screen.getByLabelText(/authentication/i)).toHaveClass(
+        "form-control",
+      );
+      expect(screen.getByLabelText(/^name/i)).toHaveClass("form-control");
+      expect(
+        screen
+          .getByText(/Authentication — how will this server connect/i)
+          .closest(".form-section"),
+      ).not.toBeNull();
     });
   });
 
-  it("resets the form after a successful save so the admin can author another", async () => {
-    // The inline panel has no dialog to close on save; it clears every author
-    // field (incl. the pasted-config box) so the next server starts fresh.
+  it("closes the authoring drawer after a successful save", async () => {
     const { userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     const getBody = captureCreateBody();
@@ -1183,12 +1847,9 @@ describe("PlatformToolsManager", () => {
     await user.click(screen.getByRole("button", { name: /^save draft/i }));
 
     await waitFor(() => expect(getBody()).not.toBeNull());
-    // Every author field resets — name, url, and the pasted-config box.
-    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe(
-      "",
-    );
     expect(
-      (screen.getByPlaceholderText(/mcpServers/i) as HTMLTextAreaElement).value,
-    ).toBe("");
+      screen.getByRole("button", { name: /Create new platform tool/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^name/i)).not.toBeInTheDocument();
   });
 });

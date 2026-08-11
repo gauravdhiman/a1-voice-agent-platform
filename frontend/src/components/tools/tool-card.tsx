@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 import { AuthStatus, ConnectionStatus } from "@/types/agent";
 import { useLiveTime, formatTimeUntilExpiry } from "@/hooks/use-live-time";
+import { ExpandableDescription } from "@/components/tools/expandable-description";
+
+interface ToolCardFunctionCatalog {
+  functions: Array<{ name: string }>;
+}
 
 export interface ToolCardProps {
   tool: {
@@ -24,8 +29,12 @@ export interface ToolCardProps {
     description: string | null;
     /** Origin of the tool — rendered as an "MCP" badge when set to "mcp". */
     tool_source?: "legacy" | "mcp";
+    /** Authentication mode, used to explain why a catalog is unavailable. */
+    auth_type?: string | null;
     /** Streamable-HTTP URL of the remote MCP server (shown under the name). */
     mcp_server_url?: string | null;
+    /** Public MCP function catalog discovered by a platform administrator. */
+    tool_functions_schema?: ToolCardFunctionCatalog | null;
     /**
      * Premium tools require the org's plan to entitle the ``premium_tools``
      * feature. They stay visible with a badge; the connect action is replaced
@@ -56,6 +65,11 @@ export interface ToolCardProps {
    * agents. Renders an amber "Unpublished" pill + an inline note. RFC §6.6.
    */
   isUnpublished?: boolean;
+  /**
+   * True when an unconnected MCP tool needs an organization API key before it
+   * can be attached because no platform fallback is available.
+   */
+  requiresApiKey?: boolean;
 }
 
 export function ToolCard({
@@ -70,18 +84,25 @@ export function ToolCard({
   premiumBlocked = false,
   className,
   isUnpublished = false,
+  requiresApiKey = false,
 }: ToolCardProps) {
   const currentTime = useLiveTime();
+  const isToolConfigured =
+    connectionStatus !== undefined
+      ? connectionStatus !== ConnectionStatus.NOT_CONNECTED
+      : isConfigured;
 
   const getStatusConfig = () => {
-    const isToolConfigured =
-      connectionStatus !== undefined
-        ? connectionStatus !== ConnectionStatus.NOT_CONNECTED
-        : isConfigured;
-    const actionText = isToolConfigured ? "Edit Configuration" : "Connect";
+    const actionText =
+      requiresApiKey && !isToolConfigured
+        ? "Configure API Key"
+        : isToolConfigured
+          ? "Edit Configuration"
+          : "Connect";
 
     // Check if token is locally expired
-    const isTokenExpired = tokenExpiresAt && (tokenExpiresAt * 1000) < currentTime;
+    const isTokenExpired =
+      tokenExpiresAt && tokenExpiresAt * 1000 < currentTime;
 
     switch (connectionStatus) {
       case ConnectionStatus.CONNECTED_NO_AUTH:
@@ -92,9 +113,11 @@ export function ToolCard({
           badgeVariant: "default" as const,
           bgColor: "bg-green-50 dark:bg-green-950/20",
           borderColor: "border-green-200 dark:border-green-800",
-          badgeBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
+          badgeBg:
+            "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
           badgeText: "text-green-700 dark:text-green-300",
-          iconBoxBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
+          iconBoxBg:
+            "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
           actionText,
         };
       case ConnectionStatus.CONNECTED_AUTH_VALID:
@@ -107,9 +130,11 @@ export function ToolCard({
             badgeVariant: "secondary" as const,
             bgColor: "bg-red-50 dark:bg-red-950/20",
             borderColor: "border-red-200 dark:border-red-800",
-            badgeBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+            badgeBg:
+              "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
             badgeText: "text-red-700 dark:text-red-300",
-            iconBoxBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+            iconBoxBg:
+              "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
             actionText,
           };
         }
@@ -120,9 +145,11 @@ export function ToolCard({
           badgeVariant: "default" as const,
           bgColor: "bg-green-50 dark:bg-green-950/20",
           borderColor: "border-green-200 dark:border-green-800",
-          badgeBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
+          badgeBg:
+            "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
           badgeText: "text-green-700 dark:text-green-300",
-          iconBoxBg: "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
+          iconBoxBg:
+            "bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700",
           actionText,
         };
       case ConnectionStatus.CONNECTED_AUTH_INVALID:
@@ -133,9 +160,11 @@ export function ToolCard({
           badgeVariant: "secondary" as const,
           bgColor: "bg-red-50 dark:bg-red-950/20",
           borderColor: "border-red-200 dark:border-red-800",
-          badgeBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+          badgeBg:
+            "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
           badgeText: "text-red-700 dark:text-red-300",
-          iconBoxBg: "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+          iconBoxBg:
+            "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
           actionText,
         };
       case ConnectionStatus.NOT_CONNECTED:
@@ -147,9 +176,11 @@ export function ToolCard({
           badgeVariant: "secondary" as const,
           bgColor: "",
           borderColor: "border-border",
-          badgeBg: "bg-white dark:bg-gray-800 border border-muted-foreground/20",
+          badgeBg:
+            "bg-white dark:bg-gray-800 border border-muted-foreground/20",
           badgeText: "text-muted-foreground",
-          iconBoxBg: "bg-white dark:bg-gray-800 border border-muted-foreground/20",
+          iconBoxBg:
+            "bg-white dark:bg-gray-800 border border-muted-foreground/20",
           actionText,
         };
     }
@@ -207,9 +238,11 @@ export function ToolCard({
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground line-clamp-2">
-              {tool.description}
-            </p>
+            <ExpandableDescription
+              description={tool.description}
+              descriptionId={`tool-card-description-${tool.id}`}
+              textClassName="text-xs text-muted-foreground"
+            />
             {tool.tool_source === "mcp" && tool.mcp_server_url && (
               <p
                 className="text-[10px] text-muted-foreground/70 mt-1 truncate font-mono"
@@ -218,10 +251,23 @@ export function ToolCard({
                 {tool.mcp_server_url}
               </p>
             )}
+            {tool.tool_source === "mcp" && (
+              <p className="text-[10px] text-muted-foreground/80 mt-1">
+                {tool.tool_functions_schema?.functions?.length
+                  ? `${tool.tool_functions_schema.functions.length} exposed function${tool.tool_functions_schema.functions.length === 1 ? "" : "s"}`
+                  : "Function catalog pending admin discovery"}
+              </p>
+            )}
             {isUnpublished && (
               <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-1">
                 <EyeOff className="h-3 w-3 shrink-0" />
                 No longer in the catalog — still mapped to this agent.
+              </p>
+            )}
+            {requiresApiKey && !isToolConfigured && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-1">
+                <Lock className="h-3 w-3 shrink-0" />
+                API key required before connecting
               </p>
             )}
           </div>
@@ -255,7 +301,7 @@ export function ToolCard({
           ) : (
             <Button
               size="sm"
-              variant={isConfigured ? "outline" : "default"}
+              variant={isConfigured || requiresApiKey ? "outline" : "default"}
               onClick={onClick}
               disabled={disabled || isConnecting}
               className="shrink-0"

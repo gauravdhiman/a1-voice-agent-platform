@@ -48,7 +48,10 @@ interface PresetConfigFormProps {
   onValidityChange?: (valid: boolean) => void;
 }
 
-const STAGE_PROVIDERS: Record<"stt" | "llm" | "tts" | "vad", readonly string[]> = {
+const STAGE_PROVIDERS: Record<
+  "stt" | "llm" | "tts" | "vad",
+  readonly string[]
+> = {
   stt: STT_PROVIDERS,
   llm: LLM_PROVIDERS,
   tts: TTS_PROVIDERS,
@@ -69,7 +72,7 @@ function StageEditor({
 }) {
   const { error } = parseParams(stage.paramsText);
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="form-section space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{label}</span>
       </div>
@@ -77,7 +80,7 @@ function StageEditor({
         <div className="space-y-1">
           <Label className="text-xs">Provider</Label>
           <select
-            className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+            className="form-control w-full rounded-md px-2 py-1 text-sm"
             value={stage.provider}
             onChange={(e) => onChange({ ...stage, provider: e.target.value })}
           >
@@ -90,12 +93,14 @@ function StageEditor({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">
-            Model <span className="text-muted-foreground">(blank = default)</span>
+            Model{" "}
+            <span className="text-muted-foreground">(blank = default)</span>
           </Label>
           <Input
             value={stage.model}
             onChange={(e) => onChange({ ...stage, model: e.target.value })}
             placeholder="provider default"
+            className="form-control"
           />
         </div>
       </div>
@@ -104,7 +109,7 @@ function StageEditor({
           Params <span className="text-muted-foreground">(JSON object)</span>
         </Label>
         <Textarea
-          className="font-mono text-xs"
+          className="form-control font-mono text-xs"
           rows={2}
           value={stage.paramsText}
           onChange={(e) => onChange({ ...stage, paramsText: e.target.value })}
@@ -130,7 +135,7 @@ function TtsStageEditor({
 }) {
   const { error } = parseParams(stage.paramsText);
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="form-section space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{label}</span>
       </div>
@@ -138,7 +143,7 @@ function TtsStageEditor({
         <div className="space-y-1">
           <Label className="text-xs">Provider</Label>
           <select
-            className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+            className="form-control w-full rounded-md px-2 py-1 text-sm"
             value={stage.provider}
             onChange={(e) => onChange({ ...stage, provider: e.target.value })}
           >
@@ -151,12 +156,14 @@ function TtsStageEditor({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">
-            Model <span className="text-muted-foreground">(blank = default)</span>
+            Model{" "}
+            <span className="text-muted-foreground">(blank = default)</span>
           </Label>
           <Input
             value={stage.model}
             onChange={(e) => onChange({ ...stage, model: e.target.value })}
             placeholder="provider default"
+            className="form-control"
           />
         </div>
         <div className="space-y-1 col-span-2">
@@ -170,15 +177,19 @@ function TtsStageEditor({
             value={stage.voice}
             onChange={(e) => onChange({ ...stage, voice: e.target.value })}
             placeholder="e.g. Cartesia voice UUID or Inference voice id"
+            className="form-control"
           />
         </div>
       </div>
       <div className="space-y-1">
         <Label className="text-xs">
-          Params <span className="text-muted-foreground">(JSON object — language, speed, …)</span>
+          Params{" "}
+          <span className="text-muted-foreground">
+            (JSON object — language, speed, …)
+          </span>
         </Label>
         <Textarea
-          className="font-mono text-xs"
+          className="form-control font-mono text-xs"
           rows={2}
           value={stage.paramsText}
           onChange={(e) => onChange({ ...stage, paramsText: e.target.value })}
@@ -216,7 +227,12 @@ export function PresetConfigForm({
     let valid = true;
     const stages: StageFormState[] =
       mode === "pipeline"
-        ? [pipeline.stt, pipeline.llm, pipeline.tts, ...(pipeline.vad ? [pipeline.vad] : [])]
+        ? [
+            pipeline.stt,
+            pipeline.llm,
+            pipeline.tts,
+            ...(pipeline.vad ? [pipeline.vad] : []),
+          ]
         : [];
     const allParams: string[] =
       mode === "realtime"
@@ -239,8 +255,8 @@ export function PresetConfigForm({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
+    <div className="form-surface space-y-4">
+      <div className="form-section space-y-1">
         <Label>Engine mode</Label>
         <div className="inline-flex rounded-md border">
           {(["realtime", "pipeline"] as const).map((m) => (
@@ -254,7 +270,9 @@ export function PresetConfigForm({
                   : "bg-background hover:bg-muted"
               } ${m === "realtime" ? "rounded-l-md" : "rounded-r-md"}`}
             >
-              {m === "realtime" ? "Realtime (end-to-end)" : "Pipeline (modular)"}
+              {m === "realtime"
+                ? "Realtime (end-to-end)"
+                : "Pipeline (modular)"}
             </button>
           ))}
         </div>
@@ -266,23 +284,29 @@ export function PresetConfigForm({
       </div>
 
       {mode === "realtime" ? (
-        <div className="space-y-3">
+        <div className="form-surface space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="form-field space-y-1">
               <Label className="text-xs">Model</Label>
               <Input
                 value={realtime.model}
-                onChange={(e) => setRealtime({ ...realtime, model: e.target.value })}
+                onChange={(e) =>
+                  setRealtime({ ...realtime, model: e.target.value })
+                }
+                className="form-control"
               />
             </div>
-            <div className="space-y-1">
+            <div className="form-field space-y-1">
               <Label className="text-xs">Voice</Label>
               <Input
                 value={realtime.voice}
-                onChange={(e) => setRealtime({ ...realtime, voice: e.target.value })}
+                onChange={(e) =>
+                  setRealtime({ ...realtime, voice: e.target.value })
+                }
+                className="form-control"
               />
             </div>
-            <div className="space-y-1">
+            <div className="form-field space-y-1">
               <Label className="text-xs">Temperature</Label>
               <Input
                 type="number"
@@ -291,35 +315,47 @@ export function PresetConfigForm({
                 onChange={(e) =>
                   setRealtime({ ...realtime, temperature: e.target.value })
                 }
+                className="form-control"
               />
             </div>
-            <div className="space-y-1">
+            <div className="form-field space-y-1">
               <Label className="text-xs">Silence duration (ms)</Label>
               <Input
                 type="number"
                 value={realtime.silence_duration_ms}
                 onChange={(e) =>
-                  setRealtime({ ...realtime, silence_duration_ms: e.target.value })
+                  setRealtime({
+                    ...realtime,
+                    silence_duration_ms: e.target.value,
+                  })
                 }
+                className="form-control"
               />
             </div>
-            <div className="space-y-1">
+            <div className="form-field space-y-1">
               <Label className="text-xs">Prefix padding (ms)</Label>
               <Input
                 type="number"
                 value={realtime.prefix_padding_ms}
                 onChange={(e) =>
-                  setRealtime({ ...realtime, prefix_padding_ms: e.target.value })
+                  setRealtime({
+                    ...realtime,
+                    prefix_padding_ms: e.target.value,
+                  })
                 }
+                className="form-control"
               />
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="form-field space-y-1">
             <Label className="text-xs">
-              Params <span className="text-muted-foreground">(JSON object, reserved)</span>
+              Params{" "}
+              <span className="text-muted-foreground">
+                (JSON object, reserved)
+              </span>
             </Label>
             <Textarea
-              className="font-mono text-xs"
+              className="form-control font-mono text-xs"
               rows={2}
               value={realtime.paramsText}
               onChange={(e) =>
@@ -335,7 +371,7 @@ export function PresetConfigForm({
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="form-surface space-y-3">
           <StageEditor
             label="STT (speech-to-text)"
             stage={pipeline.stt}
@@ -368,8 +404,9 @@ export function PresetConfigForm({
             onClick={() =>
               setPipeline({
                 ...pipeline,
-                vad:
-                  pipeline.vad ? null : { provider: "silero", model: "", paramsText: "" },
+                vad: pipeline.vad
+                  ? null
+                  : { provider: "silero", model: "", paramsText: "" },
               })
             }
           >

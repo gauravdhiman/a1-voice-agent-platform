@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import secrets
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
@@ -15,34 +16,41 @@ import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from opentelemetry import trace
 from pydantic import BaseModel, Field
-from src.auth.dependencies import assert_has_permission, assert_platform_role
-from src.auth.middleware import get_authenticated_user
-from src.auth.models import UserProfile
-from src.billing.entitlement_service import entitlement_service
 
+from shared.config import settings
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_models import (
     AgentToolCreate,
-    AgentToolUpdate,
     AgentToolResponse,
+    AgentToolUpdate,
     PlatformTool,
     PlatformToolCreate,
     ToolSource,
 )
 from shared.voice_agents.tool_service import tool_service
-from shared.voice_agents.tools.base.oauth_provider_utils import (
-    get_oauth_manager,
-)
+from shared.voice_agents.tools.base.oauth_provider_utils import get_oauth_manager
 from shared.voice_agents.tools.mcp.errors import format_mcp_client_error
 from shared.voice_agents.tools.mcp.json_http_client import (
     McpJsonRpcError,
     list_tools_json_http,
 )
 from shared.voice_agents.tools.mcp.models import McpServerConfig
+from shared.voice_agents.tools.mcp.oauth import (
+    build_mcp_authorization_url,
+    create_mcp_oauth_state,
+    decode_mcp_oauth_state,
+    discover_mcp_oauth_config,
+    pkce_challenge,
+    register_mcp_oauth_client,
+)
 from shared.voice_agents.tools.mcp.security import (
     parse_mcp_servers_json,
     validate_mcp_server_url,
 )
+from src.auth.dependencies import assert_has_permission, assert_platform_role
+from src.auth.middleware import get_authenticated_user
+from src.auth.models import UserProfile
+from src.billing.entitlement_service import entitlement_service
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -63,9 +71,7 @@ class PlatformToolPremiumUpdate(BaseModel):
 
     is_premium: bool = Field(
         ...,
-        description=(
-            "True to gate the tool behind the premium_tools plan feature"
-        ),
+        description=("True to gate the tool behind the premium_tools plan feature"),
     )
 
 
@@ -118,22 +124,16 @@ async def _assert_agent_tool_admin(
     """
     agent_tool, error = await tool_service.get_agent_tool_by_id(agent_tool_id)
     if error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=error
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     if agent_tool is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent tool not found",
         )
 
-    agent, agent_error = await voice_agent_service.get_agent_by_id(
-        agent_tool.agent_id
-    )
+    agent, agent_error = await voice_agent_service.get_agent_by_id(agent_tool.agent_id)
     if agent_error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=agent_error
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=agent_error)
     if agent is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
@@ -203,9 +203,7 @@ async def create_platform_tool(
     return tool
 
 
-@tool_router.post(
-    "/platform/{tool_id}/publish", response_model=PlatformTool
-)
+@tool_router.post("/platform/{tool_id}/publish", response_model=PlatformTool)
 @tracer.start_as_current_span("tool.routes.publish_platform_tool")
 async def publish_platform_tool(
     tool_id: UUID,
@@ -235,9 +233,7 @@ async def publish_platform_tool(
     return tool
 
 
-@tool_router.post(
-    "/platform/{tool_id}/unpublish", response_model=PlatformTool
-)
+@tool_router.post("/platform/{tool_id}/unpublish", response_model=PlatformTool)
 @tracer.start_as_current_span("tool.routes.unpublish_platform_tool")
 async def unpublish_platform_tool(
     tool_id: UUID,
@@ -363,7 +359,9 @@ async def get_platform_tool_usage(
     )
     agents, error = await tool_service.get_platform_tool_usage(tool_id)
     if error:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
     return {"count": len(agents or []), "agents": agents or []}
 
 
@@ -484,9 +482,10 @@ async def discover_mcp_tools(
 ):
     """Discover the tools a remote MCP server exposes (in-memory probe).
 
-    Validates the URL (SSRF guard), probes the server with JSON Streamable HTTP
-    (``list_tools_json_http``), and returns sanitized tool definitions so the UI
-    can preview what the agent will get before saving. Nothing is persisted.
+    Validates the URL (SSRF guard), probes the server with MCP Streamable HTTP
+    (JSON or SSE responses via ``list_tools_json_http``), and returns sanitized
+    tool definitions so the UI can preview what the agent will get before
+    saving. Nothing is persisted.
 
     Gate: platform admin only (probing a remote server is an authoring action,
     RFC §6.6). Org admins attach already-published servers; they do not author.
@@ -578,7 +577,7 @@ async def parse_mcp_servers(
     request: McpParseRequest,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Parse a pasted ``mcpServers`` JSON config into server configs + errors.
+    """Parse a pasted MCP host JSON config into server configs + errors.
 
     The authoritative parser lives in
     :func:`shared.voice_agents.tools.mcp.security.parse_mcp_servers_json` so the
@@ -648,7 +647,13 @@ async def configure_agent_tool(
     agent_tool_data: AgentToolCreate,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
-    """Configure a tool for an agent."""
+    """Configure a tool for an agent.
+
+    MCP integrations that use organization API-key authentication cannot be
+    attached without the key. A platform-owned literal fallback keeps the key
+    optional, while an organization key is encrypted by the tool service and
+    selected at runtime without changing the platform configuration.
+    """
     current_user_id, user_profile = user_data
 
     # Get agent to check organization
@@ -686,6 +691,25 @@ async def configure_agent_tool(
                 detail=(
                     "Premium tools are not included in your current plan. "
                     "Upgrade your plan to connect this tool."
+                ),
+            )
+
+    tool_source = getattr(platform_tool, "tool_source", None)
+    tool_source_value = getattr(tool_source, "value", tool_source)
+    if (
+        platform_tool is not None
+        and tool_source_value == "mcp"
+        and platform_tool.auth_type == "api_key"
+        and platform_tool.requires_auth
+    ):
+        sensitive_config = agent_tool_data.sensitive_config or {}
+        organization_api_key = sensitive_config.get("api_key")
+        if not isinstance(organization_api_key, str) or not organization_api_key.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Organization API key is required before connecting this "
+                    "MCP tool."
                 ),
             )
 
@@ -758,7 +782,9 @@ async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
           also auto-refreshed with no further wiring.
     """
     # 1. DB-first: platform_tools row by name.
-    tools, _ = await tool_service.get_platform_tools(only_active=False, include_drafts=True)
+    tools, _ = await tool_service.get_platform_tools(
+        only_active=False, include_drafts=True
+    )
     row = next((t for t in tools if t.name == tool_name), None)
     if row is not None and row.auth_config:
         cfg = row.auth_config
@@ -770,7 +796,9 @@ async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
         return dict(cfg)
 
     # 2. Legacy registry fallback (back-compat for rows lacking auth_config).
-    from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
+    from shared.voice_agents.tools.base.platform_tool_registry import (
+        platform_tool_registry,
+    )
 
     tool_class = platform_tool_registry.get_tool_class(tool_name)
     if tool_class is not None:
@@ -781,6 +809,180 @@ async def _resolve_tool_auth_config(tool_name: str) -> dict | None:
 
 
 # OAuth Handlers
+def _is_mcp_oauth_config(auth_config: dict) -> bool:
+    """Return whether an auth config uses MCP's provider-neutral OAuth flow."""
+    provider = str(auth_config.get("provider", "")).strip().lower()
+    return provider in {"mcp", "mcp_oauth", "mcp-oauth"} or bool(
+        auth_config.get("mcp_oauth")
+    )
+
+
+async def _resolve_platform_tool_by_name(tool_name: str) -> Optional[PlatformTool]:
+    """Resolve a platform tool row for MCP OAuth server URL metadata."""
+    tools, _ = await tool_service.get_platform_tools(
+        only_active=False,
+        include_drafts=True,
+    )
+    return next((tool for tool in tools if tool.name == tool_name), None)
+
+
+async def _discover_and_persist_mcp_tool_catalog(
+    tool_name: str, access_token: str
+) -> int:
+    """Discover and persist an MCP server's public function catalog.
+
+    This helper is intentionally called after OAuth succeeds for both the
+    platform-admin discovery flow and an Org Admin's agent connection. The
+    bearer token is used only for this one ``tools/list`` request; it is never
+    written to ``platform_tools``. Org runtime calls continue to use the
+    agent's own encrypted OAuth connection, so a platform discovery OAuth can
+    never become an agent credential.
+
+    Args:
+        tool_name: Platform tool name whose remote server should be queried.
+        access_token: Short-lived bearer obtained from the MCP OAuth callback.
+
+    Returns:
+        Number of functions discovered and persisted.
+
+    Raises:
+        RuntimeError: If the MCP row is missing, has no URL, or its catalog
+            update fails.
+        Exception: Transport/protocol errors from the MCP server are allowed
+            to propagate to the caller for route-specific handling.
+    """
+    platform_tool = await _resolve_platform_tool_by_name(tool_name)
+    if platform_tool is None or not platform_tool.mcp_server_url:
+        raise RuntimeError("MCP tool not found or has no server URL")
+
+    headers = dict(platform_tool.mcp_server_headers or {})
+    # OAuth bearer credentials always win over a stale static Authorization
+    # header in a copied host configuration.
+    for key in list(headers):
+        if key.lower() == "authorization":
+            del headers[key]
+    headers["Authorization"] = f"Bearer {access_token}"
+
+    tool_defs = await list_tools_json_http(
+        McpServerConfig(
+            url=platform_tool.mcp_server_url,
+            name=platform_tool.mcp_server_name or platform_tool.name,
+            headers=headers,
+        )
+    )
+    schema = {
+        "functions": [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.input_schema or {},
+            }
+            for tool in tool_defs
+        ]
+    }
+    _, update_error = await tool_service.update_platform_tool_functions_schema(
+        platform_tool.id, schema
+    )
+    if update_error:
+        raise RuntimeError(update_error)
+    return len(tool_defs)
+
+
+def _mcp_oauth_redirect_uri(auth_config: dict) -> str:
+    """Resolve the callback URI used by an MCP authorization server."""
+    return str(
+        auth_config.get("redirect_uri")
+        or os.getenv("MCP_OAUTH_REDIRECT_URI")
+        or f"{settings.api_base_url.rstrip('/')}/api/v1/tools/callback"
+    )
+
+
+async def _start_mcp_oauth(
+    tool_name: str,
+    agent_id: Optional[UUID],
+    auth_config: dict,
+    *,
+    oauth_flow: str = "mcp",
+    tool_id: Optional[UUID] = None,
+) -> dict[str, str]:
+    """Start an MCP OAuth authorization-code + PKCE flow.
+
+    MCP OAuth endpoints are either supplied in the platform definition or
+    discovered from the server's protected-resource metadata. A client ID may
+    be configured globally, embedded as a public client ID, or obtained via
+    Dynamic Client Registration. No platform API key is required for this
+    setup flow.
+    """
+    platform_tool = await _resolve_platform_tool_by_name(tool_name)
+    if platform_tool is None or not platform_tool.mcp_server_url:
+        raise HTTPException(status_code=404, detail="MCP tool not found")
+
+    try:
+        resolved = await discover_mcp_oauth_config(
+            platform_tool.mcp_server_url,
+            auth_config,
+        )
+    except Exception as exc:
+        logger.warning("MCP OAuth metadata discovery failed for %s: %s", tool_name, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not discover MCP OAuth metadata: {exc}",
+        ) from exc
+
+    redirect_uri = _mcp_oauth_redirect_uri(resolved)
+    client_id = str(resolved.get("client_id") or os.getenv("MCP_OAUTH_CLIENT_ID") or "")
+    if not client_id and resolved.get("registration_endpoint"):
+        try:
+            client_id = await register_mcp_oauth_client(
+                str(resolved["registration_endpoint"]),
+                redirect_uri=redirect_uri,
+            )
+        except Exception as exc:
+            logger.warning(
+                "MCP OAuth client registration failed for %s: %s", tool_name, exc
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not register an MCP OAuth client: {exc}",
+            ) from exc
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "MCP OAuth requires a public client ID. Configure MCP_OAUTH_CLIENT_ID "
+                "or enable Dynamic Client Registration for this server."
+            ),
+        )
+
+    verifier = secrets.token_urlsafe(64)
+    resource = str(resolved.get("resource") or platform_tool.mcp_server_url)
+    state_data = {
+        "oauth_flow": oauth_flow,
+        "tool_name": tool_name,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "token_url": str(resolved["token_url"]),
+        "resource": resource,
+        "code_verifier": verifier,
+    }
+    if agent_id is not None:
+        state_data["agent_id"] = str(agent_id)
+    if tool_id is not None:
+        state_data["tool_id"] = str(tool_id)
+    state = create_mcp_oauth_state(state_data)
+    return {
+        "auth_url": build_mcp_authorization_url(
+            str(resolved["auth_url"]),
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            state=state,
+            code_challenge=pkce_challenge(verifier),
+            scopes=[str(scope) for scope in resolved.get("scopes") or []],
+            resource=resource,
+        )
+    }
+
+
 @tool_router.get("/auth/{tool_name}")
 @tracer.start_as_current_span("tool.routes.start_oauth")
 async def start_oauth(
@@ -799,6 +1001,9 @@ async def start_oauth(
     auth_config = await _resolve_tool_auth_config(tool_name)
     if not auth_config:
         raise HTTPException(status_code=404, detail="Tool not found")
+
+    if _is_mcp_oauth_config(auth_config):
+        return await _start_mcp_oauth(tool_name, agent_id, auth_config)
 
     client_id = os.getenv("GOOGLE_OAUTH_TOOL_CLIENT_ID", "")
     redirect_uri = os.getenv("GOOGLE_OAUTH_TOOL_REDIRECT_URI", "")
@@ -839,22 +1044,67 @@ async def start_oauth(
     return {"auth_url": auth_url}
 
 
+@tool_router.get("/platform/{tool_id}/oauth")
+@tracer.start_as_current_span("tool.routes.start_platform_mcp_oauth")
+async def start_platform_mcp_oauth(
+    tool_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Start a platform-admin-only OAuth flow for catalog discovery.
+
+    The flow is deliberately separate from ``/auth/{tool_name}``, which
+    creates an agent connection. Its callback uses the resulting token once to
+    run ``tools/list`` and stores only public schemas on ``platform_tools``.
+    No ``agent_tools`` row is created and no platform OAuth token is retained.
+    """
+    _, user_profile = user_data
+    assert_platform_role(
+        user_profile,
+        "platform_admin",
+        error_message="Only platform admins can discover MCP tools with OAuth",
+    )
+    tools, _ = await tool_service.get_platform_tools(
+        only_active=False,
+        include_drafts=True,
+    )
+    platform_tool = next((tool for tool in tools if tool.id == tool_id), None)
+    if platform_tool is None or platform_tool.tool_source is not ToolSource.MCP:
+        raise HTTPException(status_code=404, detail="MCP tool not found")
+    auth_config = platform_tool.auth_config
+    if not isinstance(auth_config, dict) or not _is_mcp_oauth_config(auth_config):
+        raise HTTPException(
+            status_code=400,
+            detail="Platform OAuth discovery requires an OAuth MCP configuration",
+        )
+    return await _start_mcp_oauth(
+        platform_tool.name,
+        None,
+        auth_config,
+        oauth_flow="mcp_platform",
+        tool_id=tool_id,
+    )
+
+
 @tool_router.get("/callback")
 async def oauth_callback(code: str, state: str):
     """Handle OAuth callback and save tokens."""
     import httpx
 
-    # 1. Decode state to get agent_id and tool_name
+    # 1. Decode state to get agent_id and tool_name. New MCP OAuth state is
+    # signed and contains the PKCE verifier; legacy tool OAuth keeps its
+    # historical base64 state format for backwards compatibility.
     try:
-        decoded_state = json.loads(base64.urlsafe_b64decode(state).decode())
-        agent_id = UUID(decoded_state["agent_id"])
+        try:
+            decoded_state = decode_mcp_oauth_state(state)
+        except ValueError:
+            decoded_state = json.loads(base64.urlsafe_b64decode(state).decode())
         tool_name = decoded_state["tool_name"]
-
-        # Optional: Add timestamp validation to prevent replay attacks
-        # if state_timestamp:
-        #     state_time = datetime.fromisoformat(state_timestamp)
-        #     if (datetime.now() - state_time).total_seconds() > 300:  # 5 minutes
-        #         raise HTTPException(status_code=400, detail="OAuth state has expired")
+        is_platform_discovery = decoded_state.get("oauth_flow") == "mcp_platform"
+        agent_id = (
+            None
+            if is_platform_discovery
+            else UUID(decoded_state["agent_id"])
+        )
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid OAuth state: {str(e)}")
 
@@ -864,44 +1114,70 @@ async def oauth_callback(code: str, state: str):
     if not auth_config:
         raise HTTPException(status_code=404, detail="Tool not found")
 
-    # Get OAuth provider manager singleton
-    oauth_manager = get_oauth_manager()
-
-    # Extract provider and token_url using singleton manager
-    provider, token_url = oauth_manager.extract_oauth_config(auth_config)
-    
-    if not token_url:
-        raise HTTPException(
-            status_code=500, detail="Tool does not have token_url configured"
+    # 3. Build the token exchange payload. MCP uses a provider-neutral public
+    # client with PKCE and a resource indicator; legacy tools use the existing
+    # provider manager and environment-backed client credentials.
+    if decoded_state.get("oauth_flow") in {"mcp", "mcp_platform"}:
+        token_url = str(
+            decoded_state.get("token_url") or auth_config.get("token_url") or ""
         )
-
-    # Validate provider using singleton manager
-    is_valid, required_env_vars = oauth_manager.validate_provider(provider)
-    if not is_valid:
-        raise HTTPException(
-            status_code=400, detail=f"Unsupported OAuth provider: {provider}"
-        )
-
-    # 4. Exchange authorization code for tokens
-    # Build OAuth data using singleton manager (includes client_id and client_secret)
-    try:
-        credentials = oauth_manager.get_credentials(provider)
-        if not credentials.client_id or not credentials.client_secret or not credentials.redirect_uri:
+        if not token_url:
             raise HTTPException(
-                status_code=500,
-                detail=f"{provider.title()} OAuth credentials not configured. Please set {', '.join(required_env_vars)} environment variables.",
+                status_code=500, detail="MCP tool has no token endpoint"
+            )
+        client_id = str(
+            decoded_state.get("client_id") or auth_config.get("client_id") or ""
+        )
+        redirect_uri = str(
+            decoded_state.get("redirect_uri") or _mcp_oauth_redirect_uri(auth_config)
+        )
+        oauth_data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": client_id,
+            "code_verifier": str(decoded_state.get("code_verifier") or ""),
+            "resource": str(
+                decoded_state.get("resource") or auth_config.get("resource") or ""
+            ),
+        }
+        if os.getenv("MCP_OAUTH_CLIENT_SECRET"):
+            oauth_data["client_secret"] = os.getenv("MCP_OAUTH_CLIENT_SECRET", "")
+    else:
+        oauth_manager = get_oauth_manager()
+        provider, token_url = oauth_manager.extract_oauth_config(auth_config)
+
+        if not token_url:
+            raise HTTPException(
+                status_code=500, detail="Tool does not have token_url configured"
             )
 
-        oauth_data = oauth_manager.get_auth_data(
-            provider=provider,
-            flow="auth",
-            code=code,
-            redirect_uri=credentials.redirect_uri,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=500, detail=str(e)
-        )
+        is_valid, required_env_vars = oauth_manager.validate_provider(provider)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported OAuth provider: {provider}"
+            )
+
+        try:
+            credentials = oauth_manager.get_credentials(provider)
+            if (
+                not credentials.client_id
+                or not credentials.client_secret
+                or not credentials.redirect_uri
+            ):
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"{provider.title()} OAuth credentials not configured. Please set {', '.join(required_env_vars)} environment variables.",
+                )
+
+            oauth_data = oauth_manager.get_auth_data(
+                provider=provider,
+                flow="auth",
+                code=code,
+                redirect_uri=credentials.redirect_uri,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     try:
         async with httpx.AsyncClient() as client:
@@ -935,6 +1211,14 @@ async def oauth_callback(code: str, state: str):
     sensitive_config = {
         "access_token": access_token,
     }
+    if decoded_state.get("oauth_flow") == "mcp":
+        # DCR can produce a client ID that is not present in the platform
+        # catalog row. Keep the public client identifier with the connection so
+        # refresh works across backend instances; no client secret is stored.
+        if decoded_state.get("client_id"):
+            sensitive_config["oauth_client_id"] = decoded_state["client_id"]
+        if decoded_state.get("resource"):
+            sensitive_config["resource"] = decoded_state["resource"]
 
     # Only add refresh_token if it was returned (requires access_type=offline)
     if refresh_token:
@@ -953,8 +1237,47 @@ async def oauth_callback(code: str, state: str):
             datetime.now().timestamp() + 3600
         )  # Default 1 hour
 
+    if is_platform_discovery:
+        try:
+            tool_count = await _discover_and_persist_mcp_tool_catalog(
+                tool_name, access_token
+            )
+        except Exception as exc:
+            logger.error(
+                "Platform OAuth succeeded but catalog discovery failed for %s: %s",
+                tool_name,
+                exc,
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "OAuth succeeded, but the MCP tool catalog could not be "
+                    f"discovered: {format_mcp_client_error(exc)}"
+                ),
+            ) from exc
+        return {
+            "message": "MCP tool catalog discovered",
+            "tool_count": tool_count,
+        }
+
+    if decoded_state.get("oauth_flow") == "mcp":
+        # The Org Admin's OAuth is the runtime credential. Catalog discovery is
+        # a separate metadata side effect and does not replace this connection.
+        try:
+            await _discover_and_persist_mcp_tool_catalog(tool_name, access_token)
+        except Exception as exc:
+            logger.warning(
+                "Org OAuth succeeded but MCP catalog discovery failed for %s: %s",
+                tool_name,
+                exc,
+                exc_info=True,
+            )
+
     # 6. Get tool_id from DB
-    tools, _ = await tool_service.get_platform_tools(only_active=False, include_drafts=True)
+    tools, _ = await tool_service.get_platform_tools(
+        only_active=False, include_drafts=True
+    )
     tool_id = next((t.id for t in tools if t.name == tool_name), None)
 
     if not tool_id:
@@ -1019,7 +1342,9 @@ async def logout_agent_tool(
 @tracer.start_as_current_span("tool.routes.set_api_key")
 async def set_api_key(
     agent_tool_id: UUID,
-    api_key: str = Body(..., embed=True, description="API key to store in sensitive_config"),
+    api_key: str = Body(
+        ..., embed=True, description="API key to store in sensitive_config"
+    ),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Save or update API key in sensitive_config for a tool."""
@@ -1030,8 +1355,7 @@ async def set_api_key(
 
     if not api_key or not api_key.strip():
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="API key cannot be empty"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="API key cannot be empty"
         )
 
     # Update sensitive config with API key

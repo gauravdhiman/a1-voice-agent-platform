@@ -48,6 +48,7 @@ import {
   ToolCard,
   ToolFilters,
   ToolConfigDrawer,
+  ToolApiKeySetupDialog,
   ToolFilterType,
 } from "@/components/tools";
 import { buildAgentToolsDisplay } from "@/components/tools/tools-display";
@@ -85,9 +86,27 @@ import {
 import { voiceTemplateService } from "@/services/voice-template-service";
 import type { VoiceTemplate } from "@/types/voice-template";
 import { skillService } from "@/services/skill-service";
-import type { OrganizationSkill, AgentSkill } from "@/types/skill";
+import type { OrganizationSkill } from "@/types/skill";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+
+/**
+ * Determines whether an MCP tool must collect an organization API key before
+ * it can be attached to an agent. A literal platform credential makes the
+ * key optional; an organization key, when supplied, remains the runtime
+ * credential without mutating that platform fallback.
+ */
+function requiresOrganizationApiKeyBeforeConnect(
+  tool: PlatformTool,
+  isConnected: boolean,
+): boolean {
+  return (
+    !isConnected &&
+    tool.tool_source === "mcp" &&
+    tool.auth_type === "api_key" &&
+    tool.requires_auth !== false
+  );
+}
 
 export default function AgentDetailPage() {
   const { user } = useAuth();
@@ -109,6 +128,8 @@ export default function AgentDetailPage() {
   >(null);
   const [activeTab, setActiveTab] = React.useState("properties");
   const [pendingToolToOpen, setPendingToolToOpen] =
+    React.useState<PlatformTool | null>(null);
+  const [pendingApiKeyTool, setPendingApiKeyTool] =
     React.useState<PlatformTool | null>(null);
   const [connectingToolId, setConnectingToolId] = React.useState<string | null>(
     null,
@@ -532,6 +553,11 @@ export default function AgentDetailPage() {
       );
 
       if (!existingAgentTool) {
+        if (requiresOrganizationApiKeyBeforeConnect(tool, false)) {
+          setPendingApiKeyTool(tool);
+          return;
+        }
+
         // Premium tools are gated on the plan's 'premium_tools' feature: keep
         // the card visible with a badge but block the attach action (the API
         // enforces the same gate server-side). Already-connected premium tools
@@ -562,6 +588,31 @@ export default function AgentDetailPage() {
       }
     },
     [agentId, localAgentTools, configureAgentToolMutation, premiumToolsBlocked],
+  );
+
+  const handleRequiredApiKeyConnect = useCallback(
+    async (apiKey: string) => {
+      if (!pendingApiKeyTool) return;
+
+      const tool = pendingApiKeyTool;
+      try {
+        setConnectingToolId(tool.id);
+        setPendingToolToOpen(tool);
+        await configureAgentToolMutation.mutateAsync({
+          agent_id: agentId,
+          tool_id: tool.id,
+          is_enabled: true,
+          sensitive_config: { api_key: apiKey },
+        });
+        setPendingApiKeyTool(null);
+      } catch (error) {
+        setPendingToolToOpen(null);
+        setConnectingToolId(null);
+        console.error("Failed to connect MCP tool with API key:", error);
+        throw error;
+      }
+    },
+    [agentId, configureAgentToolMutation, pendingApiKeyTool],
   );
 
   const handleCloseToolDrawer = useCallback(() => {
@@ -1382,6 +1433,11 @@ and confirm someone will call back the next business day.`}
                         const agentTool = localAgentTools.find(
                           (at) => at.tool_id === tool.id,
                         );
+                        const requiresApiKey =
+                          requiresOrganizationApiKeyBeforeConnect(
+                            tool,
+                            Boolean(agentTool),
+                          );
 
                         return (
                           <ToolCard
@@ -1397,6 +1453,7 @@ and confirm someone will call back the next business day.`}
                             isConnecting={connectingToolId === tool.id}
                             onClick={() => handleToolCardClick(tool)}
                             disabled={!canEdit}
+                            requiresApiKey={requiresApiKey}
                             isUnpublished={unpublishedConnectedIds.has(tool.id)}
                             premiumBlocked={premiumToolsBlocked}
                           />
@@ -1453,6 +1510,20 @@ and confirm someone will call back the next business day.`}
           }}
           canEdit={canEdit}
           isSaving={updateAgentToolMutation.isPending}
+        />
+      )}
+
+      {pendingApiKeyTool && (
+        <ToolApiKeySetupDialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !configureAgentToolMutation.isPending) {
+              setPendingApiKeyTool(null);
+            }
+          }}
+          toolName={pendingApiKeyTool.name}
+          onConnect={handleRequiredApiKeyConnect}
+          isConnecting={configureAgentToolMutation.isPending}
         />
       )}
 

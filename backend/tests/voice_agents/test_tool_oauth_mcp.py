@@ -23,6 +23,7 @@ These exercise the route handlers directly (same pattern as
 ``test_tool_routes.py``); ``tool_service`` and the registry are patched so no
 DB / network is touched.
 """
+
 import base64
 import json
 from datetime import datetime
@@ -35,6 +36,10 @@ from fastapi import HTTPException
 
 from shared.voice_agents.tool_models import PlatformTool, ToolSource
 from shared.voice_agents.tools.base.platform_tool_registry import platform_tool_registry
+from shared.voice_agents.tools.mcp.oauth import (
+    create_mcp_oauth_state,
+    decode_mcp_oauth_state,
+)
 
 # Test fixtures
 TEST_AGENT_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -99,6 +104,32 @@ def _legacy_tool_without_db_auth_config() -> PlatformTool:
     )
 
 
+def _generic_mcp_oauth_tool() -> PlatformTool:
+    """An MCP tool using the protocol's provider-neutral OAuth metadata."""
+    return PlatformTool(
+        id=MCP_TOOL_ID,
+        name="generic_mcp",
+        description="Generic OAuth MCP",
+        auth_type="oauth2",
+        requires_auth=True,
+        auth_config={
+            "provider": "mcp",
+            "client_id": "mcp-client",
+            "auth_url": "https://auth.example/authorize",
+            "token_url": "https://auth.example/token",
+            "scopes": ["tools:read"],
+            "resource": "https://mcp.example/mcp",
+        },
+        is_active=True,
+        tool_source=ToolSource.MCP,
+        mcp_server_url="https://mcp.example/mcp",
+        mcp_server_name="generic-mcp",
+        tool_functions_schema=None,
+        created_at="2024-01-01T00:00:00",
+        updated_at="2024-01-01T00:00:00",
+    )
+
+
 class _FakeLegacyToolClass:
     """Stand-in for a legacy BaseTool subclass returned by the registry.
 
@@ -137,9 +168,7 @@ class TestStartOauthMcp:
     """``GET /api/v1/tools/auth/{tool_name}`` — DB-driven resolution."""
 
     @pytest.mark.asyncio
-    async def test_mcp_tool_builds_authorize_url_from_db_auth_config(
-        self, monkeypatch
-    ):
+    async def test_mcp_tool_builds_authorize_url_from_db_auth_config(self, monkeypatch):
         """MCP tool (DB auth_config, not in registry) → 200 with DB-derived URL."""
         monkeypatch.setenv("GOOGLE_OAUTH_TOOL_CLIENT_ID", "test-client-id")
         monkeypatch.setenv(
@@ -202,9 +231,7 @@ class TestStartOauthMcp:
         assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_legacy_fallback_when_db_auth_config_missing(
-        self, monkeypatch
-    ):
+    async def test_legacy_fallback_when_db_auth_config_missing(self, monkeypatch):
         """DB row has no auth_config but registry has the tool → use registry config."""
         monkeypatch.setenv("GOOGLE_OAUTH_TOOL_CLIENT_ID", "cid")
         monkeypatch.setenv(
@@ -232,6 +259,67 @@ class TestStartOauthMcp:
         mock_reg.assert_called_once_with("Gmail")
         assert "legacy-scope" in result["auth_url"]
 
+    @pytest.mark.asyncio
+    async def test_generic_mcp_oauth_uses_pkce_and_resource_indicator(
+        self, monkeypatch
+    ):
+        """Provider-neutral MCP OAuth does not depend on Google env vars."""
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-state-secret")
+        from src.voice_agents.tool_routes import start_oauth
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tools = AsyncMock(
+                return_value=([_generic_mcp_oauth_tool()], None)
+            )
+            result = await start_oauth(
+                tool_name="generic_mcp",
+                agent_id=TEST_AGENT_ID,
+                user_data=(TEST_USER_ID, Mock()),
+            )
+
+        assert "code_challenge_method=S256" in result["auth_url"]
+        assert "resource=https%3A%2F%2Fmcp.example%2Fmcp" in result["auth_url"]
+        state = result["auth_url"].split("state=", 1)[1].split("&", 1)[0]
+        decoded = decode_mcp_oauth_state(state)
+        assert decoded["tool_name"] == "generic_mcp"
+        assert decoded["code_verifier"]
+
+    @pytest.mark.asyncio
+    async def test_platform_mcp_oauth_starts_discovery_only_flow(self, monkeypatch):
+        """Platform discovery OAuth state has a tool id but no agent id."""
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-state-secret")
+        from src.voice_agents.tool_routes import start_platform_mcp_oauth
+
+        resolved_config = {
+            "auth_url": "https://auth.example/authorize",
+            "token_url": "https://auth.example/token",
+            "client_id": "mcp-client",
+            "scopes": ["tools:read"],
+            "resource": "https://mcp.example/mcp",
+        }
+        with patch("src.voice_agents.tool_routes.assert_platform_role") as assert_role:
+            with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+                mock_ts.get_platform_tools = AsyncMock(
+                    return_value=([_generic_mcp_oauth_tool()], None)
+                )
+                with patch(
+                    "src.voice_agents.tool_routes.discover_mcp_oauth_config",
+                    new_callable=AsyncMock,
+                    return_value=resolved_config,
+                ):
+                    result = await start_platform_mcp_oauth(
+                        tool_id=MCP_TOOL_ID,
+                        user_data=(TEST_USER_ID, Mock()),
+                    )
+
+        assert_role.assert_called_once()
+        assert result["auth_url"].startswith("https://auth.example/authorize?")
+        state = result["auth_url"].split("state=", 1)[1].split("&", 1)[0]
+        decoded = decode_mcp_oauth_state(state)
+        assert decoded["oauth_flow"] == "mcp_platform"
+        assert decoded["tool_id"] == str(MCP_TOOL_ID)
+        assert "agent_id" not in decoded
+
 
 class TestOauthCallbackMcp:
     """``GET /api/v1/tools/callback`` — DB-driven resolution + token storage."""
@@ -251,7 +339,11 @@ class TestOauthCallbackMcp:
         mock_response = Mock()
         mock_response.raise_for_status = Mock()
         mock_response.json = Mock(
-            return_value={"access_token": "at-123", "refresh_token": "rt-456", "expires_in": 3600}
+            return_value={
+                "access_token": "at-123",
+                "refresh_token": "rt-456",
+                "expires_in": 3600,
+            }
         )
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
@@ -313,4 +405,106 @@ class TestOauthCallbackMcp:
         assert exc_info.value.status_code == 404
         # No token exchange, no storage.
         mock_client.post.assert_not_called()
+        mock_ts.configure_agent_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_generic_mcp_oauth_callback_exchanges_pkce_code(self, monkeypatch):
+        """MCP OAuth callback stores a token without a provider-specific manager."""
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-state-secret")
+        state = create_mcp_oauth_state(
+            {
+                "oauth_flow": "mcp",
+                "agent_id": str(TEST_AGENT_ID),
+                "tool_name": "generic_mcp",
+                "client_id": "mcp-client",
+                "redirect_uri": "http://localhost:8000/api/v1/tools/callback",
+                "token_url": "https://auth.example/token",
+                "resource": "https://mcp.example/mcp",
+                "code_verifier": "v" * 43,
+            }
+        )
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        mock_response.json = Mock(
+            return_value={
+                "access_token": "mcp-at",
+                "refresh_token": "mcp-rt",
+                "expires_in": 3600,
+            }
+        )
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        from src.voice_agents.tool_routes import oauth_callback
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tools = AsyncMock(
+                return_value=([_generic_mcp_oauth_tool()], None)
+            )
+            mock_ts.configure_agent_tool = AsyncMock()
+            with patch(
+                "src.voice_agents.tool_routes._discover_and_persist_mcp_tool_catalog",
+                new_callable=AsyncMock,
+                return_value=0,
+            ) as mock_catalog:
+                with patch("httpx.AsyncClient", return_value=mock_client):
+                    result = await oauth_callback(code="mcp-code", state=state)
+
+        assert result == {"message": "Successfully authenticated"}
+        mock_catalog.assert_awaited_once_with("generic_mcp", "mcp-at")
+
+        posted = mock_client.post.await_args.kwargs
+        assert posted["data"]["code_verifier"] == "v" * 43
+        assert posted["data"]["resource"] == "https://mcp.example/mcp"
+        create = mock_ts.configure_agent_tool.call_args.args[0]
+        assert create.sensitive_config["access_token"] == "mcp-at"
+
+    @pytest.mark.asyncio
+    async def test_platform_oauth_callback_discovers_catalog_without_agent_token_storage(
+        self, monkeypatch
+    ):
+        """Platform OAuth is discovery-only and never creates agent_tools."""
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-state-secret")
+        state = create_mcp_oauth_state(
+            {
+                "oauth_flow": "mcp_platform",
+                "tool_name": "generic_mcp",
+                "tool_id": str(MCP_TOOL_ID),
+                "client_id": "mcp-client",
+                "redirect_uri": "http://localhost:8120/api/v1/tools/callback",
+                "token_url": "https://auth.example/token",
+                "resource": "https://mcp.example/mcp",
+                "code_verifier": "v" * 43,
+            }
+        )
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        mock_response.json = Mock(
+            return_value={"access_token": "platform-at", "expires_in": 3600}
+        )
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        from src.voice_agents.tool_routes import oauth_callback
+
+        with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+            mock_ts.get_platform_tools = AsyncMock(
+                return_value=([_generic_mcp_oauth_tool()], None)
+            )
+            mock_ts.configure_agent_tool = AsyncMock()
+            with patch(
+                "src.voice_agents.tool_routes._discover_and_persist_mcp_tool_catalog",
+                new_callable=AsyncMock,
+                return_value=0,
+            ) as mock_catalog:
+                with patch("httpx.AsyncClient", return_value=mock_client):
+                    result = await oauth_callback(code="mcp-code", state=state)
+
+        assert result["message"] == "MCP tool catalog discovered"
+        assert result["tool_count"] == 0
+        mock_catalog.assert_awaited_once_with("generic_mcp", "platform-at")
         mock_ts.configure_agent_tool.assert_not_called()
