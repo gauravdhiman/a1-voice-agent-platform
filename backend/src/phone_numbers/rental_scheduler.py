@@ -8,6 +8,7 @@ from typing import Optional
 
 from shared.config import settings
 
+from .platform_settings_service import platform_phone_number_settings_service
 from .service import phone_number_service
 
 logger = logging.getLogger(__name__)
@@ -50,18 +51,35 @@ class PhoneNumberRentalScheduler:
             except Exception:
                 logger.exception("Phone-rental scheduler iteration failed")
             try:
-                await asyncio.sleep(self.check_interval_hours * 3600)
+                interval_hours = await self._get_runtime_interval_hours()
+                await asyncio.sleep(interval_hours * 3600)
             except asyncio.CancelledError:
                 break
+
+    async def _get_runtime_interval_hours(self) -> float:
+        """Read the admin-configured cadence, with the startup value as fallback."""
+        try:
+            lifecycle_settings = (
+                await platform_phone_number_settings_service.get_settings()
+            )
+            return min(
+                lifecycle_settings.billing_check_interval_hours,
+                lifecycle_settings.release_retry_interval_hours,
+            )
+        except Exception:
+            logger.exception("Could not load runtime phone-rental interval")
+            return self.check_interval_hours
 
 
 _phone_number_rental_scheduler: Optional[PhoneNumberRentalScheduler] = None
 
 
 def _check_interval_hours() -> float:
-    """Read the optional scheduler interval from application settings."""
-    raw = getattr(settings, "phone_number_billing_check_interval_hours", None)
-    return float(raw) if raw is not None else float(DEFAULT_CHECK_INTERVAL_HOURS)
+    """Run often enough to satisfy both billing and release retry cadences."""
+    billing = getattr(settings, "phone_number_billing_check_interval_hours", None)
+    release = getattr(settings, "phone_number_release_retry_interval_hours", None)
+    intervals = [float(value) for value in (billing, release) if value is not None]
+    return min(intervals) if intervals else float(DEFAULT_CHECK_INTERVAL_HOURS)
 
 
 async def start_phone_number_rental_scheduler() -> None:

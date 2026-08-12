@@ -25,6 +25,8 @@ from src.security.rate_limiter import limiter
 
 from shared.organization.phone_number_models import (
     PhoneNumberAssignRequest,
+    PhoneNumberImportRequest,
+    PhoneNumberImportResponse,
     PhoneNumberListResponse,
     PhoneNumberPurchaseRequest,
     PhoneNumberPurchaseResponse,
@@ -32,11 +34,50 @@ from shared.organization.phone_number_models import (
     PhoneNumberSearchResponse,
 )
 
+from .platform_settings_models import (
+    PlatformPhoneNumberSettings,
+    PlatformPhoneNumberSettingsUpdate,
+)
+from .platform_settings_service import platform_phone_number_settings_service
 from .service import phone_number_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/phone-numbers", tags=["phone-numbers"])
+
+
+def _assert_platform_admin(user_profile: UserProfile) -> None:
+    """Require a platform administrator for global phone settings."""
+    if not user_profile.has_role("platform_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only platform administrators can manage phone-number settings",
+        )
+
+
+@router.get("/admin/settings", response_model=PlatformPhoneNumberSettings)
+async def get_platform_phone_number_settings(
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Return platform-admin phone-number billing and retry settings."""
+    _user_id, user_profile = user_auth
+    _assert_platform_admin(user_profile)
+    return await platform_phone_number_settings_service.get_settings(
+        allow_fallback=False
+    )
+
+
+@router.put("/admin/settings", response_model=PlatformPhoneNumberSettings)
+async def update_platform_phone_number_settings(
+    payload: PlatformPhoneNumberSettingsUpdate,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Update platform-admin phone-number billing and retry settings."""
+    user_id, user_profile = user_auth
+    _assert_platform_admin(user_profile)
+    return await platform_phone_number_settings_service.update_settings(
+        payload, user_id
+    )
 
 
 @router.get("/available", response_model=PhoneNumberSearchResponse)
@@ -111,6 +152,7 @@ async def purchase_phone_number(
         result, error = await phone_number_service.purchase_number(
             organization_id=organization_id,
             purchase_request=purchase_request,
+            idempotency_key=request.headers.get("Idempotency-Key"),
         )
 
         if error:
@@ -133,6 +175,41 @@ async def purchase_phone_number(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to purchase phone number",
+        )
+
+
+@router.post("/import", response_model=PhoneNumberImportResponse)
+async def import_phone_number(
+    import_request: PhoneNumberImportRequest,
+    organization_id: UUID,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Connect an existing customer-owned Twilio number without buying it."""
+    try:
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "create",
+            organization_id,
+            error_message="Insufficient permissions to connect phone numbers",
+        )
+        result, error = await phone_number_service.import_number(
+            organization_id=organization_id,
+            import_request=import_request,
+        )
+        if error:
+            if "limit" in error.lower() or "plan allows" in error.lower():
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing phone number: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to connect phone number",
         )
 
 
@@ -201,6 +278,7 @@ async def assign_phone_number_to_agent(
         result, error = await phone_number_service.assign_to_agent(
             phone_number_id=phone_number_id,
             assign_request=assign_request,
+            organization_id=organization_id,
         )
 
         if error:
@@ -254,9 +332,10 @@ async def cancel_phone_number(
 
         success, error = await phone_number_service.cancel_number(
             phone_number_id=phone_number_id,
+            organization_id=organization_id,
         )
 
-        if error:
+        if error and error != "release_pending":
             if "not found" in error.lower():
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -267,9 +346,15 @@ async def cancel_phone_number(
                 detail=error,
             )
 
+        if error == "release_pending":
+            return {
+                "success": True,
+                "message": "Release queued. We will retry with the provider automatically.",
+            }
+
         return {
             "success": True,
-            "message": "Phone number cancelled. It is now released and calls will not work.",
+            "message": "Phone number disconnected or released. Calls will not work.",
         }
 
     except HTTPException:

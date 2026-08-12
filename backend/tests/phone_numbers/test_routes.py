@@ -21,6 +21,7 @@ helper). These tests pin that contract:
     behavior change vs. the old ``check_billing_permissions`` gate.
   - ``org_admin`` on a *different* org → 403 (cross-org isolation).
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
@@ -30,6 +31,7 @@ from starlette.requests import Request
 
 from shared.organization.phone_number_models import (
     PhoneNumberAssignRequest,
+    PhoneNumberImportRequest,
     PhoneNumberPurchaseRequest,
 )
 
@@ -135,13 +137,13 @@ def _disable_limiter(monkeypatch):
 
 
 def _purchase_request():
-    return PhoneNumberPurchaseRequest(
-        phone_number="+1234567890", country_code="US"
-    )
+    return PhoneNumberPurchaseRequest(phone_number="+1234567890", country_code="US")
 
 
 def _assign_request():
-    return PhoneNumberAssignRequest(agent_id=UUID("00000000-0000-0000-0000-0000000000a1"))
+    return PhoneNumberAssignRequest(
+        agent_id=UUID("00000000-0000-0000-0000-0000000000a1")
+    )
 
 
 class TestPurchasePhoneNumberPermission:
@@ -284,6 +286,58 @@ class TestListOrganizationNumbersPermission:
             assert result is listed
 
 
+class TestPlatformPhoneNumberSettingsRoutes:
+    """Platform-admin-only settings and release-pending response behavior."""
+
+    @pytest.mark.asyncio
+    async def test_settings_require_platform_admin(self):
+        from src.phone_numbers.routes import get_platform_phone_number_settings
+
+        with patch(
+            "src.phone_numbers.routes.platform_phone_number_settings_service"
+        ) as mock_service:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_platform_phone_number_settings(
+                    user_auth=(TEST_USER_ID, _make_profile())
+                )
+            assert exc_info.value.status_code == 403
+            mock_service.get_settings.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_can_read_settings(self):
+        from src.phone_numbers.routes import get_platform_phone_number_settings
+
+        settings = Mock()
+        with patch(
+            "src.phone_numbers.routes.platform_phone_number_settings_service"
+        ) as mock_service:
+            mock_service.get_settings = AsyncMock(return_value=settings)
+            result = await get_platform_phone_number_settings(
+                user_auth=(TEST_USER_ID, _make_profile(is_platform_admin=True))
+            )
+            assert result is settings
+            mock_service.get_settings.assert_awaited_once_with(allow_fallback=False)
+
+    @pytest.mark.asyncio
+    async def test_release_pending_is_successful_queued_response(self):
+        from src.phone_numbers.routes import cancel_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.cancel_number = AsyncMock(
+                return_value=(True, "release_pending")
+            )
+            result = await cancel_phone_number(
+                phone_number_id=TEST_PHONE_ID,
+                organization_id=TEST_ORG_ID,
+                user_auth=(
+                    TEST_USER_ID,
+                    _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                ),
+            )
+            assert result["success"] is True
+            assert "retry" in result["message"]
+
+
 class TestAssignPhoneNumberPermission:
     """``assign_phone_number_to_agent`` gates on ``phone_number:update``."""
 
@@ -322,6 +376,47 @@ class TestAssignPhoneNumberPermission:
                 user_auth=(TEST_USER_ID, profile),
             )
             assert result["phone_number"] is assigned
+
+
+class TestImportPhoneNumberPermission:
+    """Existing Twilio numbers use the same organization create permission."""
+
+    @pytest.mark.asyncio
+    async def test_org_admin_can_import_without_provider_purchase(self):
+        from src.phone_numbers.routes import import_phone_number
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        imported = Mock()
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.import_number = AsyncMock(return_value=(imported, None))
+
+            result = await import_phone_number(
+                import_request=PhoneNumberImportRequest(phone_number="+14155550100"),
+                organization_id=TEST_ORG_ID,
+                user_auth=(TEST_USER_ID, profile),
+            )
+
+        assert result is imported
+        mock_svc.import_number.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_import_without_permission_is_forbidden(self):
+        from src.phone_numbers.routes import import_phone_number
+
+        profile = _make_profile()
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.import_number = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await import_phone_number(
+                    import_request=PhoneNumberImportRequest(
+                        phone_number="+14155550100"
+                    ),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 403
+        mock_svc.import_number.assert_not_called()
 
 
 class TestCancelPhoneNumberPermission:

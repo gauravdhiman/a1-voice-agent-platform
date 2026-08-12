@@ -20,10 +20,44 @@ class PhoneNumberStatus(str, Enum):
     """Phone number status enumeration."""
 
     AVAILABLE = "available"
+    PROVISIONING = "provisioning"
     PURCHASED = "purchased"
     ACTIVE = "active"
     INACTIVE = "inactive"
     CANCELLED = "cancelled"
+    VERIFICATION_REQUIRED = "verification_required"
+    RELEASE_PENDING = "release_pending"
+    DISCONNECTED = "disconnected"
+
+
+class PhoneNumberProvisioningSource(str, Enum):
+    """How a phone number first entered the platform."""
+
+    PLATFORM = "platform"
+    CUSTOMER = "customer"
+
+
+class PhoneNumberManagementMode(str, Enum):
+    """What provider actions the platform is authorized to perform."""
+
+    PLATFORM = "platform_managed"
+    CUSTOMER = "customer_managed"
+
+
+class PhoneNumberConfigurationStatus(str, Enum):
+    """State of the Twilio webhook configuration handshake."""
+
+    PENDING = "pending"
+    CONFIGURED = "configured"
+    VERIFICATION_REQUIRED = "verification_required"
+    FAILED = "failed"
+
+
+class PhoneNumberBillingMode(str, Enum):
+    """Whether the platform charges recurring rental credits."""
+
+    PLATFORM_RENTAL = "platform_rental"
+    NONE = "none"
 
 
 class PhoneNumberBillingStatus(str, Enum):
@@ -60,7 +94,9 @@ class PhoneNumberBase(BaseModel):
     area_code: Optional[str] = Field(
         None, max_length=10, description="Area code for local numbers"
     )
-    monthly_cost_credits: int = Field(..., ge=0, description="Monthly cost in credits")
+    monthly_cost_credits: int = Field(
+        default=0, ge=0, description="Monthly cost in credits"
+    )
     status: PhoneNumberStatus = Field(
         default=PhoneNumberStatus.PURCHASED, description="Current status"
     )
@@ -83,13 +119,45 @@ class PhoneNumberBase(BaseModel):
     billing_grace_ends_at: Optional[datetime] = Field(
         None, description="When an unpaid rental is released"
     )
+    provisioning_source: PhoneNumberProvisioningSource = Field(
+        default=PhoneNumberProvisioningSource.PLATFORM,
+        description="How the number entered the platform",
+    )
+    management_mode: PhoneNumberManagementMode = Field(
+        default=PhoneNumberManagementMode.PLATFORM,
+        description="Whether provider management is authorized",
+    )
+    configuration_status: PhoneNumberConfigurationStatus = Field(
+        default=PhoneNumberConfigurationStatus.CONFIGURED,
+        description="Webhook configuration state",
+    )
+    billing_mode: PhoneNumberBillingMode = Field(
+        default=PhoneNumberBillingMode.PLATFORM_RENTAL,
+        description="Whether recurring platform rental credits apply",
+    )
+    configuration_error: Optional[str] = Field(
+        None, max_length=1000, description="Most recent configuration error"
+    )
+    last_verified_at: Optional[datetime] = Field(
+        None, description="When provider webhook connectivity was last verified"
+    )
 
 
 class PhoneNumberCreate(PhoneNumberBase):
     """Model for creating a new phone number record."""
 
     organization_id: UUID = Field(..., description="Organization that owns this number")
-    provider_sid: str = Field(..., description="Provider's SID for the phone number")
+    provider_sid: Optional[str] = Field(
+        None, description="Provider's SID for the phone number"
+    )
+    connection_token_hash: Optional[str] = Field(
+        None, max_length=64, description="Hash of a customer webhook verification token"
+    )
+    provisioning_idempotency_key: Optional[str] = Field(
+        None,
+        max_length=255,
+        description="Stable retry key for a platform provisioning attempt",
+    )
 
 
 class PhoneNumberUpdate(BaseModel):
@@ -167,6 +235,31 @@ class PhoneNumberPurchaseRequest(BaseModel):
     phone_number_type: PhoneNumberType = Field(
         default=PhoneNumberType.LOCAL, description="Type of phone number"
     )
+
+
+class PhoneNumberImportRequest(BaseModel):
+    """Request to connect a customer-owned Twilio number."""
+
+    phone_number: str = Field(..., min_length=1, max_length=32)
+    country_code: str = Field(
+        default="US", min_length=2, max_length=2, description="Country code"
+    )
+    phone_number_type: PhoneNumberType = Field(
+        default=PhoneNumberType.LOCAL, description="Number type"
+    )
+    agent_id: Optional[UUID] = Field(
+        None, description="Optional agent to assign after verification"
+    )
+
+
+class PhoneNumberImportResponse(BaseModel):
+    """Response containing tokenized webhook URLs for an imported number."""
+
+    success: bool
+    phone_number: PhoneNumber
+    voice_url: str
+    status_callback: str
+    message: str
 
 
 class PhoneNumberAssignRequest(BaseModel):

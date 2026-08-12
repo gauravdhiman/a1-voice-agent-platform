@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-
 from src.billing.entitlement_handlers import (
     ConcurrentCallsHandler,
     FeatureFlagHandler,
     MaxAgentsHandler,
+    MaxPhoneNumbersHandler,
     get_handler,
     parse_entitlement_value,
 )
@@ -30,12 +30,16 @@ class TestParseEntitlementValue:
         assert effective is None
 
     def test_integer(self):
-        effective, is_unlimited = parse_entitlement_value({"type": "integer", "value": 5})
+        effective, is_unlimited = parse_entitlement_value(
+            {"type": "integer", "value": 5}
+        )
         assert effective == 5
         assert is_unlimited is False
 
     def test_boolean(self):
-        effective, is_unlimited = parse_entitlement_value({"type": "boolean", "value": True})
+        effective, is_unlimited = parse_entitlement_value(
+            {"type": "boolean", "value": True}
+        )
         assert effective is True
 
 
@@ -109,3 +113,45 @@ class TestMaxAgentsHandlerEdgeCases:
         result = await handler.check_limit(org_id, entitlements, resolved, increment=1)
         assert result.current == 0
         assert result.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_phone_number_limit_counts_non_terminal_lifecycle_rows():
+    """Provisioning, active, and pending-release rows consume plan capacity."""
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.in_.return_value = table
+    table.execute.return_value = MagicMock(count=3, data=[{}, {}, {}])
+    client = MagicMock()
+    client.table.return_value = table
+    handler = MaxPhoneNumbersHandler(supabase=client)
+    org_id = uuid4()
+    entitlements = OrgEntitlements(
+        organization_id=org_id,
+        plan_version_id=uuid4(),
+        plan_product_slug="starter",
+        plan_version_number=1,
+        is_entitled=True,
+    )
+    resolved = ResolvedEntitlement(
+        key="max_phone_numbers",
+        kind=EntitlementKind.LIMIT,
+        assigned=True,
+        raw_value={"type": "integer", "value": 3},
+        effective_value=3,
+    )
+
+    result = await handler.check_limit(org_id, entitlements, resolved, increment=1)
+
+    assert result.allowed is False
+    table.in_.assert_called_once_with(
+        "status",
+        [
+            "provisioning",
+            "purchased",
+            "active",
+            "verification_required",
+            "release_pending",
+        ],
+    )

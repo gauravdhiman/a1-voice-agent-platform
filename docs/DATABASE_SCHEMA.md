@@ -473,8 +473,9 @@ Tracks usage of embed call buttons for analytics and rate limiting.
 
 ### phone_numbers
 
-Stores Twilio numbers owned by an organization and the state needed for
-system-wide monthly rental billing.
+Stores both platform-purchased and customer-owned Twilio numbers. This table is
+the sole source of truth for phone-to-agent routing; the legacy
+`voice_agents.phone_number` field is not used by inbound call handling.
 
 | Column | Type | Constraints | Description |
 | --- | --- | --- | --- |
@@ -483,16 +484,54 @@ system-wide monthly rental billing.
 | phone_number | VARCHAR(20) | NOT NULL | E.164 number |
 | phone_number_type | VARCHAR(20) | NOT NULL | local, mobile, or toll_free |
 | monthly_cost_credits | INTEGER | NOT NULL, >= 0 | Current system monthly rate |
-| status | VARCHAR(20) | NOT NULL | purchased, active, or cancelled |
+| status | VARCHAR(30) | NOT NULL | provisioning, purchased, active, verification_required, release_pending, disconnected, or cancelled |
 | billing_status | VARCHAR(20) | NOT NULL, DEFAULT active | active or past_due |
+| billing_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_rental | platform_rental for platform-owned numbers; none for customer-owned numbers |
+| provisioning_source | VARCHAR(20) | NOT NULL, DEFAULT platform | platform or customer |
+| management_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_managed | Whether the platform may call Twilio purchase/release APIs |
+| configuration_status | VARCHAR(30) | NOT NULL, DEFAULT configured | pending, configured, verification_required, or failed |
 | next_billing_at | TIMESTAMPTZ | NULLABLE | Next monthly rental due date |
 | billing_grace_ends_at | TIMESTAMPTZ | NULLABLE | Past-due release deadline |
 | provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio SID |
+| connection_token_hash | VARCHAR(64) | NULLABLE, UNIQUE | Hash of the customer webhook connection token; raw token is never stored |
+| provisioning_idempotency_key | VARCHAR(255) | NULLABLE | Organization-scoped retry key for platform purchase |
+| configuration_error | VARCHAR(1000) | NULLABLE | Last provisioning or verification error |
+| last_verified_at | TIMESTAMPTZ | NULLABLE | Last verified webhook timestamp |
 | purchased_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Purchase timestamp |
 | cancelled_at | TIMESTAMPTZ | NULLABLE | Release timestamp |
 
-The phone-rental scheduler checks due rows daily, retries failed debits during
-the seven-day grace period, and releases the Twilio number after grace expiry.
+The phone-rental scheduler checks platform-rental rows daily (both the billing
+cadence and release-retry cadence are configurable), disables inbound calls
+when a renewal debit fails, retries during the configurable seven-day default
+grace period, and releases the Twilio number after grace expiry. A provider
+release failure remains `release_pending` for the next retry. Customer-owned
+rows are never billed or released; disconnecting one only disables routing.
+
+Platform purchases send the canonical voice and status callback URLs to Twilio
+in the same purchase request. Customer-owned rows receive tokenized URLs once
+for the initial verification flow; only the token hash is stored in this table.
+
+---
+
+### platform_phone_number_settings
+
+Singleton platform-admin configuration for phone-number rental billing and
+provider-release retry scheduling. Environment variables provide deployment
+defaults if the settings row cannot be read during startup or a transient
+database failure occurs.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Fixed singleton ID `00000000-0000-0000-0000-000000000002` |
+| billing_grace_period_days | INTEGER | NOT NULL, > 0, DEFAULT 7 | Days to keep incoming calls disabled before release |
+| billing_check_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Rental billing scheduler cadence |
+| release_retry_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Provider release retry cadence |
+| updated_by | UUID | NULLABLE | Platform admin who last changed settings |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+Only the service role accesses this singleton. The platform-admin API is
+`GET/PUT /api/v1/phone-numbers/admin/settings`.
 
 ---
 
@@ -1321,11 +1360,27 @@ erDiagram
         integer monthly_cost_credits
         varchar status
         varchar billing_status
+        varchar billing_mode
+        varchar provisioning_source
+        varchar management_mode
+        varchar configuration_status
         timestamptz next_billing_at
         timestamptz billing_grace_ends_at
         varchar provider_sid
+        varchar connection_token_hash
+        varchar provisioning_idempotency_key
         timestamptz purchased_at
         timestamptz cancelled_at
+    }
+
+    platform_phone_number_settings {
+        uuid id
+        integer billing_grace_period_days
+        numeric billing_check_interval_hours
+        numeric release_retry_interval_hours
+        uuid updated_by
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     credit_transactions {
@@ -1547,6 +1602,8 @@ erDiagram
 53. `20260812000001` - Enable RLS on the service-owned credit notification outbox.
 54. `20260812000002` - Make regular credit debits preserve a negative plan balance from a completed voice call while consuming any positive admin or purchased pools.
 55. `20260812000003` - Update the seeded low-credit notification event description and metadata to the 20/10/5 warning policy.
+56. `20260812000004` - Add platform/customer phone-number ownership, webhook verification, provisioning idempotency, lifecycle statuses, and release-retry indexes.
+57. `20260812000005` - Add the platform-admin phone-number settings singleton for configurable rental grace and billing/release retry intervals.
 
 ---
 
@@ -1795,4 +1852,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-08-12

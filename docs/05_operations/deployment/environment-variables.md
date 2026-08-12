@@ -59,6 +59,11 @@ manual deployment, it is the local `.env.prod` file.
 | `TWILIO_ACCOUNT_SID` | Twilio account SID | No |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token | **Yes** |
 | `TWILIO_PHONE_NUMBER_SID` | Default Twilio phone number SID | No |
+| `TWILIO_WEBHOOK_SIGNATURE_VALIDATION_ENABLED` | Validate `X-Twilio-Signature` on voice callbacks; default `true` | No |
+| `API_BASE_URL` | Public backend URL used for Twilio voice and status callbacks | **Yes for phone-number provisioning** |
+| `PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS` | Deployment fallback cadence for rental billing checks; default `24` | No |
+| `PHONE_NUMBER_BILLING_GRACE_PERIOD_DAYS` | Deployment fallback grace period before unpaid release; default `7` | No |
+| `PHONE_NUMBER_RELEASE_RETRY_INTERVAL_HOURS` | Deployment fallback cadence for release-pending retries; default `24` | No |
 | `VOICE_WS_PUBLIC_URL` | Browser WebSocket base — prod: `wss://voice.247ai.live` | No |
 | `VOICE_WS_TWILIO_URL` | Twilio Media Streams base — prod: `wss://voice.247ai.live` | No |
 | `VOICE_TRANSPORT` | `pipecat` in production | No |

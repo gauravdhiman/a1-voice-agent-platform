@@ -195,6 +195,13 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       section: "platform_admin",
     },
     {
+      name: "Phone Number Settings",
+      href: "/platform/phone-numbers",
+      icon: Phone,
+      requiredPermission: "platform:admin",
+      section: "platform_admin",
+    },
+    {
       name: "Plan Catalog",
       href: "/platform/plans",
       icon: Package,

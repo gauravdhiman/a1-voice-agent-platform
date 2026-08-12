@@ -58,6 +58,22 @@ the [mandatory browser and PSTN voice release gate](runbook.md#mandatory-release
 with a release-test organization that has active voice entitlements and
 prepaid credit headroom.
 
+Phone-number lifecycle settings should be present in `.env.prod`:
+
+```text
+PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS=24
+PHONE_NUMBER_BILLING_GRACE_PERIOD_DAYS=7
+PHONE_NUMBER_RELEASE_RETRY_INTERVAL_HOURS=24
+TWILIO_WEBHOOK_SIGNATURE_VALIDATION_ENABLED=true
+```
+
+The phone-number scheduler must be running after deployment. It renews
+platform-managed rentals, disables calls during unpaid grace, and retries
+`release_pending` provider releases. Customer-managed numbers are excluded
+from rental billing and provider release. Platform admins can change the grace
+period and both intervals at **Platform → Phone Number Settings**; the
+environment variables above are deployment defaults and fallbacks.
+
 ## Prerequisites
 
 - **gcloud** CLI — project `project-bb848762-18cb-4cd6-858`, region `us-central1`

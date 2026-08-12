@@ -3,15 +3,13 @@ Voice Agent service for managing agents in a multi-tenant SaaS platform.
 """
 
 import logging
-from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
-from supabase import Client
 
-from shared.common.security import encrypt_data
 from shared.config import supabase_config
+from supabase import Client
 
 from .models import DeleteResponse, VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 
@@ -100,7 +98,13 @@ class VoiceAgentService:
     async def get_agent_by_phone(
         self, phone_number: str
     ) -> tuple[Optional[VoiceAgent], Optional[str]]:
-        """Get an agent by its phone number."""
+        """Get a legacy agent mapping by its phone number.
+
+        Deprecated: inbound Twilio routing must use
+        ``PhoneNumberService.get_routable_agent_id`` and the ``phone_numbers``
+        table. This method remains only for compatibility with older callers
+        and must not be used for new routing code.
+        """
         try:
             # Handle phone number formats if necessary
             response = (

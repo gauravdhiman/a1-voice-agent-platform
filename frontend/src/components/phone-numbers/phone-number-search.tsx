@@ -25,12 +25,10 @@ import {
   PhoneNumberType,
   formatPhoneNumber,
   getPhoneNumberTypeLabel,
-  getCreditsForType,
 } from "@/types/phone-number";
 import { phoneNumberService } from "@/services/phone-number-service";
 
 interface PhoneNumberSearchProps {
-  organizationId: string;
   creditBalance: number;
   onNumberSelected?: (number: AvailablePhoneNumber) => void;
 }
@@ -39,14 +37,13 @@ const COUNTRIES = [
   { code: "US", name: "United States" },
 ];
 
-const NUMBER_TYPES: { value: PhoneNumberType; label: string; cost: number }[] = [
-  { value: "local", label: "Local", cost: 200 },
-  { value: "toll_free", label: "Toll-Free", cost: 500 },
-  { value: "mobile", label: "Mobile", cost: 200 },
+const NUMBER_TYPES: { value: PhoneNumberType; label: string }[] = [
+  { value: "local", label: "Local" },
+  { value: "toll_free", label: "Toll-Free" },
+  { value: "mobile", label: "Mobile" },
 ];
 
 export function PhoneNumberSearch({
-  organizationId,
   creditBalance,
   onNumberSelected,
 }: PhoneNumberSearchProps) {
@@ -80,11 +77,6 @@ export function PhoneNumberSearch({
     } finally {
       setSearching(false);
     }
-  };
-
-  const getCostForType = (type: PhoneNumberType) => {
-    const typeConfig = NUMBER_TYPES.find((t) => t.value === type);
-    return typeConfig?.cost || getCreditsForType(type);
   };
 
   const canAfford = (cost: number) => creditBalance >= cost;
@@ -131,7 +123,7 @@ export function PhoneNumberSearch({
                 <SelectContent>
                   {NUMBER_TYPES.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
-                      {type.label} ({type.cost} credits/mo)
+                      {type.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -186,9 +178,7 @@ export function PhoneNumberSearch({
             <CardDescription>
               {results.length} numbers found
               {results.length > 0 && (
-                <span className="ml-2">
-                  (Showing {getCostForType(numberType)} credits/month)
-                </span>
+                <span className="ml-2">(monthly pricing shown per number)</span>
               )}
             </CardDescription>
           </CardHeader>

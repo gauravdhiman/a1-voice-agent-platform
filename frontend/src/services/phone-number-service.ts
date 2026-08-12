@@ -7,6 +7,8 @@ import type {
   PhoneNumber,
   PhoneNumberAssignRequest,
   PhoneNumberListResponse,
+  PhoneNumberImportRequest,
+  PhoneNumberImportResponse,
   PhoneNumberPurchaseRequest,
   PhoneNumberPurchaseResponse,
   PhoneNumberSearchRequest,
@@ -49,13 +51,23 @@ class PhoneNumberService {
   async purchaseNumber(
     organizationId: string,
     purchaseRequest: PhoneNumberPurchaseRequest,
+    idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
   ): Promise<PhoneNumberPurchaseResponse> {
     const response = await apiClient.post<PhoneNumberPurchaseResponse>(
-      `${this.baseUrl}/purchase`,
-      {
-        organization_id: organizationId,
-        ...purchaseRequest,
-      },
+      `${this.baseUrl}/purchase?organization_id=${encodeURIComponent(organizationId)}`,
+      purchaseRequest,
+      { headers: { "Idempotency-Key": idempotencyKey } },
+    );
+    return response.data;
+  }
+
+  async importNumber(
+    organizationId: string,
+    importRequest: PhoneNumberImportRequest,
+  ): Promise<PhoneNumberImportResponse> {
+    const response = await apiClient.post<PhoneNumberImportResponse>(
+      `${this.baseUrl}/import?organization_id=${encodeURIComponent(organizationId)}`,
+      importRequest,
     );
     return response.data;
   }
@@ -72,21 +84,28 @@ class PhoneNumberService {
   async assignToAgent(
     phoneNumberId: string,
     assignRequest: PhoneNumberAssignRequest,
+    organizationId: string,
   ): Promise<{ success: boolean; phone_number: PhoneNumber }> {
     const response = await apiClient.post<{
       success: boolean;
       phone_number: PhoneNumber;
-    }>(`${this.baseUrl}/${phoneNumberId}/assign`, assignRequest);
+    }>(
+      `${this.baseUrl}/${phoneNumberId}/assign?organization_id=${encodeURIComponent(organizationId)}`,
+      assignRequest,
+    );
     return response.data;
   }
 
   async cancelNumber(
     phoneNumberId: string,
+    organizationId: string,
   ): Promise<{ success: boolean; message: string }> {
     const response = await apiClient.delete<{
       success: boolean;
       message: string;
-    }>(`${this.baseUrl}/${phoneNumberId}`);
+    }>(
+      `${this.baseUrl}/${phoneNumberId}?organization_id=${encodeURIComponent(organizationId)}`,
+    );
     return response.data;
   }
 

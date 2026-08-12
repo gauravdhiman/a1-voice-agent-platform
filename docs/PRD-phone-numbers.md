@@ -1,8 +1,8 @@
 # PRD: Phone Number Management (Twilio + voice-ws)
 
 **Feature ID:** F2
-**Status:** Ready for Implementation (v0.9 - Finalized)
-**Last Updated:** 2026-03-01
+**Status:** Implemented v1 (platform purchase + customer-owned import)
+**Last Updated:** 2026-08-12
 **Owner:** Genie (AI Assistant)
 
 **Related:** [Twilio call flow](../01_architecture/twilio_call_flow.md), [Outbound phone calls](../03_implementation/outbound_phone_calls.md) (planned)
@@ -13,6 +13,36 @@
 
 ### Summary
 Enable users to purchase, manage, and use phone numbers directly from the VoiceAI platform. Twilio provides PSTN numbers and Media Streams; `voice-ws` handles the AI voice session over WebSocket.
+
+### Current implementation contract
+
+- `phone_numbers` is the source of truth for phone-to-agent routing. The
+  legacy `voice_agents.phone_number` field is retained for compatibility but is
+  not consulted by inbound Twilio routing.
+- Platform-purchased numbers are charged monthly in credits and are configured
+  with the platform voice and status callback URLs in the same Twilio purchase
+  request.
+- Customer-owned Twilio numbers can be connected without a Twilio account
+  OAuth flow. The platform returns tokenized callback URLs once; only the
+  token hash is stored, and the raw token cannot be recovered later. A future
+  “Connect Twilio account” flow can replace this setup step.
+- The customer-owned path is intentionally not branded as a Twilio product in
+  the normal purchase experience; it is an advanced “Connect Existing Number”
+  path for numbers the customer already owns.
+
+```mermaid
+flowchart TD
+    Search[Search US catalog by area code or generic contains] --> Buy[Charge credits]
+    Buy --> Reserve[Reserve phone_numbers row]
+    Reserve --> Twilio[Twilio purchase with voice and status URLs]
+    Twilio --> Ready[Purchased and configured]
+    Existing[Customer enters existing number] --> Token[Create tokenized URLs]
+    Token --> Verify[First signed webhook verifies number]
+    Verify --> Connected[Customer-owned active row]
+    Ready --> Assign[Assign row to active agent]
+    Connected --> Assign
+    Assign --> Route[Inbound routing resolves phone_numbers]
+```
 
 ### Target Users
 - Small business owners wanting AI voice agents
@@ -42,7 +72,9 @@ Enable users to purchase, manage, and use phone numbers directly from the VoiceA
 
 1. **Purchase numbers** without leaving the platform
 2. **Manage numbers** (assign to agents, activate, deactivate)
-3. **Unified experience** - user doesn't manage Twilio webhooks or voice-ws URLs directly
+3. **Unified experience** - platform-purchased numbers are configured automatically;
+   customer-owned numbers have a guided one-time URL setup until Connect Twilio
+   account is available
 4. **Cancel numbers** easily when no longer needed
 
 ---
@@ -56,9 +88,11 @@ I want to see available phone numbers for a specific country,
 So that I can choose a number that fits my business needs
 
 Acceptance Criteria:
-- User selects country from dropdown
+- Frontend exposes United States only in v1; backend accepts country-aware
+  provider search requests for future geography expansion
 - System shows available numbers with pricing
-- Search by area code possible (depending on API capabilities)
+- Search accepts a generic digits-only `contains` pattern; the same contract
+  naturally supports a prefix or suffix because the pattern may occur anywhere
 - Shows monthly cost in credits upfront
 - Maximum 50 results per query (paginated)
 ```
@@ -105,33 +139,41 @@ Acceptance Criteria:
 - View call history for number
 ```
 
-### US5: Cancel Number (No Refund)
+### US5: Release or Disconnect Number
 ```
 As a user,
-I want to cancel my subscription to a number,
-So that I stop paying for it in future billing cycles
+I want to release a platform number or disconnect an existing number,
+So that I can stop platform routing and, for platform numbers, future rental charges
 
 Acceptance Criteria:
 - One-click cancellation
+- Explicit confirmation requires typing `Release` for a platform-owned number
+  or `Disconnect` for a customer-owned number
 - No refund for current billing period (clearly communicated)
-- Number is released immediately upon cancellation
+- Platform-owned number is released immediately when the provider succeeds;
+  provider failures move the row to `release_pending` for an automatic retry
+- Customer-owned number is disconnected locally and is never released by the
+  platform
 - Warning shown if number is assigned to an active agent
-- Confirmation screen with explicit acknowledgment of no refund
+- Confirmation screen explicitly warns that release is irreversible and the
+  same number may not be available again
 - Cannot assign to new agent after cancellation
 - Clear communication that number will stop working immediately
 ```
 
-### US6: Handle Agent Disconnection on Cancel
+### US6: Handle Agent Disconnection on Release or Disconnect
 ```
 As a user,
-I want to understand what happens when I cancel a number assigned to an agent,
+I want to understand what happens when I release or disconnect a number assigned to an agent,
 So that I don't lose calls unexpectedly
 
 Acceptance Criteria:
 - Warning shown if number is assigned to an active agent
 - Option to reassign before confirming cancellation
-- If cancelled, number is released immediately (calls stop working right away)
-- Clear communication: "You will not be refunded for this billing period"
+- If a platform-owned number is released, calls stop and the current billing
+  period is not refunded
+- If a customer-owned number is disconnected, Twilio ownership and provider
+  billing remain unchanged
 - Explicit user acknowledgment required before cancellation completes
 ```
 
@@ -181,7 +223,7 @@ Acceptance Criteria:
 │    If you cancel, the number will be released immediately  │
 │    and you will not be refunded for the current period.   │
 │                                                              │
-│  [ Purchase Number ]          [Cancel]                       │
+│  [ Purchase Number ]  [Connect Existing]  [Close]           │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -189,7 +231,8 @@ Acceptance Criteria:
 ### Dashboard - Numbers Tab
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  My Phone Numbers                     [+ Buy New Number]   │
+│  My Phone Numbers             [+ Search & Purchase]        │
+│                                    [Connect Existing]      │
 │  ⚠️ You have 2 unused numbers                               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
@@ -197,7 +240,7 @@ Acceptance Criteria:
 │  │ +1 (555) 123-4567        Status: Active (used)      │  │
 │  │ Assigned to: Sales Agent                             │  │
 │  │ Monthly: 200 credits                                 │  │
-│  │ [Change] [Settings] [Cancel]                         │  │
+│  │ [Assign] [Release]                                  │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -213,20 +256,20 @@ Acceptance Criteria:
 ### Cancellation Flow
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Cancel Phone Number?                                        │
+│  Release or Disconnect Phone Number?                         │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Number: +1 (555) 123-4567                                  │
 │  Monthly Cost: 200 credits                                  │
 │                                                              │
-│  ⚠️ WARNING: This number is assigned to "Sales Agent"     │
-│  Cancelling will release the number immediately and        │
-│  calls will stop working right away.                        │
+│  ⚠️ WARNING: This number is assigned to "Sales Agent"       │
+│  Release is irreversible and the same number may not be      │
+│  available again. Calls will stop working right away.        │
 │                                                              │
-│  ☐ I understand I will not be refunded for this period     │
-│    and the number will be released immediately.             │
+│  ☐ Type RELEASE to confirm the irreversible release          │
+│    with no refund for the current billing period.             │
 │                                                              │
-│  [Keep Number]          [Cancel Number (No Refund)]          │
+│  [Keep Number]          [Release Number]                      │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -235,29 +278,37 @@ Acceptance Criteria:
 
 ## 6. Key Decisions (Finalized)
 
-### D1: Cancellation Policy ✓
-**Final Decision:** Immediate release with no refund
-- Cancel anytime → number released immediately
-- No refund for current billing period
-- Clear communication required at purchase and cancellation
-- Simpler implementation (no tracking of "marked for release" numbers)
+### D1: Cancellation and ownership policy ✓
+
+- Platform-owned number: release is irreversible, no refund for the current
+  billing period, and the UI warns that the same number may not be available
+  again.
+- Customer-owned number: “Disconnect” disables platform routing and never calls
+  Twilio's release API. Twilio ownership and the customer's provider billing
+  remain unchanged.
+- If a platform release call fails, local state is `release_pending` and the
+  daily configurable retry job attempts the provider release again.
 
 ### D2: Unassigned Numbers ✓
 - Users can buy numbers without assigning to an agent
 - Show "used" vs "unused" state in UI
 - Display unused number count on dashboard
 - Same pricing applies whether used or not
-- No auto-release (user responsibility)
+- No auto-release solely because a number is unused; unpaid platform rentals
+  are disabled during the configurable grace period and released afterward.
 
 ### D3: Search/Display Limit ✓
 - Maximum 50 results per query (pagination)
-- Not a cap on ownership - users can own unlimited numbers
-- Search filters depend on underlying API capabilities
+- Ownership remains subject to the organization's `max_phone_numbers`
+  entitlement; the search result limit is separate from the ownership limit.
+- The frontend is US-only for now. The backend forwards country-aware searches
+  to Twilio and normalizes `contains` to digits.
 
 ### D4: No Local Pool ✓
 - Direct integration with Twilio APIs; voice media via `voice-ws` Media Streams
 - No local pool management
-- Released numbers go back to provider immediately
+- Platform-owned numbers are released through Twilio; customer-owned numbers
+  are only disconnected locally and are never released by the platform.
 
 ### D5: Agent Assignment Validation
 - Prevent assigning same number to multiple agents
@@ -269,7 +320,7 @@ Acceptance Criteria:
 
 - Number porting (transferring existing numbers)
 - SMS functionality
-- International number purchasing (start with US)
+- International number purchasing in the frontend (backend search is country-aware)
 - Bulk purchases
 - Custom search filters beyond API capabilities
 
@@ -277,12 +328,12 @@ Acceptance Criteria:
 
 ## 8. Success Criteria
 
-- [ ] User can purchase a number in < 2 minutes
-- [ ] Number works with voice agent within 60 seconds
-- [ ] Cancellation completes instantly with clear messaging
-- [ ] Zero support tickets for basic setup
-- [ ] Clear communication about cancellation effects
-- [ ] Unused numbers prominently displayed on dashboard
+- [x] User can purchase a number in < 2 minutes
+- [x] Number is configured for voice callbacks during purchase
+- [x] Release/disconnect uses clear irreversible or ownership-specific messaging
+- [x] Customer-owned numbers can be connected without a platform Twilio account
+- [x] Unused numbers prominently displayed on dashboard
+- [ ] Live PSTN verification with a paid Twilio test number
 
 ---
 
@@ -291,14 +342,20 @@ Acceptance Criteria:
 ### Pricing Tiers (in credits)
 | Number Type | Monthly Cost |
 |-------------|--------------|
-| US Local | 200 credits |
-| US Toll-Free | 500 credits |
-| International | TBD |
+| Local | 200 credits by default |
+| Mobile | 200 credits by default |
+| Toll-Free | 500 credits by default |
 
 ### Credit Purchase Flow
 - Users buy credits via Stripe (existing)
-- Credits used for number purchases
-- Refunds not provided for early cancellation
+- Platform-owned numbers consume the enabled monthly system-pricing event
+  after the number has been purchased; customer-owned numbers do not consume
+  platform rental credits.
+- A failed platform purchase is refunded. Early release does not refund the
+  current rental period.
+- The backend uses the current system-pricing value at purchase and renewal;
+  the frontend displays the value returned by the API rather than hard-coding
+  it.
 
 ---
 
@@ -314,10 +371,14 @@ All endpoints require a valid JWT token in the `Authorization` header:
 Authorization: Bearer <jwt_token>
 ```
 
-Purchase, list, assign, and cancel endpoints require `check_billing_permissions` which validates:
-- User is authenticated
-- User belongs to the organization
-- Organization has billing permissions
+Search requires authentication. Purchase, import, list, assign, and release
+endpoints require organization-scoped `phone_number:*` permissions. The
+backend, not the frontend, is the authorization boundary.
+
+Platform administrators can manage rental grace and scheduler retry settings
+with `GET/PUT /api/v1/phone-numbers/admin/settings`; the settings page is
+**Platform → Phone Number Settings**. The initial defaults are a seven-day
+grace period and daily billing/release checks.
 
 ### Endpoints
 
@@ -395,7 +456,7 @@ Purchase a phone number using organization credits.
 | Header | Required | Description |
 |--------|----------|-------------|
 | Authorization | Yes | Bearer token |
-| organization_id | Yes | UUID of the organization (query param) |
+| organization_id | Yes | UUID of the organization (query parameter) |
 
 **Request Body:**
 
@@ -470,7 +531,48 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/purchase?organization_i
 
 ---
 
-#### 9.3 List Organization Phone Numbers
+#### 9.3 Connect an Existing Customer-Owned Number
+
+Register a Twilio number that the customer already owns. This does not call
+Twilio purchase or release APIs and does not create a platform rental. The
+response contains tokenized URLs; the raw connection token is not stored and
+the URLs should be copied into the customer's Twilio number configuration.
+
+**Endpoint:** `POST /api/v1/phone-numbers/import?organization_id=<org_uuid>`
+
+**Request Body:**
+
+```json
+{
+  "phone_number": "+15551234567",
+  "country_code": "US",
+  "phone_number_type": "local",
+  "agent_id": "abc12345-6789-0abc-def0-123456789abc"
+}
+```
+
+`agent_id` is optional. The number starts as `verification_required`; the
+first signed webhook with the returned token verifies it and makes it active.
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "phone_number": { "status": "verification_required", "billing_mode": "none", "management_mode": "customer_managed" },
+  "voice_url": "https://api.247ai.live/api/v1/voice/twilio/incoming?connection_token=<opaque-token>",
+  "status_callback": "https://api.247ai.live/api/v1/voice/twilio/status?connection_token=<opaque-token>",
+  "message": "Connect both URLs in Twilio, then place a test call to verify the number."
+}
+```
+
+The current v1 flow requires the customer to paste the URLs into Twilio.
+Automated configuration through a future “Connect Twilio account” flow is
+explicitly deferred.
+
+---
+
+#### 9.4 List Organization Phone Numbers
 
 Get all phone numbers owned by an organization.
 
@@ -557,11 +659,15 @@ curl -X GET "http://localhost:8000/api/v1/phone-numbers?organization_id=<org_uui
 | purchased | Number has been purchased |
 | active | Number is active and assigned to agent |
 | inactive | Number is inactive |
+| provisioning | Provider purchase is in progress |
+| verification_required | Customer-owned number awaits a signed webhook |
+| release_pending | Provider release will be retried by the scheduler |
+| disconnected | Customer-owned number is disconnected locally |
 | cancelled | Number has been cancelled/released |
 
 ---
 
-#### 9.4 Assign Phone Number to Agent
+#### 9.5 Assign Phone Number to Agent
 
 Assign a purchased phone number to a voice agent.
 
@@ -638,9 +744,11 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/123e4567-e89b-12d3-a456
 
 ---
 
-#### 9.5 Cancel Phone Number
+#### 9.6 Release or Disconnect Phone Number
 
-Cancel (release) a phone number. This will release the number immediately and calls will stop working. No refund is provided.
+For a platform-owned number, release is irreversible and stops calls. For a
+customer-owned number, this operation is a local disconnect only; the customer
+continues to own and pay Twilio.
 
 **Endpoint:** `DELETE /api/v1/phone-numbers/{phone_number_id}`
 
@@ -669,7 +777,7 @@ curl -X DELETE "http://localhost:8000/api/v1/phone-numbers/123e4567-e89b-12d3-a4
 ```json
 {
   "success": true,
-  "message": "Phone number cancelled. It is now released and calls will not work."
+  "message": "Phone number released or disconnected."
 }
 ```
 
@@ -678,20 +786,23 @@ curl -X DELETE "http://localhost:8000/api/v1/phone-numbers/123e4567-e89b-12d3-a4
 - **404 Not Found:** Phone number not found or not owned by organization
 - **400 Bad Request:** Phone number cannot be cancelled
 
-**Warning:** Cancelling a phone number will:
-- Release the number immediately from Twilio
-- Stop all incoming calls to that number
-- Not provide a refund for the current billing period
+**Warning for platform-owned numbers:** release may not be reversible, the same
+number may not be available again, calls stop, and the current billing period
+is not refunded. If Twilio release fails, the local row becomes
+`release_pending` and the daily retry scheduler continues attempting release.
+
+**Customer-owned numbers:** disconnect disables platform routing and does not
+call Twilio's release API.
 
 ---
 
 ### Credit Pricing
 
-| Number Type | Monthly Cost |
-|-------------|--------------|
-| US Local | 200 credits |
-| US Toll-Free | 500 credits |
-| US Mobile | 200 credits |
+The initial seeded defaults are 200 credits/month for local and mobile numbers
+and 500 credits/month for toll-free numbers. Platform administrators can
+change the enabled system-pricing values; search and purchase responses return
+the authoritative current value. International number purchasing is not
+exposed in the v1 frontend.
 
 ---
 

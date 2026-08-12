@@ -17,16 +17,11 @@ from .models import (
     AdminCreditGrantResponse,
     BillingHistory,
     BillingHistoryCreate,
-    BillingStatus,
     CreditBalance,
     CreditConsumptionRequest,
     CreditConsumptionResponse,
     CreditEvent,
-    CreditEventCreate,
-    CreditEventUpdate,
     CreditProduct,
-    CreditProductCreate,
-    CreditProductUpdate,
     CreditTransaction,
     CreditTransactionCreate,
     CreditTransactionsResponse,
@@ -45,7 +40,6 @@ from .models import (
     TransactionSource,
     TransactionSourceMapping,
     TransactionType,
-    UsageStats,
 )
 from .stripe_service import stripe_service
 
@@ -561,7 +555,7 @@ class BillingService:
             expires_at=expires_at,
             metadata=metadata,
             idempotency_key=idempotency_key,
-            description=f"Subscription credits allocation",
+            description="Subscription credits allocation",
         )
 
     async def reset_subscription_credits(
@@ -691,6 +685,32 @@ class BillingService:
             description=description or "Credit purchase",
         )
 
+    async def refund_credits(
+        self,
+        organization_id: UUID,
+        credits: int,
+        reason: str,
+        metadata: Optional[dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> CreditTransaction:
+        """Return credits to the purchased pool with a refunded ledger type.
+
+        Refunds are platform adjustments rather than provider transactions, so
+        they use ``admin_adjustment`` as their source and remain visible in the
+        same immutable credit ledger as the original debit.
+        """
+        if credits <= 0:
+            raise ValueError("Refund credits must be positive")
+        return await self._add_credits(
+            organization_id=organization_id,
+            credits=credits,
+            source=TransactionSource.ADMIN_ADJUSTMENT,
+            transaction_type=TransactionType.REFUNDED,
+            description=reason,
+            metadata=metadata,
+            idempotency_key=idempotency_key,
+        )
+
     async def _add_credits(
         self,
         organization_id: UUID,
@@ -702,6 +722,7 @@ class BillingService:
         description: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
         idempotency_key: Optional[str] = None,
+        transaction_type: Optional[TransactionType] = None,
     ) -> CreditTransaction:
         """Internal method to add credits to the correct pool.
 
@@ -764,12 +785,19 @@ class BillingService:
             # Validate and serialize the ledger payload before any balance
             # mutation. Pydantic's default model_dump leaves datetime objects
             # in Python mode, which Supabase cannot encode as JSON.
+            if idempotency_key:
+                metadata = dict(metadata or {})
+                metadata["grant_key"] = idempotency_key
+
             transaction_data = CreditTransactionCreate(
                 organization_id=organization_id,
                 transaction_type=(
-                    TransactionType.EARNED
-                    if source == TransactionSource.SUBSCRIPTION
-                    else TransactionType.PURCHASED
+                    transaction_type
+                    or (
+                        TransactionType.EARNED
+                        if source == TransactionSource.SUBSCRIPTION
+                        else TransactionType.PURCHASED
+                    )
                 ),
                 amount=credits,
                 source=source,
@@ -1037,6 +1065,35 @@ class BillingService:
         recorded in transaction metadata for audit.
         """
         try:
+            if (
+                consumption_request.idempotency_key
+                and consumption_request.event_name.startswith("phone_number_")
+            ):
+                return await self._consume_phone_number_credits_atomic(
+                    consumption_request
+                )
+
+            if consumption_request.idempotency_key:
+                existing_result = (
+                    self.supabase.table("credit_transactions")
+                    .select("*")
+                    .eq("organization_id", str(consumption_request.organization_id))
+                    .contains(
+                        "metadata",
+                        {"idempotency_key": consumption_request.idempotency_key},
+                    )
+                    .limit(1)
+                    .execute()
+                )
+                if existing_result.data:
+                    existing = CreditTransaction(**existing_result.data[0])
+                    return CreditConsumptionResponse(
+                        success=True,
+                        credits_consumed=abs(existing.amount),
+                        balance_after=existing.balance_after,
+                        transaction_id=existing.id,
+                    )
+
             # Get credit event details
             event_result = (
                 self.supabase.table("credit_events")
@@ -1108,6 +1165,10 @@ class BillingService:
 
             # Record per-pool allocation for audit
             consumption_metadata = dict(consumption_request.metadata or {})
+            if consumption_request.idempotency_key:
+                consumption_metadata["idempotency_key"] = (
+                    consumption_request.idempotency_key
+                )
             consumption_metadata["plan_credits"] = plan_used
             consumption_metadata["admin_credits"] = admin_used
             consumption_metadata["purchased_credits"] = purchased_used
@@ -1194,6 +1255,76 @@ class BillingService:
         except Exception as e:
             logger.error(f"Error consuming credits: {e}")
             raise
+
+    async def _consume_phone_number_credits_atomic(
+        self, consumption_request: CreditConsumptionRequest
+    ) -> CreditConsumptionResponse:
+        """Consume a phone rental exactly once inside a Postgres transaction.
+
+        Phone-number purchase retries must not debit twice when two requests
+        with the same idempotency key arrive concurrently. The dedicated RPC
+        locks the organization row, checks the key, updates all credit pools,
+        and inserts the ledger row before returning.
+        """
+        event_result = (
+            self.supabase.table("credit_events")
+            .select("*")
+            .eq("name", consumption_request.event_name)
+            .eq("is_active", True)
+            .execute()
+        )
+        if not event_result.data:
+            raise ValueError(
+                f"Credit event '{consumption_request.event_name}' not found or inactive"
+            )
+
+        credit_event = CreditEvent(**event_result.data[0])
+        credits_needed = credit_event.credit_cost * consumption_request.quantity
+        rpc_result = self.supabase.rpc(
+            "consume_phone_number_credits",
+            {
+                "p_organization_id": str(consumption_request.organization_id),
+                "p_credit_event_id": str(credit_event.id),
+                "p_credits_needed": credits_needed,
+                "p_idempotency_key": consumption_request.idempotency_key,
+                "p_phone_number": str(
+                    (consumption_request.metadata or {}).get("phone_number", "")
+                ),
+                "p_purpose": (consumption_request.metadata or {}).get(
+                    "purpose", "phone_number_purchase"
+                ),
+            },
+        ).execute()
+        payload = rpc_result.data
+        if isinstance(payload, list):
+            payload = payload[0] if payload else {}
+        payload = payload or {}
+        if not payload.get("success"):
+            if payload.get("error") == "organization_not_found":
+                raise ValueError(
+                    f"Organization {consumption_request.organization_id} not found"
+                )
+            return CreditConsumptionResponse(
+                success=False,
+                credits_consumed=0,
+                balance_after=int(payload.get("balance_after") or 0),
+                transaction_id=UUID("00000000-0000-0000-0000-000000000000"),
+            )
+
+        transaction_id = UUID(str(payload["transaction_id"]))
+        balance_after = int(payload.get("balance_after") or 0)
+        if not payload.get("already_recorded"):
+            await self.enqueue_low_credit_notification(
+                consumption_request.organization_id,
+                transaction_id,
+                balance_after,
+            )
+        return CreditConsumptionResponse(
+            success=True,
+            credits_consumed=int(payload.get("credits_consumed") or credits_needed),
+            balance_after=balance_after,
+            transaction_id=transaction_id,
+        )
 
     async def enqueue_low_credit_notification(
         self,

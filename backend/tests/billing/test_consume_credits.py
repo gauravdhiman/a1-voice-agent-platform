@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from src.billing.credit_entitlement_service import credit_entitlement_service
-from src.billing.models import CreditConsumptionRequest
+from src.billing.models import CreditConsumptionRequest, TransactionType
 from src.billing.service import BillingService
 from src.notifications.service import notification_service
 from src.organization.member_models import MemberRole, OrganizationMember
@@ -29,15 +29,15 @@ def sample_org_id():
     return uuid4()
 
 
-def _event_response(cost: int = 10):
-    """Build a credit_events query response for 'voice_call_minute'."""
+def _event_response(cost: int = 10, name: str = "voice_call_minute"):
+    """Build a credit_events query response for one enabled event."""
     event_id = uuid4()
     now = datetime.now(timezone.utc).isoformat()
     return MagicMock(
         data=[
             {
                 "id": str(event_id),
-                "name": "voice_call_minute",
+                "name": name,
                 "credit_cost": cost,
                 "is_active": True,
                 "category": "voice",
@@ -105,6 +105,7 @@ def _setup_consume_mocks(mock_supabase_client, table_effects, debit_payload):
     table_mock.limit.return_value = table_mock
     table_mock.update.return_value = table_mock
     table_mock.insert.return_value = table_mock
+    table_mock.contains.return_value = table_mock
     table_mock.limit.return_value = table_mock
     table_mock.execute.side_effect = table_effects
     mock_supabase_client.table.return_value = table_mock
@@ -113,6 +114,88 @@ def _setup_consume_mocks(mock_supabase_client, table_effects, debit_payload):
     rpc_mock.execute.return_value = MagicMock(data=debit_payload)
     mock_supabase_client.rpc.return_value = rpc_mock
     return table_mock, rpc_mock
+
+
+@pytest.mark.asyncio
+async def test_consume_credits_reuses_idempotent_debit(
+    billing_service, mock_supabase_client, sample_org_id
+):
+    """A retried purchase debit returns the original ledger transaction."""
+    transaction_id = uuid4()
+    table_mock, rpc_mock = _setup_consume_mocks(
+        mock_supabase_client,
+        [_event_response(cost=200, name="phone_number_local_month")],
+        {
+            "success": True,
+            "already_recorded": True,
+            "transaction_id": str(transaction_id),
+            "balance_after": 800,
+        },
+    )
+
+    result = await billing_service.consume_credits(
+        CreditConsumptionRequest(
+            organization_id=sample_org_id,
+            event_name="phone_number_local_month",
+            idempotency_key="purchase-key",
+        )
+    )
+
+    assert result.success is True
+    assert result.credits_consumed == 200
+    assert result.balance_after == 800
+    rpc_mock.execute.assert_called_once()
+    table_mock.insert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_refund_credits_writes_refunded_ledger_entry(
+    billing_service, mock_supabase_client, sample_org_id
+):
+    """A failed phone purchase is returned as a typed, auditable refund."""
+    transaction = {
+        "id": str(uuid4()),
+        "organization_id": str(sample_org_id),
+        "transaction_type": "refunded",
+        "amount": 200,
+        "balance_after": 900,
+        "source": "admin_adjustment",
+        "description": "Phone-number purchase failed",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.contains.return_value = table
+    table.limit.return_value = table
+    table.execute.return_value = MagicMock(data=[transaction])
+    table.insert.return_value.execute.return_value = MagicMock(data=[transaction])
+    mock_supabase_client.table.return_value = table
+    mock_supabase_client.rpc.return_value = MagicMock(
+        execute=MagicMock(
+            return_value=MagicMock(
+                data={
+                    "success": True,
+                    "balance_after": 900,
+                    "plan_used": 0,
+                    "admin_used": 0,
+                    "purchased_used": 0,
+                }
+            )
+        )
+    )
+
+    result = await billing_service.refund_credits(
+        organization_id=sample_org_id,
+        credits=200,
+        reason="Phone-number purchase failed",
+        metadata={"phone_number": "+14155550100"},
+    )
+
+    assert result.transaction_type == TransactionType.REFUNDED
+    inserted = table.insert.call_args.args[0]
+    assert inserted["transaction_type"] == "refunded"
+    assert inserted["amount"] == 200
 
 
 @pytest.mark.asyncio

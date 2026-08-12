@@ -200,10 +200,15 @@ class ApiClient {
     return response.blob();
   }
 
-  async post<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
+  async post<T>(
+    endpoint: string,
+    data?: unknown,
+    options: Pick<RequestInit, "headers"> = {},
+  ): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: "POST",
       body: data ? JSON.stringify(data) : undefined,
+      ...options,
     });
   }
 
@@ -221,8 +226,11 @@ class ApiClient {
     });
   }
 
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: "DELETE" });
+  async delete<T>(
+    endpoint: string,
+    options: Pick<RequestInit, "headers"> = {},
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: "DELETE", ...options });
   }
 }
 

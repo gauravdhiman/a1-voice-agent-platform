@@ -105,6 +105,38 @@ class MaxAgentsHandler(MaxCountHandler):
     count_table = "voice_agents"
 
 
+class MaxPhoneNumbersHandler(MaxCountHandler):
+    """Count all non-terminal platform and customer phone-number rows."""
+
+    count_table = "phone_numbers"
+
+    async def _current_count(self, org_id: UUID) -> int:
+        client = self._client()
+        if client is None:
+            return 0
+        result = (
+            client.table(self.count_table)
+            .select("id", count="exact")
+            .eq(self.count_column, str(org_id))
+            .in_(
+                "status",
+                [
+                    "provisioning",
+                    "purchased",
+                    "active",
+                    "verification_required",
+                    "release_pending",
+                ],
+            )
+            .execute()
+        )
+        if getattr(result, "count", None) is not None:
+            count = result.count
+            if isinstance(count, int):
+                return count
+        return len(result.data or [])
+
+
 class ConcurrentCallsHandler(MaxCountHandler):
     """Count in-progress voice calls for concurrent session limits."""
 
@@ -161,7 +193,11 @@ class FeatureFlagHandler(EntitlementHandler):
         return LimitCheckResult(
             allowed=enabled,
             code=resolved.key.upper(),
-            message=None if enabled else f"Feature '{resolved.key}' is not enabled on your plan.",
+            message=(
+                None
+                if enabled
+                else f"Feature '{resolved.key}' is not enabled on your plan."
+            ),
         )
 
 
@@ -182,7 +218,12 @@ def get_handler(
     """Instantiate handler; specialize max_agents when keyed generically."""
     if handler_key == "limit.max_count" and entitlement_key == "max_agents":
         return MaxAgentsHandler(supabase=supabase)
-    if handler_key in {"limit.max_count", "limit.concurrent"} and entitlement_key == "max_concurrent_calls":
+    if handler_key == "limit.max_count" and entitlement_key == "max_phone_numbers":
+        return MaxPhoneNumbersHandler(supabase=supabase)
+    if (
+        handler_key in {"limit.max_count", "limit.concurrent"}
+        and entitlement_key == "max_concurrent_calls"
+    ):
         return ConcurrentCallsHandler(supabase=supabase)
     handler_cls = HANDLERS.get(handler_key)
     if handler_cls is None:
