@@ -70,6 +70,23 @@ class PlanInterval(str, Enum):
     ANNUAL = "annual"
 
 
+class CreditEventMeterType(str, Enum):
+    """What kind of usage quantity drives a credit event."""
+
+    COUNT = "count"
+    DURATION = "duration"
+    STORAGE = "storage"
+
+
+class CreditEventBillingUnit(str, Enum):
+    """The interval or unit used to price a credit event."""
+
+    EVENT = "event"
+    MINUTE = "minute"
+    DAY = "day"
+    MONTH = "month"
+
+
 # Subscription Plan Models
 class SubscriptionPlanBase(BaseModel):
     """Base model for subscription plans."""
@@ -182,6 +199,8 @@ class CreditEventBase(BaseModel):
     category: str = Field(..., min_length=1, max_length=50)
     is_active: bool = Field(default=True)
     metadata: Optional[dict[str, Any]] = None
+    meter_type: CreditEventMeterType = CreditEventMeterType.COUNT
+    billing_unit: CreditEventBillingUnit = CreditEventBillingUnit.EVENT
 
 
 class CreditEventCreate(CreditEventBase):

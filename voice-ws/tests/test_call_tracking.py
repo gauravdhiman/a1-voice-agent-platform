@@ -4,7 +4,11 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from src.call_tracking import end_call_tracking, start_call_tracking
+from src.call_tracking import (
+    _bill_completed_call,
+    end_call_tracking,
+    start_call_tracking,
+)
 
 
 class _Query:
@@ -53,7 +57,7 @@ class _Query:
                 [
                     {
                         "id": str(self.client.event_id),
-                        "credit_cost": 10,
+                        "credit_cost": self.client.event_cost,
                     }
                 ]
             )
@@ -74,15 +78,7 @@ class _Rpc:
 
     def execute(self):
         self.client.rpc_payload = self.client.rpc_args
-        return _Result(
-            {
-                "success": True,
-                "balance_after": 80,
-                "plan_used": 20,
-                "purchased_used": 0,
-                "transaction_id": str(self.client.transaction_id),
-            }
-        )
+        return _Result(self.client.rpc_result)
 
 
 class _Result:
@@ -100,6 +96,14 @@ class _Client:
         self.inserts = []
         self.rpc_args = None
         self.rpc_payload = None
+        self.event_cost = 10
+        self.rpc_result = {
+            "success": True,
+            "balance_after": 80,
+            "plan_used": 20,
+            "purchased_used": 0,
+            "transaction_id": str(self.transaction_id),
+        }
 
     def table(self, table: str):
         return _Query(self, table)
@@ -159,3 +163,57 @@ async def test_end_call_tracking_records_duration_and_credit_transaction():
         if table == "call_logs" and "duration" in payload
     ]
     assert duration_updates[0]["duration"] >= 60
+
+
+@pytest.mark.asyncio
+async def test_completed_call_settles_full_usage_when_rpc_reports_overdraft():
+    """An admitted call is linked even when final settlement crosses zero."""
+    client = _Client()
+    client.rpc_result = {
+        "success": True,
+        "balance_after": -20,
+        "plan_used": 0,
+        "admin_used": 0,
+        "purchased_used": 0,
+        "overdraft_used": 20,
+        "transaction_id": str(client.transaction_id),
+    }
+
+    await _bill_completed_call(
+        client,
+        call_log_id="call-log-1",
+        organization_id=client.organization_id,
+        duration_seconds=61,
+    )
+
+    usage_updates = [
+        payload
+        for table, payload in client.updates
+        if table == "call_logs" and "credits_consumed" in payload
+    ]
+    assert usage_updates == [
+        {
+            "credits_consumed": 20,
+            "credit_transaction_id": str(client.transaction_id),
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_completed_call_with_zero_rate_is_recorded_without_a_debit():
+    """A zero voice rate leaves the call free while preserving call usage."""
+    client = _Client()
+    client.event_cost = 0
+
+    await _bill_completed_call(
+        client,
+        call_log_id="call-log-1",
+        organization_id=client.organization_id,
+        duration_seconds=61,
+    )
+
+    assert client.rpc_payload is None
+    assert any(
+        table == "call_logs" and payload.get("credits_consumed") == 0
+        for table, payload in client.updates
+    )

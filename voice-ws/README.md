@@ -8,6 +8,11 @@ Cartesia/Fish pipeline (direct providers only).
 The legacy LiveKit **`worker/`** package was removed from the repo; git history
 retains it for reference only.
 
+At call teardown, this worker rounds connected duration up to whole minutes and
+settles the complete charge through the atomic billing RPC. An admitted call is
+allowed to finish even if the final settlement creates a temporary negative
+balance; the backend then blocks new calls until credits are restored.
+
 ## Architecture
 
 ```mermaid

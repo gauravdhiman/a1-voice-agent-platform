@@ -2,16 +2,13 @@
 Phone Number Service Tests
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from shared.organization.phone_number_models import (
-    PhoneNumberStatus,
-    PhoneNumberType,
-)
+from shared.organization.phone_number_models import PhoneNumberStatus, PhoneNumberType
 
 
 @pytest.fixture
@@ -200,10 +197,9 @@ class TestPhoneNumberServicePurchase:
         sample_phone_number_id,
     ):
         """Purchases a phone number successfully."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberPurchaseRequest,
-        )
         from src.billing.models import CreditBalance
+
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
 
         now = datetime.now(timezone.utc)
 
@@ -214,7 +210,7 @@ class TestPhoneNumberServicePurchase:
             return_value=mock_balance
         )
         phone_number_service.billing_service.consume_credits = AsyncMock(
-            return_value=MagicMock(success=True, remaining_credits=800)
+            return_value=MagicMock(success=True, balance_after=800)
         )
 
         with patch.object(phone_number_service, "twilio_service") as mock_twilio:
@@ -245,7 +241,9 @@ class TestPhoneNumberServicePurchase:
                     "updated_at": now.isoformat(),
                 }
             ]
-            mock_supabase_client.table.return_value.insert.return_value.execute.return_value = mock_response
+            mock_supabase_client.table.return_value.insert.return_value.execute.return_value = (
+                mock_response
+            )
 
             request = PhoneNumberPurchaseRequest(
                 phone_number="+15551234567",
@@ -262,16 +260,83 @@ class TestPhoneNumberServicePurchase:
             assert result.success is True
             assert result.phone_number.phone_number == "+15551234567"
             assert result.credit_balance_after == 800
+            consume_request = (
+                phone_number_service.billing_service.consume_credits.call_args.args[0]
+            )
+            assert consume_request.event_name == "phone_number_local_month"
+
+    @pytest.mark.asyncio
+    async def test_purchase_uses_current_system_rate_and_balance(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """Purchase uses the configured system rate instead of a code constant."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        now = datetime.now(timezone.utc)
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=123)
+        phone_number_service.billing_service.get_credit_balance = AsyncMock(
+            return_value=MagicMock(total_credits=1000)
+        )
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=877)
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+            mock_twilio.purchase_phone_number.return_value = MagicMock(
+                sid="PN1234567890", phone_number="+15551234567"
+            )
+            mock_response = MagicMock()
+            mock_response.data = [
+                {
+                    "id": str(sample_phone_number_id),
+                    "organization_id": str(sample_org_id),
+                    "phone_number": "+15551234567",
+                    "provider": "twilio",
+                    "provider_sid": "PN1234567890",
+                    "phone_number_type": "local",
+                    "country_code": "US",
+                    "monthly_cost_credits": 123,
+                    "status": "purchased",
+                    "assigned_agent_id": None,
+                    "is_incoming_enabled": True,
+                    "is_outgoing_enabled": False,
+                    "purchased_at": now.isoformat(),
+                    "cancelled_at": None,
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                }
+            ]
+            mock_supabase_client.table.return_value.insert.return_value.execute.return_value = (
+                mock_response
+            )
+
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+            )
+
+        assert error is None
+        assert result is not None
+        assert result.credit_balance_after == 877
+        consume_request = (
+            phone_number_service.billing_service.consume_credits.call_args.args[0]
+        )
+        assert consume_request.event_name == "phone_number_local_month"
+        assert consume_request.metadata["cost"] == 123
 
     @pytest.mark.asyncio
     async def test_purchase_number_insufficient_credits(
         self, phone_number_service, sample_org_id
     ):
         """Fails purchase when organization has insufficient credits."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberPurchaseRequest,
-        )
         from src.billing.models import CreditBalance
+
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
 
         mock_balance = MagicMock()
         mock_balance.total_credits = 100
@@ -301,9 +366,7 @@ class TestPhoneNumberServicePurchase:
         self, phone_number_service, sample_org_id
     ):
         """Fails purchase when Twilio is not configured."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberPurchaseRequest,
-        )
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
 
         with patch.object(phone_number_service, "twilio_service") as mock_twilio:
             mock_twilio.is_configured.return_value = False
@@ -432,7 +495,9 @@ class TestPhoneNumberServiceGetOrganizationNumbers:
         mock_response = MagicMock()
         mock_response.data = []
 
-        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         result, error = await phone_number_service.get_organization_numbers(
             sample_org_id
@@ -455,9 +520,7 @@ class TestPhoneNumberServiceAssignToAgent:
         sample_agent_id,
     ):
         """Assigns phone number to agent successfully."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberAssignRequest,
-        )
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
 
         now = datetime.now(timezone.utc)
 
@@ -515,7 +578,9 @@ class TestPhoneNumberServiceAssignToAgent:
             mock_agent_response,
             mock_update_response,
         ]
-        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = mock_update_response
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            mock_update_response
+        )
 
         request = PhoneNumberAssignRequest(agent_id=sample_agent_id)
 
@@ -533,14 +598,14 @@ class TestPhoneNumberServiceAssignToAgent:
         self, phone_number_service, mock_supabase_client, sample_phone_number_id
     ):
         """Returns error when phone number not found."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberAssignRequest,
-        )
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
 
         mock_response = MagicMock()
         mock_response.data = []
 
-        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         request = PhoneNumberAssignRequest(agent_id=uuid4())
 
@@ -559,9 +624,7 @@ class TestPhoneNumberServiceAssignToAgent:
         sample_phone_number_id,
     ):
         """Returns error when phone number is already assigned."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberAssignRequest,
-        )
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
 
         now = datetime.now(timezone.utc)
 
@@ -588,7 +651,9 @@ class TestPhoneNumberServiceAssignToAgent:
             }
         ]
 
-        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         request = PhoneNumberAssignRequest(agent_id=uuid4())
 
@@ -607,9 +672,7 @@ class TestPhoneNumberServiceAssignToAgent:
         sample_phone_number_id,
     ):
         """Returns error when agent not found."""
-        from shared.organization.phone_number_models import (
-            PhoneNumberAssignRequest,
-        )
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
 
         now = datetime.now(timezone.utc)
 
@@ -723,7 +786,7 @@ class TestPhoneNumberServiceCancel:
         # Use side_effect to directly return data - this bypasses the mock chain issue
         mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
             MagicMock(data=select_data),
-            MagicMock(data=update_data)
+            MagicMock(data=update_data),
         ]
 
         with patch.object(phone_number_service, "twilio_service") as mock_twilio:
@@ -750,7 +813,9 @@ class TestPhoneNumberServiceCancel:
         mock_response.data = []
 
         # Set the return value on the execute mock
-        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         result, error = await phone_number_service.cancel_number(sample_phone_number_id)
 
@@ -790,7 +855,9 @@ class TestPhoneNumberServiceCancel:
             }
         ]
 
-        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            mock_response
+        )
 
         result, error = await phone_number_service.cancel_number(sample_phone_number_id)
 
@@ -801,22 +868,101 @@ class TestPhoneNumberServiceCancel:
 class TestPhoneNumberServiceGetCreditsForType:
     """Test cases for credit cost calculation."""
 
-    def test_credits_for_local_number(self, phone_number_service):
+    @pytest.mark.asyncio
+    async def test_credits_for_local_number(self, phone_number_service):
         """Returns correct credits for local number."""
-        result = phone_number_service._get_credits_for_type(PhoneNumberType.LOCAL)
+        result = await phone_number_service._get_credits_for_type(PhoneNumberType.LOCAL)
         assert result == 200
 
-    def test_credits_for_toll_free_number(self, phone_number_service):
+    @pytest.mark.asyncio
+    async def test_credits_for_toll_free_number(self, phone_number_service):
         """Returns correct credits for toll-free number."""
-        result = phone_number_service._get_credits_for_type(PhoneNumberType.TOLL_FREE)
+        result = await phone_number_service._get_credits_for_type(
+            PhoneNumberType.TOLL_FREE
+        )
         assert result == 500
 
-    def test_credits_for_mobile_number(self, phone_number_service):
+    @pytest.mark.asyncio
+    async def test_credits_for_mobile_number(self, phone_number_service):
         """Returns correct credits for mobile number."""
-        result = phone_number_service._get_credits_for_type(PhoneNumberType.MOBILE)
+        result = await phone_number_service._get_credits_for_type(
+            PhoneNumberType.MOBILE
+        )
         assert result == 200
 
-    def test_credits_for_unknown_type(self, phone_number_service):
-        """Returns default credits for unknown type."""
-        result = phone_number_service._get_credits_for_type(None)
-        assert result == 200
+    @pytest.mark.asyncio
+    async def test_credits_for_unknown_type(self, phone_number_service):
+        """Rejects an unknown phone-number type instead of guessing a price."""
+        with pytest.raises(KeyError):
+            await phone_number_service._get_credits_for_type(None)
+
+
+class TestPhoneNumberRentalBilling:
+    """Tests for recurring monthly phone-number rental enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_process_due_rentals_charges_current_system_rate(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_purchased_phone_number,
+    ):
+        """A due number is charged using the current configured monthly rate."""
+        due_at = datetime.now(timezone.utc) - timedelta(days=1)
+        row = {
+            **sample_purchased_phone_number,
+            "next_billing_at": due_at.isoformat(),
+            "billing_status": "active",
+        }
+        table = MagicMock()
+        mock_supabase_client.table.return_value = table
+        table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=321)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=679)
+        )
+
+        result = await phone_number_service.process_due_rentals()
+
+        assert result.charged == 1
+        consume_request = (
+            phone_number_service.billing_service.consume_credits.call_args.args[0]
+        )
+        assert consume_request.event_name == "phone_number_local_month"
+        assert consume_request.metadata["cost"] == 321
+        update_data = table.update.call_args.args[0]
+        assert update_data["monthly_cost_credits"] == 321
+        assert update_data["billing_status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_process_due_rentals_enters_grace_when_balance_is_insufficient(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_purchased_phone_number,
+    ):
+        """A failed renewal keeps the Twilio number during the grace window."""
+        due_at = datetime.now(timezone.utc) - timedelta(days=1)
+        row = {
+            **sample_purchased_phone_number,
+            "next_billing_at": due_at.isoformat(),
+            "billing_status": "active",
+        }
+        table = MagicMock()
+        mock_supabase_client.table.return_value = table
+        table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=321)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=False, balance_after=0)
+        )
+
+        result = await phone_number_service.process_due_rentals()
+
+        assert result.past_due == 1
+        update_data = table.update.call_args.args[0]
+        assert update_data["billing_status"] == "past_due"
+        assert update_data["billing_grace_ends_at"] is not None

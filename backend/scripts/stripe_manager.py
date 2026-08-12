@@ -630,55 +630,39 @@ class StripeManager:
         )
 
     def seed_credit_events(self, dry_run: bool = False):
-        """Seed default credit events."""
+        """Seed the finite system usage-pricing catalog."""
         credit_events = [
             {
-                "name": "api_call_basic",
-                "description": "Basic API call",
-                "credit_cost": 1,
-                "category": "api_call",
-            },
-            {
-                "name": "api_call_premium",
-                "description": "Premium API call with advanced features",
-                "credit_cost": 5,
-                "category": "api_call",
-            },
-            {
-                "name": "storage_gb_month",
-                "description": "Storage per GB per month",
+                "name": "voice_call_minute",
+                "description": "A connected voice call is charged for each whole minute, rounded up.",
                 "credit_cost": 10,
-                "category": "storage",
+                "category": "voice",
+                "meter_type": "duration",
+                "billing_unit": "minute",
             },
             {
-                "name": "compute_hour",
-                "description": "Compute processing per hour",
-                "credit_cost": 100,
-                "category": "compute",
-            },
-            {
-                "name": "ai_inference",
-                "description": "AI model inference call",
-                "credit_cost": 25,
-                "category": "ai",
-            },
-            {
-                "name": "data_export",
-                "description": "Data export operation",
-                "credit_cost": 50,
-                "category": "data",
-            },
-            {
-                "name": "webhook_delivery",
-                "description": "Webhook delivery attempt",
-                "credit_cost": 2,
-                "category": "api_call",
-            },
-            {
-                "name": "phone_number_purchase",
-                "description": "Purchase of a phone number (local, toll-free, or mobile)",
-                "credit_cost": 0,
+                "name": "phone_number_local_month",
+                "description": "An active local phone number is charged once for each rental month.",
+                "credit_cost": 200,
                 "category": "phone_number",
+                "meter_type": "count",
+                "billing_unit": "month",
+            },
+            {
+                "name": "phone_number_mobile_month",
+                "description": "An active mobile phone number is charged once for each rental month.",
+                "credit_cost": 200,
+                "category": "phone_number",
+                "meter_type": "count",
+                "billing_unit": "month",
+            },
+            {
+                "name": "phone_number_toll_free_month",
+                "description": "An active toll-free phone number is charged once for each rental month.",
+                "credit_cost": 500,
+                "category": "phone_number",
+                "meter_type": "count",
+                "billing_unit": "month",
             },
         ]
 

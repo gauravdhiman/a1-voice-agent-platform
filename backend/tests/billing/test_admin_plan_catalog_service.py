@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 from src.billing.admin_plan_models import (
+    CreditEventAdminUpdate,
     EntitlementDefinitionUpdate,
     PlanProductCreate,
     PlanVersionDraftCreate,
@@ -105,6 +106,23 @@ def _entitlement_def_row(key="max_agents"):
     }
 
 
+def _credit_event_row(name="voice_call_minute"):
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": str(uuid4()),
+        "name": name,
+        "description": "One connected voice-call minute",
+        "credit_cost": 10,
+        "category": "voice",
+        "is_active": True,
+        "metadata": None,
+        "meter_type": "duration",
+        "billing_unit": "minute",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 class TestAdminPlanCatalogService:
     """Unit tests for catalog service methods."""
 
@@ -154,6 +172,46 @@ class TestAdminPlanCatalogService:
         with pytest.raises(ValueError, match="No fields"):
             await catalog_service.update_entitlement_definition(
                 "max_agents", EntitlementDefinitionUpdate()
+            )
+
+    @pytest.mark.asyncio
+    async def test_list_credit_events_returns_only_system_pricing_configuration(
+        self, catalog_service, mock_supabase_client
+    ):
+        mock_supabase_client.table.return_value.select.return_value.in_.return_value.order.return_value.order.return_value.execute.return_value = MagicMock(
+            data=[_credit_event_row()]
+        )
+
+        result = await catalog_service.list_credit_events()
+
+        assert result[0].name == "voice_call_minute"
+        assert result[0].billing_unit.value == "minute"
+
+    @pytest.mark.asyncio
+    async def test_update_credit_event_persists_cost_without_editable_metering(
+        self, catalog_service, mock_supabase_client
+    ):
+        updated = _credit_event_row()
+        updated["credit_cost"] = 0
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[updated]
+        )
+
+        result = await catalog_service.update_credit_event(
+            "voice_call_minute",
+            CreditEventAdminUpdate(credit_cost=0),
+        )
+
+        assert result.credit_cost == 0
+        mock_supabase_client.table.return_value.update.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_update_credit_event_rejects_non_system_activity(
+        self, catalog_service
+    ):
+        with pytest.raises(ValueError, match="must be a supported system pricing event"):
+            await catalog_service.update_credit_event(
+                "api_call_basic", CreditEventAdminUpdate(credit_cost=1)
             )
 
     @pytest.mark.asyncio

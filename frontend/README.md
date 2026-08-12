@@ -2,6 +2,11 @@
 
 Next.js frontend for the multi-tenant SaaS platform.
 
+Platform-admin plan configuration is consolidated under **Plan Catalog**. Its
+**Usage pricing** tab shows the finite system-wide voice-minute and monthly
+phone-number rates, with URL-deep-linkable tabs and explanations for each
+runtime-owned billing rule.
+
 ## 🚀 Getting Started
 
 ### Prerequisites

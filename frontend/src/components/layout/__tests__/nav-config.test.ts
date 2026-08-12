@@ -160,7 +160,7 @@ describe("nav-config", () => {
     expect(names).toContain("Voice Presets");
     expect(names).toContain("Notifications");
     expect(names).toContain("Plan Catalog");
-    expect(names).toContain("Entitlements");
+    expect(names).not.toContain("Entitlements");
   });
 
   it("SECTION_ROLES maps every nav section to a role or null", () => {

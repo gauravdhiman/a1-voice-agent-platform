@@ -471,6 +471,31 @@ Tracks usage of embed call buttons for analytics and rate limiting.
 
 ---
 
+### phone_numbers
+
+Stores Twilio numbers owned by an organization and the state needed for
+system-wide monthly rental billing.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Number record |
+| organization_id | UUID | NOT NULL, FK → organizations.id | Owning organization |
+| phone_number | VARCHAR(20) | NOT NULL | E.164 number |
+| phone_number_type | VARCHAR(20) | NOT NULL | local, mobile, or toll_free |
+| monthly_cost_credits | INTEGER | NOT NULL, >= 0 | Current system monthly rate |
+| status | VARCHAR(20) | NOT NULL | purchased, active, or cancelled |
+| billing_status | VARCHAR(20) | NOT NULL, DEFAULT active | active or past_due |
+| next_billing_at | TIMESTAMPTZ | NULLABLE | Next monthly rental due date |
+| billing_grace_ends_at | TIMESTAMPTZ | NULLABLE | Past-due release deadline |
+| provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio SID |
+| purchased_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Purchase timestamp |
+| cancelled_at | TIMESTAMPTZ | NULLABLE | Release timestamp |
+
+The phone-rental scheduler checks due rows daily, retries failed debits during
+the seven-day grace period, and releases the Twilio number after grace expiry.
+
+---
+
 ### call_logs
 
 Tracks voice sessions for organization reporting and concurrent-call limits.
@@ -594,19 +619,30 @@ Tracks organization subscription status.
 
 ### credit_events
 
-Defines events and their credit costs.
+Defines platform activities and the credit rate/usage interval used when they
+are metered. Platform admins edit this catalog in the Plan Catalog → Usage
+pricing tab; the catalog is not organization-specific.
 
 | Column      | Type         | Constraints             | Description                                |
 | ----------- | ------------ | ----------------------- | ------------------------------------------ |
 | id          | UUID         | PRIMARY KEY             | Unique event identifier                    |
 | name        | VARCHAR(100) | NOT NULL, UNIQUE        | Event name                                 |
 | description | TEXT         | NULLABLE                | Event description                          |
-| credit_cost | INTEGER      | NOT NULL                | Credit cost per event                      |
-| category    | VARCHAR(50)  | NOT NULL                | Category: api_call, storage, compute, etc. |
-| is_active   | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Event active status                        |
+| credit_cost | INTEGER      | NOT NULL, >= 0          | Credits per configured usage unit; zero means free |
+| category    | VARCHAR(50)  | NOT NULL                | Category: voice or phone_number for supported system pricing |
+| is_active   | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Whether the activity is available for charging |
+| meter_type  | VARCHAR(20)  | NOT NULL, DEFAULT count | Runtime-owned measure: count, duration, or storage — migration 20260811000001 |
+| billing_unit | VARCHAR(20) | NOT NULL, DEFAULT event | Charge interval: event, minute, day, or month — migration 20260811000001 |
 | metadata    | JSONB        | NULLABLE                | Additional metadata                        |
 | created_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                         |
 | updated_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                      |
+
+**Meter/unit compatibility:** `count` uses `event` or `month`, `duration` uses
+`minute`, and `storage` uses `day` or `month`. The active system catalog
+contains `voice_call_minute` (duration/minute) plus local, mobile, and
+toll-free phone-number rentals (count/month). Generic API, compute, export, and
+recording-storage rows are not active system prices. Recording retention is
+currently a free plan feature.
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -644,6 +680,36 @@ Tracks all credit movements.
 
 - `idx_credit_transactions_org_id`
 - `idx_credit_transactions_created_at`
+
+### credit_notification_outbox
+
+Durable low-credit evaluation work created after a successful credit debit. The
+row is processed by the notification scheduler and remains pending when a
+provider or database failure requires retry.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Outbox row identifier |
+| organization_id | UUID | NOT NULL, FK → organizations.id | Organization whose balance changed |
+| credit_transaction_id | UUID | NOT NULL, UNIQUE, FK → credit_transactions.id | Idempotent source debit |
+| balance_after | INTEGER | NOT NULL | Combined balance used for threshold evaluation; may be negative after final-call settlement |
+| attempt_count | INTEGER | NOT NULL, DEFAULT 0 | Outbox processing attempts |
+| last_attempt_at | TIMESTAMPTZ | NULLABLE | Most recent processing attempt |
+| last_error | TEXT | NULLABLE | Retry diagnostic |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Queue insertion time |
+| processed_at | TIMESTAMPTZ | NULLABLE | Completion time; NULL means pending |
+
+**Foreign Keys**:
+
+- `organization_id` → `organizations.id` (CASCADE)
+- `credit_transaction_id` → `credit_transactions.id` (CASCADE)
+
+**RLS**: Enabled; service-role workers process rows after route-level access
+checks.
+
+**Indexes**: `ix_credit_notification_outbox_pending` on `(processed_at,
+created_at)` and `ix_credit_notification_outbox_organization_id` on
+`organization_id`.
 
 **Atomic grant function**:
 
@@ -862,6 +928,9 @@ Tracks all sent notifications.
 | provider_message_id      | VARCHAR(255) | NULLABLE                                 | Provider-specific message ID           |
 | error_message            | TEXT         | NULLABLE                                 | Error details                          |
 | sent_at                  | TIMESTAMPTZ  | NULLABLE                                 | Sent timestamp                         |
+| idempotency_key          | VARCHAR(255) | NULLABLE, UNIQUE when present            | Stable retry key                       |
+| attempt_count            | INTEGER      | NOT NULL, DEFAULT 0                      | Provider attempts                      |
+| last_attempt_at          | TIMESTAMPTZ  | NULLABLE                                 | Most recent provider attempt           |
 | metadata                 | JSONB        | NULLABLE                                 | Additional data                        |
 | created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp                     |
 
@@ -882,6 +951,7 @@ Tracks all sent notifications.
 - `idx_notification_logs_status`
 - `idx_notification_logs_created_at`
 - `idx_notification_logs_recipient_email`
+- `uq_notification_logs_idempotency_key`
 
 ### email_verification_tokens
 
@@ -1236,9 +1306,26 @@ erDiagram
         integer credit_cost
         varchar category
         boolean is_active
+        varchar meter_type
+        varchar billing_unit
         jsonb metadata
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    phone_numbers {
+        uuid id
+        uuid organization_id
+        varchar phone_number
+        varchar phone_number_type
+        integer monthly_cost_credits
+        varchar status
+        varchar billing_status
+        timestamptz next_billing_at
+        timestamptz billing_grace_ends_at
+        varchar provider_sid
+        timestamptz purchased_at
+        timestamptz cancelled_at
     }
 
     credit_transactions {
@@ -1255,6 +1342,18 @@ erDiagram
         text description
         jsonb metadata
         timestamptz created_at
+    }
+
+    credit_notification_outbox {
+        uuid id
+        uuid organization_id
+        uuid credit_transaction_id
+        integer balance_after
+        integer attempt_count
+        timestamptz last_attempt_at
+        text last_error
+        timestamptz created_at
+        timestamptz processed_at
     }
 
     credit_products {
@@ -1331,6 +1430,9 @@ erDiagram
         varchar provider_message_id
         text error_message
         timestamptz sent_at
+        varchar idempotency_key
+        integer attempt_count
+        timestamptz last_attempt_at
         jsonb metadata
         timestamptz created_at
     }
@@ -1368,8 +1470,11 @@ erDiagram
 
     organizations ||--|| organization_subscriptions : "has one"
     organizations ||--o{ credit_transactions : "has many"
+    organizations ||--o{ phone_numbers : "owns"
     organizations ||--o{ billing_history : "has many"
     organizations ||--o{ notification_logs : "has many"
+    organizations ||--o{ credit_notification_outbox : "queues warnings"
+    credit_transactions ||--o| credit_notification_outbox : "creates warning task"
 
     subscription_plans ||--o{ organization_subscriptions : "defines"
     credit_events ||--o{ credit_transactions : "applied to"
@@ -1434,6 +1539,14 @@ erDiagram
 45. `20260809000002` - Add `call_artifacts.encryption_mode` and `retention_expires_at` plus a cleanup lookup index for recording key-strategy audits and retention enforcement.
 46. `20260809000003` - Add `organizations.admin_credit_balance` and the audited `platform_credit_grants` table. Add atomic `grant_admin_credits`, and update the debit, voice-call consumption, and subscription grant functions to account for plan → platform bonus → purchased credit precedence.
 47. `20260810000001` - Add `plan_version_entitlements.display_order` with a `(plan_version_id, display_order)` lookup index and backfill existing entitlement rows in creation order so admin drag-and-drop ordering is stable.
+48. `20260811000001` - Add explicit `credit_events.meter_type` and `billing_unit` fields with compatibility checks and annotate voice-call pricing as duration/minute.
+49. `20260811000002` - Restrict active usage pricing to voice minutes and local/mobile/toll-free monthly phone rentals; allow count/month semantics and add phone-number billing status, due date, and grace-period columns.
+50. `20260811000003` - Add notification delivery idempotency keys, attempt counters, and last-attempt timestamps for safe provider retries.
+51. `20260811000004` - Seed the enabled `credits.low_balance` notification event and its built-in template metadata so billing warnings work after migrations without a manual event seed.
+52. `20260811000005` - Add the transaction-linked `credit_notification_outbox` with retry diagnostics; atomically enqueue voice settlement warnings and allow an admitted call to settle its full duration into a temporary negative plan balance.
+53. `20260812000001` - Enable RLS on the service-owned credit notification outbox.
+54. `20260812000002` - Make regular credit debits preserve a negative plan balance from a completed voice call while consuming any positive admin or purchased pools.
+55. `20260812000003` - Update the seeded low-credit notification event description and metadata to the 20/10/5 warning policy.
 
 ---
 

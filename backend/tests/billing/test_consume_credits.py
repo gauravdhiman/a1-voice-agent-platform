@@ -10,12 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-
+from src.billing.credit_entitlement_service import credit_entitlement_service
 from src.billing.models import CreditConsumptionRequest
 from src.billing.service import BillingService
-from src.billing.credit_entitlement_service import credit_entitlement_service
-from src.organization.member_models import MemberRole, OrganizationMember
 from src.notifications.service import notification_service
+from src.organization.member_models import MemberRole, OrganizationMember
 
 
 @pytest.fixture
@@ -103,6 +102,7 @@ def _setup_consume_mocks(mock_supabase_client, table_effects, debit_payload):
     table_mock = MagicMock()
     table_mock.select.return_value = table_mock
     table_mock.eq.return_value = table_mock
+    table_mock.limit.return_value = table_mock
     table_mock.update.return_value = table_mock
     table_mock.insert.return_value = table_mock
     table_mock.limit.return_value = table_mock
@@ -155,6 +155,45 @@ async def test_consume_credits_drains_plan_pool_first(
     tx_inserted = table_mock.insert.call_args[0][0]
     assert tx_inserted["metadata"]["plan_credits"] == 10
     assert tx_inserted["metadata"]["purchased_credits"] == 0
+
+
+@pytest.mark.asyncio
+async def test_zero_priced_event_is_successful_without_a_debit(
+    billing_service, mock_supabase_client, sample_org_id
+):
+    """A zero system rate makes the activity free without calling the debit RPC."""
+    table_mock = MagicMock()
+    table_mock.select.return_value = table_mock
+    table_mock.eq.return_value = table_mock
+    table_mock.limit.return_value = table_mock
+    table_mock.execute.side_effect = [
+        _event_response(cost=0),
+        MagicMock(
+            data=[
+                {
+                    "credit_balance": 8,
+                    "admin_credit_balance": 2,
+                    "purchased_credit_balance": 1,
+                }
+            ]
+        ),
+    ]
+    mock_supabase_client.table.return_value = table_mock
+    mock_supabase_client.rpc.return_value = MagicMock()
+
+    result = await billing_service.consume_credits(
+        CreditConsumptionRequest(
+            organization_id=sample_org_id,
+            event_name="voice_call_minute",
+            quantity=1,
+        )
+    )
+
+    assert result.success is True
+    assert result.credits_consumed == 0
+    assert result.balance_after == 11
+    mock_supabase_client.rpc.assert_not_called()
+    table_mock.upsert.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -389,10 +428,10 @@ async def test_consume_credits_drains_admin_pool_before_purchased_pool(
 
 
 @pytest.mark.asyncio
-async def test_consume_credits_triggers_low_balance_notification(
+async def test_consume_credits_enqueues_low_balance_notification(
     billing_service, mock_supabase_client, sample_org_id
 ):
-    """Falling to 20% of included credits emails org admins once per threshold."""
+    """Falling to 20% of included credits creates a durable warning task."""
     request = CreditConsumptionRequest(
         organization_id=sample_org_id,
         event_name="voice_call_minute",
@@ -440,25 +479,21 @@ async def test_consume_credits_triggers_low_balance_notification(
         patch.object(
             notification_service,
             "send_notification",
-            new=AsyncMock(side_effect=lambda request: sent_requests.append(request)),
+            new=AsyncMock(
+                side_effect=lambda request: (
+                    sent_requests.append(request) or MagicMock(success=True)
+                )
+            ),
         ),
     ):
         result = await billing_service.consume_credits(request)
 
     assert result.success is True
-    assert len(sent_requests) == 1
-    request_sent = sent_requests[0]
-    assert request_sent.event_key == "credits.low_balance"
-    assert request_sent.recipient_email == "admin@example.com"
-    assert request_sent.template_variables["current_credits"] == "20"
-    assert request_sent.template_variables["organization_name"] == "Acme Corp"
-    assert (
-        "/organization/billing"
-        in request_sent.template_variables["purchase_credits_url"]
-    )
-
-    mark_call = table_mock.update.call_args_list[-1]
-    assert mark_call[0][0]["low_credit_threshold_notified"] == 20
+    assert sent_requests == []
+    outbox_payload = table_mock.upsert.call_args.args[0]
+    assert outbox_payload["balance_after"] == 20
+    assert outbox_payload["organization_id"] == str(sample_org_id)
+    assert table_mock.upsert.call_args.kwargs["on_conflict"] == "credit_transaction_id"
 
 
 @pytest.mark.asyncio
@@ -511,30 +546,17 @@ async def test_consume_credits_does_not_resend_threshold(
 async def test_consume_credits_notification_failure_does_not_break_consumption(
     billing_service, mock_supabase_client, sample_org_id
 ):
-    """Email failures are logged and never fail the consumption itself."""
+    """Outbox persistence failures are logged and never fail consumption."""
     request = CreditConsumptionRequest(
         organization_id=sample_org_id,
         event_name="voice_call_minute",
         quantity=1,
-    )
-    admin = OrganizationMember(
-        id=uuid4(),
-        email="admin@example.com",
-        first_name="Ada",
-        last_name="Admin",
-        is_verified=True,
-        created_at=datetime.now(timezone.utc).isoformat(),
-        roles=[MemberRole(id=uuid4(), name="org_admin", description="Admin")],
     )
     _setup_consume_mocks(
         mock_supabase_client,
         [
             _event_response(),
             _tx_response(sample_org_id, -10, 20),
-            MagicMock(
-                data=[{"name": "Acme Corp", "low_credit_threshold_notified": None}]
-            ),
-            MagicMock(data=[]),
         ],
         _debit_success(
             balance_after=20,
@@ -543,23 +565,13 @@ async def test_consume_credits_notification_failure_does_not_break_consumption(
         ),
     )
 
-    with (
-        patch.object(
-            credit_entitlement_service,
-            "get_included_credits_per_billing_period",
-            new=AsyncMock(return_value=100),
-        ),
-        patch(
-            "src.rbac.user_roles.service.user_role_service.get_users_by_organization",
-            new=AsyncMock(return_value=([admin], None)),
-        ),
-        patch.object(
-            notification_service,
-            "send_notification",
-            new=AsyncMock(side_effect=Exception("SMTP down")),
-        ),
-    ):
+    with patch.object(
+        billing_service,
+        "enqueue_low_credit_notification",
+        new=AsyncMock(return_value=False),
+    ) as enqueue:
         result = await billing_service.consume_credits(request)
 
     assert result.success is True
     assert result.balance_after == 20
+    enqueue.assert_awaited_once()

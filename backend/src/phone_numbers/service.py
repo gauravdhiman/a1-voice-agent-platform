@@ -5,16 +5,30 @@ This module provides the business logic for managing phone numbers,
 including purchasing, assigning, and canceling phone numbers.
 """
 
+import calendar
 import logging
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
+
+from src.billing.models import (
+    CreditConsumptionRequest,
+    TransactionSource,
+    TransactionType,
+)
+from src.billing.service import BillingService
+from src.billing.system_pricing import (
+    get_phone_number_pricing_event_name,
+    get_system_pricing_definition,
+)
 
 from shared.config import supabase_config
 from shared.organization.phone_number_models import (
     AvailablePhoneNumber,
     PhoneNumber,
     PhoneNumberAssignRequest,
+    PhoneNumberBillingStatus,
     PhoneNumberCreate,
     PhoneNumberListResponse,
     PhoneNumberPurchaseRequest,
@@ -26,20 +40,23 @@ from shared.organization.phone_number_models import (
     PhoneNumberUpdate,
     PhoneNumberWithAgent,
 )
-from src.billing.models import (
-    CreditConsumptionRequest,
-    TransactionSource,
-    TransactionType,
-)
-from src.billing.service import BillingService
 
 from .twilio_service import twilio_service
 
 logger = logging.getLogger(__name__)
 
-CREDITS_PER_LOCAL_NUMBER = 200
-CREDITS_PER_TOLL_FREE_NUMBER = 500
-CREDITS_PER_MOBILE_NUMBER = 200
+PHONE_NUMBER_BILLING_GRACE_DAYS = 7
+
+
+@dataclass
+class PhoneNumberRentalRunResult:
+    """Counters returned by one monthly phone-rental billing pass."""
+
+    processed: int = 0
+    charged: int = 0
+    past_due: int = 0
+    released: int = 0
+    errors: int = 0
 
 
 class PhoneNumberService:
@@ -72,13 +89,16 @@ class PhoneNumberService:
         """
         try:
             if not self.twilio_service.is_configured():
-                return PhoneNumberSearchResponse(
-                    items=[],
-                    total_count=0,
-                    page=search_request.page,
-                    page_size=search_request.page_size,
-                    total_pages=0,
-                ), None
+                return (
+                    PhoneNumberSearchResponse(
+                        items=[],
+                        total_count=0,
+                        page=search_request.page,
+                        page_size=search_request.page_size,
+                        total_pages=0,
+                    ),
+                    None,
+                )
 
             twilio_type = search_request.phone_number_type.value
 
@@ -92,7 +112,9 @@ class PhoneNumberService:
 
             available_numbers = []
             for num in results:
-                cost = self._get_credits_for_type(search_request.phone_number_type)
+                cost = await self._get_credits_for_type(
+                    search_request.phone_number_type
+                )
 
                 capabilities = {}
                 if hasattr(num, "capabilities"):
@@ -135,13 +157,16 @@ class PhoneNumberService:
 
         except Exception as e:
             logger.error(f"Error searching available numbers: {e}")
-            return PhoneNumberSearchResponse(
-                items=[],
-                total_count=0,
-                page=search_request.page,
-                page_size=search_request.page_size,
-                total_pages=0,
-            ), f"Failed to search available numbers: {str(e)}"
+            return (
+                PhoneNumberSearchResponse(
+                    items=[],
+                    total_count=0,
+                    page=search_request.page,
+                    page_size=search_request.page_size,
+                    total_pages=0,
+                ),
+                f"Failed to search available numbers: {str(e)}",
+            )
 
     async def purchase_number(
         self,
@@ -161,7 +186,7 @@ class PhoneNumberService:
             if not self.twilio_service.is_configured():
                 return None, "Phone number provider not configured"
 
-            cost = self._get_credits_for_type(purchase_request.phone_number_type)
+            cost = await self._get_credits_for_type(purchase_request.phone_number_type)
 
             balance = await self.billing_service.get_credit_balance(organization_id)
             if balance.total_credits < cost:
@@ -174,7 +199,8 @@ class PhoneNumberService:
                 phone_number=purchase_request.phone_number
             )
 
-            new_balance = balance.total_credits - cost
+            purchased_at = datetime.now(timezone.utc)
+            next_billing_at = _add_month(purchased_at)
 
             record = PhoneNumberCreate(
                 organization_id=organization_id,
@@ -185,21 +211,27 @@ class PhoneNumberService:
                 country_code=purchase_request.country_code,
                 monthly_cost_credits=cost,
                 status=PhoneNumberStatus.PURCHASED,
+                billing_status=PhoneNumberBillingStatus.ACTIVE,
+                next_billing_at=next_billing_at,
             )
 
             result = (
                 self.supabase.table("phone_numbers")
-                .insert(record.model_dump())
+                .insert(record.model_dump(mode="json"))
                 .execute()
             )
 
             if not result.data:
+                if purchased.sid and self.twilio_service.is_configured():
+                    self.twilio_service.release_phone_number(purchased.sid)
                 return None, "Failed to save phone number record"
 
-            await self.billing_service.consume_credits(
+            consumption = await self.billing_service.consume_credits(
                 CreditConsumptionRequest(
                     organization_id=organization_id,
-                    event_name="phone_number_purchase",
+                    event_name=get_phone_number_pricing_event_name(
+                        purchase_request.phone_number_type
+                    ),
                     quantity=1,
                     metadata={
                         "phone_number": purchase_request.phone_number,
@@ -209,6 +241,17 @@ class PhoneNumberService:
                 )
             )
 
+            if not consumption.success:
+                if purchased.sid and self.twilio_service.is_configured():
+                    self.twilio_service.release_phone_number(purchased.sid)
+                self.supabase.table("phone_numbers").update(
+                    {
+                        "status": PhoneNumberStatus.CANCELLED.value,
+                        "cancelled_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                ).eq("id", result.data[0]["id"]).execute()
+                return None, "Insufficient credits to keep the phone number"
+
             phone_number = PhoneNumber(**result.data[0])
 
             return (
@@ -216,7 +259,7 @@ class PhoneNumberService:
                     success=True,
                     phone_number=phone_number,
                     message=f"Successfully purchased {purchase_request.phone_number}",
-                    credit_balance_after=new_balance,
+                    credit_balance_after=consumption.balance_after,
                 ),
                 None,
             )
@@ -282,9 +325,10 @@ class PhoneNumberService:
 
         except Exception as e:
             logger.error(f"Error fetching organization phone numbers: {e}")
-            return PhoneNumberListResponse(
-                items=[], total_count=0, unused_count=0
-            ), f"Failed to fetch phone numbers: {str(e)}"
+            return (
+                PhoneNumberListResponse(items=[], total_count=0, unused_count=0),
+                f"Failed to fetch phone numbers: {str(e)}",
+            )
 
     async def assign_to_agent(
         self,
@@ -433,8 +477,8 @@ class PhoneNumberService:
             logger.error(f"Error fetching phone number: {e}")
             return None, f"Failed to fetch phone number: {str(e)}"
 
-    def _get_credits_for_type(self, phone_type: PhoneNumberType) -> int:
-        """Get the credit cost for a phone number type.
+    async def _get_credits_for_type(self, phone_type: PhoneNumberType) -> int:
+        """Get the current system credit cost for a phone number type.
 
         Args:
             phone_type: Type of phone number
@@ -442,12 +486,131 @@ class PhoneNumberService:
         Returns:
             Monthly cost in credits
         """
-        mapping = {
-            PhoneNumberType.LOCAL: CREDITS_PER_LOCAL_NUMBER,
-            PhoneNumberType.TOLL_FREE: CREDITS_PER_TOLL_FREE_NUMBER,
-            PhoneNumberType.MOBILE: CREDITS_PER_MOBILE_NUMBER,
-        }
-        return mapping.get(phone_type, CREDITS_PER_LOCAL_NUMBER)
+        event_name = get_phone_number_pricing_event_name(phone_type)
+        result = (
+            self.supabase.table("credit_events")
+            .select("credit_cost")
+            .eq("name", event_name)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and isinstance(result.data, list):
+            return max(0, int(result.data[0].get("credit_cost") or 0))
+        return get_system_pricing_definition(event_name).default_credit_cost
+
+    async def process_due_rentals(
+        self, now: Optional[datetime] = None
+    ) -> PhoneNumberRentalRunResult:
+        """Charge active phone rentals and release numbers after grace expiry.
+
+        Existing numbers retain their Twilio ownership while a failed monthly
+        debit is within the seven-day grace period. A successful retry restores
+        the active billing state; an expired grace period releases the provider
+        number and marks the local row cancelled.
+        """
+        # TODO: [Billing] Add a Postgres-backed rental claim/lease before the
+        # backend is deployed with multiple scheduler instances. The current
+        # single-process scheduler is safe for the present deployment shape.
+        now = now or datetime.now(timezone.utc)
+        result = (
+            self.supabase.table("phone_numbers")
+            .select("*")
+            .in_(
+                "status",
+                [PhoneNumberStatus.PURCHASED.value, PhoneNumberStatus.ACTIVE.value],
+            )
+            .execute()
+        )
+        summary = PhoneNumberRentalRunResult()
+
+        for row in result.data or []:
+            try:
+                phone_number = PhoneNumber(**row)
+                due_at = phone_number.next_billing_at or _add_month(
+                    phone_number.purchased_at
+                )
+                if due_at > now:
+                    continue
+
+                grace_ends_at = phone_number.billing_grace_ends_at
+                if (
+                    phone_number.billing_status == PhoneNumberBillingStatus.PAST_DUE
+                    and grace_ends_at
+                    and grace_ends_at <= now
+                ):
+                    released, error = await self.cancel_number(phone_number.id)
+                    if released:
+                        summary.released += 1
+                        summary.processed += 1
+                    else:
+                        summary.errors += 1
+                        logger.error(
+                            "Failed to release past-due phone number %s: %s",
+                            phone_number.id,
+                            error,
+                        )
+                    continue
+
+                cost = await self._get_credits_for_type(phone_number.phone_number_type)
+                event_name = get_phone_number_pricing_event_name(
+                    phone_number.phone_number_type
+                )
+                consumption = await self.billing_service.consume_credits(
+                    CreditConsumptionRequest(
+                        organization_id=phone_number.organization_id,
+                        event_name=event_name,
+                        quantity=1,
+                        metadata={
+                            "phone_number_id": str(phone_number.id),
+                            "billing_period": due_at.isoformat(),
+                            "cost": cost,
+                        },
+                    )
+                )
+                if consumption.success:
+                    self.supabase.table("phone_numbers").update(
+                        {
+                            "monthly_cost_credits": cost,
+                            "billing_status": PhoneNumberBillingStatus.ACTIVE.value,
+                            "next_billing_at": _add_month(due_at).isoformat(),
+                            "billing_grace_ends_at": None,
+                            "updated_at": now.isoformat(),
+                        }
+                    ).eq("id", str(phone_number.id)).execute()
+                    summary.charged += 1
+                    summary.processed += 1
+                else:
+                    grace_end = grace_ends_at or (
+                        now + timedelta(days=PHONE_NUMBER_BILLING_GRACE_DAYS)
+                    )
+                    self.supabase.table("phone_numbers").update(
+                        {
+                            "billing_status": PhoneNumberBillingStatus.PAST_DUE.value,
+                            "billing_grace_ends_at": grace_end.isoformat(),
+                            "updated_at": now.isoformat(),
+                        }
+                    ).eq("id", str(phone_number.id)).execute()
+                    summary.past_due += 1
+                    summary.processed += 1
+            except Exception:
+                summary.errors += 1
+                logger.exception(
+                    "Phone rental billing failed for row %s", row.get("id")
+                )
+
+        return summary
+
+
+def _add_month(value: datetime) -> datetime:
+    """Advance a timestamp by one calendar month without overflowing dates."""
+    next_month = value.month + 1
+    next_year = value.year
+    if next_month == 13:
+        next_month = 1
+        next_year += 1
+    next_day = min(value.day, calendar.monthrange(next_year, next_month)[1])
+    return value.replace(year=next_year, month=next_month, day=next_day)
 
 
 phone_number_service = PhoneNumberService()

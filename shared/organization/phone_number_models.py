@@ -26,6 +26,13 @@ class PhoneNumberStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class PhoneNumberBillingStatus(str, Enum):
+    """Credit-rental state for an owned phone number."""
+
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+
+
 class PhoneNumberType(str, Enum):
     """Phone number type enumeration."""
 
@@ -65,6 +72,16 @@ class PhoneNumberBase(BaseModel):
     )
     is_outgoing_enabled: bool = Field(
         default=False, description="Whether outgoing calls are enabled"
+    )
+    billing_status: PhoneNumberBillingStatus = Field(
+        default=PhoneNumberBillingStatus.ACTIVE,
+        description="Monthly credit-rental state",
+    )
+    next_billing_at: Optional[datetime] = Field(
+        None, description="When the next monthly rental is due"
+    )
+    billing_grace_ends_at: Optional[datetime] = Field(
+        None, description="When an unpaid rental is released"
     )
 
 

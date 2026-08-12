@@ -7,10 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import HTTPException
 
-from src.billing.entitlement_models import (
-    EntitlementKind,
-    EntitlementValueType,
-)
+from src.billing.entitlement_models import EntitlementKind, EntitlementValueType
 from src.billing.plan_version_models import PlanVersionStatus
 
 TEST_USER_ID = UUID("00000000-0000-0000-0000-000000000004")
@@ -92,6 +89,45 @@ class TestAdminPlanRoutesAuthz:
                 user_auth=(TEST_USER_ID, _profile(is_admin=True)),
             )
         assert result[0].key == "max_agents"
+
+    @pytest.mark.asyncio
+    async def test_list_credit_events_requires_platform_admin(self):
+        from src.billing.admin_plan_routes import list_credit_events
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_credit_events(
+                user_auth=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_update_credit_event_succeeds_for_admin(self):
+        from src.billing.admin_plan_models import CreditEventAdminUpdate
+        from src.billing.admin_plan_routes import update_credit_event
+        from src.billing.models import CreditEvent
+
+        event = CreditEvent(
+            id=uuid4(),
+            name="voice_call_minute",
+            description="Voice minute",
+            credit_cost=0,
+            category="voice",
+            meter_type="duration",
+            billing_unit="minute",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        with patch(
+            "src.billing.admin_plan_routes.admin_plan_catalog_service"
+        ) as mock_svc:
+            mock_svc.update_credit_event = AsyncMock(return_value=event)
+            result = await update_credit_event(
+                name="voice_call_minute",
+                body=CreditEventAdminUpdate(credit_cost=0),
+                user_auth=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+
+        assert result.name == "voice_call_minute"
 
     @pytest.mark.asyncio
     async def test_create_draft_version_returns_400_on_value_error(self):

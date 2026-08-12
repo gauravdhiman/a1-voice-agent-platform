@@ -4,6 +4,8 @@
 
 import { apiClient } from "@/lib/api/client";
 import type {
+  CreditEvent,
+  CreditEventAdminUpdate,
   EntitlementDefinition,
   EntitlementDefinitionUpdate,
   PlanProduct,
@@ -39,6 +41,24 @@ class AdminPlanService {
   ): Promise<EntitlementDefinition> {
     const response = await apiClient.patch<EntitlementDefinition>(
       `${this.baseUrl}/entitlement-definitions/${encodeURIComponent(key)}`,
+      body,
+    );
+    return response.data;
+  }
+
+  async listCreditEvents(): Promise<CreditEvent[]> {
+    const response = await apiClient.get<CreditEvent[]>(
+      `${this.baseUrl}/credit-events`,
+    );
+    return response.data;
+  }
+
+  async updateCreditEvent(
+    name: string,
+    body: CreditEventAdminUpdate,
+  ): Promise<CreditEvent> {
+    const response = await apiClient.patch<CreditEvent>(
+      `${this.baseUrl}/credit-events/${encodeURIComponent(name)}`,
       body,
     );
     return response.data;

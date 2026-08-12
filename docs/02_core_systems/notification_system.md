@@ -2,7 +2,12 @@
 
 ## Overview
 
-The Email Notification System provides a comprehensive solution for sending transactional emails to users and stakeholders. It integrates with [Resend.com](https://resend.com) for reliable email delivery and includes an admin interface for configuring notification events and templates.
+The Email Notification System provides a provider-neutral delivery workflow for
+transactional emails to users and stakeholders. Resend is the first adapter;
+the notification service depends on an email-provider contract so a future
+SendGrid adapter can be added without changing templates, billing alerts, or
+delivery history. Billing warnings are queued durably so provider outages do
+not cause a successful credit debit to lose its notification.
 
 ## Features
 
@@ -11,15 +16,17 @@ The Email Notification System provides a comprehensive solution for sending tran
 ✅ **Template Management** - Create and manage custom email templates via API  
 ✅ **Variable Substitution** - Dynamic content injection using template variables  
 ✅ **Notification Logging** - Track all sent notifications with delivery status  
+✅ **Idempotent Retries** - Retry failed deliveries without duplicating sent emails
 ✅ **Multiple Categories** - Organize notifications by category (auth, billing, organization, etc.)  
 ✅ **Resend Integration** - Reliable email delivery via Resend.com  
 ✅ **Configurable Sender** - Configure sender email and name per template or globally
+✅ **Durable Billing Outbox** - Process low-credit evaluations independently from usage debits
 
 ## Architecture
 
 ### Database Schema
 
-The notification system uses three main tables:
+The notification system uses four main tables:
 
 ```
 notification_events
@@ -62,8 +69,22 @@ notification_logs
 ├── provider_message_id (VARCHAR)
 ├── error_message (TEXT)
 ├── sent_at (TIMESTAMP)
+├── idempotency_key (VARCHAR, UNIQUE when present)
+├── attempt_count (INTEGER)
+├── last_attempt_at (TIMESTAMP)
 ├── metadata (JSONB)
 └── created_at (TIMESTAMP)
+
+credit_notification_outbox
+├── id (UUID)
+├── organization_id (UUID) - FK to organizations
+├── credit_transaction_id (UUID, UNIQUE) - FK to credit_transactions
+├── balance_after (INTEGER)
+├── attempt_count (INTEGER)
+├── last_attempt_at (TIMESTAMP)
+├── last_error (TEXT)
+├── created_at (TIMESTAMP)
+└── processed_at (TIMESTAMP, NULL until complete)
 ```
 
 ## Setup
@@ -76,9 +97,13 @@ copy an environment file into a root `.env`.
 
 ```bash
 # Resend Settings
+EMAIL_PROVIDER=resend
 RESEND_API_KEY=re_your_resend_api_key_here
 RESEND_FROM_EMAIL=noreply@yourdomain.com
 RESEND_FROM_NAME=24x7 AI
+PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS=24
+NOTIFICATION_RETRY_CHECK_INTERVAL_HOURS=1
+NOTIFICATION_RETRY_CHECK_INTERVAL_MINUTES=5
 
 # Required for encrypting Telegram bot tokens in platform settings
 ENCRYPTION_KEY=your-fernet-key
@@ -140,7 +165,10 @@ cd backend
 python scripts/seed_notification_events.py
 ```
 
-The Resend SDK is in `requirements.txt` (`resend==2.5.0`).
+The Resend SDK is in requirements.txt. The adapter runs its synchronous SDK
+call off the async event loop and records pending, sent, and failed attempts.
+The retry scheduler processes provider logs and the low-credit outbox every five
+minutes by default.
 
 ### 4. Seed Notification Events
 
@@ -155,6 +183,13 @@ This will create the following notification events:
 - `credits.purchased` - Credits purchase confirmation
 - `organization.invitation` - Organization invitation
 - `billing.payment_failed` - Payment failed notification
+
+Low-credit alerts are sent to organization admins at 20%, 10%, and 5% of the
+current plan version's included credits. The threshold marker advances only
+after all owner deliveries succeed. Each recipient/threshold pair has a stable
+idempotency key, so a later outbox pass can retry only the failed delivery. The
+`credits.low_balance` event is seeded by migration `20260811000004`; the manual
+seed script remains a backfill tool for the other built-in events.
 
 ## API Reference
 

@@ -170,6 +170,12 @@ async def _bill_completed_call(
         credits_needed = calculate_voice_call_credits(
             duration_seconds, int(event.get("credit_cost") or 0)
         )
+        if credits_needed == 0:
+            client.table("call_logs").update({"credits_consumed": 0}).eq(
+                "id", call_log_id
+            ).execute()
+            return
+
         debit_result = client.rpc(
             "consume_voice_call_credits",
             {
@@ -188,6 +194,13 @@ async def _bill_completed_call(
                 credits_needed,
             )
             return
+
+        if int(debit.get("overdraft_used") or 0) > 0:
+            logger.warning(
+                "Call %s settled %s credits below zero; new calls will be blocked",
+                call_log_id,
+                debit["overdraft_used"],
+            )
 
         transaction_id = debit.get("transaction_id")
         if not transaction_id:

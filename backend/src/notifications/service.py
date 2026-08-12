@@ -4,17 +4,23 @@ Notification service for sending and managing email notifications.
 
 import html
 import logging
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-import resend
+from src.notifications.email_providers import (
+    EmailMessage,
+    EmailProvider,
+    build_email_provider,
+)
 from src.notifications.models import (
     NotificationEvent,
     NotificationEventCreate,
     NotificationEventUpdate,
     NotificationLog,
     NotificationLogCreate,
+    NotificationProvider,
     NotificationStats,
     NotificationStatus,
     NotificationTemplate,
@@ -29,9 +35,17 @@ from shared.config import settings, supabase_config
 
 logger = logging.getLogger(__name__)
 
-# Initialize Resend
-if settings.resend_api_key:
-    resend.api_key = settings.resend_api_key
+RETRY_DELAY_MINUTES = 5
+
+
+@dataclass
+class NotificationRetryResult:
+    """Counters returned by one failed/pending notification retry pass."""
+
+    processed: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    skipped: int = 0
 
 
 def validate_template_variables(
@@ -136,10 +150,11 @@ def sanitize_template_variables(template_variables: Dict[str, Any]) -> Dict[str,
 class NotificationService:
     """Service for managing notifications."""
 
-    def __init__(self):
+    def __init__(self, email_provider: Optional[EmailProvider] = None):
         self.supabase_config = supabase_config
         self.from_email = settings.resend_from_email
         self.from_name = settings.resend_from_name
+        self.email_provider = email_provider or build_email_provider()
 
     @property
     def supabase(self):
@@ -394,10 +409,29 @@ class NotificationService:
 
     # Notification Sending
 
+    async def _find_notification_log_by_idempotency_key(
+        self, idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        """Find an existing delivery attempt for a stable notification key."""
+        response = (
+            self.supabase.table("notification_logs")
+            .select("id, status, attempt_count")
+            .eq("idempotency_key", idempotency_key)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data if isinstance(response.data, list) else []
+        return rows[0] if rows else None
+
     async def send_notification(
         self, request: SendNotificationRequest
     ) -> SendNotificationResponse:
-        """Send a notification email."""
+        """Render, persist, and deliver one notification idempotently.
+
+        A pending/failed log is retained and retried when the same
+        ``idempotency_key`` is submitted again. Provider calls are delegated to
+        an adapter so the notification workflow is independent of Resend.
+        """
         try:
             # Get the notification event
             event = await self.get_notification_event_by_key(request.event_key)
@@ -417,6 +451,7 @@ class NotificationService:
             template_id = request.template_id or event.default_template_id
             template = None
             html_content = None
+            text_content = None
             subject = ""
 
             if template_id:
@@ -424,6 +459,7 @@ class NotificationService:
                 template = await self.get_notification_template(template_id)
                 if template and template.is_active:
                     html_content = template.html_content
+                    text_content = template.text_content
                     subject = template.subject
                     # Validate that all required variables for this template are present
                     template_required_vars = template.template_variables or []
@@ -437,6 +473,8 @@ class NotificationService:
                     # Replace variables in subject and content with sanitized validated values
                     for key, value in sanitized_db_vars.items():
                         html_content = html_content.replace(f"{{{key}}}", value)
+                        if text_content:
+                            text_content = text_content.replace(f"{{{key}}}", value)
                         subject = subject.replace(f"{{{key}}}", value)
 
             # Fallback to built-in template
@@ -474,64 +512,108 @@ class NotificationService:
                 else self.from_name
             )
 
-            # Create notification log (pending)
-            log_data = NotificationLogCreate(
-                notification_event_id=event.id,
-                notification_template_id=template_id,
-                organization_id=request.organization_id,
-                user_id=request.user_id,
-                recipient_email=request.recipient_email,
-                recipient_name=request.recipient_name,
-                subject=subject,
-                status=NotificationStatus.PENDING,
-                metadata=request.template_variables,
-            )
-
-            log_response = (
-                self.supabase.table("notification_logs")
-                .insert(
-                    {
-                        "notification_event_id": str(log_data.notification_event_id),
-                        "notification_template_id": (
-                            str(log_data.notification_template_id)
-                            if log_data.notification_template_id
-                            else None
-                        ),
-                        "organization_id": (
-                            str(log_data.organization_id)
-                            if log_data.organization_id
-                            else None
-                        ),
-                        "user_id": str(log_data.user_id) if log_data.user_id else None,
-                        "recipient_email": log_data.recipient_email,
-                        "recipient_name": log_data.recipient_name,
-                        "subject": log_data.subject,
-                        "status": log_data.status.value,
-                        "provider": log_data.provider.value,
-                        "metadata": log_data.metadata,
-                    }
+            provider = NotificationProvider(self.email_provider.name)
+            existing_log = None
+            if request.idempotency_key:
+                existing_log = await self._find_notification_log_by_idempotency_key(
+                    request.idempotency_key
                 )
-                .execute()
-            )
+                if (
+                    existing_log
+                    and existing_log.get("status") == NotificationStatus.SENT.value
+                ):
+                    return SendNotificationResponse(
+                        success=True,
+                        notification_log_id=UUID(str(existing_log["id"])),
+                        status=NotificationStatus.SENT,
+                        message="Notification was already sent",
+                    )
 
-            notification_log_id = UUID(log_response.data[0]["id"])
+            if existing_log:
+                notification_log_id = UUID(str(existing_log["id"]))
+            else:
+                # Create notification log (pending) before the external call.
+                log_data = NotificationLogCreate(
+                    notification_event_id=event.id,
+                    notification_template_id=template_id,
+                    organization_id=request.organization_id,
+                    user_id=request.user_id,
+                    recipient_email=request.recipient_email,
+                    recipient_name=request.recipient_name,
+                    subject=subject,
+                    status=NotificationStatus.PENDING,
+                    provider=provider,
+                    idempotency_key=request.idempotency_key,
+                    metadata=request.template_variables,
+                )
 
-            # Send email via Resend
-            try:
-                params = {
-                    "from": f"{from_name} <{from_email}>",
-                    "to": [request.recipient_email],
-                    "subject": subject,
-                    "html": html_content,
+                log_response = (
+                    self.supabase.table("notification_logs")
+                    .insert(
+                        {
+                            "notification_event_id": str(
+                                log_data.notification_event_id
+                            ),
+                            "notification_template_id": (
+                                str(log_data.notification_template_id)
+                                if log_data.notification_template_id
+                                else None
+                            ),
+                            "organization_id": (
+                                str(log_data.organization_id)
+                                if log_data.organization_id
+                                else None
+                            ),
+                            "user_id": (
+                                str(log_data.user_id) if log_data.user_id else None
+                            ),
+                            "recipient_email": log_data.recipient_email,
+                            "recipient_name": log_data.recipient_name,
+                            "subject": log_data.subject,
+                            "status": log_data.status.value,
+                            "provider": log_data.provider.value,
+                            "idempotency_key": log_data.idempotency_key,
+                            "attempt_count": 0,
+                            "metadata": log_data.metadata,
+                        }
+                    )
+                    .execute()
+                )
+
+                if not log_response.data:
+                    raise ValueError("Failed to create notification log")
+                notification_log_id = UUID(log_response.data[0]["id"])
+
+            attempt_count = int((existing_log or {}).get("attempt_count") or 0) + 1
+            attempt_at = datetime.now(timezone.utc).isoformat()
+            self.supabase.table("notification_logs").update(
+                {
+                    "status": NotificationStatus.PENDING.value,
+                    "attempt_count": attempt_count,
+                    "last_attempt_at": attempt_at,
+                    "error_message": None,
                 }
+            ).eq("id", str(notification_log_id)).execute()
 
-                email_response = resend.Emails.send(params)
+            try:
+                email_response = await self.email_provider.send(
+                    EmailMessage(
+                        recipient_email=request.recipient_email,
+                        recipient_name=request.recipient_name,
+                        subject=subject,
+                        html_content=html_content,
+                        text_content=text_content,
+                        from_email=from_email,
+                        from_name=from_name,
+                    )
+                )
 
                 # Update log with success
                 self.supabase.table("notification_logs").update(
                     {
                         "status": NotificationStatus.SENT.value,
-                        "provider_message_id": email_response.get("id"),
+                        "provider": email_response.provider,
+                        "provider_message_id": email_response.provider_message_id,
                         "sent_at": datetime.now(timezone.utc).isoformat(),
                     }
                 ).eq("id", str(notification_log_id)).execute()
@@ -556,7 +638,11 @@ class NotificationService:
                     }
                 ).eq("id", str(notification_log_id)).execute()
 
-                logger.error(f"Error sending notification via Resend: {send_error}")
+                logger.error(
+                    "Error sending notification via %s: %s",
+                    self.email_provider.name,
+                    send_error,
+                )
 
                 return SendNotificationResponse(
                     success=False,
@@ -568,6 +654,94 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Error in send_notification: {e}")
             raise
+
+    async def retry_failed_notifications(
+        self, limit: int = 100, now: Optional[datetime] = None
+    ) -> NotificationRetryResult:
+        """Retry eligible failed or interrupted deliveries.
+
+        The retry pass only considers rows with an idempotency key. Older logs
+        without a stable key are left untouched to avoid creating a duplicate
+        delivery during a migration. A five-minute delay prevents a tight loop
+        when a provider is unavailable.
+        """
+        now = now or datetime.now(timezone.utc)
+        result = (
+            self.supabase.table("notification_logs")
+            .select("*, notification_events(event_key)")
+            .in_(
+                "status",
+                [NotificationStatus.PENDING.value, NotificationStatus.FAILED.value],
+            )
+            .order("created_at")
+            .limit(limit)
+            .execute()
+        )
+        summary = NotificationRetryResult()
+
+        for row in result.data or []:
+            key = row.get("idempotency_key")
+            if not key:
+                summary.skipped += 1
+                continue
+
+            last_attempt = row.get("last_attempt_at")
+            if last_attempt:
+                parsed = (
+                    last_attempt
+                    if isinstance(last_attempt, datetime)
+                    else datetime.fromisoformat(
+                        str(last_attempt).replace("Z", "+00:00")
+                    )
+                )
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                if parsed + timedelta(minutes=RETRY_DELAY_MINUTES) > now:
+                    summary.skipped += 1
+                    continue
+
+            event_data = row.get("notification_events") or {}
+            if isinstance(event_data, list):
+                event_data = event_data[0] if event_data else {}
+            event_key = event_data.get("event_key")
+            if not event_key:
+                summary.failed += 1
+                continue
+
+            try:
+                response = await self.send_notification(
+                    SendNotificationRequest(
+                        event_key=event_key,
+                        recipient_email=row["recipient_email"],
+                        recipient_name=row.get("recipient_name"),
+                        organization_id=(
+                            UUID(str(row["organization_id"]))
+                            if row.get("organization_id")
+                            else None
+                        ),
+                        user_id=(
+                            UUID(str(row["user_id"])) if row.get("user_id") else None
+                        ),
+                        template_variables=row.get("metadata") or {},
+                        template_id=(
+                            UUID(str(row["notification_template_id"]))
+                            if row.get("notification_template_id")
+                            else None
+                        ),
+                        idempotency_key=key,
+                    )
+                )
+                summary.processed += 1
+                if response.success:
+                    summary.succeeded += 1
+                else:
+                    summary.failed += 1
+            except Exception:
+                summary.processed += 1
+                summary.failed += 1
+                logger.exception("Notification retry failed for log %s", row.get("id"))
+
+        return summary
 
     # Notification Logs
 

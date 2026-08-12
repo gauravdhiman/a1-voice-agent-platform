@@ -21,8 +21,11 @@ The billing system uses the following database tables:
 - **plan_products / plan_versions**: Admin-managed catalog and immutable terms for new signups.
 - **organization_subscriptions**: Organization subscription status and bound plan version.
 - **subscription_plans**: Legacy compatibility catalog used by older records and APIs.
-- **credit_events**: Configurable events that consume credits.
+- **credit_events**: Fixed system activities that consume credits; rates are
+  global rather than plan-version-specific.
 - **credit_transactions**: All credit movements (earned, consumed, purchased).
+- **credit_notification_outbox**: Durable, transaction-linked low-credit
+  evaluation tasks processed by the notification scheduler.
 - **platform_credit_grants**: Immutable audit records for platform-admin bonus
   allocations, including actor, reason, and idempotency key.
 - **credit_products**: Standalone credit packages for purchase.
@@ -36,6 +39,46 @@ The billing system uses the following database tables:
 - Platform-admin bonus credits with no expiry and a dedicated balance pool.
 - Subscription credits that expire per billing period.
 - Comprehensive audit trail for all transactions.
+
+### Current pricing and enforcement policy
+
+The platform has a deliberately small, system-wide usage catalog. Platform
+admins edit rates in **Plan Catalog → Usage pricing**; rates are not copied into
+plan versions. The supported activities are voice calls per connected whole
+minute and local, mobile, and toll-free phone numbers per active rental month.
+The runtime owns the meter and billing interval, and a rate of zero means free.
+Call recording is currently a plan feature with one month of free retention,
+not a storage charge.
+
+New calls require enough balance for one billable minute. An admitted call is
+allowed to complete, then its full rounded duration is settled atomically. If
+the final debit crosses zero, the plan pool can temporarily be negative; the
+next call is blocked until the organization restores credits. This prevents
+undercharging while avoiding mid-conversation call drops.
+
+Phone-number renewal failures enter a seven-day grace period. The daily rental
+scheduler retries the current system rate and releases the Twilio number when
+grace expires. A failed initial purchase debit releases the provider number
+immediately.
+
+#### Platform usage pricing
+
+Platform admins manage activity pricing from **Plan Catalog → Usage pricing**;
+it is intentionally consolidated with plans and entitlements rather than added
+as another left-navigation destination. The catalog contains four predefined
+system activities: voice calls per connected minute, and local, mobile, and
+toll-free phone numbers per active rental month. The admin changes only the
+credit rate; the runtime-owned meter and interval are not arbitrary choices.
+Setting a rate to zero makes that activity free. Call recording is currently a
+plan feature with a free one-month retention policy, not a metered charge.
+
+Phone-number rentals are charged at purchase and again at each monthly due
+date using the current system rate. If a renewal debit fails, the number stays
+owned for seven days while the organization can add credits. The daily rental
+worker retries the charge and releases the Twilio number when that grace period
+expires. A new call is blocked when the organization cannot cover at least one
+billable minute; a call already in progress is allowed to finish and is billed
+at teardown.
 
 ### Backend Implementation
 
@@ -128,6 +171,14 @@ cd backend
 alembic upgrade head
 ```
 
+Migrations `20260811000004` and `20260811000005` seed the billing warning event,
+create the credit notification outbox, and install the final-call settlement
+RPC. Migrations `20260812000001` and `20260812000002` harden the outbox and
+ensure regular debits preserve any negative plan balance created by a completed
+call while still consuming positive admin or purchased pools. The outbox is
+processed by the notification retry scheduler every five minutes by default;
+email-provider failures do not fail credit consumption.
+
 ## Stripe Setup
 
 ### 1. Create Stripe Products and Prices
@@ -191,7 +242,7 @@ from src.billing.models import CreditConsumptionRequest
 
 consumption = CreditConsumptionRequest(
     organization_id="org-uuid",
-    event_name="api_call_basic",
+    event_name="voice_call_minute",
     quantity=10
 )
 
@@ -220,14 +271,17 @@ await billingService.purchaseCredits(organizationId, productId);
 
 ### Credit Events
 
-Configure events that consume credits:
+Only runtime-supported activities are configured as credit events. The admin UI
+manages the rate and description while the handler owns the measurement:
 
 ```sql
-INSERT INTO credit_events (name, description, credit_cost, category) VALUES
-('api_call_basic', 'Basic API call', 1, 'api_call'),
-('api_call_premium', 'Premium API call', 5, 'api_call'),
-('storage_gb_month', 'Storage per GB per month', 10, 'storage'),
-('ai_inference', 'AI model inference', 25, 'ai');
+INSERT INTO credit_events
+    (name, description, credit_cost, category, meter_type, billing_unit)
+VALUES
+('voice_call_minute', 'Connected voice-call minute', 10, 'voice', 'duration', 'minute'),
+('phone_number_local_month', 'Local number rental', 200, 'phone_number', 'count', 'month'),
+('phone_number_mobile_month', 'Mobile number rental', 200, 'phone_number', 'count', 'month'),
+('phone_number_toll_free_month', 'Toll-free number rental', 500, 'phone_number', 'count', 'month');
 ```
 
 ### Credit Precedence
@@ -354,7 +408,7 @@ stripe listen --forward-to localhost:8000/api/billing/webhook/stripe
 POST /api/billing/credits/consume
 {
   "organization_id": "uuid",
-  "event_name": "api_call_basic",
+  "event_name": "voice_call_minute",
   "quantity": 1
 }
 ```

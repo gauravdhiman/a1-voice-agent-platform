@@ -5,9 +5,11 @@ Resolves plan-version entitlements from Supabase (same binding rules as backend
 ``EntitlementService``) and enforces concurrent call limits plus minimum credit
 headroom before a WebSocket session starts.
 
-Credits are strictly prepaid (no pay-as-you-go): the pre-check passes when the
-combined balance (plan credits + platform-granted credits + purchased credits)
-covers at least one billable voice minute.
+New sessions are prepaid-admitted: the pre-check passes when the combined
+balance (plan credits + platform-granted credits + purchased credits) covers at
+least one billable voice minute. An admitted session may finish below zero; the
+final settlement still charges its complete rounded duration and blocks the
+next session until credits are restored.
 """
 
 from __future__ import annotations
@@ -59,7 +61,7 @@ async def assert_voice_session_allowed(
     Checks:
     - ``max_concurrent_calls`` against active ``call_logs`` rows
     - Combined credit balance (plan + purchased) for at least one billable
-      voice minute. No pay-as-you-go: consumption is strictly prepaid.
+      voice minute. An active call is allowed to complete and settle in full.
 
     Args:
         organization_id: Tenant owning the voice agent.

@@ -5,9 +5,10 @@ Resolves ``included_credits_per_billing_period`` from the bound plan version
 for renewal grants, and evaluates prepaid low-balance notification thresholds
 (20% / 10% / 5% of the period's included credits).
 
-Credits are strictly prepaid — there is no pay-as-you-go. Consumption itself
-is handled by ``BillingService.consume_credits`` with a two-pool model (plan
-credits drained first, then purchased credits).
+New activities are admitted only when the organization can cover at least one
+billable unit. A call already in progress is allowed to finish and its final
+metered debit may temporarily take the plan pool negative; the next activity
+is blocked until the balance is restored.
 """
 
 from __future__ import annotations
@@ -92,15 +93,18 @@ class CreditEntitlementService:
             # 180 credits left on a 1000-credit plan -> warn at 20%
             low_credit_threshold_to_notify(180, 1000, None)  # -> 20
             # Already warned at 20%, now at 9% -> warn at 10%
-            low_credit_threshold_to_notify(90, 1000, 20)     # -> 10
+            low_credit_threshold_to_notify(90, 1000, 20)      # -> 10
             # At 18% but already warned at 20% this cycle -> no email
             low_credit_threshold_to_notify(180, 1000, 20)    # -> None
             ```
         """
-        if included_credits <= 0 or remaining_credits < 0:
+        if included_credits <= 0:
             return None
 
-        remaining_pct = (remaining_credits / included_credits) * 100
+        # A completed call may settle below zero so the customer is charged for
+        # the full call. Treat that state as the 5% floor rather than suppressing
+        # the final warning.
+        remaining_pct = (max(0, remaining_credits) / included_credits) * 100
         candidate: Optional[int] = None
         for threshold in LOW_CREDIT_WARNING_THRESHOLDS:
             if remaining_pct <= threshold:

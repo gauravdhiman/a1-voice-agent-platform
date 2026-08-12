@@ -67,6 +67,104 @@ Run these commands from the root directory of the project.
 ./start.sh --help                                  # Help - print all commands
 ```
 
+### Local Supabase and Docker volume safety
+
+The local Supabase Postgres volume contains the local development database and
+must be treated as protected data. Do not delete it when reclaiming Docker
+Desktop disk space.
+
+- The protected Postgres volume is `supabase_db_a1-voice-agent-platform`.
+- Preserve `supabase_storage_a1-voice-agent-platform` too if local Storage
+  objects are needed. The Supabase CLI may also create additional
+  project-scoped volumes; inspect them before cleanup.
+- `supabase stop` stops the local Supabase setup while preserving its data
+  volumes. Do not use `supabase stop --no-backup` unless deleting all local
+  Supabase data is intentional.
+- Do not run `docker compose down -v`, `docker volume rm`, or
+  `docker volume prune` against a development environment that must retain its
+  local database. Stopped containers do not mean their volumes are safe to
+  delete.
+- Before destructive cleanup, back up local data and confirm the exact target:
+
+```bash
+supabase db dump --local --data-only > supabase/seed.sql
+docker system df -v
+docker volume ls --filter label=com.supabase.cli.project=a1-voice-agent-platform
+docker volume inspect supabase_db_a1-voice-agent-platform
+```
+
+To reclaim space without deleting database volumes, prefer reviewing and
+removing unused build cache, images, stopped containers, or networks. Use
+targeted cleanup commands and review their output before adding `--all`, `-a`,
+or any volume-related flag.
+
+Docker Desktop may show only opaque volume names because volumes are
+independent resources and can be mounted by zero, one, or multiple containers.
+Use labels to identify the owning project and inspect container mounts when the
+container still exists:
+
+```bash
+docker volume inspect <volume-name> --format '{{json .Labels}}'
+docker ps -a --filter volume=<volume-name>
+docker inspect <container-name> \
+  --format '{{range .Mounts}}{{println .Name "->" .Destination}}{{end}}'
+```
+
+When recreating local Supabase with `supabase start`, the CLI reuses preserved
+project volumes. Keep database schema changes in migrations and keep important
+local test data in a dump or seed file so the setup can be restored after an
+intentional reset.
+
+### Git worktrees and merge safety
+
+Every new feature or bug fix must be developed in a dedicated Git worktree
+created from the appropriate, up-to-date source branch. Worktrees keep changes
+and test environments isolated when multiple AI agents are working on separate
+features at the same time.
+
+Before starting work:
+
+1. Identify the correct source branch (`main`, `develop`, or the branch
+   specified by the user).
+2. Update that source branch with the latest remote changes.
+3. Create a uniquely named worktree and feature branch inside `.worktrees/`:
+
+```bash
+git fetch origin
+git switch <source-branch>
+git pull --ff-only origin <source-branch>
+git worktree add .worktrees/<task-name> -b codex/<task-name> <source-branch>
+```
+
+Implement and test the change only from the new worktree. Do not mix unrelated
+agent changes into the same worktree or checkout.
+
+Before merging, and periodically during long-running work when the source
+branch advances:
+
+```bash
+git fetch origin
+git switch <source-branch>
+git pull --ff-only origin <source-branch>
+git switch <feature-branch>
+git rebase <source-branch>
+```
+
+Treat every rebase as a high-risk operation. Review every conflict manually;
+preserve the intent of both existing and new functionality, and never resolve
+conflicts by blindly choosing `ours` or `theirs`. After the rebase, inspect the
+full diff, run the relevant unit/integration/E2E tests from the worktree, and
+confirm that existing behavior still works before considering the merge ready.
+If the result is ambiguous or tests regress, stop and investigate rather than
+continuing the merge.
+
+Rebasing periodically is encouraged when it reduces drift, but it does not
+authorize any remote operation. Do not push, force-push, or create a pull
+request without the user's explicit approval. Once the user approves and the
+local merge/rebase and validation are complete, push the verified branch to the
+remote and raise the pull request for review. Keep the user informed of any
+conflicts, test failures, force-push requirement, or other merge risk.
+
 ### End-to-End (E2E) Testing
 
 End-to-end tests use a "Grey Box" approach with an isolated Docker stack to ensure zero side effects on production/development data.
@@ -568,6 +666,46 @@ class TestExample:
 - Production Compose/deploy: `.env.prod` by default
 - Use `.env.local.example`, `.env.staging.example`, and `.env.prod.example`
   as the matching templates. Do not copy any file into a root `.env`.
+
+### Environment file maintenance
+
+Keep every `.env.*.example` file complete, clean, and synchronized with its
+matching environment file. These examples are the onboarding contract for
+local, staging, and production setup and must be maintained whenever
+configuration changes.
+
+- If a variable is added, removed, renamed, or no longer supported in
+  `.env.local`, `.env.staging`, `.env.prod`, or another environment-specific
+  file, make the same change in the matching `.env.*.example` file in the same
+  change.
+- Every supported variable must appear in the appropriate example file,
+  including optional variables. If an optional variable is normally unset,
+  keep its placeholder and explain when it is required.
+- Keep variables grouped into clear functional sections, such as application,
+  database/Supabase, authentication, billing, voice, observability, and
+  third-party integrations. Add concise comments for non-obvious variables,
+  environment-specific behavior, required formats, and safe local defaults.
+- Example files must never contain real secrets, tokens, passwords, private
+  keys, or production credentials. Use safe placeholders such as
+  `<set-in-local-env>` and document where the value comes from.
+- Do not silently add a variable only to a running `.env.*` file. Update the
+  example, relevant setup documentation, and any validation or startup checks
+  that depend on the variable.
+- Before completing a change, compare the variable-name sets between each
+  changed `.env.*` file and its matching example, then review the diff for
+  accidental credentials, duplicate keys, stale comments, and inconsistent
+  section placement.
+
+For the root environments, the required pairings are:
+
+```text
+.env.local   <-> .env.local.example
+.env.staging <-> .env.staging.example
+.env.prod    <-> .env.prod.example
+```
+
+The same rule applies to service-specific files such as
+`frontend/.env.local` and `frontend/.env.local.example`.
 
 ## Pre-Commit Hooks
 

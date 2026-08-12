@@ -1,0 +1,168 @@
+"""Tests for idempotent notification delivery and retry behavior."""
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
+
+import pytest
+from src.notifications.email_providers import EmailSendResult
+from src.notifications.models import NotificationEvent, SendNotificationRequest
+from src.notifications.service import NotificationService
+
+
+class FakeEmailProvider:
+    """Small provider double implementing the production adapter contract."""
+
+    name = "resend"
+
+    def __init__(self) -> None:
+        self.sent = []
+
+    async def send(self, message):
+        self.sent.append(message)
+        return EmailSendResult(provider=self.name, provider_message_id="msg-1")
+
+
+def _low_balance_event() -> NotificationEvent:
+    now = datetime.now(timezone.utc)
+    return NotificationEvent(
+        id=uuid4(),
+        name="Low Credit Balance",
+        description="Low balance",
+        event_key="credits.low_balance",
+        category="billing",
+        is_enabled=True,
+        default_template_id=None,
+        metadata=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sent_idempotency_key_skips_provider_duplicate(mock_supabase_client):
+    """A successful delivery is returned without calling the provider again."""
+    provider = FakeEmailProvider()
+    with patch("src.notifications.service.supabase_config") as config, patch(
+        "src.notifications.service.settings"
+    ) as settings:
+        config.client = mock_supabase_client
+        settings.resend_from_email = "noreply@example.com"
+        settings.resend_from_name = "24x7 AI"
+        service = NotificationService(email_provider=provider)
+
+    service.get_notification_event_by_key = AsyncMock(return_value=_low_balance_event())
+    service._find_notification_log_by_idempotency_key = AsyncMock(
+        return_value={
+            "id": str(uuid4()),
+            "status": "sent",
+            "attempt_count": 1,
+        }
+    )
+
+    response = await service.send_notification(
+        SendNotificationRequest(
+            event_key="credits.low_balance",
+            recipient_email="owner@example.com",
+            template_variables={
+                "user_name": "Owner",
+                "current_credits": "20",
+                "threshold_percent": "20",
+                "organization_name": "Acme",
+                "purchase_credits_url": "https://247ai.live/billing",
+            },
+            idempotency_key="low-credit:org:20:user",
+        )
+    )
+
+    assert response.success is True
+    assert provider.sent == []
+
+
+@pytest.mark.asyncio
+async def test_failed_idempotency_key_retries_and_marks_delivery_sent(
+    mock_supabase_client,
+):
+    """A failed log can be retried without creating another delivery record."""
+    provider = FakeEmailProvider()
+    with patch("src.notifications.service.supabase_config") as config, patch(
+        "src.notifications.service.settings"
+    ) as settings:
+        config.client = mock_supabase_client
+        settings.resend_from_email = "noreply@example.com"
+        settings.resend_from_name = "24x7 AI"
+        service = NotificationService(email_provider=provider)
+
+    service.get_notification_event_by_key = AsyncMock(return_value=_low_balance_event())
+    service._find_notification_log_by_idempotency_key = AsyncMock(
+        return_value={
+            "id": str(uuid4()),
+            "status": "failed",
+            "attempt_count": 1,
+        }
+    )
+    table = mock_supabase_client.table.return_value
+    table.update.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{}]
+    )
+
+    response = await service.send_notification(
+        SendNotificationRequest(
+            event_key="credits.low_balance",
+            recipient_email="owner@example.com",
+            template_variables={
+                "user_name": "Owner",
+                "current_credits": "20",
+                "threshold_percent": "20",
+                "organization_name": "Acme",
+                "purchase_credits_url": "https://247ai.live/billing",
+            },
+            idempotency_key="low-credit:org:20:user",
+        )
+    )
+
+    assert response.success is True
+    assert len(provider.sent) == 1
+    assert table.update.call_args_list[-1].args[0]["status"] == "sent"
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_notifications_reuses_the_original_log_key(
+    mock_supabase_client,
+):
+    """The retry pass asks the service to resend a logged failed delivery."""
+    with patch("src.notifications.service.supabase_config") as config, patch(
+        "src.notifications.service.settings"
+    ) as settings:
+        config.client = mock_supabase_client
+        settings.resend_from_email = "noreply@example.com"
+        settings.resend_from_name = "24x7 AI"
+        service = NotificationService(email_provider=FakeEmailProvider())
+
+    log_id = uuid4()
+    table = mock_supabase_client.table.return_value
+    table.select.return_value.in_.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": str(log_id),
+                "status": "failed",
+                "last_attempt_at": None,
+                "notification_event_id": str(uuid4()),
+                "notification_template_id": None,
+                "organization_id": str(uuid4()),
+                "user_id": str(uuid4()),
+                "recipient_email": "owner@example.com",
+                "recipient_name": "Owner",
+                "metadata": {"user_name": "Owner"},
+                "idempotency_key": "low-credit:org:20:user",
+                "notification_events": {"event_key": "credits.low_balance"},
+            }
+        ]
+    )
+    service.send_notification = AsyncMock(return_value=MagicMock(success=True))
+
+    result = await service.retry_failed_notifications()
+
+    assert result.succeeded == 1
+    retry_request = service.send_notification.call_args.args[0]
+    assert retry_request.idempotency_key == "low-credit:org:20:user"
