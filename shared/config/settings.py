@@ -150,6 +150,9 @@ class Settings(BaseSettings):
     )
 
     # Resend Settings
+    email_provider: str = Field(
+        default="resend", description="Configured notification email provider"
+    )
     resend_api_key: Optional[str] = Field(
         default=None, description="Resend API key for email notifications"
     )
@@ -157,6 +160,23 @@ class Settings(BaseSettings):
         default="noreply@example.com", description="Default sender email address"
     )
     resend_from_name: str = Field(default="24x7 AI", description="Default sender name")
+
+    # Phone-number rental billing
+    phone_number_billing_check_interval_hours: float = Field(
+        default=24,
+        gt=0,
+        description="How often due phone-number rentals are checked",
+    )
+    notification_retry_check_interval_hours: float = Field(
+        default=1,
+        gt=0,
+        description="How often failed email notifications are retried",
+    )
+    notification_retry_check_interval_minutes: float = Field(
+        default=5,
+        gt=0,
+        description="How often notification logs and low-credit outbox rows are processed",
+    )
 
     # OpenTelemetry Settings
     new_relic_license_key: Optional[str] = Field(

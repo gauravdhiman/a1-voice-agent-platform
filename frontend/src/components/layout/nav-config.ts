@@ -46,7 +46,6 @@ import {
   Wrench,
   Bell,
   Package,
-  ShieldCheck,
 } from "lucide-react";
 import {
   PERMISSION_ACTIONS,
@@ -199,13 +198,6 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       name: "Plan Catalog",
       href: "/platform/plans",
       icon: Package,
-      requiredPermission: "platform:admin",
-      section: "platform_admin",
-    },
-    {
-      name: "Entitlements",
-      href: "/platform/entitlements",
-      icon: ShieldCheck,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },

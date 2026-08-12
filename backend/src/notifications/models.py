@@ -33,6 +33,7 @@ class NotificationProvider(str, Enum):
     """Email provider enumeration."""
 
     RESEND = "resend"
+    SENDGRID = "sendgrid"
 
 
 # Notification Event Models
@@ -140,6 +141,9 @@ class NotificationLogBase(BaseModel):
     provider_message_id: Optional[str] = Field(None, max_length=255)
     error_message: Optional[str] = None
     sent_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = Field(None, max_length=255)
+    attempt_count: int = Field(default=0, ge=0)
+    last_attempt_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -158,6 +162,9 @@ class NotificationLogCreate(BaseModel):
     provider_message_id: Optional[str] = None
     error_message: Optional[str] = None
     sent_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = Field(None, max_length=255)
+    attempt_count: int = Field(default=0, ge=0)
+    last_attempt_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -181,6 +188,11 @@ class SendNotificationRequest(BaseModel):
         None, description="Variables to inject into template"
     )
     template_id: Optional[UUID] = Field(None, description="Override default template")
+    idempotency_key: Optional[str] = Field(
+        None,
+        max_length=255,
+        description="Stable key used to retry a notification without duplicating it",
+    )
 
 
 class SendNotificationResponse(BaseModel):

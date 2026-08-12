@@ -27,6 +27,18 @@ class EntitlementDefinitionUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class CreditEventAdminUpdate(BaseModel):
+    """Mutable rate fields for one fixed system pricing event.
+
+    Meter and billing interval are runtime-owned semantics. They are returned
+    with the catalog row for explanation, but cannot be changed from the admin
+    UI because no corresponding arbitrary handler exists in the system.
+    """
+
+    description: Optional[str] = Field(None, max_length=500)
+    credit_cost: Optional[int] = Field(None, ge=0)
+
+
 class PlanProductCreate(BaseModel):
     """Create a new plan product family."""
 

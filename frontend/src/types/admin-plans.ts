@@ -14,6 +14,10 @@ export type EntitlementKind = "limit" | "feature";
 export type EntitlementValueType =
   "integer" | "boolean" | "unlimited" | "decimal" | "enum" | "duration_seconds";
 
+export type CreditEventMeterType = "count" | "duration" | "storage";
+
+export type CreditEventBillingUnit = "event" | "minute" | "day" | "month";
+
 export type MigrationMode =
   | "new_signups_only"
   | "grace_then_optional"
@@ -41,6 +45,25 @@ export interface EntitlementDefinitionUpdate {
   display_name?: string;
   description?: string | null;
   is_active?: boolean;
+}
+
+export interface CreditEvent {
+  id: string;
+  name: string;
+  description?: string | null;
+  credit_cost: number;
+  category: string;
+  is_active: boolean;
+  metadata?: Record<string, unknown> | null;
+  meter_type: CreditEventMeterType;
+  billing_unit: CreditEventBillingUnit;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreditEventAdminUpdate {
+  description?: string | null;
+  credit_cost?: number;
 }
 
 export interface PlanProduct {

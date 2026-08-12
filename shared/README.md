@@ -2,6 +2,11 @@
 
 This directory contains code shared between the backend and `voice-ws` services, specifically for the voice agents system.
 
+The shared billing helpers define the canonical voice meter: connected duration
+is rounded up to whole minutes with a one-minute minimum. Admission is prepaid,
+but final call settlement is performed atomically by the database RPC so an
+admitted call can complete and be charged in full.
+
 ## 🏗️ Architecture
 
 ### Purpose

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
-
 from src.billing.credit_entitlement_service import (
     LOW_CREDIT_WARNING_THRESHOLDS,
     CreditEntitlementService,
@@ -45,7 +44,9 @@ class TestCreditEntitlementService:
     """Monthly credit resolution (PAYG removed)."""
 
     def test_included_credits_from_entitlements(self):
-        entitlements = _org_entitlements(limits={"included_credits_per_billing_period": 750})
+        entitlements = _org_entitlements(
+            limits={"included_credits_per_billing_period": 750}
+        )
         assert (
             CreditEntitlementService.included_credits_from_entitlements(entitlements)
             == 750
@@ -60,7 +61,8 @@ class TestCreditEntitlementService:
             is_entitled=False,
         )
         assert (
-            CreditEntitlementService.included_credits_from_entitlements(entitlements) == 0
+            CreditEntitlementService.included_credits_from_entitlements(entitlements)
+            == 0
         )
 
     def test_included_credits_unlimited_returns_zero(self):
@@ -83,7 +85,8 @@ class TestCreditEntitlementService:
             features={},
         )
         assert (
-            CreditEntitlementService.included_credits_from_entitlements(entitlements) == 0
+            CreditEntitlementService.included_credits_from_entitlements(entitlements)
+            == 0
         )
 
     @pytest.mark.asyncio
@@ -155,10 +158,9 @@ class TestLowCreditThresholdToNotify:
             CreditEntitlementService.low_credit_threshold_to_notify(50, 0, None) is None
         )
 
-    def test_negative_remaining_never_warns(self):
+    def test_negative_remaining_warns_at_five_percent_floor(self):
         assert (
-            CreditEntitlementService.low_credit_threshold_to_notify(-5, 1000, None)
-            is None
+            CreditEntitlementService.low_credit_threshold_to_notify(-5, 1000, None) == 5
         )
 
     def test_rearm_after_purchase_restarts_cycle(self):

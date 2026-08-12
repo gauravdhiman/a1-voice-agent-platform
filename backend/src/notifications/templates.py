@@ -218,6 +218,7 @@ LOW_CREDITS_TEMPLATE = """
 
 <div class="info-box">
     <p><strong>Current Balance:</strong> {current_credits} credits</p>
+    <p><strong>Remaining allowance:</strong> approximately {threshold_percent}%</p>
     <p><strong>Organization:</strong> {organization_name}</p>
 </div>
 
@@ -375,6 +376,7 @@ TEMPLATE_REGISTRY = {
         "variables": [
             "user_name",
             "current_credits",
+            "threshold_percent",
             "organization_name",
             "purchase_credits_url",
             "app_name",

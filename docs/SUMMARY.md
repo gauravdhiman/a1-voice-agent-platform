@@ -52,6 +52,7 @@ Comprehensive documentation organized by feature.
 9. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
 10. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
 11. **[Free-Tier Credit Refresh](03_implementation/free_tier_credit_refresh.md)** - pg_cron-triggered monthly credit renewal; atomic RPC race hardening
+12. **[Credit Usage Enforcement and Notifications](03_implementation/credit_usage_enforcement_and_notifications.md)** - system-wide usage rates, final-call settlement, phone-number grace periods, and durable low-credit emails
 
 ### Multi-Tenancy & RBAC
 

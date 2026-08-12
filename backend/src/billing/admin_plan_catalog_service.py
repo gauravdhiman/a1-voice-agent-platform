@@ -16,6 +16,7 @@ from uuid import UUID
 from shared.config import supabase_config
 
 from .admin_plan_models import (
+    CreditEventAdminUpdate,
     EntitlementDefinitionUpdate,
     PlanProduct,
     PlanProductCreate,
@@ -30,8 +31,10 @@ from .admin_plan_models import (
     PlanVersionSummary,
 )
 from .entitlement_models import EntitlementDefinition
+from .models import CreditEvent
 from .plan_version_models import BillingMode, PlanVersionStatus
 from .stripe_service import stripe_service
+from .system_pricing import SYSTEM_PRICING_EVENT_NAMES, get_system_pricing_definition
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,53 @@ class AdminPlanCatalogService:
         if not result.data:
             raise ValueError(f"Entitlement definition '{key}' not found")
         return EntitlementDefinition(**result.data[0])
+
+    async def list_credit_events(self) -> list[CreditEvent]:
+        """List the finite set of configurable system usage prices."""
+        result = (
+            self.supabase.table("credit_events")
+            .select("*")
+            .in_("name", list(SYSTEM_PRICING_EVENT_NAMES))
+            .order("category")
+            .order("name")
+            .execute()
+        )
+        rows_by_name = {row["name"]: row for row in (result.data or [])}
+        return [
+            CreditEvent(**rows_by_name[name])
+            for name in SYSTEM_PRICING_EVENT_NAMES
+            if name in rows_by_name
+        ]
+
+    async def update_credit_event(
+        self, name: str, update: CreditEventAdminUpdate
+    ) -> CreditEvent:
+        """Update the rate and description of one system pricing event."""
+        definition = get_system_pricing_definition(name)
+        fields = {
+            key: value
+            for key, value in update.model_dump(exclude_unset=True).items()
+            if value is not None
+        }
+        if not fields:
+            raise ValueError("No fields to update")
+
+        # Keep this validation close to the write path so a handcrafted API
+        # request cannot change the runtime-owned meter semantics.
+        fields["meter_type"] = definition.meter_type
+        fields["billing_unit"] = definition.billing_unit
+        fields["is_active"] = True
+
+        fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.supabase.table("credit_events")
+            .update(fields)
+            .eq("name", name)
+            .execute()
+        )
+        if not result.data:
+            raise ValueError(f"Credit event '{name}' not found")
+        return CreditEvent(**result.data[0])
 
     async def list_plan_products(
         self, *, include_versions: bool = True

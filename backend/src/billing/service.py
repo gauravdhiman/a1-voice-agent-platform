@@ -1031,9 +1031,10 @@ class BillingService:
         """Consume credits for an event across three strictly prepaid pools.
 
         Plan credits are drained first, followed by platform-granted bonus
-        credits, then purchased credits. No pay-as-you-go: consumption is
-        denied when the combined balance is insufficient. The per-pool
-        allocation is recorded in transaction metadata for audit.
+        credits, then purchased credits. The credit transaction is followed by
+        a durable low-credit outbox row so email delivery is retried separately
+        from the user-facing consumption request. The per-pool allocation is
+        recorded in transaction metadata for audit.
         """
         try:
             # Get credit event details
@@ -1052,6 +1053,36 @@ class BillingService:
 
             credit_event = CreditEvent(**event_result.data[0])
             credits_needed = credit_event.credit_cost * consumption_request.quantity
+
+            if credits_needed == 0:
+                balance_result = (
+                    self.supabase.table("organizations")
+                    .select(
+                        "credit_balance, admin_credit_balance, purchased_credit_balance"
+                    )
+                    .eq("id", str(consumption_request.organization_id))
+                    .limit(1)
+                    .execute()
+                )
+                if not balance_result.data:
+                    raise ValueError(
+                        f"Organization {consumption_request.organization_id} not found"
+                    )
+                balance_row = balance_result.data[0]
+                balance_after = sum(
+                    int(balance_row.get(pool) or 0)
+                    for pool in (
+                        "credit_balance",
+                        "admin_credit_balance",
+                        "purchased_credit_balance",
+                    )
+                )
+                return CreditConsumptionResponse(
+                    success=True,
+                    credits_consumed=0,
+                    balance_after=balance_after,
+                    transaction_id=UUID("00000000-0000-0000-0000-000000000000"),
+                )
 
             debit_result = await self._debit_organization_credits_locked(
                 consumption_request.organization_id, credits_needed
@@ -1143,9 +1174,12 @@ class BillingService:
                     f"(plan={plan_used}, admin={admin_used}, purchased={purchased_used})"
                 )
 
-                # Low-balance warnings never block consumption
-                await self._maybe_notify_low_balance(
-                    consumption_request.organization_id, new_balance
+                # Notification delivery is deliberately asynchronous. A
+                # provider outage must never roll back a successful debit.
+                await self.enqueue_low_credit_notification(
+                    consumption_request.organization_id,
+                    transaction.id,
+                    new_balance,
                 )
 
                 return CreditConsumptionResponse(
@@ -1160,6 +1194,114 @@ class BillingService:
         except Exception as e:
             logger.error(f"Error consuming credits: {e}")
             raise
+
+    async def enqueue_low_credit_notification(
+        self,
+        organization_id: UUID,
+        credit_transaction_id: UUID,
+        balance_after: int,
+    ) -> bool:
+        """Persist a low-credit evaluation task after a successful debit.
+
+        The outbox is idempotent on ``credit_transaction_id``. This method is
+        best-effort by design: the credit debit has already succeeded, so an
+        outbox persistence problem is logged for operational recovery instead
+        of being reported as a failed usage charge.
+
+        Args:
+            organization_id: Organization whose balance changed.
+            credit_transaction_id: Ledger transaction that caused the change.
+            balance_after: Combined credit balance after the debit.
+
+        Returns:
+            ``True`` when the outbox row was accepted, otherwise ``False``.
+        """
+        try:
+            self.supabase.table("credit_notification_outbox").upsert(
+                {
+                    "organization_id": str(organization_id),
+                    "credit_transaction_id": str(credit_transaction_id),
+                    "balance_after": int(balance_after),
+                },
+                on_conflict="credit_transaction_id",
+            ).execute()
+            return True
+        except Exception as error:
+            logger.error(
+                "Failed to enqueue low-credit notification for transaction %s: %s",
+                credit_transaction_id,
+                error,
+                exc_info=True,
+            )
+            return False
+
+    async def process_low_credit_notification_outbox(
+        self, limit: int = 100
+    ) -> dict[str, int]:
+        """Evaluate and deliver pending low-credit outbox rows.
+
+        Rows remain pending when notification delivery fails. The scheduler
+        records attempt diagnostics and retries them on a later pass; successful
+        rows are marked processed so a worker restart cannot send duplicates.
+
+        Args:
+            limit: Maximum number of outbox rows to process in one pass.
+
+        Returns:
+            Counters for processed, succeeded, failed, and skipped rows.
+        """
+        summary = {"processed": 0, "succeeded": 0, "failed": 0, "skipped": 0}
+        try:
+            result = (
+                self.supabase.table("credit_notification_outbox")
+                .select("*")
+                .is_("processed_at", "null")
+                .order("created_at")
+                .limit(limit)
+                .execute()
+            )
+        except Exception as error:
+            logger.error("Failed to read low-credit notification outbox: %s", error)
+            return summary
+
+        for row in result.data or []:
+            summary["processed"] += 1
+            row_id = row.get("id")
+            try:
+                delivered = await self._maybe_notify_low_balance(
+                    UUID(str(row["organization_id"])),
+                    int(row.get("balance_after") or 0),
+                )
+                if delivered:
+                    self.supabase.table("credit_notification_outbox").update(
+                        {
+                            "processed_at": datetime.now(timezone.utc).isoformat(),
+                            "last_error": None,
+                        }
+                    ).eq("id", str(row_id)).execute()
+                    summary["succeeded"] += 1
+                else:
+                    raise RuntimeError("notification delivery incomplete")
+            except Exception as error:
+                summary["failed"] += 1
+                try:
+                    self.supabase.table("credit_notification_outbox").update(
+                        {
+                            "attempt_count": int(row.get("attempt_count") or 0) + 1,
+                            "last_attempt_at": datetime.now(timezone.utc).isoformat(),
+                            "last_error": str(error),
+                        }
+                    ).eq("id", str(row_id)).execute()
+                except Exception:
+                    logger.exception(
+                        "Failed to record low-credit outbox retry for row %s", row_id
+                    )
+                logger.warning(
+                    "Low-credit notification outbox row %s will be retried: %s",
+                    row_id,
+                    error,
+                )
+        return summary
 
     async def _debit_organization_credits_locked(
         self, organization_id: UUID, credits_needed: int
@@ -1251,13 +1393,15 @@ class BillingService:
 
     async def _maybe_notify_low_balance(
         self, organization_id: UUID, remaining_total: int
-    ) -> None:
+    ) -> bool:
         """Email org admins when the balance crosses a low-credit threshold.
 
         Uses the ``credits.low_balance`` template at 20/10/5% of the period's
         included credits. Each threshold fires at most once per billing cycle
         (``organizations.low_credit_threshold_notified``), re-armed by any
-        grant or purchase. Failures are logged and never break consumption.
+        grant or purchase. Notification logs provide per-recipient idempotency,
+        so provider failures can be retried without duplicating successful
+        deliveries. Return ``False`` when the outbox should retry the row.
         """
         try:
             from src.notifications.models import SendNotificationRequest
@@ -1268,7 +1412,7 @@ class BillingService:
                 organization_id
             )
             if included <= 0:
-                return
+                return True
 
             org_result = (
                 self.supabase.table("organizations")
@@ -1278,7 +1422,7 @@ class BillingService:
                 .execute()
             )
             if not org_result.data:
-                return
+                return True
             org_row = org_result.data[0]
             last_notified = org_row.get("low_credit_threshold_notified")
 
@@ -1286,12 +1430,7 @@ class BillingService:
                 remaining_total, included, last_notified
             )
             if threshold is None:
-                return
-
-            # Mark first so a partial email failure does not resend
-            self.supabase.table("organizations").update(
-                {"low_credit_threshold_notified": threshold}
-            ).eq("id", str(organization_id)).execute()
+                return True
 
             members, error = await user_role_service.get_users_by_organization(
                 organization_id
@@ -1300,19 +1439,27 @@ class BillingService:
                 logger.warning(
                     f"No members to notify for low credit org {organization_id}: {error}"
                 )
-                return
+                return False
 
-            # Prefer org admins; fall back to all members
+            # Billing notifications go to business owners represented by
+            # organization admins, not every organization member.
             admins = [
                 m for m in members if any(role.name == "org_admin" for role in m.roles)
             ]
-            recipients = admins or members
+            if not admins:
+                logger.warning(
+                    "No organization admins to notify for low credit org %s",
+                    organization_id,
+                )
+                return False
+            recipients = admins
 
             purchase_url = (
                 f"{settings.app_base_url or 'http://localhost:3000'}"
                 "/organization/billing"
             )
 
+            all_sent = True
             for member in recipients:
                 try:
                     request = SendNotificationRequest(
@@ -1324,24 +1471,45 @@ class BillingService:
                         template_variables={
                             "user_name": f"{member.first_name} {member.last_name}".strip(),
                             "current_credits": str(remaining_total),
+                            "threshold_percent": str(threshold),
                             "organization_name": org_row.get(
                                 "name", "your organization"
                             ),
                             "purchase_credits_url": purchase_url,
                             "app_name": getattr(settings, "app_name", "24x7 AI"),
                         },
+                        idempotency_key=(
+                            f"low-credit:{organization_id}:{threshold}:{member.id}"
+                        ),
                     )
-                    await notification_service.send_notification(request)
+                    response = await notification_service.send_notification(request)
+                    if not response or not response.success:
+                        all_sent = False
                 except Exception as email_error:
+                    all_sent = False
                     logger.error(
                         f"Failed to send low-credit email to {member.email}: {email_error}",
                         exc_info=True,
                     )
+
+            # Only advance the cycle marker after every owner delivery has
+            # succeeded. A later credit event can retry failed recipients by
+            # reusing their idempotency keys.
+            if all_sent:
+                update_result = (
+                    self.supabase.table("organizations")
+                    .update({"low_credit_threshold_notified": threshold})
+                    .eq("id", str(organization_id))
+                    .execute()
+                )
+                return getattr(update_result, "data", None) is not None
+            return False
         except Exception as e:
             logger.error(
                 f"Error evaluating low-credit notification for {organization_id}: {e}",
                 exc_info=True,
             )
+            return False
 
     # Credit Events Management
     async def get_credit_events(self, active_only: bool = True) -> list[CreditEvent]:

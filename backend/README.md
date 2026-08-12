@@ -2,6 +2,12 @@
 
 FastAPI backend for the multi-tenant SaaS platform with health endpoints and Docker support.
 
+Billing enforcement is system-priced for voice minutes and monthly phone-number
+rentals. The backend admits new calls only with one-minute credit headroom,
+settles admitted calls fully at teardown, and runs a five-minute notification
+outbox/retry loop for low-credit warnings at 20%, 10%, and 5%. See
+[`docs/03_implementation/credit_usage_enforcement_and_notifications.md`](../docs/03_implementation/credit_usage_enforcement_and_notifications.md).
+
 ## 🚀 Getting Started
 
 ### Prerequisites

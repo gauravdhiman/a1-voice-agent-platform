@@ -17,6 +17,7 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.billing.admin_plan_catalog_service import admin_plan_catalog_service
 from src.billing.admin_plan_models import (
+    CreditEventAdminUpdate,
     EntitlementDefinitionUpdate,
     PlanProduct,
     PlanProductCreate,
@@ -30,6 +31,7 @@ from src.billing.admin_plan_models import (
     PlanVersionEntitlementOrderRequest,
 )
 from src.billing.entitlement_models import EntitlementDefinition
+from src.billing.models import CreditEvent
 from src.billing.plan_version_models import (
     PlanVersionPublishRequest,
     PlanVersionPublishResult,
@@ -94,6 +96,44 @@ async def update_entitlement_definition(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update entitlement definition",
+        )
+
+
+@router.get("/credit-events", response_model=list[CreditEvent])
+async def list_credit_events(
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """List platform usage-pricing events for the admin catalog."""
+    _, user_profile = user_auth
+    _require_platform_admin(user_profile)
+    try:
+        return await admin_plan_catalog_service.list_credit_events()
+    except Exception as exc:
+        logger.error("Error listing credit events: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list credit events",
+        )
+
+
+@router.patch("/credit-events/{name}", response_model=CreditEvent)
+async def update_credit_event(
+    name: str,
+    body: CreditEventAdminUpdate,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Update one platform usage-pricing event."""
+    _, user_profile = user_auth
+    _require_platform_admin(user_profile)
+    try:
+        return await admin_plan_catalog_service.update_credit_event(name, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.error("Error updating credit event %s: %s", name, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update credit event",
         )
 
 
