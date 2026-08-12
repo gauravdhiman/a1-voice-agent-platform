@@ -22,6 +22,7 @@ OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh all
 ./scripts/deploy.sh backend
 ./scripts/deploy.sh frontend
 ./scripts/deploy.sh migrate
+./scripts/deploy.sh verify-data --env-file .env.prod
 ./scripts/deploy.sh domains
 ./scripts/deploy.sh --help
 ```

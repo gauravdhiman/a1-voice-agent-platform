@@ -741,6 +741,69 @@ class PhoneNumberService:
             logger.error(f"Error assigning phone number to agent: {e}")
             return None, f"Failed to assign phone number: {str(e)}"
 
+    async def unassign_from_agent(
+        self,
+        phone_number_id: UUID,
+        organization_id: Optional[UUID] = None,
+    ) -> tuple[Optional[PhoneNumber], Optional[str]]:
+        """Remove an agent mapping without releasing the underlying number.
+
+        Args:
+            phone_number_id: Phone number mapping to clear.
+            organization_id: Optional organization scope used by the API.
+
+        Returns:
+            Tuple of the updated phone number and an optional error message.
+
+        Notes:
+            Platform-managed numbers return to ``purchased`` while
+            customer-managed numbers remain ``active`` but stop receiving
+            calls until they are assigned again.
+        """
+        try:
+            query = (
+                self.supabase.table("phone_numbers")
+                .select("*")
+                .eq("id", str(phone_number_id))
+            )
+            if organization_id:
+                query = query.eq("organization_id", str(organization_id))
+            result = query.execute()
+            if not result.data:
+                return None, "Phone number not found"
+
+            phone_number = PhoneNumber(**result.data[0])
+            if phone_number.status in {
+                PhoneNumberStatus.CANCELLED,
+                PhoneNumberStatus.DISCONNECTED,
+            }:
+                return None, f"Cannot unassign number with status {phone_number.status}"
+
+            next_status = (
+                PhoneNumberStatus.PURCHASED.value
+                if phone_number.management_mode == PhoneNumberManagementMode.PLATFORM
+                else PhoneNumberStatus.ACTIVE.value
+            )
+            update_result = (
+                self.supabase.table("phone_numbers")
+                .update(
+                    {
+                        "assigned_agent_id": None,
+                        "status": next_status,
+                        "is_incoming_enabled": False,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                .eq("id", str(phone_number_id))
+                .execute()
+            )
+            if not update_result.data:
+                return None, "Failed to update phone number"
+            return PhoneNumber(**update_result.data[0]), None
+        except Exception as e:
+            logger.error(f"Error unassigning phone number from agent: {e}")
+            return None, f"Failed to unassign phone number: {str(e)}"
+
     async def cancel_number(
         self,
         phone_number_id: UUID,

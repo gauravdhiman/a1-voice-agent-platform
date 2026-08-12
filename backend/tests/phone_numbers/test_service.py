@@ -719,6 +719,219 @@ class TestPhoneNumberServiceAssignToAgent:
         assert error == "Agent not found"
 
 
+class TestPhoneNumberServiceUnassign:
+    """Test cases for clearing agent mappings without provider release."""
+
+    @pytest.mark.asyncio
+    async def test_unassign_platform_number_returns_to_purchased(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_phone_number_id,
+        sample_org_id,
+        sample_agent_id,
+    ):
+        """Platform-owned numbers remain available after unassignment."""
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "id": str(sample_phone_number_id),
+            "organization_id": str(sample_org_id),
+            "phone_number": "+15551234567",
+            "provider": "twilio",
+            "provider_sid": "PN123",
+            "phone_number_type": "local",
+            "country_code": "US",
+            "area_code": "555",
+            "monthly_cost_credits": 200,
+            "status": "active",
+            "assigned_agent_id": str(sample_agent_id),
+            "is_incoming_enabled": True,
+            "is_outgoing_enabled": False,
+            "purchased_at": now,
+            "cancelled_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        selected = MagicMock(data=[row])
+        updated = MagicMock(
+            data=[{**row, "status": "purchased", "assigned_agent_id": None}]
+        )
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            selected
+        )
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            updated
+        )
+
+        result, error = await phone_number_service.unassign_from_agent(
+            sample_phone_number_id,
+            sample_org_id,
+        )
+
+        assert error is None
+        assert result is not None
+        assert result.status == PhoneNumberStatus.PURCHASED
+        assert result.assigned_agent_id is None
+
+    @pytest.mark.asyncio
+    async def test_unassign_customer_number_stays_active_without_incoming(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_phone_number_id,
+        sample_org_id,
+        sample_agent_id,
+    ):
+        """Customer-owned numbers stay connected but stop routing calls."""
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "id": str(sample_phone_number_id),
+            "organization_id": str(sample_org_id),
+            "phone_number": "+15551234567",
+            "provider": "twilio",
+            "provider_sid": None,
+            "phone_number_type": "local",
+            "country_code": "US",
+            "area_code": "555",
+            "monthly_cost_credits": 0,
+            "status": "active",
+            "assigned_agent_id": str(sample_agent_id),
+            "is_incoming_enabled": True,
+            "is_outgoing_enabled": False,
+            "provisioning_source": "customer",
+            "management_mode": "customer_managed",
+            "billing_mode": "none",
+            "configuration_status": "configured",
+            "purchased_at": now,
+            "cancelled_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        selected = MagicMock(data=[row])
+        updated = MagicMock(
+            data=[{**row, "assigned_agent_id": None, "is_incoming_enabled": False}]
+        )
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            selected
+        )
+        mock_supabase_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            updated
+        )
+
+        result, error = await phone_number_service.unassign_from_agent(
+            sample_phone_number_id,
+            sample_org_id,
+        )
+
+        assert error is None
+        assert result is not None
+        assert result.status == PhoneNumberStatus.ACTIVE
+        assert result.is_incoming_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_unassign_returns_not_found_when_row_is_missing(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """A missing number is reported without attempting an update."""
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        result, error = await phone_number_service.unassign_from_agent(
+            sample_phone_number_id
+        )
+
+        assert result is None
+        assert error == "Phone number not found"
+
+    @pytest.mark.asyncio
+    async def test_unassign_rejects_terminal_number(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """Released numbers cannot be remapped through the assignment API."""
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "id": str(sample_phone_number_id),
+            "organization_id": str(uuid4()),
+            "phone_number": "+15551234567",
+            "provider": "twilio",
+            "provider_sid": "PN123",
+            "phone_number_type": "local",
+            "country_code": "US",
+            "area_code": "555",
+            "monthly_cost_credits": 200,
+            "status": "cancelled",
+            "assigned_agent_id": None,
+            "is_incoming_enabled": False,
+            "is_outgoing_enabled": False,
+            "purchased_at": now,
+            "cancelled_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        result, error = await phone_number_service.unassign_from_agent(
+            sample_phone_number_id
+        )
+
+        assert result is None
+        assert "CANCELLED" in error
+
+    @pytest.mark.asyncio
+    async def test_unassign_reports_update_failure(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """A failed persistence response is surfaced to the caller."""
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "id": str(sample_phone_number_id),
+            "organization_id": str(uuid4()),
+            "phone_number": "+15551234567",
+            "provider": "twilio",
+            "provider_sid": "PN123",
+            "phone_number_type": "local",
+            "country_code": "US",
+            "area_code": "555",
+            "monthly_cost_credits": 200,
+            "status": "active",
+            "assigned_agent_id": str(uuid4()),
+            "is_incoming_enabled": True,
+            "is_outgoing_enabled": False,
+            "purchased_at": now,
+            "cancelled_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            MagicMock(data=[row]),
+            MagicMock(data=[]),
+        ]
+
+        result, error = await phone_number_service.unassign_from_agent(
+            sample_phone_number_id
+        )
+
+        assert result is None
+        assert error == "Failed to update phone number"
+
+    @pytest.mark.asyncio
+    async def test_unassign_handles_database_exception(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """Unexpected persistence errors become a safe service error."""
+        mock_supabase_client.table.side_effect = RuntimeError("database unavailable")
+
+        result, error = await phone_number_service.unassign_from_agent(
+            sample_phone_number_id
+        )
+
+        assert result is None
+        assert "Failed to unassign phone number" in error
+
+
 class TestPhoneNumberServiceCancel:
     """Test cases for canceling phone numbers."""
 

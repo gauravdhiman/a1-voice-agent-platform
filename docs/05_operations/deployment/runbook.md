@@ -74,7 +74,7 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | 2 | Cloud Run domain mappings (`api` + `www`) | `./scripts/deploy.sh domains` |
 | 3 | Cloudflare DNS CNAMEs (`api`, `www`) + A record (`voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
-| 5 | Production DB migrations | Required migration job in GitHub Actions; manual recovery: `./scripts/deploy.sh migrate` |
+| 5 | Production DB migrations + phone-number data verification | Required migration job in GitHub Actions; manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` |
 | 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
 | 7 | Vendor webhooks (Stripe, Twilio, Google OAuth) | You |
 
@@ -88,11 +88,44 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
 | `scripts/deploy/gcp-map-domains.sh` | Cloud Run domain mappings |
 | `scripts/deploy/run-alembic-cloud.sh` | Alembic against Supabase |
+| `scripts/deploy/verify_phone_number_backfill.py` | Read-only postcondition check for the legacy agent phone-number backfill |
 | `scripts/deploy/oci-deploy-voice-ws.sh` | Sync + build voice-ws on OCI VM |
 | `scripts/oci-env.sh` | OCI CLI session auth helper |
 | `deploy/oci/docker-compose.voice-ws.yml` | voice-ws + Caddy stack |
 | `deploy/oci/Caddyfile` | TLS reverse proxy for `voice.247ai.live` |
 | `.github/workflows/deploy-cloud.yml` | CI auto-deploy on `main` |
+
+## Phone-number data migration release procedure
+
+The legacy `voice_agents.phone_number` backfill is migration
+`20260812000006`. It runs as part of the production Alembic chain, before the
+Cloud Run deployment. The migration is atomic and fail-closed: invalid values,
+duplicate legacy ownership, and conflicts with existing `phone_numbers` rows
+stop the release before application code is deployed.
+
+The GitHub Actions production job performs this sequence automatically:
+
+1. Run `./scripts/deploy.sh migrate` against the production database.
+2. Run `python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod`.
+3. Deploy Cloud Run only when both commands succeed.
+
+For a manually approved recovery or staged rollout:
+
+```bash
+./scripts/deploy.sh migrate --env-file .env.prod
+./scripts/deploy.sh verify-data --env-file .env.prod
+```
+
+The verifier is read-only and safe to repeat. It checks that every legacy
+organization/number pair still has a `phone_numbers` row, while allowing a
+later legitimate unassignment or release. Do not manually delete the
+backfilled rows during an application rollback: the downgrade is intentionally
+a no-op so newer customer-managed or purchased-number state cannot be erased.
+Use a database backup or a reviewed, targeted repair if a rollback requires
+data changes. Future data migrations should follow this same pattern: define a
+preflight conflict policy, make the change atomic/idempotent, add a read-only
+postcondition verifier, and wire both migration and verification into the
+production deployment gate.
 
 ## Environment configuration
 

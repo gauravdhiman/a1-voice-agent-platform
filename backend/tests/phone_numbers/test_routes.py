@@ -378,6 +378,105 @@ class TestAssignPhoneNumberPermission:
             assert result["phone_number"] is assigned
 
 
+class TestUnassignPhoneNumberPermission:
+    """Unassigning a number uses the same scoped update permission."""
+
+    @pytest.mark.asyncio
+    async def test_no_permission_forbidden(self):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.unassign_from_agent = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await unassign_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(TEST_USER_ID, _make_profile()),
+                )
+
+        assert exc_info.value.status_code == 403
+        mock_svc.unassign_from_agent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_org_admin_passes(self):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        unassigned = Mock()
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.unassign_from_agent = AsyncMock(return_value=(unassigned, None))
+            result = await unassign_phone_number(
+                phone_number_id=TEST_PHONE_ID,
+                organization_id=TEST_ORG_ID,
+                user_auth=(
+                    TEST_USER_ID,
+                    _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                ),
+            )
+
+        assert result["success"] is True
+        assert result["phone_number"] is unassigned
+
+    @pytest.mark.asyncio
+    async def test_not_found_maps_to_404(self):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.unassign_from_agent = AsyncMock(
+                return_value=(None, "Phone number not found")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await unassign_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_service_error_maps_to_400(self):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.unassign_from_agent = AsyncMock(
+                return_value=(None, "Cannot unassign terminal number")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await unassign_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_unexpected_service_error_maps_to_500(self):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.unassign_from_agent = AsyncMock(
+                side_effect=RuntimeError("database unavailable")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await unassign_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+
+
 class TestImportPhoneNumberPermission:
     """Existing Twilio numbers use the same organization create permission."""
 

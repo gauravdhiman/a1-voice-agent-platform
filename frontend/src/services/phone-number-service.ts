@@ -96,6 +96,26 @@ class PhoneNumberService {
     return response.data;
   }
 
+  /**
+   * Removes an agent mapping without releasing the organization-owned number.
+   *
+   * @param phoneNumberId - Phone-number record to unassign
+   * @param organizationId - Organization scope for the request
+   * @returns Updated phone-number record
+   */
+  async unassignFromAgent(
+    phoneNumberId: string,
+    organizationId: string,
+  ): Promise<{ success: boolean; phone_number: PhoneNumber }> {
+    const response = await apiClient.delete<{
+      success: boolean;
+      phone_number: PhoneNumber;
+    }>(
+      `${this.baseUrl}/${phoneNumberId}/assignment?organization_id=${encodeURIComponent(organizationId)}`,
+    );
+    return response.data;
+  }
+
   async cancelNumber(
     phoneNumberId: string,
     organizationId: string,

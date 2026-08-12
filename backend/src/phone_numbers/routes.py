@@ -309,6 +309,48 @@ async def assign_phone_number_to_agent(
         )
 
 
+@router.delete("/{phone_number_id}/assignment")
+async def unassign_phone_number(
+    phone_number_id: UUID,
+    organization_id: UUID,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Clear an agent mapping while keeping the organization number connected."""
+    try:
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "update",
+            organization_id,
+            error_message="Insufficient permissions to unassign phone numbers",
+        )
+
+        result, error = await phone_number_service.unassign_from_agent(
+            phone_number_id=phone_number_id,
+            organization_id=organization_id,
+        )
+        if error:
+            if "not found" in error.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=error,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error,
+            )
+        return {"success": True, "phone_number": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unassigning phone number: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to unassign phone number",
+        )
+
+
 @router.delete("/{phone_number_id}")
 async def cancel_phone_number(
     phone_number_id: UUID,

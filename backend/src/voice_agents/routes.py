@@ -192,7 +192,8 @@ async def get_user_agents(
             response = (
                 voice_agent_service.supabase.table("voice_agents").select("*").execute()
             )
-            agents = [VoiceAgent(**item) for item in response.data]
+            mapped_rows = voice_agent_service._with_phone_number_mappings(response.data)
+            agents = [VoiceAgent(**item) for item in mapped_rows]
             logger.info(f"Found {len(agents)} agents (platform admin)")
             return agents
         except Exception as e:

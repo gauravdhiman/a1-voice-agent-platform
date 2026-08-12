@@ -13,6 +13,7 @@
 #   frontend    GCP Cloud Run frontend only
 #   voice-ws    OCI voice-ws WebSocket worker (Pipecat). Alias: voice, worker
 #   migrate     Run Alembic migrations against production Supabase
+#   verify-data Verify production phone-number data migration postconditions
 #   domains     Map api/www custom domains to Cloud Run services
 #
 # Options:
@@ -31,6 +32,7 @@
 #   ./scripts/deploy.sh voice-ws
 #   OCI_SSH_HOST=203.0.113.10 ./scripts/deploy.sh worker
 #   ./scripts/deploy.sh migrate
+#   ./scripts/deploy.sh verify-data
 #
 # Full runbook: docs/05_operations/deployment/runbook.md
 set -euo pipefail
@@ -56,7 +58,7 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    all|gcp|backend|frontend|voice-ws|voice|worker|migrate|migrations|db|domains|dns)
+    all|gcp|backend|frontend|voice-ws|voice|worker|migrate|migrations|db|verify-data|verify-phone-numbers|domains|dns)
       COMPONENT="$1"
       shift
       ;;
@@ -111,6 +113,9 @@ case "$COMPONENT" in
     ;;
   migrate|migrations|db)
     "${DEPLOY_DIR}/run-alembic-cloud.sh"
+    ;;
+  verify-data|verify-phone-numbers)
+    python3 "${DEPLOY_DIR}/verify_phone_number_backfill.py" --env-file "$ENV_FILE"
     ;;
   domains|dns)
     "${DEPLOY_DIR}/gcp-map-domains.sh"

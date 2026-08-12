@@ -15,10 +15,22 @@ when all of the following are true:
 - `billing_status` is `active`; and
 - `configuration_status` is `configured`.
 
+`is_incoming_enabled` is a property of the number mapping. Agent activation is
+checked separately during routing, so an inactive agent can retain its mapping
+and become callable immediately when reactivated.
+
 The legacy `voice_agents.phone_number` column is not used for inbound routing.
 This allows one agent to be changed without leaving stale routing values on the
 agent record and makes customer-owned numbers behave exactly like purchased
 numbers after verification.
+
+For compatibility, agent list/detail API responses still expose a
+`phone_number` field. The backend populates that response field from the
+assigned `phone_numbers` row, so cards, search, and older clients see the same
+current assignment without treating the legacy database column as authoritative.
+If the assignment lookup is temporarily unavailable during a rolling deploy,
+the service can fall back to the legacy value for read availability; inbound
+routing never uses that fallback.
 
 ## Two ownership modes
 
@@ -61,6 +73,16 @@ token in v1.
 The later “Connect Twilio account” capability can remove this manual callback
 configuration, but it is intentionally out of scope for v1.
 
+## Agent configuration experience
+
+Agent settings expose a single phone-number dropdown backed by
+`phone_numbers`. Existing organization numbers can be selected or cleared
+without releasing them. Selecting **Connect a custom number** opens a right
+drawer where the user enters an already-owned number; after the record is
+created, the drawer displays the tokenized voice and status callback URLs plus
+step-by-step provider instructions. The create-agent wizard defers this step
+until an agent ID exists, so it never creates a new legacy-only mapping.
+
 ## Search
 
 The UI exposes US only. The backend is country-aware and passes the selected
@@ -91,7 +113,10 @@ The scheduler cadence is the lower of:
 This gives one daily loop by default. The scheduler reads the persisted values
 at each iteration, so a settings change takes effect without a process restart.
 The broader platform-admin area for managing every cron job remains a future
-separate request.
+separate request. The current per-instance scheduler risks and the shared
+Postgres lease design are documented in
+[Maintenance jobs and horizontal scaling](maintenance_jobs.md); that work is
+scheduled immediately after this Twilio integration.
 
 <!-- TODO: Extend the platform-admin settings area to cover all cron jobs,
 including pause/resume, last-run status, and per-job health diagnostics. -->

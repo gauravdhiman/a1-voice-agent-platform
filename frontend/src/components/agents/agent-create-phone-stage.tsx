@@ -1,16 +1,7 @@
 "use client";
 
-import type { Control, FieldPath, FieldValues } from "react-hook-form";
+import type { Control, FieldValues } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 
 export interface AgentCreatePhoneFormValues extends FieldValues {
   phone_number: string;
@@ -27,48 +18,28 @@ export interface AgentCreatePhoneStageProps<
 /**
  * Optional phone-number step for the agent creation wizard.
  *
- * Phone numbers can be added later from Phone Numbers / agent settings.
+ * Phone numbers are attached after the agent exists, so the assignment can
+ * reference a concrete agent and use the phone_numbers source of truth.
  */
 export function AgentCreatePhoneStage<
   TFieldValues extends AgentCreatePhoneFormValues = AgentCreatePhoneFormValues,
->({ control, onSkip }: AgentCreatePhoneStageProps<TFieldValues>) {
-  const phoneField = "phone_number" as FieldPath<TFieldValues>;
-
+>({ onSkip }: AgentCreatePhoneStageProps<TFieldValues>) {
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-2">Phone number (optional)</h3>
         <p className="text-sm text-muted-foreground">
-          Attach an existing phone number now, or skip and configure one later.
-          Numbers must be in E.164 format when provided.
+          After the agent is created, choose an organization number or connect
+          a custom Twilio number from the agent settings. This keeps the agent
+          mapping in one place and automatically shows the webhook instructions
+          for custom numbers.
         </p>
       </div>
 
-      <FormField
-        control={control}
-        name={phoneField}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Phone number</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                placeholder="+14155551234"
-                data-testid="agent-create-phone"
-              />
-            </FormControl>
-            <FormDescription>
-              Optional. Example: +14155551234. Leave blank to configure later.
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
       <div className="bg-muted/30 rounded-lg p-4 border border-dashed space-y-3">
         <p className="text-sm text-muted-foreground">
-          You can also purchase and assign numbers later from{" "}
-          <strong>Phone Numbers</strong> in the dashboard.
+          Existing purchased numbers and custom-number setup are available from
+          the agent&apos;s <strong>Phone number</strong> setting after creation.
         </p>
         <Button
           type="button"

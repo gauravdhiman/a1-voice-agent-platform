@@ -482,9 +482,16 @@ the sole source of truth for phone-to-agent routing; the legacy
 | id | UUID | PRIMARY KEY | Number record |
 | organization_id | UUID | NOT NULL, FK → organizations.id | Owning organization |
 | phone_number | VARCHAR(20) | NOT NULL | E.164 number |
+| provider | VARCHAR(20) | NOT NULL, DEFAULT twilio | Provider name |
+| provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio phone-number SID when platform-managed |
 | phone_number_type | VARCHAR(20) | NOT NULL | local, mobile, or toll_free |
+| country_code | VARCHAR(2) | NOT NULL, DEFAULT US | ISO country code; `ZZ` means legacy geography requires review |
+| area_code | VARCHAR(10) | NULLABLE | Provider/catalog area code |
 | monthly_cost_credits | INTEGER | NOT NULL, >= 0 | Current system monthly rate |
 | status | VARCHAR(30) | NOT NULL | provisioning, purchased, active, verification_required, release_pending, disconnected, or cancelled |
+| assigned_agent_id | UUID | NULLABLE, FK → voice_agents.id | Agent receiving calls from this number |
+| is_incoming_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether inbound routing is enabled |
+| is_outgoing_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether outbound use is enabled |
 | billing_status | VARCHAR(20) | NOT NULL, DEFAULT active | active or past_due |
 | billing_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_rental | platform_rental for platform-owned numbers; none for customer-owned numbers |
 | provisioning_source | VARCHAR(20) | NOT NULL, DEFAULT platform | platform or customer |
@@ -492,13 +499,14 @@ the sole source of truth for phone-to-agent routing; the legacy
 | configuration_status | VARCHAR(30) | NOT NULL, DEFAULT configured | pending, configured, verification_required, or failed |
 | next_billing_at | TIMESTAMPTZ | NULLABLE | Next monthly rental due date |
 | billing_grace_ends_at | TIMESTAMPTZ | NULLABLE | Past-due release deadline |
-| provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio SID |
 | connection_token_hash | VARCHAR(64) | NULLABLE, UNIQUE | Hash of the customer webhook connection token; raw token is never stored |
 | provisioning_idempotency_key | VARCHAR(255) | NULLABLE | Organization-scoped retry key for platform purchase |
 | configuration_error | VARCHAR(1000) | NULLABLE | Last provisioning or verification error |
 | last_verified_at | TIMESTAMPTZ | NULLABLE | Last verified webhook timestamp |
 | purchased_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Purchase timestamp |
 | cancelled_at | TIMESTAMPTZ | NULLABLE | Release timestamp |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Record creation timestamp |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last record update timestamp |
 
 The phone-rental scheduler checks platform-rental rows daily (both the billing
 cadence and release-retry cadence are configurable), disables inbound calls
@@ -1356,9 +1364,16 @@ erDiagram
         uuid id
         uuid organization_id
         varchar phone_number
+        varchar provider
+        varchar provider_sid
         varchar phone_number_type
+        varchar country_code
+        varchar area_code
         integer monthly_cost_credits
         varchar status
+        uuid assigned_agent_id
+        boolean is_incoming_enabled
+        boolean is_outgoing_enabled
         varchar billing_status
         varchar billing_mode
         varchar provisioning_source
@@ -1366,7 +1381,6 @@ erDiagram
         varchar configuration_status
         timestamptz next_billing_at
         timestamptz billing_grace_ends_at
-        varchar provider_sid
         varchar connection_token_hash
         varchar provisioning_idempotency_key
         timestamptz purchased_at
@@ -1526,6 +1540,7 @@ erDiagram
     organizations ||--|| organization_subscriptions : "has one"
     organizations ||--o{ credit_transactions : "has many"
     organizations ||--o{ phone_numbers : "owns"
+    voice_agents ||--o{ phone_numbers : "receives calls from"
     organizations ||--o{ billing_history : "has many"
     organizations ||--o{ notification_logs : "has many"
     organizations ||--o{ credit_notification_outbox : "queues warnings"
@@ -1604,6 +1619,7 @@ erDiagram
 55. `20260812000003` - Update the seeded low-credit notification event description and metadata to the 20/10/5 warning policy.
 56. `20260812000004` - Add platform/customer phone-number ownership, webhook verification, provisioning idempotency, lifecycle statuses, and release-retry indexes.
 57. `20260812000005` - Add the platform-admin phone-number settings singleton for configurable rental grace and billing/release retry intervals.
+58. `20260812000006` - Data migration: backfill legacy non-empty `voice_agents.phone_number` values into `phone_numbers`, fail closed on invalid or conflicting assignments, and verify the new source-of-truth mappings before application deployment.
 
 ---
 

@@ -29,6 +29,18 @@ Enable users to purchase, manage, and use phone numbers directly from the VoiceA
 - The customer-owned path is intentionally not branded as a Twilio product in
   the normal purchase experience; it is an advanced “Connect Existing Number”
   path for numbers the customer already owns.
+- Agent settings use a dropdown backed by `phone_numbers`: users can choose an
+  available organization number, clear the mapping without releasing the
+  number, or choose “Connect a custom number.” The custom path opens a
+  right-side help drawer, creates the mapping, and shows the exact tokenized
+  voice and status URLs to paste into the provider console.
+- The agent-creation wizard does not accept a raw legacy phone string. Number
+  assignment happens after the agent exists so the mapping is created against a
+  concrete agent and follows the same source-of-truth flow.
+- Production migration `20260812000006` backfills existing non-empty
+  `voice_agents.phone_number` values before the application rollout. It is
+  fail-closed for invalid or conflicting data and is followed by a read-only
+  deployment verifier.
 
 ```mermaid
 flowchart TD
@@ -744,7 +756,20 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/123e4567-e89b-12d3-a456
 
 ---
 
-#### 9.6 Release or Disconnect Phone Number
+#### 9.6 Unassign Phone Number Without Releasing It
+
+Clear the agent mapping while keeping the organization-owned number available.
+Platform-managed rows return to `purchased`; customer-managed rows remain
+connected but stop inbound routing until assigned again.
+
+**Endpoint:** `DELETE /api/v1/phone-numbers/{phone_number_id}/assignment?organization_id=<org_uuid>`
+
+This endpoint requires `phone_number:update` permission and never calls
+Twilio's release API.
+
+---
+
+#### 9.7 Release or Disconnect Phone Number
 
 For a platform-owned number, release is irreversible and stops calls. For a
 customer-owned number, this operation is a local disconnect only; the customer

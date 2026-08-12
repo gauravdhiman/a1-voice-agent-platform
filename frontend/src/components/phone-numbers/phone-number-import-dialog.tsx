@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Link2, Phone } from "lucide-react";
+import { ExternalLink, Loader2, Link2, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { agentService } from "@/services/agent-service";
 import { phoneNumberService } from "@/services/phone-number-service";
@@ -92,18 +92,21 @@ export function PhoneNumberImportDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col overflow-y-auto sm:max-w-lg"
+      >
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Link2 className="h-5 w-5" />
             Connect Existing Number
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Connect a Twilio number you already own. We will not buy, bill, or
             release this number.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {result ? (
           <div className="space-y-4">
@@ -128,6 +131,15 @@ export function PhoneNumberImportDialog({
                 Place a test call after saving them. The number becomes active
                 automatically after the first verified webhook.
               </p>
+              <a
+                className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
+                href="https://www.twilio.com/docs/usage/webhooks"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Twilio webhook instructions
+                <ExternalLink className="h-3 w-3" />
+              </a>
             </div>
             <Button className="w-full" onClick={() => handleOpenChange(false)}>
               Done
@@ -185,7 +197,7 @@ export function PhoneNumberImportDialog({
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

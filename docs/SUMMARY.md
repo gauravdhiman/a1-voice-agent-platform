@@ -158,8 +158,9 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 
 1. Read **[Phone Numbers PRD](PRD-phone-numbers.md)** - Complete feature specification
 2. Read **[Phone-number lifecycle](02_core_systems/phone_number_lifecycle.md)** for implementation and ownership decisions
-3. Review API Documentation section in the PRD
-4. Check **[Backend Phone Numbers Module](../backend/src/phone_numbers/)** - Implementation details
+3. Read **[Maintenance jobs and horizontal scaling](02_core_systems/maintenance_jobs.md)** before enabling multiple backend scheduler instances
+4. Review API Documentation section in the PRD
+5. Check **[Backend Phone Numbers Module](../backend/src/phone_numbers/)** - Implementation details
 
 ### Implementing Billing?
 
