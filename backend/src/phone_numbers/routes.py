@@ -18,10 +18,6 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from src.auth.dependencies import assert_has_permission
-from src.auth.middleware import get_authenticated_user
-from src.auth.models import UserProfile
-from src.security.rate_limiter import limiter
 
 from shared.organization.phone_number_models import (
     PhoneNumberAssignRequest,
@@ -30,9 +26,16 @@ from shared.organization.phone_number_models import (
     PhoneNumberListResponse,
     PhoneNumberPurchaseRequest,
     PhoneNumberPurchaseResponse,
+    PhoneNumberSearchMode,
     PhoneNumberSearchRequest,
     PhoneNumberSearchResponse,
+    PhoneNumberWebhookDetailsResponse,
+    PhoneNumberWithAgent,
 )
+from src.auth.dependencies import assert_has_permission
+from src.auth.middleware import get_authenticated_user
+from src.auth.models import UserProfile
+from src.security.rate_limiter import limiter
 
 from .platform_settings_models import (
     PlatformPhoneNumberSettings,
@@ -86,6 +89,7 @@ async def search_available_numbers(
     phone_number_type: str = "local",
     area_code: str | None = None,
     contains: str | None = None,
+    search_mode: str = PhoneNumberSearchMode.CONTAINS.value,
     page: int = 1,
     page_size: int = 50,
     user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
@@ -102,6 +106,7 @@ async def search_available_numbers(
             phone_number_type=phone_number_type,
             area_code=area_code,
             contains=contains,
+            search_mode=search_mode,
             page=page,
             page_size=min(page_size, 50),
         )
@@ -251,6 +256,91 @@ async def list_organization_numbers(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list phone numbers",
+        )
+
+
+@router.get("/agent/{agent_id}", response_model=PhoneNumberWithAgent | None)
+async def get_agent_phone_number(
+    agent_id: UUID,
+    organization_id: UUID,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Return the active phone number assigned to one organization agent."""
+    try:
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "read",
+            organization_id,
+            error_message="Insufficient permissions to view phone numbers",
+        )
+
+        result, error = await phone_number_service.get_agent_number(
+            organization_id=organization_id,
+            agent_id=agent_id,
+        )
+        if error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=error,
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error loading phone number for agent %s: %s", agent_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load phone number for agent",
+        )
+
+
+@router.get(
+    "/{phone_number_id}/verification-details",
+    response_model=PhoneNumberWebhookDetailsResponse,
+)
+async def get_phone_number_verification_details(
+    phone_number_id: UUID,
+    organization_id: UUID,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Return pending customer-owned webhook URLs for a phone number."""
+    try:
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "read",
+            organization_id,
+            error_message="Insufficient permissions to view phone numbers",
+        )
+
+        result, error = await phone_number_service.get_verification_details(
+            organization_id=organization_id,
+            phone_number_id=phone_number_id,
+        )
+        if error:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_404_NOT_FOUND
+                    if error == "Phone number not found"
+                    else status.HTTP_400_BAD_REQUEST
+                ),
+                detail=error,
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Error loading verification details for phone number %s: %s",
+            phone_number_id,
+            e,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load phone-number verification details",
         )
 
 

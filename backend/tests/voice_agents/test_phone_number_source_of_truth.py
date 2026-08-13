@@ -32,6 +32,27 @@ def test_merge_phone_number_mappings_ignores_unassigned_rows():
     ) == [{"id": "agent-1", "phone_number": None}]
 
 
+def test_merge_phone_number_mappings_ignores_terminal_rows():
+    """Cancelled historical rows must not mask a current assignment."""
+    agents = [{"id": "agent-1", "phone_number": "+14155550100"}]
+
+    assert merge_phone_number_mappings(
+        agents,
+        [
+            {
+                "assigned_agent_id": "agent-1",
+                "phone_number": "+14155550000",
+                "status": "cancelled",
+            },
+            {
+                "assigned_agent_id": "agent-1",
+                "phone_number": "+14155550300",
+                "status": "active",
+            },
+        ],
+    ) == [{"id": "agent-1", "phone_number": "+14155550300"}]
+
+
 def test_service_mapping_loader_handles_empty_and_idless_rows():
     """The loader handles empty query results without touching Supabase."""
     service = VoiceAgentService()
@@ -117,3 +138,57 @@ async def test_get_agent_by_phone_reads_phone_numbers_table():
     get_agent_by_id.assert_awaited_once_with(
         UUID("00000000-0000-0000-0000-000000000001")
     )
+
+
+@pytest.mark.asyncio
+async def test_get_agent_by_id_embeds_phone_assignment_in_one_database_request():
+    """Agent detail loading should not make a second mapping request."""
+    service = VoiceAgentService()
+    query = Mock()
+    query.select.return_value = query
+    query.eq.return_value = query
+    query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "organization_id": "00000000-0000-0000-0000-000000000002",
+                "name": "Test Agent",
+                "phone_number": "+14155550100",
+                "is_active": True,
+                "persona": None,
+                "tone": None,
+                "mission": None,
+                "use_platform_credits": False,
+                "custom_instructions": None,
+                "instructions_markdown": None,
+                "preset_id": None,
+                "is_published_on_public_page": False,
+                "created_at": "2026-08-01T00:00:00+00:00",
+                "updated_at": "2026-08-01T00:00:00+00:00",
+                "phone_numbers": [
+                    {
+                        "assigned_agent_id": "00000000-0000-0000-0000-000000000001",
+                        "phone_number": "+14155550300",
+                        "status": "active",
+                    }
+                ],
+            }
+        ]
+    )
+    client = Mock()
+    client.table.return_value = query
+
+    with patch.object(
+        type(service.supabase_config),
+        "client",
+        new_callable=PropertyMock,
+        return_value=client,
+    ):
+        result, error = await service.get_agent_by_id(
+            UUID("00000000-0000-0000-0000-000000000001")
+        )
+
+    assert error is None
+    assert result is not None
+    assert result.phone_number == "+14155550300"
+    client.table.assert_called_once_with("voice_agents")

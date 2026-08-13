@@ -234,7 +234,8 @@ Static Embed Code → Visitor Clicks → Token Generated → WebRTC Connection
 **Key Configuration**:
 
 - ``: LiveKit SIP domain for bridging
-- `voice_agents.phone_number`: Phone number associated with agent
+- `voice_agents.phone_number`: Legacy phone-number compatibility field; active
+  phone-to-agent routing uses the `phone_numbers` mapping table
 - `voice_routes.py`: Handles Twilio webhook and returns TwiML
 
 **Example TwiML Response**:

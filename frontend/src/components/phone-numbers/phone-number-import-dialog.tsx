@@ -95,7 +95,7 @@ export function PhoneNumberImportDialog({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col overflow-y-auto sm:max-w-lg"
+        className="flex w-full flex-col overflow-y-auto p-6 sm:max-w-lg"
       >
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">

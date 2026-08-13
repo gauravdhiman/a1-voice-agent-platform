@@ -15,6 +15,12 @@ when all of the following are true:
 - `billing_status` is `active`; and
 - `configuration_status` is `configured`.
 
+Routing evaluates these predicates in one `phone_numbers` query with an inner
+join to `voice_agents`; the supporting organization/agent-active and phone
+number indexes are created by migration `20260812000009`. This keeps the call
+entry path independent of the legacy agent field and avoids a second database
+round trip just to find the assigned agent.
+
 `is_incoming_enabled` is a property of the number mapping. Agent activation is
 checked separately during routing, so an inactive agent can retain its mapping
 and become callable immediately when reactivated.
@@ -38,6 +44,10 @@ routing never uses that fallback.
 | --- | --- | --- | --- | --- |
 | `platform_managed` | Search and purchase | Monthly credits | Purchase, configure, release | Release the provider number |
 | `customer_managed` | Connect existing number | None | No purchase or release | Disconnect local routing only |
+
+Customer-managed rows do not consume the organization's
+`max_phone_numbers` entitlement. That entitlement limits only numbers the
+platform purchases and rents on the organization's behalf.
 
 ### Platform purchase
 
@@ -63,12 +73,13 @@ retry does not debit twice or purchase a second number.
 
 The Connect Existing Number dialog accepts an existing E.164 number and an
 optional agent. The backend creates a `verification_required` row and returns
-tokenized URLs once containing an opaque `connection_token`. Only its SHA-256
-hash is stored; the raw token cannot be recovered later. The user configures
-both URLs in the Twilio console once. The first signed webhook verifies the
-number and enables routing, after which the same token protects future
-callbacks. The platform never asks for or stores the customer's Twilio auth
-token in v1.
+tokenized URLs containing an opaque `connection_token`. The token hash is used
+for verification and the token is retained encrypted only while setup is
+pending, so the user can reopen the URLs from the phone-number or agent view.
+The user configures both URLs in the Twilio console once. The first signed
+webhook verifies the number, removes the encrypted setup token, and enables
+routing. The platform never asks for or stores the customer's Twilio auth token
+in v1.
 
 The later “Connect Twilio account” capability can remove this manual callback
 configuration, but it is intentionally out of scope for v1.
@@ -80,16 +91,33 @@ Agent settings expose a single phone-number dropdown backed by
 without releasing them. Selecting **Connect a custom number** opens a right
 drawer where the user enters an already-owned number; after the record is
 created, the drawer displays the tokenized voice and status callback URLs plus
-step-by-step provider instructions. The create-agent wizard defers this step
-until an agent ID exists, so it never creates a new legacy-only mapping.
+step-by-step provider instructions. While the number remains
+`verification_required`, **View setup details** appears next to the number in
+the phone-number dashboard and agent settings, reopening the same right drawer.
+The initial agent settings request loads only the current assignment through
+`GET /api/v1/phone-numbers/agent/{agent_id}`. The full organization inventory
+is fetched only when the dropdown is opened, so a large number pool does not
+delay the agent page or its selected phone field.
+The create-agent wizard defers this step until an agent ID exists, so it never
+creates a new legacy-only mapping.
 
 ## Search
 
 The UI exposes US only. The backend is country-aware and passes the selected
-country to Twilio. Search is a generic `contains` search: punctuation and a
-leading `+` are removed before the provider request. There is no separate
-starts-with or ends-with API because both are represented by a contains pattern
-at the selected position.
+country to Twilio. Search accepts a `contains`, `begins_with`, or `ends_with`
+match mode. Punctuation is removed before the provider request, then the
+backend uses Twilio's documented `%pattern%`, `+pattern`, and `pattern$`
+expressions respectively. US national prefixes receive the `1` country code
+automatically. Patterns are limited to Twilio's 16-character provider limit.
+Callers searching other countries should include the calling code in a prefix
+until country-specific dialing metadata is introduced.
+
+The search form submits on Enter. It is disabled when the organization balance
+is below the minimum monthly rental for the selected number type, and the UI
+explains the required balance with a high-contrast warning. This check is only
+for platform-purchased inventory; customer-owned number imports remain free of
+platform rental charges and are not subject to the search screen's purchase
+eligibility check.
 
 ## Billing and release scheduler
 

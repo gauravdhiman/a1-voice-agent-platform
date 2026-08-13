@@ -26,6 +26,10 @@ export type PhoneNumberBillingMode = "platform_rental" | "none";
 export type PhoneNumberBillingStatus = "active" | "past_due";
 
 export type PhoneNumberType = "local" | "toll_free" | "mobile";
+export type PhoneNumberSearchMode =
+  | "contains"
+  | "begins_with"
+  | "ends_with";
 
 export interface PhoneNumberBase {
   phone_number: string;
@@ -83,6 +87,7 @@ export interface PhoneNumberSearchRequest {
   phone_number_type?: PhoneNumberType;
   area_code?: string | null;
   contains?: string | null;
+  search_mode?: PhoneNumberSearchMode;
   page?: number;
   page_size?: number;
 }
@@ -122,6 +127,14 @@ export interface PhoneNumberImportRequest {
 export interface PhoneNumberImportResponse {
   success: boolean;
   phone_number: PhoneNumber;
+  voice_url: string;
+  status_callback: string;
+  message: string;
+}
+
+export interface PhoneNumberWebhookDetailsResponse {
+  phone_number_id: string;
+  phone_number: string;
   voice_url: string;
   status_callback: string;
   message: string;

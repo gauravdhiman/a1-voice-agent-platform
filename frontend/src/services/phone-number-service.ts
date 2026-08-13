@@ -5,6 +5,7 @@
 import { apiClient } from "@/lib/api/client";
 import type {
   PhoneNumber,
+  PhoneNumberWithAgent,
   PhoneNumberAssignRequest,
   PhoneNumberListResponse,
   PhoneNumberImportRequest,
@@ -13,6 +14,7 @@ import type {
   PhoneNumberPurchaseResponse,
   PhoneNumberSearchRequest,
   PhoneNumberSearchResponse,
+  PhoneNumberWebhookDetailsResponse,
 } from "@/types/phone-number";
 
 class PhoneNumberService {
@@ -34,6 +36,9 @@ class PhoneNumberService {
     }
     if (searchRequest.contains) {
       params.append("contains", searchRequest.contains);
+    }
+    if (searchRequest.search_mode) {
+      params.append("search_mode", searchRequest.search_mode);
     }
     if (searchRequest.page) {
       params.append("page", searchRequest.page.toString());
@@ -77,6 +82,41 @@ class PhoneNumberService {
   ): Promise<PhoneNumberListResponse> {
     const response = await apiClient.get<PhoneNumberListResponse>(
       `${this.baseUrl}?organization_id=${organizationId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Loads the active number assigned to one agent without listing the whole
+   * organization inventory.
+   *
+   * @param organizationId - Organization that owns the agent
+   * @param agentId - Agent whose assignment should be loaded
+   * @returns The assigned number, or null when the agent has no assignment
+   */
+  async getAgentNumber(
+    organizationId: string,
+    agentId: string,
+  ): Promise<PhoneNumberWithAgent | null> {
+    const response = await apiClient.get<PhoneNumberWithAgent | null>(
+      `${this.baseUrl}/agent/${agentId}?organization_id=${encodeURIComponent(organizationId)}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Loads the tokenized webhook URLs for a customer-owned number awaiting verification.
+   *
+   * @param organizationId - Organization that owns the number
+   * @param phoneNumberId - Phone-number record awaiting verification
+   * @returns Pending webhook URLs and setup instructions
+   */
+  async getVerificationDetails(
+    organizationId: string,
+    phoneNumberId: string,
+  ): Promise<PhoneNumberWebhookDetailsResponse> {
+    const response = await apiClient.get<PhoneNumberWebhookDetailsResponse>(
+      `${this.baseUrl}/${phoneNumberId}/verification-details?organization_id=${encodeURIComponent(organizationId)}`,
     );
     return response.data;
   }

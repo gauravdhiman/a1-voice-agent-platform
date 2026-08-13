@@ -85,6 +85,11 @@ const CUSTOMER_NUMBER: PhoneNumberWithAgent = {
   management_mode: "customer_managed",
 };
 
+const CUSTOMER_VERIFICATION_NUMBER: PhoneNumberWithAgent = {
+  ...CUSTOMER_NUMBER,
+  status: "verification_required",
+};
+
 describe("<PhoneNumberDashboard> (N1 #2 — write-action gate)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -187,6 +192,24 @@ describe("<PhoneNumberDashboard> (N1 #2 — write-action gate)", () => {
     expect(
       screen.queryByRole("button", { name: /^release$/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /view setup details/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows setup details only while a customer number awaits verification", () => {
+    render(
+      <PhoneNumberDashboard
+        organizationId="org-1"
+        phoneNumbers={[CUSTOMER_VERIFICATION_NUMBER]}
+        isLoading={false}
+        canManage
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /view setup details/i }),
+    ).toBeInTheDocument();
   });
 
   it("hides per-row actions when canManage is false (CRIT — read-only user)", () => {

@@ -116,8 +116,8 @@ class TestMaxAgentsHandlerEdgeCases:
 
 
 @pytest.mark.asyncio
-async def test_phone_number_limit_counts_non_terminal_lifecycle_rows():
-    """Provisioning, active, and pending-release rows consume plan capacity."""
+async def test_phone_number_limit_counts_non_terminal_platform_rows_only():
+    """Only platform-managed lifecycle rows consume plan phone capacity."""
     table = MagicMock()
     table.select.return_value = table
     table.eq.return_value = table
@@ -145,6 +145,7 @@ async def test_phone_number_limit_counts_non_terminal_lifecycle_rows():
     result = await handler.check_limit(org_id, entitlements, resolved, increment=1)
 
     assert result.allowed is False
+    table.eq.assert_any_call("management_mode", "platform_managed")
     table.in_.assert_called_once_with(
         "status",
         [

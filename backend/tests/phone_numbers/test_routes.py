@@ -286,6 +286,156 @@ class TestListOrganizationNumbersPermission:
             assert result is listed
 
 
+class TestSearchAvailableNumbers:
+    """Search route tests pin the public provider-search contract."""
+
+    @pytest.mark.asyncio
+    async def test_forwards_match_mode_and_filters(self):
+        from src.phone_numbers.routes import search_available_numbers
+
+        response = Mock()
+        profile = _make_profile()
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.search_available = AsyncMock(return_value=(response, None))
+
+            result = await search_available_numbers(
+                country_code="US",
+                phone_number_type="local",
+                area_code="480",
+                contains="2168",
+                search_mode="ends_with",
+                page=1,
+                page_size=50,
+                user_auth=(TEST_USER_ID, profile),
+            )
+
+        assert result is response
+        request = mock_svc.search_available.await_args.args[0]
+        assert request.country_code == "US"
+        assert request.area_code == "480"
+        assert request.contains == "2168"
+        assert request.search_mode.value == "ends_with"
+
+    @pytest.mark.asyncio
+    async def test_provider_error_maps_to_server_error(self):
+        from src.phone_numbers.routes import search_available_numbers
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.search_available = AsyncMock(
+                return_value=(None, "provider unavailable")
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await search_available_numbers(
+                    user_auth=(TEST_USER_ID, _make_profile())
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "provider unavailable"
+
+    @pytest.mark.asyncio
+    async def test_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import search_available_numbers
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.search_available = AsyncMock(
+                side_effect=RuntimeError("provider secret")
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await search_available_numbers(
+                    user_auth=(TEST_USER_ID, _make_profile())
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to search available numbers"
+
+
+class TestGetAgentPhoneNumber:
+    """The agent lookup route uses the phone-number read permission contract."""
+
+    @pytest.mark.asyncio
+    async def test_no_permission_forbidden(self):
+        from src.phone_numbers.routes import get_agent_phone_number
+
+        profile = _make_profile()
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.get_agent_number = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await get_agent_phone_number(
+                    agent_id=UUID("00000000-0000-0000-0000-0000000000a1"),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+            assert exc_info.value.status_code == 403
+            mock_svc.get_agent_number.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_org_admin_returns_current_assignment(self):
+        from src.phone_numbers.routes import get_agent_phone_number
+
+        assignment = Mock()
+        agent_id = UUID("00000000-0000-0000-0000-0000000000a1")
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.get_agent_number = AsyncMock(return_value=(assignment, None))
+            result = await get_agent_phone_number(
+                agent_id=agent_id,
+                organization_id=TEST_ORG_ID,
+                user_auth=(TEST_USER_ID, profile),
+            )
+
+            assert result is assignment
+            mock_svc.get_agent_number.assert_awaited_once_with(
+                organization_id=TEST_ORG_ID,
+                agent_id=agent_id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_service_error_returns_server_error(self):
+        from src.phone_numbers.routes import get_agent_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.get_agent_number = AsyncMock(
+                return_value=(None, "database unavailable")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await get_agent_phone_number(
+                    agent_id=UUID("00000000-0000-0000-0000-0000000000a1"),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+            assert exc_info.value.status_code == 500
+            assert exc_info.value.detail == "database unavailable"
+
+    @pytest.mark.asyncio
+    async def test_unexpected_service_error_is_sanitized(self):
+        from src.phone_numbers.routes import get_agent_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.get_agent_number = AsyncMock(side_effect=RuntimeError("secret"))
+            with pytest.raises(HTTPException) as exc_info:
+                await get_agent_phone_number(
+                    agent_id=UUID("00000000-0000-0000-0000-0000000000a1"),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+            assert exc_info.value.status_code == 500
+            assert exc_info.value.detail == "Failed to load phone number for agent"
+
+
 class TestPlatformPhoneNumberSettingsRoutes:
     """Platform-admin-only settings and release-pending response behavior."""
 
@@ -516,6 +666,48 @@ class TestImportPhoneNumberPermission:
 
         assert exc_info.value.status_code == 403
         mock_svc.import_number.assert_not_called()
+
+
+class TestVerificationDetailsPermission:
+    """Pending webhook URLs use the phone-number read permission."""
+
+    @pytest.mark.asyncio
+    async def test_org_admin_can_read_verification_details(self):
+        from src.phone_numbers.routes import get_phone_number_verification_details
+
+        details = Mock()
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.get_verification_details = AsyncMock(return_value=(details, None))
+
+            result = await get_phone_number_verification_details(
+                phone_number_id=TEST_PHONE_ID,
+                organization_id=TEST_ORG_ID,
+                user_auth=(TEST_USER_ID, profile),
+            )
+
+        assert result is details
+        mock_svc.get_verification_details.assert_awaited_once_with(
+            organization_id=TEST_ORG_ID,
+            phone_number_id=TEST_PHONE_ID,
+        )
+
+    @pytest.mark.asyncio
+    async def test_verification_details_without_permission_are_forbidden(self):
+        from src.phone_numbers.routes import get_phone_number_verification_details
+
+        profile = _make_profile()
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.get_verification_details = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await get_phone_number_verification_details(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 403
+        mock_svc.get_verification_details.assert_not_called()
 
 
 class TestCancelPhoneNumberPermission:

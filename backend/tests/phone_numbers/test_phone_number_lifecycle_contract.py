@@ -6,12 +6,14 @@ from uuid import uuid4
 
 import pytest
 
+from shared.common.security import decrypt_data
 from shared.organization.phone_number_models import (
     PhoneNumberBillingMode,
     PhoneNumberConfigurationStatus,
     PhoneNumberImportRequest,
     PhoneNumberManagementMode,
     PhoneNumberProvisioningSource,
+    PhoneNumberSearchMode,
     PhoneNumberStatus,
     PhoneNumberType,
 )
@@ -106,15 +108,41 @@ def test_number_normalization_supports_e164_and_us_national_input():
 def test_number_normalization_rejects_ambiguous_international_national_input():
     """Non-US numbers must be supplied in E.164 until country parsers are added."""
     from fastapi import HTTPException
+
     from src.phone_numbers.utils import normalize_phone_number
 
     with pytest.raises(HTTPException):
         normalize_phone_number("2071838750", "GB")
 
 
+def test_search_mode_defaults_to_contains():
+    """The existing generic search remains the default match mode."""
+    from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+    request = PhoneNumberSearchRequest()
+
+    assert request.search_mode is PhoneNumberSearchMode.CONTAINS
+
+
+def test_search_pattern_matches_twilio_maximum_length():
+    """Provider-bound search patterns do not exceed Twilio's 16-character limit."""
+    from pydantic import ValidationError
+    from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+    with pytest.raises(ValidationError):
+        PhoneNumberSearchRequest(contains="12345678901234567")
+
+
+def test_search_pattern_accepts_string_match_modes_for_direct_callers():
+    """The normalization helper remains safe for non-Pydantic callers."""
+    from src.phone_numbers.utils import normalize_search_contains
+
+    assert normalize_search_contains("2168", "ends_with") == "2168$"
+
+
 @pytest.mark.asyncio
-async def test_search_forwards_digits_only_contains_pattern(lifecycle_service):
-    """Formatting characters do not change the provider's generic contains search."""
+async def test_search_forwards_twilio_contains_pattern(lifecycle_service):
+    """Formatting characters do not change the provider's contains search."""
     from src.phone_numbers.service import PhoneNumberService
 
     lifecycle_service.twilio_service.search_available_numbers.return_value = []
@@ -131,7 +159,63 @@ async def test_search_forwards_digits_only_contains_pattern(lifecycle_service):
         country_code="US",
         number_type="local",
         area_code=None,
-        contains="1415",
+        contains="%1415%",
+        limit=50,
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_forwards_twilio_prefix_pattern_for_us_national_input(
+    lifecycle_service,
+):
+    """Begin searches prepend the US country code for national input."""
+    from src.phone_numbers.service import PhoneNumberService
+
+    lifecycle_service.twilio_service.search_available_numbers.return_value = []
+
+    from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+    await PhoneNumberService.search_available(
+        lifecycle_service,
+        PhoneNumberSearchRequest(
+            country_code="US",
+            contains="(480)",
+            search_mode=PhoneNumberSearchMode.BEGINS_WITH,
+        ),
+    )
+
+    lifecycle_service.twilio_service.search_available_numbers.assert_called_once_with(
+        country_code="US",
+        number_type="local",
+        area_code=None,
+        contains="+1480",
+        limit=50,
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_forwards_twilio_suffix_pattern(lifecycle_service):
+    """End searches use Twilio's documented dollar-suffix pattern."""
+    from src.phone_numbers.service import PhoneNumberService
+
+    lifecycle_service.twilio_service.search_available_numbers.return_value = []
+
+    from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+    await PhoneNumberService.search_available(
+        lifecycle_service,
+        PhoneNumberSearchRequest(
+            country_code="US",
+            contains="21-68",
+            search_mode=PhoneNumberSearchMode.ENDS_WITH,
+        ),
+    )
+
+    lifecycle_service.twilio_service.search_available_numbers.assert_called_once_with(
+        country_code="US",
+        number_type="local",
+        area_code=None,
+        contains="2168$",
         limit=50,
     )
 
@@ -140,7 +224,7 @@ async def test_search_forwards_digits_only_contains_pattern(lifecycle_service):
 async def test_import_existing_number_is_not_billed_or_released(
     lifecycle_service, mock_supabase_client
 ):
-    """Customer-owned imports create a verification record without Twilio billing."""
+    """Customer-owned imports bypass platform number entitlements and billing."""
     from src.phone_numbers.service import PhoneNumberService
 
     now = datetime.now(timezone.utc).isoformat()
@@ -183,8 +267,132 @@ async def test_import_existing_number_is_not_billed_or_released(
     assert error is None
     assert result.success is True
     assert "connection_token=" in result.voice_url
+    lifecycle_service.entitlement_service.assert_limit.assert_not_awaited()
     lifecycle_service.billing_service.consume_credits.assert_not_called()
     lifecycle_service.twilio_service.purchase_phone_number.assert_not_called()
+    inserted = mock_supabase_client.table.return_value.insert.call_args.args[0]
+    assert decrypt_data(inserted["connection_token_encrypted"])["token"]
+
+
+@pytest.mark.asyncio
+async def test_verification_details_can_be_retrieved_until_customer_number_is_verified(
+    lifecycle_service, mock_supabase_client
+):
+    """Customer webhook URLs remain available while verification is pending."""
+    from shared.common.security import encrypt_data
+    from src.phone_numbers.service import PhoneNumberService
+
+    row = {
+        "id": str(uuid4()),
+        "phone_number": "+14155550100",
+        "status": "verification_required",
+        "provisioning_source": "customer",
+        "management_mode": "customer_managed",
+        "connection_token_encrypted": encrypt_data({"token": "saved-token"}),
+    }
+    mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[row])
+
+    result, error = await PhoneNumberService.get_verification_details(
+        lifecycle_service,
+        organization_id=uuid4(),
+        phone_number_id=uuid4(),
+    )
+
+    assert error is None
+    assert result is not None
+    assert "connection_token=saved-token" in result.voice_url
+    assert "connection_token=saved-token" in result.status_callback
+
+
+@pytest.mark.asyncio
+async def test_verification_details_are_unavailable_after_verification(
+    lifecycle_service, mock_supabase_client
+):
+    """Configured customer numbers do not expose their retired setup token."""
+    from src.phone_numbers.service import PhoneNumberService
+
+    mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": str(uuid4()),
+                "phone_number": "+14155550100",
+                "status": "active",
+                "provisioning_source": "customer",
+                "management_mode": "customer_managed",
+                "connection_token_encrypted": "encrypted-token",
+            }
+        ]
+    )
+
+    result, error = await PhoneNumberService.get_verification_details(
+        lifecycle_service,
+        organization_id=uuid4(),
+        phone_number_id=uuid4(),
+    )
+
+    assert result is None
+    assert error == "Verification details are only available while setup is pending"
+
+
+@pytest.mark.asyncio
+async def test_pending_legacy_number_gets_a_replacement_verification_token(
+    lifecycle_service, mock_supabase_client
+):
+    """Pending rows created before encrypted storage can recover their setup URLs."""
+    from src.phone_numbers.service import PhoneNumberService
+
+    phone_number_id = uuid4()
+    row = {
+        "id": str(phone_number_id),
+        "phone_number": "+14155550100",
+        "status": "verification_required",
+        "provisioning_source": "customer",
+        "management_mode": "customer_managed",
+        "connection_token_encrypted": None,
+    }
+    table = mock_supabase_client.table.return_value
+    table.execute.return_value = MagicMock(data=[row])
+    table.update.return_value.execute.return_value = MagicMock(data=[row])
+
+    result, error = await PhoneNumberService.get_verification_details(
+        lifecycle_service,
+        organization_id=uuid4(),
+        phone_number_id=phone_number_id,
+    )
+
+    assert error is None
+    assert result is not None
+    assert "connection_token=" in result.voice_url
+    update_payload = table.update.call_args.args[0]
+    assert update_payload["connection_token_hash"]
+    assert update_payload["connection_token_encrypted"]
+
+
+@pytest.mark.asyncio
+async def test_import_duplicate_number_returns_actionable_error(
+    lifecycle_service, mock_supabase_client
+):
+    """A number already connected is reported without leaking a DB error."""
+    from src.phone_numbers.service import PhoneNumberService
+
+    mock_supabase_client.table.return_value.insert.return_value.execute.side_effect = (
+        Exception(
+            "duplicate key value violates unique constraint "
+            '"uq_phone_numbers_active_number"'
+        )
+    )
+
+    result, error = await PhoneNumberService.import_number(
+        lifecycle_service,
+        organization_id=uuid4(),
+        import_request=PhoneNumberImportRequest(phone_number="+14155550100"),
+    )
+
+    assert result is None
+    assert error == (
+        "This phone number is already connected. "
+        "Select it from the phone-number list instead."
+    )
 
 
 @pytest.mark.asyncio
@@ -243,10 +451,9 @@ async def test_purchase_refunds_and_marks_release_pending_when_provider_compensa
     lifecycle_service, mock_supabase_client
 ):
     """Provider failures are compensated and orphaned SIDs become retryable."""
+    from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
     from src.billing.models import CreditConsumptionResponse
     from src.phone_numbers.service import PhoneNumberService
-
-    from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
 
     organization_id = uuid4()
     record_id = uuid4()
@@ -290,9 +497,8 @@ async def test_purchase_idempotency_key_does_not_purchase_twice(
     lifecycle_service, mock_supabase_client
 ):
     """A client retry returns the existing row before touching Twilio again."""
-    from src.phone_numbers.service import PhoneNumberService
-
     from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+    from src.phone_numbers.service import PhoneNumberService
 
     now = datetime.now(timezone.utc).isoformat()
     row = {

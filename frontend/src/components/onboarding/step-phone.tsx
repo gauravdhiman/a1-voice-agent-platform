@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -58,6 +58,11 @@ export function StepPhone({
     } finally {
       setSearching(false);
     }
+  };
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleSearch();
   };
 
   const handlePurchase = async () => {
@@ -118,7 +123,7 @@ export function StepPhone({
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <form onSubmit={handleSearchSubmit} className="flex gap-2">
         <Input
           placeholder="Area code (optional)"
           value={areaCode}
@@ -126,7 +131,7 @@ export function StepPhone({
           className="w-40"
           maxLength={3}
         />
-        <Button onClick={handleSearch} disabled={searching} variant="outline">
+        <Button type="submit" disabled={searching} variant="outline">
           {searching ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
@@ -134,7 +139,7 @@ export function StepPhone({
           )}
           Search
         </Button>
-      </div>
+      </form>
 
       {results.length > 0 && (
         <div className="space-y-2">

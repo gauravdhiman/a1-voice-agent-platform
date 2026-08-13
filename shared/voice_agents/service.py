@@ -7,9 +7,9 @@ from typing import List, Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
+from supabase import Client
 
 from shared.config import supabase_config
-from supabase import Client
 
 from .models import DeleteResponse, VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 
@@ -23,6 +23,14 @@ agent_operations_counter = meter.create_counter(
 
 agent_errors_counter = meter.create_counter(
     "voice_agent.errors", description="Number of voice agent operation errors"
+)
+
+TERMINAL_PHONE_NUMBER_STATUSES = frozenset({"cancelled", "disconnected"})
+ACTIVE_PHONE_NUMBER_STATUSES = (
+    "purchased",
+    "active",
+    "verification_required",
+    "release_pending",
 )
 
 
@@ -51,6 +59,8 @@ def merge_phone_number_mappings(
     for row in phone_number_rows:
         agent_id = row.get("assigned_agent_id")
         phone_number = row.get("phone_number")
+        if row.get("status") in TERMINAL_PHONE_NUMBER_STATUSES:
+            continue
         if agent_id and phone_number:
             assigned_numbers.setdefault(str(agent_id), str(phone_number))
 
@@ -98,6 +108,7 @@ class VoiceAgentService:
                 self.supabase.table("phone_numbers")
                 .select("assigned_agent_id, phone_number")
                 .in_("assigned_agent_id", agent_ids)
+                .in_("status", list(ACTIVE_PHONE_NUMBER_STATUSES))
                 .execute()
             )
             return merge_phone_number_mappings(agent_rows, response.data or [])
@@ -151,17 +162,19 @@ class VoiceAgentService:
     async def get_agent_by_id(
         self, agent_id: UUID
     ) -> tuple[Optional[VoiceAgent], Optional[str]]:
-        """Get an agent by its ID."""
+        """Get an agent and its current phone assignment in one request."""
         try:
             response = (
                 self.supabase.table("voice_agents")
-                .select("*")
+                .select("*, phone_numbers(phone_number, assigned_agent_id, status)")
                 .eq("id", str(agent_id))
                 .execute()
             )
             if not response.data:
                 return None, "Agent not found"
-            agent_dict = self._with_phone_number_mappings([response.data[0]])[0]
+            agent_dict = dict(response.data[0])
+            phone_number_rows = agent_dict.pop("phone_numbers", []) or []
+            agent_dict = merge_phone_number_mappings([agent_dict], phone_number_rows)[0]
             return VoiceAgent(**agent_dict), None
         except Exception as e:
             logger.error(f"Error getting agent {agent_id}: {e}")

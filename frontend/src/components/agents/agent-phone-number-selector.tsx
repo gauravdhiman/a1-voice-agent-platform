@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { phoneNumberService } from "@/services/phone-number-service";
+import { PhoneNumberWebhookDetailsDrawer } from "@/components/phone-numbers/phone-number-webhook-details-drawer";
 import type {
   PhoneNumberImportResponse,
   PhoneNumberWithAgent,
@@ -127,7 +128,7 @@ function PhoneNumberConnectionDrawer({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col overflow-y-auto sm:max-w-lg"
+        className="flex w-full flex-col overflow-y-auto p-6 sm:max-w-lg"
         data-testid="webhook-help-drawer"
       >
         <SheetHeader>
@@ -142,7 +143,7 @@ function PhoneNumberConnectionDrawer({
         </SheetHeader>
 
         {result ? (
-          <div className="flex-1 space-y-5 py-6">
+          <div className="flex-1 space-y-5">
             <Alert>
               <Phone className="h-4 w-4" />
               <AlertTitle>Save these webhook settings in Twilio</AlertTitle>
@@ -178,7 +179,7 @@ function PhoneNumberConnectionDrawer({
             </a>
           </div>
         ) : (
-          <div className="flex-1 space-y-5 py-6">
+          <div className="flex-1 space-y-5">
             <div className="space-y-2">
               <Label htmlFor="agent-custom-twilio-number">
                 Twilio phone number
@@ -268,7 +269,7 @@ interface AgentPhoneNumberSelectorProps {
 /**
  * Selects an organization-owned number for an agent or opens custom-number
  * setup.  The selector uses ``phone_numbers`` as the source of truth and never
- * writes the legacy ``voice_agents.phone_number`` field.
+ * writes the normalized ``phone_numbers`` assignment used for routing.
  */
 export function AgentPhoneNumberSelector({
   agentId,
@@ -279,32 +280,53 @@ export function AgentPhoneNumberSelector({
 }: AgentPhoneNumberSelectorProps) {
   const [numbers, setNumbers] = React.useState<PhoneNumberWithAgent[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [numbersLoaded, setNumbersLoaded] = React.useState(false);
   const [updating, setUpdating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
 
   const loadNumbers = React.useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const response = await phoneNumberService.getOrganizationNumbers(
         organizationId,
       );
       setNumbers(response.items);
+      setNumbersLoaded(true);
     } catch (loadError: unknown) {
       setError(
         loadError instanceof Error
           ? loadError.message
           : "Failed to load phone numbers",
       );
-    } finally {
-      setLoading(false);
     }
   }, [organizationId]);
 
+  const loadAssignedNumber = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const assignedNumber = await phoneNumberService.getAgentNumber(
+        organizationId,
+        agentId,
+      );
+      setNumbers(assignedNumber ? [assignedNumber] : []);
+      setNumbersLoaded(false);
+    } catch (loadError: unknown) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load phone number",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [agentId, organizationId]);
+
   React.useEffect(() => {
-    void loadNumbers();
-  }, [loadNumbers]);
+    void loadAssignedNumber();
+  }, [loadAssignedNumber]);
 
   const assignedNumber = React.useMemo(
     () => numbers.find((number) => number.assigned_agent_id === agentId) ?? null,
@@ -364,6 +386,7 @@ export function AgentPhoneNumberSelector({
         ...current.filter((number) => number.id !== phoneNumber.id),
         phoneNumber,
       ]);
+      setNumbersLoaded(false);
       onAssignmentChange?.(phoneNumber);
     },
     [onAssignmentChange],
@@ -375,6 +398,11 @@ export function AgentPhoneNumberSelector({
       <Select
         value={assignedNumber?.id ?? "none"}
         onValueChange={(value) => void handleSelection(value)}
+        onOpenChange={(open) => {
+          if (open && !numbersLoaded) {
+            void loadNumbers();
+          }
+        }}
         disabled={!canEdit || loading || updating}
       >
         <SelectTrigger id="agent-phone-number" aria-label="Phone number">
@@ -383,6 +411,11 @@ export function AgentPhoneNumberSelector({
           />
         </SelectTrigger>
         <SelectContent>
+          {!numbersLoaded && numbers.length === 0 && (
+            <SelectItem value="loading" disabled>
+              Loading available numbers…
+            </SelectItem>
+          )}
           <SelectItem value="none">No phone number</SelectItem>
           {numbers.map((number) => {
             const assignedToAnotherAgent =
@@ -407,9 +440,22 @@ export function AgentPhoneNumberSelector({
         </SelectContent>
       </Select>
       {assignedNumber?.status === "verification_required" ? (
-        <p className="text-xs text-amber-600">
-          Finish the Twilio webhook setup to activate incoming calls.
-        </p>
+        <div className="space-y-1">
+          <p className="text-xs text-amber-600">
+            Finish the Twilio webhook setup to activate incoming calls.
+          </p>
+          {assignedNumber.management_mode === "customer_managed" && (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={() => setDetailsOpen(true)}
+            >
+              View setup details
+            </Button>
+          )}
+        </div>
       ) : (
         <p className="text-xs text-muted-foreground">
           Choose a number already owned by your organization or connect one from
@@ -425,6 +471,16 @@ export function AgentPhoneNumberSelector({
         onOpenChange={setDrawerOpen}
         onConnected={handleConnected}
       />
+      {assignedNumber?.management_mode === "customer_managed" &&
+        assignedNumber.status === "verification_required" && (
+          <PhoneNumberWebhookDetailsDrawer
+            organizationId={organizationId}
+            phoneNumberId={assignedNumber.id}
+            phoneNumber={assignedNumber.phone_number}
+            open={detailsOpen}
+            onOpenChange={setDetailsOpen}
+          />
+        )}
     </div>
   );
 }

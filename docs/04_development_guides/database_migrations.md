@@ -58,6 +58,16 @@ For the legacy agent phone-number backfill:
    organization/number pair to have a table row. The migration itself verifies
    the initial assigned-agent mapping; the later deployment check allows users
    to unassign or release the row without blocking subsequent releases.
+5. `20260812000007_expand_phone_number_status_length.py` widens the lifecycle
+   status column to `VARCHAR(30)`, allowing the 21-character
+   `verification_required` state used by customer-owned numbers.
+6. `20260812000008_add_phone_number_webhook_token_encryption.py` adds nullable
+   encrypted token storage so pending customer setup URLs can be reopened. The
+   application clears that value after successful webhook verification.
+7. `20260812000009_add_phone_number_lookup_indexes.py` adds the composite
+   organization/agent-active indexes used by the agent editor and inbound
+   phone-to-agent routing. It is a schema-only migration and is applied by the
+   same production migration job before the application rollout.
 
 The automatic production path is:
 

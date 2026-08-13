@@ -12,6 +12,7 @@ from uuid import UUID
 
 from shared.billing.call_status import ACTIVE_VOICE_CALL_STATUSES
 from shared.config import supabase_config
+from shared.organization.phone_number_models import PhoneNumberManagementMode
 
 from .entitlement_models import LimitCheckResult, OrgEntitlements, ResolvedEntitlement
 
@@ -106,7 +107,7 @@ class MaxAgentsHandler(MaxCountHandler):
 
 
 class MaxPhoneNumbersHandler(MaxCountHandler):
-    """Count all non-terminal platform and customer phone-number rows."""
+    """Count non-terminal platform-managed phone-number rows only."""
 
     count_table = "phone_numbers"
 
@@ -118,6 +119,7 @@ class MaxPhoneNumbersHandler(MaxCountHandler):
             client.table(self.count_table)
             .select("id", count="exact")
             .eq(self.count_column, str(org_id))
+            .eq("management_mode", PhoneNumberManagementMode.PLATFORM.value)
             .in_(
                 "status",
                 [

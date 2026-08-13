@@ -20,6 +20,33 @@ describe("phoneNumberService API contracts", () => {
     apiClient.delete.mockResolvedValue({ data: {} });
   });
 
+  it("loads one agent assignment without listing the organization inventory", async () => {
+    apiClient.get.mockResolvedValueOnce({ data: null });
+
+    await phoneNumberService.getAgentNumber("org/1", "agent-1");
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/phone-numbers/agent/agent-1?organization_id=org%2F1",
+    );
+  });
+
+  it("passes the selected phone-number match mode to the search API", async () => {
+    apiClient.get.mockResolvedValueOnce({ data: { items: [] } });
+
+    await phoneNumberService.searchAvailable({
+      country_code: "US",
+      phone_number_type: "local",
+      contains: "480",
+      search_mode: "begins_with",
+      page: 1,
+      page_size: 50,
+    });
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/phone-numbers/available?country_code=US&phone_number_type=local&contains=480&search_mode=begins_with&page=1&page_size=50",
+    );
+  });
+
   it("uses a query organization id and idempotency header for purchase", async () => {
     await phoneNumberService.purchaseNumber(
       "org/1",

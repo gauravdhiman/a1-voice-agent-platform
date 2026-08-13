@@ -14,15 +14,8 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from src.billing.entitlement_models import EntitlementDenied
-from src.billing.entitlement_service import EntitlementService
-from src.billing.models import CreditConsumptionRequest
-from src.billing.service import BillingService
-from src.billing.system_pricing import (
-    get_phone_number_pricing_event_name,
-    get_system_pricing_definition,
-)
 
+from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
 from shared.config.settings import settings
 from shared.organization.phone_number_models import (
@@ -44,7 +37,16 @@ from shared.organization.phone_number_models import (
     PhoneNumberSearchResponse,
     PhoneNumberStatus,
     PhoneNumberType,
+    PhoneNumberWebhookDetailsResponse,
     PhoneNumberWithAgent,
+)
+from src.billing.entitlement_models import EntitlementDenied
+from src.billing.entitlement_service import EntitlementService
+from src.billing.models import CreditConsumptionRequest
+from src.billing.service import BillingService
+from src.billing.system_pricing import (
+    get_phone_number_pricing_event_name,
+    get_system_pricing_definition,
 )
 
 from .platform_settings_service import platform_phone_number_settings_service
@@ -65,6 +67,15 @@ ACTIVE_PHONE_NUMBER_STATUSES = (
     PhoneNumberStatus.ACTIVE.value,
     PhoneNumberStatus.VERIFICATION_REQUIRED.value,
     PhoneNumberStatus.RELEASE_PENDING.value,
+)
+
+PHONE_NUMBER_LIST_COLUMNS = (
+    "id, organization_id, phone_number, provider, provider_sid, phone_number_type, "
+    "country_code, area_code, monthly_cost_credits, status, assigned_agent_id, "
+    "is_incoming_enabled, is_outgoing_enabled, billing_status, next_billing_at, "
+    "billing_grace_ends_at, provisioning_source, management_mode, "
+    "configuration_status, billing_mode, configuration_error, last_verified_at, "
+    "purchased_at, cancelled_at, created_at, updated_at"
 )
 
 
@@ -127,7 +138,11 @@ class PhoneNumberService:
                 country_code=search_request.country_code.upper(),
                 number_type=twilio_type,
                 area_code=search_request.area_code,
-                contains=normalize_search_contains(search_request.contains),
+                contains=normalize_search_contains(
+                    search_request.contains,
+                    search_request.search_mode,
+                    search_request.country_code,
+                ),
                 limit=search_request.page_size,
             )
 
@@ -402,16 +417,13 @@ class PhoneNumberService:
 
         The method creates a verification-required row and returns tokenized
         webhook URLs once. The raw token is not recoverable and the method
-        never calls Twilio's purchase or delete API.
+        never calls Twilio's purchase or delete API. Customer-managed numbers
+        are not subject to the organization's platform-purchased number limit.
         """
         try:
             normalized_number = normalize_phone_number(
                 import_request.phone_number, import_request.country_code
             )
-            limit_error = await self._phone_number_limit_error(organization_id)
-            if limit_error:
-                return None, limit_error
-
             assigned_agent_id = None
             if import_request.agent_id:
                 agent_result = (
@@ -446,6 +458,7 @@ class PhoneNumberService:
                 management_mode=PhoneNumberManagementMode.CUSTOMER,
                 configuration_status=PhoneNumberConfigurationStatus.VERIFICATION_REQUIRED,
                 connection_token_hash=hash_connection_token(token),
+                connection_token_encrypted=encrypt_data({"token": token}),
                 purchased_at=now,
             )
             result = (
@@ -473,8 +486,104 @@ class PhoneNumberService:
         except HTTPException as exc:
             return None, str(exc.detail)
         except Exception as e:
+            if "uq_phone_numbers_active_number" in str(e):
+                return (
+                    None,
+                    "This phone number is already connected. "
+                    "Select it from the phone-number list instead.",
+                )
             logger.error("Error importing customer phone number: %s", e)
             return None, f"Failed to import phone number: {str(e)}"
+
+    async def get_verification_details(
+        self, organization_id: UUID, phone_number_id: UUID
+    ) -> tuple[Optional[PhoneNumberWebhookDetailsResponse], Optional[str]]:
+        """Return pending customer webhook URLs for an organization-owned number.
+
+        Args:
+            organization_id: Organization requesting the setup details.
+            phone_number_id: Phone-number record whose setup URLs are needed.
+
+        Returns:
+            A tuple containing the tokenized webhook details, or an error when
+            the number is not pending customer verification or its encrypted
+            setup token is unavailable.
+
+        Notes:
+            The raw token is encrypted at rest and is removed when the first
+            valid customer webhook verifies the number. Platform-managed and
+            already-verified numbers never expose setup details.
+        """
+        try:
+            result = (
+                self.supabase.table("phone_numbers")
+                .select(
+                    "id, phone_number, status, provisioning_source, "
+                    "management_mode, connection_token_encrypted"
+                )
+                .eq("id", str(phone_number_id))
+                .eq("organization_id", str(organization_id))
+                .execute()
+            )
+            if not result.data:
+                return None, "Phone number not found"
+
+            row = result.data[0]
+            if (
+                row.get("status") != PhoneNumberStatus.VERIFICATION_REQUIRED.value
+                or row.get("provisioning_source")
+                != PhoneNumberProvisioningSource.CUSTOMER.value
+                or row.get("management_mode")
+                != PhoneNumberManagementMode.CUSTOMER.value
+            ):
+                return (
+                    None,
+                    "Verification details are only available while setup is pending",
+                )
+
+            encrypted_token = row.get("connection_token_encrypted")
+            token = decrypt_data(encrypted_token or "").get("token")
+            if not token:
+                token = secrets.token_urlsafe(32)
+                update_result = (
+                    self.supabase.table("phone_numbers")
+                    .update(
+                        {
+                            "connection_token_hash": hash_connection_token(token),
+                            "connection_token_encrypted": encrypt_data(
+                                {"token": token}
+                            ),
+                            "updated_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                    .eq("id", str(phone_number_id))
+                    .eq("organization_id", str(organization_id))
+                    .execute()
+                )
+                if not update_result.data:
+                    return None, "Verification details are no longer available"
+
+            urls = build_phone_number_webhook_urls(settings.api_base_url, token)
+            return (
+                PhoneNumberWebhookDetailsResponse(
+                    phone_number_id=UUID(str(row["id"])),
+                    phone_number=row["phone_number"],
+                    voice_url=urls.voice_url,
+                    status_callback=urls.status_callback,
+                    message=(
+                        "Set both URLs in Twilio, then place a test call to "
+                        "complete verification."
+                    ),
+                ),
+                None,
+            )
+        except Exception as e:
+            logger.error(
+                "Error loading verification details for phone number %s: %s",
+                phone_number_id,
+                e,
+            )
+            return None, "Failed to load phone-number verification details"
 
     async def verify_customer_number(
         self, phone_number: str, connection_token: str
@@ -506,6 +615,7 @@ class PhoneNumberService:
                 "configuration_status": PhoneNumberConfigurationStatus.CONFIGURED.value,
                 "last_verified_at": datetime.now(timezone.utc).isoformat(),
                 "configuration_error": None,
+                "connection_token_encrypted": None,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", result.data[0]["id"]).execute()
@@ -518,7 +628,7 @@ class PhoneNumberService:
         normalized = normalize_phone_number(phone_number)
         result = (
             self.supabase.table("phone_numbers")
-            .select("assigned_agent_id")
+            .select("assigned_agent_id, voice_agents!inner(id, is_active)")
             .eq("phone_number", normalized)
             .in_(
                 "status",
@@ -527,22 +637,13 @@ class PhoneNumberService:
             .eq("is_incoming_enabled", True)
             .eq("billing_status", PhoneNumberBillingStatus.ACTIVE.value)
             .eq("configuration_status", PhoneNumberConfigurationStatus.CONFIGURED.value)
+            .eq("voice_agents.is_active", True)
             .limit(1)
             .execute()
         )
         if not result.data or not result.data[0].get("assigned_agent_id"):
             return None, "Phone number is not assigned or enabled"
-        agent_result = (
-            self.supabase.table("voice_agents")
-            .select("id")
-            .eq("id", result.data[0]["assigned_agent_id"])
-            .eq("is_active", True)
-            .limit(1)
-            .execute()
-        )
-        if not agent_result.data:
-            return None, "Assigned agent is not active"
-        return UUID(str(agent_result.data[0]["id"])), None
+        return UUID(str(result.data[0]["assigned_agent_id"])), None
 
     async def _phone_number_limit_error(self, organization_id: UUID) -> Optional[str]:
         """Return a plan-limit error before any paid provider operation."""
@@ -615,7 +716,7 @@ class PhoneNumberService:
         try:
             result = (
                 self.supabase.table("phone_numbers")
-                .select("*")
+                .select(PHONE_NUMBER_LIST_COLUMNS)
                 .eq("organization_id", str(organization_id))
                 .in_("status", list(ACTIVE_PHONE_NUMBER_STATUSES))
                 .execute()
@@ -623,27 +724,42 @@ class PhoneNumberService:
 
             phone_numbers = [PhoneNumber(**item) for item in result.data]
 
+            assigned_agent_ids = sorted(
+                {
+                    str(phone_number.assigned_agent_id)
+                    for phone_number in phone_numbers
+                    if phone_number.assigned_agent_id
+                }
+            )
+            agent_names: dict[str, str] = {}
+            if assigned_agent_ids:
+                agent_result = (
+                    self.supabase.table("voice_agents")
+                    .select("id, name")
+                    .in_("id", assigned_agent_ids)
+                    .execute()
+                )
+                agent_names = {
+                    str(item["id"]): item["name"]
+                    for item in (agent_result.data or [])
+                    if item.get("id") and item.get("name")
+                }
+
             numbers_with_agent = []
             unused_count = 0
 
             for pn in phone_numbers:
-                agent_name = None
-                if pn.assigned_agent_id:
-                    agent_result = (
-                        self.supabase.table("voice_agents")
-                        .select("name")
-                        .eq("id", str(pn.assigned_agent_id))
-                        .execute()
-                    )
-                    if agent_result.data:
-                        agent_name = agent_result.data[0]["name"]
-                else:
+                if not pn.assigned_agent_id:
                     unused_count += 1
 
                 numbers_with_agent.append(
                     PhoneNumberWithAgent(
                         **pn.model_dump(),
-                        agent_name=agent_name,
+                        agent_name=(
+                            agent_names.get(str(pn.assigned_agent_id))
+                            if pn.assigned_agent_id
+                            else None
+                        ),
                     )
                 )
 
@@ -662,6 +778,46 @@ class PhoneNumberService:
                 PhoneNumberListResponse(items=[], total_count=0, unused_count=0),
                 f"Failed to fetch phone numbers: {str(e)}",
             )
+
+    async def get_agent_number(
+        self, organization_id: UUID, agent_id: UUID
+    ) -> tuple[Optional[PhoneNumberWithAgent], Optional[str]]:
+        """Load the current number assigned to one agent.
+
+        This endpoint is intentionally narrower than the organization list used
+        by the assignment dropdown. The agent detail page can render its
+        current value with one indexed lookup and defer loading every available
+        organization number until the user opens the dropdown.
+
+        Args:
+            organization_id: Organization that owns the agent and number.
+            agent_id: Agent whose active assignment should be returned.
+
+        Returns:
+            The assigned phone number, or ``None`` when the agent has no active
+            assignment, together with an optional error message.
+        """
+        try:
+            result = (
+                self.supabase.table("phone_numbers")
+                .select(PHONE_NUMBER_LIST_COLUMNS)
+                .eq("organization_id", str(organization_id))
+                .eq("assigned_agent_id", str(agent_id))
+                .in_("status", list(ACTIVE_PHONE_NUMBER_STATUSES))
+                .limit(1)
+                .execute()
+            )
+            if not result.data:
+                return None, None
+            return PhoneNumberWithAgent(**result.data[0]), None
+        except Exception as e:
+            logger.error(
+                "Error fetching phone number for agent %s in organization %s: %s",
+                agent_id,
+                organization_id,
+                e,
+            )
+            return None, f"Failed to fetch phone number for agent: {str(e)}"
 
     async def assign_to_agent(
         self,

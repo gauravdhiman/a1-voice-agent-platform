@@ -29,6 +29,7 @@ import { PhoneNumberCancelDialog } from "./phone-number-cancel-dialog";
 import { PhoneNumberPurchase } from "./phone-number-purchase";
 import { PhoneNumberSearch } from "./phone-number-search";
 import { PhoneNumberImportDialog } from "./phone-number-import-dialog";
+import { PhoneNumberWebhookDetailsDrawer } from "./phone-number-webhook-details-drawer";
 
 interface PhoneNumberDashboardProps {
   organizationId: string;
@@ -57,9 +58,12 @@ export function PhoneNumberDashboard({
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<PhoneNumberWithAgent | null>(
     null,
   );
+  const [selectedDetailsNumber, setSelectedDetailsNumber] =
+    useState<PhoneNumberWithAgent | null>(null);
   const [selectedAvailableNumber, setSelectedAvailableNumber] = useState<AvailablePhoneNumber | null>(null);
 
   const unusedCount = phoneNumbers.filter((n) => !n.assigned_agent_id).length;
@@ -72,6 +76,11 @@ export function PhoneNumberDashboard({
   const handleCancel = (number: PhoneNumberWithAgent) => {
     setSelectedNumber(number);
     setCancelDialogOpen(true);
+  };
+
+  const handleDetails = (number: PhoneNumberWithAgent) => {
+    setSelectedDetailsNumber(number);
+    setDetailsDialogOpen(true);
   };
 
   const handleAssignSuccess = () => {
@@ -109,15 +118,15 @@ export function PhoneNumberDashboard({
     if (status === "cancelled") {
       return <Badge variant="destructive">Cancelled</Badge>;
     }
+    if (status === "verification_required") {
+      return <Badge variant="secondary">Verification required</Badge>;
+    }
     if (hasAgent) {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
           Active (used)
         </Badge>
       );
-    }
-    if (status === "verification_required") {
-      return <Badge variant="secondary">Verification required</Badge>;
     }
     if (status === "release_pending") {
       return <Badge variant="secondary">Release pending</Badge>;
@@ -190,8 +199,22 @@ export function PhoneNumberDashboard({
                     <div className="flex items-center gap-3">
                       <Phone className="w-6 h-6 text-muted-foreground" />
                       <div>
-                        <div className="font-semibold text-lg">
-                          {formatPhoneNumber(number.phone_number)}
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold text-lg">
+                            {formatPhoneNumber(number.phone_number)}
+                          </div>
+                          {number.management_mode === "customer_managed" &&
+                            number.status === "verification_required" && (
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 text-xs"
+                                onClick={() => handleDetails(number)}
+                              >
+                                View setup details
+                              </Button>
+                            )}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Badge variant="outline">
@@ -320,6 +343,16 @@ export function PhoneNumberDashboard({
         onOpenChange={setImportDialogOpen}
         onImportSuccess={handleImportSuccess}
       />
+
+      {selectedDetailsNumber && (
+        <PhoneNumberWebhookDetailsDrawer
+          organizationId={organizationId}
+          phoneNumberId={selectedDetailsNumber.id}
+          phoneNumber={selectedDetailsNumber.phone_number}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+        />
+      )}
     </div>
   );
 }

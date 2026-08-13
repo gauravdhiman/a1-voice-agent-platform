@@ -92,6 +92,8 @@ import type { PhoneNumberWithAgent } from "@/types/phone-number";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+const AGENT_REALTIME_TABLES = ["agent_tools", "voice_agents"];
+
 /**
  * Determines whether an MCP tool must collect an organization API key before
  * it can be attached to an agent. A literal platform credential makes the
@@ -154,7 +156,7 @@ export default function AgentDetailPage() {
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
-    tables: ["agent_tools", "voice_agents"], // Database table is voice_agents, not agents
+    tables: AGENT_REALTIME_TABLES, // Database table is voice_agents, not agents
   });
 
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
@@ -196,9 +198,9 @@ export default function AgentDetailPage() {
     error: agentError,
   } = useAgent(agentId);
   const { data: platformTools = [], isLoading: toolsLoading } =
-    usePlatformTools(true);
+    usePlatformTools(true, { enabled: activeTab === "tools" });
   const { data: agentTools = [], refetch: refetchAgentTools } =
-    useAgentTools(agentId);
+    useAgentTools(agentId, activeTab === "tools");
 
   // Org plan entitlements drive the premium-tool gate (blocked connect when
   // the 'premium_tools' feature is off). Fetched once the agent resolves its
@@ -206,7 +208,7 @@ export default function AgentDetailPage() {
   const [orgEntitlements, setOrgEntitlements] =
     React.useState<OrgEntitlements | null>(null);
   React.useEffect(() => {
-    if (!agent?.organization_id) return;
+    if (!agent?.organization_id || activeTab !== "tools") return;
     let cancelled = false;
     billingService
       .getOrganizationEntitlements(agent.organization_id)
@@ -219,7 +221,7 @@ export default function AgentDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [agent?.organization_id]);
+  }, [activeTab, agent?.organization_id]);
 
   const premiumToolsBlocked = !orgEntitlements?.features["premium_tools"]
     ?.effective_value;
@@ -228,7 +230,7 @@ export default function AgentDetailPage() {
   const {
     data: systemPromptPreview,
     isLoading: systemPromptLoading,
-  } = useAgentSystemPrompt(agentId);
+  } = useAgentSystemPrompt(agentId, showSystemPrompt);
 
   // Mutations
   const updateAgentMutation = useUpdateAgent();
@@ -272,7 +274,7 @@ export default function AgentDetailPage() {
 
   // Load org skills and agent skill assignments
   React.useEffect(() => {
-    if (!agent?.organization_id) return;
+    if (!agent?.organization_id || activeTab !== "skills") return;
     setSkillsLoading(true);
     Promise.all([
       skillService.getOrganizationSkills(agent.organization_id),
@@ -287,7 +289,7 @@ export default function AgentDetailPage() {
         console.error("Failed to load skills:", err);
       })
       .finally(() => setSkillsLoading(false));
-  }, [agent?.organization_id, agentId]);
+  }, [activeTab, agent?.organization_id, agentId]);
 
   // Fetch skill files when viewing a skill in the drawer
   React.useEffect(() => {

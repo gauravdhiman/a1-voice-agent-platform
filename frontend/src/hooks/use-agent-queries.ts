@@ -55,12 +55,12 @@ export function useAgent(agentId: string) {
 }
 
 // Get the generated system prompt for an agent
-export function useAgentSystemPrompt(agentId: string) {
+export function useAgentSystemPrompt(agentId: string, enabled = true) {
   return useQuery({
     queryKey: agentQueryKeys.systemPrompt(agentId),
     queryFn: () => agentService.getAgentSystemPrompt(agentId),
     staleTime: 5 * 1000, // Short stale time since it depends on agent/org data
-    enabled: !!agentId,
+    enabled: !!agentId && enabled,
   });
 }
 
@@ -71,25 +71,29 @@ export function useAgentSystemPrompt(agentId: string) {
 // there is no per-org filter / key.
 export function usePlatformTools(
   onlyActive = true,
-  opts?: { includeDrafts?: boolean },
+  opts?: { includeDrafts?: boolean; enabled?: boolean },
 ) {
+  const requestOptions = opts?.includeDrafts
+    ? { includeDrafts: true }
+    : undefined;
   return useQuery({
     queryKey: [
       ...agentQueryKeys.platformTools(),
       { drafts: opts?.includeDrafts ?? false },
     ],
-    queryFn: () => agentService.getPlatformTools(onlyActive, opts),
+    queryFn: () => agentService.getPlatformTools(onlyActive, requestOptions),
     staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
+    enabled: opts?.enabled ?? true,
   });
 }
 
 // Get tools for a specific agent
-export function useAgentTools(agentId: string) {
+export function useAgentTools(agentId: string, enabled = true) {
   return useQuery({
     queryKey: agentQueryKeys.agentTools(agentId),
     queryFn: () => agentService.getAgentTools(agentId),
     staleTime: 30 * 1000,
-    enabled: !!agentId,
+    enabled: !!agentId && enabled,
   });
 }
 

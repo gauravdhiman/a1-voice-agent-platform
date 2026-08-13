@@ -43,6 +43,7 @@ describe("PhoneNumberImportDialog", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /connect number/i }));
 
+    expect(screen.getByRole("dialog").getAttribute("class")).toContain("p-6");
     const helpLink = await screen.findByRole("link", {
       name: /twilio webhook instructions/i,
     });

@@ -23,9 +23,11 @@ Enable users to purchase, manage, and use phone numbers directly from the VoiceA
   with the platform voice and status callback URLs in the same Twilio purchase
   request.
 - Customer-owned Twilio numbers can be connected without a Twilio account
-  OAuth flow. The platform returns tokenized callback URLs once; only the
-  token hash is stored, and the raw token cannot be recovered later. A future
-  “Connect Twilio account” flow can replace this setup step.
+  OAuth flow. The platform returns tokenized callback URLs and keeps the token
+  encrypted only while verification is pending, so users can reopen setup
+  details from the phone-number or agent view. The token is removed after the
+  first valid verification callback. A future “Connect Twilio account” flow can
+  replace this setup step.
 - The customer-owned path is intentionally not branded as a Twilio product in
   the normal purchase experience; it is an advanced “Connect Existing Number”
   path for numbers the customer already owns.
@@ -37,14 +39,15 @@ Enable users to purchase, manage, and use phone numbers directly from the VoiceA
 - The agent-creation wizard does not accept a raw legacy phone string. Number
   assignment happens after the agent exists so the mapping is created against a
   concrete agent and follows the same source-of-truth flow.
-- Production migration `20260812000006` backfills existing non-empty
-  `voice_agents.phone_number` values before the application rollout. It is
-  fail-closed for invalid or conflicting data and is followed by a read-only
-  deployment verifier.
+- Production migrations `20260812000006` through `20260812000009` backfill
+  existing non-empty `voice_agents.phone_number` values, widen the lifecycle
+  status column, add pending webhook-token encryption, and add lookup indexes
+  before the application rollout. The backfill is fail-closed for invalid or
+  conflicting data and is followed by a read-only deployment verifier.
 
 ```mermaid
 flowchart TD
-    Search[Search US catalog by area code or generic contains] --> Buy[Charge credits]
+    Search[Search US catalog by area code or match mode] --> Buy[Charge credits]
     Buy --> Reserve[Reserve phone_numbers row]
     Reserve --> Twilio[Twilio purchase with voice and status URLs]
     Twilio --> Ready[Purchased and configured]
@@ -103,9 +106,13 @@ Acceptance Criteria:
 - Frontend exposes United States only in v1; backend accepts country-aware
   provider search requests for future geography expansion
 - System shows available numbers with pricing
-- Search accepts a generic digits-only `contains` pattern; the same contract
-  naturally supports a prefix or suffix because the pattern may occur anywhere
-- Shows monthly cost in credits upfront
+- Search accepts digits or formatted input with `Contains`, `Begins with`, and
+  `Ends with` match modes. Pressing Enter submits the search without requiring
+  a second click.
+- Search is disabled with a clear, high-contrast explanation when the balance
+  is below the minimum monthly rental for the selected number type.
+- Shows monthly cost in credits upfront and marks individual results that cost
+  more than the current balance as unavailable for selection.
 - Maximum 50 results per query (paginated)
 ```
 
@@ -311,10 +318,12 @@ Acceptance Criteria:
 
 ### D3: Search/Display Limit ✓
 - Maximum 50 results per query (pagination)
-- Ownership remains subject to the organization's `max_phone_numbers`
-  entitlement; the search result limit is separate from the ownership limit.
+- Platform-purchased ownership remains subject to the organization's
+  `max_phone_numbers` entitlement; customer-managed imports are excluded and
+  the search result limit is separate from the platform ownership limit.
 - The frontend is US-only for now. The backend forwards country-aware searches
-  to Twilio and normalizes `contains` to digits.
+  to Twilio and maps `contains`, `begins_with`, and `ends_with` to Twilio's
+  `%pattern%`, `+pattern`, and `pattern$` search expressions.
 
 ### D4: No Local Pool ✓
 - Direct integration with Twilio APIs; voice media via `voice-ws` Media Streams
@@ -407,14 +416,15 @@ Search for phone numbers available for purchase from the provider.
 | country_code | string | No | Country code (default: "US") |
 | phone_number_type | string | No | Type: "local", "toll_free", "mobile" (default: "local") |
 | area_code | string | No | Filter by area code |
-| contains | string | No | Pattern to search for in number |
+| contains | string | No | Digits or formatted pattern to search for (2–16 provider characters) |
+| search_mode | string | No | Match mode: `contains`, `begins_with`, or `ends_with` (default: `contains`) |
 | page | integer | No | Page number (default: 1) |
 | page_size | integer | No | Results per page, max 50 (default: 50) |
 
 **Request Example:**
 
 ```bash
-curl -X GET "http://localhost:8000/api/v1/phone-numbers/available?country_code=US&phone_number_type=local&area_code=555" \
+curl -X GET "http://localhost:8000/api/v1/phone-numbers/available?country_code=US&phone_number_type=local&area_code=555&contains=480&search_mode=begins_with" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -547,8 +557,9 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/purchase?organization_i
 
 Register a Twilio number that the customer already owns. This does not call
 Twilio purchase or release APIs and does not create a platform rental. The
-response contains tokenized URLs; the raw connection token is not stored and
-the URLs should be copied into the customer's Twilio number configuration.
+response contains tokenized URLs. The connection token is encrypted only while
+verification is pending, so the URLs can be reopened from the phone-number or
+agent view; it is removed after the first valid verification callback.
 
 **Endpoint:** `POST /api/v1/phone-numbers/import?organization_id=<org_uuid>`
 
@@ -581,6 +592,24 @@ first signed webhook with the returned token verifies it and makes it active.
 The current v1 flow requires the customer to paste the URLs into Twilio.
 Automated configuration through a future “Connect Twilio account” flow is
 explicitly deferred.
+
+**Pending setup details:**
+
+`GET /api/v1/phone-numbers/{phone_number_id}/verification-details?organization_id=<org_uuid>`
+
+This endpoint is available only to users with phone-number read permission and
+only while a customer-owned number is `verification_required`. It returns the
+same tokenized `voice_url` and `status_callback` values shown during import.
+
+**Current agent assignment:**
+
+`GET /api/v1/phone-numbers/agent/{agent_id}?organization_id=<org_uuid>`
+
+This permission-protected endpoint returns the single non-terminal number
+currently assigned to the agent, or `null`. Agent settings use this lightweight
+lookup on initial load and request the full organization list only when the
+number selector is opened. Inbound Twilio routing performs its number and
+active-agent resolution in one relational query.
 
 ---
 

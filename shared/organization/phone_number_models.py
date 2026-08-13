@@ -75,6 +75,14 @@ class PhoneNumberType(str, Enum):
     MOBILE = "mobile"
 
 
+class PhoneNumberSearchMode(str, Enum):
+    """Match mode used when searching provider phone-number inventory."""
+
+    CONTAINS = "contains"
+    BEGINS_WITH = "begins_with"
+    ENDS_WITH = "ends_with"
+
+
 class PhoneNumberBase(BaseModel):
     """Base model for phone numbers."""
 
@@ -153,6 +161,10 @@ class PhoneNumberCreate(PhoneNumberBase):
     connection_token_hash: Optional[str] = Field(
         None, max_length=64, description="Hash of a customer webhook verification token"
     )
+    connection_token_encrypted: Optional[str] = Field(
+        None,
+        description="Encrypted customer webhook verification token for pending setup",
+    )
     provisioning_idempotency_key: Optional[str] = Field(
         None,
         max_length=255,
@@ -217,7 +229,11 @@ class PhoneNumberSearchRequest(BaseModel):
         None, max_length=10, description="Filter by area code"
     )
     contains: Optional[str] = Field(
-        None, max_length=10, description="Pattern to search for in number"
+        None, max_length=16, description="Pattern to search for in number"
+    )
+    search_mode: PhoneNumberSearchMode = Field(
+        default=PhoneNumberSearchMode.CONTAINS,
+        description="Whether the pattern can occur anywhere, at the beginning, or at the end",
     )
     page: int = Field(default=1, ge=1, description="Page number")
     page_size: int = Field(
@@ -257,6 +273,16 @@ class PhoneNumberImportResponse(BaseModel):
 
     success: bool
     phone_number: PhoneNumber
+    voice_url: str
+    status_callback: str
+    message: str
+
+
+class PhoneNumberWebhookDetailsResponse(BaseModel):
+    """Tokenized webhook URLs for a customer number awaiting verification."""
+
+    phone_number_id: UUID
+    phone_number: str
     voice_url: str
     status_callback: str
     message: str

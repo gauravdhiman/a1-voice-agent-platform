@@ -105,6 +105,37 @@ class TestPhoneNumberServiceSearch:
     """Test cases for phone number search."""
 
     @pytest.mark.asyncio
+    async def test_get_routable_agent_id_uses_joined_active_agent_lookup(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_agent_id,
+    ):
+        """Inbound routing resolves the agent in the phone-number query."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[
+                {
+                    "assigned_agent_id": str(sample_agent_id),
+                    "voice_agents": {
+                        "id": str(sample_agent_id),
+                        "is_active": True,
+                    },
+                }
+            ]
+        )
+
+        result, error = await phone_number_service.get_routable_agent_id(
+            "+1 (555) 123-4567"
+        )
+
+        assert error is None
+        assert result == sample_agent_id
+        mock_supabase_client.table.assert_called_once_with("phone_numbers")
+        mock_supabase_client.table.return_value.select.assert_called_once_with(
+            "assigned_agent_id, voice_agents!inner(id, is_active)"
+        )
+
+    @pytest.mark.asyncio
     async def test_search_available_numbers_success(
         self, phone_number_service, mock_supabase_client, sample_available_number
     ):
@@ -473,11 +504,37 @@ class TestPhoneNumberServiceGetOrganizationNumbers:
         ]
 
         mock_agent_response = MagicMock()
-        mock_agent_response.data = [{"name": "Test Agent"}]
+        mock_agent_response.data = [{"id": str(sample_agent_id), "name": "Test Agent"}]
 
-        mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
-            mock_phone_response,
-            mock_agent_response,
+        mock_supabase_client.table.side_effect = [
+            MagicMock(
+                select=MagicMock(
+                    return_value=MagicMock(
+                        eq=MagicMock(
+                            return_value=MagicMock(
+                                in_=MagicMock(
+                                    return_value=MagicMock(
+                                        execute=MagicMock(
+                                            return_value=mock_phone_response
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            ),
+            MagicMock(
+                select=MagicMock(
+                    return_value=MagicMock(
+                        in_=MagicMock(
+                            return_value=MagicMock(
+                                execute=MagicMock(return_value=mock_agent_response)
+                            )
+                        )
+                    )
+                )
+            ),
         ]
 
         result, error = await phone_number_service.get_organization_numbers(
@@ -508,6 +565,132 @@ class TestPhoneNumberServiceGetOrganizationNumbers:
         assert error is None
         assert result.items == []
         assert result.total_count == 0
+
+    @pytest.mark.asyncio
+    async def test_get_agent_number_returns_only_the_current_assignment(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_agent_id,
+        sample_phone_number_id,
+    ):
+        """The agent editor can load its current number without listing the org."""
+        now = datetime.now(timezone.utc).isoformat()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": str(sample_phone_number_id),
+                    "organization_id": str(sample_org_id),
+                    "phone_number": "+15551234567",
+                    "provider": "twilio",
+                    "provider_sid": "PN1234567890",
+                    "phone_number_type": "local",
+                    "country_code": "US",
+                    "area_code": "555",
+                    "monthly_cost_credits": 200,
+                    "status": "active",
+                    "assigned_agent_id": str(sample_agent_id),
+                    "is_incoming_enabled": True,
+                    "is_outgoing_enabled": False,
+                    "billing_status": "active",
+                    "billing_mode": "platform_rental",
+                    "provisioning_source": "platform",
+                    "management_mode": "platform_managed",
+                    "configuration_status": "configured",
+                    "configuration_error": None,
+                    "last_verified_at": None,
+                    "next_billing_at": None,
+                    "billing_grace_ends_at": None,
+                    "purchased_at": now,
+                    "cancelled_at": None,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            ]
+        )
+
+        result, error = await phone_number_service.get_agent_number(
+            sample_org_id, sample_agent_id
+        )
+
+        assert error is None
+        assert result is not None
+        assert result.id == sample_phone_number_id
+        assert result.assigned_agent_id == sample_agent_id
+        mock_supabase_client.table.assert_called_once_with("phone_numbers")
+
+    @pytest.mark.asyncio
+    async def test_get_agent_number_returns_error_when_database_fails(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_agent_id,
+    ):
+        """Agent assignment failures are returned without leaking exceptions."""
+        mock_supabase_client.table.side_effect = RuntimeError("database unavailable")
+
+        result, error = await phone_number_service.get_agent_number(
+            sample_org_id, sample_agent_id
+        )
+
+        assert result is None
+        assert error == "Failed to fetch phone number for agent: database unavailable"
+
+    @pytest.mark.asyncio
+    async def test_get_organization_numbers_batches_agent_name_lookup(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_agent_id,
+    ):
+        """Listing numbers uses one agent query instead of one query per number."""
+        now = datetime.now(timezone.utc).isoformat()
+        number_row = {
+            "id": str(sample_phone_number_id),
+            "organization_id": str(sample_org_id),
+            "phone_number": "+15551234567",
+            "provider": "twilio",
+            "provider_sid": "PN1234567890",
+            "phone_number_type": "local",
+            "country_code": "US",
+            "area_code": "555",
+            "monthly_cost_credits": 200,
+            "status": "active",
+            "assigned_agent_id": str(sample_agent_id),
+            "is_incoming_enabled": True,
+            "is_outgoing_enabled": False,
+            "billing_status": "active",
+            "billing_mode": "platform_rental",
+            "provisioning_source": "platform",
+            "management_mode": "platform_managed",
+            "configuration_status": "configured",
+            "configuration_error": None,
+            "last_verified_at": None,
+            "next_billing_at": None,
+            "billing_grace_ends_at": None,
+            "purchased_at": now,
+            "cancelled_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[number_row]),
+            MagicMock(data=[{"id": str(sample_agent_id), "name": "Test Agent"}]),
+        ]
+
+        result, error = await phone_number_service.get_organization_numbers(
+            sample_org_id
+        )
+
+        assert error is None
+        assert result.items[0].agent_name == "Test Agent"
+        assert mock_supabase_client.table.call_count == 2
+        mock_supabase_client.table.assert_any_call("voice_agents")
 
 
 class TestPhoneNumberServiceAssignToAgent:

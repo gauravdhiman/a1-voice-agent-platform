@@ -9,6 +9,8 @@ from urllib.parse import urlencode
 
 from fastapi import HTTPException, status
 
+from shared.organization.phone_number_models import PhoneNumberSearchMode
+
 
 @dataclass(frozen=True)
 class PhoneNumberWebhookUrls:
@@ -55,12 +57,47 @@ def normalize_phone_number(value: str, country_code: str = "US") -> str:
     return normalized
 
 
-def normalize_search_contains(value: str | None) -> str | None:
-    """Keep only digits for the user-facing generic contains search."""
+def normalize_search_contains(
+    value: str | None,
+    search_mode: PhoneNumberSearchMode | str = PhoneNumberSearchMode.CONTAINS,
+    country_code: str = "US",
+) -> str | None:
+    """Convert user input into Twilio's documented phone-search pattern.
+
+    Args:
+        value: User-entered phone-number pattern. Formatting characters are
+            ignored so values such as ``(480)`` and ``480`` behave identically.
+        search_mode: Whether the pattern should match anywhere, at the start,
+            or at the end of the available number.
+        country_code: ISO country code for the selected provider inventory.
+            US national prefixes receive the ``1`` country calling code.
+
+    Returns:
+        A Twilio ``contains`` expression, or ``None`` when no digits were
+        supplied. Twilio uses ``%`` for an anywhere match, ``+`` for a prefix,
+        and ``$`` for a suffix.
+
+    Notes:
+        Twilio's prefix syntax expects the country calling code. The frontend
+        currently exposes US inventory, so a national prefix such as ``480``
+        becomes ``+1480``. Callers searching other countries should include
+        the calling code in the entered prefix until country-specific dialing
+        metadata is introduced.
+    """
     if not value:
         return None
     digits = re.sub(r"\D", "", value)
-    return digits or None
+    if not digits:
+        return None
+
+    mode = PhoneNumberSearchMode(search_mode)
+    if mode is PhoneNumberSearchMode.BEGINS_WITH:
+        if country_code.upper() == "US" and not digits.startswith("1"):
+            digits = f"1{digits}"
+        return f"+{digits}"
+    if mode is PhoneNumberSearchMode.ENDS_WITH:
+        return f"{digits}$"
+    return f"%{digits}%"
 
 
 def hash_connection_token(token: str) -> str:
