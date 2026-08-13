@@ -11,7 +11,10 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote, urlparse
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from src.phone_numbers.service import phone_number_service
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
+from twilio.request_validator import RequestValidator
 from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 
 from shared.billing.voice_session_entitlement import (
@@ -21,7 +24,6 @@ from shared.billing.voice_session_entitlement import (
 from shared.config.settings import settings
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import voice_session_service
-from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 logger = logging.getLogger(__name__)
 voice_router = APIRouter(prefix="/api/v1/voice", tags=["Voice Webhooks"])
@@ -41,8 +43,10 @@ def resolve_twilio_stream_base_url() -> str:
         or an empty string when neither setting is configured.
     """
     raw = (
-        settings.voice_ws_twilio_url or settings.voice_ws_public_url or ""
-    ).strip().rstrip("/")
+        (settings.voice_ws_twilio_url or settings.voice_ws_public_url or "")
+        .strip()
+        .rstrip("/")
+    )
     if not raw:
         return ""
 
@@ -114,6 +118,7 @@ def build_pipecat_stream_twiml(
     connect.append(stream)
     response.append(connect)
     return str(response)
+
 
 def _xml_response(content: str) -> Response:
     """Wrap TwiML XML in a FastAPI Response."""
@@ -190,6 +195,29 @@ async def _handle_pipecat_incoming(
     return _xml_response(twiml)
 
 
+async def _validated_form(request: Request) -> dict[str, str]:
+    """Read a Twilio form and reject requests with an invalid signature."""
+    form_data = await request.form()
+    params = {str(key): str(value) for key, value in form_data.items()}
+    if not getattr(settings, "twilio_webhook_signature_validation_enabled", True):
+        return params
+
+    auth_token = getattr(settings, "twilio_auth_token", None)
+    signature = request.headers.get("X-Twilio-Signature")
+    if not auth_token or not signature:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Twilio webhook signature",
+        )
+    validator = RequestValidator(auth_token)
+    if not validator.validate(str(request.url), params, signature):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Twilio webhook signature",
+        )
+    return params
+
+
 @voice_router.post("/twilio/incoming")
 async def handle_twilio_incoming(request: Request):
     """
@@ -199,7 +227,7 @@ async def handle_twilio_incoming(request: Request):
     from src.call_logs.models import CallLogCreate
     from src.call_logs.service import call_log_service
 
-    form_data = await request.form()
+    form_data = await _validated_form(request)
     to_number = form_data.get("To")
     from_number = form_data.get("From")
     call_sid = form_data.get("CallSid")
@@ -211,7 +239,23 @@ async def handle_twilio_incoming(request: Request):
         call_sid,
     )
 
-    agent, error = await voice_agent_service.get_agent_by_phone(to_number)
+    if not to_number:
+        return _say_response("We could not identify the called number.")
+
+    connection_token = request.query_params.get("connection_token")
+    if connection_token:
+        if not to_number or not await phone_number_service.verify_customer_number(
+            to_number, connection_token
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Phone number verification failed",
+            )
+
+    agent_id, error = await phone_number_service.get_routable_agent_id(to_number)
+    agent = None
+    if agent_id:
+        agent, error = await voice_agent_service.get_agent_by_id(agent_id)
 
     if error or not agent:
         logger.warning("No agent found for phone number %s", to_number)
@@ -253,10 +297,21 @@ async def handle_twilio_status_callback(request: Request):
     from src.call_logs.models import CallLogUpdate
     from src.call_logs.service import call_log_service
 
-    form_data = await request.form()
+    form_data = await _validated_form(request)
     call_sid = form_data.get("CallSid")
     call_status = form_data.get("CallStatus", "")
     call_duration = form_data.get("CallDuration", "0")
+
+    connection_token = request.query_params.get("connection_token")
+    if connection_token:
+        to_number = form_data.get("To")
+        if not to_number or not await phone_number_service.verify_customer_number(
+            to_number, connection_token
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Phone number verification failed",
+            )
 
     logger.info(
         "Twilio status callback: CallSid=%s, Status=%s, Duration=%s",
@@ -278,9 +333,14 @@ async def handle_twilio_status_callback(request: Request):
         }
         internal_status = status_map.get(call_status, call_status)
 
+        try:
+            duration_seconds = max(0, int(call_duration or 0))
+        except (TypeError, ValueError):
+            duration_seconds = 0
+
         update_data = CallLogUpdate(
             status=internal_status,
-            duration=int(call_duration) if call_duration else 0,
+            duration=duration_seconds,
             ended_at=(
                 datetime.now(timezone.utc)
                 if call_status

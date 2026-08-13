@@ -35,6 +35,9 @@ jobs:
           chmod +x scripts/deploy.sh scripts/deploy/run-alembic-cloud.sh scripts/deploy/run-alembic.sh
           ./scripts/deploy.sh migrate
 
+      - name: Verify phone-number data migration
+        run: python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod
+
   deploy-gcp:
     runs-on: ubuntu-latest
     needs: migrate-production

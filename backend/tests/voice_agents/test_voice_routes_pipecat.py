@@ -7,15 +7,14 @@ from uuid import uuid4
 
 import pytest
 from fastapi import Response
-
-from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
-
 from src.voice_agents.voice_routes import (
     build_pipecat_stream_twiml,
     handle_twilio_incoming,
     is_twilio_reachable_stream_base,
     resolve_twilio_stream_base_url,
 )
+
+from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
 
 
 class TestTwimlBuilders:
@@ -70,6 +69,7 @@ class TestTwilioIncomingPipecat:
                 "CallSid": "CA123456789",
             }
         )
+        mock_request.query_params = {}
         agent_id = uuid4()
         org_id = uuid4()
         mock_agent = MagicMock()
@@ -80,8 +80,9 @@ class TestTwilioIncomingPipecat:
         with (
             patch("src.voice_agents.voice_routes.settings") as mock_settings,
             patch(
-                "src.voice_agents.voice_routes.voice_agent_service"
-            ) as mock_service,
+                "src.voice_agents.voice_routes.phone_number_service"
+            ) as mock_phone_service,
+            patch("src.voice_agents.voice_routes.voice_agent_service") as mock_service,
             patch(
                 "src.voice_agents.voice_routes.voice_session_service"
             ) as mock_sessions,
@@ -93,9 +94,11 @@ class TestTwilioIncomingPipecat:
         ):
             mock_settings.voice_ws_twilio_url = "wss://tunnel.example.com"
             mock_settings.voice_ws_public_url = "ws://localhost:7860"
-            mock_service.get_agent_by_phone = AsyncMock(
-                return_value=(mock_agent, None)
+            mock_settings.twilio_webhook_signature_validation_enabled = False
+            mock_phone_service.get_routable_agent_id = AsyncMock(
+                return_value=(agent_id, None)
             )
+            mock_service.get_agent_by_id = AsyncMock(return_value=(mock_agent, None))
             mock_sessions.create_session_token = MagicMock(
                 return_value=("sess.jwt", "sess-1")
             )
@@ -123,6 +126,7 @@ class TestTwilioIncomingPipecat:
                 "CallSid": "CA123",
             }
         )
+        mock_request.query_params = {}
         mock_agent = MagicMock()
         mock_agent.id = uuid4()
         mock_agent.organization_id = uuid4()
@@ -130,15 +134,18 @@ class TestTwilioIncomingPipecat:
         with (
             patch("src.voice_agents.voice_routes.settings") as mock_settings,
             patch(
-                "src.voice_agents.voice_routes.voice_agent_service"
-            ) as mock_service,
+                "src.voice_agents.voice_routes.phone_number_service"
+            ) as mock_phone_service,
+            patch("src.voice_agents.voice_routes.voice_agent_service") as mock_service,
             patch("src.call_logs.service.call_log_service") as mock_logs,
         ):
             mock_settings.voice_ws_twilio_url = ""
             mock_settings.voice_ws_public_url = ""
-            mock_service.get_agent_by_phone = AsyncMock(
-                return_value=(mock_agent, None)
+            mock_settings.twilio_webhook_signature_validation_enabled = False
+            mock_phone_service.get_routable_agent_id = AsyncMock(
+                return_value=(mock_agent.id, None)
             )
+            mock_service.get_agent_by_id = AsyncMock(return_value=(mock_agent, None))
             mock_logs.create_call_log = AsyncMock()
 
             response = await handle_twilio_incoming(mock_request)
@@ -156,6 +163,7 @@ class TestTwilioIncomingPipecat:
                 "CallSid": "CA123",
             }
         )
+        mock_request.query_params = {}
         mock_agent = MagicMock()
         mock_agent.id = uuid4()
         mock_agent.organization_id = uuid4()
@@ -163,15 +171,18 @@ class TestTwilioIncomingPipecat:
         with (
             patch("src.voice_agents.voice_routes.settings") as mock_settings,
             patch(
-                "src.voice_agents.voice_routes.voice_agent_service"
-            ) as mock_service,
+                "src.voice_agents.voice_routes.phone_number_service"
+            ) as mock_phone_service,
+            patch("src.voice_agents.voice_routes.voice_agent_service") as mock_service,
             patch("src.call_logs.service.call_log_service") as mock_logs,
         ):
             mock_settings.voice_ws_twilio_url = ""
             mock_settings.voice_ws_public_url = "ws://localhost:7860"
-            mock_service.get_agent_by_phone = AsyncMock(
-                return_value=(mock_agent, None)
+            mock_settings.twilio_webhook_signature_validation_enabled = False
+            mock_phone_service.get_routable_agent_id = AsyncMock(
+                return_value=(mock_agent.id, None)
             )
+            mock_service.get_agent_by_id = AsyncMock(return_value=(mock_agent, None))
             mock_logs.create_call_log = AsyncMock()
 
             response = await handle_twilio_incoming(mock_request)
@@ -191,6 +202,7 @@ class TestTwilioIncomingPipecat:
                 "CallSid": "CA123",
             }
         )
+        mock_request.query_params = {}
         mock_agent = MagicMock()
         mock_agent.id = uuid4()
         mock_agent.organization_id = uuid4()
@@ -198,8 +210,9 @@ class TestTwilioIncomingPipecat:
         with (
             patch("src.voice_agents.voice_routes.settings") as mock_settings,
             patch(
-                "src.voice_agents.voice_routes.voice_agent_service"
-            ) as mock_service,
+                "src.voice_agents.voice_routes.phone_number_service"
+            ) as mock_phone_service,
+            patch("src.voice_agents.voice_routes.voice_agent_service") as mock_service,
             patch("src.call_logs.service.call_log_service") as mock_logs,
             patch(
                 "src.voice_agents.voice_routes.assert_voice_session_allowed",
@@ -214,9 +227,11 @@ class TestTwilioIncomingPipecat:
         ):
             mock_settings.voice_ws_twilio_url = "wss://tunnel.example.com"
             mock_settings.voice_ws_public_url = "ws://localhost:7860"
-            mock_service.get_agent_by_phone = AsyncMock(
-                return_value=(mock_agent, None)
+            mock_settings.twilio_webhook_signature_validation_enabled = False
+            mock_phone_service.get_routable_agent_id = AsyncMock(
+                return_value=(mock_agent.id, None)
             )
+            mock_service.get_agent_by_id = AsyncMock(return_value=(mock_agent, None))
             mock_logs.create_call_log = AsyncMock()
 
             response = await handle_twilio_incoming(mock_request)

@@ -234,7 +234,11 @@ Stores voice agent configurations for each organization.
 - `organization_id` → `organizations.id` (CASCADE)
 - `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the System Default preset row — migration 20260729000002)
 
-**Indexes**: `ix_voice_agents_preset_id` on `preset_id` — migration 20260729000001
+**Indexes**:
+
+- `ix_voice_agents_preset_id` on `preset_id` — migration 20260729000001
+- `ix_voice_agents_organization_active` on `(organization_id, is_active)` —
+  migration `20260812000009`
 **RLS**: Enabled
 **Real-time**: Enabled
 
@@ -473,26 +477,93 @@ Tracks usage of embed call buttons for analytics and rate limiting.
 
 ### phone_numbers
 
-Stores Twilio numbers owned by an organization and the state needed for
-system-wide monthly rental billing.
+Stores both platform-purchased and customer-owned Twilio numbers. This table is
+the sole source of truth for phone-to-agent routing; the legacy
+`voice_agents.phone_number` field is not used by inbound call handling.
 
 | Column | Type | Constraints | Description |
 | --- | --- | --- | --- |
 | id | UUID | PRIMARY KEY | Number record |
 | organization_id | UUID | NOT NULL, FK → organizations.id | Owning organization |
 | phone_number | VARCHAR(20) | NOT NULL | E.164 number |
+| provider | VARCHAR(20) | NOT NULL, DEFAULT twilio | Provider name |
+| provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio phone-number SID when platform-managed |
 | phone_number_type | VARCHAR(20) | NOT NULL | local, mobile, or toll_free |
+| country_code | VARCHAR(2) | NOT NULL, DEFAULT US | ISO country code; `ZZ` means legacy geography requires review |
+| area_code | VARCHAR(10) | NULLABLE | Provider/catalog area code |
 | monthly_cost_credits | INTEGER | NOT NULL, >= 0 | Current system monthly rate |
-| status | VARCHAR(20) | NOT NULL | purchased, active, or cancelled |
+| status | VARCHAR(30) | NOT NULL | provisioning, purchased, active, verification_required, release_pending, disconnected, or cancelled |
+| assigned_agent_id | UUID | NULLABLE, FK → voice_agents.id | Agent receiving calls from this number |
+| is_incoming_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether inbound routing is enabled |
+| is_outgoing_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether outbound use is enabled |
 | billing_status | VARCHAR(20) | NOT NULL, DEFAULT active | active or past_due |
+| billing_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_rental | platform_rental for platform-owned numbers; none for customer-owned numbers |
+| provisioning_source | VARCHAR(20) | NOT NULL, DEFAULT platform | platform or customer |
+| management_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_managed | Whether the platform may call Twilio purchase/release APIs |
+| configuration_status | VARCHAR(30) | NOT NULL, DEFAULT configured | pending, configured, verification_required, or failed |
 | next_billing_at | TIMESTAMPTZ | NULLABLE | Next monthly rental due date |
 | billing_grace_ends_at | TIMESTAMPTZ | NULLABLE | Past-due release deadline |
-| provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio SID |
+| connection_token_hash | VARCHAR(64) | NULLABLE, UNIQUE | Hash of the customer webhook connection token used for verification |
+| connection_token_encrypted | TEXT | NULLABLE | Fernet-encrypted token retained only while customer webhook setup is pending |
+| provisioning_idempotency_key | VARCHAR(255) | NULLABLE | Organization-scoped retry key for platform purchase |
+| configuration_error | VARCHAR(1000) | NULLABLE | Last provisioning or verification error |
+| last_verified_at | TIMESTAMPTZ | NULLABLE | Last verified webhook timestamp |
 | purchased_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Purchase timestamp |
 | cancelled_at | TIMESTAMPTZ | NULLABLE | Release timestamp |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Record creation timestamp |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last record update timestamp |
 
-The phone-rental scheduler checks due rows daily, retries failed debits during
-the seven-day grace period, and releases the Twilio number after grace expiry.
+The phone-rental scheduler checks platform-rental rows daily (both the billing
+cadence and release-retry cadence are configurable), disables inbound calls
+when a renewal debit fails, retries during the configurable seven-day default
+grace period, and releases the Twilio number after grace expiry. A provider
+release failure remains `release_pending` for the next retry. Customer-owned
+rows are never billed or released; disconnecting one only disables routing.
+
+Platform purchases send the canonical voice and status callback URLs to Twilio
+in the same purchase request. Customer-owned rows receive tokenized URLs for
+the initial verification flow; the token hash is used for validation and the
+token is retained encrypted only until the first valid verification callback.
+
+---
+
+### platform_phone_number_settings
+
+Singleton platform-admin configuration for phone-number rental billing and
+provider-release retry scheduling. Environment variables provide deployment
+defaults if the settings row cannot be read during startup or a transient
+database failure occurs.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Fixed singleton ID `00000000-0000-0000-0000-000000000002` |
+| billing_grace_period_days | INTEGER | NOT NULL, > 0, DEFAULT 7 | Days to keep incoming calls disabled before release |
+| billing_check_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Rental billing scheduler cadence |
+| release_retry_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Provider release retry cadence |
+| updated_by | UUID | NULLABLE | Platform admin who last changed settings |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Indexes**:
+
+- `ix_phone_numbers_organization_id` on `organization_id`
+- `ix_phone_numbers_phone_number` on `phone_number`
+- `ix_phone_numbers_organization_status` on `(organization_id, status)`
+- `ix_phone_numbers_assigned_agent_id` on `assigned_agent_id`
+- `ix_phone_numbers_next_billing_at` on `next_billing_at`
+- `ix_phone_numbers_organization_agent_active` on
+  `(organization_id, assigned_agent_id)` for non-terminal rows — migration
+  `20260812000009`
+- Unique/partial indexes protect active provider numbers, connection-token
+  hashes, idempotency keys, and release-pending retries.
+
+The agent editor uses the organization/assigned-agent index to load only the
+current assignment. Inbound routing uses the phone-number index together with
+the active-agent join and lifecycle predicates, so it does not read the
+legacy `voice_agents.phone_number` field or issue a second agent lookup.
+
+Only the service role accesses this singleton. The platform-admin API is
+`GET/PUT /api/v1/phone-numbers/admin/settings`.
 
 ---
 
@@ -1317,15 +1388,38 @@ erDiagram
         uuid id
         uuid organization_id
         varchar phone_number
+        varchar provider
+        varchar provider_sid
         varchar phone_number_type
+        varchar country_code
+        varchar area_code
         integer monthly_cost_credits
         varchar status
+        uuid assigned_agent_id
+        boolean is_incoming_enabled
+        boolean is_outgoing_enabled
         varchar billing_status
+        varchar billing_mode
+        varchar provisioning_source
+        varchar management_mode
+        varchar configuration_status
         timestamptz next_billing_at
         timestamptz billing_grace_ends_at
-        varchar provider_sid
+        varchar connection_token_hash
+        text connection_token_encrypted
+        varchar provisioning_idempotency_key
         timestamptz purchased_at
         timestamptz cancelled_at
+    }
+
+    platform_phone_number_settings {
+        uuid id
+        integer billing_grace_period_days
+        numeric billing_check_interval_hours
+        numeric release_retry_interval_hours
+        uuid updated_by
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     credit_transactions {
@@ -1471,6 +1565,7 @@ erDiagram
     organizations ||--|| organization_subscriptions : "has one"
     organizations ||--o{ credit_transactions : "has many"
     organizations ||--o{ phone_numbers : "owns"
+    voice_agents ||--o{ phone_numbers : "receives calls from"
     organizations ||--o{ billing_history : "has many"
     organizations ||--o{ notification_logs : "has many"
     organizations ||--o{ credit_notification_outbox : "queues warnings"
@@ -1547,6 +1642,12 @@ erDiagram
 53. `20260812000001` - Enable RLS on the service-owned credit notification outbox.
 54. `20260812000002` - Make regular credit debits preserve a negative plan balance from a completed voice call while consuming any positive admin or purchased pools.
 55. `20260812000003` - Update the seeded low-credit notification event description and metadata to the 20/10/5 warning policy.
+56. `20260812000004` - Add platform/customer phone-number ownership, webhook verification, provisioning idempotency, lifecycle statuses, and release-retry indexes.
+57. `20260812000005` - Add the platform-admin phone-number settings singleton for configurable rental grace and billing/release retry intervals.
+58. `20260812000006` - Data migration: backfill legacy non-empty `voice_agents.phone_number` values into `phone_numbers`, fail closed on invalid or conflicting assignments, and verify the new source-of-truth mappings before application deployment.
+59. `20260812000007` - Widen `phone_numbers.status` from `VARCHAR(20)` to `VARCHAR(30)` so the `verification_required` customer-number lifecycle state can be stored safely.
+60. `20260812000008` - Add nullable Fernet-encrypted storage for customer webhook tokens while phone-number setup remains `verification_required`.
+61. `20260812000009` - Add organization/agent-active lookup indexes for fast agent settings loads and single-query inbound phone-number routing.
 
 ---
 
@@ -1734,6 +1835,8 @@ Key indexes have been created for:
 - Unique constraints (email, token, stripe_subscription_id)
 - Catalog publish lifecycle: `ix_platform_tools_is_published`, `ix_pipeline_presets_is_published` (org-user listing filters on `is_published=true`)
 - `ix_voice_agents_preset_id` (preset→agent usage join for the delete `in_use` guardrail)
+- `ix_voice_agents_organization_active` and `ix_phone_numbers_organization_agent_active`
+  (agent settings assignment loads and phone-to-agent routing)
 - `ux_pipeline_presets_is_default` — partial UNIQUE index enforcing at most one system-default preset row (Phase 4, migration 20260729000002)
 
 ### Query Patterns
@@ -1742,6 +1845,12 @@ Key indexes have been created for:
 - Use `user_id` from `auth.uid()` for RLS policy checks
 - Join with `user_roles` and `roles` for permission checks
 - Use `created_at` timestamps for time-based queries
+- Load an agent's current number through the organization/agent assignment
+  query; fetch the full organization inventory only when the user opens the
+  number selector.
+- Keep inbound routing on the single relational `phone_numbers` →
+  `voice_agents` query and preserve the lifecycle predicates so disabled,
+  unconfigured, past-due, and inactive-agent rows are not routed.
 
 ---
 
@@ -1795,4 +1904,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-08-12

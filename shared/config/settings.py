@@ -167,6 +167,16 @@ class Settings(BaseSettings):
         gt=0,
         description="How often due phone-number rentals are checked",
     )
+    phone_number_billing_grace_period_days: int = Field(
+        default=7,
+        ge=1,
+        description="Days to keep incoming calls disabled before unpaid rental release",
+    )
+    phone_number_release_retry_interval_hours: float = Field(
+        default=24,
+        gt=0,
+        description="How often provider release-pending numbers are retried",
+    )
     notification_retry_check_interval_hours: float = Field(
         default=1,
         gt=0,
@@ -330,6 +340,10 @@ class Settings(BaseSettings):
     )
     twilio_phone_number_sid: Optional[str] = Field(
         default=None, description="Default Twilio phone number SID"
+    )
+    twilio_webhook_signature_validation_enabled: bool = Field(
+        default=True,
+        description="Validate X-Twilio-Signature on inbound and status webhooks",
     )
 
     @validator("cors_origins", pre=True)

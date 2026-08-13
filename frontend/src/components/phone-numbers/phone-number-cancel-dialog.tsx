@@ -16,13 +16,15 @@ import { phoneNumberService } from "@/services/phone-number-service";
 import { PhoneNumberWithAgent, formatPhoneNumber } from "@/types/phone-number";
 
 interface PhoneNumberCancelDialogProps {
+  organizationId: string;
   phoneNumber: PhoneNumberWithAgent;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCancelSuccess: () => void;
+  onCancelSuccess: (message?: string) => void;
 }
 
 export function PhoneNumberCancelDialog({
+  organizationId,
   phoneNumber,
   open,
   onOpenChange,
@@ -32,7 +34,8 @@ export function PhoneNumberCancelDialog({
   const [error, setError] = useState<string | null>(null);
   const [confirmationText, setConfirmationText] = useState("");
 
-  const expectedConfirmation = "Cancel";
+  const isCustomerManaged = phoneNumber.management_mode === "customer_managed";
+  const expectedConfirmation = isCustomerManaged ? "Disconnect" : "Release";
   const isConfirmationValid = confirmationText === expectedConfirmation;
 
   const handleCancel = async () => {
@@ -41,8 +44,11 @@ export function PhoneNumberCancelDialog({
     try {
       setLoading(true);
       setError(null);
-      await phoneNumberService.cancelNumber(phoneNumber.id);
-      onCancelSuccess();
+      const response = await phoneNumberService.cancelNumber(
+        phoneNumber.id,
+        organizationId,
+      );
+      onCancelSuccess(response.message);
     } catch (err: unknown) {
       const error = err as Error;
       console.error("Error cancelling phone number:", err);
@@ -70,11 +76,12 @@ export function PhoneNumberCancelDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600">
             <AlertTriangle className="h-5 w-5" />
-            Cancel Phone Number
+            {isCustomerManaged ? "Disconnect Phone Number" : "Release Phone Number"}
           </DialogTitle>
           <DialogDescription>
-            This action cannot be undone. The phone number will be released and
-            you will stop being charged.
+            {isCustomerManaged
+              ? "This disconnects the number from your platform. Twilio ownership and billing remain with you."
+              : "This action cannot be undone. The number will be released, calls will stop, you may not be able to get the same number back, and the current billing period is not refunded."}
           </DialogDescription>
         </DialogHeader>
 
@@ -86,7 +93,9 @@ export function PhoneNumberCancelDialog({
                 {formatPhoneNumber(phoneNumber.phone_number)}
               </div>
               <div className="text-sm text-muted-foreground">
-                {phoneNumber.monthly_cost_credits} credits/month
+                {isCustomerManaged
+                  ? "Customer-owned Twilio number"
+                  : `${phoneNumber.monthly_cost_credits} credits/month`}
               </div>
             </div>
           </div>
@@ -116,13 +125,13 @@ export function PhoneNumberCancelDialog({
           <div className="space-y-2">
             <Label htmlFor="confirmation">
               Type <strong>&quot;{expectedConfirmation}&quot;</strong> to confirm
-              cancellation:
+              {isCustomerManaged ? " disconnection" : " release"}:
             </Label>
             <Input
               id="confirmation"
               value={confirmationText}
               onChange={(e) => setConfirmationText(e.target.value)}
-              placeholder="Cancel"
+              placeholder={expectedConfirmation}
               disabled={loading}
               className="font-mono"
             />
@@ -147,12 +156,12 @@ export function PhoneNumberCancelDialog({
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Cancelling...
+                  {isCustomerManaged ? "Disconnecting..." : "Releasing..."}
                 </>
               ) : (
                 <>
                   <AlertTriangle className="h-4 w-4 mr-2" />
-                  Cancel Phone Number
+                  {isCustomerManaged ? "Disconnect Number" : "Release Number"}
                 </>
               )}
             </Button>

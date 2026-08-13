@@ -31,6 +31,7 @@ import { TestCallModal } from "@/components/agents/test-call-modal";
 import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
 import { PresetPicker, useSelectedPresetReadiness } from "@/components/agents/preset-picker";
 import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
+import { AgentPhoneNumberSelector } from "@/components/agents/agent-phone-number-selector";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -87,8 +88,11 @@ import { voiceTemplateService } from "@/services/voice-template-service";
 import type { VoiceTemplate } from "@/types/voice-template";
 import { skillService } from "@/services/skill-service";
 import type { OrganizationSkill } from "@/types/skill";
+import type { PhoneNumberWithAgent } from "@/types/phone-number";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+
+const AGENT_REALTIME_TABLES = ["agent_tools", "voice_agents"];
 
 /**
  * Determines whether an MCP tool must collect an organization API key before
@@ -119,6 +123,8 @@ export default function AgentDetailPage() {
   const [organization, setOrganization] = React.useState<Organization | null>(
     null,
   );
+  const [assignedPhoneNumber, setAssignedPhoneNumber] =
+    React.useState<PhoneNumberWithAgent | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
@@ -150,7 +156,7 @@ export default function AgentDetailPage() {
 
   // Enable real-time updates for this agent's tools
   useRealtime(agentId, {
-    tables: ["agent_tools", "voice_agents"], // Database table is voice_agents, not agents
+    tables: AGENT_REALTIME_TABLES, // Database table is voice_agents, not agents
   });
 
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
@@ -163,7 +169,6 @@ export default function AgentDetailPage() {
   // Agent form state
   const [agentForm, setAgentForm] = React.useState<{
     name: string;
-    phone_number: string;
     persona: string;
     tone: string;
     mission: string;
@@ -175,7 +180,6 @@ export default function AgentDetailPage() {
     preset_id: string | null;
   }>({
     name: "",
-    phone_number: "",
     persona: "",
     tone: "",
     mission: "",
@@ -194,9 +198,9 @@ export default function AgentDetailPage() {
     error: agentError,
   } = useAgent(agentId);
   const { data: platformTools = [], isLoading: toolsLoading } =
-    usePlatformTools(true);
+    usePlatformTools(true, { enabled: activeTab === "tools" });
   const { data: agentTools = [], refetch: refetchAgentTools } =
-    useAgentTools(agentId);
+    useAgentTools(agentId, activeTab === "tools");
 
   // Org plan entitlements drive the premium-tool gate (blocked connect when
   // the 'premium_tools' feature is off). Fetched once the agent resolves its
@@ -204,7 +208,7 @@ export default function AgentDetailPage() {
   const [orgEntitlements, setOrgEntitlements] =
     React.useState<OrgEntitlements | null>(null);
   React.useEffect(() => {
-    if (!agent?.organization_id) return;
+    if (!agent?.organization_id || activeTab !== "tools") return;
     let cancelled = false;
     billingService
       .getOrganizationEntitlements(agent.organization_id)
@@ -217,7 +221,7 @@ export default function AgentDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [agent?.organization_id]);
+  }, [activeTab, agent?.organization_id]);
 
   const premiumToolsBlocked = !orgEntitlements?.features["premium_tools"]
     ?.effective_value;
@@ -226,7 +230,7 @@ export default function AgentDetailPage() {
   const {
     data: systemPromptPreview,
     isLoading: systemPromptLoading,
-  } = useAgentSystemPrompt(agentId);
+  } = useAgentSystemPrompt(agentId, showSystemPrompt);
 
   // Mutations
   const updateAgentMutation = useUpdateAgent();
@@ -270,7 +274,7 @@ export default function AgentDetailPage() {
 
   // Load org skills and agent skill assignments
   React.useEffect(() => {
-    if (!agent?.organization_id) return;
+    if (!agent?.organization_id || activeTab !== "skills") return;
     setSkillsLoading(true);
     Promise.all([
       skillService.getOrganizationSkills(agent.organization_id),
@@ -285,7 +289,7 @@ export default function AgentDetailPage() {
         console.error("Failed to load skills:", err);
       })
       .finally(() => setSkillsLoading(false));
-  }, [agent?.organization_id, agentId]);
+  }, [activeTab, agent?.organization_id, agentId]);
 
   // Fetch skill files when viewing a skill in the drawer
   React.useEffect(() => {
@@ -360,7 +364,6 @@ export default function AgentDetailPage() {
     if (agent) {
       setAgentForm({
         name: agent.name,
-        phone_number: agent.phone_number || "",
         persona: agent.persona || "",
         tone: agent.tone || "",
         mission: agent.mission || "",
@@ -789,19 +792,12 @@ export default function AgentDetailPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  value={agentForm.phone_number}
-                  onChange={(e) =>
-                    setAgentForm({ ...agentForm, phone_number: e.target.value })
-                  }
-                  placeholder="+1234567890"
-                  disabled={!canEdit}
+                <AgentPhoneNumberSelector
+                  agentId={agentId}
+                  organizationId={agent.organization_id}
+                  canEdit={canEdit}
+                  onAssignmentChange={setAssignedPhoneNumber}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Twilio phone number for this agent
-                </p>
               </div>
 
               {/* Agent Instructions (Markdown) */}
@@ -948,7 +944,7 @@ and confirm someone will call back the next business day.`}
                     id="active"
                     checked={agentForm.is_active}
                     onCheckedChange={(checked) => {
-                      if (checked && !agentForm.phone_number?.trim()) {
+                      if (checked && !assignedPhoneNumber) {
                         toast.warning(
                           "A phone number is required to activate this agent. Please assign a phone number first.",
                         );
@@ -973,7 +969,7 @@ and confirm someone will call back the next business day.`}
                     Agent is active and ready to handle calls
                   </Label>
                 </div>
-                {!agentForm.phone_number?.trim() && (
+                {!assignedPhoneNumber && (
                   <p className="text-xs text-amber-600 flex items-center gap-1">
                     <Info className="w-3 h-3" />
                     A phone number must be configured before the agent can be activated.

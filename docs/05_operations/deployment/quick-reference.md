@@ -22,6 +22,7 @@ OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh all
 ./scripts/deploy.sh backend
 ./scripts/deploy.sh frontend
 ./scripts/deploy.sh migrate
+./scripts/deploy.sh verify-data --env-file .env.prod
 ./scripts/deploy.sh domains
 ./scripts/deploy.sh --help
 ```
@@ -57,6 +58,22 @@ These are liveness checks only. Before calling a deployment complete, follow
 the [mandatory browser and PSTN voice release gate](runbook.md#mandatory-release-gate-ai-agent-calling)
 with a release-test organization that has active voice entitlements and
 prepaid credit headroom.
+
+Phone-number lifecycle settings should be present in `.env.prod`:
+
+```text
+PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS=24
+PHONE_NUMBER_BILLING_GRACE_PERIOD_DAYS=7
+PHONE_NUMBER_RELEASE_RETRY_INTERVAL_HOURS=24
+TWILIO_WEBHOOK_SIGNATURE_VALIDATION_ENABLED=true
+```
+
+The phone-number scheduler must be running after deployment. It renews
+platform-managed rentals, disables calls during unpaid grace, and retries
+`release_pending` provider releases. Customer-managed numbers are excluded
+from rental billing and provider release. Platform admins can change the grace
+period and both intervals at **Platform → Phone Number Settings**; the
+environment variables above are deployment defaults and fallbacks.
 
 ## Prerequisites
 

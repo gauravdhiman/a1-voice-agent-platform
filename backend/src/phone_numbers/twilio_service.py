@@ -8,11 +8,11 @@ available phone numbers and purchasing them.
 import logging
 from typing import Optional
 
+from twilio.base.page import Page
 from twilio.rest import Client
 from twilio.rest.api.v2010.account.incoming_phone_number import (
     IncomingPhoneNumberInstance,
 )
-from twilio.base.page import Page
 
 from shared.config.settings import settings
 
@@ -122,6 +122,10 @@ class TwilioService:
         phone_number: str,
         voice_application_sid: Optional[str] = None,
         sms_application_sid: Optional[str] = None,
+        voice_url: Optional[str] = None,
+        voice_method: str = "POST",
+        status_callback: Optional[str] = None,
+        status_callback_method: str = "POST",
     ) -> IncomingPhoneNumberInstance:
         """Purchase a phone number.
 
@@ -129,6 +133,10 @@ class TwilioService:
             phone_number: The phone number to purchase (E.164 format, e.g., +15551234567)
             voice_application_sid: Optional Voice Application SID for handling calls
             sms_application_sid: Optional SMS Application SID for handling SMS
+            voice_url: Optional public URL Twilio calls for inbound voice
+            voice_method: HTTP method used for ``voice_url``
+            status_callback: Optional public URL for call status callbacks
+            status_callback_method: HTTP method used for ``status_callback``
 
         Returns:
             The purchased phone number instance
@@ -145,6 +153,10 @@ class TwilioService:
         try:
             purchased = self.client.incoming_phone_numbers.create(
                 phone_number=phone_number,
+                voice_url=voice_url,
+                voice_method=voice_method,
+                status_callback=status_callback,
+                status_callback_method=status_callback_method,
                 voice_application_sid=voice_application_sid,
                 sms_application_sid=sms_application_sid,
             )

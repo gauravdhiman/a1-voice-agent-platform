@@ -398,9 +398,11 @@ The platform uses **`voice-ws`** (Pipecat WebSocket) for browser test calls and 
 
    Tunnel example: `ngrok http 7860` → set `VOICE_WS_TWILIO_URL=wss://<ngrok-host>`.
 
-4. **Configure phone numbers** (inbound today; outbound planned):
-   - Purchase a number in Twilio Console and assign it to an agent
-   - Set the voice webhook to `https://<backend>/api/v1/voice/twilio/incoming`
+4. **Configure phone numbers**:
+   - Platform admins configure `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and a public `API_BASE_URL`.
+   - Users can search and purchase a number in the 24x7 AI dashboard; the backend configures the voice and status callbacks in the same Twilio purchase request.
+   - Users who already own a Twilio number can use **Connect Existing Number**. The returned tokenized voice and status URLs must be saved on that Twilio number once. The platform never needs the customer's Twilio auth token in v1.
+   - Set `PHONE_NUMBER_BILLING_GRACE_PERIOD_DAYS=7` for the deployment fallback. `PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS` and `PHONE_NUMBER_RELEASE_RETRY_INTERVAL_HOURS` default to daily. After migration, platform administrators can manage these values in **Platform → Phone Number Settings**.
    - For outbound calling design, see **[Outbound phone calls](../03_implementation/outbound_phone_calls.md)**
 
 ## Email Configuration

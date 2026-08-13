@@ -119,10 +119,12 @@ backend/
 | Endpoint                        | Method | Description                        |
 | ------------------------------- | ------ | ---------------------------------- |
 | `/api/v1/phone-numbers/available` | GET    | Search available phone numbers    |
-| `/api/v1/phone-numbers/purchase` | POST   | Purchase a phone number           |
+| `/api/v1/phone-numbers/purchase` | POST   | Purchase and configure a number   |
+| `/api/v1/phone-numbers/import` | POST | Connect a customer-owned number   |
 | `/api/v1/phone-numbers`          | GET    | List organization phone numbers   |
 | `/api/v1/phone-numbers/{id}/assign` | POST | Assign number to agent             |
-| `/api/v1/phone-numbers/{id}`     | DELETE | Cancel (release) a phone number   |
+| `/api/v1/phone-numbers/{id}/assignment` | DELETE | Clear mapping without release |
+| `/api/v1/phone-numbers/{id}`     | DELETE | Release or disconnect a number    |
 
 For detailed API documentation, see [Phone Numbers PRD](../docs/PRD-phone-numbers.md).
 

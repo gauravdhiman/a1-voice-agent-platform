@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -22,15 +23,15 @@ import { Loader2, Search, Phone, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import {
   AvailablePhoneNumber,
+  PhoneNumberSearchMode,
   PhoneNumberType,
   formatPhoneNumber,
-  getPhoneNumberTypeLabel,
   getCreditsForType,
+  getPhoneNumberTypeLabel,
 } from "@/types/phone-number";
 import { phoneNumberService } from "@/services/phone-number-service";
 
 interface PhoneNumberSearchProps {
-  organizationId: string;
   creditBalance: number;
   onNumberSelected?: (number: AvailablePhoneNumber) => void;
 }
@@ -39,14 +40,19 @@ const COUNTRIES = [
   { code: "US", name: "United States" },
 ];
 
-const NUMBER_TYPES: { value: PhoneNumberType; label: string; cost: number }[] = [
-  { value: "local", label: "Local", cost: 200 },
-  { value: "toll_free", label: "Toll-Free", cost: 500 },
-  { value: "mobile", label: "Mobile", cost: 200 },
+const NUMBER_TYPES: { value: PhoneNumberType; label: string }[] = [
+  { value: "local", label: "Local" },
+  { value: "toll_free", label: "Toll-Free" },
+  { value: "mobile", label: "Mobile" },
+];
+
+const SEARCH_MODES: { value: PhoneNumberSearchMode; label: string }[] = [
+  { value: "contains", label: "Contains" },
+  { value: "begins_with", label: "Begins with" },
+  { value: "ends_with", label: "Ends with" },
 ];
 
 export function PhoneNumberSearch({
-  organizationId,
   creditBalance,
   onNumberSelected,
 }: PhoneNumberSearchProps) {
@@ -54,11 +60,19 @@ export function PhoneNumberSearch({
   const [numberType, setNumberType] = useState<PhoneNumberType>("local");
   const [areaCode, setAreaCode] = useState("");
   const [contains, setContains] = useState("");
+  const [searchMode, setSearchMode] = useState<PhoneNumberSearchMode>(
+    "contains",
+  );
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<AvailablePhoneNumber[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
 
+  const minimumRentalCredits = getCreditsForType(numberType);
+  const hasMinimumCredits = creditBalance >= minimumRentalCredits;
+
   const handleSearch = async () => {
+    if (!hasMinimumCredits) return;
+
     setSearching(true);
     setHasSearched(true);
     setResults([]);
@@ -69,6 +83,7 @@ export function PhoneNumberSearch({
         phone_number_type: numberType,
         area_code: areaCode || null,
         contains: contains || null,
+        search_mode: searchMode,
         page: 1,
         page_size: 50,
       });
@@ -82,9 +97,9 @@ export function PhoneNumberSearch({
     }
   };
 
-  const getCostForType = (type: PhoneNumberType) => {
-    const typeConfig = NUMBER_TYPES.find((t) => t.value === type);
-    return typeConfig?.cost || getCreditsForType(type);
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleSearch();
   };
 
   const canAfford = (cost: number) => creditBalance >= cost;
@@ -102,80 +117,168 @@ export function PhoneNumberSearch({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Country</label>
-              <Select value={countryCode} onValueChange={setCountryCode}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select country" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COUNTRIES.map((country) => (
-                    <SelectItem key={country.code} value={country.code}>
-                      {country.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <form
+            aria-label="Available phone number search"
+            onSubmit={handleSubmit}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="phone-number-country"
+                  className="text-sm font-medium"
+                >
+                  Country
+                </label>
+                <Select value={countryCode} onValueChange={setCountryCode}>
+                  <SelectTrigger id="phone-number-country">
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((country) => (
+                      <SelectItem key={country.code} value={country.code}>
+                        {country.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="phone-number-type"
+                  className="text-sm font-medium"
+                >
+                  Number Type
+                </label>
+                <Select
+                  value={numberType}
+                  onValueChange={(v) => setNumberType(v as PhoneNumberType)}
+                >
+                  <SelectTrigger id="phone-number-type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NUMBER_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="phone-number-area-code"
+                  className="text-sm font-medium"
+                >
+                  Area Code (Optional)
+                </label>
+                <Input
+                  id="phone-number-area-code"
+                  placeholder="e.g., 555"
+                  value={areaCode}
+                  onChange={(e) => setAreaCode(e.target.value)}
+                  maxLength={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="phone-number-search-mode"
+                  className="text-sm font-medium"
+                >
+                  Match
+                </label>
+                <Select
+                  value={searchMode}
+                  onValueChange={(value) =>
+                    setSearchMode(value as PhoneNumberSearchMode)
+                  }
+                >
+                  <SelectTrigger id="phone-number-search-mode">
+                    <SelectValue placeholder="Select match" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEARCH_MODES.map((mode) => (
+                      <SelectItem key={mode.value} value={mode.value}>
+                        {mode.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="phone-number-pattern"
+                  className="text-sm font-medium"
+                >
+                  Phone number pattern (Optional)
+                </label>
+                <Input
+                  id="phone-number-pattern"
+                  placeholder={
+                    searchMode === "begins_with"
+                      ? "e.g., 480"
+                      : searchMode === "ends_with"
+                        ? "e.g., 2168"
+                        : "e.g., 1234"
+                  }
+                  value={contains}
+                  onChange={(e) => setContains(e.target.value)}
+                  maxLength={16}
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Number Type</label>
-              <Select
-                value={numberType}
-                onValueChange={(v) => setNumberType(v as PhoneNumberType)}
+            {!hasMinimumCredits && (
+              <Alert
+                id="phone-number-credit-help"
+                className="border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-400/50 dark:bg-amber-950/30 dark:text-amber-100"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {NUMBER_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label} ({type.cost} credits/mo)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Area Code (Optional)</label>
-              <Input
-                placeholder="e.g., 555"
-                value={areaCode}
-                onChange={(e) => setAreaCode(e.target.value)}
-                maxLength={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Contains (Optional)</label>
-              <Input
-                placeholder="e.g., 1234"
-                value={contains}
-                onChange={(e) => setContains(e.target.value)}
-                maxLength={10}
-              />
-            </div>
-          </div>
-
-          <Button onClick={handleSearch} disabled={searching} className="w-full">
-            {searching ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Searching...
-              </>
-            ) : (
-              <>
-                <Search className="w-4 h-4 mr-2" />
-                Search Numbers
-              </>
+                <AlertDescription className="text-amber-950 dark:text-amber-100">
+                  Search is unavailable because your balance is below the
+                  minimum of {minimumRentalCredits} credits required for a{" "}
+                  {getPhoneNumberTypeLabel(numberType).toLowerCase()} number.
+                  Add credits to search and purchase a number.
+                </AlertDescription>
+              </Alert>
             )}
-          </Button>
 
-          <div className="text-sm text-muted-foreground">
-            Your balance: <span className="font-semibold">{creditBalance} credits</span>
-          </div>
+            <Button
+              type="submit"
+              disabled={searching || !hasMinimumCredits}
+              aria-describedby={
+                !hasMinimumCredits ? "phone-number-credit-help" : undefined
+              }
+              className="w-full"
+            >
+              {searching ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4 mr-2" />
+                  Search Numbers
+                </>
+              )}
+            </Button>
+
+            <div
+              className={
+                hasMinimumCredits
+                  ? "text-sm text-muted-foreground"
+                  : "text-sm font-medium text-amber-950 dark:text-amber-100"
+              }
+            >
+              Your balance:{" "}
+              <span className="font-semibold">{creditBalance} credits</span>
+            </div>
+          </form>
         </CardContent>
       </Card>
 
@@ -186,9 +289,7 @@ export function PhoneNumberSearch({
             <CardDescription>
               {results.length} numbers found
               {results.length > 0 && (
-                <span className="ml-2">
-                  (Showing {getCostForType(numberType)} credits/month)
-                </span>
+                <span className="ml-2">(monthly pricing shown per number)</span>
               )}
             </CardDescription>
           </CardHeader>
@@ -238,7 +339,10 @@ export function PhoneNumberSearch({
                           {number.monthly_cost_credits} credits/mo
                         </div>
                         {!canAfford(number.monthly_cost_credits) && (
-                          <Badge variant="destructive" className="text-xs">
+                          <Badge
+                            variant="outline"
+                            className="border-red-700 bg-red-50 text-xs text-red-900 dark:border-red-400 dark:bg-red-950/40 dark:text-red-100"
+                          >
                             Insufficient credits
                           </Badge>
                         )}

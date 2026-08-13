@@ -15,7 +15,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Loader2, Phone, UserX, UserPlus, Trash2, Plus } from "lucide-react";
+import { Loader2, Phone, UserX, UserPlus, Trash2, Plus, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AvailablePhoneNumber,
@@ -28,6 +28,8 @@ import { PhoneNumberAssignDialog } from "./phone-number-assign-dialog";
 import { PhoneNumberCancelDialog } from "./phone-number-cancel-dialog";
 import { PhoneNumberPurchase } from "./phone-number-purchase";
 import { PhoneNumberSearch } from "./phone-number-search";
+import { PhoneNumberImportDialog } from "./phone-number-import-dialog";
+import { PhoneNumberWebhookDetailsDrawer } from "./phone-number-webhook-details-drawer";
 
 interface PhoneNumberDashboardProps {
   organizationId: string;
@@ -38,8 +40,7 @@ interface PhoneNumberDashboardProps {
   /**
    * Whether the current user can manage (add, assign, cancel) phone
    * numbers. Defaults to `true` for back-compat with pre-N1 call
-   * sites. The /phone-numbers page is the strict gate — it must
-   * pass `canManage={isPlatformAdmin || isOrgAdmin}`.
+   * sites. The /phone-numbers page is the strict permission gate.
    */
   canManage?: boolean;
 }
@@ -56,11 +57,14 @@ export function PhoneNumberDashboard({
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<PhoneNumberWithAgent | null>(
     null,
   );
+  const [selectedDetailsNumber, setSelectedDetailsNumber] =
+    useState<PhoneNumberWithAgent | null>(null);
   const [selectedAvailableNumber, setSelectedAvailableNumber] = useState<AvailablePhoneNumber | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const unusedCount = phoneNumbers.filter((n) => !n.assigned_agent_id).length;
 
@@ -74,6 +78,11 @@ export function PhoneNumberDashboard({
     setCancelDialogOpen(true);
   };
 
+  const handleDetails = (number: PhoneNumberWithAgent) => {
+    setSelectedDetailsNumber(number);
+    setDetailsDialogOpen(true);
+  };
+
   const handleAssignSuccess = () => {
     toast.success("Phone number assigned successfully");
     setAssignDialogOpen(false);
@@ -81,8 +90,8 @@ export function PhoneNumberDashboard({
     onRefresh?.();
   };
 
-  const handleCancelSuccess = () => {
-    toast.success("Phone number cancelled successfully");
+  const handleCancelSuccess = (message?: string) => {
+    toast.success(message || "Phone number released or disconnected successfully");
     setCancelDialogOpen(false);
     setSelectedNumber(null);
     onRefresh?.();
@@ -100,9 +109,17 @@ export function PhoneNumberDashboard({
     onRefresh?.();
   };
 
+  const handleImportSuccess = () => {
+    toast.success("Existing number connected");
+    onRefresh?.();
+  };
+
   const getStatusBadge = (status: PhoneNumberStatus, hasAgent: boolean) => {
     if (status === "cancelled") {
       return <Badge variant="destructive">Cancelled</Badge>;
+    }
+    if (status === "verification_required") {
+      return <Badge variant="secondary">Verification required</Badge>;
     }
     if (hasAgent) {
       return (
@@ -110,6 +127,9 @@ export function PhoneNumberDashboard({
           Active (used)
         </Badge>
       );
+    }
+    if (status === "release_pending") {
+      return <Badge variant="secondary">Release pending</Badge>;
     }
     return <Badge variant="secondary">Unused</Badge>;
   };
@@ -142,10 +162,16 @@ export function PhoneNumberDashboard({
             <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">No phone numbers yet</p>
             {canManage && (
-              <Button onClick={() => setSearchDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Search & Purchase Phone Number
-              </Button>
+              <div className="flex justify-center gap-2">
+                <Button onClick={() => setSearchDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Search & Purchase
+                </Button>
+                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Connect Existing
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -153,10 +179,16 @@ export function PhoneNumberDashboard({
         <div className="space-y-4">
           <div className="flex justify-end">
             {canManage && (
-              <Button variant="outline" onClick={() => setSearchDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Phone Number
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setSearchDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Search & Purchase
+                </Button>
+                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Connect Existing
+                </Button>
+              </div>
             )}
           </div>
           {phoneNumbers.map((number) => (
@@ -167,8 +199,22 @@ export function PhoneNumberDashboard({
                     <div className="flex items-center gap-3">
                       <Phone className="w-6 h-6 text-muted-foreground" />
                       <div>
-                        <div className="font-semibold text-lg">
-                          {formatPhoneNumber(number.phone_number)}
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold text-lg">
+                            {formatPhoneNumber(number.phone_number)}
+                          </div>
+                          {number.management_mode === "customer_managed" &&
+                            number.status === "verification_required" && (
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 text-xs"
+                                onClick={() => handleDetails(number)}
+                              >
+                                View setup details
+                              </Button>
+                            )}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Badge variant="outline">
@@ -187,7 +233,9 @@ export function PhoneNumberDashboard({
                     <div className="text-right">
                       <div className="text-sm text-muted-foreground">Monthly</div>
                       <div className="font-semibold">
-                        {number.monthly_cost_credits} credits
+                        {number.management_mode === "customer_managed"
+                          ? "No platform rental"
+                          : `${number.monthly_cost_credits} credits`}
                       </div>
                     </div>
 
@@ -217,16 +265,9 @@ export function PhoneNumberDashboard({
                             size="sm"
                             variant="outline"
                             onClick={() => handleAssign(number)}
-                            disabled={actionLoading === number.id}
                           >
-                            {actionLoading === number.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <>
-                                <UserPlus className="w-4 h-4 mr-1" />
-                                Assign
-                              </>
-                            )}
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Assign
                           </Button>
                         )}
 
@@ -236,16 +277,11 @@ export function PhoneNumberDashboard({
                           variant="outline"
                           className="text-red-600 border-red-200 hover:bg-red-50"
                           onClick={() => handleCancel(number)}
-                          disabled={actionLoading === number.id}
                         >
-                          {actionLoading === number.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Cancel
-                            </>
-                          )}
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          {number.management_mode === "customer_managed"
+                            ? "Disconnect"
+                            : "Release"}
                         </Button>
                       )}
                     </div>
@@ -269,6 +305,7 @@ export function PhoneNumberDashboard({
 
       {selectedNumber && (
         <PhoneNumberCancelDialog
+          organizationId={organizationId}
           phoneNumber={selectedNumber}
           open={cancelDialogOpen}
           onOpenChange={setCancelDialogOpen}
@@ -284,7 +321,6 @@ export function PhoneNumberDashboard({
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-5">
             <PhoneNumberSearch
-              organizationId={organizationId}
               creditBalance={creditBalance}
               onNumberSelected={handleNumberSelectedFromSearch}
             />
@@ -300,6 +336,23 @@ export function PhoneNumberDashboard({
         onOpenChange={setPurchaseDialogOpen}
         onPurchaseSuccess={handlePurchaseSuccess}
       />
+
+      <PhoneNumberImportDialog
+        organizationId={organizationId}
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImportSuccess={handleImportSuccess}
+      />
+
+      {selectedDetailsNumber && (
+        <PhoneNumberWebhookDetailsDrawer
+          organizationId={organizationId}
+          phoneNumberId={selectedDetailsNumber.id}
+          phoneNumber={selectedDetailsNumber.phone_number}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+        />
+      )}
     </div>
   );
 }

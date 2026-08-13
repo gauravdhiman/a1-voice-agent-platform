@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,32 +46,31 @@ export function PhoneNumberAssignDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && organizationId) {
-      fetchAgents();
-    }
-  }, [open, organizationId]);
-
-  useEffect(() => {
     if (open && agents.length > 0 && phoneNumber.assigned_agent_id) {
       setSelectedAgentId(phoneNumber.assigned_agent_id);
     }
   }, [open, agents, phoneNumber.assigned_agent_id]);
 
-  const fetchAgents = async () => {
+  const fetchAgents = useCallback(async () => {
     try {
       setFetchingAgents(true);
       const orgAgents = await agentService.getOrgAgents(organizationId);
-      const availableAgents = orgAgents.filter(
-        (agent) => !agent.phone_number || agent.phone_number === ""
-      );
-      setAgents(availableAgents);
+      // Phone assignment is now owned by phone_numbers. A legacy
+      // voice_agents.phone_number value must not hide otherwise valid agents.
+      setAgents(orgAgents);
     } catch (err) {
       console.error("Error fetching agents:", err);
       toast.error("Failed to load agents");
     } finally {
       setFetchingAgents(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (open && organizationId) {
+      void fetchAgents();
+    }
+  }, [fetchAgents, open, organizationId]);
 
   const handleAssign = async () => {
     if (!selectedAgentId) {
@@ -82,9 +81,11 @@ export function PhoneNumberAssignDialog({
     try {
       setLoading(true);
       setError(null);
-      await phoneNumberService.assignToAgent(phoneNumber.id, {
-        agent_id: selectedAgentId,
-      });
+      await phoneNumberService.assignToAgent(
+        phoneNumber.id,
+        { agent_id: selectedAgentId },
+        organizationId,
+      );
       onAssignSuccess();
     } catch (err: unknown) {
       const error = err as Error;

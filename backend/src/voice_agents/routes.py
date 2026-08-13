@@ -9,6 +9,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
 from pydantic import BaseModel
+from src.auth.dependencies import assert_has_permission, require_permission
+from src.auth.middleware import get_authenticated_user
+from src.auth.models import UserProfile
+from src.billing.entitlement_models import EntitlementDenied
+from src.billing.entitlement_service import entitlement_service
+from src.organization.service import OrganizationService
 
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
@@ -20,12 +26,6 @@ from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import voice_session_service
-from src.auth.dependencies import assert_has_permission, require_permission
-from src.auth.middleware import get_authenticated_user
-from src.auth.models import UserProfile
-from src.billing.entitlement_models import EntitlementDenied
-from src.billing.entitlement_service import entitlement_service
-from src.organization.service import OrganizationService
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -122,10 +122,6 @@ async def create_agent(
     """
     current_user_id, user_profile = _auth
 
-    # Force inactive if no phone number assigned
-    if not agent_data.phone_number:
-        agent_data.is_active = False
-
     # Validate the preset assignment (must exist + be published) before creating.
     preset_error = await _validate_preset_assignment(agent_data.preset_id)
     if preset_error:
@@ -196,7 +192,8 @@ async def get_user_agents(
             response = (
                 voice_agent_service.supabase.table("voice_agents").select("*").execute()
             )
-            agents = [VoiceAgent(**item) for item in response.data]
+            mapped_rows = voice_agent_service._with_phone_number_mappings(response.data)
+            agents = [VoiceAgent(**item) for item in mapped_rows]
             logger.info(f"Found {len(agents)} agents (platform admin)")
             return agents
         except Exception as e:
@@ -451,20 +448,6 @@ async def update_agent(
         error_message="Insufficient permissions to update this agent",
     )
 
-    # Prevent activating an agent without a phone number
-    if agent_data.is_active is True:
-        # Check the phone number that will be effective after update
-        effective_phone = (
-            agent_data.phone_number
-            if agent_data.phone_number is not None
-            else agent.phone_number
-        )
-        if not effective_phone:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot activate an agent without a phone number. Please assign a phone number first.",
-            )
-
     # Validate the preset assignment when it is being changed. ``preset_id`` is
     # Optional on VoiceAgentUpdate; only validate when explicitly supplied
     # (exclude_unset semantics) so omitting the field never trips validation.
@@ -666,7 +649,7 @@ async def delete_embed_config(
     )
 
     try:
-        result = (
+        (
             voice_agent_service.supabase.table("agent_embed_configs")
             .delete()
             .eq("agent_id", str(agent_id))
@@ -756,13 +739,11 @@ async def get_embed_token(
     domain = request.headers.get("origin", "")
     ip_address = request.client.host if request.client else None
 
-    embed_token, voice_token, ws_url, session_id = (
-        embed_service.generate_embed_token(
-            agent_id=str(agent_id),
-            embed_config_id=str(embed_config["id"]),
-            domain=domain,
-            ip_address=ip_address,
-        )
+    embed_token, voice_token, ws_url, session_id = embed_service.generate_embed_token(
+        agent_id=str(agent_id),
+        embed_config_id=str(embed_config["id"]),
+        domain=domain,
+        ip_address=ip_address,
     )
 
     if not embed_token or not voice_token or not ws_url or not session_id:

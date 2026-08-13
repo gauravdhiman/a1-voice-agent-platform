@@ -502,6 +502,9 @@ class CreditConsumptionRequest(BaseModel):
     event_name: str
     quantity: int = Field(default=1, ge=1)
     metadata: Optional[dict[str, Any]] = None
+    idempotency_key: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="Stable retry key for one debit"
+    )
 
 
 class CreditConsumptionResponse(BaseModel):

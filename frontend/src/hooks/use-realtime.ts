@@ -29,7 +29,7 @@
  * }
  * ```
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { getRealtimeService } from '@/lib/realtime'
 import { useQueryClient } from '@tanstack/react-query'
@@ -79,6 +79,20 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
     filter,
     onChange,
   } = options
+  const tablesKey = tables.join('\u001f')
+  const stableTables = useMemo(
+    () => (tablesKey ? tablesKey.split('\u001f') : []),
+    [tablesKey],
+  )
+  const filterColumn = filter?.column
+  const filterValue = filter?.value
+  const stableFilter = useMemo(
+    () =>
+      filterColumn !== undefined && filterValue !== undefined
+        ? { column: filterColumn, value: filterValue }
+        : undefined,
+    [filterColumn, filterValue],
+  )
 
   useEffect(() => {
     const realtimeService = realtimeServiceRef.current
@@ -86,8 +100,8 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
     // Subscribe to real-time updates
     realtimeService.subscribe({
       subscriptionId,
-      tables,
-      filter,
+      tables: stableTables,
+      filter: stableFilter,
       onInsert: (payload) => {
         if (payload.table === 'agent_tools') {
           console.log('Tool added:', payload)
@@ -124,7 +138,7 @@ export function useRealtime(subscriptionId: string, options: UseRealtimeOptions 
       realtimeService.unsubscribe(subscriptionId)
       setIsSubscribed(false)
     }
-  }, [subscriptionId, tables, filter, onChange])
+  }, [onChange, stableFilter, stableTables, subscriptionId])
 
   return {
     /** Whether subscription is active */

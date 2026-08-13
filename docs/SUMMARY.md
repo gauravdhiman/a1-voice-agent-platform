@@ -96,6 +96,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
    - Agent assignment workflow
    - Cancellation policy
    - **API Documentation** - All endpoints with request/response formats
+2. **[Phone-number lifecycle](02_core_systems/phone_number_lifecycle.md)** - Source-of-truth routing, platform purchase, customer-owned import, webhook security, rental billing, release retries, and test/live-gate policy
 
 ### Authentication & OAuth
 
@@ -156,8 +157,10 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 ### Implementing Phone Numbers?
 
 1. Read **[Phone Numbers PRD](PRD-phone-numbers.md)** - Complete feature specification
-2. Review API Documentation section in the PRD
-3. Check **[Backend Phone Numbers Module](../backend/src/phone_numbers/)** - Implementation details
+2. Read **[Phone-number lifecycle](02_core_systems/phone_number_lifecycle.md)** for implementation and ownership decisions
+3. Read **[Maintenance jobs and horizontal scaling](02_core_systems/maintenance_jobs.md)** before enabling multiple backend scheduler instances
+4. Review API Documentation section in the PRD
+5. Check **[Backend Phone Numbers Module](../backend/src/phone_numbers/)** - Implementation details
 
 ### Implementing Billing?
 

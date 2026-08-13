@@ -157,6 +157,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       } else {
         breadcrumbs.push({ name: "Dashboard", href: null });
       }
+    } else if (pathname === "/platform/phone-numbers") {
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Phone Number Settings", href: null });
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
     } else if (pathname === "/organization/billing") {
       const orgHref = orgId ? `/organization?org_id=${orgId}` : "/organization";
       breadcrumbs.push({ name: "Organization", href: orgHref });
