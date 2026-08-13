@@ -1430,3 +1430,990 @@ class TestPhoneNumberRentalBilling:
             "PN1234567890"
         )
         assert table.update.call_args.args[0]["status"] == "cancelled"
+
+
+class TestPhoneNumberServiceEdgeCases:
+    """Cover service error and no-op paths that protect lifecycle boundaries."""
+
+    @pytest.mark.asyncio
+    async def test_get_routable_agent_id_rejects_unassigned_number(
+        self, phone_number_service, mock_supabase_client
+    ):
+        """An enabled number without an assignment must not route a call."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        agent_id, error = await phone_number_service.get_routable_agent_id(
+            "+15551234567"
+        )
+
+        assert agent_id is None
+        assert error == "Phone number is not assigned or enabled"
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_returns_not_found(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """Missing records return a stable not-found error."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        number, error = await phone_number_service.get_by_id(sample_phone_number_id)
+
+        assert number is None
+        assert error == "Phone number not found"
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_sanitizes_database_exception(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """Database failures are returned rather than escaping the service."""
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "database unavailable"
+        )
+
+        number, error = await phone_number_service.get_by_id(sample_phone_number_id)
+
+        assert number is None
+        assert "Failed to fetch phone number" in error
+
+    @pytest.mark.asyncio
+    async def test_get_agent_number_returns_none_when_unassigned(
+        self, phone_number_service, mock_supabase_client, sample_org_id, sample_agent_id
+    ):
+        """Agent detail loading treats an absent assignment as an empty value."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        number, error = await phone_number_service.get_agent_number(
+            sample_org_id, sample_agent_id
+        )
+
+        assert number is None
+        assert error is None
+
+    @pytest.mark.asyncio
+    async def test_get_organization_numbers_returns_error_on_database_failure(
+        self, phone_number_service, mock_supabase_client, sample_org_id
+    ):
+        """Organization listing failures produce an empty safe response."""
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "database unavailable"
+        )
+
+        response, error = await phone_number_service.get_organization_numbers(
+            sample_org_id
+        )
+
+        assert response.items == []
+        assert response.total_count == 0
+        assert "Failed to fetch phone numbers" in error
+
+    @pytest.mark.asyncio
+    async def test_phone_number_limit_error_returns_entitlement_message(
+        self, phone_number_service, sample_org_id
+    ):
+        """Provider purchases stop when the plan entitlement is exhausted."""
+        from src.billing.entitlement_models import EntitlementDenied
+
+        phone_number_service.entitlement_service.assert_limit.side_effect = (
+            EntitlementDenied("max_phone_numbers", "Phone-number limit reached")
+        )
+
+        error = await phone_number_service._phone_number_limit_error(sample_org_id)
+
+        assert error == "Phone-number limit reached"
+
+    @pytest.mark.asyncio
+    async def test_refund_failed_purchase_swallows_refund_exception(
+        self, phone_number_service, sample_org_id
+    ):
+        """A refund failure is logged without masking the original purchase error."""
+        phone_number_service.billing_service.refund_credits = AsyncMock(
+            side_effect=RuntimeError("billing unavailable")
+        )
+
+        await phone_number_service._refund_failed_purchase(
+            sample_org_id, 200, "+15551234567", "purchase-idempotency-key"
+        )
+
+        phone_number_service.billing_service.refund_credits.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_import_number_rejects_agent_outside_organization(
+        self, phone_number_service, mock_supabase_client, sample_org_id, sample_agent_id
+    ):
+        """Customer numbers cannot be assigned across organization boundaries."""
+        from shared.organization.phone_number_models import PhoneNumberImportRequest
+
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        result, error = await phone_number_service.import_number(
+            sample_org_id,
+            PhoneNumberImportRequest(
+                phone_number="+15551234567", agent_id=sample_agent_id
+            ),
+        )
+
+        assert result is None
+        assert error == "Agent not found in this organization"
+
+
+def test_add_month_handles_year_boundary_and_short_months():
+    """Rental billing advances calendar months without invalid dates."""
+    from src.phone_numbers.service import _add_month
+
+    assert (
+        _add_month(datetime(2026, 1, 31, tzinfo=timezone.utc)).date()
+        == datetime(2026, 2, 28, tzinfo=timezone.utc).date()
+    )
+    assert (
+        _add_month(datetime(2026, 12, 31, tzinfo=timezone.utc)).date()
+        == datetime(2027, 1, 31, tzinfo=timezone.utc).date()
+    )
+
+
+class TestPhoneNumberServiceLifecycleBranches:
+    """Exercise idempotency, verification, and transactional failure paths."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("status", "expected_error"),
+        [
+            ("provisioning", "already provisioning"),
+            ("release_pending", "awaiting provider release"),
+        ],
+    )
+    async def test_purchase_idempotency_rejects_nonterminal_attempts(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_purchased_phone_number,
+        status,
+        expected_error,
+    ):
+        """Retries cannot start a second provider operation for an active attempt."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": status,
+            "provisioning_idempotency_key": "same-attempt",
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+                idempotency_key="same-attempt",
+            )
+
+        assert result is None
+        assert expected_error in error
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_purchase_idempotency_replays_completed_attempt_with_balance(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_purchased_phone_number,
+    ):
+        """A completed retry returns the local record without another charge."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": "purchased",
+            "provisioning_idempotency_key": "completed-attempt",
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        phone_number_service.billing_service.get_credit_balance = AsyncMock(
+            return_value=MagicMock(total_credits=321)
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+                idempotency_key="completed-attempt",
+            )
+
+        assert error is None
+        assert result.success is True
+        assert result.credit_balance_after == 321
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_purchase_idempotency_key_cannot_be_reused_for_another_number(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_purchased_phone_number,
+    ):
+        """A retry key is bound to the original normalized number and type."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "provisioning_idempotency_key": "reused-key",
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551230000"),
+                idempotency_key="reused-key",
+            )
+
+        assert result is None
+        assert error == "This idempotency key was already used for another number"
+
+    @pytest.mark.asyncio
+    async def test_purchase_returns_entitlement_error_before_charging(
+        self, phone_number_service, sample_org_id
+    ):
+        """Plan limits are enforced before the credit debit or provider call."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+        from src.billing.entitlement_models import EntitlementDenied
+
+        phone_number_service.entitlement_service.assert_limit.side_effect = (
+            EntitlementDenied("max_phone_numbers", "No phone number capacity")
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+            )
+
+        assert result is None
+        assert error == "No phone number capacity"
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_purchase_refunds_when_pending_record_cannot_be_saved(
+        self, phone_number_service, mock_supabase_client, sample_org_id
+    ):
+        """A failed local reservation refunds the debit before returning."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=200)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=0)
+        )
+        phone_number_service.billing_service.refund_credits = AsyncMock()
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+            )
+
+        assert result is None
+        assert error == "Failed to save phone number provisioning record"
+        phone_number_service.billing_service.refund_credits.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_import_returns_save_error_when_insert_is_empty(
+        self, phone_number_service, mock_supabase_client, sample_org_id
+    ):
+        """Customer-number setup fails cleanly when its local row is not written."""
+        from shared.organization.phone_number_models import PhoneNumberImportRequest
+
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        result, error = await phone_number_service.import_number(
+            sample_org_id,
+            PhoneNumberImportRequest(phone_number="+15551234567"),
+        )
+
+        assert result is None
+        assert error == "Failed to save customer phone number"
+
+    @pytest.mark.asyncio
+    async def test_import_returns_validation_detail_for_invalid_number(
+        self, phone_number_service, sample_org_id
+    ):
+        """Invalid customer numbers return the validation detail to the caller."""
+        from shared.organization.phone_number_models import PhoneNumberImportRequest
+
+        result, error = await phone_number_service.import_number(
+            sample_org_id,
+            PhoneNumberImportRequest(phone_number="not-a-phone-number"),
+        )
+
+        assert result is None
+        assert (
+            error == "Phone number must be a valid E.164 number or a 10-digit US number"
+        )
+
+    @pytest.mark.asyncio
+    async def test_verification_details_return_not_found(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """Verification details are scoped to an existing organization row."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        result, error = await phone_number_service.get_verification_details(
+            sample_org_id, sample_phone_number_id
+        )
+
+        assert result is None
+        assert error == "Phone number not found"
+
+    @pytest.mark.asyncio
+    async def test_verification_details_report_failed_token_replacement(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """Legacy pending rows fail safely when token persistence is unavailable."""
+        row = {
+            "id": str(sample_phone_number_id),
+            "phone_number": "+15551234567",
+            "status": "verification_required",
+            "provisioning_source": "customer",
+            "management_mode": "customer_managed",
+            "connection_token_encrypted": None,
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [MagicMock(data=[row]), MagicMock(data=[])]
+
+        result, error = await phone_number_service.get_verification_details(
+            sample_org_id, sample_phone_number_id
+        )
+
+        assert result is None
+        assert error == "Verification details are no longer available"
+
+    @pytest.mark.asyncio
+    async def test_verify_customer_number_returns_false_for_unknown_token(
+        self, phone_number_service, mock_supabase_client
+    ):
+        """A missing or incorrect token cannot activate a customer number."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        verified = await phone_number_service.verify_customer_number(
+            "+15551234567", "wrong-token"
+        )
+
+        assert verified is False
+
+    @pytest.mark.asyncio
+    async def test_verify_customer_number_enables_incoming_calls(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """A valid customer token activates routing and retires the token."""
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+        ]
+
+        verified = await phone_number_service.verify_customer_number(
+            "+15551234567", "correct-token"
+        )
+
+        assert verified is True
+        update_payload = table.update.call_args.args[0]
+        assert update_payload["status"] == "active"
+        assert update_payload["is_incoming_enabled"] is True
+        assert update_payload["connection_token_encrypted"] is None
+
+
+class TestPhoneNumberServiceFailureCompensation:
+    """Verify compensation and persistence behavior when lifecycle steps fail."""
+
+    @pytest.mark.asyncio
+    async def test_purchase_releases_provider_number_after_finalize_failure(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """A failed final write releases the just-purchased provider asset."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=200)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=0)
+        )
+        phone_number_service.billing_service.refund_credits = AsyncMock()
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+            MagicMock(data=[]),
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+        ]
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            twilio.purchase_phone_number.return_value = MagicMock(
+                sid="PN-compensate", phone_number="+15551234567"
+            )
+            twilio.release_phone_number.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+            )
+
+        assert result is None
+        assert "Failed to finalize phone number record" in error
+        twilio.release_phone_number.assert_called_once_with("PN-compensate")
+        phone_number_service.billing_service.refund_credits.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_purchase_marks_release_pending_when_compensation_fails(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """A provider release failure is persisted for the daily retry worker."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=200)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=0)
+        )
+        phone_number_service.billing_service.refund_credits = AsyncMock()
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+            MagicMock(data=[]),
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+        ]
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            twilio.purchase_phone_number.return_value = MagicMock(
+                sid="PN-release-pending", phone_number="+15551234567"
+            )
+            twilio.release_phone_number.side_effect = RuntimeError("provider down")
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+            )
+
+        assert result is None
+        assert "Failed to finalize phone number record" in error
+        assert table.update.call_args.args[0]["status"] == "release_pending"
+        phone_number_service.billing_service.refund_credits.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_import_returns_database_error_for_unexpected_insert_failure(
+        self, phone_number_service, mock_supabase_client, sample_org_id
+    ):
+        """Unexpected import failures remain actionable without leaking internals."""
+        from shared.organization.phone_number_models import PhoneNumberImportRequest
+
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "database unavailable"
+        )
+
+        result, error = await phone_number_service.import_number(
+            sample_org_id,
+            PhoneNumberImportRequest(phone_number="+15551234567"),
+        )
+
+        assert result is None
+        assert error == "Failed to import phone number: database unavailable"
+
+    @pytest.mark.asyncio
+    async def test_verification_details_sanitize_database_exception(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """Verification-detail database failures use a stable public error."""
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "database unavailable"
+        )
+
+        result, error = await phone_number_service.get_verification_details(
+            sample_org_id, sample_phone_number_id
+        )
+
+        assert result is None
+        assert error == "Failed to load phone-number verification details"
+
+    @pytest.mark.asyncio
+    async def test_purchase_marks_local_attempt_cancelled_when_provider_purchase_fails(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """A provider failure before a SID exists still closes the local attempt."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=200)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=0)
+        )
+        phone_number_service.billing_service.refund_credits = AsyncMock()
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+        ]
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            twilio.purchase_phone_number.side_effect = RuntimeError("provider down")
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+            )
+
+        assert result is None
+        assert "provider down" in error
+        assert table.update.call_args.args[0]["status"] == "cancelled"
+        phone_number_service.billing_service.refund_credits.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_import_can_assign_number_to_an_active_agent(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_agent_id,
+        sample_purchased_phone_number,
+    ):
+        """Import validates and preserves an optional in-organization assignment."""
+        from shared.organization.phone_number_models import PhoneNumberImportRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": "verification_required",
+            "organization_id": str(sample_org_id),
+            "assigned_agent_id": str(sample_agent_id),
+            "is_incoming_enabled": False,
+            "billing_mode": "none",
+            "management_mode": "customer_managed",
+            "provisioning_source": "customer",
+            "configuration_status": "verification_required",
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[{"id": str(sample_agent_id)}]),
+            MagicMock(data=[row]),
+        ]
+
+        result, error = await phone_number_service.import_number(
+            sample_org_id,
+            PhoneNumberImportRequest(
+                phone_number="+15551234567", agent_id=sample_agent_id
+            ),
+        )
+
+        assert error is None
+        assert result.success is True
+        assert result.phone_number.assigned_agent_id == sample_agent_id
+
+
+class TestPhoneNumberServiceAssignmentBranches:
+    """Cover assignment scoping, idempotence, and update failure handling."""
+
+    @pytest.mark.asyncio
+    async def test_assign_rejects_terminal_status_with_organization_scope(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_agent_id,
+        sample_purchased_phone_number,
+    ):
+        """Cancelled numbers cannot be reattached to an agent."""
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": "cancelled",
+            "organization_id": str(sample_org_id),
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        result, error = await phone_number_service.assign_to_agent(
+            sample_phone_number_id,
+            PhoneNumberAssignRequest(agent_id=sample_agent_id),
+            organization_id=sample_org_id,
+        )
+
+        assert result is None
+        assert "Cannot assign number with status" in error
+
+    @pytest.mark.asyncio
+    async def test_assign_is_idempotent_for_same_agent_with_organization_scope(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_agent_id,
+        sample_purchased_phone_number,
+    ):
+        """Repeating an existing mapping is a successful no-op."""
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": "active",
+            "organization_id": str(sample_org_id),
+            "assigned_agent_id": str(sample_agent_id),
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        result, error = await phone_number_service.assign_to_agent(
+            sample_phone_number_id,
+            PhoneNumberAssignRequest(agent_id=sample_agent_id),
+            organization_id=sample_org_id,
+        )
+
+        assert error is None
+        assert result.assigned_agent_id == sample_agent_id
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_assign_reports_update_failure_after_scoped_agent_check(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_agent_id,
+        sample_purchased_phone_number,
+    ):
+        """An empty update response does not report a false assignment success."""
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "organization_id": str(sample_org_id),
+            "assigned_agent_id": None,
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[row]),
+            MagicMock(data=[{"id": str(sample_agent_id)}]),
+            MagicMock(data=[]),
+        ]
+
+        result, error = await phone_number_service.assign_to_agent(
+            sample_phone_number_id,
+            PhoneNumberAssignRequest(agent_id=sample_agent_id),
+            organization_id=sample_org_id,
+        )
+
+        assert result is None
+        assert error == "Failed to update phone number"
+
+    @pytest.mark.asyncio
+    async def test_assign_sanitizes_database_exception(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_phone_number_id,
+        sample_agent_id,
+    ):
+        """Assignment database failures return a service-level error."""
+        from shared.organization.phone_number_models import PhoneNumberAssignRequest
+
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "database unavailable"
+        )
+
+        result, error = await phone_number_service.assign_to_agent(
+            sample_phone_number_id,
+            PhoneNumberAssignRequest(agent_id=sample_agent_id),
+        )
+
+        assert result is None
+        assert "Failed to assign phone number" in error
+
+
+class TestPhoneNumberServiceCancellationAndRentalBranches:
+    """Cover provider release retries and rental state transitions."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_queues_release_when_provider_release_fails(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_purchased_phone_number,
+    ):
+        """A provider outage leaves a platform number in release_pending."""
+        row = {
+            **sample_purchased_phone_number,
+            "organization_id": str(sample_org_id),
+            "status": "purchased",
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [MagicMock(data=[row]), MagicMock(data=[row])]
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            twilio.release_phone_number.side_effect = RuntimeError("provider down")
+            success, error = await phone_number_service.cancel_number(
+                sample_phone_number_id, organization_id=sample_org_id
+            )
+
+        assert success is True
+        assert error == "release_pending"
+        assert table.update.call_args.args[0]["status"] == "release_pending"
+
+    @pytest.mark.asyncio
+    async def test_cancel_reports_empty_status_update(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_purchased_phone_number,
+    ):
+        """Cancellation does not succeed when its status update is empty."""
+        row = {
+            **sample_purchased_phone_number,
+            "organization_id": str(sample_org_id),
+            "status": "active",
+            "management_mode": "customer_managed",
+            "provisioning_source": "customer",
+            "billing_mode": "none",
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [MagicMock(data=[row]), MagicMock(data=[])]
+
+        success, error = await phone_number_service.cancel_number(
+            sample_phone_number_id, organization_id=sample_org_id
+        )
+
+        assert success is False
+        assert error == "Failed to update phone number status"
+
+    @pytest.mark.asyncio
+    async def test_cancel_sanitizes_database_exception(
+        self, phone_number_service, mock_supabase_client, sample_phone_number_id
+    ):
+        """Cancellation database failures return an actionable error."""
+        mock_supabase_client.table.return_value.execute.side_effect = RuntimeError(
+            "database unavailable"
+        )
+
+        success, error = await phone_number_service.cancel_number(
+            sample_phone_number_id
+        )
+
+        assert success is False
+        assert "Failed to cancel phone number" in error
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_returns_a_phone_number(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_phone_number_id,
+        sample_purchased_phone_number,
+    ):
+        """Successful detail loading returns the normalized model."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[sample_purchased_phone_number]
+        )
+
+        number, error = await phone_number_service.get_by_id(sample_phone_number_id)
+
+        assert error is None
+        assert number.id == sample_phone_number_id
+
+    @pytest.mark.asyncio
+    async def test_process_due_rentals_counts_release_retry_errors(
+        self, phone_number_service, mock_supabase_client, sample_purchased_phone_number
+    ):
+        """A failed release retry is visible in the maintenance summary."""
+        row = {
+            **sample_purchased_phone_number,
+            "status": "release_pending",
+            "billing_mode": "platform_rental",
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.return_value = MagicMock(data=[row])
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.release_phone_number.side_effect = RuntimeError("provider down")
+            result = await phone_number_service.process_due_rentals()
+
+        assert result.errors == 1
+        assert result.released == 0
+
+    @pytest.mark.asyncio
+    async def test_process_due_rentals_skips_number_not_yet_due(
+        self, phone_number_service, mock_supabase_client, sample_purchased_phone_number
+    ):
+        """Future rental dates do not trigger a debit."""
+        row = {
+            **sample_purchased_phone_number,
+            "status": "purchased",
+            "billing_mode": "platform_rental",
+            "next_billing_at": (
+                datetime.now(timezone.utc) + timedelta(days=5)
+            ).isoformat(),
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        phone_number_service.billing_service.consume_credits = AsyncMock()
+
+        result = await phone_number_service.process_due_rentals()
+
+        assert result.processed == 0
+        phone_number_service.billing_service.consume_credits.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("cancel_result", "expected_processed", "expected_released", "expected_errors"),
+        [
+            ((True, None), 1, 1, 0),
+            ((True, "release_pending"), 1, 0, 1),
+            ((False, "provider error"), 0, 0, 1),
+        ],
+    )
+    async def test_process_due_rentals_handles_expired_grace_period(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_purchased_phone_number,
+        cancel_result,
+        expected_processed,
+        expected_released,
+        expected_errors,
+    ):
+        """Expired grace periods account for success, pending, and failed release."""
+        now = datetime.now(timezone.utc)
+        row = {
+            **sample_purchased_phone_number,
+            "status": "active",
+            "billing_mode": "platform_rental",
+            "billing_status": "past_due",
+            "next_billing_at": (now - timedelta(days=2)).isoformat(),
+            "billing_grace_ends_at": (now - timedelta(days=1)).isoformat(),
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        phone_number_service.cancel_number = AsyncMock(return_value=cancel_result)
+
+        result = await phone_number_service.process_due_rentals(now=now)
+
+        assert result.processed == expected_processed
+        assert result.released == expected_released
+        assert result.errors == expected_errors
+        phone_number_service.cancel_number.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_process_due_rentals_counts_malformed_rows_as_errors(
+        self, phone_number_service, mock_supabase_client
+    ):
+        """Malformed legacy rows do not abort processing of the remaining batch."""
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[{"id": "malformed"}]
+        )
+
+        result = await phone_number_service.process_due_rentals()
+
+        assert result.errors == 1
+
+    @pytest.mark.asyncio
+    async def test_retry_release_pending_without_provider_sid_marks_cancelled(
+        self, phone_number_service, mock_supabase_client, sample_purchased_phone_number
+    ):
+        """Rows without a provider SID are safe to finalize locally."""
+        from shared.organization.phone_number_models import PhoneNumber
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": "release_pending",
+            "provider_sid": None,
+        }
+        phone_number = PhoneNumber(**row)
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        released, error = await phone_number_service._retry_release_pending(
+            phone_number
+        )
+
+        assert released is True
+        assert error is None
+        assert (
+            mock_supabase_client.table.return_value.update.call_args.args[0]["status"]
+            == "cancelled"
+        )
+
+    @pytest.mark.asyncio
+    async def test_retry_release_pending_returns_provider_error(
+        self, phone_number_service, sample_purchased_phone_number
+    ):
+        """A failed pending-release retry remains eligible for the next run."""
+        from shared.organization.phone_number_models import PhoneNumber
+
+        row = {**sample_purchased_phone_number, "status": "release_pending"}
+        phone_number = PhoneNumber(**row)
+        phone_number_service.twilio_service.release_phone_number = MagicMock(
+            side_effect=RuntimeError("provider down")
+        )
+
+        released, error = await phone_number_service._retry_release_pending(
+            phone_number
+        )
+
+        assert released is False
+        assert error == "provider down"

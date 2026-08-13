@@ -487,6 +487,385 @@ class TestPlatformPhoneNumberSettingsRoutes:
             assert result["success"] is True
             assert "retry" in result["message"]
 
+    @pytest.mark.asyncio
+    async def test_platform_admin_can_update_settings(self):
+        from src.phone_numbers.platform_settings_models import (
+            PlatformPhoneNumberSettingsUpdate,
+        )
+        from src.phone_numbers.routes import update_platform_phone_number_settings
+
+        payload = PlatformPhoneNumberSettingsUpdate(billing_grace_period_days=14)
+        updated = Mock()
+        with patch(
+            "src.phone_numbers.routes.platform_phone_number_settings_service"
+        ) as mock_service:
+            mock_service.update_settings = AsyncMock(return_value=updated)
+            result = await update_platform_phone_number_settings(
+                payload=payload,
+                user_auth=(TEST_USER_ID, _make_profile(is_platform_admin=True)),
+            )
+
+        assert result is updated
+        mock_service.update_settings.assert_awaited_once_with(payload, TEST_USER_ID)
+
+
+class TestPurchaseAndImportErrorMapping:
+    """Route errors expose stable client-facing statuses and messages."""
+
+    @pytest.mark.asyncio
+    async def test_purchase_insufficient_credits_maps_to_payment_required(self):
+        from src.phone_numbers.routes import purchase_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.purchase_number = AsyncMock(
+                return_value=(None, "Insufficient credits to purchase the phone number")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=_purchase_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 402
+
+    @pytest.mark.asyncio
+    async def test_purchase_other_service_error_maps_to_bad_request(self):
+        from src.phone_numbers.routes import purchase_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.purchase_number = AsyncMock(
+                return_value=(None, "Phone number already exists")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=_purchase_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_purchase_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import purchase_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.purchase_number = AsyncMock(side_effect=RuntimeError("secret"))
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=_purchase_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to purchase phone number"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "expected_status"),
+        [("plan allows 0 phone numbers", 403), ("invalid phone number", 400)],
+    )
+    async def test_import_error_mapping(self, error, expected_status):
+        from src.phone_numbers.routes import import_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.import_number = AsyncMock(return_value=(None, error))
+            with pytest.raises(HTTPException) as exc_info:
+                await import_phone_number(
+                    import_request=PhoneNumberImportRequest(
+                        phone_number="+14807452168"
+                    ),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == expected_status
+        assert exc_info.value.detail == error
+
+    @pytest.mark.asyncio
+    async def test_import_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import import_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.import_number = AsyncMock(side_effect=RuntimeError("secret"))
+            with pytest.raises(HTTPException) as exc_info:
+                await import_phone_number(
+                    import_request=PhoneNumberImportRequest(
+                        phone_number="+14807452168"
+                    ),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to connect phone number"
+
+
+class TestVerificationDetailsAndAssignmentErrors:
+    """Customer setup and assignment routes cover their error contracts."""
+
+    @pytest.mark.asyncio
+    async def test_verification_details_success(self):
+        from src.phone_numbers.routes import get_phone_number_verification_details
+
+        details = Mock()
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.get_verification_details = AsyncMock(
+                return_value=(details, None)
+            )
+            result = await get_phone_number_verification_details(
+                phone_number_id=TEST_PHONE_ID,
+                organization_id=TEST_ORG_ID,
+                user_auth=(
+                    TEST_USER_ID,
+                    _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                ),
+            )
+
+        assert result is details
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "expected_status"),
+        [("Phone number not found", 404), ("Setup is no longer pending", 400)],
+    )
+    async def test_verification_details_error_mapping(self, error, expected_status):
+        from src.phone_numbers.routes import get_phone_number_verification_details
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.get_verification_details = AsyncMock(
+                return_value=(None, error)
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await get_phone_number_verification_details(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == expected_status
+
+    @pytest.mark.asyncio
+    async def test_verification_details_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import get_phone_number_verification_details
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.get_verification_details = AsyncMock(
+                side_effect=RuntimeError("secret")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await get_phone_number_verification_details(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert (
+            exc_info.value.detail == "Failed to load phone-number verification details"
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "expected_status"),
+        [
+            ("Phone number not found", 404),
+            ("Phone number is already assigned to an agent", 409),
+            ("Invalid assignment", 400),
+        ],
+    )
+    async def test_assignment_error_mapping(self, error, expected_status):
+        from src.phone_numbers.routes import assign_phone_number_to_agent
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.assign_to_agent = AsyncMock(return_value=(None, error))
+            with pytest.raises(HTTPException) as exc_info:
+                await assign_phone_number_to_agent(
+                    phone_number_id=TEST_PHONE_ID,
+                    assign_request=_assign_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == expected_status
+
+    @pytest.mark.asyncio
+    async def test_assignment_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import assign_phone_number_to_agent
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.assign_to_agent = AsyncMock(side_effect=RuntimeError("secret"))
+            with pytest.raises(HTTPException) as exc_info:
+                await assign_phone_number_to_agent(
+                    phone_number_id=TEST_PHONE_ID,
+                    assign_request=_assign_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to assign phone number"
+
+
+class TestOrganizationListAndCancelErrors:
+    """List, unassign, and release routes sanitize service failures."""
+
+    @pytest.mark.asyncio
+    async def test_list_service_error_preserves_service_detail(self):
+        from src.phone_numbers.routes import list_organization_numbers
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.get_organization_numbers = AsyncMock(
+                return_value=(None, "database unavailable")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await list_organization_numbers(
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "database unavailable"
+
+    @pytest.mark.asyncio
+    async def test_list_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import list_organization_numbers
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.get_organization_numbers = AsyncMock(
+                side_effect=RuntimeError("secret")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await list_organization_numbers(
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to list phone numbers"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "expected_status"),
+        [("Phone number not found", 404), ("Cannot unassign number", 400)],
+    )
+    async def test_unassign_error_mapping(self, error, expected_status):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.unassign_from_agent = AsyncMock(return_value=(None, error))
+            with pytest.raises(HTTPException) as exc_info:
+                await unassign_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == expected_status
+
+    @pytest.mark.asyncio
+    async def test_unassign_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import unassign_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.unassign_from_agent = AsyncMock(
+                side_effect=RuntimeError("secret")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await unassign_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to unassign phone number"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "expected_status"),
+        [("Phone number not found", 404), ("Provider release failed", 400)],
+    )
+    async def test_cancel_error_mapping(self, error, expected_status):
+        from src.phone_numbers.routes import cancel_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.cancel_number = AsyncMock(return_value=(False, error))
+            with pytest.raises(HTTPException) as exc_info:
+                await cancel_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == expected_status
+
+    @pytest.mark.asyncio
+    async def test_cancel_unexpected_error_is_sanitized(self):
+        from src.phone_numbers.routes import cancel_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.cancel_number = AsyncMock(side_effect=RuntimeError("secret"))
+            with pytest.raises(HTTPException) as exc_info:
+                await cancel_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to cancel phone number"
+
 
 class TestAssignPhoneNumberPermission:
     """``assign_phone_number_to_agent`` gates on ``phone_number:update``."""
