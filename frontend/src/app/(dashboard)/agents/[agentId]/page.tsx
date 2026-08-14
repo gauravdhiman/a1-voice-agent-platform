@@ -792,7 +792,7 @@ export default function AgentDetailPage() {
           <TabsTrigger value="tools">Tools</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           {recordingsTabVisible && (
-            <TabsTrigger value="recordings">Call Recordings</TabsTrigger>
+            <TabsTrigger value="recordings">Call History</TabsTrigger>
           )}
         </TabsList>
 

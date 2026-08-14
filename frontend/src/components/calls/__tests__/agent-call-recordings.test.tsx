@@ -30,7 +30,7 @@ describe("AgentCallRecordings", () => {
     });
   });
 
-  it("loads only recorded calls for the selected agent", async () => {
+  it("loads all calls for the selected agent", async () => {
     const { AgentCallRecordings } = await import("../agent-call-recordings");
 
     render(
@@ -43,11 +43,10 @@ describe("AgentCallRecordings", () => {
 
     expect(mockUseCallLogs).toHaveBeenCalledWith("org-1", {
       agent_id: "agent-1",
-      recording_only: true,
       page: 1,
       page_size: 25,
     });
-    expect(screen.getByText("No recordings yet")).toBeInTheDocument();
+    expect(screen.getByText("No calls yet")).toBeInTheDocument();
   });
 
   it("shows call duration and credits used for each recording", async () => {
@@ -83,7 +82,7 @@ describe("AgentCallRecordings", () => {
       />,
     );
 
-    expect(screen.getByText("Duration 2m 5s")).toBeInTheDocument();
-    expect(screen.getByText("Credits used 12")).toBeInTheDocument();
+    expect(screen.getAllByText("2m 5s").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("12").length).toBeGreaterThan(0);
   });
 });
