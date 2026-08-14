@@ -113,9 +113,10 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.getByText(/not set up for your organization yet/i),
+      screen.getByText(/needs a little more setup before your agent can use it/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Open API Credentials/i)).toBeInTheDocument();
+    expect(screen.getByText(/Open voice setup/i)).toBeInTheDocument();
+    expect(screen.queryByText(/API credentials/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Deepgram/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/OpenAI/i)).not.toBeInTheDocument();
   });
@@ -134,7 +135,7 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.queryByText(/not set up for your organization yet/i),
+      screen.queryByText(/needs a little more setup before your agent can use it/i),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
   });
@@ -165,9 +166,9 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.getByText(/contact your platform administrator/i),
+      screen.getByText(/contact your account administrator/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Open API Credentials/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Open voice setup/i)).not.toBeInTheDocument();
   });
 
   it("fires onChange(null) when the system-default option is selected", () => {

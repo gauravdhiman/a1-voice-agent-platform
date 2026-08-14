@@ -68,7 +68,7 @@ const stageConfig = {
   template: { step: 1, title: "Template", icon: Mic },
   basic: { step: 2, title: "Basic Information", icon: Bot },
   phone: { step: 3, title: "Phone Number", icon: Phone },
-  tools: { step: 4, title: "Platform Tools", icon: Plug },
+  tools: { step: 4, title: "Business Tools", icon: Plug },
   review: { step: 5, title: "Review & Create", icon: Check },
   success: { step: 6, title: "Done", icon: CheckCircle2 },
 };

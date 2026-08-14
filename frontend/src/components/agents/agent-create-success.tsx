@@ -36,8 +36,8 @@ export function AgentCreateSuccess({
           {agentName} is ready
         </h3>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          Your agent was created successfully. Next, associate skills and tools
-          so it can use the right knowledge and take actions on calls.
+          Your agent was created successfully. Next, add knowledge and connect
+          business tools so it can answer questions and take action on calls.
         </p>
       </div>
 
@@ -51,10 +51,9 @@ export function AgentCreateSuccess({
             <Sparkles className="w-4 h-4 text-violet-700" />
           </div>
           <div>
-            <p className="font-medium">Associate skills</p>
+            <p className="font-medium">Add knowledge</p>
             <p className="text-sm text-muted-foreground">
-              Open the Skills tab to attach organization skills this agent
-              should use.
+              Open the Skills tab to add the information this agent should use.
             </p>
           </div>
         </Link>
@@ -68,10 +67,10 @@ export function AgentCreateSuccess({
             <Plug className="w-4 h-4 text-blue-700" />
           </div>
           <div>
-            <p className="font-medium">Connect tools</p>
+            <p className="font-medium">Connect business tools</p>
             <p className="text-sm text-muted-foreground">
-              Open the Tools tab to enable calendar, CRM, or other platform
-              tools for this agent.
+              Open the Tools tab to connect calendar, CRM, or other business
+              services for this agent.
             </p>
           </div>
         </Link>
