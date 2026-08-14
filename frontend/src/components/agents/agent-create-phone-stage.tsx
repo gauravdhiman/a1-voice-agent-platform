@@ -29,17 +29,17 @@ export function AgentCreatePhoneStage<
       <div>
         <h3 className="text-lg font-semibold mb-2">Phone number (optional)</h3>
         <p className="text-sm text-muted-foreground">
-          After the agent is created, choose an organization number or connect
-          a custom Twilio number from the agent settings. This keeps the agent
-          mapping in one place and automatically shows the webhook instructions
-          for custom numbers.
+          After the agent is created, choose a number your organization already
+          owns, buy a new number, or use a business number you already manage.
+          These choices are available in the agent settings so you can keep the
+          main setup quick and focused.
         </p>
       </div>
 
       <div className="bg-muted/30 rounded-lg p-4 border border-dashed space-y-3">
         <p className="text-sm text-muted-foreground">
-          Existing purchased numbers and custom-number setup are available from
-          the agent&apos;s <strong>Phone number</strong> setting after creation.
+          Number assignment and purchase are available from the agent&apos;s{" "}
+          <strong>Phone number</strong> setting after creation.
         </p>
         <Button
           type="button"

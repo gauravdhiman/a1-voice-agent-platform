@@ -10,13 +10,21 @@ const { toast } = vi.hoisted(() => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+const { billingService } = vi.hoisted(() => ({
+  billingService: { getCreditBalance: vi.fn() },
+}));
+
 vi.mock("sonner", () => ({ toast }));
+
+vi.mock("@/services/billing-service", () => ({ billingService }));
 
 vi.mock("@/services/phone-number-service", () => ({
   phoneNumberService: {
     getOrganizationNumbers: vi.fn(),
     getAgentNumber: vi.fn(),
     getVerificationDetails: vi.fn(),
+    searchAvailable: vi.fn(),
+    purchaseNumber: vi.fn(),
     assignToAgent: vi.fn(),
     unassignFromAgent: vi.fn(),
     importNumber: vi.fn(),
@@ -94,6 +102,37 @@ describe("AgentPhoneNumberSelector", () => {
         "https://247ai.live/api/v1/twilio/status?token=secret",
       message: "Save both URLs in Twilio.",
     });
+    vi.mocked(phoneNumberService.searchAvailable).mockResolvedValue({
+      items: [
+        {
+          phone_number: "+14805550101",
+          phone_number_type: "local",
+          country_code: "US",
+          area_code: "480",
+          monthly_cost_credits: 200,
+          capabilities: { voice: true },
+          locality: "Phoenix",
+          postal_code: "85001",
+        },
+      ],
+      total_count: 1,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+    });
+    vi.mocked(phoneNumberService.purchaseNumber).mockResolvedValue({
+      success: true,
+      phone_number: {
+        ...AVAILABLE_NUMBER,
+        id: "pn-purchased",
+        phone_number: "+14805550101",
+      },
+      message: "Phone number purchased.",
+      credit_balance_after: 300,
+    });
+    vi.mocked(billingService.getCreditBalance).mockResolvedValue({
+      total_credits: 500,
+    });
     vi.mocked(phoneNumberService.getVerificationDetails).mockResolvedValue({
       phone_number_id: "pn-custom",
       phone_number: "+14155550101",
@@ -113,6 +152,10 @@ describe("AgentPhoneNumberSelector", () => {
       />,
     );
 
+    expect(
+      await screen.findByText(/choose a number your organization already owns/i),
+    ).toBeTruthy();
+
     await waitFor(() => {
       expect(phoneNumberService.getAgentNumber).toHaveBeenCalledWith(
         "org-1",
@@ -129,6 +172,48 @@ describe("AgentPhoneNumberSelector", () => {
     await waitFor(() => {
       expect(phoneNumberService.assignToAgent).toHaveBeenCalledWith(
         "pn-1",
+        { agent_id: "agent-1" },
+        "org-1",
+      );
+    });
+  });
+
+  it("opens purchase search from the selector and assigns the purchased number", async () => {
+    render(
+      <AgentPhoneNumberSelector
+        agentId="agent-1"
+        organizationId="org-1"
+        canEdit
+      />,
+    );
+
+    await waitFor(() => {
+      expect(phoneNumberService.getAgentNumber).toHaveBeenCalledWith(
+        "org-1",
+        "agent-1",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /buy a new number/i }));
+
+    expect(await screen.findByTestId("agent-phone-number-purchase-drawer")).toBeTruthy();
+    expect(billingService.getCreditBalance).toHaveBeenCalledWith("org-1");
+    expect(await screen.findByText(/search available numbers/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /search numbers/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^select$/i }));
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /purchase number/i }));
+
+    await waitFor(() => {
+      expect(phoneNumberService.purchaseNumber).toHaveBeenCalledWith("org-1", {
+        phone_number: "+14805550101",
+        country_code: "US",
+        phone_number_type: "local",
+      });
+      expect(phoneNumberService.assignToAgent).toHaveBeenCalledWith(
+        "pn-purchased",
         { agent_id: "agent-1" },
         "org-1",
       );
