@@ -96,17 +96,19 @@ export function PresetPicker({
             description={DEFAULT_PRESET_DISPLAY.description}
             isReady={defaultIsReady}
             disabled={disabled}
+            notice={
+              value === null ? (
+                <div className="mt-3 flex items-start gap-2 border-t border-amber-200/80 pt-3 text-amber-950 dark:border-amber-800/80 dark:text-amber-100">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p className="text-xs leading-relaxed">
+                    To reduce plan-credit usage, choose one of the below voice
+                    profiles (if available), which should be configured with your organization&apos;s own
+                    keys (BYOK).
+                  </p>
+                </div>
+              ) : undefined
+            }
           />
-          {value === null && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-              <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              <p className="text-xs leading-relaxed">
-                The System Default voice profile may use your plan call
-                credits. To reduce plan-credit usage, choose a voice profile
-                configured with your organization&apos;s own account.
-              </p>
-            </div>
-          )}
           {presets.length === 0 ? (
             <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
               <SlidersHorizontal className="h-6 w-6 text-muted-foreground mx-auto mb-1 opacity-50" />
@@ -185,6 +187,7 @@ function PresetOption({
   name,
   description,
   isReady,
+  notice,
   disabled = false,
 }: {
   selected: boolean;
@@ -192,6 +195,7 @@ function PresetOption({
   name: string;
   description?: string;
   isReady: boolean;
+  notice?: React.ReactNode;
   disabled?: boolean;
 }) {
   return (
@@ -239,6 +243,7 @@ function PresetOption({
           {description}
         </p>
       )}
+      {notice}
     </div>
   );
 }

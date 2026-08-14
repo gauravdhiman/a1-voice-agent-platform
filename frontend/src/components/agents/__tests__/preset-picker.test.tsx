@@ -6,7 +6,7 @@
  * generic setup guidance without naming underlying providers.
  */
 import * as React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { PresetPicker } from "@/components/agents/preset-picker";
@@ -66,11 +66,14 @@ describe("PresetPicker", () => {
       <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
     );
 
+    const systemDefaultOption = screen.getAllByRole("radio")[0];
     expect(
-      screen.getByText(/may use your plan call credits/i),
+      within(systemDefaultOption).getByText(/may use your plan call credits/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/choose a voice profile configured with your organization/i),
+      within(systemDefaultOption).getByText(
+        /choose a voice profile configured with your organization/i,
+      ),
     ).toBeInTheDocument();
   });
 
