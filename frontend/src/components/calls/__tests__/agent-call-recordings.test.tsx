@@ -49,4 +49,41 @@ describe("AgentCallRecordings", () => {
     });
     expect(screen.getByText("No recordings yet")).toBeInTheDocument();
   });
+
+  it("shows call duration and credits used for each recording", async () => {
+    mockUseCallLogs.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: "call-1",
+            caller_number: "+15555550100",
+            created_at: "2026-08-14T10:00:00Z",
+            duration: 125,
+            credits_consumed: 12,
+            recording_available: true,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 25,
+        total_pages: 1,
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    const { AgentCallRecordings } = await import("../agent-call-recordings");
+
+    render(
+      <AgentCallRecordings
+        organizationId="org-1"
+        agentId="agent-1"
+        agentName="Reception Agent"
+      />,
+    );
+
+    expect(screen.getByText("Duration 2m 5s")).toBeInTheDocument();
+    expect(screen.getByText("Credits used 12")).toBeInTheDocument();
+  });
 });

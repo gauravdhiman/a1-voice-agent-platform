@@ -18,10 +18,12 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Headphones,
   Loader2,
   PhoneIncoming,
   RefreshCw,
+  Zap,
 } from "lucide-react";
 
 interface AgentCallRecordingsProps {
@@ -49,6 +51,16 @@ function formatDateTime(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * Formats a call-credit amount for compact display in a recording row.
+ *
+ * @param credits - Number of credits consumed by the call.
+ * @returns A localized integer string.
+ */
+function formatCredits(credits: number | null | undefined): string {
+  return (credits ?? 0).toLocaleString("en-US");
 }
 
 /**
@@ -193,8 +205,18 @@ export function AgentCallRecordings({
                           {call.caller_number ?? "Unknown caller"}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {formatDateTime(call.created_at)} · {formatDuration(call.duration)}
+                          {formatDateTime(call.created_at)}
                         </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock3 className="h-3.5 w-3.5" />
+                            Duration {formatDuration(call.duration)}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Zap className="h-3.5 w-3.5 text-amber-500" />
+                            Credits used {formatCredits(call.credits_consumed)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     {call.recording_available && !recordingUnavailableIds.has(call.id) ? (

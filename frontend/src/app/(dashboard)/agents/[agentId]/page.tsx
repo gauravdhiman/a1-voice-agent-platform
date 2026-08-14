@@ -1112,56 +1112,6 @@ and confirm someone will call back the next business day.`}
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="p-5 pb-3">
-                <CardTitle className="text-lg">Call Credits</CardTitle>
-                <CardDescription>
-                  Choose how calls for this agent are billed
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                {organization?.google_api_key ? (
-                  <div className="p-4 border rounded-lg bg-muted/20">
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="use_platform_credits"
-                        checked={agentForm.use_platform_credits}
-                        onCheckedChange={(checked) =>
-                          setAgentForm({ ...agentForm, use_platform_credits: checked === true })
-                        }
-                        disabled={!canEdit}
-                      />
-                      <Label
-                        htmlFor="use_platform_credits"
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        Use Your Plan Credits
-                      </Label>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {agentForm.use_platform_credits
-                        ? "Calls will use your plan credits."
-                        : "Calls will be billed directly to the Google API key configured under your organization settings."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      <span className="font-medium">Using Platform Credits: </span>
-                      Calls will use your plan credits. To use your organization&apos;s own Google API key, configure it in organization settings.
-                    </p>
-                    <Link
-                      href={`/organization?org_id=${agent?.organization_id}`}
-                      className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
-                    >
-                      <ExternalLink className="h-3 w-3 mr-1" />
-                      Configure Organization API Key
-                    </Link>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {canEdit && (
               <div className="flex space-x-2">
                 <Button

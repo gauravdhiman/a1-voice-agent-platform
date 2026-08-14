@@ -56,6 +56,24 @@ describe("PresetPicker", () => {
     expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("explains plan-credit usage when the system default is selected", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog(),
+      isLoading: false,
+    });
+
+    render(
+      <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
+    );
+
+    expect(
+      screen.getByText(/may use your plan call credits/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/choose a voice profile configured with your organization/i),
+    ).toBeInTheDocument();
+  });
+
   it("renders published profiles with Ready or Setup required badges (no engine badges)", () => {
     mockUsePresetCatalog.mockReturnValue({
       data: makeCatalog({
