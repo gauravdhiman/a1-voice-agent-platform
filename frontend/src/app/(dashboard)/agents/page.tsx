@@ -145,7 +145,7 @@ export default function AgentsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="agents-page">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="bg-primary/10 p-3 rounded-lg">
@@ -160,7 +160,7 @@ export default function AgentsPage() {
         </div>
 
         {canCreateAgent && (
-          <Button onClick={handleAddAgent}>
+          <Button onClick={handleAddAgent} data-tour="agents-create">
             <Plus className="h-4 w-4 mr-2" />
             New Agent
           </Button>
@@ -172,13 +172,13 @@ export default function AgentsPage() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="w-full">
+        <TabsList className="w-full" data-tour="agents-view-toggle">
           <TabsTrigger value="list">List View</TabsTrigger>
           <TabsTrigger value="grid">Grid View</TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="space-y-6">
-          <Card>
+          <Card data-tour="agents-filters">
             <CardHeader>
               <CardTitle>Filter & Search</CardTitle>
               <CardDescription>
@@ -217,50 +217,52 @@ export default function AgentsPage() {
             </CardContent>
           </Card>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+          <div data-tour="agents-results">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               <span className="ml-3 text-muted-foreground">
                 Loading agents...
               </span>
-            </div>
-          ) : filteredAgents.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Bot className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-                <h3 className="text-lg font-semibold mb-2">No agents found</h3>
-                <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                  {searchQuery || selectedOrgId !== "all"
-                    ? "No agents match your search or filter criteria."
-                    : "You haven't created any voice agents yet."}
-                </p>
-                {canCreateAgent && (
-                  <Button onClick={handleAddAgent}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Your First Agent
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {filteredAgents.map((agent) => {
-                const canAct = canActOnAgent(agent);
-                return (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    organizationName={getOrgName(agent.organization_id)}
-                    view="list"
-                    onDelete={handleDeleteAgent}
-                    canDelete={canAct}
-                    canEdit={canAct}
-                    canConfigure={canAct}
-                  />
-                );
-              })}
-            </div>
-          )}
+              </div>
+            ) : filteredAgents.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Bot className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+                  <h3 className="text-lg font-semibold mb-2">No agents found</h3>
+                  <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
+                    {searchQuery || selectedOrgId !== "all"
+                      ? "No agents match your search or filter criteria."
+                      : "You haven't created any voice agents yet."}
+                  </p>
+                  {canCreateAgent && (
+                    <Button onClick={handleAddAgent}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Your First Agent
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {filteredAgents.map((agent) => {
+                  const canAct = canActOnAgent(agent);
+                  return (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      organizationName={getOrgName(agent.organization_id)}
+                      view="list"
+                      onDelete={handleDeleteAgent}
+                      canDelete={canAct}
+                      canEdit={canAct}
+                      canConfigure={canAct}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="grid" className="space-y-6">

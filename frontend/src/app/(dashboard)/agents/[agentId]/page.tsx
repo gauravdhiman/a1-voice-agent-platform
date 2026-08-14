@@ -699,7 +699,7 @@ export default function AgentDetailPage() {
     false;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="agent-detail-page">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -722,6 +722,7 @@ export default function AgentDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => setTestCallOpen(true)}
+                data-tour="agent-detail-test"
                 disabled={!voiceProfileReady && !voiceProfileReadinessLoading}
                 title={
                   !voiceProfileReady && !voiceProfileReadinessLoading
@@ -753,7 +754,7 @@ export default function AgentDetailPage() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="w-full">
+        <TabsList className="w-full" data-tour="agent-detail-tabs">
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
@@ -761,7 +762,7 @@ export default function AgentDetailPage() {
 
         {/* Properties Tab */}
         <TabsContent value="properties">
-          <Card>
+          <Card data-tour="agent-detail-properties">
             <CardHeader className="p-5 pb-3">
               <CardTitle className="flex items-center space-x-2 text-lg">
                 <Settings className="h-5 w-5" />

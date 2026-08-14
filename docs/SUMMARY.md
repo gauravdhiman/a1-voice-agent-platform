@@ -38,6 +38,10 @@ Understanding how the system works.
 
 Comprehensive documentation organized by feature.
 
+#### User onboarding
+
+- **[Role-aware product walkthrough](02_features/user_onboarding/product_tour.md)** - First-login tour, role-specific steps, skip/restart behavior, and extension guidance
+
 #### Voice Agents
 
 1. **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system and lifecycle

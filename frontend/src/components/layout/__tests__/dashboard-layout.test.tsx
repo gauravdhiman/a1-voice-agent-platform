@@ -17,7 +17,7 @@
  */
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Override the global next/navigation mock (in tests/setup.ts) to add the
@@ -44,6 +44,11 @@ vi.mock("next/navigation", () => ({
 // Mock the theme toggle so we don't need a real ThemeProvider in tests.
 vi.mock("@/components/ui/theme-toggle", () => ({
   ThemeToggle: () => <div data-testid="theme-toggle-stub" />,
+}));
+
+const mockOpenProductTour = vi.fn();
+vi.mock("@/components/product-tour/product-tour-provider", () => ({
+  useProductTour: () => ({ openProductTour: mockOpenProductTour }),
 }));
 
 const mockUseAuth = vi.fn();
@@ -198,6 +203,24 @@ describe("DashboardLayout - permission-aware nav", () => {
     // The pulsing live dot signals the always-on agent (same motif as the
     // marketing hero's "live" badge).
     expect(within(sidebar).getByTestId("brand-live-dot")).toBeInTheDocument();
+  });
+
+  it("renders a global help icon beside the theme toggle", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <DashboardLayout>
+        <div />
+      </DashboardLayout>,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    expect(screen.getByTestId("theme-toggle-stub")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /open product walkthrough/i }),
+    );
+    expect(mockOpenProductTour).toHaveBeenCalledTimes(1);
   });
 
   it("renders all workspace items for a regular org member", () => {
