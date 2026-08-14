@@ -65,6 +65,8 @@ export interface NavItem {
   name: string;
   /** Target route. */
   href: string;
+  /** Stable key used by the product walkthrough to spotlight this item. */
+  tourId: string;
   /** Icon shown in the collapsed and expanded sidebar. */
   icon: LucideIcon;
   /**
@@ -92,6 +94,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Home",
       href: "/dashboard",
+      tourId: "home",
       icon: LayoutDashboard,
       // Visible to every signed-in user; no permission gate.
       requiredPermission: null,
@@ -101,6 +104,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Agents",
       href: "/agents",
+      tourId: "agents",
       icon: UsersRound,
       requiredPermission: "agent:read",
       section: "workspace",
@@ -108,6 +112,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Phone Numbers",
       href: "/phone-numbers",
+      tourId: "phone-numbers",
       icon: Phone,
       requiredPermission: "phone_number:read",
       section: "workspace",
@@ -115,6 +120,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Skills",
       href: "/skills",
+      tourId: "skills",
       icon: BookOpen,
       requiredPermission: "skill:read",
       section: "workspace",
@@ -122,6 +128,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Calls",
       href: "/calls",
+      tourId: "calls",
       icon: PhoneCall,
       requiredPermission: "call_log:read",
       section: "workspace",
@@ -131,6 +138,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Members",
       href: "/organization/members",
+      tourId: "members",
       icon: Users,
       requiredPermission: "member:read",
       section: "org_admin",
@@ -138,6 +146,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Billing",
       href: "/organization/billing",
+      tourId: "billing",
       icon: Wallet,
       requiredPermission: "billing:manage",
       section: "org_admin",
@@ -145,6 +154,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Organization",
       href: "/organization",
+      tourId: "organization",
       icon: Building2,
       requiredPermission: "organization:read",
       section: "org_admin",
@@ -155,6 +165,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Organizations",
       href: "/organizations",
+      tourId: "organizations",
       icon: Building2,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -162,6 +173,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "All Users",
       href: "/users",
+      tourId: "all-users",
       icon: Users,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -169,6 +181,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Platform Skills",
       href: "/platform/skills",
+      tourId: "platform-skills",
       icon: Layers,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -176,6 +189,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Platform Tools",
       href: "/platform/tools",
+      tourId: "platform-tools",
       icon: Wrench,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -183,6 +197,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Voice Presets",
       href: "/platform/presets",
+      tourId: "voice-presets",
       icon: SlidersHorizontal,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -190,6 +205,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Notifications",
       href: "/platform/notifications",
+      tourId: "notifications",
       icon: Bell,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -197,6 +213,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Phone Number Settings",
       href: "/platform/phone-numbers",
+      tourId: "platform-phone-numbers",
       icon: Phone,
       requiredPermission: "platform:admin",
       section: "platform_admin",
@@ -204,6 +221,7 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
     {
       name: "Plan Catalog",
       href: "/platform/plans",
+      tourId: "plan-catalog",
       icon: Package,
       requiredPermission: "platform:admin",
       section: "platform_admin",

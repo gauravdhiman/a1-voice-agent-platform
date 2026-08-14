@@ -789,7 +789,10 @@ export function SkillEditor({
   const isOrg = mode === "organization";
 
   return (
-    <div className={`flex gap-4 h-full min-h-[60vh] ${className ?? ""}`}>
+    <div
+      className={`flex gap-4 h-full min-h-[60vh] ${className ?? ""}`}
+      data-tour="skills-editor"
+    >
       {/* Left panel — skill list with expandable file tree */}
       <div className="w-80 shrink-0 flex flex-col border rounded-lg bg-card h-full overflow-hidden">
         <div className="p-3 border-b space-y-2">
@@ -798,7 +801,11 @@ export function SkillEditor({
             {canCreate && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-tour="skills-add"
+                  >
                     <Plus className="h-4 w-4 mr-1" />
                     Add
                     <ChevronDown className="h-3 w-3 ml-1" />
@@ -846,6 +853,7 @@ export function SkillEditor({
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
+              data-tour="skills-filter"
               placeholder="Filter skills..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -863,7 +871,7 @@ export function SkillEditor({
             </Button>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" data-tour="skills-library">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

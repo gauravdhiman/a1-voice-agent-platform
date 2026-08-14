@@ -258,7 +258,7 @@ export default function CallsPage() {
     "the organization";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="calls-page">
       {/* Header */}
       <div className="flex items-center space-x-4">
         <div className="bg-primary/10 p-3 rounded-lg">
@@ -295,7 +295,7 @@ export default function CallsPage() {
       ) : null}
 
       {/* Filters */}
-      <Card>
+      <Card data-tour="calls-filters">
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
@@ -393,7 +393,7 @@ export default function CallsPage() {
       </Card>
 
       {/* Table */}
-      <Card>
+      <Card data-tour="calls-results">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -410,6 +410,7 @@ export default function CallsPage() {
               onClick={() => void refetch()}
               disabled={isFetching}
               aria-label="Refresh"
+              data-tour="calls-refresh"
             >
               <RefreshCw
                 className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}

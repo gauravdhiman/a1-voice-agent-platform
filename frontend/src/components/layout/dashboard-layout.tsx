@@ -4,7 +4,13 @@ import React, { useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
-import { Settings, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import {
+  CircleHelp,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -29,6 +35,7 @@ import {
 import { useHasPermission } from "@/hooks/use-has-permission";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { SITE_NAME } from "@/lib/site-config";
+import { useProductTour } from "@/components/product-tour/product-tour-provider";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -50,6 +57,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { openProductTour } = useProductTour();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Sidebar brand. If the name ends in " AI" (e.g. "24x7 AI"), strip the
@@ -193,7 +201,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         } flex flex-col h-full z-20`}
       >
         {/* Sidebar Header */}
-        <div className="h-14 flex items-center justify-between px-4 border-b border-sidebar-border bg-sidebar">
+        <div
+          className="h-14 flex items-center justify-between px-4 border-b border-sidebar-border bg-sidebar"
+          data-tour="brand"
+        >
           {!sidebarCollapsed && (
             <div className="flex items-center gap-1.5">
               {/* Brand pill: a single continued box split into a lighter
@@ -252,7 +263,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             user sees. Hidden in the collapsed state to keep the rail
             minimal. */}
         {!sidebarCollapsed && (
-          <div className="px-3 pt-3">
+          <div className="px-3 pt-3" data-tour="organization-switcher">
             <OrganizationSwitcher currentRole={currentOrganizationRole} />
           </div>
         )}
@@ -354,12 +365,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           <div className="flex items-center space-x-4">
             <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Open product walkthrough"
+              title="Open product walkthrough"
+              onClick={openProductTour}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            >
+              <CircleHelp className="h-4 w-4" />
+              <span className="sr-only">Open product walkthrough</span>
+            </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   className="relative h-8 w-8 rounded-full p-0 ring-2 ring-transparent hover:ring-primary/20 transition-all"
+                  data-tour="user-menu"
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground font-medium text-xs">
@@ -501,6 +524,7 @@ function NavSectionItem({
     <NavigationLink
       href={item.href}
       title={collapsed ? item.name : undefined}
+      data-tour={`nav-${item.tourId}`}
       exact={item.exact ?? true}
       className={collapsed ? "justify-center" : ""}
     >
