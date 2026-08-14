@@ -33,6 +33,7 @@ import { AgentCreatePhoneStage } from "@/components/agents/agent-create-phone-st
 import { AgentCreateSuccess } from "@/components/agents/agent-create-success";
 import { AgentCreateToolsStage } from "@/components/agents/agent-create-tools-stage";
 import { PresetPicker } from "@/components/agents/preset-picker";
+import { VoiceTemplatePreviewSheet } from "@/components/agents/voice-template-preview-sheet";
 import {
   isOptionalE164Phone,
   normalizeOptionalPhone,
@@ -136,7 +137,16 @@ function StepIndicator({
   );
 }
 
-function TemplateSelectionStage({
+/**
+ * Presents the available voice templates during agent creation.
+ *
+ * Template cards remain compact in the wizard. The full template definition is
+ * shown in a right-side drawer so the list does not become difficult to scan.
+ *
+ * @param props - Selection and skip callbacks for the wizard.
+ * @returns The template selection stage.
+ */
+export function TemplateSelectionStage({
   onSelect,
   onSkip,
 }: {
@@ -205,32 +215,25 @@ function TemplateSelectionStage({
                     className="shrink-0 h-7 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setPreview(preview?.id === t.id ? null : t);
+                      setPreview(t);
                     }}
                   >
                     <Eye className="w-3 h-3 mr-1" />
-                    {preview?.id === t.id ? "Hide" : "Preview"}
+                    Preview
                   </Button>
                 </div>
-                {preview?.id === t.id && (
-                  <div className="mt-2 pt-2 border-t border-border/60 space-y-1">
-                    {t.greeting && (
-                      <p className="text-xs text-foreground/80">
-                        <span className="font-medium">Greeting:</span> {t.greeting.replace("[Business Name]", "Your Business")}
-                      </p>
-                    )}
-                    {t.mission && (
-                      <p className="text-xs text-muted-foreground">
-                        <span className="font-medium">Mission:</span> {t.mission}
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
       )}
+
+      <VoiceTemplatePreviewSheet
+        template={preview}
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+        onSelect={onSelect}
+      />
 
       <div className="flex gap-3 pt-2 border-t">
         <Button

@@ -12,16 +12,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { VoiceTemplatePreviewSheet } from "@/components/agents/voice-template-preview-sheet";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  applyTemplatePlaceholders,
   canContinueTemplateStep,
   canSkipTemplateStep,
   type OnboardingWizardState,
@@ -165,88 +157,15 @@ export function StepTemplate({
         </div>
       )}
 
-      <Sheet
+      <VoiceTemplatePreviewSheet
+        template={previewTemplate}
         open={!!previewTemplate}
         onOpenChange={(open) => !open && setPreviewTemplate(null)}
-      >
-        <SheetContent className="flex flex-col w-full sm:max-w-md">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b">
-            <SheetTitle>{previewTemplate?.name}</SheetTitle>
-            <SheetDescription>Template preview</SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-            {previewTemplate?.greeting && (
-              <div>
-                <span className="text-sm font-medium text-gray-800">
-                  Greeting
-                </span>
-                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-                  {applyTemplatePlaceholders(previewTemplate.greeting, {
-                    businessName: state.businessName,
-                    agentName: state.agentName || "your assistant",
-                  })}
-                </p>
-              </div>
-            )}
-            {previewTemplate?.mission && (
-              <div>
-                <span className="text-sm font-medium text-gray-800">
-                  Mission
-                </span>
-                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-                  {previewTemplate.mission}
-                </p>
-              </div>
-            )}
-            {previewTemplate?.tone && (
-              <div>
-                <span className="text-sm font-medium text-gray-800">Tone</span>
-                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-                  {previewTemplate.tone}
-                </p>
-              </div>
-            )}
-            {previewTemplate?.persona && (
-              <div>
-                <span className="text-sm font-medium text-gray-800">
-                  Persona
-                </span>
-                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-                  {applyTemplatePlaceholders(previewTemplate.persona, {
-                    businessName: state.businessName,
-                    agentName: state.agentName || "your assistant",
-                  })}
-                </p>
-              </div>
-            )}
-            {previewTemplate?.custom_instructions && (
-              <div>
-                <span className="text-sm font-medium text-gray-800">
-                  Custom Instructions
-                </span>
-                <p className="mt-1 text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-line">
-                  {previewTemplate.custom_instructions}
-                </p>
-              </div>
-            )}
-          </div>
-          <SheetFooter className="px-6 py-4 border-t gap-2">
-            <Button variant="outline" onClick={() => setPreviewTemplate(null)}>
-              Close
-            </Button>
-            <Button
-              onClick={() => {
-                if (previewTemplate) {
-                  onChange({ selectedTemplate: previewTemplate });
-                }
-                setPreviewTemplate(null);
-              }}
-            >
-              Select this template
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+        businessName={state.businessName}
+        agentName={state.agentName}
+        onSelect={(template) => onChange({ selectedTemplate: template })}
+        selectLabel="Select this template"
+      />
 
       <div className="flex gap-3">
         <Button variant="outline" onClick={onBack} className="w-32">
