@@ -498,7 +498,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
   // Edit/Tools/Trash affordance. They need a way to open the detail
   // page in read-only mode. The fix: the card body is itself a
   // clickable surface (button with the agent name as its accessible
-  // name) that navigates to /agents/[id]?tab=properties. Admin
+  // name) that navigates to /agents/[id]?tab=persona. Admin
   // buttons inside the card (Edit, Tools, Trash) must still work and
   // must not be eaten by the outer click handler.
 
@@ -531,7 +531,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     const cardButton = screen.getByRole("button", { name: /fixture agent/i });
     fireEvent.click(cardButton);
 
-    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=properties");
+    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=persona");
   });
 
   it("regular user can open the read-only detail view for an agent in another org too", () => {
@@ -561,7 +561,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     });
     fireEvent.click(cardButton);
 
-    expect(mockPush).toHaveBeenCalledWith("/agents/agent-2?tab=properties");
+    expect(mockPush).toHaveBeenCalledWith("/agents/agent-2?tab=persona");
   });
 
   it("org admin's per-card Edit button still navigates to the detail page (not double-fired)", () => {
@@ -588,6 +588,6 @@ describe("/agents page (N1 permission-aware UI)", () => {
     const editButton = screen.getByRole("button", { name: /^edit$/i });
     fireEvent.click(editButton);
 
-    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=properties");
+    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=persona");
   });
 });

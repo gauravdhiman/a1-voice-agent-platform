@@ -85,7 +85,7 @@ manual deployment, it is the local `.env.prod` file.
 | `DEBUG` | `false` | No |
 | `MCP_ALLOW_LOCAL_URLS` | Keep `false` in production | No |
 | `TOKEN_REFRESH_*` | OAuth token refresh tuning (see `.env.prod.example`) | No |
-| `VOICE_RECORDING_ENABLED` | Persist mixed call audio when recording is enabled | No |
+| `VOICE_RECORDING_ENABLED` | Platform safety gate for persisting mixed call audio; the agent-level recording setting must also be enabled | No |
 | `RECORDING_STORAGE_BACKEND` | `r2` for staging/production; `local` for local development | No |
 | `RECORDING_R2_ENDPOINT` | Shared account S3 endpoint: `https://<account-id>.r2.cloudflarestorage.com` | No |
 | `RECORDING_R2_BUCKET` | Environment-specific private bucket name | No |
@@ -113,7 +113,7 @@ manual deployment, it is the local `.env.prod` file.
 | `OPENROUTER_API_KEY` | LLM gateway fallback | **Yes** |
 | `FISH_API_KEY` | TTS fallback | **Yes** |
 | `AGENT_DEFAULT_TIMEZONE` | IANA tz fallback for agent prompts | No |
-| `VOICE_RECORDING_ENABLED` | Persist mixed call audio (`false` default) | No |
+| `VOICE_RECORDING_ENABLED` | Platform safety gate for persisting mixed call audio (`false` default); the agent-level recording setting must also be enabled | No |
 | `RECORDING_STORAGE_BACKEND` | `local` or private Cloudflare `r2` | No |
 | `RECORDING_ENCRYPTION_MODE` | `provider_managed` (customer-managed reserved) | No |
 | `RECORDING_R2_ENDPOINT` / `RECORDING_R2_BUCKET` | Environment-specific R2 object store | No |

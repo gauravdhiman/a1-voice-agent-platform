@@ -137,3 +137,19 @@ class TestInstructionsMarkdown:
         )
         assert agent.instructions_markdown is None
         assert agent.persona == "A helpful assistant"
+
+
+class TestCallRecording:
+    """Test cases for the per-agent call recording preference."""
+
+    def test_call_recording_is_disabled_by_default(self):
+        """New agents must not record calls unless explicitly enabled."""
+        agent = VoiceAgentBase(name="Test")
+
+        assert agent.call_recording_enabled is False
+
+    def test_update_model_accepts_call_recording_preference(self):
+        """Editing an agent can explicitly enable or disable recording."""
+        update = VoiceAgentUpdate(call_recording_enabled=True)
+
+        assert update.call_recording_enabled is True

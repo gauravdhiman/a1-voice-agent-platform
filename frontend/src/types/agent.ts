@@ -30,6 +30,8 @@ export interface VoiceAgent {
   is_active: boolean;
   /** Explicit publish flag for the org public page at `/o/{slug}`. */
   is_published_on_public_page?: boolean;
+  /** Whether calls handled by this agent may be recorded. Defaults to false. */
+  call_recording_enabled: boolean;
   use_platform_credits: boolean;
   instructions_markdown: string | null;
   /**
@@ -58,6 +60,8 @@ export interface VoiceAgentCreate {
   mission?: string | null;
   custom_instructions?: string | null;
   is_active?: boolean;
+  /** Whether calls handled by this agent may be recorded. Defaults to false. */
+  call_recording_enabled?: boolean;
   use_platform_credits?: boolean;
   instructions_markdown?: string | null;
   /** Voice-engine preset id; `null` = system default. */
@@ -74,6 +78,8 @@ export interface VoiceAgentUpdate {
   custom_instructions?: string | null;
   is_active?: boolean;
   is_published_on_public_page?: boolean;
+  /** Whether calls handled by this agent may be recorded. */
+  call_recording_enabled?: boolean;
   use_platform_credits?: boolean;
   instructions_markdown?: string | null;
   /** Voice-engine preset id; `null` clears it (falls back to the system default). */

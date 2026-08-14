@@ -227,6 +227,7 @@ Stores voice agent configurations for each organization.
 | preset_id         | UUID         | NULLABLE, FK → pipeline_presets.id | Voice-engine preset reference. voice-ws loads this preset **live on every call** (no versioning — admin edits take effect on the next call). NULL = legacy agent, or one whose preset was deleted via the FK `ON DELETE SET NULL` → resolves to the **System Default** preset row (`pipeline_presets.is_default=true`, migration 20260729000002); if that row is missing/unparseable voice-ws falls back to the hardcoded `default_realtime_config()`. Migrations 20260729000001 (column) + 20260729000002 (system default) |
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
 | is_published_on_public_page | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit publish flag for the org public page (`/o/{slug}`). Distinct from `is_active`; both must be true for public listing/calls — migration 20260731000001 |
+| call_recording_enabled | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Explicit per-agent opt-in for call recordings. Runtime recording gates must also allow recording — migration 20260814000001 |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
 
@@ -1167,6 +1168,7 @@ erDiagram
         text mission
         text custom_instructions
         boolean is_active
+        boolean call_recording_enabled
         uuid preset_id
         timestamptz created_at
         timestamptz updated_at
@@ -1648,6 +1650,7 @@ erDiagram
 59. `20260812000007` - Widen `phone_numbers.status` from `VARCHAR(20)` to `VARCHAR(30)` so the `verification_required` customer-number lifecycle state can be stored safely.
 60. `20260812000008` - Add nullable Fernet-encrypted storage for customer webhook tokens while phone-number setup remains `verification_required`.
 61. `20260812000009` - Add organization/agent-active lookup indexes for fast agent settings loads and single-query inbound phone-number routing.
+62. `20260814000001` - Add `voice_agents.call_recording_enabled`, defaulting to `FALSE`, so call recording is opt-in per agent.
 
 ---
 

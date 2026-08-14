@@ -89,6 +89,10 @@ import type { VoiceTemplate } from "@/types/voice-template";
 import { skillService } from "@/services/skill-service";
 import type { OrganizationSkill } from "@/types/skill";
 import type { PhoneNumberWithAgent } from "@/types/phone-number";
+import {
+  normalizeAgentDetailTab,
+  type AgentDetailTab,
+} from "@/components/agents/agent-detail-tabs";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -132,7 +136,7 @@ export default function AgentDetailPage() {
   const [disconnectingToolId, setDisconnectingToolId] = React.useState<
     string | null
   >(null);
-  const [activeTab, setActiveTab] = React.useState("properties");
+  const [activeTab, setActiveTab] = React.useState<AgentDetailTab>("persona");
   const [pendingToolToOpen, setPendingToolToOpen] =
     React.useState<PlatformTool | null>(null);
   const [pendingApiKeyTool, setPendingApiKeyTool] =
@@ -175,6 +179,7 @@ export default function AgentDetailPage() {
     custom_instructions: string;
     is_active: boolean;
     is_published_on_public_page: boolean;
+    call_recording_enabled: boolean;
     use_platform_credits: boolean;
     instructions_markdown: string;
     preset_id: string | null;
@@ -186,6 +191,7 @@ export default function AgentDetailPage() {
     custom_instructions: "",
     is_active: true,
     is_published_on_public_page: false,
+    call_recording_enabled: false,
     use_platform_credits: false,
     instructions_markdown: "",
     preset_id: null,
@@ -370,6 +376,7 @@ export default function AgentDetailPage() {
         custom_instructions: agent.custom_instructions || "",
         is_active: agent.is_active,
         is_published_on_public_page: agent.is_published_on_public_page ?? false,
+        call_recording_enabled: agent.call_recording_enabled ?? false,
         use_platform_credits: agent.use_platform_credits || false,
         instructions_markdown: agent.instructions_markdown || "",
         preset_id: agent.preset_id ?? null,
@@ -401,16 +408,14 @@ export default function AgentDetailPage() {
 
   // Sync tab state with URL
   useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "properties" || tabParam === "tools" || tabParam === "skills") {
-      setActiveTab(tabParam);
-    }
+    setActiveTab(normalizeAgentDetailTab(searchParams.get("tab")));
   }, [searchParams]);
 
   const handleTabChange = useCallback(
     (value: string) => {
-      setActiveTab(value);
-      router.push(`/agents/${agentId}?tab=${value}`, { scroll: false });
+      const tab = normalizeAgentDetailTab(value);
+      setActiveTab(tab);
+      router.push(`/agents/${agentId}?tab=${tab}`, { scroll: false });
     },
     [router, agentId],
   );
@@ -755,21 +760,22 @@ export default function AgentDetailPage() {
         className="space-y-6"
       >
         <TabsList className="w-full" data-tour="agent-detail-tabs">
-          <TabsTrigger value="properties">Properties</TabsTrigger>
+          <TabsTrigger value="persona">Persona</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
-        {/* Properties Tab */}
-        <TabsContent value="properties">
-          <Card data-tour="agent-detail-properties">
+        {/* Persona Tab */}
+        <TabsContent value="persona">
+          <Card data-tour="agent-detail-persona">
             <CardHeader className="p-5 pb-3">
               <CardTitle className="flex items-center space-x-2 text-lg">
-                <Settings className="h-5 w-5" />
-                <span>Agent Properties</span>
+                <Bot className="h-5 w-5" />
+                <span>Agent Persona</span>
               </CardTitle>
               <CardDescription>
-                Configure your AI voice agent settings
+                Define how your agent represents your business and communicates with callers
               </CardDescription>
             </CardHeader>
             <CardContent className="p-5 pt-0 space-y-4">
@@ -789,15 +795,6 @@ export default function AgentDetailPage() {
                     setAgentForm({ ...agentForm, name: e.target.value })
                   }
                   disabled={!canEdit}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <AgentPhoneNumberSelector
-                  agentId={agentId}
-                  organizationId={agent.organization_id}
-                  canEdit={canEdit}
-                  onAssignmentChange={setAssignedPhoneNumber}
                 />
               </div>
 
@@ -939,122 +936,140 @@ and confirm someone will call back the next business day.`}
                 )}
               </div>
 
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="active"
-                    checked={agentForm.is_active}
-                    onCheckedChange={(checked) => {
-                      if (checked && !assignedPhoneNumber) {
-                        toast.warning(
-                          "A phone number is required to activate this agent. Please assign a phone number first.",
-                        );
-                        return;
-                      }
-                      // Deactivating also unpublishes — inactive agents must not
-                      // remain listed on the public organization page.
-                      setAgentForm({
-                        ...agentForm,
-                        is_active: checked === true,
-                        ...(checked
-                          ? {}
-                          : { is_published_on_public_page: false }),
-                      });
-                    }}
-                    disabled={!canEdit}
-                  />
-                  <Label
-                    htmlFor="active"
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Agent is active and ready to handle calls
-                  </Label>
-                </div>
-                {!assignedPhoneNumber && (
-                  <p className="text-xs text-amber-600 flex items-center gap-1">
-                    <Info className="w-3 h-3" />
-                    A phone number must be configured before the agent can be activated.
-                  </p>
-                )}
-              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="public-page-publish"
-                    checked={agentForm.is_published_on_public_page}
-                    onCheckedChange={(checked) => {
-                      if (checked && !agentForm.is_active) {
-                        toast.warning(
-                          "Only active agents can be published on the public organization page.",
-                        );
-                        return;
-                      }
-                      setAgentForm({
-                        ...agentForm,
-                        is_published_on_public_page: checked === true,
-                      });
-                    }}
-                    disabled={!canEdit || !agentForm.is_active}
+        {/* Settings Tab */}
+        <TabsContent value="settings">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="flex items-center space-x-2 text-lg">
+                  <Settings className="h-5 w-5" />
+                  <span>Agent Settings</span>
+                </CardTitle>
+                <CardDescription>
+                  Control how this agent is used and where it can respond
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 pt-0 space-y-6">
+                <div className="space-y-2">
+                  <AgentPhoneNumberSelector
+                    agentId={agentId}
+                    organizationId={agent.organization_id}
+                    canEdit={canEdit}
+                    onAssignmentChange={setAssignedPhoneNumber}
                   />
-                  <Label
-                    htmlFor="public-page-publish"
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Publish on public organization page
-                  </Label>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  When enabled, visitors at your org public URL can start a voice
-                  call with this agent. Requires the agent to be active;
-                  deactivating an agent also removes it from the public page.
-                </p>
-              </div>
 
-              {/* API Key Configuration */}
-              {organization?.google_api_key ? (
-                <div className="mt-6 p-4 border rounded-lg bg-muted/20">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="use_platform_credits"
-                      checked={agentForm.use_platform_credits}
-                      onCheckedChange={(checked) =>
-                        setAgentForm({ ...agentForm, use_platform_credits: checked === true })
-                      }
-                      disabled={!canEdit}
-                    />
-                    <Label
-                      htmlFor="use_platform_credits"
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      Use Your Plan Credits
-                    </Label>
+                <div className="border-t pt-5 space-y-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="active"
+                        checked={agentForm.is_active}
+                        onCheckedChange={(checked) => {
+                          if (checked && !assignedPhoneNumber) {
+                            toast.warning(
+                              "A phone number is required to activate this agent. Please assign a phone number first.",
+                            );
+                            return;
+                          }
+                          // Deactivating also unpublishes — inactive agents must not
+                          // remain listed on the public organization page.
+                          setAgentForm({
+                            ...agentForm,
+                            is_active: checked === true,
+                            ...(checked
+                              ? {}
+                              : { is_published_on_public_page: false }),
+                          });
+                        }}
+                        disabled={!canEdit}
+                      />
+                      <Label
+                        htmlFor="active"
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        Agent is active and ready to handle calls
+                      </Label>
+                    </div>
+                    {!assignedPhoneNumber && (
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <Info className="w-3 h-3" />
+                        A phone number must be configured before the agent can be activated.
+                      </p>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {agentForm.use_platform_credits
-                      ? "Calls will use your plan credits."
-                      : "Your plan credits will not be used. Calls will be billed directly to your Google API key configured under your organization settings."}
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-6 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
-                    <span className="font-medium">Using Platform Credits: </span>
-                    Calls will be using your plan credits. If you want to use your own Google API key, please configure it in your organization settings.
-                  </p>
-                  <Link
-                    href={`/organization?org_id=${agent?.organization_id}`}
-                    className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
-                  >
-                    <ExternalLink className="h-3 w-3 mr-1" />
-                    Configure Organization API Key
-                  </Link>
-                </div>
-              )}
 
-              {/* Voice profile (Phase 4). Optional — null = system default.
-                  Read-only for non-editors; canEdit users pick/clear and save. */}
-              <div className="mt-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="public-page-publish"
+                        checked={agentForm.is_published_on_public_page}
+                        onCheckedChange={(checked) => {
+                          if (checked && !agentForm.is_active) {
+                            toast.warning(
+                              "Only active agents can be published on the public organization page.",
+                            );
+                            return;
+                          }
+                          setAgentForm({
+                            ...agentForm,
+                            is_published_on_public_page: checked === true,
+                          });
+                        }}
+                        disabled={!canEdit || !agentForm.is_active}
+                      />
+                      <Label
+                        htmlFor="public-page-publish"
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        Publish on public organization page
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, visitors at your organization&apos;s public URL can start a voice call with this agent. Requires the agent to be active.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="call-recording"
+                        checked={agentForm.call_recording_enabled}
+                        onCheckedChange={(checked) =>
+                          setAgentForm({
+                            ...agentForm,
+                            call_recording_enabled: checked === true,
+                          })
+                        }
+                        disabled={!canEdit}
+                      />
+                      <Label
+                        htmlFor="call-recording"
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        Record calls for this agent
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, your team can review recordings of this agent&apos;s calls. Inform callers and follow applicable consent requirements.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="text-lg">Voice Profile</CardTitle>
+                <CardDescription>
+                  Choose how this agent sounds when speaking with callers
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
                 <PresetPicker
                   organizationId={agent.organization_id}
                   usePlatformCredits={agentForm.use_platform_credits}
@@ -1064,23 +1079,73 @@ and confirm someone will call back the next business day.`}
                   }
                   disabled={!canEdit}
                 />
-              </div>
+              </CardContent>
+            </Card>
 
-              {canEdit && (
-                <div className="flex space-x-2 pt-4">
-                  <Button
-                    onClick={handleSaveAgent}
-                    disabled={saving || updateAgentMutation.isPending}
-                  >
-                    <Save className="h-4 w-4 mr-2" />
-                    {saving || updateAgentMutation.isPending
-                      ? "Saving..."
-                      : "Save Changes"}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="text-lg">Call Credits</CardTitle>
+                <CardDescription>
+                  Choose how calls for this agent are billed
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                {organization?.google_api_key ? (
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="use_platform_credits"
+                        checked={agentForm.use_platform_credits}
+                        onCheckedChange={(checked) =>
+                          setAgentForm({ ...agentForm, use_platform_credits: checked === true })
+                        }
+                        disabled={!canEdit}
+                      />
+                      <Label
+                        htmlFor="use_platform_credits"
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        Use Your Plan Credits
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {agentForm.use_platform_credits
+                        ? "Calls will use your plan credits."
+                        : "Calls will be billed directly to the Google API key configured under your organization settings."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <span className="font-medium">Using Platform Credits: </span>
+                      Calls will use your plan credits. To use your organization&apos;s own Google API key, configure it in organization settings.
+                    </p>
+                    <Link
+                      href={`/organization?org_id=${agent?.organization_id}`}
+                      className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
+                    >
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      Configure Organization API Key
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {canEdit && (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={handleSaveAgent}
+                  disabled={saving || updateAgentMutation.isPending}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving || updateAgentMutation.isPending
+                    ? "Saving..."
+                    : "Save Changes"}
+                </Button>
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         {/* Skills Tab */}

@@ -6,6 +6,7 @@ from uuid import UUID
 import pytest
 
 from shared.voice_agents.service import VoiceAgentService, merge_phone_number_mappings
+from shared.voice_agents.models import VoiceAgentCreate
 
 
 def test_merge_phone_number_mappings_replaces_legacy_values_with_assigned_rows():
@@ -102,6 +103,55 @@ def test_service_mapping_loader_falls_back_if_table_lookup_fails():
         return_value=client,
     ):
         assert service._with_phone_number_mappings(legacy_rows) == legacy_rows
+
+
+@pytest.mark.asyncio
+async def test_create_agent_persists_the_per_agent_recording_preference():
+    """The create service must pass the recording opt-in to the database."""
+    service = VoiceAgentService()
+    query = Mock()
+    query.insert.return_value = query
+    query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "organization_id": "00000000-0000-0000-0000-000000000002",
+                "name": "Recording Agent",
+                "phone_number": None,
+                "is_active": True,
+                "call_recording_enabled": True,
+                "is_published_on_public_page": False,
+                "use_platform_credits": False,
+                "created_at": "2026-08-01T00:00:00+00:00",
+                "updated_at": "2026-08-01T00:00:00+00:00",
+            }
+        ]
+    )
+    client = Mock()
+    client.table.return_value = query
+    agent_data = VoiceAgentCreate(
+        organization_id=UUID("00000000-0000-0000-0000-000000000002"),
+        name="Recording Agent",
+        call_recording_enabled=True,
+    )
+
+    with patch.object(
+        type(service.supabase_config),
+        "client",
+        new_callable=PropertyMock,
+        return_value=client,
+    ), patch.object(
+        service,
+        "_with_phone_number_mappings",
+        return_value=query.execute.return_value.data,
+    ):
+        result, error = await service.create_agent(agent_data)
+
+    assert error is None
+    assert result is not None
+    assert result.call_recording_enabled is True
+    inserted = query.insert.call_args.args[0]
+    assert inserted["call_recording_enabled"] is True
 
 
 @pytest.mark.asyncio

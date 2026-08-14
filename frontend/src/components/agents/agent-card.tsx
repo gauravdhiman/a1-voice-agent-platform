@@ -75,7 +75,7 @@ export function AgentCard({
     // Don't bubble to the card body click — the Edit button has its
     // own destination and we don't want to navigate twice.
     e.stopPropagation();
-    router.push(`/agents/${agent.id}?tab=properties`);
+    router.push(`/agents/${agent.id}?tab=persona`);
   };
 
   const handleConfigureTools = (e: React.MouseEvent) => {
@@ -95,12 +95,12 @@ export function AgentCard({
   // inside <button> is invalid HTML and the browser silently moves
   // the inner ones out, breaking layout.
   const handleCardClick = () => {
-    router.push(`/agents/${agent.id}?tab=properties`);
+    router.push(`/agents/${agent.id}?tab=persona`);
   };
   const handleCardKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      router.push(`/agents/${agent.id}?tab=properties`);
+      router.push(`/agents/${agent.id}?tab=persona`);
     }
   };
 

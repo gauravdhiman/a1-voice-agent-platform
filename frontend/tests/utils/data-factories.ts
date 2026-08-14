@@ -33,6 +33,7 @@ export const createMockAgent = (overrides: Partial<VoiceAgent> = {}): VoiceAgent
     voice: 'alloy',
   },
   is_active: true,
+  call_recording_enabled: false,
   phone_number: null,
   organization_id: 'org-1',
   created_by: 'user-1',
