@@ -24,6 +24,7 @@ describe("AgentCreatePhoneStage", () => {
         /After you finish setting up the agent, you can choose one of your purchased numbers or buy a new number, or connect your own custom number for Lio/i,
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText(/after creation/i)).toBeInTheDocument();
     expect(
       screen.getByText(/start answering calls on that number/i),
     ).toBeInTheDocument();
