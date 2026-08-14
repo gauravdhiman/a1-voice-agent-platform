@@ -40,6 +40,7 @@ export interface CallLogListParams {
   status?: string;
   date_from?: string;
   date_to?: string;
+  recording_only?: boolean;
   page?: number;
   page_size?: number;
 }
@@ -56,6 +57,7 @@ class CallLogService {
     if (params.status) query.set("status", params.status);
     if (params.date_from) query.set("date_from", params.date_from);
     if (params.date_to) query.set("date_to", params.date_to);
+    if (params.recording_only) query.set("recording_only", "true");
     if (params.page) query.set("page", String(params.page));
     if (params.page_size) query.set("page_size", String(params.page_size));
 

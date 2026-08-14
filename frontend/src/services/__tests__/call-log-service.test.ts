@@ -30,4 +30,21 @@ describe("callLogService recording access", () => {
       "/api/v1/calls/call-123/recording",
     );
   });
+
+  it("requests only recorded calls when the recordings view is filtered", async () => {
+    getMock.mockResolvedValue({
+      data: { items: [], total: 0, page: 1, page_size: 25, total_pages: 1 },
+    });
+
+    await callLogService.listCallLogs("org-1", {
+      agent_id: "agent-1",
+      recording_only: true,
+      page: 1,
+      page_size: 25,
+    });
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/calls/organization/org-1?agent_id=agent-1&recording_only=true&page=1&page_size=25",
+    );
+  });
 });

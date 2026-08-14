@@ -32,6 +32,7 @@ import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
 import { PresetPicker, useSelectedPresetReadiness } from "@/components/agents/preset-picker";
 import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 import { AgentPhoneNumberSelector } from "@/components/agents/agent-phone-number-selector";
+import { AgentCallRecordings } from "@/components/calls/agent-call-recordings";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { Button } from "@/components/ui/button";
@@ -207,6 +208,12 @@ export default function AgentDetailPage() {
     usePlatformTools(true, { enabled: activeTab === "tools" });
   const { data: agentTools = [], refetch: refetchAgentTools } =
     useAgentTools(agentId, activeTab === "tools");
+
+  const canViewRecordings =
+    isPlatformAdmin ||
+    Boolean(agent && user?.hasRole("org_admin", agent.organization_id));
+  const recordingsTabVisible =
+    Boolean(agent?.call_recording_enabled) && canViewRecordings;
 
   // Org plan entitlements drive the premium-tool gate (blocked connect when
   // the 'premium_tools' feature is off). Fetched once the agent resolves its
@@ -408,8 +415,13 @@ export default function AgentDetailPage() {
 
   // Sync tab state with URL
   useEffect(() => {
-    setActiveTab(normalizeAgentDetailTab(searchParams.get("tab")));
-  }, [searchParams]);
+    const requestedTab = normalizeAgentDetailTab(searchParams.get("tab"));
+    setActiveTab(
+      requestedTab === "recordings" && !recordingsTabVisible
+        ? "persona"
+        : requestedTab,
+    );
+  }, [recordingsTabVisible, searchParams]);
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -764,6 +776,9 @@ export default function AgentDetailPage() {
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          {recordingsTabVisible && (
+            <TabsTrigger value="recordings">Call Recordings</TabsTrigger>
+          )}
         </TabsList>
 
         {/* Persona Tab */}
@@ -1147,6 +1162,16 @@ and confirm someone will call back the next business day.`}
             )}
           </div>
         </TabsContent>
+
+        {recordingsTabVisible && (
+          <TabsContent value="recordings">
+            <AgentCallRecordings
+              organizationId={agent.organization_id}
+              agentId={agent.id}
+              agentName={agent.name}
+            />
+          </TabsContent>
+        )}
 
         {/* Skills Tab */}
         <TabsContent value="skills">

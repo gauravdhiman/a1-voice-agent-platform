@@ -96,6 +96,21 @@ describe("CallsPage date filters", () => {
     expect(mockRefetch).toHaveBeenCalledOnce();
   });
 
+  it("requests recorded calls across the organization", async () => {
+    const { default: CallsPage } = await import("../page");
+
+    render(<CallsPage />);
+
+    expect(mockUseCallLogs).toHaveBeenCalledWith(
+      "org-1",
+      expect.objectContaining({
+        recording_only: true,
+        page: 1,
+        page_size: 25,
+      }),
+    );
+  });
+
   it("shows recording retention, privacy, and consent guidance to admins", async () => {
     const { default: CallsPage } = await import("../page");
 

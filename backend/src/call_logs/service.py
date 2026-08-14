@@ -80,11 +80,53 @@ class CallLogService:
         status: Optional[str] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
+        recording_only: bool = False,
         page: int = 1,
         page_size: int = 25,
     ) -> Tuple[Optional[CallLogsResponse], Optional[str]]:
-        """List call logs with optional filters and pagination."""
+        """List call logs with optional filters and pagination.
+
+        When ``recording_only`` is enabled, only calls with a completed
+        recording artifact are returned. The filter is applied before
+        pagination so an agent's recordings tab does not hide recordings on
+        later pages because unrecorded calls occupy the first page.
+        """
         try:
+            recording_call_ids: Optional[set[str]] = None
+            if recording_only:
+                try:
+                    artifact_result = (
+                        self.supabase.table("call_artifacts")
+                        .select("call_log_id")
+                        .eq("organization_id", str(organization_id))
+                        .eq("artifact_type", "recording")
+                        .eq("status", "completed")
+                        .execute()
+                    )
+                    recording_call_ids = {
+                        str(row["call_log_id"])
+                        for row in (artifact_result.data or [])
+                        if row.get("call_log_id")
+                    }
+                except Exception:  # noqa: BLE001 - old DBs may not have artifacts yet
+                    logger.warning(
+                        "Could not load recording-only call logs; returning no recordings",
+                        exc_info=True,
+                    )
+                    recording_call_ids = set()
+
+                if not recording_call_ids:
+                    return (
+                        CallLogsResponse(
+                            items=[],
+                            total=0,
+                            page=page,
+                            page_size=page_size,
+                            total_pages=1,
+                        ),
+                        None,
+                    )
+
             query = (
                 self.supabase.table("call_logs")
                 .select("*", count="exact")
@@ -94,6 +136,8 @@ class CallLogService:
 
             if agent_id:
                 query = query.eq("agent_id", str(agent_id))
+            if recording_call_ids is not None:
+                query = query.in_("id", list(recording_call_ids))
             if status:
                 query = query.eq("status", status)
             if date_from:
@@ -107,8 +151,7 @@ class CallLogService:
             result = query.execute()
             total = result.count or 0
             rows = result.data or []
-            recording_call_ids: set[str] = set()
-            if rows:
+            if recording_call_ids is None and rows:
                 try:
                     artifact_result = (
                         self.supabase.table("call_artifacts")
@@ -126,6 +169,7 @@ class CallLogService:
                         "Could not load recording availability; returning call logs",
                         exc_info=True,
                     )
+                    recording_call_ids = set()
             items = [
                 CallLog(
                     **row,
