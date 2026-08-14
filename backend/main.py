@@ -253,7 +253,8 @@ async def lifespan(app: FastAPI):
         platform_tool_registry,
     )
 
-    # Register in-tree platform tools and sync schemas to the database.
+    # Register in-tree platform tools for runtime discovery. Database writes
+    # for platform-tool master data happen only through the explicit CLI.
     platform_tool_registry.register_tools_from_package(
         "shared.voice_agents.tools.implementations"
     )
@@ -261,20 +262,9 @@ async def lifespan(app: FastAPI):
     # Sync with database
     tool_service = ToolService()
 
-    # Sync platform tool registry with database
-    logging.info("Syncing tools to database using platform tool registry...")
-    await platform_tool_registry.sync_with_db(tool_service)
-    logging.info("Tools synchronized with database")
-
-    # Seed platform skills (idempotent — uses content_hash)
-    from shared.voice_agents.skill_service import skill_service
-
-    logging.info("Seeding platform skills from code templates...")
-    count, error = await skill_service.seed_platform_skills()
-    if error:
-        logging.warning(f"Platform skill seeding issue: {error}")
-    else:
-        logging.info(f"Platform skills seeded: {count} created/updated")
+    # Master data is intentionally not seeded during application startup.
+    # Run ``python -m src.master_data.cli`` for a dry-run preview, then apply
+    # the reviewed plan as a separate release/bootstrap operation.
 
     # Start token refresh service
     logging.info("Starting token refresh service...")

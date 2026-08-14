@@ -12,6 +12,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Plan Versioning & Entitlements Tables](#plan-versioning--entitlements-tables)
 - [Notification Tables](#notification-tables)
 - [Platform Skills Tables](#platform-skills-tables)
+- [Master Data Seed Tables](#master-data-seed-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
 - [Indexes](#indexes)
 - [Row Level Security (RLS)](#row-level-security-rls)
@@ -1581,6 +1582,19 @@ erDiagram
     notification_events ||--o{ notification_logs : "triggers"
     notification_templates ||--o{ notification_events : "default for"
     notification_templates ||--o{ notification_logs : "used in"
+
+    master_data_seed_runs {
+        uuid id
+        varchar domain
+        varchar definition_version
+        varchar definition_hash
+        varchar operation
+        varchar status
+        uuid triggered_by
+        jsonb details
+        timestamptz started_at
+        timestamptz completed_at
+    }
 ```
 
 ---
@@ -1650,7 +1664,8 @@ erDiagram
 59. `20260812000007` - Widen `phone_numbers.status` from `VARCHAR(20)` to `VARCHAR(30)` so the `verification_required` customer-number lifecycle state can be stored safely.
 60. `20260812000008` - Add nullable Fernet-encrypted storage for customer webhook tokens while phone-number setup remains `verification_required`.
 61. `20260812000009` - Add organization/agent-active lookup indexes for fast agent settings loads and single-query inbound phone-number routing.
-62. `20260814000001` - Add `voice_agents.call_recording_enabled`, defaulting to `FALSE`, so call recording is opt-in per agent.
+62. `20260813000001` - Add the `master_data_seed_runs` audit ledger for explicit CLI-driven platform master-data seeding. The ledger records source hashes, operations, statuses, operators, results, and timestamps; RLS is enabled and no direct browser policy is granted.
+63. `20260814000001` - Add `voice_agents.call_recording_enabled`, defaulting to `FALSE`, so call recording is opt-in per agent.
 
 ---
 
@@ -1789,6 +1804,38 @@ Audit trail for refresh operations. Each time an organization refreshes a forked
 | performed_by        | UUID         | NULLABLE, FK → auth.users.id            | User who triggered the refresh  |
 | performed_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Timestamp of the refresh        |
 
+## Master Data Seed Tables
+
+### master_data_seed_runs
+
+Audit ledger for explicit platform master-data seed operations.
+Only the backend service-role CLI path writes this table; it is not exposed as a
+browser-facing admin API.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Seed operation identifier |
+| domain | VARCHAR(100) | NOT NULL | Catalog domain, e.g. `platform_skills` or `system_pricing` |
+| definition_version | VARCHAR(100) | NOT NULL | Version of the operator-facing source catalog |
+| definition_hash | VARCHAR(128) | NOT NULL | Hash of the source definition used for the run |
+| operation | VARCHAR(20) | NOT NULL, DEFAULT `seed`, CHECK `seed` or `reset` | Requested operation |
+| status | VARCHAR(20) | NOT NULL, DEFAULT `running`, CHECK `running`, `completed`, or `failed` | Operation lifecycle |
+| triggered_by | UUID | NULLABLE | Platform-admin user ID when applicable; NULL for CLI execution |
+| details | JSONB | NOT NULL, DEFAULT `{}` | Provider result details and changed counts |
+| error_message | TEXT | NULLABLE | Safe error summary for a failed run |
+| started_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Operation start |
+| completed_at | TIMESTAMPTZ | NULLABLE | Completion time for completed or failed runs |
+
+**Indexes:** `ix_master_data_seed_runs_domain_completed` on `(domain, status,
+completed_at)` and partial unique `ux_master_data_seed_runs_running_domain` on
+`domain` while `status = 'running'`.
+**RLS:** Enabled; no browser policy is provided because the backend uses the
+service-role client through the explicit operator CLI.
+
+The ledger is intentionally not a unique one-row-per-domain table. Keeping run
+history makes resets and source changes auditable while reviewed CLI plans can
+be verified against the latest source definition before applying changes.
+
 ---
 
 ## Real-time Tables
@@ -1841,6 +1888,8 @@ Key indexes have been created for:
 - `ix_voice_agents_organization_active` and `ix_phone_numbers_organization_agent_active`
   (agent settings assignment loads and phone-to-agent routing)
 - `ux_pipeline_presets_is_default` — partial UNIQUE index enforcing at most one system-default preset row (Phase 4, migration 20260729000002)
+- `ix_master_data_seed_runs_domain_completed` — latest-run lookup for CLI plan review
+- `ux_master_data_seed_runs_running_domain` — prevents concurrent active runs for the same domain
 
 ### Query Patterns
 
