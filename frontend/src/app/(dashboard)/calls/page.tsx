@@ -146,7 +146,6 @@ export default function CallsPage() {
       status: statusFilter || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
-      recording_only: true,
       page,
       page_size: 25,
     }),
@@ -266,9 +265,9 @@ export default function CallsPage() {
           <Phone className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Call Recordings</h1>
+          <h1 className="text-2xl font-bold">Call Log</h1>
           <p className="text-sm text-muted-foreground">
-            Recorded calls across all agents for {organizationName}
+            History of all incoming calls for {organizationName}
           </p>
         </div>
       </div>
@@ -298,7 +297,7 @@ export default function CallsPage() {
       {/* Filters */}
       <Card data-tour="calls-filters">
         <CardHeader>
-          <CardTitle className="text-base">Filter recordings</CardTitle>
+          <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -398,10 +397,10 @@ export default function CallsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Recorded Calls</CardTitle>
+              <CardTitle>Recent Calls</CardTitle>
               {data && (
                 <CardDescription>
-                  {data.total} recording{data.total !== 1 ? "s" : ""} found
+                  {data.total} call{data.total !== 1 ? "s" : ""} found
                 </CardDescription>
               )}
             </div>
@@ -424,9 +423,7 @@ export default function CallsPage() {
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-3 text-muted-foreground">
-                Loading recordings…
-              </span>
+              <span className="ml-3 text-muted-foreground">Loading calls…</span>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-16">
@@ -438,10 +435,10 @@ export default function CallsPage() {
             <div className="flex flex-col items-center justify-center py-16">
               <Phone className="h-12 w-12 text-muted-foreground opacity-30 mb-4" />
               <p className="text-lg font-semibold text-foreground">
-                No recordings yet
+                No calls yet
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Recorded calls will appear here once your agents start handling them.
+                Calls will appear here once your agents start receiving them.
               </p>
             </div>
           ) : (

@@ -4,6 +4,7 @@ import {
   AGENT_DETAIL_TABS,
   getAgentDetailTabs,
   normalizeAgentDetailTab,
+  shouldShowAgentRecordingsTab,
 } from "../agent-detail-tabs";
 
 describe("agent detail tabs", () => {
@@ -25,6 +26,12 @@ describe("agent detail tabs", () => {
       "settings",
     ]);
     expect(getAgentDetailTabs(true)).toContain("recordings");
+  });
+
+  it("shows recordings when historical recordings exist even without the setting", () => {
+    expect(shouldShowAgentRecordingsTab(false, true, true)).toBe(true);
+    expect(shouldShowAgentRecordingsTab(false, false, true)).toBe(false);
+    expect(shouldShowAgentRecordingsTab(true, false, false)).toBe(false);
   });
 
   it("keeps old properties links pointed at the Persona tab", () => {

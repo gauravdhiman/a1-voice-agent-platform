@@ -32,6 +32,25 @@ export function getAgentDetailTabs(
 }
 
 /**
+ * Determines whether an authorized user should see the recordings tab.
+ *
+ * Historical recordings remain discoverable when an older environment does
+ * not yet return the agent-level setting, or when recording is later disabled.
+ *
+ * @param callRecordingEnabled - Whether recording is enabled for the agent.
+ * @param hasRecordedCalls - Whether completed recordings exist for the agent.
+ * @param canViewRecordings - Whether the current user may view recordings.
+ * @returns True when the recordings tab should be rendered.
+ */
+export function shouldShowAgentRecordingsTab(
+  callRecordingEnabled: boolean,
+  hasRecordedCalls: boolean,
+  canViewRecordings: boolean,
+): boolean {
+  return canViewRecordings && (callRecordingEnabled || hasRecordedCalls);
+}
+
+/**
  * Converts an agent detail URL value into a supported tab.
  *
  * @param value - Raw tab query-string value.

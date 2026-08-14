@@ -96,7 +96,7 @@ describe("CallsPage date filters", () => {
     expect(mockRefetch).toHaveBeenCalledOnce();
   });
 
-  it("requests recorded calls across the organization", async () => {
+  it("requests all calls across the organization", async () => {
     const { default: CallsPage } = await import("../page");
 
     render(<CallsPage />);
@@ -104,10 +104,12 @@ describe("CallsPage date filters", () => {
     expect(mockUseCallLogs).toHaveBeenCalledWith(
       "org-1",
       expect.objectContaining({
-        recording_only: true,
         page: 1,
         page_size: 25,
       }),
+    );
+    expect(mockUseCallLogs.mock.calls[0][1]).not.toHaveProperty(
+      "recording_only",
     );
   });
 

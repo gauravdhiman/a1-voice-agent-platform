@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useRealtime } from "@/hooks/use-realtime";
+import { useCallLogs } from "@/hooks/use-call-logs";
 import {
   useAgent,
   usePlatformTools,
@@ -92,6 +93,7 @@ import type { OrganizationSkill } from "@/types/skill";
 import type { PhoneNumberWithAgent } from "@/types/phone-number";
 import {
   normalizeAgentDetailTab,
+  shouldShowAgentRecordingsTab,
   type AgentDetailTab,
 } from "@/components/agents/agent-detail-tabs";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
@@ -212,8 +214,21 @@ export default function AgentDetailPage() {
   const canViewRecordings =
     isPlatformAdmin ||
     Boolean(agent && user?.hasRole("org_admin", agent.organization_id));
-  const recordingsTabVisible =
-    Boolean(agent?.call_recording_enabled) && canViewRecordings;
+  const { data: agentRecordingSummary } = useCallLogs(
+    agent?.organization_id ?? "",
+    {
+      agent_id: agentId,
+      recording_only: true,
+      page: 1,
+      page_size: 1,
+    },
+    canViewRecordings,
+  );
+  const recordingsTabVisible = shouldShowAgentRecordingsTab(
+    Boolean(agent?.call_recording_enabled),
+    Boolean(agentRecordingSummary?.total),
+    canViewRecordings,
+  );
 
   // Org plan entitlements drive the premium-tool gate (blocked connect when
   // the 'premium_tools' feature is off). Fetched once the agent resolves its
