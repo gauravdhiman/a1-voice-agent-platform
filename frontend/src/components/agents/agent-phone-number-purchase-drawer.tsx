@@ -131,7 +131,7 @@ export function AgentPhoneNumberPurchaseDrawer({
               assign it to this agent automatically.
             </SheetDescription>
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {loadingBalance ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -147,6 +147,7 @@ export function AgentPhoneNumberPurchaseDrawer({
             ) : creditBalance !== null ? (
               <PhoneNumberSearch
                 creditBalance={creditBalance}
+                className="min-h-full"
                 onNumberSelected={(number) => {
                   setSelectedNumber(number);
                   setPurchaseDialogOpen(true);

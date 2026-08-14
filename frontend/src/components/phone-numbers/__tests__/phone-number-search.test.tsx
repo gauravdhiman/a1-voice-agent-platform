@@ -151,4 +151,20 @@ describe("PhoneNumberSearch", () => {
       expect.objectContaining({ phone_number: "+14805550101" }),
     );
   });
+
+  it("lets the available numbers section fill the drawer height", async () => {
+    render(<PhoneNumberSearch creditBalance={500} className="min-h-full" />);
+
+    fireEvent.submit(
+      screen.getByRole("form", { name: /available phone number search/i }),
+    );
+
+    const availableNumbersCard = (await screen.findByText("Available Numbers"))
+      .closest('[data-slot="card"]');
+
+    expect(availableNumbersCard).toHaveClass("flex-1", "min-h-0");
+    expect(
+      availableNumbersCard?.querySelector('[data-slot="card-content"]'),
+    ).toHaveClass("flex-1", "min-h-0");
+  });
 });
