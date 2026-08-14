@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation";
 import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
 import { ForgotPasswordDialog } from "@/components/auth/forgot-password-dialog";
 import { OAuthRedirectButton } from "@/components/auth/oauth-redirect-button";
+import { authService } from "@/services/auth-service";
 
 const signInSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -22,6 +23,63 @@ const signInSchema = z.object({
 });
 
 type SignInData = z.infer<typeof signInSchema>;
+
+const ACCOUNT_NOT_FOUND_MESSAGE =
+  "No account found for this email. Please check the address or sign up for a new account.";
+const INVALID_PASSWORD_MESSAGE =
+  "The password you entered is incorrect. Please try again or reset your password.";
+
+/**
+ * Extracts the optional code and message from an authentication failure.
+ *
+ * The auth context may return errors from either the backend API or Supabase,
+ * so sign-in feedback needs to handle both Error instances and error-shaped
+ * objects without assuming either one is always present.
+ *
+ * @param error - Unknown value returned by the sign-in flow.
+ * @returns Normalized error code and message when either is available.
+ */
+function getSignInErrorDetails(error: unknown): {
+  code?: string;
+  message?: string;
+} {
+  if (error instanceof Error) {
+    const code =
+      "code" in error && typeof error.code === "string"
+        ? error.code.toLowerCase()
+        : undefined;
+    return { code, message: error.message };
+  }
+
+  if (error && typeof error === "object") {
+    const candidate = error as { code?: unknown; message?: unknown };
+    return {
+      code:
+        typeof candidate.code === "string"
+          ? candidate.code.toLowerCase()
+          : undefined,
+      message:
+        typeof candidate.message === "string" ? candidate.message : undefined,
+    };
+  }
+
+  return {};
+}
+
+/**
+ * Determines whether an auth failure represents a password mismatch.
+ *
+ * @param error - Unknown sign-in error returned by the auth layer.
+ * @returns True when the error is the known invalid-credentials response.
+ */
+function isInvalidPasswordError(error: unknown): boolean {
+  const { code, message } = getSignInErrorDetails(error);
+  return (
+    code === "invalid_credentials" ||
+    (typeof message === "string" &&
+      /invalid (?:email or password|credentials)/i.test(message))
+  );
+}
 
 export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -54,37 +112,33 @@ export function SignInForm() {
     setShowVerificationBanner(false);
 
     try {
+      const emailCheck = await authService.checkEmailAvailability(data.email);
+      if (emailCheck.success && emailCheck.data?.exists === false) {
+        setError(ACCOUNT_NOT_FOUND_MESSAGE);
+        return;
+      }
+
       const result = await signIn(data);
       if (result?.error) {
-        const err = result.error as Error & { code?: string };
-        if (err.code === "email_not_confirmed") {
+        const { code, message } = getSignInErrorDetails(result.error);
+        if (code === "email_not_confirmed") {
           setShowVerificationBanner(true);
           setError(null);
+        } else if (isInvalidPasswordError(result.error)) {
+          setError(INVALID_PASSWORD_MESSAGE);
         } else {
-          setError(err.message || "Failed to sign in");
+          setError(message || "Failed to sign in");
         }
       }
       // Success case handled by global route guard
     } catch (error) {
       console.log("Sign in error:", error);
-      // Check if it's an email not confirmed error from Supabase
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        typeof error.code === "string"
-      ) {
-        const errCode = error.code.toLowerCase();
-        if (errCode === "email_not_confirmed") {
-          setShowVerificationBanner(true);
-          setError(null);
-        } else if (errCode === "invalid_credentials") {
-          setError(
-            "Invalid credentials. Please try again with the correct credentials.",
-          );
-        } else {
-          setError("An unexpected error occurred. Please try again.");
-        }
+      const { code } = getSignInErrorDetails(error);
+      if (code === "email_not_confirmed") {
+        setShowVerificationBanner(true);
+        setError(null);
+      } else if (isInvalidPasswordError(error)) {
+        setError(INVALID_PASSWORD_MESSAGE);
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
