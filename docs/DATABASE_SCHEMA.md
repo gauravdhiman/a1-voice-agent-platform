@@ -1666,6 +1666,7 @@ erDiagram
 61. `20260812000009` - Add organization/agent-active lookup indexes for fast agent settings loads and single-query inbound phone-number routing.
 62. `20260813000001` - Add the `master_data_seed_runs` audit ledger for explicit CLI-driven platform master-data seeding. The ledger records source hashes, operations, statuses, operators, results, and timestamps; RLS is enabled and no direct browser policy is granted.
 63. `20260814000001` - Add `voice_agents.call_recording_enabled`, defaulting to `FALSE`, so call recording is opt-in per agent.
+64. `20260814000002` - Canonicalize legacy voice-template markers such as `[Agent Name]` and `[Business Name]` to the runtime-supported `{{agent.name}}` and `{{org.name}}` placeholders across all prompt-bearing template fields.
 
 ---
 
