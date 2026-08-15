@@ -32,13 +32,19 @@ import type { VoiceTemplate } from "@/types/voice-template";
 import { AgentCreatePhoneStage } from "@/components/agents/agent-create-phone-stage";
 import { AgentCreateSuccess } from "@/components/agents/agent-create-success";
 import { AgentCreateToolsStage } from "@/components/agents/agent-create-tools-stage";
+import { AgentInstructionsHelpText } from "@/components/agents/agent-instructions-help-text";
 import { PresetPicker } from "@/components/agents/preset-picker";
 import { VoiceTemplatePreviewSheet } from "@/components/agents/voice-template-preview-sheet";
 import {
   isOptionalE164Phone,
   normalizeOptionalPhone,
-  resolveAgentCreatePromptFields,
 } from "@/lib/agent-create";
+import {
+  buildAgentInstructionsMarkdown,
+  buildMarkdownFromTemplate,
+  DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER,
+} from "@/lib/agent-instructions";
+import { applyTemplatePlaceholders } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
@@ -50,10 +56,9 @@ const formSchema = z.object({
       (value) => isOptionalE164Phone(value),
       "Phone number must be in E.164 format with at least 8 digits (e.g., +14155551234), or left blank",
     ),
-  persona: z.string().min(1, "Persona is required"),
-  tone: z.string().min(1, "Tone is required"),
-  mission: z.string().min(1, "Mission is required"),
-  custom_instructions: z.string().optional(),
+  persona: z.string().min(1, "Agent role is required"),
+  tone: z.string().min(1, "Communication style is required"),
+  instructions_markdown: z.string().optional(),
   is_active: z.boolean(),
   // Voice-engine preset (Phase 4). null = system default. Optional
   // UUID when a published preset is chosen. Never an empty string — the backend
@@ -277,8 +282,7 @@ export function AgentCreateWidget() {
       phone_number: "",
       persona: "",
       tone: "Professional",
-      mission: "",
-      custom_instructions: "",
+      instructions_markdown: "",
       is_active: true,
       preset_id: null,
     },
@@ -310,21 +314,14 @@ export function AgentCreateWidget() {
   const handleTemplateSelect = (template: VoiceTemplate) => {
     form.setValue("persona", template.persona ?? "");
     form.setValue("tone", template.tone ?? "Professional");
-    form.setValue("mission", template.mission ?? "");
-    const instructions = [
-      template.custom_instructions,
-      template.greeting ? `Default greeting: ${template.greeting}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-    form.setValue("custom_instructions", instructions);
+    form.setValue("instructions_markdown", buildMarkdownFromTemplate(template));
     setCurrentStage("basic");
   };
 
   const validateCurrentStage = async (): Promise<boolean> => {
     const fieldsToValidate: Record<Stage, (keyof FormData)[]> = {
       template: [],
-      basic: ["organization_id", "name", "persona", "tone", "mission"],
+      basic: ["organization_id", "name", "persona", "tone"],
       // Phone is optional; still validate format when a value is entered.
       phone: ["phone_number"],
       tools: [],
@@ -386,12 +383,12 @@ export function AgentCreateWidget() {
       const selectedOrg = organizations?.find(
         (org) => org.id === data.organization_id,
       );
-      const resolvedPromptFields = resolveAgentCreatePromptFields(
-        {
-          persona: data.persona,
-          mission: data.mission,
-          custom_instructions: data.custom_instructions,
-        },
+      const resolvedRole = applyTemplatePlaceholders(data.persona, {
+        businessName: selectedOrg?.name ?? "",
+        agentName: data.name,
+      });
+      const resolvedMarkdown = applyTemplatePlaceholders(
+        data.instructions_markdown ?? "",
         {
           businessName: selectedOrg?.name ?? "",
           agentName: data.name,
@@ -400,7 +397,12 @@ export function AgentCreateWidget() {
 
       const payload: VoiceAgentCreate = {
         ...data,
-        ...resolvedPromptFields,
+        persona: resolvedRole,
+        instructions_markdown: buildAgentInstructionsMarkdown({
+          role: resolvedRole,
+          tone: data.tone,
+          markdown: resolvedMarkdown,
+        }),
         phone_number: normalizeOptionalPhone(data.phone_number),
       };
       const agent = await createAgentMutation.mutateAsync(payload);
@@ -472,7 +474,7 @@ export function AgentCreateWidget() {
           name="persona"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Agent Persona / Role *</FormLabel>
+              <FormLabel>Agent Role *</FormLabel>
               <FormControl>
                 <Input {...field} placeholder="Front Desk Coordinator" />
               </FormControl>
@@ -487,18 +489,14 @@ export function AgentCreateWidget() {
           name="tone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Communication Tone *</FormLabel>
+              <FormLabel>Communication Style *</FormLabel>
               <FormControl>
-                <select
+                <Input
                   {...field}
-                  className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                >
-                  <option value="Professional">Professional</option>
-                  <option value="Friendly">Friendly</option>
-                  <option value="Enthusiastic">Enthusiastic</option>
-                  <option value="Minimalist">Minimalist / Formal</option>
-                </select>
+                  placeholder="Warm, professional, and reassuring"
+                />
               </FormControl>
+              <FormDescription>How the agent should communicate</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -507,46 +505,20 @@ export function AgentCreateWidget() {
 
       <FormField
         control={form.control}
-        name="mission"
+        name="instructions_markdown"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Key Mission *</FormLabel>
+            <FormLabel>Agent Instructions</FormLabel>
             <FormControl>
               <Textarea
                 {...field}
-                placeholder="e.g., Your main goal is to book appointments and answer pricing questions."
-                className="min-h-[80px]"
+                placeholder={DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER}
+                className="min-h-[300px] font-mono text-sm"
               />
             </FormControl>
-            <FormDescription>What should the agent accomplish?</FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={form.control}
-        name="custom_instructions"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Additional Instructions</FormLabel>
-            <FormControl>
-              <Textarea
-                {...field}
-                placeholder={`Add context specific to this agent's role. Include:
-
-• Company policies and procedures (for support agents)
-• Unique selling points and differentiators (for sales agents)
-• Common customer questions and how to handle them
-• Emergency or after-hours protocols
-• Specific workflows or escalation procedures
-• Any other context that helps this agent handle calls effectively
-
-Example: "Always mention our 30-day guarantee. For pricing questions, emphasize competitive rates. For enterprise inquiries, gather company size before scheduling a demo."`}
-                className="min-h-[150px]"
-              />
-            </FormControl>
-            <FormDescription>Role-specific context and instructions</FormDescription>
+            <FormDescription>
+              <AgentInstructionsHelpText />
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -651,7 +623,7 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Persona
+                  Agent Role
                 </span>
                 <p className="font-medium mt-1">
                   {values.persona || "Not set"}
@@ -659,16 +631,16 @@ Example: "Always mention our 30-day guarantee. For pricing questions, emphasize 
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Tone
+                  Communication Style
                 </span>
                 <p className="font-medium mt-1">{values.tone}</p>
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Mission
+                  Agent Instructions
                 </span>
-                <p className="text-sm mt-1 text-muted-foreground line-clamp-2">
-                  {values.mission || "Not set"}
+                <p className="text-sm mt-1 text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+                  {values.instructions_markdown || "Not set"}
                 </p>
               </div>
               <div>

@@ -33,6 +33,7 @@ import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
 import { PresetPicker, useSelectedPresetReadiness } from "@/components/agents/preset-picker";
 import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 import { AgentPhoneNumberSelector } from "@/components/agents/agent-phone-number-selector";
+import { AgentInstructionsHelpText } from "@/components/agents/agent-instructions-help-text";
 import { AgentCallRecordings } from "@/components/calls/agent-call-recordings";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
@@ -96,6 +97,11 @@ import {
   shouldShowAgentRecordingsTab,
   type AgentDetailTab,
 } from "@/components/agents/agent-detail-tabs";
+import {
+  buildAgentInstructionsMarkdown,
+  buildMarkdownFromTemplate,
+  DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER,
+} from "@/lib/agent-instructions";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -178,8 +184,6 @@ export default function AgentDetailPage() {
     name: string;
     persona: string;
     tone: string;
-    mission: string;
-    custom_instructions: string;
     is_active: boolean;
     is_published_on_public_page: boolean;
     call_recording_enabled: boolean;
@@ -190,8 +194,6 @@ export default function AgentDetailPage() {
     name: "",
     persona: "",
     tone: "",
-    mission: "",
-    custom_instructions: "",
     is_active: true,
     is_published_on_public_page: false,
     call_recording_enabled: false,
@@ -331,41 +333,6 @@ export default function AgentDetailPage() {
     }
   }, [viewingSkill, agent?.organization_id]);
 
-  const buildMarkdownFromTemplate = useCallback((template: VoiceTemplate): string => {
-    const sections: string[] = [];
-
-    // Identity & Persona
-    if (template.persona) {
-      sections.push(`# Identity and Persona\n\n${template.persona}`);
-    }
-    if (template.tone) {
-      sections.push(`Your communication style is ${template.tone}.`);
-    }
-
-    // Mission
-    if (template.mission) {
-      sections.push(`# Mission\n\n${template.mission}`);
-    }
-
-    // Business Context (using template variables)
-    sections.push(
-      `# Business Context\n\n- **Business:** {{org.name}}\n- **Industry:** {{org.industry}}\n- **Location:** {{org.location}}\n\n{{org.business_details}}`
-    );
-
-    // Greeting
-    if (template.greeting) {
-      const greeting = template.greeting.replace("[Business Name]", "{{org.name}}");
-      sections.push(`# Default Greeting\n\n${greeting}`);
-    }
-
-    // Procedures / Custom Instructions
-    if (template.custom_instructions) {
-      sections.push(`# Procedures\n\n${template.custom_instructions}`);
-    }
-
-    return sections.join("\n\n");
-  }, []);
-
   const handleSkillToggle = useCallback(async (skillId: string, assign: boolean) => {
     setSkillToggling(skillId);
     try {
@@ -387,23 +354,45 @@ export default function AgentDetailPage() {
     }
   }, [agentId]);
 
-  // Update form when agent data changes
+  // Update form when agent data changes. Older agents may only have the
+  // structured prompt fields, so hydrate Markdown from the existing API
+  // endpoint when no canonical instructions have been saved yet.
   React.useEffect(() => {
-    if (agent) {
-      setAgentForm({
-        name: agent.name,
-        persona: agent.persona || "",
-        tone: agent.tone || "",
-        mission: agent.mission || "",
-        custom_instructions: agent.custom_instructions || "",
-        is_active: agent.is_active,
-        is_published_on_public_page: agent.is_published_on_public_page ?? false,
-        call_recording_enabled: agent.call_recording_enabled ?? false,
-        use_platform_credits: agent.use_platform_credits || false,
-        instructions_markdown: agent.instructions_markdown || "",
-        preset_id: agent.preset_id ?? null,
-      });
+    if (!agent) return;
+
+    let cancelled = false;
+    setAgentForm({
+      name: agent.name,
+      persona: agent.persona || "",
+      tone: agent.tone || "",
+      is_active: agent.is_active,
+      is_published_on_public_page: agent.is_published_on_public_page ?? false,
+      call_recording_enabled: agent.call_recording_enabled ?? false,
+      use_platform_credits: agent.use_platform_credits || false,
+      instructions_markdown: agent.instructions_markdown || "",
+      preset_id: agent.preset_id ?? null,
+    });
+
+    if (!agent.instructions_markdown?.trim()) {
+      agentService
+        .generateMarkdown(agent.id)
+        .then((markdown) => {
+          if (!cancelled && markdown.trim()) {
+            setAgentForm((current) =>
+              current.instructions_markdown.trim()
+                ? current
+                : { ...current, instructions_markdown: markdown },
+            );
+          }
+        })
+        .catch(() => {
+          // Keep the placeholder available when legacy Markdown generation fails.
+        });
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [agent]);
 
   // Sync local agent tools state with query data
@@ -454,7 +443,14 @@ export default function AgentDetailPage() {
     try {
       await updateAgentMutation.mutateAsync({
         agentId,
-        data: agentForm,
+        data: {
+          ...agentForm,
+          instructions_markdown: buildAgentInstructionsMarkdown({
+            role: agentForm.persona,
+            tone: agentForm.tone,
+            markdown: agentForm.instructions_markdown,
+          }),
+        },
       });
     } catch (error) {
       console.error("Failed to save agent:", error);
@@ -828,6 +824,40 @@ export default function AgentDetailPage() {
                 />
               </div>
 
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="agent-role">Agent Role</Label>
+                  <Input
+                    id="agent-role"
+                    value={agentForm.persona}
+                    onChange={(e) =>
+                      setAgentForm({ ...agentForm, persona: e.target.value })
+                    }
+                    placeholder="Front Desk Coordinator"
+                    disabled={!canEdit}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The character or job title this agent represents.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="communication-style">Communication Style</Label>
+                  <Input
+                    id="communication-style"
+                    value={agentForm.tone}
+                    onChange={(e) =>
+                      setAgentForm({ ...agentForm, tone: e.target.value })
+                    }
+                    placeholder="Warm, professional, and reassuring"
+                    disabled={!canEdit}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    How the agent should communicate with callers.
+                  </p>
+                </div>
+              </div>
+
               {/* Agent Instructions (Markdown) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -836,19 +866,7 @@ export default function AgentDetailPage() {
                       Agent Instructions
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Define your agent&apos;s behavior, persona, and procedures in{" "}
-                      <a
-                        href="https://www.markdownguide.org/basic-syntax/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline underline-offset-2 hover:text-primary/80"
-                      >
-                        markdown format
-                      </a>.
-                      Use <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{org.name}}"}</code>,{" "}
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{org.industry}}"}</code>,{" "}
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{agent.name}}"}</code>{" "}
-                      for dynamic context.
+                      <AgentInstructionsHelpText />
                     </p>
                   </div>
                   {canEdit && voiceTemplates.length > 0 && (
@@ -870,7 +888,12 @@ export default function AgentDetailPage() {
                                 return;
                               }
                               const markdown = buildMarkdownFromTemplate(template);
-                              setAgentForm({ ...agentForm, instructions_markdown: markdown });
+                              setAgentForm({
+                                ...agentForm,
+                                persona: template.persona || agentForm.persona,
+                                tone: template.tone || agentForm.tone,
+                                instructions_markdown: markdown,
+                              });
                               toast.success(`"${template.name}" template inserted`);
                             }}
                           >
@@ -893,31 +916,7 @@ export default function AgentDetailPage() {
                       instructions_markdown: e.target.value,
                     })
                   }
-                  placeholder={`# Identity and Persona
-
-You are a friendly receptionist representing {{org.name}}.
-Your communication style is warm, professional, and reassuring.
-
-# Mission
-
-Help patients schedule appointments, answer common questions,
-and provide a welcoming experience.
-
-# Business Context
-
-- Industry: {{org.industry}}
-- Location: {{org.location}}
-
-# Procedures
-
-## Appointment Booking
-1. Ask for preferred date and time
-2. Check availability
-3. Confirm details with caller
-
-## After Hours
-If calling outside business hours, offer to take a message
-and confirm someone will call back the next business day.`}
+                  placeholder={DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER}
                   className="min-h-[400px] font-mono text-sm"
                   disabled={!canEdit}
                 />
@@ -1605,7 +1604,12 @@ and confirm someone will call back the next business day.`}
               onClick={() => {
                 if (pendingTemplate) {
                   const markdown = buildMarkdownFromTemplate(pendingTemplate);
-                  setAgentForm({ ...agentForm, instructions_markdown: markdown });
+                  setAgentForm({
+                    ...agentForm,
+                    persona: pendingTemplate.persona || agentForm.persona,
+                    tone: pendingTemplate.tone || agentForm.tone,
+                    instructions_markdown: markdown,
+                  });
                   toast.success(`"${pendingTemplate.name}" template inserted`);
                 }
                 setPendingTemplate(null);
