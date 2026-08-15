@@ -140,6 +140,7 @@ class VoiceAgentService:
                         "mission": agent_data.mission,
                         "custom_instructions": agent_data.custom_instructions,
                         "instructions_markdown": agent_data.instructions_markdown,
+                        "call_recording_enabled": agent_data.call_recording_enabled,
                         "preset_id": (
                             str(agent_data.preset_id) if agent_data.preset_id else None
                         ),

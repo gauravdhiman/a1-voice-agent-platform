@@ -20,12 +20,12 @@ export function StepTools({ onNext, onBack }: StepToolsProps) {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">
-          Tools &amp; integrations
+          Tools &amp; business connections
         </h2>
         <p className="text-gray-500 mt-1">
-          After setup, you can connect tools so your agent can take real actions
-          during calls — like booking appointments or looking up customer
-          information.
+          After setup, connect business services so your agent can handle
+          everyday tasks during calls — like booking appointments or looking up
+          customer information.
         </p>
       </div>
 
@@ -37,20 +37,20 @@ export function StepTools({ onNext, onBack }: StepToolsProps) {
           <div>
             <p className="font-semibold text-gray-900">Connect when you&apos;re ready</p>
             <p className="text-sm text-gray-500">
-              No tools to configure in this step.
+              No tools to select in this step.
             </p>
           </div>
         </div>
         <ul className="text-sm text-gray-600 list-disc pl-5 space-y-1">
-          <li>Google Calendar and other booking tools</li>
-          <li>CRM and messaging integrations</li>
-          <li>Custom MCP tools your team connects later</li>
+          <li>Calendar and appointment booking</li>
+          <li>Customer records and messaging</li>
+          <li>Other business services your team uses</li>
         </ul>
       </div>
 
       <Alert>
         <AlertDescription className="text-sm">
-          You can connect tools anytime from{" "}
+          You can connect business services anytime from{" "}
           <strong>Settings → Tools</strong> after finishing setup.
         </AlertDescription>
       </Alert>

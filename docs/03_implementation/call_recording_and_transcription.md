@@ -7,11 +7,13 @@ Call usage reporting is now wired to the existing `call_logs` and
 debits the `voice_call_minute` event using a one-minute minimum and rounded-up
 minutes, and links the ledger row back to the call.
 
-Recording capture and authenticated playback are now implemented. The feature
-is opt-in through `VOICE_RECORDING_ENABLED` and remains disabled by default
-until consent and disclosure have been configured for the jurisdiction in
-which the organization operates. Transcription and summaries remain a later
-processing phase.
+Recording capture and authenticated playback are now implemented. Recording is
+opt-in at the agent level through `voice_agents.call_recording_enabled`, which
+defaults to `FALSE`; the runtime `VOICE_RECORDING_ENABLED` flag remains a
+platform-level safety gate for staged rollout. A call is recorded only when
+both gates allow it and consent/disclosure have been configured for the
+jurisdiction in which the organization operates. Transcription and summaries
+remain a later processing phase.
 
 ## Storage decision
 
@@ -91,8 +93,8 @@ sequenceDiagram
 
 ## Security, consent, and retention
 
-- Recording must be an explicit organization/agent setting with a clear caller
-  disclosure before capture begins. The product owner must define jurisdiction
+- Recording must be an explicit agent setting with a clear caller disclosure
+  before capture begins. The product owner must define jurisdiction
   coverage for two-party and international calls before enabling it in
   production.
 - Keep the bucket private and enforce organization ownership in the API. Do not

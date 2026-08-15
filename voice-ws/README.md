@@ -59,7 +59,7 @@ curl http://localhost:7860/health
 | `GEMINI_API_KEY` | Platform Gemini key fallback |
 | `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` / `CEREBRAS_API_KEY` / `OPENROUTER_API_KEY` / `FISH_API_KEY` | Pipeline provider key fallbacks |
 | `AGENT_DEFAULT_TIMEZONE` | Prompt datetime section |
-| `VOICE_RECORDING_ENABLED` | `true` to capture and persist mixed audio (default `false`) |
+| `VOICE_RECORDING_ENABLED` | Platform gate for mixed audio persistence (default `false`); the agent must also opt in |
 | `RECORDING_STORAGE_BACKEND` | `local` for development or `r2` for staging/production |
 | `RECORDING_ENCRYPTION_MODE` | `provider_managed` (customer-managed is reserved) |
 | `RECORDING_R2_*` | Bucket-scoped R2 endpoint, bucket, credentials, and URL TTL |

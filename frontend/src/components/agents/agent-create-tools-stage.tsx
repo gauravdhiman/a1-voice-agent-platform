@@ -13,11 +13,11 @@ export function AgentCreateToolsStage() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-2">Platform tools</h3>
+        <h3 className="text-lg font-semibold mb-2">Business tools</h3>
         <p className="text-sm text-muted-foreground">
-          Tools let your agent take real actions during calls. There is nothing
-          to select on this step — you&apos;ll connect them after the agent is
-          created.
+          Business tools help Lio take care of everyday tasks during calls.
+          There&apos;s nothing to select right now — you can connect them after the
+          agent is created.
         </p>
       </div>
 
@@ -28,24 +28,24 @@ export function AgentCreateToolsStage() {
           </div>
           <div>
             <p className="font-semibold text-foreground">
-              Informational only
+              Ready to customize after setup
             </p>
             <p className="text-sm text-muted-foreground">
-              No tools to configure in this step.
+              No tools to select right now.
             </p>
           </div>
         </div>
         <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-          <li>Google Calendar and booking integrations</li>
-          <li>CRM and messaging connectors</li>
-          <li>Custom MCP tools your organization publishes</li>
+          <li>Calendar and appointment booking</li>
+          <li>Customer records and messaging</li>
+          <li>Other business services your team uses</li>
         </ul>
       </div>
 
       <Alert>
         <AlertDescription className="text-sm">
           After creation, open the agent&apos;s <strong>Tools</strong> tab to
-          connect the integrations this agent should use.
+          choose the connections Lio should use.
         </AlertDescription>
       </Alert>
     </div>

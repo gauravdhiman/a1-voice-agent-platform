@@ -30,10 +30,15 @@ import {
   getPhoneNumberTypeLabel,
 } from "@/types/phone-number";
 import { phoneNumberService } from "@/services/phone-number-service";
+import { cn } from "@/lib/utils";
 
 interface PhoneNumberSearchProps {
+  /** Current organization credit balance used to gate searches and purchases. */
   creditBalance: number;
+  /** Called when the user selects an available number. */
   onNumberSelected?: (number: AvailablePhoneNumber) => void;
+  /** Optional layout classes, including the drawer's full-height mode. */
+  className?: string;
 }
 
 const COUNTRIES = [
@@ -55,6 +60,7 @@ const SEARCH_MODES: { value: PhoneNumberSearchMode; label: string }[] = [
 export function PhoneNumberSearch({
   creditBalance,
   onNumberSelected,
+  className,
 }: PhoneNumberSearchProps) {
   const [countryCode, setCountryCode] = useState("US");
   const [numberType, setNumberType] = useState<PhoneNumberType>("local");
@@ -105,7 +111,7 @@ export function PhoneNumberSearch({
   const canAfford = (cost: number) => creditBalance >= cost;
 
   return (
-    <div className="space-y-6">
+    <div className={cn("flex min-h-0 flex-col gap-6", className)}>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -283,7 +289,7 @@ export function PhoneNumberSearch({
       </Card>
 
       {hasSearched && (
-        <Card>
+        <Card className="flex min-h-0 flex-1 flex-col">
           <CardHeader>
             <CardTitle>Available Numbers</CardTitle>
             <CardDescription>
@@ -293,19 +299,19 @@ export function PhoneNumberSearch({
               )}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex min-h-0 flex-1 flex-col">
             {searching ? (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex flex-1 items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : results.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="flex flex-1 flex-col items-center justify-center py-8 text-center text-muted-foreground">
                 <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No available numbers found</p>
                 <p className="text-sm">Try a different search criteria</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
                 {results.map((number) => (
                   <div
                     key={number.phone_number}

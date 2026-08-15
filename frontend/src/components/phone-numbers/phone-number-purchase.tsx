@@ -19,6 +19,7 @@ import {
   formatPhoneNumber,
   getPhoneNumberTypeLabel,
 } from "@/types/phone-number";
+import type { PhoneNumber } from "@/types/phone-number";
 import { phoneNumberService } from "@/services/phone-number-service";
 
 interface PhoneNumberPurchaseProps {
@@ -27,7 +28,7 @@ interface PhoneNumberPurchaseProps {
   selectedNumber: AvailablePhoneNumber | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPurchaseSuccess?: () => void;
+  onPurchaseSuccess?: (phoneNumber: PhoneNumber) => void | Promise<void>;
 }
 
 export function PhoneNumberPurchase({
@@ -58,7 +59,7 @@ export function PhoneNumberPurchase({
           `Successfully purchased ${formatPhoneNumber(selectedNumber.phone_number)}`,
         );
         setAcknowledged(false);
-        onPurchaseSuccess?.();
+        await onPurchaseSuccess?.(response.phone_number);
         onOpenChange(false);
       }
     } catch (error) {

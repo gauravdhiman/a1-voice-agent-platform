@@ -9,13 +9,25 @@ export const callLogQueryKeys = {
     [...callLogQueryKeys.all, "analytics", orgId] as const,
 };
 
-export function useCallLogs(orgId: string, params: CallLogListParams = {}) {
+/**
+ * Fetches paginated call logs with optional filters.
+ *
+ * @param orgId - Organization whose call logs should be loaded.
+ * @param params - Optional server-side filters and pagination values.
+ * @param enabled - Whether the query should run after the organization is known.
+ * @returns React Query state for the requested call logs.
+ */
+export function useCallLogs(
+  orgId: string,
+  params: CallLogListParams = {},
+  enabled = true,
+) {
   return useQuery({
     queryKey: callLogQueryKeys.list(orgId, params),
     queryFn: () => callLogService.listCallLogs(orgId, params),
     staleTime: 30 * 1000,
     refetchOnMount: "always",
-    enabled: !!orgId,
+    enabled: Boolean(orgId) && enabled,
   });
 }
 

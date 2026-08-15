@@ -44,7 +44,7 @@ export type PresetType = "realtime" | "pipeline";
  */
 export const DEFAULT_PRESET_DISPLAY = {
   name: "System Default",
-  description: "Used when an agent has no voice profile selected.",
+  description: "Used when an agent has no voice profile selected. The voice profile will use your plan's call credits.",
 } as const;
 
 /**

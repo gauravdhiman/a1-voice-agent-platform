@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, CheckCircle2, SlidersHorizontal } from "lucide-react";
-import Link from "next/link";
+import { Loader2, CheckCircle2, Info, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { usePresetCatalog } from "@/hooks/use-preset-queries";
@@ -37,7 +36,7 @@ import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 export interface PresetPickerProps {
   /** Owning organization — required for org-scoped readiness from the catalog API. */
   organizationId: string;
-  /** Mirrors the agent's "Use plan credits" toggle when evaluating readiness. */
+  /** Existing billing preference used when evaluating profile readiness. */
   usePlatformCredits?: boolean;
   /** Currently selected preset id, or `null` for the system default. */
   value: string | null;
@@ -97,6 +96,18 @@ export function PresetPicker({
             description={DEFAULT_PRESET_DISPLAY.description}
             isReady={defaultIsReady}
             disabled={disabled}
+            notice={
+              value === null ? (
+                <div className="mt-3 flex items-start gap-2 border-t border-amber-200/80 pt-3 text-amber-950 dark:border-amber-800/80 dark:text-amber-100">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p className="text-xs leading-relaxed">
+                    The System Default voice profile may use your plan call
+                    credits. To reduce plan-credit usage, choose a voice
+                    profile configured with your organization&apos;s own account.
+                  </p>
+                </div>
+              ) : undefined
+            }
           />
           {presets.length === 0 ? (
             <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
@@ -176,6 +187,7 @@ function PresetOption({
   name,
   description,
   isReady,
+  notice,
   disabled = false,
 }: {
   selected: boolean;
@@ -183,6 +195,7 @@ function PresetOption({
   name: string;
   description?: string;
   isReady: boolean;
+  notice?: React.ReactNode;
   disabled?: boolean;
 }) {
   return (
@@ -230,6 +243,7 @@ function PresetOption({
           {description}
         </p>
       )}
+      {notice}
     </div>
   );
 }

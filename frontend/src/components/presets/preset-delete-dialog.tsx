@@ -17,7 +17,7 @@ import type { Preset, PresetUsageAgent } from "@/types/preset";
  * list of agents currently using the preset (via `usePresetUsage`):
  *  - In use: `warnings` carries the irreversible-action summary lines, and
  *    `extraContent` renders the affected agents as links to each agent's
- *    Properties tab (`/agents/{agentId}?tab=properties`) — where the preset
+ *    Settings tab (`/agents/{agentId}?tab=settings`) — where the voice profile
  *    picker lives — so the platform admin can navigate directly to review an
  *    agent before force-deleting. Agent names are links, not plain text, to
  *    make that review path one click away.
@@ -42,8 +42,8 @@ export interface PresetDeleteDialogProps {
 }
 
 /**
- * Render the affected-agents list as navigable links to each agent's Properties
- * tab (where the preset picker lives).
+ * Render the affected-agents list as navigable links to each agent's Settings
+ * tab (where the voice profile picker lives).
  *
  * Links open in a NEW tab (`target="_blank"`) so the delete dialog stays open
  * underneath — the admin reviews the agent, closes the tab, and returns to
@@ -60,7 +60,7 @@ function AffectedAgentsList({ agents }: { agents: PresetUsageAgent[] }) {
           <li key={a.id} className="flex items-center gap-1.5">
             <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
             <Link
-              href={`/agents/${a.id}?tab=properties`}
+              href={`/agents/${a.id}?tab=settings`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline underline-offset-2 hover:text-primary/80 break-all"
@@ -87,7 +87,7 @@ export function PresetDeleteDialog({
   const agents = usageQuery.data?.agents ?? [];
 
   // Summary lines only — the agent names live in `extraContent` as links so the
-  // admin can jump straight to an agent's Properties tab to review before
+  // admin can jump straight to an agent's Settings tab to review before
   // deleting. A force-delete detaches the preset (preset_id -> NULL via the FK),
   // so each listed agent falls back to the system default on its next call.
   const warnings: string[] =

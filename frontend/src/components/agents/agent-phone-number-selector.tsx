@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +29,16 @@ import type {
   PhoneNumberWithAgent,
 } from "@/types/phone-number";
 import { formatPhoneNumber } from "@/types/phone-number";
-import { Check, Clipboard, ExternalLink, Link2, Loader2, Phone } from "lucide-react";
+import { Check, Clipboard, ExternalLink, Link2, Loader2, Phone, Plus } from "lucide-react";
 import { toast } from "sonner";
+
+const AgentPhoneNumberPurchaseDrawer = dynamic(
+  () =>
+    import("./agent-phone-number-purchase-drawer").then(
+      (module) => module.AgentPhoneNumberPurchaseDrawer,
+    ),
+  { ssr: false },
+);
 
 interface PhoneNumberConnectionDrawerProps {
   /** Organization that owns the customer-managed number. */
@@ -284,6 +293,7 @@ export function AgentPhoneNumberSelector({
   const [updating, setUpdating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [purchaseDrawerOpen, setPurchaseDrawerOpen] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
 
   const loadNumbers = React.useCallback(async () => {
@@ -439,6 +449,18 @@ export function AgentPhoneNumberSelector({
           <SelectItem value="custom">Connect a custom number…</SelectItem>
         </SelectContent>
       </Select>
+      {canEdit && (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto px-0 text-xs"
+          onClick={() => setPurchaseDrawerOpen(true)}
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Buy a new number
+        </Button>
+      )}
       {assignedNumber?.status === "verification_required" ? (
         <div className="space-y-1">
           <p className="text-xs text-amber-600">
@@ -458,8 +480,8 @@ export function AgentPhoneNumberSelector({
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Choose a number already owned by your organization or connect one from
-          Twilio.
+          Choose a number your organization already owns, or buy a new number
+          for this agent.
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
@@ -471,6 +493,15 @@ export function AgentPhoneNumberSelector({
         onOpenChange={setDrawerOpen}
         onConnected={handleConnected}
       />
+      {purchaseDrawerOpen && (
+        <AgentPhoneNumberPurchaseDrawer
+          agentId={agentId}
+          organizationId={organizationId}
+          open
+          onOpenChange={setPurchaseDrawerOpen}
+          onPurchased={handleConnected}
+        />
+      )}
       {assignedNumber?.management_mode === "customer_managed" &&
         assignedNumber.status === "verification_required" && (
           <PhoneNumberWebhookDetailsDrawer

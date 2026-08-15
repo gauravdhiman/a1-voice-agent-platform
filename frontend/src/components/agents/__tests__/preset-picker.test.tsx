@@ -6,7 +6,7 @@
  * generic setup guidance without naming underlying providers.
  */
 import * as React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { PresetPicker } from "@/components/agents/preset-picker";
@@ -54,6 +54,27 @@ describe("PresetPicker", () => {
     expect(screen.queryByText("Realtime")).not.toBeInTheDocument();
     expect(screen.queryByText("Pipeline")).not.toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("explains plan-credit usage when the system default is selected", () => {
+    mockUsePresetCatalog.mockReturnValue({
+      data: makeCatalog(),
+      isLoading: false,
+    });
+
+    render(
+      <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
+    );
+
+    const systemDefaultOption = screen.getAllByRole("radio")[0];
+    expect(
+      within(systemDefaultOption).getByText(/may use your plan call credits/i),
+    ).toBeInTheDocument();
+    expect(
+      within(systemDefaultOption).getByText(
+        /choose a voice profile configured with your organization/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("renders published profiles with Ready or Setup required badges (no engine badges)", () => {
@@ -113,9 +134,10 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.getByText(/not set up for your organization yet/i),
+      screen.getByText(/needs a little more setup before your agent can use it/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Open API Credentials/i)).toBeInTheDocument();
+    expect(screen.getByText(/Open voice setup/i)).toBeInTheDocument();
+    expect(screen.queryByText(/API credentials/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Deepgram/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/OpenAI/i)).not.toBeInTheDocument();
   });
@@ -134,7 +156,7 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.queryByText(/not set up for your organization yet/i),
+      screen.queryByText(/needs a little more setup before your agent can use it/i),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
   });
@@ -165,9 +187,9 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.getByText(/contact your platform administrator/i),
+      screen.getByText(/contact your account administrator/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Open API Credentials/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Open voice setup/i)).not.toBeInTheDocument();
   });
 
   it("fires onChange(null) when the system-default option is selected", () => {

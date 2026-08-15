@@ -42,16 +42,22 @@ class _Query:
         if self.table == "call_artifacts" and self.client.fail_artifacts:
             raise RuntimeError("call_artifacts table is unavailable")
         if self.table == "call_artifacts":
-            return _Result([{"call_log_id": str(self.client.call_id)}])
+            artifact_rows = (
+                [{"call_log_id": str(self.client.call_id)}]
+                if self.client.has_recording
+                else []
+            )
+            return _Result(artifact_rows)
         return _Result([self.client.call_row], count=1)
 
 
 class _Client:
     """Supabase client double for availability enrichment."""
 
-    def __init__(self, fail_artifacts=False):
+    def __init__(self, fail_artifacts=False, has_recording=True):
         self.call_id = uuid4()
         self.fail_artifacts = fail_artifacts
+        self.has_recording = has_recording
         now = datetime.now(timezone.utc).isoformat()
         self.call_row = {
             "id": str(self.call_id),
@@ -110,3 +116,70 @@ async def test_list_call_logs_fails_closed_when_artifact_table_is_unavailable():
 
     assert error is None
     assert result.items[0].recording_available is False
+
+
+@pytest.mark.asyncio
+async def test_list_call_logs_can_return_only_completed_recordings():
+    """The recordings view filters out calls without completed audio."""
+    client = _Client()
+    from shared.config import supabase_config
+
+    original_client = supabase_config._client
+    supabase_config._client = client
+    try:
+        result, error = await CallLogService().list_call_logs(
+            organization_id=uuid4(),
+            agent_id=uuid4(),
+            recording_only=True,
+            page=1,
+            page_size=25,
+        )
+    finally:
+        supabase_config._client = original_client
+
+    assert error is None
+    assert result is not None
+    assert result.total == 1
+    assert result.items[0].recording_available is True
+
+
+@pytest.mark.asyncio
+async def test_recording_only_returns_empty_when_no_recordings_exist():
+    """The recordings view stays empty when an organization has no recordings."""
+    client = _Client(has_recording=False)
+    from shared.config import supabase_config
+
+    original_client = supabase_config._client
+    supabase_config._client = client
+    try:
+        result, error = await CallLogService().list_call_logs(
+            organization_id=uuid4(), recording_only=True, page=1, page_size=25
+        )
+    finally:
+        supabase_config._client = original_client
+
+    assert error is None
+    assert result is not None
+    assert result.items == []
+    assert result.total == 0
+
+
+@pytest.mark.asyncio
+async def test_recording_only_fails_closed_when_artifacts_are_unavailable():
+    """The recordings view does not expose unverified calls on older databases."""
+    client = _Client(fail_artifacts=True)
+    from shared.config import supabase_config
+
+    original_client = supabase_config._client
+    supabase_config._client = client
+    try:
+        result, error = await CallLogService().list_call_logs(
+            organization_id=uuid4(), recording_only=True, page=1, page_size=25
+        )
+    finally:
+        supabase_config._client = original_client
+
+    assert error is None
+    assert result is not None
+    assert result.items == []
+    assert result.total == 0

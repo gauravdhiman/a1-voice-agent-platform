@@ -25,6 +25,7 @@ from pipecat.transports.websocket.fastapi import (
 )
 from src.call_tracking import end_call_tracking, start_call_tracking
 from src.recording import RecordingCoordinator
+from src.recording_policy import should_record_agent_call
 from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
 from src.session_setup import prepare_voice_session
 
@@ -91,8 +92,10 @@ async def run_bot(
             agent_id=bundle.agent.id,
         )
 
-    recording_enabled = settings.voice_recording_enabled or (
-        os.getenv("VOICE_RECORDING_TEE", "false").lower() == "true"
+    recording_enabled = should_record_agent_call(
+        bundle.agent,
+        global_enabled=settings.voice_recording_enabled,
+        tee_enabled=os.getenv("VOICE_RECORDING_TEE", "false").lower() == "true",
     )
     if recording_enabled and call_log_id and bundle.agent.organization_id:
         try:

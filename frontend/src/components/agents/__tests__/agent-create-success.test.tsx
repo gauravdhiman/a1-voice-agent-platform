@@ -11,6 +11,12 @@ describe("AgentCreateSuccess", () => {
 
     expect(screen.getByTestId("agent-create-success")).toBeInTheDocument();
     expect(screen.getByText(/Front Desk is ready/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/add knowledge and connect business tools/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Connect business tools/i }),
+    ).toBeInTheDocument();
 
     const skills = screen.getByTestId("agent-create-success-skills");
     const tools = screen.getByTestId("agent-create-success-tools");

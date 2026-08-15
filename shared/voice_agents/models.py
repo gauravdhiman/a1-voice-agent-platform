@@ -126,6 +126,13 @@ class VoiceAgentBase(BaseModel):
             "and accepts visitor voice calls."
         ),
     )
+    call_recording_enabled: bool = Field(
+        default=False,
+        description=(
+            "When true, calls handled by this agent may be recorded when the "
+            "runtime recording feature is enabled."
+        ),
+    )
 
     @field_validator("phone_number", mode="before")
     @classmethod
@@ -211,6 +218,13 @@ class VoiceAgentUpdate(BaseModel):
             "(/o/{slug}) and can receive visitor voice calls. Requires the "
             "agent to be active; deactivating an agent clears this flag. "
             "Distinct from embed configuration."
+        ),
+    )
+    call_recording_enabled: Optional[bool] = Field(
+        None,
+        description=(
+            "Enable call recordings for this agent. Recording remains subject "
+            "to the runtime recording feature gate."
         ),
     )
 

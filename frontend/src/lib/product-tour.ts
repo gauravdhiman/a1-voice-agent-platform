@@ -242,15 +242,15 @@ const AGENT_DETAILS_BRANCH_STEPS: readonly ProductTourStep[] = [
     target: '[data-tour="agent-detail-tabs"]',
     title: "Explore configuration areas",
     content:
-      "Properties control identity and behavior, Skills add reusable workflows, and Tools connect the agent to external capabilities.",
+      "Persona defines identity and behavior, Skills add reusable workflows, Tools connect external capabilities, and Settings control availability and voice.",
     placement: "bottom",
   },
   {
-    id: "agent-details-properties",
-    target: '[data-tour="agent-detail-properties"]',
+    id: "agent-details-persona",
+    target: '[data-tour="agent-detail-persona"]',
     title: "Start with the essentials",
     content:
-      "The Properties tab is where you set the agent name, phone number, instructions, voice behavior, and activation settings.",
+      "The Persona tab is where you set the agent name and instructions. Use Settings for the phone number, availability, publishing, call recording, voice profile, and call credits.",
     placement: "top",
   },
 ];

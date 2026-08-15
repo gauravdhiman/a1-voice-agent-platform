@@ -36,6 +36,9 @@ async def list_call_logs(
     call_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
     date_from: Optional[datetime] = Query(None, description="Filter start date (ISO 8601)"),
     date_to: Optional[datetime] = Query(None, description="Filter end date (ISO 8601)"),
+    recording_only: bool = Query(
+        False, description="Return only calls with completed recordings"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
@@ -50,6 +53,7 @@ async def list_call_logs(
         status=call_status,
         date_from=date_from,
         date_to=date_to,
+        recording_only=recording_only,
         page=page,
         page_size=page_size,
     )

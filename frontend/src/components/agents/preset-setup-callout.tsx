@@ -37,17 +37,17 @@ export function PresetSetupCallout({
         <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <div className="space-y-2 text-sm text-amber-900 dark:text-amber-100">
           <p>
-            This voice profile is not set up for your organization yet. Calls
-            may not work until setup is complete.
+            This voice profile needs a little more setup before your agent can
+            use it.
           </p>
           {credentialsSelfService ? (
             <p className="text-xs text-amber-800 dark:text-amber-200">
-              You can configure API credentials in Organization Settings, or
-              ask your platform administrator for assistance.
+              You can finish setup in Organization Settings, or ask your
+              account administrator for assistance.
             </p>
           ) : (
             <p className="text-xs text-amber-800 dark:text-amber-200">
-              Please contact your platform administrator to complete setup.
+              Please contact your account administrator to complete setup.
             </p>
           )}
           {credentialsSelfService && (
@@ -56,7 +56,7 @@ export function PresetSetupCallout({
               className="inline-flex items-center text-xs font-medium text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100"
             >
               <ExternalLink className="h-3 w-3 mr-1" />
-              Open API Credentials
+              Open voice setup
             </Link>
           )}
         </div>

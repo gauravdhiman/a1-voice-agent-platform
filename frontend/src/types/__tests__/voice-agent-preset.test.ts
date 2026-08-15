@@ -18,6 +18,18 @@ import type {
 } from "@/types/agent";
 
 describe("VoiceAgent preset_id field", () => {
+  it("VoiceAgent exposes call_recording_enabled as a boolean", () => {
+    expectTypeOf<VoiceAgent>()
+      .toHaveProperty("call_recording_enabled")
+      .toEqualTypeOf<boolean>();
+  });
+
+  it("VoiceAgentUpdate accepts an optional call recording setting", () => {
+    expectTypeOf<VoiceAgentUpdate>()
+      .toHaveProperty("call_recording_enabled")
+      .toEqualTypeOf<boolean | undefined>();
+  });
+
   it("VoiceAgent exposes preset_id as string | null", () => {
     expectTypeOf<VoiceAgent>()
       .toHaveProperty("preset_id")
@@ -50,6 +62,7 @@ describe("VoiceAgent preset_id field", () => {
       custom_instructions: null,
       voice_settings: null,
       is_active: true,
+      call_recording_enabled: true,
       use_platform_credits: false,
       instructions_markdown: null,
       preset_id: "p-1",
@@ -74,6 +87,7 @@ describe("VoiceAgent preset_id field", () => {
       custom_instructions: null,
       voice_settings: null,
       is_active: true,
+      call_recording_enabled: false,
       use_platform_credits: false,
       instructions_markdown: null,
       preset_id: null,

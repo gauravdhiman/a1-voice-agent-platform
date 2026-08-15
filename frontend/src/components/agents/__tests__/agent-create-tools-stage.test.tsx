@@ -7,8 +7,10 @@ describe("AgentCreateToolsStage", () => {
   it("is informational and does not present tool selection controls", () => {
     render(<AgentCreateToolsStage />);
 
-    expect(screen.getByText(/Informational only/i)).toBeInTheDocument();
-    expect(screen.getByText(/No tools to configure in this step/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Business tools/i })).toBeInTheDocument();
+    expect(screen.getByText(/No tools to select right now/i)).toBeInTheDocument();
+    expect(screen.getByText(/Other business services your team uses/i)).toBeInTheDocument();
+    expect(screen.queryByText(/MCP|platform tools/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
   });
