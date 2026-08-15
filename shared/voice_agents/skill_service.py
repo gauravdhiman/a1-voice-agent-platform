@@ -13,9 +13,9 @@ from typing import List, Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
-from supabase import Client
 
 from shared.config import supabase_config
+from supabase import Client
 
 from .skill_models import (
     AgentSkillResponse,
@@ -206,9 +206,7 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.delete_skill")
-    async def delete_skill(
-        self, skill_id: UUID
-    ) -> tuple[bool, Optional[str]]:
+    async def delete_skill(self, skill_id: UUID) -> tuple[bool, Optional[str]]:
         """Delete a skill."""
         skill_operations_counter.add(1, {"operation": "delete_skill"})
         try:
@@ -285,7 +283,9 @@ class SkillService:
                     )
             return summaries, None
         except Exception as e:
-            logger.error(f"Error getting skill summaries {agent_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error getting skill summaries {agent_id}: {e}", exc_info=True
+            )
             return [], str(e)
 
     @tracer.start_as_current_span("skill.assign_skill")
@@ -352,7 +352,9 @@ class SkillService:
                     agents.append(item["agent"])
             return agents, None
         except Exception as e:
-            logger.error(f"Error getting agents for skill {skill_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error getting agents for skill {skill_id}: {e}", exc_info=True
+            )
             return [], str(e)
 
     # --- Skill file CRUD ---
@@ -439,13 +441,15 @@ class SkillService:
             content_hash = _compute_content_hash(file_data.content)
             response = (
                 self.supabase.table("organization_skill_files")
-                .insert({
-                    "skill_id": str(skill_id),
-                    "file_path": file_data.file_path,
-                    "content": file_data.content,
-                    "file_kind": file_data.file_kind,
-                    "content_hash": content_hash,
-                })
+                .insert(
+                    {
+                        "skill_id": str(skill_id),
+                        "file_path": file_data.file_path,
+                        "content": file_data.content,
+                        "file_kind": file_data.file_kind,
+                        "content_hash": content_hash,
+                    }
+                )
                 .execute()
             )
             if not response.data:
@@ -486,9 +490,7 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.delete_skill_file")
-    async def delete_skill_file(
-        self, file_id: UUID
-    ) -> tuple[bool, Optional[str]]:
+    async def delete_skill_file(self, file_id: UUID) -> tuple[bool, Optional[str]]:
         """Delete a reference file."""
         skill_operations_counter.add(1, {"operation": "delete_skill_file"})
         try:
@@ -514,21 +516,21 @@ class SkillService:
         try:
             rows = []
             for f in files:
-                rows.append({
-                    "skill_id": str(skill_id),
-                    "file_path": f.file_path,
-                    "content": f.content,
-                    "file_kind": f.file_kind,
-                    "content_hash": _compute_content_hash(f.content),
-                })
+                rows.append(
+                    {
+                        "skill_id": str(skill_id),
+                        "file_path": f.file_path,
+                        "content": f.content,
+                        "file_kind": f.file_kind,
+                        "content_hash": _compute_content_hash(f.content),
+                    }
+                )
 
             if not rows:
                 return 0, None
 
             response = (
-                self.supabase.table("organization_skill_files")
-                .insert(rows)
-                .execute()
+                self.supabase.table("organization_skill_files").insert(rows).execute()
             )
             return len(response.data), None
         except Exception as e:
@@ -542,11 +544,19 @@ class SkillService:
     # ═════════════════════════════════════════════════════════════════════════
 
     @tracer.start_as_current_span("skill.seed_platform_skills")
-    async def seed_platform_skills(self) -> tuple[int, Optional[str]]:
+    async def seed_platform_skills(
+        self, *, prune_orphans: bool = False
+    ) -> tuple[int, Optional[str]]:
         """Seed platform_skills table from code-defined templates.
 
-        Called on app startup (idempotent). Uses content_hash to skip
-        unchanged skills. No per-org seeding — orgs fork what they need.
+        Uses content_hash to skip unchanged skills. No per-org seeding — orgs
+        fork what they need. Normal runs never delete rows; callers must
+        explicitly request orphan pruning.
+
+        Args:
+            prune_orphans: Delete platform-only rows whose slugs are absent
+                from the source catalog. This is intended for an explicit,
+                reviewed reset in non-production environments.
 
         Returns:
             Tuple of (skills created/updated count, error or None).
@@ -572,6 +582,7 @@ class SkillService:
                     # Only update if content changed
                     if row.get("content_hash") != new_hash:
                         from datetime import date
+
                         today = date.today().strftime("%Y.%m.%d")
                         current_version = row.get("version") or "1970.01.01_0"
                         base, suffix = current_version.rsplit("_", 1)
@@ -580,60 +591,79 @@ class SkillService:
                         else:
                             new_version = f"{today}_1"
 
-                        self.supabase.table("platform_skills").update({
-                            "name": seed["name"],
-                            "description": seed.get("description"),
-                            "content": seed["content"],
-                            "content_hash": new_hash,
-                            "version": new_version,
-                        }).eq("id", row["id"]).execute()
+                        self.supabase.table("platform_skills").update(
+                            {
+                                "name": seed["name"],
+                                "description": seed.get("description"),
+                                "content": seed["content"],
+                                "content_hash": new_hash,
+                                "version": new_version,
+                            }
+                        ).eq("id", row["id"]).execute()
                         count += 1
 
                         # Update default files (delete old, insert new)
-                        self.supabase.table("platform_skill_files").delete().eq("skill_id", row["id"]).execute()
+                        self.supabase.table("platform_skill_files").delete().eq(
+                            "skill_id", row["id"]
+                        ).execute()
                         for file_def in seed.get("default_files", []):
-                            self.supabase.table("platform_skill_files").insert({
-                                "skill_id": row["id"],
-                                "file_path": file_def["file_path"],
-                                "content": file_def["content"],
-                                "file_kind": file_def.get("file_kind", "reference"),
-                                "content_hash": _compute_content_hash(file_def["content"]),
-                            }).execute()
+                            self.supabase.table("platform_skill_files").insert(
+                                {
+                                    "skill_id": row["id"],
+                                    "file_path": file_def["file_path"],
+                                    "content": file_def["content"],
+                                    "file_kind": file_def.get("file_kind", "reference"),
+                                    "content_hash": _compute_content_hash(
+                                        file_def["content"]
+                                    ),
+                                }
+                            ).execute()
                     continue
 
                 # Create new platform skill
                 from datetime import date
+
                 today = date.today().strftime("%Y.%m.%d")
                 version = f"{today}_1"
 
                 # status defaults to 'active' in the DB; we do not pass it
                 # explicitly so the seeder keeps working regardless of which
                 # platform-skill status columns exist.
-                response = self.supabase.table("platform_skills").insert({
-                    "slug": seed["slug"],
-                    "name": seed["name"],
-                    "description": seed.get("description"),
-                    "content": seed["content"],
-                    "version": version,
-                    "content_hash": new_hash,
-                    "author": "Platform",
-                }).execute()
+                response = (
+                    self.supabase.table("platform_skills")
+                    .insert(
+                        {
+                            "slug": seed["slug"],
+                            "name": seed["name"],
+                            "description": seed.get("description"),
+                            "content": seed["content"],
+                            "version": version,
+                            "content_hash": new_hash,
+                            "author": "Platform",
+                        }
+                    )
+                    .execute()
+                )
 
                 if response.data:
                     skill_id = response.data[0]["id"]
                     for file_def in seed.get("default_files", []):
-                        self.supabase.table("platform_skill_files").insert({
-                            "skill_id": skill_id,
-                            "file_path": file_def["file_path"],
-                            "content": file_def["content"],
-                            "file_kind": file_def.get("file_kind", "reference"),
-                            "content_hash": _compute_content_hash(file_def["content"]),
-                        }).execute()
+                        self.supabase.table("platform_skill_files").insert(
+                            {
+                                "skill_id": skill_id,
+                                "file_path": file_def["file_path"],
+                                "content": file_def["content"],
+                                "file_kind": file_def.get("file_kind", "reference"),
+                                "content_hash": _compute_content_hash(
+                                    file_def["content"]
+                                ),
+                            }
+                        ).execute()
                     count += 1
 
-            # Cleanup pass: remove any platform_skills rows whose slugs are
-            # no longer in PLATFORM_SKILL_TEMPLATES. Idempotent and safe.
-            orphan_count = self._prune_orphan_platform_skills()
+            orphan_count = 0
+            if prune_orphans:
+                orphan_count = await self._prune_orphan_platform_skills()
 
             logger.info(
                 f"Seeded {count} platform skills; removed {orphan_count} orphan(s)"
@@ -647,9 +677,9 @@ class SkillService:
     async def _prune_orphan_platform_skills(self) -> int:
         """Delete platform_skills rows whose slugs aren't in PLATFORM_SKILL_TEMPLATES.
 
-        Called by ``seed_platform_skills`` on every startup. Removing a
-        slug from the seed list is a deliberate removal from the platform
-        library; the next deploy deletes the row.
+        Called only by an explicit, reviewed reset. Removing a slug from the
+        seed list is treated as a deliberate removal from the platform
+        library only when that reset is requested.
 
         Existing org forks are unaffected — they own their own content +
         files. The fork's ``source_skill_id`` becomes a dangling pointer,
@@ -663,9 +693,7 @@ class SkillService:
 
         seeded_slugs = {s["slug"] for s in PLATFORM_SKILL_TEMPLATES}
         existing_rows = (
-            self.supabase.table("platform_skills")
-            .select("id, slug")
-            .execute()
+            self.supabase.table("platform_skills").select("id, slug").execute()
         ).data or []
         orphan_count = 0
         for row in existing_rows:
@@ -716,9 +744,7 @@ class SkillService:
         invalid = [s for s in statuses if not isinstance(s, PlatformSkillStatus)]
         if invalid:
             valid = ", ".join(s.value for s in PlatformSkillStatus)
-            return [], (
-                f"Invalid status value(s): {invalid}. Must be one of: {valid}"
-            )
+            return [], (f"Invalid status value(s): {invalid}. Must be one of: {valid}")
 
         try:
             status_values = [s.value for s in statuses]
@@ -736,7 +762,9 @@ class SkillService:
             return [], str(e)
 
     @tracer.start_as_current_span("skill.get_platform_skill_by_id")
-    async def get_platform_skill_by_id(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+    async def get_platform_skill_by_id(
+        self, skill_id: UUID
+    ) -> tuple[Optional[PlatformSkill], Optional[str]]:
         """Get a platform skill by ID with its files."""
         try:
             response = (
@@ -754,10 +782,13 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.create_platform_skill")
-    async def create_platform_skill(self, skill_data: PlatformSkillCreate) -> tuple[Optional[PlatformSkill], Optional[str]]:
+    async def create_platform_skill(
+        self, skill_data: PlatformSkillCreate
+    ) -> tuple[Optional[PlatformSkill], Optional[str]]:
         """Create a new platform skill. Version auto-set to current date."""
         try:
             from datetime import date
+
             today = date.today().strftime("%Y.%m.%d")
             version = f"{today}_1"
 
@@ -765,15 +796,21 @@ class SkillService:
             # status defaults to 'active' in the DB; we deliberately do not
             # accept a status on create — DRAFT/publish will get a dedicated
             # endpoint when we add the draft UI.
-            response = self.supabase.table("platform_skills").insert({
-                "slug": skill_data.slug,
-                "name": skill_data.name,
-                "description": skill_data.description,
-                "content": skill_data.content,
-                "version": version,
-                "content_hash": content_hash,
-                "author": skill_data.author,
-            }).execute()
+            response = (
+                self.supabase.table("platform_skills")
+                .insert(
+                    {
+                        "slug": skill_data.slug,
+                        "name": skill_data.name,
+                        "description": skill_data.description,
+                        "content": skill_data.content,
+                        "version": version,
+                        "content_hash": content_hash,
+                        "author": skill_data.author,
+                    }
+                )
+                .execute()
+            )
 
             if not response.data:
                 return None, "Failed to create platform skill"
@@ -783,7 +820,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.update_platform_skill")
-    async def update_platform_skill(self, skill_id: UUID, skill_data: PlatformSkillUpdate) -> tuple[Optional[PlatformSkill], Optional[str]]:
+    async def update_platform_skill(
+        self, skill_id: UUID, skill_data: PlatformSkillUpdate
+    ) -> tuple[Optional[PlatformSkill], Optional[str]]:
         """Update a platform skill and bump version."""
         try:
             existing, err = await self.get_platform_skill_by_id(skill_id)
@@ -806,6 +845,7 @@ class SkillService:
             # Auto-bump version on any content change
             if "content" in update_dict:
                 from datetime import date
+
                 today = date.today().strftime("%Y.%m.%d")
                 current_version = existing.version or "1970.01.01_0"
                 base, suffix = current_version.rsplit("_", 1)
@@ -858,7 +898,9 @@ class SkillService:
             return False, str(e)
 
     @tracer.start_as_current_span("skill.restore_platform_skill")
-    async def restore_platform_skill(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+    async def restore_platform_skill(
+        self, skill_id: UUID
+    ) -> tuple[Optional[PlatformSkill], Optional[str]]:
         """Restore a soft-deleted platform skill (DELETED → ACTIVE).
 
         Only skills in DELETED state can be restored. Restored skills always
@@ -889,7 +931,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.deprecate_platform_skill")
-    async def deprecate_platform_skill(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+    async def deprecate_platform_skill(
+        self, skill_id: UUID
+    ) -> tuple[Optional[PlatformSkill], Optional[str]]:
         """Deprecate a platform skill (ACTIVE → DEPRECATED).
 
         Only ACTIVE skills can be deprecated; DRAFT/DEPRECATED/DELETED
@@ -921,7 +965,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.reactivate_platform_skill")
-    async def reactivate_platform_skill(self, skill_id: UUID) -> tuple[Optional[PlatformSkill], Optional[str]]:
+    async def reactivate_platform_skill(
+        self, skill_id: UUID
+    ) -> tuple[Optional[PlatformSkill], Optional[str]]:
         """Reactivate a deprecated platform skill (DEPRECATED → ACTIVE).
 
         Only DEPRECATED skills can be reactivated; ACTIVE/DRAFT/DELETED
@@ -950,7 +996,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.list_platform_skill_files")
-    async def list_platform_skill_files(self, skill_id: UUID) -> tuple[List[PlatformSkillFileSummary], Optional[str]]:
+    async def list_platform_skill_files(
+        self, skill_id: UUID
+    ) -> tuple[List[PlatformSkillFileSummary], Optional[str]]:
         """List files for a platform skill."""
         try:
             response = (
@@ -966,7 +1014,9 @@ class SkillService:
             return [], str(e)
 
     @tracer.start_as_current_span("skill.get_platform_skill_file")
-    async def get_platform_skill_file(self, file_id: UUID) -> tuple[Optional[PlatformSkillFile], Optional[str]]:
+    async def get_platform_skill_file(
+        self, file_id: UUID
+    ) -> tuple[Optional[PlatformSkillFile], Optional[str]]:
         """Get a platform skill file by ID."""
         try:
             response = (
@@ -984,17 +1034,25 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.create_platform_skill_file")
-    async def create_platform_skill_file(self, skill_id: UUID, file_data: PlatformSkillFileCreate) -> tuple[Optional[PlatformSkillFile], Optional[str]]:
+    async def create_platform_skill_file(
+        self, skill_id: UUID, file_data: PlatformSkillFileCreate
+    ) -> tuple[Optional[PlatformSkillFile], Optional[str]]:
         """Create a file for a platform skill."""
         try:
             content_hash = _compute_content_hash(file_data.content)
-            response = self.supabase.table("platform_skill_files").insert({
-                "skill_id": str(skill_id),
-                "file_path": file_data.file_path,
-                "content": file_data.content,
-                "file_kind": file_data.file_kind,
-                "content_hash": content_hash,
-            }).execute()
+            response = (
+                self.supabase.table("platform_skill_files")
+                .insert(
+                    {
+                        "skill_id": str(skill_id),
+                        "file_path": file_data.file_path,
+                        "content": file_data.content,
+                        "file_kind": file_data.file_kind,
+                        "content_hash": content_hash,
+                    }
+                )
+                .execute()
+            )
             if not response.data:
                 return None, "Failed to create file"
             return PlatformSkillFile(**response.data[0]), None
@@ -1003,7 +1061,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.update_platform_skill_file")
-    async def update_platform_skill_file(self, file_id: UUID, file_data: PlatformSkillFileCreate) -> tuple[Optional[PlatformSkillFile], Optional[str]]:
+    async def update_platform_skill_file(
+        self, file_id: UUID, file_data: PlatformSkillFileCreate
+    ) -> tuple[Optional[PlatformSkillFile], Optional[str]]:
         """Update a platform skill file."""
         try:
             update_dict = {
@@ -1026,10 +1086,14 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.delete_platform_skill_file")
-    async def delete_platform_skill_file(self, file_id: UUID) -> tuple[bool, Optional[str]]:
+    async def delete_platform_skill_file(
+        self, file_id: UUID
+    ) -> tuple[bool, Optional[str]]:
         """Delete a platform skill file."""
         try:
-            self.supabase.table("platform_skill_files").delete().eq("id", str(file_id)).execute()
+            self.supabase.table("platform_skill_files").delete().eq(
+                "id", str(file_id)
+            ).execute()
             return True, None
         except Exception as e:
             logger.error(f"Error deleting platform skill file: {e}", exc_info=True)
@@ -1040,7 +1104,13 @@ class SkillService:
     # ═════════════════════════════════════════════════════════════════════════
 
     @tracer.start_as_current_span("skill.fork_platform_skill")
-    async def fork_platform_skill(self, org_id: UUID, platform_skill_id: UUID, custom_name: Optional[str] = None, custom_slug: Optional[str] = None) -> tuple[Optional[OrganizationSkill], Optional[str]]:
+    async def fork_platform_skill(
+        self,
+        org_id: UUID,
+        platform_skill_id: UUID,
+        custom_name: Optional[str] = None,
+        custom_slug: Optional[str] = None,
+    ) -> tuple[Optional[OrganizationSkill], Optional[str]]:
         """Fork a platform skill into an org's library. Copies all files."""
         try:
             # Get platform skill with files
@@ -1075,7 +1145,9 @@ class SkillService:
                 "is_visible": True,
             }
 
-            skill_resp = self.supabase.table("organization_skills").insert(org_skill).execute()
+            skill_resp = (
+                self.supabase.table("organization_skills").insert(org_skill).execute()
+            )
             if not skill_resp.data:
                 return None, "Failed to create forked skill"
 
@@ -1084,13 +1156,15 @@ class SkillService:
             # Copy all files
             files = platform_skill.get("platform_skill_files", [])
             for file in files:
-                self.supabase.table("organization_skill_files").insert({
-                    "skill_id": new_skill_id,
-                    "file_path": file["file_path"],
-                    "content": file["content"],
-                    "file_kind": file["file_kind"],
-                    "content_hash": file.get("content_hash"),
-                }).execute()
+                self.supabase.table("organization_skill_files").insert(
+                    {
+                        "skill_id": new_skill_id,
+                        "file_path": file["file_path"],
+                        "content": file["content"],
+                        "file_kind": file["file_kind"],
+                        "content_hash": file.get("content_hash"),
+                    }
+                ).execute()
 
             return OrganizationSkill(**skill_resp.data[0]), None
         except Exception as e:
@@ -1098,7 +1172,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.refresh_forked_skill")
-    async def refresh_forked_skill(self, org_skill_id: UUID, user_id: UUID) -> tuple[Optional[OrganizationSkill], Optional[str]]:
+    async def refresh_forked_skill(
+        self, org_skill_id: UUID, user_id: UUID
+    ) -> tuple[Optional[OrganizationSkill], Optional[str]]:
         """Refresh a forked skill from its platform source. Replaces ALL files."""
         try:
             # Get org skill
@@ -1145,34 +1221,44 @@ class SkillService:
                 return None, f"Already up to date ({old_version})"
 
             # Replace ALL content
-            self.supabase.table("organization_skills").update({
-                "content": platform_skill["content"],
-                "content_hash": platform_skill.get("content_hash"),
-                "source_version": new_version,
-                "name": platform_skill["name"],  # Also update name in case it changed
-                "description": platform_skill.get("description"),
-            }).eq("id", str(org_skill_id)).execute()
+            self.supabase.table("organization_skills").update(
+                {
+                    "content": platform_skill["content"],
+                    "content_hash": platform_skill.get("content_hash"),
+                    "source_version": new_version,
+                    "name": platform_skill[
+                        "name"
+                    ],  # Also update name in case it changed
+                    "description": platform_skill.get("description"),
+                }
+            ).eq("id", str(org_skill_id)).execute()
 
             # Delete ALL existing org files and replace with platform's latest
-            self.supabase.table("organization_skill_files").delete().eq("skill_id", str(org_skill_id)).execute()
+            self.supabase.table("organization_skill_files").delete().eq(
+                "skill_id", str(org_skill_id)
+            ).execute()
 
             files = platform_skill.get("platform_skill_files", [])
             for file in files:
-                self.supabase.table("organization_skill_files").insert({
-                    "skill_id": str(org_skill_id),
-                    "file_path": file["file_path"],
-                    "content": file["content"],
-                    "file_kind": file["file_kind"],
-                    "content_hash": file.get("content_hash"),
-                }).execute()
+                self.supabase.table("organization_skill_files").insert(
+                    {
+                        "skill_id": str(org_skill_id),
+                        "file_path": file["file_path"],
+                        "content": file["content"],
+                        "file_kind": file["file_kind"],
+                        "content_hash": file.get("content_hash"),
+                    }
+                ).execute()
 
             # Log the update
-            self.supabase.table("skill_update_logs").insert({
-                "org_skill_id": str(org_skill_id),
-                "old_source_version": old_version,
-                "new_source_version": new_version,
-                "performed_by": str(user_id),
-            }).execute()
+            self.supabase.table("skill_update_logs").insert(
+                {
+                    "org_skill_id": str(org_skill_id),
+                    "old_source_version": old_version,
+                    "new_source_version": new_version,
+                    "performed_by": str(user_id),
+                }
+            ).execute()
 
             # Return updated skill
             updated_resp = (
@@ -1188,7 +1274,9 @@ class SkillService:
             return None, str(e)
 
     @tracer.start_as_current_span("skill.check_update_available")
-    async def check_update_available(self, org_skill_id: UUID) -> tuple[bool, Optional[str], Optional[str]]:
+    async def check_update_available(
+        self, org_skill_id: UUID
+    ) -> tuple[bool, Optional[str], Optional[str]]:
         """Check if a forked skill has an update available.
 
         Returns:
@@ -1218,9 +1306,13 @@ class SkillService:
                 .execute()
             )
             if not platform_resp.data:
-                return False, None, (
-                    "The base skill this fork was created from is no longer "
-                    "available. Updates cannot be checked."
+                return (
+                    False,
+                    None,
+                    (
+                        "The base skill this fork was created from is no longer "
+                        "available. Updates cannot be checked."
+                    ),
                 )
 
             latest_version = platform_resp.data.get("version")

@@ -66,4 +66,21 @@ describe("resolveAgentCreatePromptFields", () => {
       "Default greeting: Thank you for calling Acme Plumbing! This is Riley.",
     );
   });
+
+  it("resolves canonical agent and organization placeholders before create", () => {
+    const result = resolveAgentCreatePromptFields(
+      {
+        persona: "You are the {{agent.name}} for {{org.name}}.",
+        mission: "Help callers in {{org.industry}}.",
+        custom_instructions: "Use the business context for {{org.name}}.",
+      },
+      { businessName: "Acme Plumbing", agentName: "Riley" },
+    );
+
+    expect(result.persona).toBe("You are the Riley for Acme Plumbing.");
+    expect(result.mission).toBe("Help callers in {{org.industry}}.");
+    expect(result.custom_instructions).toBe(
+      "Use the business context for Acme Plumbing.",
+    );
+  });
 });

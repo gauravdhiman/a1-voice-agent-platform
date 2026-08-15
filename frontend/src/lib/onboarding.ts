@@ -171,10 +171,48 @@ export function canSkipTemplateStep(state: { agentName: string }): boolean {
 }
 
 /**
+ * Normalize legacy template markers to the canonical dynamic-context syntax.
+ *
+ * This keeps old database rows and older template payloads compatible while
+ * allowing edit screens to preserve runtime placeholders instead of resolving
+ * them to the current user's values.
+ *
+ * @param text Template text that may contain legacy markers
+ * @returns Text using canonical `{{org.*}}` and `{{agent.name}}` placeholders
+ */
+export function normalizeTemplatePlaceholders(
+  text: string | null | undefined,
+): string {
+  if (!text) return "";
+
+  let result = text
+    .replace(/\[(?:Business|Company|Organization|Org) Name\]/gi, "{{org.name}}")
+    .replace(/\[Agent Name\]/gi, "{{agent.name}}");
+
+  result = result
+    .replace(/\{\{\s*(?:org|organization|business|company)\.name\s*\}\}/gi, "{{org.name}}")
+    .replace(/\{\{\s*(?:org|organization)\.industry\s*\}\}/gi, "{{org.industry}}")
+    .replace(/\{\{\s*(?:org|organization)\.location\s*\}\}/gi, "{{org.location}}")
+    .replace(/\{\{\s*(?:org|organization)\.business_details\s*\}\}/gi, "{{org.business_details}}")
+    .replace(/\{\{\s*agent\.name\s*\}\}/gi, "{{agent.name}}");
+
+  const namePattern = HARDCODED_TEMPLATE_AGENT_NAMES.join("|");
+  result = result.replace(
+    new RegExp(`\\bnamed (${namePattern})\\b`, "gi"),
+    "named {{agent.name}}",
+  );
+  return result.replace(
+    new RegExp(`\\bThis is (${namePattern})\\b`, "gi"),
+    "This is {{agent.name}}",
+  );
+}
+
+/**
  * Apply business/agent name placeholders to template text.
  *
- * Replaces `[Business Name]`, `[Agent Name]`, and hard-coded seed names
- * (Alex, Jordan, Taylor, Morgan, Casey) in greetings/personas.
+ * Replaces canonical organization/agent name placeholders, legacy bracket
+ * markers, and hard-coded seed names (Alex, Jordan, Taylor, Morgan, Casey) in
+ * greetings and personas.
  *
  * @param text Template text that may contain placeholders or seed names
  * @param opts Names to substitute into the text
@@ -187,22 +225,10 @@ export function applyTemplatePlaceholders(
   if (!text) return "";
   const businessName = opts.businessName.trim() || "Your Business";
   const agentName = opts.agentName.trim() || "your assistant";
-  const namePattern = HARDCODED_TEMPLATE_AGENT_NAMES.join("|");
 
-  let result = text
-    .replace(/\[Business Name\]/gi, businessName)
-    .replace(/\[Agent Name\]/gi, agentName);
-
-  result = result.replace(
-    new RegExp(`\\bnamed (${namePattern})\\b`, "gi"),
-    `named ${agentName}`,
-  );
-  result = result.replace(
-    new RegExp(`\\bThis is (${namePattern})\\b`, "gi"),
-    `This is ${agentName}`,
-  );
-
-  return result;
+  return normalizeTemplatePlaceholders(text)
+    .replace(/\{\{org\.name\}\}/g, businessName)
+    .replace(/\{\{agent\.name\}\}/g, agentName);
 }
 
 /**

@@ -34,6 +34,12 @@ Understanding how the system works.
 
 - **[Database Schema](DATABASE_SCHEMA.md)** - Complete database schema documentation with ER diagram
 
+### Platform operations and launch
+
+- **[Master-data seeding runbook](05_operations/master_data_seeding_runbook.md)** - Copy-paste review, plan, apply, reset, and troubleshooting commands
+- **[Master-data catalog and seeding](03_implementation/master_data_seeding.md)** - Domain inventory, seed ledger, operator workflow, and provider boundaries
+- **[Master-data launch strategy](05_operations/master_data_launch_strategy.md)** - Initial industries, competitive pricing signals, unit economics, and review-gated paid-plan hypothesis
+
 ### 02_features/ - Platform Features (NEW)
 
 Comprehensive documentation organized by feature.

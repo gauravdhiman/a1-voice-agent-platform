@@ -5,6 +5,7 @@ import {
   canSkipOnboarding,
   canSkipTemplateStep,
   isOrgDetailsStepComplete,
+  normalizeTemplatePlaceholders,
   parseIndustrySelection,
   resolveIndustryValue,
   suggestAgentName,
@@ -150,6 +151,26 @@ describe("applyTemplatePlaceholders", () => {
     ).toBe(
       "You are a friendly dental receptionist named Sam. You help patients.",
     );
+  });
+
+  it("resolves canonical dynamic context placeholders", () => {
+    expect(
+      applyTemplatePlaceholders(
+        "Welcome to {{org.name}}. This is {{agent.name}}.",
+        {
+          businessName: "Smile Dental",
+          agentName: "Riley",
+        },
+      ),
+    ).toBe("Welcome to Smile Dental. This is Riley.");
+  });
+
+  it("normalizes legacy template markers without resolving runtime context", () => {
+    expect(
+      normalizeTemplatePlaceholders(
+        "This is [Agent Name] at [Business Name]. {{ organization.name }}.",
+      ),
+    ).toBe("This is {{agent.name}} at {{org.name}}. {{org.name}}.");
   });
 });
 
