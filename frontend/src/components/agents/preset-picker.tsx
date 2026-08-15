@@ -101,9 +101,9 @@ export function PresetPicker({
                 <div className="mt-3 flex items-start gap-2 border-t border-amber-200/80 pt-3 text-amber-950 dark:border-amber-800/80 dark:text-amber-100">
                   <Info className="mt-0.5 h-4 w-4 shrink-0" />
                   <p className="text-xs leading-relaxed">
-                    To reduce plan-credit usage, choose one of the below voice
-                    profiles (if available), which should be configured with your organization&apos;s own
-                    keys (BYOK).
+                    The System Default voice profile may use your plan call
+                    credits. To reduce plan-credit usage, choose a voice
+                    profile configured with your organization&apos;s own account.
                   </p>
                 </div>
               ) : undefined
