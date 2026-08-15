@@ -28,7 +28,11 @@ describe("AgentCreatePhoneStage", () => {
     expect(
       screen.getByText(/start answering calls on that number/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/buy a new number/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Choose a purchased number, buy a new number, or connect your own custom number/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/agent settings/i)).toBeInTheDocument();
     expect(screen.queryByText(/Twilio|webhook|API|mapping/i)).not.toBeInTheDocument();
   });
