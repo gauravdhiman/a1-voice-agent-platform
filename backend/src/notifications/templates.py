@@ -315,6 +315,29 @@ EMAIL_VERIFICATION_TEMPLATE = """
 """
 
 
+# OAuth connection attention template
+OAUTH_REAUTHORIZATION_REQUIRED_TEMPLATE = """
+<h2>Tool connection needs attention ⚠️</h2>
+<p>Hi {user_name},</p>
+<p>The <strong>{tool_name}</strong> connection used by <strong>{agent_name}</strong> in <strong>{organization_name}</strong> {status_text}.</p>
+
+<div class="info-box">
+    <p><strong>Tool:</strong> {tool_name}</p>
+    <p><strong>Agent:</strong> {agent_name}</p>
+    <p><strong>Status:</strong> {status_text}</p>
+    <p><strong>Expiration:</strong> {expires_at}</p>
+    <p><strong>What happened:</strong> {reason}</p>
+</div>
+
+<p>Reconnect this tool before the agent needs it. Open the agent's Tools tab and choose the connection action for this tool.</p>
+<a href="{action_url}" class="cta-button">Review Tool Connection</a>
+
+<p>Until it is reconnected, the agent may not be able to use this tool during a call.</p>
+
+<p>Best regards,<br>The {app_name} Team</p>
+"""
+
+
 # Template registry for easy access
 TEMPLATE_REGISTRY = {
     "user.signup": {
@@ -420,6 +443,22 @@ TEMPLATE_REGISTRY = {
             "payment_method",
             "failure_reason",
             "update_payment_url",
+            "app_name",
+        ],
+    },
+    "tools.oauth_reauthorization_required": {
+        "name": "Tool OAuth Reauthorization Required",
+        "subject": "Tool connection needs attention - {tool_name}",
+        "html_content": OAUTH_REAUTHORIZATION_REQUIRED_TEMPLATE,
+        "variables": [
+            "user_name",
+            "tool_name",
+            "agent_name",
+            "organization_name",
+            "status_text",
+            "expires_at",
+            "reason",
+            "action_url",
             "app_name",
         ],
     },

@@ -262,13 +262,14 @@ System-wide tools available for integration with voice agents.
 | is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = visible in every org's tool catalog. Backfilled TRUE for existing rows — migration 20260726000001 |
 | auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
 | requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
-| auth_config           | JSONB         | NULLABLE                          | Auth configuration (OAuth URLs, scopes, provider) — migration 20260111000001 |
+| auth_config           | JSONB         | NULLABLE                          | Non-secret auth metadata (OAuth URLs, scopes, provider, refresh capability) — migration 20260111000001 |
 | tool_source           | VARCHAR(20)   | NOT NULL, DEFAULT 'legacy'        | 'legacy' (in-tree BaseTool) or 'mcp' (remote MCP server) — migration 20260715000001 |
 | mcp_server_url        | VARCHAR(1024) | NULLABLE                          | Streamable HTTP endpoint of the MCP server (tool_source='mcp' only)          |
 | mcp_server_headers    | JSONB         | NULLABLE                          | Static per-request headers (server-level auth) — tool_source='mcp' only      |
 | mcp_server_name       | VARCHAR(200)  | NULLABLE                          | Human-readable MCP server name for logging — tool_source='mcp' only          |
 | organization_id       | UUID          | NULLABLE, FK → organizations.id   | DORMANT: the org-scoped custom MCP tier is retired (RFC §6.6, 2026-07-26). All published MCP servers are global catalog rows (NULL); the org-scoped read/create code paths are removed. The column is kept for a future org-private-publish tier — migration 20260725000001 |
 | mcp_server_secret_headers | TEXT      | NULLABLE                          | Fernet-encrypted JSON of server-level secret headers. Under the publish-lifecycle model this is a **template**: a value containing `{{KEY}}` is filled at runtime with the attaching org admin's API key (`agent_tools.sensitive_config["api_key"]`); a literal value (no `{{KEY}}`) passes through as a fixed shared header. Never returned to the frontend (a `mcp_secret_headers_configured` bool flag is exposed instead) — migration 20260725000001 |
+| oauth_client_secret_encrypted | TEXT | NULLABLE                     | Fernet-encrypted confidential OAuth client secret; write-only admin input, never included in `auth_config` or API responses — migration 20260814000003 |
 | created_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Creation timestamp                                                          |
 | updated_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Last update timestamp                                                        |
 
@@ -286,6 +287,24 @@ System-wide tools available for integration with voice agents.
 - `is_published=true` + `is_active=true` → **published**: a normal tool card in every org's agent tool panel; org admins attach it and supply their own API key (the `{{KEY}}` template is substituted with `agent_tools.sensitive_config["api_key"]` at runtime — no platform test-key fallback).
 - `organization_id` is **dormant** (org-scoped custom tier retired); MCP rows are forced to NULL on create.
 - Server-level secret headers (`mcp_server_secret_headers`) are encrypted at rest via Fernet (`shared/common/security.py`); the decrypted values never leave voice-ws dispatch path.
+
+**OAuth metadata and client credentials**:
+
+- `auth_config` contains only public OAuth metadata: endpoints, scopes, client ID,
+  resource indicators, token-endpoint authentication method, and refresh-support
+  declarations. Bearer tokens, refresh tokens, authorization codes, PKCE
+  verifiers, and client secrets are removed before a platform-tool response is
+  built.
+- Confidential client secrets are accepted through the write-only
+  `oauth_client_secret_input` field and stored in
+  `oauth_client_secret_encrypted` using authenticated Fernet encryption. The
+  backend performs an idempotent startup migration for historical rows that
+  still contain a client secret in `auth_config`; startup fails closed if that
+  migration cannot complete.
+- Native providers may continue to use deployment-managed credentials from the
+  provider registry. Generic native and MCP providers use the dedicated
+  encrypted column or a public-client flow; unsupported client-auth schemes are
+  reported as manual reauthorization rather than guessed.
 
 **OAuth Configuration in `config_schema`**:
 
@@ -1195,6 +1214,7 @@ erDiagram
         jsonb tool_functions_schema
         boolean is_active
         boolean is_premium
+        text oauth_client_secret_encrypted
         timestamptz created_at
         timestamptz updated_at
     }
@@ -1667,6 +1687,8 @@ erDiagram
 62. `20260813000001` - Add the `master_data_seed_runs` audit ledger for explicit CLI-driven platform master-data seeding. The ledger records source hashes, operations, statuses, operators, results, and timestamps; RLS is enabled and no direct browser policy is granted.
 63. `20260814000001` - Add `voice_agents.call_recording_enabled`, defaulting to `FALSE`, so call recording is opt-in per agent.
 64. `20260814000002` - Canonicalize legacy voice-template markers such as `[Agent Name]` and `[Business Name]` to the runtime-supported `{{agent.name}}` and `{{org.name}}` placeholders across all prompt-bearing template fields.
+65. `20260814000003` - Add nullable Fernet-encrypted `platform_tools.oauth_client_secret_encrypted` storage. OAuth client secrets are accepted through a write-only input, removed from public `auth_config`, and historical rows are migrated/scrubbed by the backend before the token-refresh worker starts.
+66. `20260817000001` - Seed the enabled `tools.oauth_reauthorization_required` notification event and its built-in template metadata for organization-admin reminders when native or MCP OAuth connections cannot renew automatically.
 
 ---
 
@@ -1856,8 +1878,32 @@ These tables are configured in `scripts/setup-supabase-realtime.sql` and allow t
 
 - OAuth tokens and API keys are stored in the `sensitive_config` column of `agent_tools` table
 - The `sensitive_config` field is encrypted using Fernet encryption
+- Confidential platform OAuth client secrets are stored in the Fernet-encrypted
+  `platform_tools.oauth_client_secret_encrypted` column; `platform_tools.auth_config`
+  is metadata-only.
+- `ENCRYPTION_KEY` is required in staging/production. `ENCRYPTION_KEY_FALLBACKS`
+  supports controlled Fernet key rotation: new values use the current key while
+  old values remain decryptable until re-encrypted.
 - Only backend services (FastAPI, Worker) can decrypt these values
 - Frontend API endpoints exclude `sensitive_config` from responses
+
+### OAuth Transport and Grant Protection
+
+- OAuth authorization, token, and dynamic-registration endpoints must use HTTPS;
+  public HTTP, private-address endpoints, URL userinfo, and fragments are
+  rejected. Loopback HTTP is available only when local development explicitly
+  enables `MCP_ALLOW_LOCAL_URLS`. A locally run app may use an explicitly
+  configured loopback browser callback against staging; this does not relax
+  validation for any server-side OAuth endpoint.
+- Native and MCP authorization-code flows use short-lived encrypted callback
+  state. The state contains the PKCE verifier but is opaque to the browser and
+  is rejected after its bounded lifetime or if tampered with. MCP flows use
+  S256 PKCE and resource indicators where provided.
+- HTTP clients do not follow redirects for OAuth or MCP metadata/token calls, so
+  a server cannot redirect a grant or bearer request to an unvalidated host.
+- Public MCP headers cannot contain conventional credential names. Runtime
+  OAuth bearer injection overrides stale static `Authorization` headers, and
+  secret server headers are decrypted only in the runtime probe/dispatch path.
 
 ### Row Level Security
 

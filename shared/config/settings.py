@@ -315,6 +315,15 @@ class Settings(BaseSettings):
         le=60,
         description="Window in minutes before expiry to refresh tokens (default: 15)",
     )
+    token_refresh_attention_window_minutes: int = Field(
+        default=30,
+        ge=1,
+        le=1440,
+        description=(
+            "Window in minutes before expiry to notify administrators when a "
+            "connection cannot be renewed automatically (default: 30)."
+        ),
+    )
     token_refresh_lock_lease_seconds: int = Field(
         default=120,
         ge=10,

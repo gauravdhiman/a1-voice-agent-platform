@@ -27,7 +27,12 @@ import {
   Loader2,
   EyeOff,
 } from "lucide-react";
-import { AuthStatus, PlatformTool, AgentTool } from "@/types/agent";
+import {
+  AuthStatus,
+  PlatformTool,
+  AgentTool,
+  OAuthRefreshMode,
+} from "@/types/agent";
 import { DeleteButton } from "@/components/ui/delete-button";
 import {
   filterMcpFunctions,
@@ -179,6 +184,18 @@ export function ToolConfigDrawer({
   );
   const authenticated =
     agentTool?.auth_status === AuthStatus.AUTHENTICATED && !isTokenExpired;
+  const oauthRefreshMode: OAuthRefreshMode =
+    agentTool?.oauth_refresh_mode ?? tool.oauth_refresh_mode ?? "unknown";
+  const oauthRefreshMessage =
+    agentTool?.oauth_refresh_message ??
+    tool.oauth_refresh_message ??
+    "Refresh support is not declared by this provider.";
+  const oauthRefreshModeLabel =
+    oauthRefreshMode === "automatic"
+      ? "Automatic refresh"
+      : oauthRefreshMode === "manual"
+        ? "Manual reauthorization"
+        : "Refresh support unknown";
 
   const getAuthStatusConfig = () => {
     if (!agentTool) {
@@ -318,6 +335,22 @@ export function ToolConfigDrawer({
                     Expires in {authConfig.expiryText}
                   </div>
                 )}
+                <div
+                  className={cn(
+                    "mt-1 rounded-md border px-2.5 py-2 text-xs",
+                    oauthRefreshMode === "automatic"
+                      ? "border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200"
+                      : "border-amber-200 bg-amber-50/70 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200",
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <RefreshCw className="h-3 w-3" />
+                    {oauthRefreshModeLabel}
+                  </div>
+                  <p className="mt-1 leading-relaxed">
+                    {oauthRefreshMessage}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center space-x-2 shrink-0">
                 {authConfig.showButton && (

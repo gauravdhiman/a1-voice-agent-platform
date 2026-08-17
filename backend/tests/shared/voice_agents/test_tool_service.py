@@ -1,21 +1,23 @@
 """
 Tests for shared Tool Service.
 """
-import pytest
+
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone
 
-from shared.voice_agents.tool_service import ToolService, validate_token_status
+import pytest
+
 from shared.voice_agents.tool_models import (
+    AgentToolCreate,
+    AgentToolUpdate,
+    AuthStatus,
     PlatformTool,
     PlatformToolCreate,
     ToolSource,
-    AgentToolCreate,
-    AgentToolUpdate,
-    AuthStatus
 )
+from shared.voice_agents.tool_service import ToolService, validate_token_status
 from shared.voice_agents.tools.mcp.models import McpToolDef
 
 
@@ -55,14 +57,13 @@ def tool_service(mock_supabase_client):
     """ToolService with mocked Supabase."""
     from unittest.mock import patch
 
-    with patch('shared.voice_agents.tool_service.supabase_config') as mock_config:
+    with patch("shared.voice_agents.tool_service.supabase_config") as mock_config:
         mock_config.client = mock_supabase_client
         mock_config.is_configured.return_value = True
 
         service = ToolService()
         service.supabase_config = mock_config
         yield service
-
 
 
 @pytest.fixture
@@ -86,17 +87,157 @@ def sample_platform_tool():
 class TestToolService:
     """Test cases for ToolService."""
 
+    async def test_migrate_legacy_oauth_client_secrets_encrypts_and_scrubs_metadata(
+        self, tool_service, mock_supabase_client
+    ):
+        """Historical plaintext OAuth client secrets are moved to encrypted storage."""
+        legacy_row = _platform_tool_row(
+            id="legacy-tool-id",
+            name="legacy-oauth",
+            auth_type="oauth2",
+            requires_auth=True,
+            auth_config={
+                "provider": "mcp",
+                "client_id": "legacy-client",
+                "client_secret": "legacy-secret",
+                "token_url": "https://oauth.example/token",
+            },
+            oauth_client_secret_encrypted=None,
+        )
+        mock_response = MagicMock()
+        mock_response.data = [legacy_row]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            mock_response,
+            MagicMock(
+                data=[
+                    {
+                        **legacy_row,
+                        "auth_config": {
+                            "provider": "mcp",
+                            "client_id": "legacy-client",
+                            "token_url": "https://oauth.example/token",
+                        },
+                        "oauth_client_secret_encrypted": "encrypted-secret",
+                    }
+                ]
+            ),
+        ]
+
+        with patch(
+            "shared.voice_agents.tool_service.encrypt_data",
+            return_value="encrypted-secret",
+        ) as mock_encrypt:
+            migrated, error = await tool_service.migrate_legacy_oauth_client_secrets()
+
+        assert error is None
+        assert migrated == 1
+        mock_encrypt.assert_called_once_with({"client_secret": "legacy-secret"})
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0] == {
+            "auth_config": {
+                "provider": "mcp",
+                "client_id": "legacy-client",
+                "token_url": "https://oauth.example/token",
+            },
+            "oauth_client_secret_encrypted": "encrypted-secret",
+        }
+
+    async def test_migrate_legacy_oauth_client_secrets_scrubs_existing_encrypted_rows(
+        self, tool_service, mock_supabase_client
+    ):
+        """Rows already migrated still lose any duplicate plaintext secret."""
+        legacy_row = _platform_tool_row(
+            id="already-encrypted",
+            name="already-encrypted-oauth",
+            auth_type="oauth2",
+            requires_auth=True,
+            auth_config={
+                "client_id": "client",
+                "client_secret": "stale-plaintext",
+                "token_url": "https://oauth.example/token",
+            },
+            oauth_client_secret_encrypted="existing-ciphertext",
+        )
+        mock_response = MagicMock()
+        mock_response.data = [legacy_row]
+        mock_supabase_client.table.return_value.execute.return_value = mock_response
+
+        with patch("shared.voice_agents.tool_service.encrypt_data") as mock_encrypt:
+            migrated, error = await tool_service.migrate_legacy_oauth_client_secrets()
+
+        assert error is None
+        assert migrated == 1
+        mock_encrypt.assert_not_called()
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0] == {
+            "auth_config": {
+                "client_id": "client",
+                "token_url": "https://oauth.example/token",
+            }
+        }
+
+    async def test_update_platform_tool_oauth_metadata_scrubs_credentials(
+        self, tool_service, mock_supabase_client
+    ):
+        """Discovered OAuth metadata is persisted without credential fields."""
+        tool_id = uuid4()
+        response = MagicMock()
+        response.data = [
+            _platform_tool_row(
+                id=str(tool_id),
+                name="discovered-mcp",
+                auth_type="oauth2",
+                requires_auth=True,
+                auth_config={
+                    "provider": "mcp",
+                    "auth_url": "https://auth.example/authorize",
+                    "token_url": "https://auth.example/token",
+                },
+            )
+        ]
+        mock_supabase_client.table.return_value.execute.return_value = response
+
+        updated, error = await tool_service.update_platform_tool_oauth_metadata(
+            tool_id,
+            {
+                "provider": "mcp",
+                "client_id": "public-client",
+                "client_secret": "must-not-persist-in-auth-config",
+                "auth_url": "https://auth.example/authorize",
+                "token_url": "https://auth.example/token",
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+                "nested": {"refresh_token": "must-not-persist"},
+            },
+        )
+
+        assert error is None
+        assert updated is True
+        update_call = mock_supabase_client.table.return_value.update.call_args
+        assert update_call.args[0] == {
+            "auth_config": {
+                "provider": "mcp",
+                "client_id": "public-client",
+                "auth_url": "https://auth.example/authorize",
+                "token_url": "https://auth.example/token",
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+            }
+        }
+
     async def test_validate_token_status_authenticated(self, tool_service):
         """Test token status validation for authenticated token."""
         from unittest.mock import patch
 
         sensitive_config = {
             "access_token": "valid_token",
-            "expires_at": datetime.now(timezone.utc).timestamp() + 3600  # 1 hour from now
+            "expires_at": datetime.now(timezone.utc).timestamp()
+            + 3600,  # 1 hour from now
         }
 
         # Patch decrypt_data to return the sensitive_config
-        with patch('shared.voice_agents.tool_service.decrypt_data', return_value=sensitive_config):
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value=sensitive_config,
+        ):
             encrypted_config = "encrypted_config"
             status = validate_token_status(encrypted_config)
 
@@ -108,11 +249,14 @@ class TestToolService:
 
         sensitive_config = {
             "access_token": "expired_token",
-            "expires_at": datetime.now(timezone.utc).timestamp() - 3600  # 1 hour ago
+            "expires_at": datetime.now(timezone.utc).timestamp() - 3600,  # 1 hour ago
         }
 
         # Patch decrypt_data to return the sensitive_config
-        with patch('shared.voice_agents.tool_service.decrypt_data', return_value=sensitive_config):
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value=sensitive_config,
+        ):
             encrypted_config = "encrypted_config"
             status = validate_token_status(encrypted_config)
 
@@ -129,12 +273,13 @@ class TestToolService:
         """Test token status validation for API key auth."""
         from unittest.mock import patch
 
-        sensitive_config = {
-            "api_key": "test_api_key_12345"
-        }
+        sensitive_config = {"api_key": "test_api_key_12345"}
 
         # Patch decrypt_data to return to sensitive_config
-        with patch('shared.voice_agents.tool_service.decrypt_data', return_value=sensitive_config):
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value=sensitive_config,
+        ):
             encrypted_config = "encrypted_config"
             status = validate_token_status(encrypted_config, auth_type="api_key")
 
@@ -144,18 +289,21 @@ class TestToolService:
         """Test token status validation for missing API key."""
         from unittest.mock import patch
 
-        sensitive_config = {
-            "other_field": "value"
-        }
+        sensitive_config = {"other_field": "value"}
 
         # Patch decrypt_data to return to sensitive_config
-        with patch('shared.voice_agents.tool_service.decrypt_data', return_value=sensitive_config):
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value=sensitive_config,
+        ):
             encrypted_config = "encrypted_config"
             status = validate_token_status(encrypted_config, auth_type="api_key")
 
         assert status == AuthStatus.NOT_AUTHENTICATED
 
-    async def test_upsert_platform_tool_create(self, tool_service, mock_supabase_client):
+    async def test_upsert_platform_tool_create(
+        self, tool_service, mock_supabase_client
+    ):
         """Test creating new platform tool."""
         from shared.voice_agents.tool_models import PlatformToolCreate
 
@@ -167,7 +315,7 @@ class TestToolService:
             requires_auth=True,
             auth_config={"client_id": "test"},
             tool_functions_schema={"functions": ["test_func"]},
-            is_active=True
+            is_active=True,
         )
 
         tool_data_with_id = {
@@ -181,7 +329,7 @@ class TestToolService:
             "tool_functions_schema": {"functions": ["test_func"]},
             "is_active": True,
             "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z"
+            "updated_at": "2024-01-01T00:00:00Z",
         }
 
         # Create separate execute mocks for different calls
@@ -194,7 +342,7 @@ class TestToolService:
         # Use side_effect on execute to return different responses
         mock_supabase_client.table.return_value.execute.side_effect = [
             mock_check_response,
-            mock_insert_response
+            mock_insert_response,
         ]
 
         result, error = await tool_service.upsert_platform_tool(tool_data)
@@ -218,7 +366,7 @@ class TestToolService:
                 "tool_functions_schema": {"functions": ["func1"]},
                 "is_active": True,
                 "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z"
+                "updated_at": "2024-01-01T00:00:00Z",
             }
         ]
 
@@ -232,7 +380,9 @@ class TestToolService:
         assert len(tools) == 1
         assert tools[0].name == "Tool 1"
 
-    async def test_configure_agent_tool_create(self, tool_service, mock_supabase_client):
+    async def test_configure_agent_tool_create(
+        self, tool_service, mock_supabase_client
+    ):
         """Test creating new agent tool configuration."""
         from unittest.mock import patch
 
@@ -243,21 +393,23 @@ class TestToolService:
             agent_id=agent_tool_id,
             tool_id=tool_id,
             unselected_functions=[],  # No functions excluded
-            sensitive_config={"access_token": "token"}
+            sensitive_config={"access_token": "token"},
         )
 
         # Mock responses
         mock_insert_response = MagicMock()
-        mock_insert_response.data = [{
-            "id": str(agent_tool_id),
-            "agent_id": str(agent_tool_data.agent_id),
-            "tool_id": str(agent_tool_data.tool_id),
-            "unselected_functions": agent_tool_data.unselected_functions,
-            "sensitive_config": "encrypted_config",
-            "is_enabled": True,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z"
-        }]
+        mock_insert_response.data = [
+            {
+                "id": str(agent_tool_id),
+                "agent_id": str(agent_tool_data.agent_id),
+                "tool_id": str(agent_tool_data.tool_id),
+                "unselected_functions": agent_tool_data.unselected_functions,
+                "sensitive_config": "encrypted_config",
+                "is_enabled": True,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            }
+        ]
 
         platform_tool_data = {
             "id": str(tool_id),
@@ -270,7 +422,7 @@ class TestToolService:
             "tool_functions_schema": {},
             "is_active": True,
             "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z"
+            "updated_at": "2024-01-01T00:00:00Z",
         }
         mock_platform_response = MagicMock()
         mock_platform_response.data = [platform_tool_data]
@@ -280,13 +432,16 @@ class TestToolService:
 
         # Set side_effect to return different responses in order
         mock_supabase_client.table.return_value.execute.side_effect = [
-            mock_check_response,    # Check for existing
-            mock_insert_response,   # Insert agent tool
-            mock_platform_response   # Get platform tool for requires_auth
+            mock_check_response,  # Check for existing
+            mock_insert_response,  # Insert agent tool
+            mock_platform_response,  # Get platform tool for requires_auth
         ]
 
         # Patch encrypt_data
-        with patch('shared.voice_agents.tool_service.encrypt_data', return_value="encrypted_config"):
+        with patch(
+            "shared.voice_agents.tool_service.encrypt_data",
+            return_value="encrypted_config",
+        ):
             result, error = await tool_service.configure_agent_tool(agent_tool_data)
 
         assert error is None
@@ -320,10 +475,10 @@ class TestToolService:
                     "tool_functions_schema": {},
                     "is_active": True,
                     "created_at": "2024-01-01T00:00:00Z",
-                    "updated_at": "2024-01-01T00:00:00Z"
+                    "updated_at": "2024-01-01T00:00:00Z",
                 },
                 "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z"
+                "updated_at": "2024-01-01T00:00:00Z",
             }
         ]
 
@@ -347,16 +502,18 @@ class TestToolService:
         update_data = AgentToolUpdate(unselected_functions=["read_emails"])
 
         mock_response = MagicMock()
-        mock_response.data = [{
-            "id": str(agent_tool_id),
-            "agent_id": str(agent_id),
-            "tool_id": str(tool_id),
-            "unselected_functions": ["read_emails"],
-            "sensitive_config": None,
-            "is_enabled": True,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z"
-        }]
+        mock_response.data = [
+            {
+                "id": str(agent_tool_id),
+                "agent_id": str(agent_id),
+                "tool_id": str(tool_id),
+                "unselected_functions": ["read_emails"],
+                "sensitive_config": None,
+                "is_enabled": True,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            }
+        ]
 
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
@@ -402,7 +559,9 @@ class TestPlatformToolPublishLifecycle:
         assert error is None
         eq_mock = mock_supabase_client.table.return_value.eq
         # is_published=True filter was applied.
-        publish_calls = [c for c in eq_mock.call_args_list if c.args == ("is_published", True)]
+        publish_calls = [
+            c for c in eq_mock.call_args_list if c.args == ("is_published", True)
+        ]
         assert len(publish_calls) == 1
 
     async def test_get_platform_tools_include_drafts_skips_published_filter(
@@ -411,7 +570,10 @@ class TestPlatformToolPublishLifecycle:
         """include_drafts=True (platform admin / internal) skips the
         is_published filter so drafts are returned too."""
         mock_response = MagicMock()
-        mock_response.data = [_platform_tool_row(), _platform_tool_row(is_published=False, name="draft")]
+        mock_response.data = [
+            _platform_tool_row(),
+            _platform_tool_row(is_published=False, name="draft"),
+        ]
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         tools, error = await tool_service.get_platform_tools(
@@ -421,7 +583,9 @@ class TestPlatformToolPublishLifecycle:
         assert error is None
         assert len(tools) == 2
         eq_mock = mock_supabase_client.table.return_value.eq
-        publish_calls = [c for c in eq_mock.call_args_list if c.args == ("is_published", True)]
+        publish_calls = [
+            c for c in eq_mock.call_args_list if c.args == ("is_published", True)
+        ]
         assert publish_calls == []  # no is_published filter applied
 
     async def test_get_platform_tools_only_active_adds_is_active_filter(
@@ -435,8 +599,12 @@ class TestPlatformToolPublishLifecycle:
         await tool_service.get_platform_tools(only_active=True)
 
         eq_mock = mock_supabase_client.table.return_value.eq
-        active_calls = [c for c in eq_mock.call_args_list if c.args == ("is_active", True)]
-        publish_calls = [c for c in eq_mock.call_args_list if c.args == ("is_published", True)]
+        active_calls = [
+            c for c in eq_mock.call_args_list if c.args == ("is_active", True)
+        ]
+        publish_calls = [
+            c for c in eq_mock.call_args_list if c.args == ("is_published", True)
+        ]
         assert len(active_calls) == 1
         assert len(publish_calls) == 1
 
@@ -456,7 +624,9 @@ class TestPlatformToolPublishLifecycle:
         mock_check = MagicMock()
         mock_check.data = []  # not existing
         mock_insert = MagicMock()
-        mock_insert.data = [_platform_tool_row(mcp_server_secret_headers="encrypted-blob")]
+        mock_insert.data = [
+            _platform_tool_row(mcp_server_secret_headers="encrypted-blob")
+        ]
         mock_supabase_client.table.return_value.execute.side_effect = [
             mock_check,
             mock_insert,
@@ -492,7 +662,9 @@ class TestPlatformToolPublishLifecycle:
         mock_check = MagicMock()
         mock_check.data = []
         mock_insert = MagicMock()
-        mock_insert.data = [_platform_tool_row(name="no-secret-mcp", mcp_server_secret_headers=None)]
+        mock_insert.data = [
+            _platform_tool_row(name="no-secret-mcp", mcp_server_secret_headers=None)
+        ]
         mock_supabase_client.table.return_value.execute.side_effect = [
             mock_check,
             mock_insert,
@@ -503,6 +675,64 @@ class TestPlatformToolPublishLifecycle:
         assert error is None
         assert result.mcp_secret_headers_configured is False
         assert result.mcp_server_secret_headers is None
+
+    async def test_upsert_encrypts_oauth_client_secret_outside_auth_config(
+        self, tool_service, mock_supabase_client
+    ):
+        """Confidential OAuth client secrets use the encrypted column only."""
+        tool_data = PlatformToolCreate(
+            name="oauth-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            auth_type="oauth2",
+            requires_auth=True,
+            auth_config={
+                "provider": "mcp",
+                "client_id": "public-client",
+                "client_secret": "legacy-plaintext",
+                "token_url": "https://auth.example/token",
+            },
+            oauth_client_secret_input="new-confidential-secret",
+        )
+        mock_check = MagicMock()
+        mock_check.data = []
+        mock_insert = MagicMock()
+        mock_insert.data = [
+            _platform_tool_row(
+                name="oauth-mcp",
+                auth_type="oauth2",
+                requires_auth=True,
+                auth_config={
+                    "provider": "mcp",
+                    "client_id": "public-client",
+                    "token_url": "https://auth.example/token",
+                },
+                oauth_client_secret_encrypted="encrypted-client-secret",
+            )
+        ]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            mock_check,
+            mock_insert,
+        ]
+
+        with patch(
+            "shared.voice_agents.tool_service.encrypt_data",
+            return_value="encrypted-client-secret",
+        ) as mock_encrypt:
+            result, error = await tool_service.upsert_platform_tool(tool_data)
+
+        assert error is None
+        assert result.oauth_client_secret_configured is True
+        inserted = mock_supabase_client.table.return_value.insert.call_args.args[0]
+        assert inserted["auth_config"] == {
+            "provider": "mcp",
+            "client_id": "public-client",
+            "token_url": "https://auth.example/token",
+        }
+        assert inserted["oauth_client_secret_encrypted"] == "encrypted-client-secret"
+        mock_encrypt.assert_called_once_with(
+            {"client_secret": "new-confidential-secret"}
+        )
 
     async def test_upsert_mcp_forces_global_org_even_when_org_supplied(
         self, tool_service, mock_supabase_client
@@ -562,6 +792,59 @@ class TestPlatformToolPublishLifecycle:
         assert secret_tool.mcp_secret_headers_configured is True
         assert plain_tool.mcp_secret_headers_configured is False
 
+    def test_platform_tool_response_redacts_public_credentials_and_oauth_secrets(self):
+        """Catalog responses contain metadata only, never bearer or client secrets."""
+        row = _platform_tool_row(
+            auth_type="oauth2",
+            requires_auth=True,
+            auth_config={
+                "provider": "mcp",
+                "client_id": "public-client",
+                "client_secret": "must-not-return",
+                "nested": {"access_token": "must-not-return"},
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+            },
+            mcp_server_headers={
+                "Authorization": "Bearer platform-secret",
+                "X-Public": "safe",
+            },
+            oauth_client_secret_encrypted="encrypted-client-secret",
+        )
+
+        tool = ToolService._platform_tool_for_response(PlatformTool(**row))
+
+        assert tool.auth_config == {
+            "provider": "mcp",
+            "client_id": "public-client",
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+        }
+        assert tool.mcp_server_headers == {"X-Public": "safe"}
+        assert tool.oauth_client_secret_configured is True
+        assert tool.oauth_client_secret_encrypted is None
+
+    def test_live_connection_discloses_unsupported_auth_method(self):
+        """Encrypted discovery metadata cannot hide an unsupported refresh scheme."""
+        from shared.voice_agents.tool_service import _oauth_response_metadata
+
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={
+                "refresh_token": "live-refresh",
+                "oauth_token_endpoint_auth_method": "private_key_jwt",
+            },
+        ):
+            metadata = _oauth_response_metadata(
+                "oauth2",
+                {
+                    "token_url": "https://oauth.example/token",
+                    "grant_types_supported": ["refresh_token"],
+                },
+                "encrypted-connection",
+            )
+
+        assert metadata["oauth_refresh_mode"] == "manual"
+        assert "client authentication" in metadata["oauth_refresh_message"].lower()
+
     async def test_publish_platform_tool_flips_is_published(
         self, tool_service, mock_supabase_client
     ):
@@ -575,7 +858,9 @@ class TestPlatformToolPublishLifecycle:
             _platform_tool_row(
                 id=str(tool_id),
                 is_published=True,
-                tool_functions_schema={"functions": [{"name": "t", "description": None, "parameters": {}}]},
+                tool_functions_schema={
+                    "functions": [{"name": "t", "description": None, "parameters": {}}]
+                },
             )
         ]
         mock_supabase_client.table.return_value.execute.return_value = mock_update
@@ -590,7 +875,9 @@ class TestPlatformToolPublishLifecycle:
         eq_call = mock_supabase_client.table.return_value.eq.call_args
         assert eq_call.args == ("id", str(tool_id))
 
-    async def test_unpublish_flips_is_published_false(self, tool_service, mock_supabase_client):
+    async def test_unpublish_flips_is_published_false(
+        self, tool_service, mock_supabase_client
+    ):
         tool_id = uuid4()
         mock_update = MagicMock()
         mock_update.data = [_platform_tool_row(id=str(tool_id), is_published=False)]
@@ -625,7 +912,9 @@ class TestPlatformToolPublishLifecycle:
             ]
         }
         mock_response = MagicMock()
-        mock_response.data = [_platform_tool_row(id=str(tool_id), tool_functions_schema=schema)]
+        mock_response.data = [
+            _platform_tool_row(id=str(tool_id), tool_functions_schema=schema)
+        ]
         mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         result, error = await tool_service.update_platform_tool_functions_schema(
@@ -660,12 +949,16 @@ class TestPlatformToolPublishLifecycle:
         """Publishing an MCP row with null tool_functions_schema discovers live
         and persists the tool list so the drawer can render it."""
         tool_id = uuid4()
-        row = _platform_tool_row(id=str(tool_id), is_published=True, tool_functions_schema=None)
+        row = _platform_tool_row(
+            id=str(tool_id), is_published=True, tool_functions_schema=None
+        )
         # First .execute() → is_published update returns the row; second .execute()
         # → the backfill's tool_functions_schema update returns the updated row.
         backfill_row = dict(row)
         backfill_row["tool_functions_schema"] = {
-            "functions": [{"name": "ask_question", "description": "d", "parameters": {}}]
+            "functions": [
+                {"name": "ask_question", "description": "d", "parameters": {}}
+            ]
         }
         mock_supabase_client.table.return_value.execute.side_effect = [
             MagicMock(data=[row]),
@@ -675,9 +968,13 @@ class TestPlatformToolPublishLifecycle:
         with patch.object(
             tool_service,
             "_discover_functions_schema",
-            new=AsyncMock(return_value={
-                "functions": [{"name": "ask_question", "description": "d", "parameters": {}}]
-            }),
+            new=AsyncMock(
+                return_value={
+                    "functions": [
+                        {"name": "ask_question", "description": "d", "parameters": {}}
+                    ]
+                }
+            ),
         ) as mock_discover:
             result, error = await tool_service.publish_platform_tool(tool_id, True)
 
@@ -687,7 +984,9 @@ class TestPlatformToolPublishLifecycle:
         mock_discover.assert_awaited_once()
         # The backfilled schema reached the returned tool.
         assert result.tool_functions_schema == {
-            "functions": [{"name": "ask_question", "description": "d", "parameters": {}}]
+            "functions": [
+                {"name": "ask_question", "description": "d", "parameters": {}}
+            ]
         }
         # A second update persisted tool_functions_schema.
         update_calls = mock_supabase_client.table.return_value.update.call_args_list
@@ -701,9 +1000,13 @@ class TestPlatformToolPublishLifecycle:
         row = _platform_tool_row(
             id=str(tool_id),
             is_published=True,
-            tool_functions_schema={"functions": [{"name": "x", "description": None, "parameters": {}}]},
+            tool_functions_schema={
+                "functions": [{"name": "x", "description": None, "parameters": {}}]
+            },
         )
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[row])
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
 
         with patch.object(tool_service, "_discover_functions_schema") as mock_discover:
             result, error = await tool_service.publish_platform_tool(tool_id, True)
@@ -720,8 +1023,12 @@ class TestPlatformToolPublishLifecycle:
     ):
         """Unpublishing (published=False) never triggers discovery."""
         tool_id = uuid4()
-        row = _platform_tool_row(id=str(tool_id), is_published=False, tool_functions_schema=None)
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[row])
+        row = _platform_tool_row(
+            id=str(tool_id), is_published=False, tool_functions_schema=None
+        )
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
 
         with patch.object(tool_service, "_discover_functions_schema") as mock_discover:
             result, error = await tool_service.publish_platform_tool(tool_id, False)
@@ -737,10 +1044,16 @@ class TestPlatformToolPublishLifecycle:
         """If live discovery fails (returns None), publish still succeeds with
         is_published=True and no backfill update is written."""
         tool_id = uuid4()
-        row = _platform_tool_row(id=str(tool_id), is_published=True, tool_functions_schema=None)
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[row])
+        row = _platform_tool_row(
+            id=str(tool_id), is_published=True, tool_functions_schema=None
+        )
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
 
-        with patch.object(tool_service, "_discover_functions_schema", return_value=None):
+        with patch.object(
+            tool_service, "_discover_functions_schema", return_value=None
+        ):
             result, error = await tool_service.publish_platform_tool(tool_id, True)
 
         assert error is None
@@ -772,7 +1085,11 @@ class TestPlatformToolPublishLifecycle:
             "shared.voice_agents.tools.mcp.json_http_client.list_tools_json_http",
             new_callable=AsyncMock,
             return_value=[
-                McpToolDef(name="read_wiki_contents", description="View docs", input_schema={"type": "object"}),
+                McpToolDef(
+                    name="read_wiki_contents",
+                    description="View docs",
+                    input_schema={"type": "object"},
+                ),
             ],
         ), patch(
             "shared.voice_agents.tools.mcp.models.McpServerConfig"
@@ -802,9 +1119,7 @@ class TestPlatformToolPublishLifecycle:
             "shared.voice_agents.tools.mcp.json_http_client.list_tools_json_http",
             new_callable=AsyncMock,
             side_effect=RuntimeError("boom"),
-        ), patch(
-            "shared.voice_agents.tools.mcp.models.McpServerConfig"
-        ):
+        ), patch("shared.voice_agents.tools.mcp.models.McpServerConfig"):
             schema = await tool_service._discover_functions_schema(row)
 
         assert schema is None
@@ -822,7 +1137,9 @@ class TestPlatformToolPublishLifecycle:
         self, tool_service, mock_supabase_client
     ):
         """No agent_tools referencing the tool → empty list."""
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[])
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
 
         agents, error = await tool_service.get_platform_tool_usage(uuid4())
 
@@ -875,9 +1192,7 @@ class TestPlatformToolPublishLifecycle:
         delete_calls = mock_supabase_client.table.return_value.delete.call_args_list
         assert len(delete_calls) == 1
 
-    async def test_delete_refuses_legacy_tool(
-        self, tool_service, mock_supabase_client
-    ):
+    async def test_delete_refuses_legacy_tool(self, tool_service, mock_supabase_client):
         """Legacy (code-backed) tools are re-seeded on worker startup;
         hard-delete is refused even with force."""
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(
@@ -898,7 +1213,17 @@ class TestPlatformToolPublishLifecycle:
         force; the row is left intact."""
         mock_supabase_client.table.return_value.execute.side_effect = [
             MagicMock(data=[{"tool_source": "mcp"}]),  # fetch row
-            MagicMock(data=[{"agent_id": str(uuid4()), "voice_agents": {"name": "Alex", "organization_id": str(uuid4())}}]),  # usage
+            MagicMock(
+                data=[
+                    {
+                        "agent_id": str(uuid4()),
+                        "voice_agents": {
+                            "name": "Alex",
+                            "organization_id": str(uuid4()),
+                        },
+                    }
+                ]
+            ),  # usage
         ]
 
         result, error = await tool_service.delete_platform_tool(uuid4(), force=False)
@@ -916,7 +1241,17 @@ class TestPlatformToolPublishLifecycle:
         tool_id = uuid4()
         mock_supabase_client.table.return_value.execute.side_effect = [
             MagicMock(data=[{"tool_source": "mcp"}]),  # fetch row
-            MagicMock(data=[{"agent_id": str(uuid4()), "voice_agents": {"name": "Alex", "organization_id": str(uuid4())}}]),  # usage (1 agent)
+            MagicMock(
+                data=[
+                    {
+                        "agent_id": str(uuid4()),
+                        "voice_agents": {
+                            "name": "Alex",
+                            "organization_id": str(uuid4()),
+                        },
+                    }
+                ]
+            ),  # usage (1 agent)
             MagicMock(data=[]),  # agent_tools cascade-detach
             MagicMock(data=[{"id": str(tool_id)}]),  # platform_tools delete
         ]
@@ -938,7 +1273,9 @@ class TestPlatformToolPublishLifecycle:
     ):
         """Deleting a non-existent id returns (None, 'not found') before any
         usage check or delete."""
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(data=[])
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
 
         result, error = await tool_service.delete_platform_tool(uuid4())
 
@@ -961,7 +1298,9 @@ class TestPlatformToolPublishLifecycle:
             mcp_secret_headers_input={"Authorization": "Bearer {{KEY}}"},
         )
         mock_update = MagicMock()
-        mock_update.data = [_platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")]
+        mock_update.data = [
+            _platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")
+        ]
         mock_supabase_client.table.return_value.execute.return_value = mock_update
 
         with patch(
@@ -1030,7 +1369,9 @@ class TestPlatformToolPublishLifecycle:
             # mcp_secret_headers_input omitted → None
         )
         mock_update = MagicMock()
-        mock_update.data = [_platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")]
+        mock_update.data = [
+            _platform_tool_row(id=str(tool_id), mcp_server_secret_headers="enc")
+        ]
         mock_supabase_client.table.return_value.execute.return_value = mock_update
 
         result, error = await tool_service.update_platform_tool(tool_id, tool_data)
@@ -1218,7 +1559,9 @@ class TestUpsertPreservesLegacyPremiumFlag:
         upsert that does not mention is_premium."""
         tool_id = uuid4()
         mock_check = MagicMock()
-        mock_check.data = [_platform_tool_row(id=str(tool_id), tool_source="legacy", is_premium=True)]
+        mock_check.data = [
+            _platform_tool_row(id=str(tool_id), tool_source="legacy", is_premium=True)
+        ]
         mock_update = MagicMock()
         mock_update.data = [
             _platform_tool_row(id=str(tool_id), tool_source="legacy", is_premium=True)

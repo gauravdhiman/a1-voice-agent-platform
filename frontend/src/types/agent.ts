@@ -119,6 +119,13 @@ export interface PlatformToolFunction {
  */
 export type ToolSource = "legacy" | "mcp";
 
+/**
+ * How an OAuth provider keeps a connection alive after its access token
+ * expires. The value is derived by the backend from provider metadata and the
+ * live connection's encrypted refresh-token presence.
+ */
+export type OAuthRefreshMode = "automatic" | "manual" | "unknown";
+
 export interface PlatformTool {
   id: string;
   name: string;
@@ -168,6 +175,14 @@ export interface PlatformTool {
    * returned to the frontend — this flag just drives UI affordances.
    */
   mcp_secret_headers_configured?: boolean;
+  /** Whether OAuth refresh is automatic, manual, or not declared. */
+  oauth_refresh_mode?: OAuthRefreshMode | null;
+  /** Optional platform-admin-declared manual reauthorization interval. */
+  oauth_refresh_interval_minutes?: number | null;
+  /** Safe refresh guidance suitable for platform and organization admins. */
+  oauth_refresh_message?: string | null;
+  /** Whether a confidential OAuth client secret is configured. */
+  oauth_client_secret_configured?: boolean;
 }
 
 /**
@@ -242,6 +257,14 @@ export interface AgentTool {
   auth_status: AuthStatus;
   token_expires_at: number | null;
   connection_status: ConnectionStatus;
+  /** Timestamp of the most recent automatic token refresh, if any. */
+  last_refreshed_at: string | null;
+  /** Actual/expected OAuth refresh behavior for this connection. */
+  oauth_refresh_mode: OAuthRefreshMode | null;
+  /** Optional manual reauthorization interval in minutes. */
+  oauth_refresh_interval_minutes: number | null;
+  /** Safe refresh guidance for the connection administrator. */
+  oauth_refresh_message: string | null;
   created_at: string;
   updated_at: string;
   tool?: PlatformTool;

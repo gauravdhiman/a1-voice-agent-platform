@@ -146,6 +146,43 @@ both trigger alerts. Existing users accepting an invitation trigger a separate
 
 ---
 
+### OAuth connection-attention reminders
+
+The token refresh worker checks every enabled, authenticated OAuth connection on
+its normal background cycle. Automatic renewal uses the narrower
+`TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES` window (15 minutes by default). The
+administrator-attention window is 30 minutes by default and is controlled by
+`TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES`.
+
+The worker does not notify simply because a provider is labeled `unknown`. It
+first tries the same provider-neutral OAuth resolution used for renewal. An
+MCP or native tool with a refresh grant and a standard token endpoint is
+treated as automatically renewable. A notice is sent when the live connection
+has no renewal grant, declares manual renewal, has incomplete/unsupported
+renewal metadata, has no verifiable expiry, or an automatic renewal attempt
+fails. Notices are sent at two lifecycle points: once while expiring and once
+after expiry.
+
+Agent-specific notices go to the `org_admin` members of the organization that
+owns the agent. The message contains the organization, agent, tool, expiry
+status, safe action guidance, and a link to the agent Tools tab. It never
+contains access tokens, refresh tokens, client secrets, OAuth endpoints, or
+provider error payloads. Platform-admin escalation is deliberately not enabled
+for every tenant connection in this first integration to avoid unnecessary
+cross-organization disclosure and alert noise.
+
+The event key is `tools.oauth_reauthorization_required`. Its migration seeds
+the event, while the built-in template remains editable through the existing
+notification administration workflow. Per-recipient idempotency keys combine
+the agent-tool connection, lifecycle phase, expiry timestamp, and recipient;
+the existing notification retry scheduler handles failed email delivery.
+
+This integration currently uses email only. The existing Telegram service is a
+separate platform-admin signup-alert path, and WhatsApp is not implemented.
+Organization-level channel preferences, reminder frequency settings, and
+Telegram/WhatsApp adapters should be delivered as a separate notification
+platform enhancement.
+
 ### 2. Run Database Migration
 
 Apply migrations (includes `platform_notification_settings` and
@@ -183,6 +220,7 @@ This will create the following notification events:
 - `credits.purchased` - Credits purchase confirmation
 - `organization.invitation` - Organization invitation
 - `billing.payment_failed` - Payment failed notification
+- `tools.oauth_reauthorization_required` - Tool connection needs attention
 
 Low-credit alerts are sent to organization admins at 20%, 10%, and 5% of the
 current plan version's included credits. The threshold marker advances only

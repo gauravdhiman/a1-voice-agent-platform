@@ -139,6 +139,42 @@ DB-driven (read `platform_tools.auth_config`), and `TokenRefreshService`
 auto-refreshes the tokens from the same `auth_config`. See RFC §6.4 for the
 full sequence diagram and the one-time GCP setup checklist.
 
+Refresh selection is provider-agnostic: an MCP tool with native provider
+metadata such as Google keeps the native provider refresh payload, while
+generic MCP metadata—or any unregistered provider with complete OAuth
+metadata—uses the standard refresh-token payload with the connection's
+encrypted client ID and resource. Discovery capabilities (token endpoint,
+client-auth method, supported grants, client ID, and resource) are sanitized and
+persisted as platform metadata, with the connection retaining an encrypted
+endpoint fallback. The provider label is not used as an MCP allow-list. Public
+clients, `client_secret_post`, and `client_secret_basic` are supported, as are
+refresh-token rotation, expired-token recovery, and transient token-endpoint
+retries. The connection still requires a durable
+`refresh_token`, a token endpoint, and usable OAuth client metadata; revoked
+tokens or proprietary client-auth schemes require reauthorization.
+
+OAuth configuration is metadata-only. Access/refresh tokens are stored in the
+encrypted `agent_tools.sensitive_config` connection, while confidential MCP
+client secrets use the write-only `oauth_client_secret_input` field and the
+encrypted `platform_tools.oauth_client_secret_encrypted` column. The platform
+admin UI declares whether refresh is automatic, manual, or unknown and shows
+Org Admins the corresponding reauthorization guidance. If a provider returns
+no refresh token, the live connection is always reported as manual even when
+the provider advertises the refresh grant.
+
+Callback state is encrypted and short-lived, carries the PKCE verifier only
+inside the opaque value, and is rejected when tampered with or expired. OAuth
+and MCP endpoints require HTTPS, do not follow redirects, and never echo token
+responses or provider exception bodies to the browser. MCP server URLs are
+validated at discovery, save, and runtime dispatch; the final dispatch check
+re-resolves the host before decrypting or merging credentials. Public MCP
+headers are filtered for credential-like names; use the encrypted secret-header
+field for server credentials. Authorization-server metadata, dynamic client
+registration, callback token exchange, and background refresh also perform
+DNS-aware private-address checks. Providers advertising only proprietary token
+endpoint authentication are disclosed as manual and are not sent a guessed
+`client_secret_post` request.
+
 ### The seeded `Google_calendar_mcp` row (local dev — current state, Path A)
 
 | Field | Value |

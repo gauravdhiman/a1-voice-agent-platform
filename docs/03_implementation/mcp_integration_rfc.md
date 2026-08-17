@@ -82,7 +82,7 @@ sign-off.
 | 3a — voice-ws dispatch branch | ✅ Additive MCP branch in `worker.py` (`_integrate_mcp_agent_tool`), `mcp/dispatch.py` (`mcp_server_config_from_agent_tool`, `build_mcp_livekit_tools`, `build_livekit_tools_for_agent_tool`); legacy `BaseTool`/`LiveKitToolRegistry` path unchanged; fail-soft (a broken MCP server never blocks other tools). **MCP client lifecycle (fixed 2026-07-16):** the entrypoint returns right after `agent_session.start()` while the session runs on, so clients are handed to the job lifecycle via `ctx.add_shutdown_callback` (`_hand_off_mcp_clients_to_session`) and closed on job shutdown — NOT in the entrypoint `finally`, which now only closes clients when setup failed before handoff (`_cleanup_mcp_clients`). (Earlier the `finally` closed them at return time, so every MCP tool failed with `RuntimeError: McpClient is closed` at call time.) 13 tests green (dispatch + voice-ws branch incl. fail-soft + lifecycle). |
 | 3b — First working MCP tool (Google Calendar, in-memory) | ✅ In-memory Google Calendar MCP reference server at `shared/voice_agents/tools/mcp/reference_servers/google_calendar.py` (`list_events` / `create_event` / `get_event` / `check_availability`); full-pipeline e2e (discover → synthesize → invoke) green. Proves the platform plumbing with no third-party OAuth. |
 | 3c — Real Google Calendar MCP (remote server + DB-driven OAuth) | ✅ `Google_calendar_mcp` row repointed at Google's official remote server `https://calendarmcp.googleapis.com/mcp/v1` with `auth_type=oauth2`, `requires_auth=true`, and a real Google OAuth `auth_config` (4 scopes). `start_oauth` / `oauth_callback` in `tool_routes.py` made **DB-driven** (`_resolve_tool_auth_config`: DB-first, legacy registry fallback) so MCP-sourced tools reuse the existing OAuth endpoints; `TokenRefreshService` already reads the same `auth_config` column, so MCP tokens auto-refresh with no extra wiring. 5 new backend tests (`test_tool_oauth_mcp.py`) + 14 existing tool_routes tests green (19 total); 305 green across voice_agents + token-refresh + tool-service suites. Frontend `PlatformTool` type extended with `tool_source` / `mcp_server_url` / `mcp_server_name` / `mcp_server_headers` (3 vitest tests). End-to-end against the real Google API pending the one-time GCP client config (§6.4). |
-| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-08-10:** custom MCP authoring is platform-admin-only (author → test → publish to global catalog); Org Admins are always offered an organization API-key override, while a literal platform key remains an optional fallback. OAuth-enabled servers use the Org Admin's OAuth connection at runtime, and platform-admin OAuth is available separately for catalog discovery. The parser accepts common host-config wrappers and URL aliases, while hosted discovery/runtime support Streamable HTTP JSON and SSE responses. OAuth discovery, PKCE, resource indicators, dynamic client registration, callback handling, and token refresh are supported for generic MCP servers. |
+| 3d — Configure any MCP server from the UI | ✅ See §6.6. **Revised 2026-08-14:** custom MCP authoring is platform-admin-only (author → test → publish to global catalog); Org Admins are always offered an organization API-key override, while a literal platform key remains an optional fallback. OAuth-enabled servers use the Org Admin's OAuth connection at runtime, and platform-admin OAuth is available separately for catalog discovery. The parser accepts common host-config wrappers and URL aliases, while hosted discovery/runtime support Streamable HTTP JSON and SSE responses. OAuth discovery, PKCE, encrypted callback state, resource indicators, dynamic client registration, callback handling, standards-based token refresh, capability disclosure, and token security are supported for generic MCP servers. |
 | 4–5 | Not started (gated per §7). |
 
 **What shipped (no legacy code touched):**
@@ -334,14 +334,100 @@ sequenceDiagram
   `BaseTool` subclass) flow through the same endpoints as legacy tools.
 - `TokenRefreshService` is **already DB-driven** (reads
   `agent_tool.tool.auth_config`), so MCP tokens auto-refresh with no extra
-  wiring once `auth_config` is populated.
+  wiring once `auth_config` is populated. Refresh selection is based on the
+  tool source plus provider capability: registered native providers such as
+  Google retain their native OAuth payload, while generic MCP metadata—or any
+  unregistered provider with complete OAuth metadata—uses the standard
+  OAuth refresh-token payload. A vendor label such as Linear or Notion is not
+  treated as a native-provider requirement.
 - `shared/voice_agents/tools/mcp/dispatch.py` injects the decrypted per-user
   bearer from `agent_tools.sensitive_config` as `Authorization: Bearer` on the
   MCP Streamable HTTP call (unchanged from Phase 3a).
 - Frontend `PlatformTool` type carries `tool_source` / `mcp_server_url` /
-  `mcp_server_name` / `mcp_server_headers`; the OAuth "Connect" button renders
-  purely on `auth_type === "oauth2"`, so no frontend change was needed for the
-  button to appear for the MCP tool.
+  `mcp_server_name` / `mcp_server_headers`; OAuth cards also show the resolved
+  refresh capability and safe reauthorization guidance to platform/org admins.
+
+#### Provider-agnostic OAuth refresh contract
+
+The original failure was not a Linear- or Notion-specific token lifetime
+problem. The background service was running, but its resolver required every
+OAuth provider to exist in the native environment-backed registry (`google`,
+`microsoft`, or `github`). MCP authorization metadata commonly uses the
+vendor's name—or no provider name at all—so the resolver raised
+`Unsupported OAuth provider` before making a refresh request. The UI then
+correctly classified the old `expires_at` as expired and rendered the tool as
+requiring authentication.
+
+The refresh path now has one contract for every OAuth 2.0 tool:
+
+| Stage | Behavior |
+|---|---|
+| Candidate selection | Checks every enabled OAuth `agent_tools` row on the periodic service; tokens inside the expiry window **or already expired with a refresh token** are candidates. |
+| Flow selection | Registered native providers retain provider-manager behavior. MCP sources, explicit generic OAuth metadata, and unregistered providers use the tool's token URL/client metadata; the vendor name is never an allow-list. |
+| Client authentication | Supports public clients, `client_secret_post`, and `client_secret_basic`; MCP resource indicators are included when present. |
+| Provider response | Requires a new access token, accepts numeric/string `expires_in`, applies a one-hour fallback when omitted, and preserves the previous refresh token unless a non-empty rotated token is returned. |
+| Reliability | Uses a Postgres lease so multiple backend instances cannot refresh the same connection concurrently, retries transport/429/5xx failures with backoff, and persists the encrypted result before releasing the lease. |
+
+The same periodic pass also evaluates the wider administrator-attention
+window (`TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES`, 30 minutes by default). It
+notifies organization admins through the existing durable email notification
+service when a live MCP or native connection has no renewal grant, declares
+manual renewal, has incomplete/unsupported renewal metadata, or an automatic
+renewal attempt fails. It sends a separate follow-up after expiry. Unknown
+provider labels are not enough to trigger a notice: standard refresh metadata
+is resolved first, so a future MCP or native provider remains automatic when
+the live connection can be renewed.
+
+Delivery uses the `tools.oauth_reauthorization_required` event and an
+idempotency key per connection, lifecycle phase, expiry timestamp, and
+organization admin. The email contains only safe tool/agent status and a
+reconnect link; it never contains OAuth credentials or provider error payloads.
+The current Telegram path is limited to platform signup alerts and there is no
+WhatsApp adapter. Organization channel preferences and reminder-frequency
+settings remain a separate notification-platform task.
+
+This covers all standards-compliant OAuth 2.0 refresh-token integrations that
+return a durable `refresh_token` and publish a usable token endpoint. It cannot
+refresh a connection that never received a refresh token, has been revoked by
+the provider, or uses a proprietary client authentication scheme such as
+mTLS/private-key JWT without adding that scheme's metadata and key handling.
+Those cases must remain visibly reauthentication-required rather than being
+silently reported as connected.
+
+#### OAuth capability disclosure and security contract
+
+The platform exposes `oauth_refresh_mode`,
+`oauth_refresh_interval_minutes`, and `oauth_refresh_message` on platform and
+agent-tool responses. Platform admins can declare `automatic`, `manual`, or
+`unknown` support while authoring a tool. The live agent connection takes
+precedence: if the provider does not return a durable refresh token, the UI
+reports manual reauthorization even when the server advertises
+`refresh_token`. This prevents an access-token-only grant from being shown as
+permanently connected. Providers that revoke refresh grants, require
+proprietary client authentication, or omit the token endpoint remain explicitly
+reauthentication-required; no implementation can guarantee indefinite access
+after a provider revokes a grant.
+
+Security boundaries are shared by native and MCP OAuth:
+
+- Agent access/refresh tokens are stored only in encrypted
+  `agent_tools.sensitive_config`. Confidential platform OAuth client secrets
+  use the write-only `oauth_client_secret_input` field and encrypted
+  `platform_tools.oauth_client_secret_encrypted`; `auth_config` is metadata-only.
+  Backend startup performs an idempotent scrub/migration for historical rows
+  that contain client secrets in `auth_config` and fails closed if it cannot
+  complete.
+- Authorization/token/registration URLs require HTTPS and are validated against
+  private-address, URL-userinfo, and fragment abuse. OAuth and MCP HTTP clients
+  do not follow redirects. Loopback HTTP is only enabled explicitly for local
+  development.
+- Callback state is encrypted with a deployment secret, contains the PKCE
+  verifier only inside the opaque value, and expires after ten minutes. MCP
+  uses S256 PKCE and resource indicators. Unsigned legacy state is rejected.
+- Public MCP headers are filtered for credential-like names; runtime OAuth
+  bearer injection overrides stale static `Authorization` headers. Provider
+  errors and token responses are reduced to generic API errors, and token
+  values are never written to logs or catalog responses.
 
 **Scopes requested** (in `auth_config.scopes`):
 `calendar.calendarlist.readonly`, `calendar.events.freebusy`,
@@ -866,7 +952,7 @@ An OAuth entry may provide `authorization_endpoint`/`auth_url`,
 `token_endpoint`/`token_url`, `scopes`, `client_id`, `resource`, and optional
 `registration_endpoint`. If endpoints are omitted, the backend discovers
 Protected Resource Metadata and OAuth/OIDC authorization-server metadata from
-the MCP URL. Authorization uses a signed short-lived state, PKCE, and the MCP
+the MCP URL. Authorization uses encrypted short-lived state, PKCE, and the MCP
 resource indicator. When a public client ID is not configured, the backend can
 use dynamic client registration when the server advertises a registration
 endpoint.
@@ -884,10 +970,20 @@ their own key before the agent can call the server.
 - **SSRF guard** (`shared/voice_agents/tools/mcp/security.py::validate_mcp_server_url`):
   https-only (plain http to loopback gated by `MCP_ALLOW_LOCAL_URLS` for
   dev/test); blocks private/loopback/link-local/metadata IPs (127/8, 10/8,
-  172.16/12, 192.168/16, 169.254.169.254, ::1, fc00/7). Enforced at discover
-  time and save time. Runtime re-validation is deferred (TODO in
-  `dispatch.py`) — it would add a per-session DNS resolve and break loopback
-  dev/test servers; save-time validation is the gate.
+  172.16/12, 192.168/16, 169.254.169.254, ::1, fc00/7). Enforced at discover,
+  save, and runtime dispatch. The runtime check repeats DNS resolution immediately
+  before decrypting or merging connection credentials, closing the saved-URL/DNS
+  rebinding window; tests mock that DNS boundary when exercising header merging.
+- **OAuth endpoint SSRF guard** (`shared/voice_agents/tools/base/oauth_support.py`):
+  authorization-server metadata, dynamic registration, callback token exchange,
+  and background refresh perform DNS-aware validation and reject private,
+  loopback, link-local, reserved, or unspecified results. Display-only URL
+  validation remains separate from the server-side network boundary; redirect
+  URIs are still HTTPS/loopback-policy checked but are not contacted by the
+  backend. When `MCP_ALLOW_LOCAL_URLS=true`, an explicitly configured
+  `localhost`/loopback callback remains usable for a locally run app even when
+  the app is pointed at staging; the same exception is never applied to a
+  server-side OAuth endpoint.
 - **Authoring is platform-admin-only** (`assert_platform_role`) on every
   authoring endpoint: `POST /tools/platform` (create), `POST /tools/platform/{id}/publish`
   + `/unpublish`, `PUT /tools/platform/{id}` (edit), `DELETE /tools/platform/{id}`,
@@ -1001,9 +1097,11 @@ Each step is independently shippable; the test suite stays green at every step
    `tool_source = 'mcp_remote'`. The legacy `BaseTool` versions stay in place
    and remain selectable. Per-org/agent enablement decides which path a given
    agent uses. **No legacy file is deleted in this phase.**
-5. **Shrink `TokenRefreshService`'s *new* usage** to client-injected-credential
-   servers only — but **do not remove** its handling of the legacy native tools.
-   Server-managed-OAuth MCP servers handle their own refresh.
+5. **Keep `TokenRefreshService` as the single platform refresh path** for both
+   native and MCP OAuth connections. It uses provider-specific adapters when
+   available and a standards-based resolver for any tool with durable refresh
+   metadata; only access-token-only grants, revoked grants, and unsupported
+   proprietary client-auth schemes remain manual/reauthentication-required.
 6. **For internal/niche tools with no community MCP server**, write a **thin**
    MCP server (FastMCP in Python is ~tens of lines per tool) and deploy it as
    its own small service.

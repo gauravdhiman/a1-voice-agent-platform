@@ -6,6 +6,19 @@ retry scheduler evaluates the 20%, 10%, and 5% thresholds and delivers to
 organization admins. Resend is the initial adapter behind a provider-neutral
 email contract.
 
+OAuth connection-attention reminders use this same notification service. The
+token refresh worker checks every enabled, authenticated OAuth connection on
+its normal cycle. A connection that cannot be renewed automatically is sent to
+organization admins once when it is inside the 30-minute attention window and
+once again after it expires. Stable idempotency keys prevent duplicate emails;
+the existing notification retry scheduler handles delivery failures.
+
+The current integration delivers these reminders by email. The existing
+Telegram implementation is a separate platform-admin signup-alert path, and
+there is no WhatsApp adapter yet. Organization notification preferences,
+channel selection, and configurable reminder frequency are intentionally left
+for a separate notification-platform task.
+
 ## Quick Setup
 
 ### 1. Configure Environment
@@ -32,7 +45,8 @@ This creates notification tables, `email_verification_tokens`, and
 `platform_notification_settings`.
 
 Migration `20260811000004` also seeds the required `credits.low_balance` event;
-the event seed script remains useful for the other built-in templates.
+`20260817000001` seeds the OAuth connection-attention event. The event seed
+script remains useful for the other built-in templates.
 
 ### 3. Seed Events
 
@@ -46,6 +60,9 @@ Platform admins: open **Platform → Notifications** (`/platform/notifications`)
 
 - Verification email **from address** and **from name** (Resend)
 - Telegram **bot token**, **chat ID**, and enable/disable alerts
+
+OAuth attention reminders do not currently use these Telegram settings; they
+are sent through the durable email notification path.
 
 ## Signup Verification Flow
 

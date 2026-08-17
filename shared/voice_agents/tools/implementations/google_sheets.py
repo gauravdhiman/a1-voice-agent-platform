@@ -1,7 +1,7 @@
-from typing import Any, Optional, List
-import httpx
 import logging
-from shared.voice_agents.tools.base.tool_context import ToolContext
+from typing import Any, List, Optional
+
+import httpx
 from pydantic import Field
 
 from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
@@ -11,6 +11,7 @@ from shared.voice_agents.tools.base.base_tool import (
     BaseTool,
     ToolMetadata,
 )
+from shared.voice_agents.tools.base.tool_context import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,9 @@ class GoogleSheetsTool(BaseTool):
             Dict containing values from the specified range (for internal use only)
         """
         # Log function call for debugging
-        logger.info(f"get_sheet_values called with spreadsheet_id={spreadsheet_id[:15] if spreadsheet_id else 'EMPTY'}..., range={range}")
+        logger.info(
+            f"get_sheet_values called with spreadsheet_id={spreadsheet_id[:15] if spreadsheet_id else 'EMPTY'}..., range={range}"
+        )
 
         if not spreadsheet_id:
             logger.error("get_sheet_values: spreadsheet_id is empty or missing")
@@ -99,20 +102,26 @@ class GoogleSheetsTool(BaseTool):
             parts = spreadsheet_id.split("/spreadsheets/d/")
             if len(parts) > 1:
                 spreadsheet_id = parts[1].split("/")[0].split("?")[0]
-                logger.info(f"get_sheet_values: Extracted ID from URL: {spreadsheet_id[:15]}...")
+                logger.info(
+                    f"get_sheet_values: Extracted ID from URL: {spreadsheet_id[:15]}..."
+                )
 
         # Validate spreadsheet_id format (should be alphanumeric with some special chars)
         if len(spreadsheet_id) < 10 or " " in spreadsheet_id:
-            logger.error(f"get_sheet_values: Invalid spreadsheet_id format: {spreadsheet_id}")
+            logger.error(
+                f"get_sheet_values: Invalid spreadsheet_id format: {spreadsheet_id}"
+            )
             return {
                 "error": True,
-                "message": "Invalid spreadsheet ID format. Please provide a valid spreadsheet ID."
+                "message": "Invalid spreadsheet ID format. Please provide a valid spreadsheet ID.",
             }
 
         # Validate range format - basic check for A1 notation
         if "!" not in range and range != "":
             # If no sheet specified, default to Sheet1
-            logger.warning(f"get_sheet_values: No sheet specified in range '{range}', defaulting to Sheet1")
+            logger.warning(
+                f"get_sheet_values: No sheet specified in range '{range}', defaulting to Sheet1"
+            )
             range = f"Sheet1!{range}"
 
         headers = {
@@ -120,7 +129,7 @@ class GoogleSheetsTool(BaseTool):
         }
 
         url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range}"
-        logger.info(f"get_sheet_values: Calling URL: {url}")
+        logger.info("get_sheet_values: calling Google Sheets API")
 
         async with httpx.AsyncClient() as client:
             try:
@@ -134,15 +143,9 @@ class GoogleSheetsTool(BaseTool):
                     "major_dimension": data.get("majorDimension", "ROWS"),
                 }
             except httpx.HTTPStatusError as e:
-                error_body = ""
-                try:
-                    error_body = e.response.text
-                except Exception:
-                    pass
                 logger.error(
-                    f"get_sheet_values: HTTP {e.response.status_code} error. "
-                    f"URL: {url}, "
-                    f"Response: {error_body[:500]}"
+                    "get_sheet_values: Google Sheets API returned HTTP %s",
+                    e.response.status_code,
                 )
                 return self._handle_api_error(e, "get_sheet_values")
 
@@ -310,12 +313,14 @@ class GoogleSheetsTool(BaseTool):
             for row_idx, row in enumerate(values):
                 for col_idx, cell_value in enumerate(row):
                     if search_lower in str(cell_value).lower():
-                        matches.append({
-                            "row": row_idx + 1,  # 1-indexed for A1 notation
-                            "column": chr(65 + col_idx),  # A, B, C, etc.
-                            "cell": f"{chr(65 + col_idx)}{row_idx + 1}",
-                            "value": cell_value,
-                        })
+                        matches.append(
+                            {
+                                "row": row_idx + 1,  # 1-indexed for A1 notation
+                                "column": chr(65 + col_idx),  # A, B, C, etc.
+                                "cell": f"{chr(65 + col_idx)}{row_idx + 1}",
+                                "value": cell_value,
+                            }
+                        )
 
             return {
                 "matches": matches,
@@ -361,12 +366,14 @@ class GoogleSheetsTool(BaseTool):
         # Prepare sheet properties
         sheets = []
         for i, name in enumerate(sheet_names):
-            sheets.append({
-                "properties": {
-                    "title": name,
-                    "sheetId": i + 1,
+            sheets.append(
+                {
+                    "properties": {
+                        "title": name,
+                        "sheetId": i + 1,
+                    }
                 }
-            })
+            )
 
         body = {
             "properties": {
@@ -388,12 +395,13 @@ class GoogleSheetsTool(BaseTool):
                 "spreadsheet_id": data.get("spreadsheetId"),
                 "title": data.get("properties", {}).get("title"),
                 "sheets": [
-                    sheet["properties"]["title"]
-                    for sheet in data.get("sheets", [])
+                    sheet["properties"]["title"] for sheet in data.get("sheets", [])
                 ],
             }
 
-    def _handle_api_error(self, error: httpx.HTTPStatusError, operation: str = "API call") -> dict[str, Any]:
+    def _handle_api_error(
+        self, error: httpx.HTTPStatusError, operation: str = "API call"
+    ) -> dict[str, Any]:
         """Handle API errors and return user-friendly error messages.
 
         Args:
@@ -405,26 +413,31 @@ class GoogleSheetsTool(BaseTool):
         """
         status_code = error.response.status_code
         error_detail = ""
-        error_code = ""
         try:
             error_data = error.response.json()
-            error_detail = error_data.get("error", {}).get("message", str(error))
-            error_code = error_data.get("error", {}).get("code", "")
+            error_body = (
+                error_data.get("error", {}) if isinstance(error_data, dict) else {}
+            )
+            if isinstance(error_body, dict):
+                error_detail = str(error_body.get("message", ""))
         except Exception:
-            error_detail = str(error)
+            # Provider error bodies and exception strings may contain echoed
+            # bearer grants or credential-bearing URLs; keep them out of logs
+            # and tool responses.
+            error_detail = ""
 
-        # Log the full error for debugging
         logger.error(
-            f"Google Sheets {operation} failed: "
-            f"status={status_code}, "
-            f"error_code={error_code}, "
-            f"detail={error_detail}, "
-            f"url={error.request.url if error.request else 'N/A'}"
+            "Google Sheets %s failed: status=%s",
+            operation,
+            status_code,
         )
 
         if status_code == 403:
             # Check if it's a scope/permission issue
-            scope_error = "insufficientPermissions" in str(error_detail) or "scope" in str(error_detail).lower()
+            scope_error = (
+                "insufficientPermissions" in str(error_detail)
+                or "scope" in str(error_detail).lower()
+            )
 
             if scope_error:
                 logger.error(
@@ -444,7 +457,8 @@ class GoogleSheetsTool(BaseTool):
                     "2. Use your available communication tools (email/text) to notify the owner\n"
                     "3. Inform the owner that Google Sheets re-authentication is needed\n"
                     "4. Provide the owner with this reference: 'Google Sheets authorization failed'\n\n"
-                    "For your reference only - Technical details: " + error_detail
+                    "No provider error details are included because they may "
+                    "contain credential material."
                 ),
             }
         elif status_code == 401:
@@ -516,9 +530,9 @@ class GoogleSheetsTool(BaseTool):
         if not self.sensitive_config or not self.sensitive_config.access_token:
             raise ValueError("No access token found in sensitive config")
 
-        # Log token info for debugging (token prefix only for security)
-        token_preview = self.sensitive_config.access_token[:20] + "..." if len(self.sensitive_config.access_token) > 20 else "invalid"
-        logger.info(f"list_user_spreadsheets called with access_token prefix: {token_preview}")
+        # Never log access-token values or prefixes. The request is already
+        # observable through the tool span and the token must remain secret.
+        logger.info("list_user_spreadsheets called with an authenticated token")
 
         headers = {
             "Authorization": f"Bearer {self.sensitive_config.access_token}",
@@ -535,7 +549,9 @@ class GoogleSheetsTool(BaseTool):
 
         # Add query filter if provided
         if query:
-            params["q"] = f"mimeType='application/vnd.google-apps.spreadsheet' and {query}"
+            params["q"] = (
+                f"mimeType='application/vnd.google-apps.spreadsheet' and {query}"
+            )
 
         async with httpx.AsyncClient() as client:
             try:
@@ -554,8 +570,14 @@ class GoogleSheetsTool(BaseTool):
                         "title": file.get("name"),
                         "created_time": file.get("createdTime"),
                         "modified_time": file.get("modifiedTime"),
-                        "last_modified_by": file.get("lastModifyingUser", {}).get("displayName") if file.get("lastModifyingUser") else None,
-                        "owners": [owner.get("displayName") for owner in file.get("owners", [])],
+                        "last_modified_by": (
+                            file.get("lastModifyingUser", {}).get("displayName")
+                            if file.get("lastModifyingUser")
+                            else None
+                        ),
+                        "owners": [
+                            owner.get("displayName") for owner in file.get("owners", [])
+                        ],
                         "description": file.get("description"),
                     }
 
@@ -631,8 +653,14 @@ class GoogleSheetsTool(BaseTool):
                         "title": file.get("name"),
                         "created_time": file.get("createdTime"),
                         "modified_time": file.get("modifiedTime"),
-                        "last_modified_by": file.get("lastModifyingUser", {}).get("displayName") if file.get("lastModifyingUser") else None,
-                        "owners": [owner.get("displayName") for owner in file.get("owners", [])],
+                        "last_modified_by": (
+                            file.get("lastModifyingUser", {}).get("displayName")
+                            if file.get("lastModifyingUser")
+                            else None
+                        ),
+                        "owners": [
+                            owner.get("displayName") for owner in file.get("owners", [])
+                        ],
                         "description": file.get("description"),
                     }
 
@@ -709,8 +737,15 @@ class GoogleSheetsTool(BaseTool):
                     "mime_type": drive_data.get("mimeType"),
                     "created_time": drive_data.get("createdTime"),
                     "modified_time": drive_data.get("modifiedTime"),
-                    "last_modified_by": drive_data.get("lastModifyingUser", {}).get("displayName") if drive_data.get("lastModifyingUser") else None,
-                    "owners": [owner.get("displayName") for owner in drive_data.get("owners", [])],
+                    "last_modified_by": (
+                        drive_data.get("lastModifyingUser", {}).get("displayName")
+                        if drive_data.get("lastModifyingUser")
+                        else None
+                    ),
+                    "owners": [
+                        owner.get("displayName")
+                        for owner in drive_data.get("owners", [])
+                    ],
                     "description": drive_data.get("description"),
                     "web_view_link": drive_data.get("webViewLink"),
                     "icon_link": drive_data.get("iconLink"),
@@ -761,13 +796,17 @@ class GoogleSheetsTool(BaseTool):
             parts = spreadsheet_id.split("/spreadsheets/d/")
             if len(parts) > 1:
                 spreadsheet_id = parts[1].split("/")[0].split("?")[0]
-                logger.info(f"get_spreadsheet_info: Extracted ID from URL: {spreadsheet_id[:15]}...")
+                logger.info(
+                    f"get_spreadsheet_info: Extracted ID from URL: {spreadsheet_id[:15]}..."
+                )
 
         if len(spreadsheet_id) < 10 or " " in spreadsheet_id:
-            logger.error(f"get_spreadsheet_info: Invalid spreadsheet_id format: {spreadsheet_id}")
+            logger.error(
+                f"get_spreadsheet_info: Invalid spreadsheet_id format: {spreadsheet_id}"
+            )
             return {
                 "error": True,
-                "message": "Invalid spreadsheet ID format. Please provide a valid spreadsheet ID from list_user_spreadsheets."
+                "message": "Invalid spreadsheet ID format. Please provide a valid spreadsheet ID from list_user_spreadsheets.",
             }
 
         headers = {
@@ -775,7 +814,7 @@ class GoogleSheetsTool(BaseTool):
         }
 
         url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}"
-        logger.info(f"get_spreadsheet_info: Calling URL: {url}")
+        logger.info("get_spreadsheet_info: calling Google Sheets API")
 
         async with httpx.AsyncClient() as client:
             try:
@@ -791,21 +830,17 @@ class GoogleSheetsTool(BaseTool):
                             "sheet_id": sheet["properties"]["sheetId"],
                             "title": sheet["properties"]["title"],
                             "index": sheet["properties"]["index"],
-                            "grid_properties": sheet["properties"].get("gridProperties", {}),
+                            "grid_properties": sheet["properties"].get(
+                                "gridProperties", {}
+                            ),
                         }
                         for sheet in data.get("sheets", [])
                     ],
                 }
             except httpx.HTTPStatusError as e:
-                error_body = ""
-                try:
-                    error_body = e.response.text
-                except Exception:
-                    pass
                 logger.error(
-                    f"get_spreadsheet_info: HTTP {e.response.status_code} error. "
-                    f"URL: {url}, "
-                    f"Response: {error_body[:500]}"
+                    "get_spreadsheet_info: Google Sheets API returned HTTP %s",
+                    e.response.status_code,
                 )
                 return self._handle_api_error(e, "get_spreadsheet_info")
 
@@ -917,11 +952,13 @@ class GoogleSheetsTool(BaseTool):
             for sheet in data.get("sheets", []):
                 properties = sheet.get("properties", {})
                 sheet_title_prop = properties.get("title", "")
-                all_sheets.append({
-                    "sheet_id": properties.get("sheetId"),
-                    "title": sheet_title_prop,
-                    "index": properties.get("index"),
-                })
+                all_sheets.append(
+                    {
+                        "sheet_id": properties.get("sheetId"),
+                        "title": sheet_title_prop,
+                        "index": properties.get("index"),
+                    }
+                )
 
                 # Case-insensitive match
                 if sheet_title_prop.lower() == sheet_title.lower():
@@ -983,7 +1020,7 @@ class GoogleSheetsTool(BaseTool):
                 response = await client.get(
                     f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}",
                     headers=headers,
-                    params={"includeGridData": "false"}
+                    params={"includeGridData": "false"},
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -1001,8 +1038,14 @@ class GoogleSheetsTool(BaseTool):
                             "grid_properties": properties.get("gridProperties", {}),
                             "protected_ranges": sheet.get("protectedRanges", []),
                             "basic_filter": sheet.get("basicFilter"),
-                            "conditional_formats": len(sheet.get("conditionalFormats", [])),
-                            "data_validations": len(sheet.get("dataValidations", {}).get("dataValidationRanges", [])),
+                            "conditional_formats": len(
+                                sheet.get("conditionalFormats", [])
+                            ),
+                            "data_validations": len(
+                                sheet.get("dataValidations", {}).get(
+                                    "dataValidationRanges", []
+                                )
+                            ),
                         }
                         break
 
@@ -1019,15 +1062,9 @@ class GoogleSheetsTool(BaseTool):
                         "message": f"Sheet with ID {sheet_id} not found in spreadsheet",
                     }
             except httpx.HTTPStatusError as e:
-                error_body = ""
-                try:
-                    error_body = e.response.text
-                except Exception:
-                    pass
                 logger.error(
-                    f"get_sheet_metadata: HTTP {e.response.status_code} error. "
-                    f"spreadsheet_id={spreadsheet_id}, sheet_id={sheet_id}, "
-                    f"Response: {error_body[:500]}"
+                    "get_sheet_metadata: Google Sheets API returned HTTP %s",
+                    e.response.status_code,
                 )
                 return self._handle_api_error(e, "get_sheet_metadata")
 
