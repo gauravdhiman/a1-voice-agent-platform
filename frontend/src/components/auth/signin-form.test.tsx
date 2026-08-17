@@ -71,7 +71,9 @@ describe("SignInForm credential feedback", () => {
       success: true,
       data: { exists: true, signInMethods: ["email"] },
     });
-    signInMock.mockRejectedValue(new Error("Invalid email or password"));
+    signInMock.mockRejectedValue(
+      new Error("Invalid credentials. Please try again with the correct credentials."),
+    );
 
     render(<SignInForm />);
     fireEvent.change(screen.getByLabelText("Email Address"), {
