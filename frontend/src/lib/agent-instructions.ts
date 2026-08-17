@@ -22,7 +22,7 @@ Describe what this agent should help callers accomplish.
 
 {{org.business_details}}
 
-# Procedures
+# Instructions
 
 ## How to help callers
 1. Describe the steps this agent should follow.
@@ -77,12 +77,17 @@ function buildIdentitySection(role: string, tone: string): string {
 }
 
 /**
- * Convert a reusable voice template into the long-form Markdown field.
+ * Convert a reusable use case template into the long-form Markdown field.
  *
  * Role and communication style stay in their dedicated fields. The template's
- * mission, business context, greeting, and procedures become Markdown content.
+ * mission, business context, greeting, and instructions become Markdown content.
  */
-export function buildMarkdownFromTemplate(template: VoiceTemplate): string {
+export function buildMarkdownFromTemplate(
+  template: Pick<
+    VoiceTemplate,
+    "mission" | "greeting" | "custom_instructions"
+  >,
+): string {
   const sections: string[] = [];
 
   if (template.mission) {
@@ -101,7 +106,7 @@ export function buildMarkdownFromTemplate(template: VoiceTemplate): string {
 
   if (template.custom_instructions) {
     sections.push(
-      `# Procedures\n\n${toRuntimeTemplateVariables(template.custom_instructions)}`,
+      `# Instructions\n\n${toRuntimeTemplateVariables(template.custom_instructions)}`,
     );
   }
 

@@ -146,6 +146,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       } else {
         breadcrumbs.push({ name: "Dashboard", href: null });
       }
+    } else if (pathname === "/platform/templates") {
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Use Case Templates", href: null });
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
     } else if (pathname === "/platform/tools") {
       // Mirror /platform/skills: platform admins see the route's own title;
       // anyone else (e.g. a regular member who somehow lands here) sees the

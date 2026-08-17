@@ -89,7 +89,7 @@ function buildCreateAgentRequest(
       markdownSections.push(`# Default Greeting\n\n${greeting}`);
     }
     if (template.custom_instructions) {
-      markdownSections.push(`# Procedures\n\n${template.custom_instructions}`);
+      markdownSections.push(`# Instructions\n\n${template.custom_instructions}`);
     }
   } else {
     markdownSections.push(

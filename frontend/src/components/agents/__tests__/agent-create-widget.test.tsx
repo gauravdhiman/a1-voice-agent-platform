@@ -39,11 +39,15 @@ describe("TemplateSelectionStage", () => {
   });
 
   it("opens the full template preview in a right drawer", async () => {
-    render(<TemplateSelectionStage onSelect={vi.fn()} onSkip={vi.fn()} />);
+    const onSelect = vi.fn();
+    render(<TemplateSelectionStage onSelect={onSelect} onSkip={vi.fn()} />);
 
     await waitFor(() =>
       expect(screen.getByText("Dental Receptionist")).toBeInTheDocument(),
     );
+    expect(
+      screen.getByText(/Pick a use case template to pre-fill your agent configuration/),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
 
@@ -75,6 +79,17 @@ describe("TemplateSelectionStage", () => {
     expect(
       within(drawer).getByText("Always confirm appointment details."),
     ).toBeInTheDocument();
+    expect(within(drawer).getByText("Instructions")).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByText("View generated Markdown"));
+    await waitFor(() =>
+      expect(within(drawer).getByText("Used as Additional Instructions")).toBeInTheDocument(),
+    );
+    fireEvent.click(within(drawer).getByText("View Markdown source"));
+    expect(within(drawer).getByText(/# Mission/)).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Use this template" }));
+    expect(onSelect).toHaveBeenCalledWith(template);
   });
 
   it("shows empty states for optional template details", async () => {

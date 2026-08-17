@@ -22,14 +22,15 @@ const TEMPLATE: VoiceTemplate = {
 };
 
 describe("agent instruction helpers", () => {
-  it("converts a voice template into markdown instruction content", () => {
+  it("converts a use case template into markdown instruction content", () => {
     const markdown = buildMarkdownFromTemplate(TEMPLATE);
 
     expect(markdown).toContain("# Mission");
     expect(markdown).toContain("Help patients schedule appointments.");
     expect(markdown).toContain("# Default Greeting");
     expect(markdown).toContain("{{org.name}}");
-    expect(markdown).toContain("# Procedures");
+    expect(markdown).toContain("# Instructions");
+    expect(markdown).not.toContain("# Procedures");
     expect(markdown).toContain("Always confirm appointment details.");
     expect(markdown).not.toContain("# Identity and Persona");
   });
@@ -62,7 +63,7 @@ describe("agent instruction helpers", () => {
 
   it("provides a markdown placeholder without duplicating role or style fields", () => {
     expect(DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER).toContain("# Mission");
-    expect(DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER).toContain("# Procedures");
+    expect(DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER).toContain("# Instructions");
     expect(DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER).not.toContain(
       "# Identity and Persona",
     );

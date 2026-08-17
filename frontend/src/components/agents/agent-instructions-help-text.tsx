@@ -28,8 +28,9 @@ export function AgentInstructionsHelpText({
       >
         markdown format
       </a>{" "}
-      for the mission, procedures, and business-specific guidance. The agent
-      role and communication style are managed above. Use{" "}
+      for the mission, instructions, and business-specific guidance. Templates
+      populate this additional instructions field; the agent role and
+      communication style are managed above. Use{" "}
       <code className="text-xs bg-muted px-1 py-0.5 rounded">
         {"{{org.name}}"}
       </code>

@@ -41,7 +41,10 @@ from src.voice_agents import (
     tool_router,
     voice_router,
 )
-from src.voice_templates import voice_templates_router
+from src.voice_templates import (
+    platform_voice_templates_router,
+    voice_templates_router,
+)
 
 from shared.config import settings, supabase_config
 
@@ -184,6 +187,7 @@ def create_app() -> FastAPI:
 
     # Include voice templates routes
     app.include_router(voice_templates_router)
+    app.include_router(platform_voice_templates_router)
 
     # Include call logs routes
     app.include_router(call_logs_router)

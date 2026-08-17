@@ -294,7 +294,7 @@ export default function AgentDetailPage() {
     }
   }, [agent?.organization_id]);
 
-  // Load voice templates for the "Insert template" dropdown
+  // Load use case templates for the "Insert template" dropdown
   React.useEffect(() => {
     voiceTemplateService
       .listTemplates()
@@ -858,12 +858,12 @@ export default function AgentDetailPage() {
                 </div>
               </div>
 
-              {/* Agent Instructions (Markdown) */}
+              {/* Additional Instructions (Markdown) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <Label htmlFor="instructions_markdown" className="text-sm font-medium">
-                      Agent Instructions
+                      Additional Instructions
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       <AgentInstructionsHelpText />
