@@ -34,5 +34,11 @@ def test_formats_generic_http_status():
     assert "HTTP 502" in message
 
 
-def test_passes_through_plain_exception():
-    assert format_mcp_client_error(RuntimeError("boom")) == "boom"
+def test_redacts_arbitrary_remote_exception_details():
+    """Remote error text must not echo a bearer or provider response body."""
+    message = format_mcp_client_error(
+        RuntimeError("refresh_token=do-not-return-to-the-browser")
+    )
+
+    assert message == "MCP request failed"
+    assert "do-not-return" not in message

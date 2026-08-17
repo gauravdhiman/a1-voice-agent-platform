@@ -10,6 +10,7 @@ import logging
 from shared.common.security import decrypt_data
 from shared.voice_agents.tool_models import AgentTool
 from shared.voice_agents.tools.mcp.models import McpServerConfig
+from shared.voice_agents.tools.mcp.security import validate_mcp_server_url
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,9 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
        with no org key is dropped rather than sending the bare marker.
     3. the per-user OAuth bearer from the agent_tool's decrypted
        ``sensitive_config`` (``access_token``), injected as
-       ``Authorization: Bearer <token>`` only when the merged headers do not
-       already set ``Authorization``.
+       ``Authorization: Bearer <token>``. For OAuth tools it replaces any
+       stale static ``Authorization`` header so a platform-level grant can
+       never override the connected user's grant.
 
     Args:
         agent_tool: An :class:`AgentTool` whose ``tool`` is a ``platform_tools``
@@ -77,6 +79,14 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
             "Cannot build McpServerConfig: agent_tool's platform tool has no "
             "mcp_server_url (is it actually tool_source='mcp'?)."
         )
+
+    # A saved URL can change DNS answers after configuration, so repeat the
+    # SSRF check at the last boundary before any credential is decrypted or
+    # merged into the request headers. This protects long-lived agent_tools
+    # from DNS rebinding and out-of-band database/configuration changes.
+    valid_url, reason = validate_mcp_server_url(platform_tool.mcp_server_url)
+    if not valid_url:
+        raise ValueError(f"Cannot build McpServerConfig: {reason}")
 
     sensitive = agent_tool.sensitive_config
     org_api_key = sensitive.get("api_key") if isinstance(sensitive, dict) else None
@@ -109,17 +119,24 @@ def mcp_server_config_from_agent_tool(agent_tool: AgentTool) -> McpServerConfig:
                         headers[str(k)] = value
         except Exception as e:
             logger.error(
-                "Failed to decrypt mcp_server_secret_headers for %s: %s",
+                "Failed to decrypt mcp_server_secret_headers for %s (%s)",
                 platform_tool.name,
-                e,
-                exc_info=True,
+                type(e).__name__,
             )
 
     access_token = (
         sensitive.get("access_token") if isinstance(sensitive, dict) else None
     )
-    has_authorization = any(key.lower() == "authorization" for key in headers)
-    if access_token and not has_authorization:
+    is_oauth_tool = getattr(platform_tool, "auth_type", None) == "oauth2"
+    if access_token and is_oauth_tool:
+        # A stale static Authorization header must never override the
+        # per-connection OAuth grant. This also prevents a platform-level
+        # bearer from being sent after an org admin connects their account.
+        for key in list(headers):
+            if key.lower() == "authorization":
+                del headers[key]
+        headers["Authorization"] = f"Bearer {access_token}"
+    elif access_token and not any(key.lower() == "authorization" for key in headers):
         headers["Authorization"] = f"Bearer {access_token}"
 
     return McpServerConfig(

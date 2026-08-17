@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import json
 import os
 import time
@@ -19,10 +18,17 @@ from typing import Any, Mapping
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
+from cryptography.fernet import Fernet
+
+from shared.voice_agents.tools.base.oauth_support import (
+    get_oauth_client_auth_method,
+    validate_oauth_endpoint_url,
+)
+from shared.voice_agents.tools.mcp.security import validate_mcp_server_url
 
 
 def _state_secret() -> bytes:
-    """Return the signing key used for short-lived OAuth callback state."""
+    """Return the secret used to encrypt short-lived OAuth callback state."""
     configured = os.getenv("MCP_OAUTH_STATE_SECRET") or os.getenv("JWT_SECRET_KEY")
     if not configured:
         try:
@@ -33,9 +39,15 @@ def _state_secret() -> bytes:
             configured = None
     if not configured:
         raise ValueError(
-            "MCP OAuth state signing requires MCP_OAUTH_STATE_SECRET or JWT_SECRET_KEY"
+            "MCP OAuth state encryption requires MCP_OAUTH_STATE_SECRET or JWT_SECRET_KEY"
         )
     return configured.encode("utf-8")
+
+
+def _state_cipher() -> Fernet:
+    """Build the Fernet cipher used for opaque, stateless callback state."""
+    key = hashlib.sha256(_state_secret()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
 
 
 def _encode(value: bytes) -> str:
@@ -54,36 +66,34 @@ def pkce_challenge(verifier: str) -> str:
 
 
 def create_mcp_oauth_state(payload: Mapping[str, Any]) -> str:
-    """Create signed, short-lived state containing the PKCE verifier.
+    """Create encrypted, short-lived state containing the PKCE verifier.
 
-    The verifier is intentionally carried inside authenticated state so the
+    The verifier is intentionally carried inside encrypted state so the
     callback remains stateless across backend instances. It is never logged or
-    returned to the browser outside the opaque ``state`` value.
+    returned to the browser in plaintext outside the opaque ``state`` value.
     """
     body = dict(payload)
     body.setdefault("issued_at", int(time.time()))
-    encoded = _encode(json.dumps(body, separators=(",", ":"), sort_keys=True).encode())
-    signature = _encode(
-        hmac.new(_state_secret(), encoded.encode(), hashlib.sha256).digest()
+    encrypted = _state_cipher().encrypt(
+        json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
     )
-    return f"{encoded}.{signature}"
+    return _encode(encrypted)
 
 
 def decode_mcp_oauth_state(state: str, *, max_age_seconds: int = 600) -> dict[str, Any]:
-    """Verify and decode callback state, rejecting tampering and replay windows."""
+    """Decrypt and decode callback state, rejecting tampering and expiry."""
     try:
-        encoded, signature = state.split(".", 1)
-        expected = _encode(
-            hmac.new(_state_secret(), encoded.encode(), hashlib.sha256).digest()
+        if max_age_seconds <= 0:
+            raise ValueError("MCP OAuth state max age must be positive")
+        body = json.loads(
+            _state_cipher().decrypt(_decode(state), ttl=max_age_seconds).decode("utf-8")
         )
-        if not hmac.compare_digest(signature, expected):
-            raise ValueError("Invalid MCP OAuth state signature")
-        body = json.loads(_decode(encoded).decode("utf-8"))
-        issued_at = int(body["issued_at"])
-        if abs(int(time.time()) - issued_at) > max_age_seconds:
-            raise ValueError("MCP OAuth state has expired")
         if not isinstance(body, dict):
             raise ValueError("MCP OAuth state payload must be an object")
+        issued_at = int(body["issued_at"])
+        age_seconds = time.time() - issued_at
+        if age_seconds < 0 or age_seconds > max_age_seconds:
+            raise ValueError("MCP OAuth state has expired")
         return body
     except ValueError:
         raise
@@ -97,7 +107,7 @@ def build_mcp_authorization_url(
     client_id: str,
     redirect_uri: str,
     state: str,
-    code_challenge: str,
+    code_challenge: str | None,
     scopes: list[str] | None = None,
     resource: str | None = None,
 ) -> str:
@@ -107,9 +117,10 @@ def build_mcp_authorization_url(
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "state": state,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
     }
+    if code_challenge:
+        params["code_challenge"] = code_challenge
+        params["code_challenge_method"] = "S256"
     if scopes:
         params["scope"] = " ".join(scopes)
     if resource:
@@ -153,6 +164,19 @@ def _protected_resource_urls(server_url: str) -> list[str]:
     return candidates
 
 
+def _validate_metadata_url(url: str, label: str) -> None:
+    """Reject an OAuth metadata URL before the connector contacts it.
+
+    MCP protected-resource metadata is supplied by a remote server and may
+    point the client at a different authorization server. Validate those
+    redirects before making a second request so a compromised or malicious
+    MCP server cannot turn OAuth discovery into an SSRF primitive.
+    """
+    valid, reason = validate_oauth_endpoint_url(url, resolve_dns=True)
+    if not valid:
+        raise ValueError(f"Invalid MCP OAuth {label}: {reason}")
+
+
 async def discover_mcp_oauth_config(
     server_url: str,
     configured: Mapping[str, Any] | None = None,
@@ -165,13 +189,28 @@ async def discover_mcp_oauth_config(
     ``auth_url`` and ``token_url`` so the existing tool connection model can
     store it without a schema migration.
     """
+    valid_server, server_reason = validate_mcp_server_url(server_url)
+    if not valid_server:
+        raise ValueError(f"Invalid MCP server URL: {server_reason}")
+
     supplied = dict(configured or {})
     if supplied.get("auth_url") and supplied.get("token_url"):
+        _validate_metadata_url(str(supplied["auth_url"]), "authorization endpoint")
+        _validate_metadata_url(str(supplied["token_url"]), "token endpoint")
+        if supplied.get("registration_endpoint"):
+            _validate_metadata_url(
+                str(supplied["registration_endpoint"]),
+                "dynamic client registration endpoint",
+            )
         supplied.setdefault("provider", "mcp")
         supplied.setdefault("resource", server_url)
+        if not supplied.get("token_endpoint_auth_method"):
+            discovered_method = get_oauth_client_auth_method(supplied)
+            if discovered_method:
+                supplied["token_endpoint_auth_method"] = discovered_method
         return supplied
 
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         protected: dict[str, Any] = {}
         for metadata_url in _protected_resource_urls(server_url):
             try:
@@ -195,8 +234,11 @@ async def discover_mcp_oauth_config(
             # the host root when protected-resource metadata was unavailable.
             issuer = _origin(server_url)
 
+        _validate_metadata_url(issuer, "authorization server")
+
         metadata: dict[str, Any] = {}
         for metadata_url in _well_known_urls(issuer):
+            _validate_metadata_url(metadata_url, "authorization metadata endpoint")
             try:
                 response = await client.get(
                     metadata_url, headers={"Accept": "application/json"}
@@ -216,6 +258,13 @@ async def discover_mcp_oauth_config(
             "MCP server did not publish OAuth authorization metadata; provide "
             "authorization and token endpoints in the platform configuration"
         )
+    _validate_metadata_url(str(auth_url), "authorization endpoint")
+    _validate_metadata_url(str(token_url), "token endpoint")
+    if metadata.get("registration_endpoint"):
+        _validate_metadata_url(
+            str(metadata["registration_endpoint"]),
+            "dynamic client registration endpoint",
+        )
 
     scopes = (
         supplied.get("scopes")
@@ -225,6 +274,17 @@ async def discover_mcp_oauth_config(
     )
     if isinstance(scopes, str):
         scopes = [part for part in scopes.replace(",", " ").split() if part]
+    supported_auth_methods = metadata.get("token_endpoint_auth_methods_supported") or []
+    if isinstance(supported_auth_methods, str):
+        supported_auth_methods = [supported_auth_methods]
+    token_endpoint_auth_method = supplied.get("token_endpoint_auth_method")
+    if not token_endpoint_auth_method:
+        token_endpoint_auth_method = get_oauth_client_auth_method(
+            {"token_endpoint_auth_methods_supported": supported_auth_methods}
+        )
+    grant_types_supported = supplied.get("grant_types_supported") or metadata.get(
+        "grant_types_supported"
+    )
     return {
         **supplied,
         "provider": "mcp",
@@ -233,6 +293,11 @@ async def discover_mcp_oauth_config(
         "scopes": [str(scope) for scope in scopes],
         "resource": supplied.get("resource") or protected.get("resource") or server_url,
         "registration_endpoint": metadata.get("registration_endpoint"),
+        "token_endpoint_auth_method": token_endpoint_auth_method,
+        "token_endpoint_auth_methods_supported": [
+            str(method) for method in supported_auth_methods
+        ],
+        "grant_types_supported": grant_types_supported,
     }
 
 
@@ -244,6 +309,16 @@ async def register_mcp_oauth_client(
     timeout: float = 10.0,
 ) -> str:
     """Register a public PKCE client through OAuth Dynamic Client Registration."""
+    _validate_metadata_url(
+        registration_endpoint,
+        "dynamic client registration endpoint",
+    )
+    valid_redirect, redirect_reason = validate_oauth_endpoint_url(
+        redirect_uri,
+        allow_loopback_redirect=True,
+    )
+    if not valid_redirect:
+        raise ValueError(f"Invalid MCP OAuth redirect URI: {redirect_reason}")
     payload = {
         "client_name": client_name,
         "redirect_uris": [redirect_uri],
@@ -251,7 +326,7 @@ async def register_mcp_oauth_client(
         "response_types": ["code"],
         "token_endpoint_auth_method": "none",
     }
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         response = await client.post(
             registration_endpoint,
             json=payload,

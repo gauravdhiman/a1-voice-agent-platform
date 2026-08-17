@@ -19,6 +19,7 @@ Design notes:
       ``is_error=True`` rather than raised; transport-level failures (network,
       non-2xx) propagate as exceptions.
 """
+
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Optional
@@ -33,8 +34,37 @@ from shared.voice_agents.tools.mcp.models import (
     McpToolDef,
     McpToolResult,
 )
+from shared.voice_agents.tools.mcp.security import validate_mcp_server_url
 
 logger = logging.getLogger(__name__)
+
+
+def _create_secure_mcp_http_client(
+    *, headers: Optional[dict[str, str]], timeout: httpx.Timeout
+) -> httpx.AsyncClient:
+    """Create an MCP SDK HTTP client with redirect following disabled.
+
+    The MCP SDK currently defaults its internal ``httpx.AsyncClient`` to
+    ``follow_redirects=True``. Disabling redirects is required because the
+    client may carry bearer or other connection credentials, and forwarding
+    those headers to a redirected host would expand the credential trust
+    boundary without an explicit user action.
+
+    Args:
+        headers: Optional request headers, including connection credentials.
+        timeout: HTTP timeout configuration for the MCP transport.
+
+    Returns:
+        A configured ``httpx.AsyncClient`` returned by the MCP SDK.
+
+    Notes:
+        The SDK constructs the client internally, so the redirect policy is
+        set immediately after construction and before the client can issue a
+        request. The JSON HTTP fallback applies the same policy directly.
+    """
+    http_client = create_mcp_http_client(headers=headers or None, timeout=timeout)
+    http_client.follow_redirects = False
+    return http_client
 
 
 class McpClient:
@@ -90,15 +120,16 @@ class McpClient:
             return await list_tools_json_http(self.config)
         except Exception as json_err:
             logger.debug(
-                "JSON HTTP list_tools failed for %s, falling back to MCP SDK: %s",
-                self.config.url,
-                json_err,
+                "JSON HTTP list_tools failed for MCP server; falling back to SDK (%s)",
+                type(json_err).__name__,
             )
         async with self._session() as session:
             result = await session.list_tools()
         return [self._to_tool_def(tool) for tool in result.tools]
 
-    async def call_tool(self, name: str, arguments: Optional[dict] = None) -> McpToolResult:
+    async def call_tool(
+        self, name: str, arguments: Optional[dict] = None
+    ) -> McpToolResult:
         """Invoke a tool by name with the given arguments.
 
         Server-reported errors (unknown tool name, argument validation
@@ -123,10 +154,9 @@ class McpClient:
             return await call_tool_json_http(self.config, name, arguments)
         except Exception as json_err:
             logger.debug(
-                "JSON HTTP call_tool failed for %s/%s, falling back to MCP SDK: %s",
-                self.config.url,
+                "JSON HTTP call_tool failed for MCP tool %s; falling back to SDK (%s)",
                 name,
-                json_err,
+                type(json_err).__name__,
             )
         async with self._session() as session:
             result = await session.call_tool(name, arguments or {})
@@ -162,6 +192,9 @@ class McpClient:
         """
         if self._closed:
             raise RuntimeError("McpClient is closed")
+        valid_url, reason = validate_mcp_server_url(self.config.url)
+        if not valid_url:
+            raise ValueError(f"Cannot contact MCP server: {reason}")
         # Use the current MCP SDK transport API: auth/custom headers live on the
         # httpx client, not on StreamableHTTPTransport (the deprecated
         # ``streamablehttp_client(url, headers=...)`` wrapper is easy to misread
@@ -171,7 +204,7 @@ class McpClient:
         # no-op for them (Cursor/other clients behave the same way).
         headers = dict(self.config.headers or {})
         timeout = httpx.Timeout(self.config.timeout, read=MCP_DEFAULT_SSE_READ_TIMEOUT)
-        async with create_mcp_http_client(
+        async with _create_secure_mcp_http_client(
             headers=headers or None,
             timeout=timeout,
         ) as http_client:

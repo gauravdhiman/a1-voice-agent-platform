@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from shared.voice_agents.tools.base.auth_config import BaseAuthConfig
+from shared.voice_agents.tools.base.oauth_support import OAuthRefreshMode
 
 
 class AuthStatus(str, Enum):
@@ -25,10 +26,12 @@ class ConnectionStatus(str, Enum):
 
     NOT_CONNECTED = "not_connected"  # No agent_tools record
     CONNECTED_NO_AUTH = "connected_no_auth"  # Connected, tool doesn't require auth
-    CONNECTED_AUTH_VALID = "connected_auth_valid"  # Connected, requires auth, valid tokens
+    CONNECTED_AUTH_VALID = (
+        "connected_auth_valid"  # Connected, requires auth, valid tokens
+    )
     CONNECTED_AUTH_INVALID = (
-        "connected_auth_invalid"
-    )  # Connected, requires auth, invalid/missing tokens
+        "connected_auth_invalid"  # Connected, requires auth, invalid/missing tokens
+    )
 
 
 class ToolSource(str, Enum):
@@ -177,6 +180,17 @@ class PlatformToolCreate(PlatformToolBase):
             "mcp_server_secret_headers; this field is never persisted directly."
         ),
     )
+    # Confidential OAuth client secrets are accepted only through this
+    # write-only field. The service encrypts them into a dedicated database
+    # column; they must never be embedded in the public auth_config JSONB.
+    oauth_client_secret_input: Optional[str] = Field(
+        None,
+        exclude=True,
+        description=(
+            "Write-only OAuth client secret. Encrypted at rest by the service "
+            "and never returned in a platform-tool response."
+        ),
+    )
 
 
 class PlatformTool(PlatformToolBase):
@@ -196,6 +210,29 @@ class PlatformTool(PlatformToolBase):
     mcp_secret_headers_configured: bool = Field(
         default=False,
         description="Whether encrypted server-level secret headers are set.",
+    )
+    oauth_client_secret_encrypted: Optional[str] = Field(
+        None,
+        exclude=True,
+        description="Internal encrypted OAuth client secret; never returned.",
+    )
+    oauth_client_secret_configured: bool = Field(
+        default=False,
+        description="Whether a confidential OAuth client secret is configured.",
+    )
+    oauth_refresh_mode: Optional[OAuthRefreshMode] = Field(
+        None,
+        description=("Expected OAuth refresh behavior: automatic, manual, or unknown."),
+    )
+    oauth_refresh_interval_minutes: Optional[int] = Field(
+        None,
+        description=(
+            "Optional admin-declared manual reauthorization interval in minutes."
+        ),
+    )
+    oauth_refresh_message: Optional[str] = Field(
+        None,
+        description="Safe OAuth refresh guidance for platform and org admins.",
     )
 
 
@@ -259,6 +296,17 @@ class AgentTool(AgentToolBase):
     last_refreshed_at: Optional[datetime] = Field(
         None, description="Timestamp when OAuth tokens were last auto-refreshed"
     )
+    # These fields are internal context used by background services. They are
+    # deliberately not part of AgentToolResponse, which is the public API
+    # model and never carries decrypted connection state.
+    agent_name: Optional[str] = Field(
+        None, exclude=True, description="Agent name for internal notifications"
+    )
+    organization_id: Optional[UUID] = Field(
+        None,
+        exclude=True,
+        description="Owning organization for internal notifications",
+    )
     tool: Optional[PlatformTool] = Field(None, description="Tool details")
 
 
@@ -288,6 +336,22 @@ class AgentToolResponse(BaseModel):
     connection_status: ConnectionStatus = Field(
         default=ConnectionStatus.NOT_CONNECTED,
         description="Connection status of the tool",
+    )
+    last_refreshed_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when OAuth tokens were last auto-refreshed",
+    )
+    oauth_refresh_mode: Optional[OAuthRefreshMode] = Field(
+        None,
+        description="Actual or expected OAuth refresh behavior for this connection",
+    )
+    oauth_refresh_interval_minutes: Optional[int] = Field(
+        None,
+        description="Optional manual reauthorization interval in minutes",
+    )
+    oauth_refresh_message: Optional[str] = Field(
+        None,
+        description="Safe OAuth refresh guidance for admins",
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")

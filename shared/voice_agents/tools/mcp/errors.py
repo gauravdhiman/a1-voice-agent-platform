@@ -38,4 +38,7 @@ def format_mcp_client_error(exc: BaseException) -> str:
         reason = exc.response.reason_phrase or "error"
         return f"MCP server returned HTTP {status} {reason}"
 
-    return str(exc)
+    # MCP servers control JSON-RPC error text. Never echo it to an admin
+    # response: a misbehaving provider could reflect an Authorization header,
+    # token, or other request material in that string.
+    return "MCP request failed"

@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -29,6 +29,7 @@ from shared.voice_agents.tools.mcp.models import (
     McpToolDef,
     McpToolResult,
 )
+from shared.voice_agents.tools.mcp.security import validate_mcp_server_url
 
 logger = logging.getLogger(__name__)
 
@@ -160,13 +161,17 @@ async def _json_http_session(
     config: McpServerConfig,
 ) -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
     """Open httpx client and complete MCP initialize handshake."""
+    valid_url, reason = validate_mcp_server_url(config.url)
+    if not valid_url:
+        raise ValueError(f"Cannot contact MCP server: {reason}")
+
     request_headers = _request_headers(config)
     # The MCP-Protocol-Version header is negotiated during initialize and is
     # required on subsequent requests. Do not pin the initialize request to a
     # possibly stale version supplied by a host config or an older client.
     request_headers.pop("MCP-Protocol-Version", None)
     timeout = httpx.Timeout(config.timeout, read=config.timeout)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         init_response = await client.post(
             config.url,
             headers=request_headers,
@@ -236,8 +241,7 @@ async def list_tools_json_http(config: McpServerConfig) -> list[McpToolDef]:
             if isinstance(t, dict) and t.get("name")
         ]
         logger.info(
-            "JSON HTTP MCP discover url=%s tools=%d",
-            config.url,
+            "JSON HTTP MCP discover completed tools=%d",
             len(tools),
         )
         return tools
@@ -267,8 +271,7 @@ async def call_tool_json_http(
         call_body = _response_json(call_response)
         result = _result_from_body(call_body)
         logger.info(
-            "JSON HTTP MCP call url=%s tool=%s is_error=%s",
-            config.url,
+            "JSON HTTP MCP call tool=%s is_error=%s",
             name,
             result.is_error,
         )

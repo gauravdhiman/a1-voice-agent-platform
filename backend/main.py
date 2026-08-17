@@ -266,6 +266,20 @@ async def lifespan(app: FastAPI):
     # Run ``python -m src.master_data.cli`` for a dry-run preview, then apply
     # the reviewed plan as a separate release/bootstrap operation.
 
+    # Remove any pre-encryption OAuth client secrets before the refresh worker
+    # starts. The migration is idempotent and fails closed: continuing while a
+    # known credential migration is broken would leave secrets in auth_config.
+    migrated_client_secrets, migration_error = (
+        await tool_service.migrate_legacy_oauth_client_secrets()
+    )
+    if migration_error:
+        raise RuntimeError(migration_error)
+    if migrated_client_secrets:
+        logging.info(
+            "Migrated %s legacy OAuth client-secret row(s) to encrypted storage",
+            migrated_client_secrets,
+        )
+
     # Start token refresh service
     logging.info("Starting token refresh service...")
     await start_token_refresh_service(tool_service)

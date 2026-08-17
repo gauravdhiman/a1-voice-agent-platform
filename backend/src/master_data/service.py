@@ -320,6 +320,7 @@ class MasterDataService:
             "credits.purchased": NotificationCategory.BILLING,
             "organization.invitation": NotificationCategory.ORGANIZATION,
             "billing.payment_failed": NotificationCategory.BILLING,
+            "tools.oauth_reauthorization_required": NotificationCategory.AUTH,
         }
         changed = 0
         for event_key, template_data in TEMPLATE_REGISTRY.items():

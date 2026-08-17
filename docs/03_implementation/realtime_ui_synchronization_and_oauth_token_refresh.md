@@ -216,6 +216,10 @@ TOKEN_REFRESH_CHECK_INTERVAL_MINUTES=5
 
 # Window in minutes before expiry to refresh tokens (default: 15)
 TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES=15
+
+# Window in minutes before expiry to notify admins when renewal is unavailable
+# (default: 30)
+TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES=30
 ```
 
 **Validation**:
@@ -423,6 +427,7 @@ flowchart LR
 |-------------------|---------|-------|-------------|
 | `TOKEN_REFRESH_CHECK_INTERVAL_MINUTES` | 5 | 1-60 | How often to check for expiring tokens |
 | `TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES` | 15 | 1-60 | Refresh tokens expiring within this window |
+| `TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES` | 30 | 1-1440 | Notify organization admins when a connection cannot be renewed automatically |
 
 **Recommended Settings**:
 - **Development**: 5 min check, 15 min window (default)

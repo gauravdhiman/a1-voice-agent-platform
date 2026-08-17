@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from shared.voice_agents.tools.mcp.dispatch import mcp_server_config_from_agent_tool
 
 
@@ -10,6 +12,7 @@ def _agent_tool(
     api_key: str | None = None,
     public_headers: dict[str, str] | None = None,
     secret_headers: str | None = None,
+    access_token: str | None = None,
 ) -> Mock:
     """Build a minimal MCP agent-tool double for dispatch tests."""
     agent_tool = Mock()
@@ -17,6 +20,7 @@ def _agent_tool(
         mcp_server_url="https://example.com/mcp",
         mcp_server_name="example",
         name="example_mcp",
+        auth_type="oauth2" if access_token else "api_key",
         mcp_server_headers=public_headers
         or {
             "Authorization": "Bearer {{KEY}}",
@@ -25,11 +29,22 @@ def _agent_tool(
         mcp_server_secret_headers=secret_headers,
     )
     agent_tool.sensitive_config = {"api_key": api_key} if api_key else {}
+    if access_token:
+        agent_tool.sensitive_config["access_token"] = access_token
     return agent_tool
 
 
 class TestMcpDispatch:
     """Runtime never sends a placeholder or a platform test credential."""
+
+    @pytest.fixture(autouse=True)
+    def mock_mcp_url_validation(self):
+        """Keep header-merging tests independent of the test host's DNS."""
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.validate_mcp_server_url",
+            return_value=(True, None),
+        ):
+            yield
 
     def test_public_header_placeholder_is_filled_from_org_key(self):
         config = mcp_server_config_from_agent_tool(_agent_tool(api_key="org-key"))
@@ -66,3 +81,25 @@ class TestMcpDispatch:
             )
 
         assert config.headers["X-API-Key"] == "platform-key"
+
+    def test_oauth_bearer_replaces_stale_static_authorization_header(self):
+        """OAuth connections must not silently send an old platform grant."""
+        agent_tool = _agent_tool(
+            access_token="user-oauth-token",
+            public_headers={"Authorization": "Bearer stale-platform-token"},
+        )
+
+        config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.headers["Authorization"] == "Bearer user-oauth-token"
+
+    def test_runtime_ssrf_validation_happens_before_credentials_are_merged(self):
+        """A saved MCP URL is rechecked before any bearer/header is decrypted."""
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.validate_mcp_server_url",
+            return_value=(False, "URL resolves to a blocked address"),
+        ):
+            with pytest.raises(ValueError, match="blocked address"):
+                mcp_server_config_from_agent_tool(
+                    _agent_tool(access_token="user-oauth-token")
+                )

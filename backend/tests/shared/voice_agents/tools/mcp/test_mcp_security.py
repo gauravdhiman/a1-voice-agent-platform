@@ -58,6 +58,21 @@ class TestValidateMcpServerUrl:
         assert ok is False
         assert "http" in reason.lower()
 
+    def test_rejects_url_userinfo_and_fragments(self):
+        """MCP URLs cannot smuggle credentials or opaque metadata in the URL."""
+        with _patch_resolve(["93.184.216.34"]):
+            userinfo_ok, userinfo_reason = validate_mcp_server_url(
+                "https://user:password@example.com/mcp"
+            )
+            fragment_ok, fragment_reason = validate_mcp_server_url(
+                "https://example.com/mcp#token"
+            )
+
+        assert userinfo_ok is False
+        assert "userinfo" in userinfo_reason.lower()
+        assert fragment_ok is False
+        assert "fragment" in fragment_reason.lower()
+
     def test_rejects_empty_and_none(self):
         assert validate_mcp_server_url("")[0] is False
         assert validate_mcp_server_url(None)[0] is False  # type: ignore[arg-type]
@@ -109,6 +124,18 @@ class TestValidateMcpServerUrl:
             with _patch_resolve(["127.0.0.1"]):
                 ok, reason = validate_mcp_server_url("http://127.0.0.1:8080/mcp")
             assert ok is True, reason
+        finally:
+            _set_allow_local(False)
+
+    def test_local_http_flag_is_ignored_in_staging(self, monkeypatch):
+        """The dev-only local URL escape hatch cannot be enabled in staging."""
+        monkeypatch.setenv("ENVIRONMENT", "staging")
+        _set_allow_local(True)
+        try:
+            with _patch_resolve(["127.0.0.1"]):
+                ok, reason = validate_mcp_server_url("http://127.0.0.1:8080/mcp")
+            assert ok is False
+            assert "blocked" in reason.lower() or "http" in reason.lower()
         finally:
             _set_allow_local(False)
 
@@ -319,6 +346,8 @@ class TestParseMcpServersJson:
             '{"servers": {"calendar": {'
             '"url": "https://calendar.example/mcp",'
             '"oauth": {"type": "oauth2", "clientId": "public-client",'
+            '"tokenEndpointAuthMethod": "client_secret_basic",'
+            '"oauthMode": "generic",'
             '"registrationEndpoint": "https://auth.example/register",'
             '"resource_uri": "https://calendar.example/resource"}'
             "}}}"
@@ -327,6 +356,8 @@ class TestParseMcpServersJson:
         server = parse_mcp_servers_json(raw).servers[0]
 
         assert server.auth_config["client_id"] == "public-client"
+        assert server.auth_config["token_endpoint_auth_method"] == "client_secret_basic"
+        assert server.auth_config["oauth_mode"] == "generic"
         assert (
             server.auth_config["registration_endpoint"]
             == "https://auth.example/register"

@@ -19,15 +19,19 @@ Contract:
   - unauthenticated → 401 (handled by `get_authenticated_user`,
     not exercised here)
 """
-import pytest
+
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
+import pytest
 from fastapi import HTTPException
 
 from shared.voice_agents.models import VoiceAgent
-from shared.voice_agents.tool_models import AgentToolResponse, AuthStatus, ConnectionStatus
-
+from shared.voice_agents.tool_models import (
+    AgentToolResponse,
+    AuthStatus,
+    ConnectionStatus,
+)
 
 # Test fixtures
 TEST_AGENT_TOOL_ID = UUID("00000000-0000-0000-0000-000000000001")
@@ -82,9 +86,7 @@ def _make_user_profile(
     )
     # current_organization_id is the org the embedded permissions are scoped to;
     # routes use it to force org-scoping on custom-MCP creates.
-    profile.current_organization_id = (
-        UUID(is_org_admin_on) if is_org_admin_on else None
-    )
+    profile.current_organization_id = UUID(is_org_admin_on) if is_org_admin_on else None
     return profile
 
 
@@ -121,6 +123,7 @@ class TestToolRoutesPermissions:
     async def test_update_agent_tool_regular_user_forbidden(self):
         """Regular user (no admin role) cannot rewrite tool config."""
         from src.voice_agents.tool_routes import update_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolUpdate
 
         profile = _make_user_profile()  # no roles
@@ -152,11 +155,10 @@ class TestToolRoutesPermissions:
     async def test_update_agent_tool_org_admin_on_agent_org_allowed(self):
         """Org admin on the agent's own org → 200."""
         from src.voice_agents.tool_routes import update_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolUpdate
 
-        profile = _make_user_profile(
-            is_org_admin_on=str(TEST_ORG_ID)
-        )
+        profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
         agent = _make_agent()
         updated = _make_agent_tool_response()
 
@@ -166,9 +168,7 @@ class TestToolRoutesPermissions:
                     return_value=(_make_agent_tool_response(), None)
                 )
                 mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
-                mock_ts.update_agent_tool = AsyncMock(
-                    return_value=(updated, None)
-                )
+                mock_ts.update_agent_tool = AsyncMock(return_value=(updated, None))
 
                 result = await update_agent_tool(
                     agent_tool_id=TEST_AGENT_TOOL_ID,
@@ -183,6 +183,7 @@ class TestToolRoutesPermissions:
     async def test_update_agent_tool_org_admin_on_other_org_forbidden(self):
         """Org admin on a DIFFERENT org → 403 (cross-org IDOR guard)."""
         from src.voice_agents.tool_routes import update_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolUpdate
 
         profile = _make_user_profile(
@@ -212,6 +213,7 @@ class TestToolRoutesPermissions:
     async def test_update_agent_tool_platform_admin_allowed(self):
         """Platform admin → 200 regardless of org."""
         from src.voice_agents.tool_routes import update_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolUpdate
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -224,9 +226,7 @@ class TestToolRoutesPermissions:
                     return_value=(_make_agent_tool_response(), None)
                 )
                 mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
-                mock_ts.update_agent_tool = AsyncMock(
-                    return_value=(updated, None)
-                )
+                mock_ts.update_agent_tool = AsyncMock(return_value=(updated, None))
 
                 result = await update_agent_tool(
                     agent_tool_id=TEST_AGENT_TOOL_ID,
@@ -301,9 +301,7 @@ class TestToolRoutesPermissions:
                     return_value=(_make_agent_tool_response(), None)
                 )
                 mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
-                mock_ts.update_agent_tool = AsyncMock(
-                    return_value=(cleared, None)
-                )
+                mock_ts.update_agent_tool = AsyncMock(return_value=(cleared, None))
 
                 result = await logout_agent_tool(
                     agent_tool_id=TEST_AGENT_TOOL_ID,
@@ -378,9 +376,7 @@ class TestToolRoutesPermissions:
                     return_value=(_make_agent_tool_response(), None)
                 )
                 mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
-                mock_ts.update_agent_tool = AsyncMock(
-                    return_value=(updated, None)
-                )
+                mock_ts.update_agent_tool = AsyncMock(return_value=(updated, None))
 
                 result = await set_api_key(
                     agent_tool_id=TEST_AGENT_TOOL_ID,
@@ -453,9 +449,7 @@ class TestToolRoutesPermissions:
                     return_value=(_make_agent_tool_response(), None)
                 )
                 mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
-                mock_ts.delete_agent_tool = AsyncMock(
-                    return_value=(True, None)
-                )
+                mock_ts.delete_agent_tool = AsyncMock(return_value=(True, None))
 
                 result = await delete_agent_tool(
                     agent_tool_id=TEST_AGENT_TOOL_ID,
@@ -477,9 +471,7 @@ class TestToolRoutesPermissions:
                     return_value=(_make_agent_tool_response(), None)
                 )
                 mock_vas.get_agent_by_id = AsyncMock(return_value=(agent, None))
-                mock_ts.delete_agent_tool = AsyncMock(
-                    return_value=(True, None)
-                )
+                mock_ts.delete_agent_tool = AsyncMock(return_value=(True, None))
 
                 result = await delete_agent_tool(
                     agent_tool_id=TEST_AGENT_TOOL_ID,
@@ -513,6 +505,7 @@ class TestPremiumToolGate:
     @pytest.mark.asyncio
     async def test_premium_tool_denied_without_feature(self):
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -545,6 +538,7 @@ class TestPremiumToolGate:
     @pytest.mark.asyncio
     async def test_premium_tool_allowed_with_feature(self):
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -578,6 +572,7 @@ class TestPremiumToolGate:
     @pytest.mark.asyncio
     async def test_non_premium_tool_skips_gate(self):
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -628,6 +623,7 @@ class TestMcpAttachCredentialGate:
     @pytest.mark.asyncio
     async def test_required_mcp_key_is_rejected_before_attach(self):
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -656,6 +652,7 @@ class TestMcpAttachCredentialGate:
     @pytest.mark.asyncio
     async def test_required_mcp_key_allows_attach_with_org_key(self):
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -688,6 +685,7 @@ class TestMcpAttachCredentialGate:
     @pytest.mark.asyncio
     async def test_mcp_platform_fallback_allows_attach_without_org_key(self):
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -722,6 +720,7 @@ class TestMcpAttachCredentialGate:
         """A tool missing from the catalog is not premium-gated (the service
         layer surfaces the not-found error downstream)."""
         from src.voice_agents.tool_routes import configure_agent_tool
+
         from shared.voice_agents.tool_models import AgentToolCreate
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -768,7 +767,8 @@ class TestMcpDiscoverAndCreate:
 
     @pytest.mark.asyncio
     async def test_discover_returns_sanitized_tools_for_platform_admin(self):
-        from src.voice_agents.tool_routes import discover_mcp_tools, McpDiscoverRequest
+        from src.voice_agents.tool_routes import McpDiscoverRequest, discover_mcp_tools
+
         from shared.voice_agents.tools.mcp.models import McpToolDef
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -776,14 +776,19 @@ class TestMcpDiscoverAndCreate:
             name="add", description="add two numbers", input_schema={"type": "object"}
         )
 
-        with patch("src.voice_agents.tool_routes.validate_mcp_server_url", return_value=(True, "")):
+        with patch(
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
+        ):
             with patch(
                 "src.voice_agents.tool_routes.list_tools_json_http",
                 new_callable=AsyncMock,
                 return_value=[tool_def],
             ) as mock_discover:
                 result = await discover_mcp_tools(
-                    request=McpDiscoverRequest(url="https://example.com/mcp", headers={}),
+                    request=McpDiscoverRequest(
+                        url="https://example.com/mcp", headers={}
+                    ),
                     user_data=(TEST_USER_ID, profile),
                 )
 
@@ -795,7 +800,8 @@ class TestMcpDiscoverAndCreate:
     @pytest.mark.asyncio
     async def test_discover_merges_stored_secret_headers_when_tool_id_set(self):
         """Edit re-test: blank secret field still uses encrypted stored headers."""
-        from src.voice_agents.tool_routes import discover_mcp_tools, McpDiscoverRequest
+        from src.voice_agents.tool_routes import McpDiscoverRequest, discover_mcp_tools
+
         from shared.voice_agents.tools.mcp.models import McpToolDef
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -845,7 +851,7 @@ class TestMcpDiscoverAndCreate:
     @pytest.mark.asyncio
     async def test_discover_requires_test_key_when_stored_template_needs_it(self):
         """Stored {{KEY}} templates need a transient test key on re-probe."""
-        from src.voice_agents.tool_routes import discover_mcp_tools, McpDiscoverRequest
+        from src.voice_agents.tool_routes import McpDiscoverRequest, discover_mcp_tools
 
         profile = _make_user_profile(is_platform_admin=True)
 
@@ -883,7 +889,7 @@ class TestMcpDiscoverAndCreate:
 
     @pytest.mark.asyncio
     async def test_discover_rejects_ssrf_url_without_calling_client(self):
-        from src.voice_agents.tool_routes import discover_mcp_tools, McpDiscoverRequest
+        from src.voice_agents.tool_routes import McpDiscoverRequest, discover_mcp_tools
 
         profile = _make_user_profile(is_platform_admin=True)
 
@@ -891,10 +897,15 @@ class TestMcpDiscoverAndCreate:
             "src.voice_agents.tool_routes.validate_mcp_server_url",
             return_value=(False, "URL resolves to a blocked address (169.254.169.254)"),
         ):
-            with patch("src.voice_agents.tool_routes.list_tools_json_http", new_callable=AsyncMock) as mock_discover:
+            with patch(
+                "src.voice_agents.tool_routes.list_tools_json_http",
+                new_callable=AsyncMock,
+            ) as mock_discover:
                 with pytest.raises(HTTPException) as exc_info:
                     await discover_mcp_tools(
-                        request=McpDiscoverRequest(url="https://169.254.169.254/", headers={}),
+                        request=McpDiscoverRequest(
+                            url="https://169.254.169.254/", headers={}
+                        ),
                         user_data=(TEST_USER_ID, profile),
                     )
                 assert exc_info.value.status_code == 400
@@ -903,15 +914,20 @@ class TestMcpDiscoverAndCreate:
     @pytest.mark.asyncio
     async def test_discover_forbidden_for_org_admin(self):
         """Org admins cannot author — discover is platform-admin only."""
-        from src.voice_agents.tool_routes import discover_mcp_tools, McpDiscoverRequest
+        from src.voice_agents.tool_routes import McpDiscoverRequest, discover_mcp_tools
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
 
         with patch("src.voice_agents.tool_routes.validate_mcp_server_url") as mock_val:
-            with patch("src.voice_agents.tool_routes.list_tools_json_http", new_callable=AsyncMock) as mock_discover:
+            with patch(
+                "src.voice_agents.tool_routes.list_tools_json_http",
+                new_callable=AsyncMock,
+            ) as mock_discover:
                 with pytest.raises(HTTPException) as exc_info:
                     await discover_mcp_tools(
-                        request=McpDiscoverRequest(url="https://example.com/mcp", headers={}),
+                        request=McpDiscoverRequest(
+                            url="https://example.com/mcp", headers={}
+                        ),
                         user_data=(TEST_USER_ID, profile),
                     )
                 assert exc_info.value.status_code == 403
@@ -920,15 +936,20 @@ class TestMcpDiscoverAndCreate:
 
     @pytest.mark.asyncio
     async def test_discover_forbidden_for_regular_user(self):
-        from src.voice_agents.tool_routes import discover_mcp_tools, McpDiscoverRequest
+        from src.voice_agents.tool_routes import McpDiscoverRequest, discover_mcp_tools
 
         profile = _make_user_profile()  # no roles
 
         with patch("src.voice_agents.tool_routes.validate_mcp_server_url") as mock_val:
-            with patch("src.voice_agents.tool_routes.list_tools_json_http", new_callable=AsyncMock) as mock_discover:
+            with patch(
+                "src.voice_agents.tool_routes.list_tools_json_http",
+                new_callable=AsyncMock,
+            ) as mock_discover:
                 with pytest.raises(HTTPException) as exc_info:
                     await discover_mcp_tools(
-                        request=McpDiscoverRequest(url="https://example.com/mcp", headers={}),
+                        request=McpDiscoverRequest(
+                            url="https://example.com/mcp", headers={}
+                        ),
                         user_data=(TEST_USER_ID, profile),
                     )
                 assert exc_info.value.status_code == 403
@@ -937,7 +958,7 @@ class TestMcpDiscoverAndCreate:
 
     @pytest.mark.asyncio
     async def test_parse_returns_servers_and_errors_for_platform_admin(self):
-        from src.voice_agents.tool_routes import parse_mcp_servers, McpParseRequest
+        from src.voice_agents.tool_routes import McpParseRequest, parse_mcp_servers
 
         profile = _make_user_profile(is_platform_admin=True)
         raw = (
@@ -958,7 +979,7 @@ class TestMcpDiscoverAndCreate:
 
     @pytest.mark.asyncio
     async def test_parse_forbidden_for_org_admin(self):
-        from src.voice_agents.tool_routes import parse_mcp_servers, McpParseRequest
+        from src.voice_agents.tool_routes import McpParseRequest, parse_mcp_servers
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
 
@@ -975,6 +996,7 @@ class TestMcpDiscoverAndCreate:
         global — the payload organization_id is ignored (the service forces it
         off)."""
         from src.voice_agents.tool_routes import create_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -987,11 +1009,15 @@ class TestMcpDiscoverAndCreate:
         )
 
         with patch(
-            "src.voice_agents.tool_routes.validate_mcp_server_url", return_value=(True, "")
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
         ):
             with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
                 mock_ts.upsert_platform_tool = AsyncMock(
-                    return_value=(Mock(name="created", mcp_secret_headers_configured=False), None)
+                    return_value=(
+                        Mock(name="created", mcp_secret_headers_configured=False),
+                        None,
+                    )
                 )
 
                 await create_platform_tool(
@@ -1007,6 +1033,7 @@ class TestMcpDiscoverAndCreate:
     async def test_create_mcp_platform_admin_can_publish_on_create(self):
         """A platform admin may set is_published=True to publish immediately."""
         from src.voice_agents.tool_routes import create_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -1018,7 +1045,8 @@ class TestMcpDiscoverAndCreate:
         )
 
         with patch(
-            "src.voice_agents.tool_routes.validate_mcp_server_url", return_value=(True, "")
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
         ):
             with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
                 mock_ts.upsert_platform_tool = AsyncMock(
@@ -1037,6 +1065,7 @@ class TestMcpDiscoverAndCreate:
     async def test_create_mcp_forbidden_for_org_admin(self):
         """Org admins cannot author MCP servers — 403 before any upsert."""
         from src.voice_agents.tool_routes import create_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -1047,7 +1076,8 @@ class TestMcpDiscoverAndCreate:
         )
 
         with patch(
-            "src.voice_agents.tool_routes.validate_mcp_server_url", return_value=(True, "")
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
         ):
             with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
                 with pytest.raises(HTTPException) as exc_info:
@@ -1061,6 +1091,7 @@ class TestMcpDiscoverAndCreate:
     @pytest.mark.asyncio
     async def test_create_mcp_rejects_bad_url(self):
         from src.voice_agents.tool_routes import create_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -1086,6 +1117,7 @@ class TestMcpDiscoverAndCreate:
     @pytest.mark.asyncio
     async def test_create_mcp_rejects_missing_url(self):
         from src.voice_agents.tool_routes import create_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -1103,6 +1135,35 @@ class TestMcpDiscoverAndCreate:
                 )
             assert exc_info.value.status_code == 400
             mock_ts.upsert_platform_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_mcp_rejects_credential_headers_in_public_metadata(self):
+        """Credential-bearing headers must use encrypted secret-header input."""
+        from src.voice_agents.tool_routes import create_platform_tool
+
+        from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
+
+        profile = _make_user_profile(is_platform_admin=True)
+        tool_data = PlatformToolCreate(
+            name="credentialed-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            mcp_server_headers={"Authorization": "Bearer pasted-secret"},
+        )
+
+        with patch(
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
+        ):
+            with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+                with pytest.raises(HTTPException) as exc_info:
+                    await create_platform_tool(
+                        tool_data=tool_data,
+                        user_data=(TEST_USER_ID, profile),
+                    )
+
+        assert exc_info.value.status_code == 400
+        mock_ts.upsert_platform_tool.assert_not_called()
 
 
 class TestPlatformToolPublishLifecycle:
@@ -1189,6 +1250,7 @@ class TestPlatformToolPublishLifecycle:
     @pytest.mark.asyncio
     async def test_update_platform_tool_platform_admin_allowed(self):
         from src.voice_agents.tool_routes import update_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_platform_admin=True)
@@ -1200,7 +1262,8 @@ class TestPlatformToolPublishLifecycle:
         updated = Mock(name="updated")
 
         with patch(
-            "src.voice_agents.tool_routes.validate_mcp_server_url", return_value=(True, "")
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
         ):
             with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
                 mock_ts.update_platform_tool = AsyncMock(return_value=(updated, None))
@@ -1217,6 +1280,7 @@ class TestPlatformToolPublishLifecycle:
     @pytest.mark.asyncio
     async def test_update_platform_tool_forbidden_for_org_admin(self):
         from src.voice_agents.tool_routes import update_platform_tool
+
         from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
 
         profile = _make_user_profile(is_org_admin_on=str(TEST_ORG_ID))
@@ -1235,6 +1299,36 @@ class TestPlatformToolPublishLifecycle:
                 )
             assert exc_info.value.status_code == 403
             mock_ts.update_platform_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_mcp_rejects_credential_headers_in_public_metadata(self):
+        """The edit path enforces the same public-header secret boundary."""
+        from src.voice_agents.tool_routes import update_platform_tool
+
+        from shared.voice_agents.tool_models import PlatformToolCreate, ToolSource
+
+        profile = _make_user_profile(is_platform_admin=True)
+        tool_data = PlatformToolCreate(
+            name="credentialed-mcp",
+            tool_source=ToolSource.MCP,
+            mcp_server_url="https://example.com/mcp",
+            mcp_server_headers={"X-API-Key": "pasted-secret"},
+        )
+
+        with patch(
+            "src.voice_agents.tool_routes.validate_mcp_server_url",
+            return_value=(True, ""),
+        ):
+            with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
+                with pytest.raises(HTTPException) as exc_info:
+                    await update_platform_tool(
+                        tool_id=TEST_TOOL_ID,
+                        tool_data=tool_data,
+                        user_data=(TEST_USER_ID, profile),
+                    )
+
+        assert exc_info.value.status_code == 400
+        mock_ts.update_platform_tool.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_delete_platform_tool_platform_admin_allowed(self):
@@ -1392,8 +1486,11 @@ class TestPlatformToolDeleteGuardrails:
 
         profile = _make_user_profile(is_platform_admin=True)
         agents = [
-            {"agent_id": str(TEST_AGENT_ID), "agent_name": "Alex",
-             "organization_id": str(TEST_ORG_ID)},
+            {
+                "agent_id": str(TEST_AGENT_ID),
+                "agent_name": "Alex",
+                "organization_id": str(TEST_ORG_ID),
+            },
         ]
         with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
             mock_ts.get_platform_tool_usage = AsyncMock(return_value=(agents, None))
@@ -1428,8 +1525,11 @@ class TestPlatformToolDeleteGuardrails:
 
         profile = _make_user_profile(is_platform_admin=True)
         agents = [
-            {"agent_id": str(TEST_AGENT_ID), "agent_name": "Alex",
-             "organization_id": str(TEST_ORG_ID)},
+            {
+                "agent_id": str(TEST_AGENT_ID),
+                "agent_name": "Alex",
+                "organization_id": str(TEST_ORG_ID),
+            },
         ]
         with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
             mock_ts.get_platform_tool_usage = AsyncMock(return_value=(agents, None))
@@ -1458,8 +1558,11 @@ class TestPlatformToolDeleteGuardrails:
 
         profile = _make_user_profile(is_platform_admin=True)
         agents = [
-            {"agent_id": str(TEST_AGENT_ID), "agent_name": "Alex",
-             "organization_id": str(TEST_ORG_ID)},
+            {
+                "agent_id": str(TEST_AGENT_ID),
+                "agent_name": "Alex",
+                "organization_id": str(TEST_ORG_ID),
+            },
         ]
         with patch("src.voice_agents.tool_routes.tool_service") as mock_ts:
             mock_ts.get_platform_tool_usage = AsyncMock(return_value=(agents, None))
@@ -1475,14 +1578,14 @@ class TestPlatformToolDeleteGuardrails:
         assert result == {"id": str(TEST_TOOL_ID), "deleted": True}
         # Usage was fetched up front so the audit can name the detached agents.
         mock_ts.get_platform_tool_usage.assert_awaited_once()
-        mock_ts.delete_platform_tool.assert_awaited_once_with(
-            TEST_TOOL_ID, force=True
-        )
+        mock_ts.delete_platform_tool.assert_awaited_once_with(TEST_TOOL_ID, force=True)
         # An audit log entry recording the force-delete + detached agent.
         audit = [r for r in caplog.records if "force" in r.getMessage().lower()]
         assert audit, "expected a force-delete audit log entry"
-        assert any("Alex" in r.getMessage() or str(TEST_AGENT_ID) in r.getMessage()
-                   for r in audit)
+        assert any(
+            "Alex" in r.getMessage() or str(TEST_AGENT_ID) in r.getMessage()
+            for r in audit
+        )
 
     @pytest.mark.asyncio
     async def test_delete_legacy_tool_returns_400(self):
@@ -1593,9 +1696,7 @@ class TestPlatformToolPremiumToggle:
             )
 
         assert result.is_premium is True
-        mock_ts.set_platform_tool_premium.assert_awaited_once_with(
-            TEST_TOOL_ID, True
-        )
+        mock_ts.set_platform_tool_premium.assert_awaited_once_with(TEST_TOOL_ID, True)
 
     @pytest.mark.asyncio
     async def test_platform_admin_sets_premium_false(self):
@@ -1614,9 +1715,7 @@ class TestPlatformToolPremiumToggle:
             )
 
         assert result.is_premium is False
-        mock_ts.set_platform_tool_premium.assert_awaited_once_with(
-            TEST_TOOL_ID, False
-        )
+        mock_ts.set_platform_tool_premium.assert_awaited_once_with(TEST_TOOL_ID, False)
 
     @pytest.mark.asyncio
     async def test_premium_toggle_forbidden_for_non_platform_admin(self):

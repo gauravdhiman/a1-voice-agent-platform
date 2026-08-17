@@ -9,10 +9,16 @@ from typing import List, Optional
 from uuid import UUID, uuid4
 
 from opentelemetry import trace
-from supabase import Client
 
 from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
+from shared.voice_agents.tools.base.oauth_support import (
+    extract_oauth_client_secret,
+    get_oauth_refresh_metadata,
+    sanitize_oauth_config,
+)
+from shared.voice_agents.tools.mcp.security import is_sensitive_mcp_header
+from supabase import Client
 
 from .tool_models import (
     AgentTool,
@@ -52,6 +58,7 @@ def _with_retry(max_retries: int = 3, delay: float = 0.5):
         max_retries: Maximum number of retry attempts
         delay: Delay between retries in seconds
     """
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             last_error = None
@@ -71,7 +78,9 @@ def _with_retry(max_retries: int = 3, delay: float = 0.5):
                         continue
                     raise
             raise last_error
+
         return wrapper
+
     return decorator
 
 
@@ -123,7 +132,7 @@ def validate_token_status(
             return AuthStatus.NOT_AUTHENTICATED
 
     except Exception as e:
-        logger.error(f"Error validating token status: {e}")
+        logger.error("Error validating token status (%s)", type(e).__name__)
         return AuthStatus.NOT_AUTHENTICATED
 
 
@@ -147,6 +156,61 @@ def get_connection_status(
         return ConnectionStatus.CONNECTED_AUTH_VALID
 
     return ConnectionStatus.CONNECTED_AUTH_INVALID
+
+
+def _oauth_response_metadata(
+    auth_type: Optional[str],
+    auth_config: object,
+    encrypted_sensitive_config: Optional[str],
+) -> dict[str, object]:
+    """Build safe refresh guidance for an agent-tool API response.
+
+    The encrypted connection is inspected only to determine whether a refresh
+    token exists. No token value is returned. A connected token without a
+    refresh grant is explicitly reported as manual reauthorization so admins
+    do not mistake a green access-token status for a persistent connection.
+    """
+    if auth_type != "oauth2":
+        return {
+            "oauth_refresh_mode": None,
+            "oauth_refresh_interval_minutes": None,
+            "oauth_refresh_message": None,
+        }
+
+    safe_config = sanitize_oauth_config(auth_config or {})
+    has_refresh_token: Optional[bool] = None
+    if encrypted_sensitive_config:
+        decrypted = decrypt_data(encrypted_sensitive_config)
+        if isinstance(decrypted, dict):
+            has_refresh_token = bool(decrypted.get("refresh_token"))
+            if not safe_config.get("token_url") and decrypted.get("oauth_token_url"):
+                safe_config["token_url"] = decrypted["oauth_token_url"]
+            if decrypted.get("oauth_token_endpoint_auth_method"):
+                safe_config["token_endpoint_auth_method"] = decrypted[
+                    "oauth_token_endpoint_auth_method"
+                ]
+    metadata = get_oauth_refresh_metadata(
+        safe_config,
+        has_refresh_token=has_refresh_token,
+    )
+    return {
+        "oauth_refresh_mode": metadata.mode,
+        "oauth_refresh_interval_minutes": metadata.manual_reauth_interval_minutes,
+        "oauth_refresh_message": metadata.message,
+    }
+
+
+def _token_expiry(encrypted_sensitive_config: Optional[str]) -> Optional[float]:
+    """Extract a numeric token expiry without exposing the encrypted payload."""
+    if not encrypted_sensitive_config:
+        return None
+    decrypted = decrypt_data(encrypted_sensitive_config)
+    if not isinstance(decrypted, dict):
+        return None
+    try:
+        return float(decrypted["expires_at"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 class ToolService:
@@ -283,13 +347,18 @@ class ToolService:
                 data_dict.pop("organization_id", None)
                 # Cleared public headers arrive as None; persist as {} so an
                 # upsert-by-name edit does not leave stale JSONB in place.
-                data_dict["mcp_server_headers"] = (
-                    tool_data.mcp_server_headers or {}
-                )
+                data_dict["mcp_server_headers"] = tool_data.mcp_server_headers or {}
                 if tool_data.auth_type != "oauth2":
                     # OAuth metadata must not survive a switch to no-auth or
                     # API-key mode and accidentally re-enable the OAuth route.
                     data_dict["auth_config"] = None
+            # OAuth client secrets are credentials, not public authorization
+            # metadata. Strip legacy/client-supplied secret keys from the JSONB
+            # config and persist the write-only input in encrypted storage.
+            if isinstance(data_dict.get("auth_config"), dict):
+                data_dict["auth_config"] = sanitize_oauth_config(
+                    data_dict["auth_config"]
+                )
 
             # Legacy (code-backed) tools carry NO premium metadata in the
             # registry: ``PlatformToolRegistry.sync_with_db`` re-upserts them
@@ -317,6 +386,12 @@ class ToolService:
                 # so a later discover/runtime session does not send stale
                 # credentials alongside the new auth mode.
                 data_dict["mcp_server_secret_headers"] = None
+            if tool_data.oauth_client_secret_input:
+                data_dict["oauth_client_secret_encrypted"] = encrypt_data(
+                    {"client_secret": tool_data.oauth_client_secret_input}
+                )
+            elif tool_data.auth_type != "oauth2":
+                data_dict["oauth_client_secret_encrypted"] = None
 
             if existing.data:
                 response = (
@@ -332,7 +407,10 @@ class ToolService:
 
             if not response.data:
                 return None, "Failed to upsert platform tool"
-            return self._platform_tool_for_response(PlatformTool(**response.data[0])), None
+            return (
+                self._platform_tool_for_response(PlatformTool(**response.data[0])),
+                None,
+            )
         except Exception as e:
             logger.error(f"Error upserting platform tool: {e}")
             return None, str(e)
@@ -348,7 +426,32 @@ class ToolService:
         retains the encrypted blob for the dispatch layer to decrypt.
         """
         tool.mcp_secret_headers_configured = bool(tool.mcp_server_secret_headers)
+        tool.oauth_client_secret_configured = bool(tool.oauth_client_secret_encrypted)
+        if tool.auth_type == "oauth2":
+            safe_auth_config = sanitize_oauth_config(tool.auth_config or {})
+            metadata = get_oauth_refresh_metadata(safe_auth_config)
+            tool.auth_config = safe_auth_config
+            tool.oauth_refresh_mode = metadata.mode
+            tool.oauth_refresh_interval_minutes = (
+                metadata.manual_reauth_interval_minutes
+            )
+            tool.oauth_refresh_message = metadata.message
+        else:
+            tool.auth_config = (
+                sanitize_oauth_config(tool.auth_config or {})
+                if tool.auth_config
+                else tool.auth_config
+            )
+            tool.oauth_refresh_mode = None
+            tool.oauth_refresh_interval_minutes = None
+            tool.oauth_refresh_message = None
+        tool.mcp_server_headers = {
+            str(key): str(value)
+            for key, value in (tool.mcp_server_headers or {}).items()
+            if not is_sensitive_mcp_header(str(key))
+        }
         tool.mcp_server_secret_headers = None
+        tool.oauth_client_secret_encrypted = None
         return tool
 
     @tracer.start_as_current_span("tool.get_platform_tools")
@@ -426,6 +529,172 @@ class ToolService:
             logger.error(f"Error getting platform tool {tool_id}: {e}")
             return None, str(e)
 
+    @tracer.start_as_current_span("tool.get_platform_tool_oauth_client_secret")
+    async def get_platform_tool_oauth_client_secret(
+        self, tool_name: str
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Load one platform OAuth client secret for an internal token exchange.
+
+        The secret is stored as Fernet-encrypted JSON in
+        ``platform_tools.oauth_client_secret_encrypted``. This method is
+        intentionally narrow: it returns only the decrypted secret to the
+        backend OAuth route and never exposes it through a platform-tool model
+        or API response.
+
+        Args:
+            tool_name: Platform tool name whose confidential OAuth client is
+                being used.
+
+        Returns:
+            ``(secret, error)``. A missing secret is ``(None, None)``; a
+            database/decryption failure returns an error string.
+        """
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .select("oauth_client_secret_encrypted")
+                .eq("name", tool_name)
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None, "Platform tool not found"
+            encrypted = response.data[0].get("oauth_client_secret_encrypted")
+            if not encrypted:
+                return None, None
+            decrypted = decrypt_data(encrypted)
+            secret = (
+                decrypted.get("client_secret") if isinstance(decrypted, dict) else None
+            )
+            if not isinstance(secret, str) or not secret:
+                return None, "OAuth client secret could not be decrypted"
+            return secret, None
+        except Exception as exc:
+            logger.error(
+                "Error loading OAuth client secret for platform tool %s: %s",
+                tool_name,
+                type(exc).__name__,
+            )
+            return None, "Could not load OAuth client secret"
+
+    @tracer.start_as_current_span("tool.migrate_legacy_oauth_client_secrets")
+    async def migrate_legacy_oauth_client_secrets(
+        self,
+    ) -> tuple[int, Optional[str]]:
+        """Move legacy OAuth client secrets out of public tool metadata.
+
+        Prior versions allowed a confidential OAuth client secret to be stored
+        in ``platform_tools.auth_config``. That JSONB field is returned as
+        administrative metadata and is therefore not an acceptable secret
+        store. This startup-safe migration copies a legacy secret into the
+        Fernet-encrypted ``oauth_client_secret_encrypted`` column when needed,
+        then removes all known grant and credential fields from ``auth_config``.
+
+        Args:
+            None.
+
+        Returns:
+            A tuple containing the number of rows scrubbed and an optional
+            error message. Rows already using encrypted storage are still
+            scrubbed if stale credential keys remain in their metadata.
+
+        Raises:
+            No exception is intentionally propagated. Database or encryption
+            failures are logged without credential material and returned to the
+            caller so application startup can report the migration issue.
+
+        Notes:
+            The operation is idempotent. Running it on every backend startup
+            is safe because a row with an encrypted secret is never encrypted
+            again; only the public metadata cleanup is repeated when needed.
+        """
+        migrated = 0
+        try:
+            response = (
+                self.supabase.table("platform_tools")
+                .select("id,auth_type,auth_config,oauth_client_secret_encrypted")
+                .eq("auth_type", "oauth2")
+                .execute()
+            )
+            for row in response.data or []:
+                raw_config = row.get("auth_config")
+                if not isinstance(raw_config, dict):
+                    continue
+
+                sanitized_config = sanitize_oauth_config(raw_config)
+                legacy_secret = extract_oauth_client_secret(raw_config)
+                update_data: dict[str, object] = {}
+                if sanitized_config != raw_config:
+                    update_data["auth_config"] = sanitized_config
+                if legacy_secret and not row.get("oauth_client_secret_encrypted"):
+                    update_data["oauth_client_secret_encrypted"] = encrypt_data(
+                        {"client_secret": legacy_secret}
+                    )
+                if not update_data:
+                    continue
+
+                (
+                    self.supabase.table("platform_tools")
+                    .update(update_data)
+                    .eq("id", str(row["id"]))
+                    .execute()
+                )
+                migrated += 1
+            return migrated, None
+        except Exception as exc:
+            logger.error(
+                "OAuth client-secret migration failed after %s rows (%s)",
+                migrated,
+                type(exc).__name__,
+            )
+            return migrated, "Could not migrate legacy OAuth client secrets"
+
+    @tracer.start_as_current_span("tool.update_platform_tool_oauth_metadata")
+    async def update_platform_tool_oauth_metadata(
+        self,
+        tool_id: UUID,
+        oauth_metadata: dict,
+    ) -> tuple[bool, Optional[str]]:
+        """Persist discovered OAuth metadata without persisting credentials.
+
+        MCP authorization-server discovery can fill in the token endpoint,
+        public client id, token-endpoint authentication method, and refresh
+        grant capability after a platform tool was authored. Those values must
+        survive the initial OAuth redirect so the background refresh worker
+        can resolve the same request on a later run. This method is deliberately
+        narrower than ``update_platform_tool``: it writes only sanitized
+        ``auth_config`` metadata and has no path for plaintext credentials.
+
+        Args:
+            tool_id: The ``platform_tools.id`` row to update.
+            oauth_metadata: Provider metadata returned by MCP discovery. Known
+                credential and grant-artifact fields are removed recursively
+                before the database write.
+
+        Returns:
+            ``(True, None)`` after a successful update, otherwise ``(False,
+            error_message)``. Error messages are safe for API logs and do not
+            include the submitted metadata.
+        """
+        try:
+            sanitized_metadata = sanitize_oauth_config(oauth_metadata)
+            response = (
+                self.supabase.table("platform_tools")
+                .update({"auth_config": sanitized_metadata})
+                .eq("id", str(tool_id))
+                .execute()
+            )
+            if not response.data:
+                return False, "Platform tool not found or OAuth metadata was not saved"
+            return True, None
+        except Exception as exc:
+            logger.error(
+                "Error persisting discovered OAuth metadata for tool %s (%s)",
+                tool_id,
+                type(exc).__name__,
+            )
+            return False, "Could not persist discovered OAuth metadata"
+
     @tracer.start_as_current_span("tool.merge_stored_mcp_secret_headers")
     async def merge_stored_mcp_secret_headers(
         self,
@@ -474,10 +743,9 @@ class ToolService:
             except Exception as e:
                 logger.error(
                     "Failed to decrypt mcp_server_secret_headers for discover "
-                    "probe on tool %s: %s",
+                    "probe on tool %s (%s)",
                     tool_id,
-                    e,
-                    exc_info=True,
+                    type(e).__name__,
                 )
                 return (
                     probe_headers,
@@ -497,9 +765,7 @@ class ToolService:
                 value = str(raw_value)
                 if "{{KEY}}" in value:
                     if test_api_key:
-                        merged[header_key] = value.replace(
-                            "{{KEY}}", str(test_api_key)
-                        )
+                        merged[header_key] = value.replace("{{KEY}}", str(test_api_key))
                     else:
                         needs_test_key = True
                 else:
@@ -514,10 +780,11 @@ class ToolService:
             return merged, None
         except Exception as e:
             logger.error(
-                f"Error merging stored MCP secret headers for {tool_id}: {e}",
-                exc_info=True,
+                "Error merging stored MCP secret headers for %s (%s)",
+                tool_id,
+                type(e).__name__,
             )
-            return probe_headers, str(e)
+            return probe_headers, "Could not merge stored secret headers"
 
     @tracer.start_as_current_span("tool.publish_platform_tool")
     async def publish_platform_tool(
@@ -670,14 +937,10 @@ class ToolService:
                 None,
             )
         except Exception as e:
-            logger.error(
-                f"Error setting premium flag on platform tool {tool_id}: {e}"
-            )
+            logger.error(f"Error setting premium flag on platform tool {tool_id}: {e}")
             return None, str(e)
 
-    async def _discover_functions_schema(
-        self, row: dict
-    ) -> Optional[dict]:
+    async def _discover_functions_schema(self, row: dict) -> Optional[dict]:
         """Best-effort live discovery of a platform tool's exposed tools.
 
         Builds the MCP server config from the row (public headers + decrypted
@@ -728,10 +991,9 @@ class ToolService:
             except Exception as e:
                 logger.error(
                     "Failed to decrypt mcp_server_secret_headers for backfill of "
-                    "%s: %s",
+                    "%s (%s)",
                     row.get("name"),
-                    e,
-                    exc_info=True,
+                    type(e).__name__,
                 )
 
         config = McpServerConfig(
@@ -740,14 +1002,16 @@ class ToolService:
             headers=headers,
         )
         try:
-            from shared.voice_agents.tools.mcp.json_http_client import list_tools_json_http
+            from shared.voice_agents.tools.mcp.json_http_client import (
+                list_tools_json_http,
+            )
 
             tool_defs = await list_tools_json_http(config)
         except Exception as e:
             logger.warning(
-                "Publish-time MCP discover failed for %s: %s",
+                "Publish-time MCP discover failed for %s (%s)",
                 row.get("name"),
-                e,
+                type(e).__name__,
             )
             return None
 
@@ -787,13 +1051,15 @@ class ToolService:
                 data_dict.pop("organization_id", None)
                 # Cleared form fields arrive as None and would be dropped by
                 # exclude_none — write empty/null explicitly so edits persist.
-                data_dict["mcp_server_headers"] = (
-                    tool_data.mcp_server_headers or {}
-                )
+                data_dict["mcp_server_headers"] = tool_data.mcp_server_headers or {}
                 if tool_data.auth_type != "oauth2":
                     # OAuth metadata must not survive a switch to no-auth or
                     # API-key mode and accidentally re-enable the OAuth route.
                     data_dict["auth_config"] = None
+            if isinstance(data_dict.get("auth_config"), dict):
+                data_dict["auth_config"] = sanitize_oauth_config(
+                    data_dict["auth_config"]
+                )
             # Always write these so clearing them in the UI is not a no-op.
             data_dict["description"] = tool_data.description
             data_dict["auth_type"] = tool_data.auth_type
@@ -807,6 +1073,12 @@ class ToolService:
                 # so a later discover/runtime session does not send stale
                 # credentials alongside the new auth mode.
                 data_dict["mcp_server_secret_headers"] = None
+            if tool_data.oauth_client_secret_input:
+                data_dict["oauth_client_secret_encrypted"] = encrypt_data(
+                    {"client_secret": tool_data.oauth_client_secret_input}
+                )
+            elif tool_data.auth_type != "oauth2":
+                data_dict["oauth_client_secret_encrypted"] = None
             response = (
                 self.supabase.table("platform_tools")
                 .update(data_dict)
@@ -1034,11 +1306,17 @@ class ToolService:
             result_data = response.data[0]
             auth_type = platform_tool.auth_type if platform_tool else None
             auth_status_val = validate_token_status(
-                result_data.get("sensitive_config"),
-                auth_type=auth_type or "oauth2"
+                result_data.get("sensitive_config"), auth_type=auth_type or "oauth2"
             )
             requires_auth = platform_tool.requires_auth if platform_tool else False
-            connection_status_val = get_connection_status(requires_auth, auth_status_val)
+            connection_status_val = get_connection_status(
+                requires_auth, auth_status_val
+            )
+            oauth_metadata = _oauth_response_metadata(
+                auth_type,
+                platform_tool.auth_config if platform_tool else {},
+                result_data.get("sensitive_config"),
+            )
 
             response_dict = {
                 "id": result_data["id"],
@@ -1049,11 +1327,16 @@ class ToolService:
                 "is_enabled": result_data.get("is_enabled", True),
                 "auth_status": auth_status_val,
                 "connection_status": connection_status_val,
+                "token_expires_at": _token_expiry(result_data.get("sensitive_config")),
+                "last_refreshed_at": result_data.get("last_refreshed_at"),
+                **oauth_metadata,
                 "created_at": result_data["created_at"],
                 "updated_at": result_data["updated_at"],
             }
-
-            return AgentToolResponse(**response_dict), None
+            agent_tool_response = AgentToolResponse(**response_dict)
+            if platform_tool:
+                agent_tool_response.tool = platform_tool
+            return agent_tool_response, None
         except Exception as e:
             logger.error(f"Error configuring agent tool: {e}")
             return None, str(e)
@@ -1077,23 +1360,25 @@ class ToolService:
                 # Extract tool details from the joined query
                 tool_data = item.pop("tool")
 
-                # Extract token expiry from encrypted config for display
-                token_expires_at = None
-                try:
-                    decrypted_config = decrypt_data(item.get("sensitive_config"))
-                    if decrypted_config and isinstance(decrypted_config, dict):
-                        token_expires_at = decrypted_config.get("expires_at")
-                except Exception:
-                    pass
+                # Extract only non-secret token metadata for display.
+                token_expires_at = _token_expiry(item.get("sensitive_config"))
 
                 # Build response without sensitive config
                 auth_type = tool_data.get("auth_type") if tool_data else None
                 auth_status_val = validate_token_status(
-                    item.get("sensitive_config"),
-                    auth_type=auth_type or "oauth2"
+                    item.get("sensitive_config"), auth_type=auth_type or "oauth2"
                 )
-                requires_auth = tool_data.get("requires_auth", False) if tool_data else False
-                connection_status_val = get_connection_status(requires_auth, auth_status_val)
+                requires_auth = (
+                    tool_data.get("requires_auth", False) if tool_data else False
+                )
+                connection_status_val = get_connection_status(
+                    requires_auth, auth_status_val
+                )
+                oauth_metadata = _oauth_response_metadata(
+                    auth_type,
+                    tool_data.get("auth_config") if tool_data else {},
+                    item.get("sensitive_config"),
+                )
 
                 response_dict = {
                     "id": item["id"],
@@ -1105,6 +1390,8 @@ class ToolService:
                     "auth_status": auth_status_val,
                     "connection_status": connection_status_val,
                     "token_expires_at": token_expires_at,
+                    "last_refreshed_at": item.get("last_refreshed_at"),
+                    **oauth_metadata,
                     "created_at": item["created_at"],
                     "updated_at": item["updated_at"],
                 }
@@ -1148,7 +1435,10 @@ class ToolService:
                         if decrypted_config and isinstance(decrypted_config, dict):
                             sensitive_config = decrypted_config
                     except Exception as e:
-                        logger.error(f"Error decrypting sensitive config: {e}")
+                        logger.error(
+                            "Error decrypting sensitive config (%s)",
+                            type(e).__name__,
+                        )
 
                 # Build full AgentTool with sensitive config
                 agent_tool_dict = {
@@ -1159,6 +1449,7 @@ class ToolService:
                     "sensitive_config": sensitive_config,
                     "unselected_functions": item.get("unselected_functions"),
                     "is_enabled": item.get("is_enabled", True),
+                    "last_refreshed_at": item.get("last_refreshed_at"),
                     "created_at": item["created_at"],
                     "updated_at": item["updated_at"],
                 }
@@ -1228,6 +1519,13 @@ class ToolService:
                 "is_enabled": item.get("is_enabled", True),
                 "auth_status": auth_status_val,
                 "connection_status": connection_status_val,
+                "token_expires_at": _token_expiry(item.get("sensitive_config")),
+                "last_refreshed_at": item.get("last_refreshed_at"),
+                **_oauth_response_metadata(
+                    auth_type,
+                    tool_data.get("auth_config") if tool_data else {},
+                    item.get("sensitive_config"),
+                ),
                 "created_at": item["created_at"],
                 "updated_at": item["updated_at"],
             }
@@ -1298,8 +1596,14 @@ class ToolService:
                 "unselected_functions": result_data.get("unselected_functions"),
                 "is_enabled": result_data.get("is_enabled", True),
                 "auth_status": validate_token_status(
+                    result_data.get("sensitive_config"), auth_type=auth_type or "oauth2"
+                ),
+                "token_expires_at": _token_expiry(result_data.get("sensitive_config")),
+                "last_refreshed_at": result_data.get("last_refreshed_at"),
+                **_oauth_response_metadata(
+                    auth_type,
+                    platform_tool.auth_config if platform_tool else {},
                     result_data.get("sensitive_config"),
-                    auth_type=auth_type or "oauth2"
                 ),
                 "created_at": result_data["created_at"],
                 "updated_at": result_data["updated_at"],
@@ -1333,17 +1637,19 @@ class ToolService:
     async def get_all_agent_tools_with_auth(
         self,
     ) -> tuple[List[AgentTool], Optional[str]]:
-        """Get all agent tools that require authentication (for token refresh).
+        """Get all enabled OAuth agent tools with decrypted state for refresh.
 
         Returns:
-            List of AgentTool objects with sensitive config for tools requiring auth
+            List of OAuth AgentTool objects with sensitive config for token refresh
         """
         try:
             # Get all agent_tools that require auth (requires filter)
             # Join with platform_tools to filter by requires_auth
             response = (
                 self.supabase.table("agent_tools")
-                .select("*, tool:platform_tools(*)")
+                .select(
+                    "*, tool:platform_tools(*), " "voice_agents(name,organization_id)"
+                )
                 .eq("is_enabled", True)
                 .execute()
             )
@@ -1361,6 +1667,28 @@ class ToolService:
                 if not tool_data or not tool_data.get("requires_auth", False):
                     continue
 
+                # TokenRefreshService is OAuth-specific. Keep API-key and
+                # other manual credential tools out of its candidate set while
+                # still accepting future OAuth rows whose auth_type was not
+                # normalized but whose metadata clearly contains OAuth fields.
+                auth_type = str(tool_data.get("auth_type") or "").lower()
+                auth_config = tool_data.get("auth_config")
+                oauth_metadata_keys = {
+                    "token_url",
+                    "authorization_url",
+                    "oauth_mode",
+                    "oauth_refresh_mode",
+                    "oauth2",
+                }
+                has_oauth_metadata = isinstance(auth_config, dict) and bool(
+                    oauth_metadata_keys.intersection(auth_config)
+                )
+                if (
+                    auth_type not in {"oauth", "oauth2", "oauth_2"}
+                    and not has_oauth_metadata
+                ):
+                    continue
+
                 # Only process if there's sensitive_config (tokens exist)
                 if not item.get("sensitive_config"):
                     continue
@@ -1372,10 +1700,16 @@ class ToolService:
                     if decrypted_config and isinstance(decrypted_config, dict):
                         sensitive_config = decrypted_config
                 except Exception as e:
-                    logger.error(f"Error decrypting sensitive config: {e}")
+                    logger.error(
+                        "Error decrypting sensitive config (%s)",
+                        type(e).__name__,
+                    )
                     continue
 
                 # Build full AgentTool with sensitive config
+                agent_data = item.get("voice_agents") or {}
+                if isinstance(agent_data, list):
+                    agent_data = agent_data[0] if agent_data else {}
                 agent_tool_dict = {
                     "id": item["id"],
                     "agent_id": item["agent_id"],
@@ -1387,6 +1721,8 @@ class ToolService:
                     "created_at": item["created_at"],
                     "updated_at": item["updated_at"],
                     "last_refreshed_at": item.get("last_refreshed_at"),
+                    "agent_name": agent_data.get("name"),
+                    "organization_id": agent_data.get("organization_id"),
                 }
 
                 agent_tool = AgentTool(**agent_tool_dict)
@@ -1396,7 +1732,9 @@ class ToolService:
 
             return agent_tools, None
         except Exception as e:
-            logger.error(f"Error getting all agent tools with auth: {e}")
+            logger.error(
+                "Error getting all agent tools with auth (%s)", type(e).__name__
+            )
             return [], str(e)
 
 

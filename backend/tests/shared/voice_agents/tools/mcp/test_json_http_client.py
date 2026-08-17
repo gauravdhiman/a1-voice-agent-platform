@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import httpx
 import pytest
 
 from shared.voice_agents.tools.mcp.json_http_client import list_tools_json_http
 from shared.voice_agents.tools.mcp.models import McpServerConfig
+
+
+@pytest.fixture(autouse=True)
+def allow_test_mcp_urls(monkeypatch):
+    """Keep transport tests independent of external DNS while testing HTTP."""
+    monkeypatch.setattr(
+        "shared.voice_agents.tools.mcp.json_http_client.validate_mcp_server_url",
+        lambda _url: (True, ""),
+    )
 
 
 def _twenty_like_handler(request: httpx.Request) -> httpx.Response:
@@ -231,3 +241,53 @@ async def test_list_tools_json_http_uses_negotiated_protocol_version_on_later_re
         mod.httpx.AsyncClient = original
 
     assert tools == []
+
+
+@pytest.mark.asyncio
+async def test_mcp_http_client_does_not_follow_redirects_with_bearer_headers():
+    """A redirect cannot move an OAuth bearer to an untrusted host."""
+    import shared.voice_agents.tools.mcp.json_http_client as mod
+
+    transport = httpx.MockTransport(_twenty_like_handler)
+    original = httpx.AsyncClient
+    captured: dict[str, object] = {}
+
+    class _Client(original):
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+            kwargs["transport"] = transport
+            super().__init__(*args, **kwargs)
+
+    mod.httpx.AsyncClient = _Client  # type: ignore[misc]
+    try:
+        await list_tools_json_http(
+            McpServerConfig(
+                url="https://crm.example.com/mcp",
+                headers={"Authorization": "Bearer good-key"},
+            )
+        )
+    finally:
+        mod.httpx.AsyncClient = original
+
+    assert captured["follow_redirects"] is False
+
+
+@pytest.mark.asyncio
+async def test_mcp_http_client_revalidates_url_before_opening_client():
+    """Direct MCP callers cannot bypass the runtime SSRF boundary."""
+    import shared.voice_agents.tools.mcp.json_http_client as mod
+
+    with patch.object(
+        mod,
+        "validate_mcp_server_url",
+        return_value=(False, "URL resolves to a blocked address"),
+    ), patch.object(mod.httpx, "AsyncClient") as async_client:
+        with pytest.raises(ValueError, match="blocked address"):
+            await list_tools_json_http(
+                McpServerConfig(
+                    url="https://changed.example/mcp",
+                    headers={"Authorization": "Bearer should-not-be-used"},
+                )
+            )
+
+    async_client.assert_not_called()

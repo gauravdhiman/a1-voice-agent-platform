@@ -29,6 +29,7 @@ import type {
   PlatformTool,
   DiscoveredMcpTool,
   ParsedMcpServerError,
+  OAuthRefreshMode,
 } from "@/types/agent";
 import {
   useDiscoverMcpTools,
@@ -155,6 +156,11 @@ export function PlatformToolsManager({
   const [oauthTokenUrl, setOauthTokenUrl] = React.useState("");
   const [oauthScopes, setOauthScopes] = React.useState("");
   const [oauthClientId, setOauthClientId] = React.useState("");
+  const [oauthClientSecret, setOauthClientSecret] = React.useState("");
+  const [oauthRefreshMode, setOauthRefreshMode] =
+    React.useState<OAuthRefreshMode>("unknown");
+  const [oauthRefreshInterval, setOauthRefreshInterval] =
+    React.useState("");
   const [description, setDescription] = React.useState("");
   // Premium flag: premium tools require the org plan to entitle the
   // ``premium_tools`` feature before an org can attach them.
@@ -232,6 +238,9 @@ export function PlatformToolsManager({
     setOauthTokenUrl("");
     setOauthScopes("");
     setOauthClientId("");
+    setOauthClientSecret("");
+    setOauthRefreshMode("unknown");
+    setOauthRefreshInterval("");
     setDescription("");
     setIsPremium(false);
     setDiscoveredTools([]);
@@ -342,6 +351,19 @@ export function PlatformToolsManager({
             : String(parsedOauth.scopes || ""),
         );
         setOauthClientId(String(parsedOauth.client_id || ""));
+        setOauthClientSecret("");
+        setOauthRefreshMode(
+          parsedOauth.oauth_refresh_mode === "automatic" ||
+            parsedOauth.oauth_refresh_mode === "manual" ||
+            parsedOauth.oauth_refresh_mode === "unknown"
+            ? (parsedOauth.oauth_refresh_mode as OAuthRefreshMode)
+            : "unknown",
+        );
+        setOauthRefreshInterval(
+          parsedOauth.manual_reauth_interval_minutes
+            ? String(parsedOauth.manual_reauth_interval_minutes)
+            : "",
+        );
         if (result.servers.length > 1) {
           setParseErrors((prev) => [
             ...prev,
@@ -490,6 +512,14 @@ export function PlatformToolsManager({
             ...(oauthClientId.trim()
               ? { client_id: oauthClientId.trim() }
               : {}),
+            oauth_refresh_mode: oauthRefreshMode,
+            ...(oauthRefreshMode === "manual" && oauthRefreshInterval.trim()
+              ? {
+                  manual_reauth_interval_minutes: Number(
+                    oauthRefreshInterval.trim(),
+                  ),
+                }
+              : {}),
           }
         : null;
     const credentialHeaderValues = [
@@ -530,6 +560,9 @@ export function PlatformToolsManager({
           : {}
         : {}),
       ...(oauthConfig ? { auth_config: oauthConfig } : {}),
+      ...(authMode === "oauth2" && oauthClientSecret.trim()
+        ? { oauth_client_secret_input: oauthClientSecret.trim() }
+        : {}),
       is_active: true,
       requires_auth: authMode === "oauth2" || apiKeyRequiresOrgKey,
       auth_type: authMode === "none" ? null : authMode,
@@ -656,6 +689,22 @@ export function PlatformToolsManager({
         : String(storedOauth.scopes || ""),
     );
     setOauthClientId(String(storedOauth.client_id || ""));
+    setOauthClientSecret("");
+    setOauthRefreshMode(
+      tool.oauth_refresh_mode ??
+        (storedOauth.oauth_refresh_mode === "automatic" ||
+        storedOauth.oauth_refresh_mode === "manual" ||
+        storedOauth.oauth_refresh_mode === "unknown"
+          ? (storedOauth.oauth_refresh_mode as OAuthRefreshMode)
+          : "unknown"),
+    );
+    setOauthRefreshInterval(
+      tool.oauth_refresh_interval_minutes
+        ? String(tool.oauth_refresh_interval_minutes)
+        : storedOauth.manual_reauth_interval_minutes
+          ? String(storedOauth.manual_reauth_interval_minutes)
+          : "",
+    );
     setIsPremium(Boolean(tool.is_premium));
     setDiscoveredTools([]);
     setParseErrors([]);
@@ -981,6 +1030,97 @@ export function PlatformToolsManager({
                             className="form-control h-9 text-sm"
                           />
                         </div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="form-field space-y-1">
+                          <Label htmlFor="mcp-oauth-refresh-mode">
+                            Refresh support
+                          </Label>
+                          <select
+                            id="mcp-oauth-refresh-mode"
+                            value={oauthRefreshMode}
+                            onChange={(e) =>
+                              setOauthRefreshMode(
+                                e.target.value as OAuthRefreshMode,
+                              )
+                            }
+                            className="form-control flex h-10 w-full rounded-lg px-3 text-sm"
+                          >
+                            <option value="unknown">
+                              Not declared — platform will detect
+                            </option>
+                            <option value="automatic">
+                              Automatic — provider issues refresh tokens
+                            </option>
+                            <option value="manual">
+                              Manual — provider does not refresh
+                            </option>
+                          </select>
+                        </div>
+                        {oauthRefreshMode === "manual" && (
+                          <div className="form-field space-y-1">
+                            <Label htmlFor="mcp-oauth-refresh-interval">
+                              Manual reauthorization interval (minutes)
+                            </Label>
+                            <Input
+                              id="mcp-oauth-refresh-interval"
+                              type="number"
+                              min={1}
+                              max={525600}
+                              value={oauthRefreshInterval}
+                              onChange={(e) =>
+                                setOauthRefreshInterval(e.target.value)
+                              }
+                              placeholder="For example, 60"
+                              className="form-control h-9 text-sm"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="form-field space-y-1">
+                        <Label htmlFor="mcp-oauth-client-secret">
+                          Confidential client secret (optional, encrypted)
+                        </Label>
+                        <Input
+                          id="mcp-oauth-client-secret"
+                          type="password"
+                          autoComplete="new-password"
+                          value={oauthClientSecret}
+                          onChange={(e) => setOauthClientSecret(e.target.value)}
+                          placeholder={
+                            editingTool?.oauth_client_secret_configured
+                              ? "Configured — leave blank to keep it"
+                              : "Only required by confidential OAuth clients"
+                          }
+                          className="form-control h-9 text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Stored separately with authenticated encryption. It is
+                          never included in the tool catalog or OAuth state.
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                        {oauthRefreshMode === "automatic" ? (
+                          <>
+                            The provider is expected to return a refresh token;
+                            the platform will refresh access tokens before they
+                            expire. A connection that does not return one will
+                            still be shown as requiring manual reauthorization.
+                          </>
+                        ) : oauthRefreshMode === "manual" ? (
+                          <>
+                            Tell Org Admins to reauthorize at the configured
+                            interval. The platform will not claim that this
+                            integration stays connected automatically.
+                          </>
+                        ) : (
+                          <>
+                            Refresh support is not confirmed. The platform will
+                            auto-refresh only when the authorization returns a
+                            refresh token; otherwise an administrator must
+                            reauthorize after expiry.
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1334,6 +1474,23 @@ export function PlatformToolsManager({
                       descriptionId={`platform-tool-description-${tool.id}`}
                       textClassName="text-xs text-muted-foreground"
                     />
+                    {tool.auth_type === "oauth2" && (
+                      <div className="mt-2 flex items-start gap-1.5 text-[11px]">
+                        <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <span className="text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            {tool.oauth_refresh_mode === "automatic"
+                              ? "Automatic refresh"
+                              : tool.oauth_refresh_mode === "manual"
+                                ? "Manual reauthorization"
+                                : "Refresh support unknown"}
+                            :{" "}
+                          </span>
+                          {tool.oauth_refresh_message ||
+                            "The platform will determine whether a refresh token is returned."}
+                        </span>
+                      </div>
+                    )}
                     {tool.tool_source === "mcp" && (
                       <div className="mt-2 space-y-0.5 text-[11px]">
                         {tool.tool_functions_schema?.functions?.length ? (

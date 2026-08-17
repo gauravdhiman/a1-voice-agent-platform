@@ -174,6 +174,17 @@ def _is_sensitive_header(name: str) -> bool:
     )
 
 
+def is_sensitive_mcp_header(name: str) -> bool:
+    """Return whether a header must be kept out of public MCP metadata.
+
+    Platform-tool rows expose ``mcp_server_headers`` to administrators and
+    workers. Conventional credential headers belong in the encrypted secret
+    header field instead; this public wrapper lets API validation reuse the
+    parser's classification without duplicating header-name rules.
+    """
+    return _is_sensitive_header(name)
+
+
 def _as_mapping(value: Any) -> dict[str, Any]:
     """Return a shallow dict for optional JSON config sections."""
     return dict(value) if isinstance(value, Mapping) else {}
@@ -288,6 +299,28 @@ def _normalize_auth(
     if registration_endpoint:
         auth_config["registration_endpoint"] = str(registration_endpoint)
 
+    token_endpoint_auth_method = _first_value(
+        auth,
+        "token_endpoint_auth_method",
+        "tokenEndpointAuthMethod",
+        "client_auth_method",
+        "clientAuthMethod",
+    ) or _first_value(
+        cfg,
+        "token_endpoint_auth_method",
+        "tokenEndpointAuthMethod",
+        "client_auth_method",
+        "clientAuthMethod",
+    )
+    if token_endpoint_auth_method:
+        auth_config["token_endpoint_auth_method"] = str(token_endpoint_auth_method)
+
+    oauth_mode = _first_value(auth, "oauth_mode", "oauthMode") or _first_value(
+        cfg, "oauth_mode", "oauthMode"
+    )
+    if oauth_mode:
+        auth_config["oauth_mode"] = str(oauth_mode)
+
     is_oauth = "oauth" in normalized_type or bool(auth_url or token_url) or bool(oauth)
     if is_oauth:
         auth_config["provider"] = auth_config.get("provider", "mcp")
@@ -368,6 +401,9 @@ def _is_blocked_ip(ip: Union[ipaddress.IPv4Address, ipaddress.IPv6Address]) -> b
 
 
 def _allow_local() -> bool:
+    environment = os.getenv("ENVIRONMENT") or os.getenv("APP_ENV") or "development"
+    if environment.strip().lower() in {"production", "prod", "staging", "stage"}:
+        return False
     return os.getenv(_ALLOW_LOCAL, "").strip().lower() in ("1", "true", "yes")
 
 
@@ -404,6 +440,10 @@ def validate_mcp_server_url(url: Optional[str]) -> tuple[bool, str]:
     host = parsed.hostname
     if not host:
         return False, "URL has no host"
+    if parsed.username or parsed.password:
+        return False, "URL must not contain userinfo"
+    if parsed.fragment:
+        return False, "URL must not contain a fragment"
 
     try:
         ips_str = _resolve_host(host)
