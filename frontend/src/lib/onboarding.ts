@@ -50,7 +50,7 @@ export interface OnboardingWizardState {
   businessDescription: string;
   /** Display name for the voice agent */
   agentName: string;
-  /** Selected voice template, or null when skipped */
+  /** Selected use case template, or null when skipped */
   selectedTemplate: VoiceTemplate | null;
   /** Purchased phone number E.164, if any */
   purchasedPhoneNumber: string | null;

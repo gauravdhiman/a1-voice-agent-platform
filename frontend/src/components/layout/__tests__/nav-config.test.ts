@@ -158,6 +158,7 @@ describe("nav-config", () => {
     expect(names).toContain("Platform Skills");
     expect(names).toContain("Platform Tools");
     expect(names).toContain("Voice Presets");
+    expect(names).toContain("Use Case Templates");
     expect(names).toContain("Notifications");
     expect(names).toContain("Plan Catalog");
     expect(names).not.toContain("Entitlements");

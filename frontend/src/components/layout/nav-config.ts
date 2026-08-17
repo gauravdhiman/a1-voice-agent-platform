@@ -46,6 +46,7 @@ import {
   Wrench,
   Bell,
   Package,
+  FileText,
 } from "lucide-react";
 import {
   PERMISSION_ACTIONS,
@@ -183,6 +184,14 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       href: "/platform/skills",
       tourId: "platform-skills",
       icon: Layers,
+      requiredPermission: "platform:admin",
+      section: "platform_admin",
+    },
+    {
+      name: "Use Case Templates",
+      href: "/platform/templates",
+      tourId: "voice-templates",
+      icon: FileText,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },

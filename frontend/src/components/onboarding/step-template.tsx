@@ -31,7 +31,7 @@ export interface StepTemplateProps {
 }
 
 /**
- * Step 2 — agent name plus optional voice template selection.
+ * Step 2 — agent name plus optional use case template selection.
  *
  * Continue requires an agent name and a selected template. Skip only requires
  * an agent name so founders can leave without a template.

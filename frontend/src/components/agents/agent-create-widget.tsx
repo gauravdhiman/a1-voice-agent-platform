@@ -143,7 +143,7 @@ function StepIndicator({
 }
 
 /**
- * Presents the available voice templates during agent creation.
+ * Presents the available use case templates during agent creation.
  *
  * Template cards remain compact in the wizard. The full template definition is
  * shown in a right-side drawer so the list does not become difficult to scan.
@@ -176,7 +176,7 @@ export function TemplateSelectionStage({
       <div>
         <h3 className="text-lg font-semibold mb-1">Start from a template</h3>
         <p className="text-sm text-muted-foreground">
-          Pick an industry template to pre-fill your agent configuration, or skip to set it up manually.
+          Pick a use case template to pre-fill your agent configuration, or skip to set it up manually.
         </p>
       </div>
 
@@ -508,7 +508,7 @@ export function AgentCreateWidget() {
         name="instructions_markdown"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Agent Instructions</FormLabel>
+            <FormLabel>Additional Instructions</FormLabel>
             <FormControl>
               <Textarea
                 {...field}
@@ -637,7 +637,7 @@ export function AgentCreateWidget() {
               </div>
               <div>
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Agent Instructions
+                  Additional Instructions
                 </span>
                 <p className="text-sm mt-1 text-muted-foreground line-clamp-3 whitespace-pre-wrap">
                   {values.instructions_markdown || "Not set"}

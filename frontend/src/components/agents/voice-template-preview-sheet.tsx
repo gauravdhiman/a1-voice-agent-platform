@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import { useState } from "react";
+import { MarkdownRenderer } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { applyTemplatePlaceholders } from "@/lib/onboarding";
+import { buildMarkdownFromTemplate } from "@/lib/agent-instructions";
 import type { VoiceTemplate } from "@/types/voice-template";
 
 interface VoiceTemplatePreviewFieldProps {
@@ -70,7 +72,7 @@ export interface VoiceTemplatePreviewSheetProps {
 /**
  * Full voice-template preview presented in a right-side drawer.
  *
- * A voice template is a reusable starting configuration for an agent. The
+ * A use case template is a reusable starting configuration for an agent. The
  * drawer keeps the selection list compact while exposing every user-facing
  * template field before the user applies it.
  *
@@ -86,6 +88,7 @@ export function VoiceTemplatePreviewSheet({
   onSelect,
   selectLabel = "Use this template",
 }: VoiceTemplatePreviewSheetProps) {
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const placeholderContext = { businessName, agentName };
   const industryLabel = template?.industry.replace(/_/g, " ");
 
@@ -140,10 +143,36 @@ export function VoiceTemplatePreviewSheet({
             }
           />
           <VoiceTemplatePreviewField
-            label="Custom instructions"
+            label="Instructions"
             value={template?.custom_instructions}
             preserveWhitespace
           />
+          {template && (
+            <details
+              className="border-t pt-5"
+              data-testid="voice-template-markdown-preview"
+              onToggle={(event) => setShowMarkdownPreview(event.currentTarget.open)}
+            >
+              <summary className="cursor-pointer text-sm font-medium text-foreground">
+                View generated Markdown
+              </summary>
+              {showMarkdownPreview && (
+                <>
+                  <span className="mt-2 block text-xs text-muted-foreground">Used as Additional Instructions</span>
+                  <MarkdownRenderer
+                    content={buildMarkdownFromTemplate(template)}
+                    className="prose prose-sm mt-2 max-w-none rounded-lg bg-muted/50 p-3 dark:prose-invert"
+                  />
+                  <details className="mt-3 rounded-lg border bg-background p-3">
+                    <summary className="cursor-pointer text-xs font-medium">View Markdown source</summary>
+                    <pre className="mt-2 whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+                      {buildMarkdownFromTemplate(template)}
+                    </pre>
+                  </details>
+                </>
+              )}
+            </details>
+          )}
         </div>
 
         <SheetFooter className="gap-2 border-t px-6 py-4">

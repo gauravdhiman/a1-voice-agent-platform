@@ -246,6 +246,38 @@ Stores voice agent configurations for each organization.
 
 ---
 
+### voice_templates
+
+Global, platform-admin-managed reusable starting points for agent setup. The
+table is shared across organizations and is read by the public voice-template
+service; no organization foreign key or RLS policy is used.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Unique template identifier |
+| name | VARCHAR(100) | NOT NULL | Template name shown in agent setup |
+| industry | VARCHAR(100) | NOT NULL | Industry grouping used for browsing |
+| description | TEXT | NULLABLE | Short catalog description |
+| persona | TEXT | NULLABLE | Starting agent persona |
+| tone | VARCHAR(100) | NULLABLE | Starting communication style |
+| mission | TEXT | NULLABLE | Markdown mission section source |
+| greeting | TEXT | NULLABLE | Markdown greeting section source |
+| custom_instructions | TEXT | NULLABLE | Markdown-capable instructions, lists, and policies |
+| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether the template appears in agent pickers |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**RLS**: Not enabled. The public read service filters `is_active=true`; all
+create, update, and delete operations are restricted by the backend
+`platform_admin` role check at `/api/v1/platform/voice-templates`.
+
+**Markdown**: `mission`, `greeting`, and `custom_instructions` are composed by
+`frontend/src/lib/agent-instructions.ts` into the canonical Markdown stored on
+the agent. Deleting a catalog row does not alter previously inserted agent
+instructions.
+
+---
+
 ### platform_tools
 
 System-wide tools available for integration with voice agents.
@@ -1194,6 +1226,21 @@ erDiagram
         timestamptz updated_at
     }
 
+    voice_templates {
+        uuid id
+        varchar name
+        varchar industry
+        text description
+        text persona
+        varchar tone
+        text mission
+        text greeting
+        text custom_instructions
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     pipeline_presets {
         uuid id
         varchar name
@@ -1638,7 +1685,7 @@ erDiagram
 13. `20260127000001` - Enhance organization and agent models (add: industry, location, business_details, persona, tone, mission, custom_instructions; remove: system_prompt - now auto-generated via PromptBuilder)
 14. `20260217004742` - Add agent_embed_configs and embed_call_logs tables for embed button feature
 15. `20260222000000` - Add use_platform_credits column to voice_agents
-16. `20260329000001` - Add phone_numbers table for Twilio phone number management
+16. `20260329000001` - Add `onboarding_completed` to organizations and create the `voice_templates` table for onboarding template selection
 17. `20260329000002` - Add call_logs table for tracking voice agent calls
 18. `20260331000001` - Add instructions_markdown column to voice_agents (Phase 1: markdown-based agent instructions)
 19. `20260401000001` - Add skills tables: organization_skills, organization_skill_files, agent_skills (Phase 2a: skills system with progressive disclosure)

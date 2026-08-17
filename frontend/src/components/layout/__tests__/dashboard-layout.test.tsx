@@ -524,9 +524,8 @@ describe("DashboardLayout - permission-aware nav", () => {
   describe("breadcrumb header", () => {
     // The breadcrumb region doubles as the page header title. Each platform-
     // admin route must resolve to its own title (not fall through to the
-    // "Dashboard" default). `/platform/skills` already resolves; the
-    // `/platform/tools` nav item was added without a breadcrumb case, so it
-    // fell through to "Dashboard".
+    // "Dashboard" default). Platform catalog routes should each resolve to
+    // their own title instead of falling through to "Dashboard".
     function renderAsPlatformAdmin() {
       mockUseAuth.mockReturnValue({
         user: {
@@ -589,6 +588,20 @@ describe("DashboardLayout - permission-aware nav", () => {
       });
       expect(
         within(breadcrumb).getByText("Platform Tools"),
+      ).toBeInTheDocument();
+      expect(
+        within(breadcrumb).queryByText("Dashboard"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows 'Use Case Templates' for /platform/templates", () => {
+      mockUsePathname.mockReturnValue("/platform/templates");
+      renderAsPlatformAdmin();
+      const breadcrumb = screen.getByRole("navigation", {
+        name: /breadcrumb/i,
+      });
+      expect(
+        within(breadcrumb).getByText("Use Case Templates"),
       ).toBeInTheDocument();
       expect(
         within(breadcrumb).queryByText("Dashboard"),
