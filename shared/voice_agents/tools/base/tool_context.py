@@ -1,16 +1,34 @@
-"""Transport-agnostic tool context placeholder.
+"""Transport-neutral runtime context injected into shared tool methods."""
 
-Shared tool methods accept a ``ToolContext`` as their first argument so
-credentials and config stay on ``self`` while runtimes (``voice-ws``) can inject
-call metadata later without changing tool signatures.
-"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
 
 
+@dataclass(frozen=True)
 class ToolContext:
-    """Opaque context passed as the first argument to tool methods.
+    """Trusted per-session metadata available to tool implementations.
 
-    Intentionally empty. Reserved for future shared call metadata (session id,
-    caller phone, etc.) without tying tools to a media transport.
+    The model never supplies these values as function arguments.  The voice
+    runtime resolves them from the authenticated agent and organization before
+    assembling tools.  Provider-neutral tools can ignore fields they do not
+    need; scheduling tools use the organization timezone and session id for
+    datetime normalization and safe retry handling.
+
+    Attributes:
+        organization_id: Organization owning the active agent, when known.
+        organization_timezone: Valid IANA timezone for the organization's
+            business calendar.  Defaults to UTC only as a last-resort runtime
+            fallback.
+        session_id: Stable voice session identifier used for operation-scoped
+            idempotency where a provider supports it.
+        current_time: Optional fixed execution time.  Production callers leave
+            this unset so tools read the current clock; tests may set it.
     """
 
-    pass
+    organization_id: Optional[str] = None
+    organization_timezone: str = "UTC"
+    session_id: Optional[str] = None
+    current_time: Optional[datetime] = None

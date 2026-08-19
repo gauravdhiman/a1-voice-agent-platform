@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
+from src.tools.assembly import build_function_schema, create_legacy_tool_handler
 
-from src.tools.assembly import (
-    build_function_schema,
-    create_legacy_tool_handler,
+from shared.voice_agents.tools.base.tool_context import ToolContext
+from shared.voice_agents.tools.implementations.google_calendar_appointment import (
+    GoogleCalendarAppointmentTool,
 )
+from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
 
 
 class _FakeFunctionCallParams:
@@ -35,6 +36,17 @@ async def _example_tool(
     return {"subject": subject, "count": count}
 
 
+async def _pep604_tool(
+    context: Any,
+    duration_minutes: int | None = None,
+) -> dict[str, Any]:
+    """Expose a PEP 604 optional integer for schema conversion tests."""
+    return {
+        "duration_minutes": duration_minutes,
+        "timezone": context.organization_timezone,
+    }
+
+
 class TestToolAssemblyHelpers:
     """Validate schema conversion and safe legacy tool invocation."""
 
@@ -47,6 +59,19 @@ class TestToolAssemblyHelpers:
         assert schema.properties["subject"]["type"] == "string"
         assert schema.properties["count"]["type"] == "integer"
         assert schema.required == ["subject"]
+
+    def test_native_tool_docstring_becomes_model_facing_schema_description(
+        self,
+    ) -> None:
+        """Tool capability guidance belongs to the native function schema."""
+        schema = build_function_schema(
+            GoogleCalendarAppointmentTool.find_available_slots
+        )
+
+        assert "free starts" in schema.description.lower()
+        assert "time window" in schema.description.lower()
+        assert "duration_minutes" in schema.properties
+        assert "window_start" in schema.properties
 
     def test_build_function_schema_includes_array_items_for_gemini(self) -> None:
         """Gemini Live requires array parameters to declare item schemas."""
@@ -69,6 +94,33 @@ class TestToolAssemblyHelpers:
         updates_schema = batch_schema.properties["updates"]
         assert updates_schema["type"] == "array"
         assert updates_schema["items"]["type"] == "object"
+
+    def test_build_function_schema_preserves_pep604_optional_primitive_type(
+        self,
+    ) -> None:
+        """PEP 604 unions must not silently become string parameters."""
+        schema = build_function_schema(_pep604_tool)
+
+        assert schema.properties["duration_minutes"]["type"] == "integer"
+
+    def test_legacy_handler_injects_runtime_context(self) -> None:
+        """Tool context comes from the trusted session, never model arguments."""
+        handler = create_legacy_tool_handler(
+            _pep604_tool,
+            runtime_context=ToolContext(
+                organization_timezone="America/Phoenix",
+                session_id="session-123",
+            ),
+        )
+        params = _FakeFunctionCallParams(
+            {"duration_minutes": 60, "context": "untrusted"}
+        )
+
+        asyncio.run(handler(params))
+
+        assert (
+            params.result == '{"duration_minutes": 60, "timezone": "America/Phoenix"}'
+        )
 
     def test_legacy_handler_filters_context_from_model_arguments(self) -> None:
         """A model-provided context key cannot override runtime ToolContext."""

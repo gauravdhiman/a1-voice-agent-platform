@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.tools.mcp.dispatch import mcp_server_config_from_agent_tool
 
 
@@ -93,6 +94,29 @@ class TestMcpDispatch:
 
         assert config.headers["Authorization"] == "Bearer user-oauth-token"
 
+    def test_runtime_context_headers_carry_org_scheduling_context(self):
+        """MCP receives org context without making it model-facing input."""
+        agent_tool = _agent_tool(access_token="user-oauth-token")
+        agent_tool.config = {
+            "calendar_id": "clinic@example.com",
+            "require_email": True,
+        }
+
+        config = mcp_server_config_from_agent_tool(
+            agent_tool,
+            runtime_context=ToolContext(
+                organization_id="org-123",
+                organization_timezone="America/Phoenix",
+                session_id="session-123",
+            ),
+        )
+
+        assert config.headers["X-247AI-Organization-Timezone"] == "America/Phoenix"
+        assert config.headers["X-247AI-Organization-ID"] == "org-123"
+        assert config.headers["X-247AI-Session-ID"] == "session-123"
+        assert config.headers["X-247AI-Calendar-ID"] == "clinic@example.com"
+        assert config.headers["X-247AI-Require-Email"] == "true"
+
     def test_runtime_ssrf_validation_happens_before_credentials_are_merged(self):
         """A saved MCP URL is rechecked before any bearer/header is decrypted."""
         with patch(
@@ -103,3 +127,18 @@ class TestMcpDispatch:
                 mcp_server_config_from_agent_tool(
                     _agent_tool(access_token="user-oauth-token")
                 )
+
+    def test_shipped_appointment_connector_can_use_loopback_without_global_local_flag(
+        self,
+    ):
+        """Only the named, shipped connector receives the loopback exception."""
+        agent_tool = _agent_tool(access_token="user-oauth-token")
+        agent_tool.tool.name = "Google_calendar_appointment_mcp"
+        agent_tool.tool.mcp_server_url = "http://127.0.0.1:8733/mcp"
+        with patch(
+            "shared.voice_agents.tools.mcp.dispatch.validate_mcp_server_url",
+            return_value=(False, "loopback blocked"),
+        ):
+            config = mcp_server_config_from_agent_tool(agent_tool)
+
+        assert config.url == "http://127.0.0.1:8733/mcp"

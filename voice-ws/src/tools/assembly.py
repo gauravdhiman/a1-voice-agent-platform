@@ -11,22 +11,22 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.services.llm_service import FunctionCallParams
+from src.tools.mcp_pipecat import build_mcp_pipecat_tools
+from src.tools.skill_tools import (
+    create_load_skill_function,
+    create_load_skill_reference_function,
+)
 
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.tool_models import ToolSource
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
 from shared.voice_agents.tools.base.tool_context import ToolContext
-
-from src.tools.mcp_pipecat import build_mcp_pipecat_tools
-from src.tools.skill_tools import (
-    create_load_skill_function,
-    create_load_skill_reference_function,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,12 @@ class AssembledTools:
     Attributes:
         schemas: Schemas supplied to the Pipecat LLM service.
         handlers: Function handlers registered on the LLM by schema name.
-        enabled_tool_names: Platform tool names for prompt construction.
+        enabled_tool_names: Platform tool names for observability and diagnostics.
         mcp_clients: Open clients that must stay alive for the session.
         skill_summaries: Prompt-safe skill metadata for progressive disclosure.
-        unavailable_tools: Human-readable reasons for tools that failed to load
-            so the model is told not to invent outcomes for them.
+        unavailable_tools: Human-readable reasons for tools that failed to load.
+            These are retained for observability and are not sent to the model as
+            prompt text.
     """
 
     schemas: list[FunctionSchema] = field(default_factory=list)
@@ -63,8 +64,10 @@ def _json_schema_for_annotation(annotation: Any) -> dict[str, Any]:
         annotation = Any
 
     origin = get_origin(annotation)
-    if origin is Union:
-        choices = [choice for choice in get_args(annotation) if choice is not type(None)]
+    if origin in (Union, UnionType):
+        choices = [
+            choice for choice in get_args(annotation) if choice is not type(None)
+        ]
         if len(choices) == 1:
             return _json_schema_for_annotation(choices[0])
         return {"type": "string"}
@@ -143,11 +146,12 @@ def build_function_schema(function: Callable[..., Any]) -> FunctionSchema:
 
 def create_legacy_tool_handler(
     bound_method: Callable[..., Any],
+    runtime_context: ToolContext | None = None,
 ) -> Callable[[FunctionCallParams], Any]:
     """Create a Pipecat handler that safely calls a shared ``BaseTool`` method.
 
     ``context`` is deliberately removed from model arguments and injected as a
-    new ``ToolContext``. Results are JSON encoded so Pipecat always returns a
+    trusted per-session ``ToolContext``. Results are JSON encoded so Pipecat always returns a
     string to the LLM, even when a legacy tool returns a mapping or list.
     Exceptions are caught and returned as ``{"error": ...}`` so the model can
     recover instead of inventing a successful booking.
@@ -164,7 +168,9 @@ def create_legacy_tool_handler(
         }
         logger.info("Invoking legacy tool %s with args=%s", tool_name, arguments)
         try:
-            result = await bound_method(context=ToolContext(), **arguments)
+            result = await bound_method(
+                context=runtime_context or ToolContext(), **arguments
+            )
         except Exception as exc:  # noqa: BLE001 - always return a model-visible error
             logger.exception("Legacy tool %s failed: %s", tool_name, exc)
             await params.result_callback(
@@ -175,39 +181,6 @@ def create_legacy_tool_handler(
         await params.result_callback(json.dumps(result, default=str))
 
     return handler
-
-
-def format_tool_runtime_instructions(assembled: AssembledTools) -> str:
-    """Build prompt text that anchors the model to real tool call results.
-
-    Args:
-        assembled: Tools assembled for the current voice session.
-
-    Returns:
-        A markdown section listing callable function names and any tools that
-        failed to load. Empty string when neither list has content.
-    """
-    sections: list[str] = []
-    function_names = [schema.name for schema in assembled.schemas]
-    if function_names:
-        sections.append(
-            "# AVAILABLE TOOL FUNCTIONS\n"
-            "For scheduling, availability, and bookings you MUST call the "
-            "appropriate function below and wait for its result before telling "
-            "the caller the outcome.\n"
-            f"Callable functions: {', '.join(function_names)}.\n"
-            "Never invent availability or confirm a booking/cancel/reschedule "
-            "without a successful tool result for that action."
-        )
-    if assembled.unavailable_tools:
-        failure_lines = "\n".join(f"- {item}" for item in assembled.unavailable_tools)
-        sections.append(
-            "# UNAVAILABLE TOOLS\n"
-            "These tools failed to load for this call. Tell the caller you "
-            "cannot complete related actions right now — do not invent results.\n"
-            f"{failure_lines}"
-        )
-    return "\n\n".join(sections)
 
 
 def _add_handler(
@@ -224,12 +197,18 @@ def _add_handler(
     assembled.schemas.append(schema)
 
 
-async def assemble_agent_tools(agent_id: Any, organization_id: Any) -> AssembledTools:
+async def assemble_agent_tools(
+    agent_id: Any,
+    organization_id: Any,
+    runtime_context: ToolContext | None = None,
+) -> AssembledTools:
     """Build every enabled legacy, MCP, and skill tool for one voice agent.
 
     Args:
         agent_id: Voice agent UUID.
         organization_id: Organization UUID used by progressive skill handlers.
+        runtime_context: Trusted session metadata injected into native tools and
+            translated into namespaced headers for in-process MCP connectors.
 
     Returns:
         The assembled schemas, handler map, open MCP clients, tool names, and
@@ -240,7 +219,9 @@ async def assemble_agent_tools(agent_id: Any, organization_id: Any) -> Assembled
     registry = PlatformToolRegistry()
     registry.register_tools_from_package("shared.voice_agents.tools.implementations")
 
-    agent_tools, error = await tool_service.get_agent_tools_with_sensitive_config(agent_id)
+    agent_tools, error = await tool_service.get_agent_tools_with_sensitive_config(
+        agent_id
+    )
     if error:
         logger.error("Unable to fetch agent tools for %s: %s", agent_id, error)
         agent_tools = []
@@ -252,7 +233,9 @@ async def assemble_agent_tools(agent_id: Any, organization_id: Any) -> Assembled
         tool_name = platform_tool.name
         if platform_tool.tool_source == ToolSource.MCP:
             try:
-                schemas, handlers, client = await build_mcp_pipecat_tools(agent_tool)
+                schemas, handlers, client = await build_mcp_pipecat_tools(
+                    agent_tool, runtime_context=runtime_context
+                )
             except Exception as exc:  # noqa: BLE001 - preserve non-MCP tools
                 logger.exception("Failed to assemble MCP tool '%s': %s", tool_name, exc)
                 assembled.unavailable_tools.append(f"{tool_name}: {exc}")
@@ -281,7 +264,8 @@ async def assemble_agent_tools(agent_id: Any, organization_id: Any) -> Assembled
                 continue
             schema = build_function_schema(function)
             handler = create_legacy_tool_handler(
-                getattr(instance, function.__name__)
+                getattr(instance, function.__name__),
+                runtime_context=runtime_context,
             )
             _add_handler(assembled, schema.name, handler, schema)
 
@@ -335,7 +319,9 @@ async def assemble_agent_tools(agent_id: Any, organization_id: Any) -> Assembled
     return assembled
 
 
-def _create_skill_handler(function: Callable[..., Any]) -> Callable[[FunctionCallParams], Any]:
+def _create_skill_handler(
+    function: Callable[..., Any]
+) -> Callable[[FunctionCallParams], Any]:
     """Adapt a keyword-based skill loader to Pipecat's function call contract."""
 
     async def handler(params: FunctionCallParams) -> None:

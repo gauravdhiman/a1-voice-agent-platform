@@ -285,7 +285,7 @@ System-wide tools available for integration with voice agents.
 | Column                | Type          | Constraints                       | Description                                                                 |
 | --------------------- | ------------- | --------------------------------- | --------------------------------------------------------------------------- |
 | id                    | UUID          | PRIMARY KEY                       | Unique platform tool identifier                                             |
-| name                  | VARCHAR(100)  | NOT NULL, UNIQUE                  | Tool name (e.g., gmail, google_calendar)                                    |
+| name                  | VARCHAR(100)  | NOT NULL, UNIQUE                  | Tool name (e.g., Gmail, Google_calendar_appointment)                       |
 | description           | TEXT          | NULLABLE                          | Tool description                                                            |
 | config_schema         | JSONB         | NULLABLE                          | JSON schema for tool configuration                                          |
 | tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
@@ -1736,6 +1736,8 @@ erDiagram
 64. `20260814000002` - Canonicalize legacy voice-template markers such as `[Agent Name]` and `[Business Name]` to the runtime-supported `{{agent.name}}` and `{{org.name}}` placeholders across all prompt-bearing template fields.
 65. `20260814000003` - Add nullable Fernet-encrypted `platform_tools.oauth_client_secret_encrypted` storage. OAuth client secrets are accepted through a write-only input, removed from public `auth_config`, and historical rows are migrated/scrubbed by the backend before the token-refresh worker starts.
 66. `20260817000001` - Seed the enabled `tools.oauth_reauthorization_required` notification event and its built-in template metadata for organization-admin reminders when native or MCP OAuth connections cannot renew automatically.
+67. `20260817000002` - Rename legacy Google Calendar catalog rows to appointment-specific names when the canonical destination is unused. This preserves the migration history already applied to staging.
+68. `20260818000001` - Add/canonicalize the published `Google_calendar_appointment` native catalog row and `Google_calendar_appointment_mcp` platform-owned MCP catalog row. Existing legacy names are renamed only when the canonical destination is unused; agent attachments remain on the same tool row. The MCP row points to the loopback connector started with voice-ws.
 
 ---
 
@@ -2050,4 +2052,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-08-12
+**Last Updated**: 2026-08-18

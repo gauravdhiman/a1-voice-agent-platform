@@ -19,10 +19,31 @@ flowchart LR
   Prompt --> Pipeline
 ```
 
+## Prompt and tool contract boundary
+
+The model context has three deliberately separate sources:
+
+- `PromptBuilder` combines platform guardrails, organization context, agent
+  instructions, assigned skill summaries, and the runtime date/time anchor. It
+  does not receive attached tool names and must remain valid for any agent.
+- `DEFAULT_VOICE_SYSTEM_PROMPT` contains generic tool-use, error-handling, and
+  anti-hallucination behavior. Organization and agent instructions may add
+  business-specific or tool-specific guidance when configured by the user.
+- Native function schemas are generated from native method docstrings, while
+  MCP function schemas use the descriptions returned by `tools/list`. These
+  schemas are passed through the model's tool-definition channel rather than
+  copied into the generic platform prompt. The schema is the source of truth for
+  a tool's purpose, arguments, constraints, and result contract.
+
+Tool load failures remain in `unavailable_tools` for logs and diagnostics. They
+are not rendered into the model context because exposing internal connector
+names or failure details is both unnecessary and another source of prompt drift.
+
 - `src/tools/assembly.py` discovers shared `BaseTool` implementations, injects
   `ToolContext`, and preserves function-level enablement. Failed MCP/legacy
-  tools are recorded as `unavailable_tools` and injected into the prompt so the
-  model cannot invent booking/availability outcomes.
+  tools are recorded as `unavailable_tools` for logs and diagnostics only; they
+  are not copied into the platform prompt. Available native function schemas and
+  MCP `tools/list` descriptions remain the model-facing source of tool guidance.
 - `src/tools/mcp_pipecat.py` discovers remote MCP schemas, sanitizes Gemini
   schemas, and owns MCP client lifecycle through call teardown.
 - Skills expose `load_skill` and `load_skill_reference` only when assigned.

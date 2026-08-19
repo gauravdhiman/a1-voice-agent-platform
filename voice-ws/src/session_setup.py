@@ -9,11 +9,16 @@ from typing import Any
 from uuid import UUID
 
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from src.speech.factory import build_speech_components
+from src.tools.assembly import (
+    AssembledTools,
+    assemble_agent_tools,
+)
 
 from shared.organization.service import BaseOrganizationService
+from shared.organization.timezone import resolve_organization_timezone
 from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from shared.voice_agents.key_resolver import resolve_api_keys
-from shared.organization.timezone import resolve_organization_timezone
 from shared.voice_agents.prompt_builder import (
     PromptBuilder,
     build_current_datetime_section,
@@ -24,14 +29,8 @@ from shared.voice_agents.speech_config import (
     default_realtime_config,
 )
 from shared.voice_agents.speech_config_resolver import resolve_speech_config_for_agent
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.voice_session_service import VoiceSessionClaims
-
-from src.speech.factory import build_speech_components
-from src.tools.assembly import (
-    AssembledTools,
-    assemble_agent_tools,
-    format_tool_runtime_instructions,
-)
 
 logger = logging.getLogger(__name__)
 organization_service = BaseOrganizationService()
@@ -71,17 +70,29 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
 
     org = None
     if agent.organization_id:
-        org, _ = await organization_service.get_organization_by_id(agent.organization_id)
-    tools = await assemble_agent_tools(agent.id, agent.organization_id)
+        org, _ = await organization_service.get_organization_by_id(
+            agent.organization_id
+        )
+    session_timezone = resolve_organization_timezone(
+        org,
+        platform_default=os.getenv("AGENT_DEFAULT_TIMEZONE"),
+    )
+    tools = await assemble_agent_tools(
+        agent.id,
+        agent.organization_id,
+        runtime_context=ToolContext(
+            organization_id=(
+                str(agent.organization_id) if agent.organization_id else None
+            ),
+            organization_timezone=session_timezone,
+            session_id=claims.session_id,
+        ),
+    )
     speech_config = await resolve_speech_config_for_agent(agent, agent.id)
     api_keys = resolve_api_keys(
         speech_config,
         org=org,
         use_platform_credits=bool(getattr(agent, "use_platform_credits", False)),
-    )
-    session_timezone = resolve_organization_timezone(
-        org,
-        platform_default=os.getenv("AGENT_DEFAULT_TIMEZONE"),
     )
     current_datetime = build_current_datetime_section(session_timezone)
     instructions = (
@@ -89,16 +100,12 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             org=org,
             agent=agent,
             default_rules=DEFAULT_VOICE_SYSTEM_PROMPT,
-            enabled_tools=tools.enabled_tool_names,
             agent_skills=tools.skill_summaries,
             current_datetime=current_datetime,
         )
         if org is not None
         else f"{current_datetime}\n\n{DEFAULT_VOICE_SYSTEM_PROMPT}"
     )
-    tool_runtime = format_tool_runtime_instructions(tools)
-    if tool_runtime:
-        instructions = f"{instructions}\n\n{tool_runtime}"
     logger.info(
         "Prepared voice session agent=%s timezone=%s functions=%s unavailable=%s",
         agent.id,
@@ -106,9 +113,7 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
         [schema.name for schema in tools.schemas],
         tools.unavailable_tools,
     )
-    tools_schema = (
-        ToolsSchema(standard_tools=tools.schemas) if tools.schemas else None
-    )
+    tools_schema = ToolsSchema(standard_tools=tools.schemas) if tools.schemas else None
     try:
         speech = build_speech_components(
             speech_config,

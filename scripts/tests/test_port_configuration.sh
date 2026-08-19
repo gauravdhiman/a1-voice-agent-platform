@@ -30,6 +30,7 @@ assert_contains "$offset_config" "Backend host port: 8020"
 assert_contains "$offset_config" "Voice WebSocket host port: 7880"
 assert_contains "$offset_config" "OTEL HTTP host port: 4338"
 assert_contains "$offset_config" "Compose project: 247ai-custom-p20"
+assert_contains "$offset_config" "Local OAuth/MCP URLs: true"
 
 custom_file="$custom_dir/custom.env"
 cat > "$custom_file" <<'EOF'
@@ -45,5 +46,17 @@ assert_contains "$custom_config" "Frontend host port: 3007"
 assert_contains "$custom_config" "Backend host port: 9100"
 assert_contains "$custom_config" "Voice WebSocket host port: 7867"
 assert_contains "$custom_config" "Compose project: 247ai-custom-p7"
+
+production_file="$custom_dir/production.env"
+cat > "$production_file" <<'EOF'
+ENVIRONMENT=production
+NEXT_PUBLIC_SUPABASE_URL=https://custom.example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=custom-anon-key
+SUPABASE_SERVICE_KEY=custom-service-key
+MCP_ALLOW_LOCAL_URLS=false
+EOF
+
+production_config="$("$ROOT/start.sh" config --env-file "$production_file" --port-offset 20)"
+assert_contains "$production_config" "Local OAuth/MCP URLs: false"
 
 echo "Port configuration tests passed."

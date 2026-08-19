@@ -10,22 +10,23 @@ Streamable HTTP. They serve two purposes:
 2. **Test fixtures** — voice-ws tests stand these up in-process on an
    ephemeral localhost port to prove the platform's MCP plumbing end-to-end
 
-The ``google_calendar`` server is an in-memory stand-in for the real Google
-Calendar MCP server. It mirrors the tool contract of the legacy
-``GoogleCalendarTool`` (``list_events`` / ``create_event`` / ``get_event`` /
-``check_availability``) so the platform's MCP path is exercised against a
-Google-Calendar-shaped tool. The module docstring of
-:mod:`shared.voice_agents.tools.mcp.reference_servers.google_calendar`
-documents how to swap the in-memory store for the real Google Calendar API
-(per-user OAuth bearer injected by the dispatch layer).
+The ``google_calendar`` server is an in-memory stand-in for deterministic MCP
+plumbing tests. The production appointment contract lives in
+``google_calendar_rest`` and the native adapter; both use the shared
+appointment service.
 
 The ``google_calendar_rest`` server is the **REST connector** — the path that
 works with a **personal Gmail** today. It wraps Google's plain, GA, un-gated
 Calendar REST API (``www.googleapis.com/calendar/v3``) and forwards the per-user
-OAuth bearer (injected by the dispatch layer) to it. This bypasses the Google
+OAuth bearer (injected by the dispatch layer) to it. It exposes
+``Google_calendar_appointment_mcp`` and the same appointment functions as
+``Google_calendar_appointment``.
+
+The module docstring of
+:mod:`shared.voice_agents.tools.mcp.reference_servers.google_calendar`
+documents the deterministic fixture. The REST connector bypasses the Google
 Workspace Developer Preview gate that blocks Google's *remote* Calendar MCP
-server (``calendarmcp.googleapis.com``) for personal-Gmail users. The
-``Google_calendar_mcp`` ``platform_tools`` row points at this connector. See
+server (``calendarmcp.googleapis.com``) for personal-Gmail users. See
 :mod:`shared.voice_agents.tools.mcp.reference_servers.google_calendar_rest`
 and ``docs/03_implementation/mcp_connector_access_model.md``.
 """
