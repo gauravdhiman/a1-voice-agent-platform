@@ -37,6 +37,7 @@ services:
       - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000","http://frontend:3000","http://frontend-dev:3000"]}
       - GOOGLE_OAUTH_TOOL_REDIRECT_URI=${GOOGLE_OAUTH_TOOL_REDIRECT_URI:-http://localhost:8000/api/v1/tools/callback}
+      - MCP_ALLOW_LOCAL_URLS=${MCP_ALLOW_LOCAL_URLS:-false}
       - VOICE_WS_PUBLIC_URL=${VOICE_WS_PUBLIC_URL:-ws://localhost:7860}
       - VOICE_WS_TWILIO_URL=${VOICE_WS_TWILIO_URL:-}
       - VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}
@@ -186,6 +187,7 @@ services:
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - MCP_HOST=127.0.0.1
       - MCP_PORT=8733
+      - MCP_ALLOW_LOCAL_URLS=${MCP_ALLOW_LOCAL_URLS:-false}
     networks:
       - saas-dev-network
     restart: unless-stopped

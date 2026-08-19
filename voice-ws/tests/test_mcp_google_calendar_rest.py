@@ -14,21 +14,66 @@ All Google HTTP calls are faked with ``httpx.MockTransport`` by patching the
 connector's ``_default_client_factory`` seam — no real network, no Google
 credentials required.
 """
+
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import httpx
 import pytest
+import pytest_asyncio
 
-from shared.voice_agents.tools.mcp.reference_servers import (
-    google_calendar_rest as gcr,
+from shared.voice_agents.tools import (
+    google_calendar_appointment_service as appointment_service_module,
 )
+from shared.voice_agents.tools.mcp.models import McpServerConfig
+from shared.voice_agents.tools.mcp.reference_servers import google_calendar_rest as gcr
+
+
+@pytest_asyncio.fixture
+async def google_calendar_rest_mcp_config(unused_tcp_port, monkeypatch):
+    """Run the connector over Streamable HTTP for an in-process MCP test."""
+    import uvicorn
+
+    monkeypatch.setenv("MCP_ALLOW_LOCAL_URLS", "true")
+    app = gcr.build_google_calendar_rest_server().streamable_http_app()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=unused_tcp_port,
+            log_level="error",
+        )
+    )
+    task = asyncio.create_task(server.serve())
+    for _ in range(50):
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.get(f"http://127.0.0.1:{unused_tcp_port}/mcp", timeout=0.2)
+            break
+        except (httpx.ConnectError, httpx.ReadError):
+            await asyncio.sleep(0.05)
+    else:
+        server.should_exit = True
+        await task
+        raise RuntimeError("MCP test server did not start")
+
+    try:
+        yield McpServerConfig(
+            url=f"http://127.0.0.1:{unused_tcp_port}/mcp",
+            name="google-calendar-appointment",
+            headers={"Authorization": "Bearer TOK"},
+        )
+    finally:
+        server.should_exit = True
+        await task
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _patch_transport(monkeypatch, handler: Callable[[httpx.Request], httpx.Response]):
     """Point the connector's HTTP client factory at a MockTransport handler.
@@ -39,6 +84,11 @@ def _patch_transport(monkeypatch, handler: Callable[[httpx.Request], httpx.Respo
     """
     monkeypatch.setattr(
         gcr,
+        "_default_client_factory",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(
+        appointment_service_module,
         "_default_client_factory",
         lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
@@ -64,7 +114,11 @@ class TestListCalendars:
             return _ok(
                 {
                     "items": [
-                        {"id": "gauravd.chd@gmail.com", "summary": "My Calendar", "primary": True},
+                        {
+                            "id": "gauravd.chd@gmail.com",
+                            "summary": "My Calendar",
+                            "primary": True,
+                        },
                         {"id": "work@group.com", "summary": "Work", "primary": False},
                     ]
                 }
@@ -111,7 +165,10 @@ class TestListEvents:
 
         _patch_transport(monkeypatch, handler)
         result = await gcr.list_events_logic(
-            "TOK", "2026-07-22T00:00:00-07:00", "2026-07-23T00:00:00-07:00", max_results=10
+            "TOK",
+            "2026-07-22T00:00:00-07:00",
+            "2026-07-23T00:00:00-07:00",
+            max_results=10,
         )
         assert result == [
             {
@@ -156,7 +213,9 @@ class TestListEvents:
             return _ok({"items": []})
 
         _patch_transport(monkeypatch, handler)
-        await gcr.list_events_logic("TOK", "2026-07-22T00:00:00Z", calendar_id="work@group.com")
+        await gcr.list_events_logic(
+            "TOK", "2026-07-22T00:00:00Z", calendar_id="work@group.com"
+        )
         assert captured["path"] == "/calendar/v3/calendars/work@group.com/events"
 
 
@@ -192,7 +251,10 @@ class TestGetEvent:
         }
 
     async def test_not_found_returns_error_payload(self, monkeypatch):
-        _patch_transport(monkeypatch, lambda req: httpx.Response(404, json={"error": {"message": "Not Found"}}))
+        _patch_transport(
+            monkeypatch,
+            lambda req: httpx.Response(404, json={"error": {"message": "Not Found"}}),
+        )
         assert await gcr.get_event_logic("TOK", "nope") == {"error": "not_found"}
 
 
@@ -217,7 +279,9 @@ class TestCreateEvent:
             assert req.url.path == "/calendar/v3/calendars/primary/events"
             assert req.headers["authorization"] == "Bearer TOK"
             posted.update(json.loads(req.content.decode()))
-            return httpx.Response(201, json={"id": "new-evt", "htmlLink": "https://g/cal/new"})
+            return httpx.Response(
+                201, json={"id": "new-evt", "htmlLink": "https://g/cal/new"}
+            )
 
         _patch_transport(monkeypatch, handler)
         result = await gcr.create_event_logic(
@@ -259,7 +323,10 @@ class TestCreateEvent:
 
         _patch_transport(monkeypatch, handler)
         result = await gcr.create_event_logic(
-            "TOK", caller_name="John Smith", purpose="Checkup", start="2026-07-23T09:00:00-07:00"
+            "TOK",
+            caller_name="John Smith",
+            purpose="Checkup",
+            start="2026-07-23T09:00:00-07:00",
         )
         assert result["status"] == "created"
         assert "John Smith" in posted["summary"]
@@ -292,7 +359,9 @@ class TestCreateEvent:
     async def test_error_returns_error_dict(self, monkeypatch):
         _patch_transport(
             monkeypatch,
-            lambda req: httpx.Response(403, json={"error": {"message": "Insufficient scopes"}}),
+            lambda req: httpx.Response(
+                403, json={"error": {"message": "Insufficient scopes"}}
+            ),
         )
         result = await gcr.create_event_logic(
             "TOK", caller_name="A", purpose="P", start="2026-07-23T09:00:00-07:00"
@@ -316,24 +385,33 @@ class TestCheckAvailability:
             return _ok(
                 {
                     "calendars": {
-                        "primary": {"busy": [{"start": "2026-07-22T10:00:00Z", "end": "2026-07-22T10:30:00Z"}]}
+                        "primary": {
+                            "busy": [
+                                {
+                                    "start": "2026-07-22T10:00:00Z",
+                                    "end": "2026-07-22T10:30:00Z",
+                                }
+                            ]
+                        }
                     }
                 }
             )
 
         _patch_transport(monkeypatch, handler)
         result = await gcr.check_availability_logic(
-            "TOK", "2026-08-10T10:00:00Z", "2026-08-10T11:00:00Z"
+            "TOK", "2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z"
         )
         assert result == {"status": "busy"}
-        assert posted["timeMin"] == "2026-08-10T10:00:00Z"
-        assert posted["timeMax"] == "2026-08-10T11:00:00Z"
+        assert posted["timeMin"] == "2026-08-20T10:00:00Z"
+        assert posted["timeMax"] == "2026-08-20T11:00:00Z"
         assert posted["items"] == [{"id": "primary"}]
 
     async def test_free_when_no_busy_blocks(self, monkeypatch):
-        _patch_transport(monkeypatch, lambda req: _ok({"calendars": {"primary": {"busy": []}}}))
+        _patch_transport(
+            monkeypatch, lambda req: _ok({"calendars": {"primary": {"busy": []}}})
+        )
         assert await gcr.check_availability_logic(
-            "TOK", "2026-08-10T10:00:00Z", "2026-08-10T11:00:00Z"
+            "TOK", "2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z"
         ) == {"status": "free"}
 
     async def test_busy_when_google_keys_primary_as_email(self, monkeypatch):
@@ -350,8 +428,8 @@ class TestCheckAvailability:
                         "gauravd.chd@gmail.com": {
                             "busy": [
                                 {
-                                    "start": "2026-08-10T17:00:00Z",
-                                    "end": "2026-08-10T17:30:00Z",
+                                    "start": "2026-08-20T17:00:00Z",
+                                    "end": "2026-08-20T17:30:00Z",
                                 }
                             ]
                         }
@@ -362,8 +440,8 @@ class TestCheckAvailability:
         _patch_transport(monkeypatch, handler)
         result = await gcr.check_availability_logic(
             "TOK",
-            "2026-08-10T10:00:00-07:00",
-            "2026-08-10T10:30:00-07:00",
+            "2026-08-20T10:00:00-07:00",
+            "2026-08-20T10:30:00-07:00",
             calendar_id="primary",
         )
         assert result == {"status": "busy"}
@@ -375,7 +453,7 @@ class TestCheckAvailability:
             lambda req: _ok({"calendars": {"user@example.com": {"busy": []}}}),
         )
         assert await gcr.check_availability_logic(
-            "TOK", "2026-08-10T10:00:00-07:00", "2026-08-10T10:30:00-07:00"
+            "TOK", "2026-08-20T10:00:00-07:00", "2026-08-20T10:30:00-07:00"
         ) == {"status": "free"}
 
     async def test_past_window_returns_past_without_calling_google(self, monkeypatch):
@@ -408,7 +486,9 @@ class TestErrorHandling:
     async def test_401_returns_error_with_status(self, monkeypatch):
         _patch_transport(
             monkeypatch,
-            lambda req: httpx.Response(401, json={"error": {"message": "Invalid Credentials"}}),
+            lambda req: httpx.Response(
+                401, json={"error": {"message": "Invalid Credentials"}}
+            ),
         )
         result = await gcr.list_events_logic("BAD", "2026-07-22T00:00:00Z")
         assert result == {"error": "Invalid Credentials", "status": 401}
@@ -416,7 +496,9 @@ class TestErrorHandling:
     async def test_403_returns_error_with_status(self, monkeypatch):
         _patch_transport(
             monkeypatch,
-            lambda req: httpx.Response(403, json={"error": {"message": "Insufficient scopes"}}),
+            lambda req: httpx.Response(
+                403, json={"error": {"message": "Insufficient scopes"}}
+            ),
         )
         result = await gcr.list_calendars_logic("BAD")
         assert result["status"] == 403
@@ -468,20 +550,23 @@ def _ctx_with_header(name: str, value: Any) -> Any:
 class TestRestConnectorFullPipeline:
     """The connector behaves like any other MCP server from the platform's POV."""
 
-    async def test_discovers_five_tools(self, google_calendar_rest_mcp_config):
+    async def test_discovers_appointment_tools(self, google_calendar_rest_mcp_config):
         from shared.voice_agents.tools.mcp.client import McpClient
 
         async with McpClient(google_calendar_rest_mcp_config) as client:
             names = {t.name for t in await client.list_tools()}
         assert names == {
-            "list_calendars",
-            "list_events",
-            "get_event",
-            "create_event",
+            "find_available_slots",
             "check_availability",
+            "find_appointments",
+            "create_appointment",
+            "update_appointment",
+            "cancel_appointment",
         }
 
-    async def test_list_events_round_trip_through_mcp(self, monkeypatch, google_calendar_rest_mcp_config):
+    async def test_find_appointments_round_trip_through_mcp(
+        self, monkeypatch, google_calendar_rest_mcp_config
+    ):
         from shared.voice_agents.tools.mcp.client import McpClient
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -501,33 +586,47 @@ class TestRestConnectorFullPipeline:
 
         _patch_transport(monkeypatch, handler)
         async with McpClient(google_calendar_rest_mcp_config) as client:
-            res = await client.call_tool("list_events", {"time_min": "2026-07-22T00:00:00Z"})
+            res = await client.call_tool(
+                "find_appointments",
+                {
+                    "window_start": "2026-07-22T00:00:00Z",
+                    "window_end": "2026-07-23T00:00:00Z",
+                },
+            )
         assert res.is_error is False
         payload = json.loads(res.content[0]["text"])
-        assert payload[0]["summary"] == "Standup"
+        assert payload.get("appointments"), payload
+        assert payload["appointments"][0]["summary"] == "Standup"
 
-    async def test_create_event_round_trip_through_mcp(self, monkeypatch, google_calendar_rest_mcp_config):
+    async def test_create_appointment_round_trip_through_mcp(
+        self, monkeypatch, google_calendar_rest_mcp_config
+    ):
         from shared.voice_agents.tools.mcp.client import McpClient
 
         def handler(req: httpx.Request) -> httpx.Response:
             body = json.loads(req.content.decode())
+            if req.url.path == "/calendar/v3/freeBusy":
+                return _ok({"calendars": {"primary": {"busy": []}}})
             assert "Jane Doe" in body["summary"]
-            return httpx.Response(201, json={"id": "new-evt", "htmlLink": "https://g/cal/new"})
+            return httpx.Response(
+                201, json={"id": "new-evt", "htmlLink": "https://g/cal/new"}
+            )
 
         _patch_transport(monkeypatch, handler)
         async with McpClient(google_calendar_rest_mcp_config) as client:
             res = await client.call_tool(
-                "create_event",
+                "create_appointment",
                 {
                     "caller_name": "Jane Doe",
                     "purpose": "Cleaning",
-                    "start": "2026-07-23T14:00:00-07:00",
+                    "start_time": "2026-08-20T14:00:00-07:00",
                     "duration_minutes": 30,
+                    "user_confirmed": True,
                 },
             )
         payload = json.loads(res.content[0]["text"])
-        assert payload["status"] == "created"
-        assert "Jane Doe" in payload["summary"]
+        assert payload["status"] == "created", payload
+        assert "Jane Doe" in payload["appointment"]["caller_name"]
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +643,7 @@ class TestToolDescriptionsPromptFrontDeskBehavior:
     behavior the user reported on 2026-07-22.
     """
 
-    async def test_create_event_description_enforces_front_desk_protocol(
+    async def test_create_appointment_description_enforces_front_desk_protocol(
         self, google_calendar_rest_mcp_config
     ):
         from shared.voice_agents.tools.mcp.client import McpClient
@@ -552,7 +651,7 @@ class TestToolDescriptionsPromptFrontDeskBehavior:
         async with McpClient(google_calendar_rest_mcp_config) as client:
             tools = {t.name: t for t in await client.list_tools()}
 
-        desc = (tools["create_event"].description or "").lower()
+        desc = (tools["create_appointment"].description or "").lower()
         # Books into the organization's calendar, not the caller's.
         assert "organization" in desc
         # Must gather the caller's details first.
@@ -560,13 +659,20 @@ class TestToolDescriptionsPromptFrontDeskBehavior:
         # Must confirm + get explicit confirmation before booking.
         assert "confirm" in desc and "explicit" in desc
         # Must check availability first to avoid double-booking.
-        assert "check_availability" in desc
+        assert "check" in desc and "conflict" in desc
 
         # Caller-detail args exist in the schema so the model is prompted to
         # collect them during the call (not just free-text a summary).
-        props = tools["create_event"].input_schema.get("properties", {})
-        for arg in ("caller_name", "purpose", "caller_phone", "caller_email", "duration_minutes"):
-            assert arg in props, f"create_event missing front-desk arg {arg}"
+        props = tools["create_appointment"].input_schema.get("properties", {})
+        for arg in (
+            "caller_name",
+            "purpose",
+            "caller_phone",
+            "caller_email",
+            "duration_minutes",
+            "user_confirmed",
+        ):
+            assert arg in props, f"create_appointment missing front-desk arg {arg}"
 
     async def test_check_availability_description_mentions_avoiding_double_booking(
         self, google_calendar_rest_mcp_config
@@ -586,11 +692,15 @@ class TestSchemasAreGeminiClean:
     guard in voice-ws MCP dispatch tests.
     """
 
-    async def test_all_tool_schemas_pass_gemini_validation(self, google_calendar_rest_mcp_config):
-        from google.genai import types
+    async def test_all_tool_schemas_pass_gemini_validation(
+        self, google_calendar_rest_mcp_config
+    ):
+        types = pytest.importorskip("google.genai").types
 
         from shared.voice_agents.tools.mcp.client import McpClient
-        from shared.voice_agents.tools.mcp.schema_sanitize import build_gemini_function_declaration
+        from shared.voice_agents.tools.mcp.schema_sanitize import (
+            build_gemini_function_declaration,
+        )
 
         async with McpClient(google_calendar_rest_mcp_config) as client:
             tools = await client.list_tools()

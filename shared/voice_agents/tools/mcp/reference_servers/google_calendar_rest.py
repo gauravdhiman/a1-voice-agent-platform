@@ -18,18 +18,18 @@ Why this exists:
          token today (verified: it lists the user's calendars with the stored
          token).
 
-    This module is a small FastMCP server that exposes a Google-Calendar-shaped
-    tool contract (``list_calendars`` / ``list_events`` / ``get_event`` /
-    ``create_event`` / ``check_availability``) and, on each tool call, forwards
-    the per-user OAuth bearer to the **REST API** (option 2). The platform points
-    the ``Google_calendar_mcp`` ``platform_tools`` row at this server instead of
-    Google's gated remote server, so the agent reads the caller's real calendar
-    with a personal Gmail — no Workspace, no Preview wait.
+    This module is a small FastMCP server that exposes the same six appointment
+    operations as the native ``Google_calendar_appointment`` adapter and, on
+    each tool call, forwards the per-user OAuth bearer to the **REST API**. The
+    platform points the ``Google_calendar_appointment_mcp`` row at this server
+    instead of Google's gated remote server, so the agent reads and writes the
+    organization's real calendar with a personal Gmail — no Workspace Preview
+    enrollment is required for the REST path.
 
     This is also the better long-term design: we own the tool schemas (clean,
     Gemini-friendly — no sanitization hack needed) and the error handling. If we
-    later get Workspace Preview access, we can repoint the row at Google's remote
-    server with no platform change (the dispatch layer is server-agnostic).
+    later get Workspace Preview/GA access, we can add a provider adapter without
+    changing the appointment-facing contract.
 
 Auth model:
     The worker's dispatch layer
@@ -48,25 +48,34 @@ Testability:
     integration test (in-process server + :class:`McpClient`).
 
 Scopes required on the stored token (standard Google Calendar REST scopes; all
-are granted by the existing ``Google_calendar_mcp`` OAuth config):
-    - ``https://www.googleapis.com/auth/calendar`` (read/write) or
-      ``calendar.events`` + ``calendar.calendarlist.readonly``.
+    are granted by the ``Google_calendar_appointment_mcp`` OAuth config):
+    - ``https://www.googleapis.com/auth/calendar.events``
+    - ``https://www.googleapis.com/auth/calendar.readonly``
 """
+
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import Optional
 
 import httpx
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
+
+from shared.voice_agents.tools.google_calendar_appointment_service import (
+    GoogleCalendarAppointmentService,
+)
 
 # Google Calendar REST API base. The REST API is GA and un-gated (unlike the
 # Preview-gated calendarmcp.googleapis.com remote MCP server).
 _API_BASE = "https://www.googleapis.com/calendar/v3"
 _TIMEOUT = 20.0
 
+
 # Testability seam: tests override this to return an httpx.AsyncClient backed by
 # a MockTransport so no real network call is made. Default returns a real client.
-_default_client_factory: Callable[[], httpx.AsyncClient] = lambda: httpx.AsyncClient(timeout=_TIMEOUT)
+def _default_client_factory() -> httpx.AsyncClient:
+    """Create the production Google HTTP client."""
+    return httpx.AsyncClient(timeout=_TIMEOUT)
 
 
 def _bearer(ctx: Context) -> str:
@@ -171,7 +180,11 @@ async def list_calendars_logic(token: str) -> list[dict] | dict:
     if status != 200:
         return _err(status, body)
     return [
-        {"id": c.get("id"), "summary": c.get("summary"), "primary": bool(c.get("primary"))}
+        {
+            "id": c.get("id"),
+            "summary": c.get("summary"),
+            "primary": bool(c.get("primary")),
+        }
         for c in body.get("items", [])
     ]
 
@@ -446,9 +459,7 @@ async def check_availability_logic(
         ``{"status": "free"}`` or ``{"status": "busy"}``, ``{"status": "past"}``
         when the window is before the current time, or an error dict on non-200.
     """
-    if _availability_window_is_in_past(
-        time_min, time_max, reference_now=reference_now
-    ):
+    if _availability_window_is_in_past(time_min, time_max, reference_now=reference_now):
         return {
             "status": "past",
             "message": (
@@ -469,181 +480,195 @@ async def check_availability_logic(
     return {"status": "busy" if busy else "free"}
 
 
+def _header(ctx: Context, name: str, default: str = "") -> str:
+    """Read one namespaced runtime header from the in-flight MCP request."""
+    return str(ctx.request_context.request.headers.get(name, default) or default)
+
+
+def _bool_header(ctx: Context, name: str) -> bool:
+    """Read a boolean policy header emitted by the worker."""
+    return _header(ctx, name).strip().lower() == "true"
+
+
+def _appointment_service(ctx: Context) -> GoogleCalendarAppointmentService:
+    """Build the shared service from OAuth and trusted runtime headers."""
+    return GoogleCalendarAppointmentService(
+        access_token=_bearer(ctx),
+        calendar_id=_header(ctx, "x-247ai-calendar-id", "primary"),
+        timezone_name=_header(ctx, "x-247ai-organization-timezone", "UTC"),
+        require_phone=_bool_header(ctx, "x-247ai-require-phone"),
+        require_email=_bool_header(ctx, "x-247ai-require-email"),
+        idempotency_key=_header(ctx, "x-247ai-session-id") or None,
+    )
+
+
 def build_google_calendar_rest_server() -> FastMCP:
-    """Build the Google Calendar REST connector MCP server.
+    """Build the platform-owned Google Calendar Appointment MCP server.
 
-    Returns:
-        A FastMCP server named ``google-calendar-rest`` exposing five tools:
-        ``list_calendars``, ``list_events``, ``get_event``, ``create_event``,
-        ``check_availability``. Each forwards the caller's OAuth bearer (from
-        the MCP request ``Authorization`` header, injected by the worker
-        dispatch layer) to Google's Calendar REST API.
+    The server exposes the same six operations as the native tool.  Calendar
+    id, organization timezone, policy flags, and session id are request
+    context supplied by the worker; they are intentionally not model-facing
+    arguments.  The OAuth bearer is forwarded to Google's Calendar REST API.
     """
-    mcp = FastMCP("google-calendar-rest")
+    mcp = FastMCP("google-calendar-appointment")
 
-    @mcp.tool()
-    async def list_calendars(ctx: Context) -> str:
-        """List the calendars on the organization's Google account.
-
-        This is the organization's (the business's) Google account, NOT the
-        caller's. Use this only if the business keeps more than one calendar and
-        you need to pick the right ``calendar_id``; otherwise book into
-        ``primary`` (the default).
-
-        Returns:
-            JSON array of ``{id, summary, primary}`` for each calendar the
-            business owns or is subscribed to.
-        """
-        return json.dumps(await list_calendars_logic(_bearer(ctx)))
-
-    @mcp.tool()
-    async def list_events(
-        ctx: Context,
-        time_min: str,
-        time_max: str = "",
-        max_results: int = 10,
-        calendar_id: str = "primary",
-    ) -> str:
-        """List the organization's upcoming appointments within a time range.
-
-        Use this to see what is already booked on the business's calendar (e.g.
-        to answer "what does the doctor's schedule look like next week?"). This
-        is the organization's calendar, not the caller's.
-
-        Args:
-            time_min: Window start (ISO 8601 WITH timezone),
-                e.g. ``2026-07-22T00:00:00-07:00``. Always include the timezone;
-                ask the caller for their timezone if you cannot infer it, and
-                reason from the current date/time you were given.
-            time_max: Window end (ISO 8601). Optional; when empty, events from
-                ``time_min`` onward (bounded by ``max_results``).
-            max_results: Maximum events to return (default 10).
-            calendar_id: The organization's calendar to read (default
-                ``primary`` — do not ask the caller for this).
-
-        Returns:
-            JSON array of ``{id, summary, start, end}`` sorted by start time.
-        """
-        return json.dumps(
-            await list_events_logic(_bearer(ctx), time_min, time_max, max_results, calendar_id)
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, idempotentHint=True
         )
-
-    @mcp.tool()
-    async def get_event(
-        ctx: Context, event_id: str, calendar_id: str = "primary"
-    ) -> str:
-        """Fetch a single appointment by id from the organization's calendar.
-
-        Use this to look up an existing appointment and read its details back to
-        the caller (e.g. to confirm or reschedule). Find the ``event_id`` with
-        ``list_events`` first.
-
-        Args:
-            event_id: The event id returned by ``list_events`` / ``create_event``.
-            calendar_id: The organization's calendar owning the event (default
-                ``primary`` — do not ask the caller for this).
-
-        Returns:
-            JSON object of the event (id, summary, start, end, html_link,
-            attendees), or ``{"error": "not_found"}``.
-        """
-        return json.dumps(await get_event_logic(_bearer(ctx), event_id, calendar_id))
-
-    @mcp.tool()
-    async def create_event(
+    )
+    async def find_available_slots(
         ctx: Context,
-        caller_name: str,
-        purpose: str,
-        start: str,
-        duration_minutes: int = 30,
-        caller_phone: str = "",
-        caller_email: str = "",
-        caller_dob: str = "",
-        calendar_id: str = "primary",
+        window_start: str,
+        window_end: str,
+        duration_minutes: int,
+        slot_interval_minutes: int = 30,
     ) -> str:
-        """Book an appointment on the ORGANIZATION'S Google Calendar (the
-        business's calendar — NOT the caller's). You are the business's front
-        desk; this writes the appointment into the business's calendar so the
-        business knows who it is with.
+        """Find future free appointment starts in a requested time window.
 
-        BEFORE you call this tool, you MUST complete these steps with the caller:
-        1. COLLECT the caller's details: their full name (required), a contact
-           phone number, an email address, and their date of birth or age when
-           the business needs it (e.g. a dental or medical practice). Ask
-           politely, one or two questions at a time — do NOT skip this and do
-           NOT book for an unknown caller.
-        2. Use ``check_availability`` to confirm the requested slot is free
-           (avoid double-booking). If it is busy, propose the nearest free
-           alternative and agree on it with the caller.
-        3. READ BACK the appointment to the caller: the caller's name, the
-           purpose, the date and time WITH the time zone, and the contact
-           details you captured.
-        4. Get the caller's EXPLICIT confirmation ("Shall I go ahead and book
-           that for you?") BEFORE calling this tool. DO NOT book without
-           explicit confirmation.
-
-        Args:
-            caller_name: The caller's full name — the appointment is for this
-                person. Required; collect it from the caller before booking.
-            purpose: Reason for the appointment in a few words (e.g.
-                ``"Dental cleaning"``, ``"New patient consultation"``).
-            start: Appointment start as ISO 8601 WITH timezone, e.g.
-                ``2026-07-23T14:00:00-07:00``. Always include the timezone; ask
-                the caller if you cannot infer it, and reason from the current
-                date/time you were given.
-            duration_minutes: Appointment length in minutes (default 30).
-            caller_phone: Caller's phone number. Collect it before booking.
-            caller_email: Caller's email address. If provided, the caller is
-                added as an invitee. Collect it before booking.
-            caller_dob: Caller's date of birth (``YYYY-MM-DD``) or age, when the
-                business requires it.
-            calendar_id: The organization's calendar to book into (default
-                ``primary`` — the business's calendar). Do not ask the caller
-                for this.
-
-        Returns:
-            JSON object ``{"id", "status": "created", "summary", "html_link"}``
-            on success, or an error object.
+        Use this when the caller asks what times are open.  The search is based
+        on the organization's calendar and appointment duration, not caller
+        name, phone, or email.  Timestamps must be ISO 8601 with a timezone.
         """
         return json.dumps(
-            await create_event_logic(
-                _bearer(ctx),
-                caller_name,
-                purpose,
-                start,
-                duration_minutes,
-                caller_phone,
-                caller_email,
-                caller_dob,
-                calendar_id,
+            await _appointment_service(ctx).find_available_slots(
+                window_start=window_start,
+                window_end=window_end,
+                duration_minutes=duration_minutes,
+                slot_interval_minutes=slot_interval_minutes,
             )
         )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, idempotentHint=True
+        )
+    )
     async def check_availability(
-        ctx: Context, time_min: str, time_max: str, calendar_id: str = "primary"
+        ctx: Context, start_time: str, duration_minutes: int
     ) -> str:
-        """Check whether a time window is free or busy on the organization's
-        calendar. USE THIS BEFORE ``create_event`` to avoid double-booking.
+        """Check whether one exact future interval is free or busy on the organization's calendar."""
+        return json.dumps(
+            await _appointment_service(ctx).check_availability(
+                start_time=start_time, duration_minutes=duration_minutes
+            )
+        )
 
-        Args:
-            time_min: Window start (ISO 8601 WITH timezone), e.g.
-                ``2026-07-23T14:00:00-07:00``. Always include the timezone; ask
-                the caller for their timezone if you cannot infer it.
-            time_max: Window end (ISO 8601 WITH timezone).
-            calendar_id: The organization's calendar to check (default
-                ``primary`` — the business's calendar; do not ask the caller).
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, idempotentHint=True
+        )
+    )
+    async def find_appointments(
+        ctx: Context,
+        window_start: str,
+        window_end: str,
+        caller_name: str = "",
+        caller_phone: str = "",
+        caller_email: str = "",
+        limit: int = 20,
+    ) -> str:
+        """Find existing appointments in a time window with optional caller filters.
 
-        Returns:
-            JSON object ``{"status": "free"}``, ``{"status": "busy"}``, or
-            ``{"status": "past", "message": "..."}`` when the window is before
-            the current time. If busy, propose the nearest **future** free
-            alternative and call ``check_availability`` for it before offering it.
-            Never state a time is free without a successful check_availability
-            result for that exact window.
+        Time is the primary search key.  Caller details narrow the results but
+        are not identity verification.  Use the returned appointment id only
+        for a later update or cancellation; never read it to the caller.
         """
         return json.dumps(
-            await check_availability_logic(_bearer(ctx), time_min, time_max, calendar_id)
+            await _appointment_service(ctx).find_appointments(
+                window_start=window_start,
+                window_end=window_end,
+                caller_name=caller_name,
+                caller_phone=caller_phone,
+                caller_email=caller_email,
+                limit=limit,
+            )
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=True
+        )
+    )
+    async def create_appointment(
+        ctx: Context,
+        caller_name: str,
+        purpose: str,
+        start_time: str,
+        duration_minutes: int,
+        user_confirmed: bool,
+        caller_phone: str = "",
+        caller_email: str = "",
+        notes: str = "",
+    ) -> str:
+        """Book a business appointment on the organization's Google Calendar after explicit caller confirmation.
+
+        Collect the caller's name and the business-required contact details, read back the purpose,
+        date, time, duration, and contact details, then call with
+        ``user_confirmed=true``.  The server performs a fresh exact conflict
+        check immediately before writing, so an earlier availability result is
+        not treated as a guarantee.  Do not put DOB, insurance, or other
+        sensitive health information in notes unless the organization's policy
+        explicitly permits calendar storage.
+        """
+        return json.dumps(
+            await _appointment_service(ctx).create_appointment(
+                caller_name=caller_name,
+                purpose=purpose,
+                start_time=start_time,
+                duration_minutes=duration_minutes,
+                caller_phone=caller_phone,
+                caller_email=caller_email,
+                notes=notes,
+                user_confirmed=user_confirmed,
+            )
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=True
+        )
+    )
+    async def update_appointment(
+        ctx: Context,
+        appointment_id: str,
+        user_confirmed: bool,
+        new_start_time: str = "",
+        new_duration_minutes: int = 0,
+        new_purpose: str = "",
+        caller_name: str = "",
+        caller_phone: str = "",
+        caller_email: str = "",
+        notes: str = "",
+    ) -> str:
+        """Update or reschedule an appointment after caller confirmation."""
+        return json.dumps(
+            await _appointment_service(ctx).update_appointment(
+                appointment_id=appointment_id,
+                new_start_time=new_start_time,
+                new_duration_minutes=new_duration_minutes,
+                new_purpose=new_purpose,
+                caller_name=caller_name,
+                caller_phone=caller_phone,
+                caller_email=caller_email,
+                notes=notes,
+                user_confirmed=user_confirmed,
+            )
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=True
+        )
+    )
+    async def cancel_appointment(
+        ctx: Context, appointment_id: str, user_confirmed: bool
+    ) -> str:
+        """Cancel an appointment only after explicit caller confirmation."""
+        return json.dumps(
+            await _appointment_service(ctx).cancel_appointment(
+                appointment_id=appointment_id, user_confirmed=user_confirmed
+            )
         )
 
     return mcp
@@ -651,7 +676,7 @@ def build_google_calendar_rest_server() -> FastMCP:
 
 if __name__ == "__main__":
     # Run the connector as a standalone Streamable HTTP service so the worker
-    # can point the ``Google_calendar_mcp`` platform_tools row at it. Configure
+    # can point the ``Google_calendar_appointment_mcp`` platform_tools row at it. Configure
     # host/port via env vars; defaults bind to localhost on 8733.
     #
     #   python -m shared.voice_agents.tools.mcp.reference_servers.google_calendar_rest

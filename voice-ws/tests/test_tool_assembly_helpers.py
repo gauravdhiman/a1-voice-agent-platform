@@ -5,12 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
+from src.tools.assembly import build_function_schema, create_legacy_tool_handler
 
-from src.tools.assembly import (
-    build_function_schema,
-    create_legacy_tool_handler,
-)
+from shared.voice_agents.tools.base.tool_context import ToolContext
+from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
 
 
 class _FakeFunctionCallParams:
@@ -33,6 +31,17 @@ async def _example_tool(
     """Create a test result from model supplied arguments."""
     assert context is not None
     return {"subject": subject, "count": count}
+
+
+async def _pep604_tool(
+    context: Any,
+    duration_minutes: int | None = None,
+) -> dict[str, Any]:
+    """Expose a PEP 604 optional integer for schema conversion tests."""
+    return {
+        "duration_minutes": duration_minutes,
+        "timezone": context.organization_timezone,
+    }
 
 
 class TestToolAssemblyHelpers:
@@ -69,6 +78,33 @@ class TestToolAssemblyHelpers:
         updates_schema = batch_schema.properties["updates"]
         assert updates_schema["type"] == "array"
         assert updates_schema["items"]["type"] == "object"
+
+    def test_build_function_schema_preserves_pep604_optional_primitive_type(
+        self,
+    ) -> None:
+        """PEP 604 unions must not silently become string parameters."""
+        schema = build_function_schema(_pep604_tool)
+
+        assert schema.properties["duration_minutes"]["type"] == "integer"
+
+    def test_legacy_handler_injects_runtime_context(self) -> None:
+        """Tool context comes from the trusted session, never model arguments."""
+        handler = create_legacy_tool_handler(
+            _pep604_tool,
+            runtime_context=ToolContext(
+                organization_timezone="America/Phoenix",
+                session_id="session-123",
+            ),
+        )
+        params = _FakeFunctionCallParams(
+            {"duration_minutes": 60, "context": "untrusted"}
+        )
+
+        asyncio.run(handler(params))
+
+        assert (
+            params.result == '{"duration_minutes": 60, "timezone": "America/Phoenix"}'
+        )
 
     def test_legacy_handler_filters_context_from_model_arguments(self) -> None:
         """A model-provided context key cannot override runtime ToolContext."""

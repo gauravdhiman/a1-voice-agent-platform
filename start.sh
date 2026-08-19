@@ -184,6 +184,24 @@ resolve_port_config() {
         customized_ports=true
     fi
 
+    # Local Docker stacks use loopback OAuth callbacks even when they connect
+    # to the cloud staging database. Keep production HTTPS-only while making
+    # the local callback policy deterministic instead of depending on a
+    # developer's untracked environment-file value.
+    local configured_environment
+    configured_environment="$(get_config_setting ENVIRONMENT)"
+    if [[ -z "$configured_environment" ]]; then
+        configured_environment="$ENVIRONMENT_NAME"
+    fi
+    case "$(printf '%s' "$configured_environment" | tr '[:upper:]' '[:lower:]')" in
+        production|prod)
+            export MCP_ALLOW_LOCAL_URLS="$(get_config_setting MCP_ALLOW_LOCAL_URLS)"
+            ;;
+        *)
+            export MCP_ALLOW_LOCAL_URLS="true"
+            ;;
+    esac
+
     [[ -n "$HOST_FRONTEND_PORT" ]] || HOST_FRONTEND_PORT=$((3000 + offset))
     [[ -n "$HOST_BACKEND_PORT" ]] || HOST_BACKEND_PORT=$((8000 + offset))
     [[ -n "$HOST_VOICE_WS_PORT" ]] || HOST_VOICE_WS_PORT=$((7860 + offset))
@@ -299,6 +317,7 @@ show_config() {
     echo "OTEL gRPC host port: $HOST_OTEL_GRPC_PORT"
     echo "OTEL HTTP host port: $HOST_OTEL_HTTP_PORT"
     echo "OTEL health host port: $HOST_OTEL_HEALTH_PORT"
+    echo "Local OAuth/MCP URLs: ${MCP_ALLOW_LOCAL_URLS:-false}"
 }
 
 # Function to check if Docker is installed

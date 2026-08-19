@@ -10,6 +10,7 @@ from typing import Any
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.services.llm_service import FunctionCallParams
 
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.tools.mcp.client import McpClient
 from shared.voice_agents.tools.mcp.dispatch import mcp_server_config_from_agent_tool
 from shared.voice_agents.tools.mcp.schema_sanitize import sanitize_schema_for_gemini
@@ -60,12 +61,15 @@ def _create_mcp_handler(client: McpClient, tool_name: str) -> Callable[..., Any]
 
 async def build_mcp_pipecat_tools(
     agent_tool: Any,
+    runtime_context: ToolContext | None = None,
 ) -> tuple[list[FunctionSchema], list[tuple[str, Callable[..., Any]]], McpClient]:
     """Open an MCP client and synthesize Pipecat schemas and handlers.
 
     Args:
         agent_tool: Enabled MCP-sourced agent tool including its platform tool,
             sensitive configuration, and optional unselected function names.
+        runtime_context: Trusted organization/session metadata forwarded as
+            namespaced MCP request headers.
 
     Returns:
         A tuple containing tool schemas, separately registerable name/handler
@@ -76,7 +80,9 @@ async def build_mcp_pipecat_tools(
         Exception: When server discovery fails. The partially created client is
             closed before the error propagates.
     """
-    client = McpClient(mcp_server_config_from_agent_tool(agent_tool))
+    client = McpClient(
+        mcp_server_config_from_agent_tool(agent_tool, runtime_context=runtime_context)
+    )
     try:
         tool_defs = await client.list_tools()
     except Exception:

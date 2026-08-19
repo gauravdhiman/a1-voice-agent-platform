@@ -77,14 +77,27 @@ TOOLSET_INSTRUCTIONS = {
 - Confirm bookings with general information only
 - Always call get_available_slots before offering times, and create_booking before confirming a booking""",
 
-    "Google_calendar_mcp": """## Google Calendar Tool Guidelines
-- Calendar events and attendee information are private
-- DO NOT share attendee names, email addresses, or raw event IDs with callers
-- Always call check_availability (or list_events) before offering times — never guess
-- If check_availability returns status "past", tell the caller that time has already passed; only suggest future slots
-- If check_availability returns status "busy", call check_availability for each alternative before offering it
-- Always call create_event before confirming that an appointment was booked
-- If a tool returns an error, say you could not complete the booking — never invent success""",
+    "Google_calendar_appointment": """## Google Calendar Appointment Guidelines
+- Use this calendar only for business appointments; never expose event IDs, raw event details, or private attendee information.
+- For an open-ended request, call `find_available_slots` with the organization's current date/time and timezone. For one proposed time, call `check_availability` for that exact interval.
+- Collect only the appointment details the organization requires. Keep details already provided by the caller; do not ask the same question again unless the caller changes or corrects it.
+- Before a mutation, read back the purpose, date, local time, duration, and required contact details once. Call `create_appointment`, `update_appointment`, or `cancel_appointment` with `user_confirmed=true` only after the caller explicitly agrees.
+- The service performs its own final conflict check. If it returns `busy`, `past`, `confirmation_required`, or an error, do not claim the action succeeded and do not repeat the same call without resolving that result.
+- Treat appointment IDs and matching caller details as internal lookup data, not as identity verification.""",
+
+    "Google_calendar_appointment_mcp": """## Google Calendar Appointment Guidelines
+- Use this calendar only for business appointments; never expose event IDs, raw event details, or private attendee information.
+- For an open-ended request, call `find_available_slots` with the organization's current date/time and timezone. For one proposed time, call `check_availability` for that exact interval.
+- Collect only the appointment details the organization requires. Keep details already provided by the caller; do not ask the same question again unless the caller changes or corrects it.
+- Before a mutation, read back the purpose, date, local time, duration, and required contact details once. Call `create_appointment`, `update_appointment`, or `cancel_appointment` with `user_confirmed=true` only after the caller explicitly agrees.
+- The service performs its own final conflict check. If it returns `busy`, `past`, `confirmation_required`, or an error, do not claim the action succeeded and do not repeat the same call without resolving that result.
+- Treat appointment IDs and matching caller details as internal lookup data, not as identity verification.""",
+
+    # Compatibility guidance for agents that still have the pre-appointment
+    # MCP row enabled while the catalog migration is rolling out.
+    "Google_calendar_mcp": """## Google Calendar Appointment Guidelines
+- Prefer the appointment-specific functions when available; never expose raw event IDs or private attendee information.
+- Do not claim an appointment was booked without a successful create result.""",
 }
 
 
