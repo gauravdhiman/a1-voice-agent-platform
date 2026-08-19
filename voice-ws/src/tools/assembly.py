@@ -38,11 +38,12 @@ class AssembledTools:
     Attributes:
         schemas: Schemas supplied to the Pipecat LLM service.
         handlers: Function handlers registered on the LLM by schema name.
-        enabled_tool_names: Platform tool names for prompt construction.
+        enabled_tool_names: Platform tool names for observability and diagnostics.
         mcp_clients: Open clients that must stay alive for the session.
         skill_summaries: Prompt-safe skill metadata for progressive disclosure.
-        unavailable_tools: Human-readable reasons for tools that failed to load
-            so the model is told not to invent outcomes for them.
+        unavailable_tools: Human-readable reasons for tools that failed to load.
+            These are retained for observability and are not sent to the model as
+            prompt text.
     """
 
     schemas: list[FunctionSchema] = field(default_factory=list)
@@ -180,43 +181,6 @@ def create_legacy_tool_handler(
         await params.result_callback(json.dumps(result, default=str))
 
     return handler
-
-
-def format_tool_runtime_instructions(assembled: AssembledTools) -> str:
-    """Build prompt text that anchors the model to real tool call results.
-
-    Args:
-        assembled: Tools assembled for the current voice session.
-
-    Returns:
-        A markdown section listing callable function names and any tools that
-        failed to load. Empty string when neither list has content.
-    """
-    sections: list[str] = []
-    function_names = [schema.name for schema in assembled.schemas]
-    if function_names:
-        sections.append(
-            "# AVAILABLE TOOL FUNCTIONS\n"
-            "For scheduling, availability, and bookings you MUST call the "
-            "appropriate function below and wait for its result before telling "
-            "the caller the outcome.\n"
-            f"Callable functions: {', '.join(function_names)}.\n"
-            "Never invent availability or confirm a booking/cancel/reschedule "
-            "without a successful tool result for that action.\n"
-            "A pending call, user assertion, or plan is not a result; wait for "
-            "the tool result before saying an action completed.\n"
-            "For availability, only repeat times returned by the tool. An "
-            "omitted time is not proof of a conflict; check that exact interval."
-        )
-    if assembled.unavailable_tools:
-        failure_lines = "\n".join(f"- {item}" for item in assembled.unavailable_tools)
-        sections.append(
-            "# UNAVAILABLE TOOLS\n"
-            "These tools failed to load for this call. Tell the caller you "
-            "cannot complete related actions right now — do not invent results.\n"
-            f"{failure_lines}"
-        )
-    return "\n\n".join(sections)
 
 
 def _add_handler(

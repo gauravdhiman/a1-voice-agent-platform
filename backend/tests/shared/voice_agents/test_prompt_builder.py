@@ -2,13 +2,18 @@
 Tests for PromptBuilder service.
 """
 
+import inspect
 from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
+
 from shared.organization.models import Organization
 from shared.voice_agents.models import VoiceAgent
-from shared.voice_agents.prompt_builder import PromptBuilder, build_current_datetime_section
+from shared.voice_agents.prompt_builder import (
+    PromptBuilder,
+    build_current_datetime_section,
+)
 
 
 class TestPromptBuilder:
@@ -179,8 +184,8 @@ class TestPromptBuilder:
 
         assert "Location: , Details: " in prompt
 
-    def test_build_from_markdown_includes_tool_guidelines(self):
-        """Test that tool guidelines are appended in markdown mode."""
+    def test_prompt_builder_keeps_platform_prompt_tool_agnostic(self):
+        """Platform prompt content must not name or describe particular tools."""
         now = datetime.now(timezone.utc)
         org = Organization(
             id=UUID("00000000-0000-0000-0000-000000000001"),
@@ -201,11 +206,23 @@ class TestPromptBuilder:
         )
 
         markdown = "# My Agent"
-        prompt = PromptBuilder.build_from_markdown(
-            org, agent, markdown, enabled_tools=["Google_Calendar"]
-        )
+        prompt = PromptBuilder.build_from_markdown(org, agent, markdown)
+        lowered = prompt.lower()
 
-        assert "Google Calendar Tool Guidelines" in prompt
+        assert "google calendar" not in lowered
+        assert "google sheets" not in lowered
+        assert "gmail" not in lowered
+        assert "spreadsheet" not in lowered
+        assert "toolset-specific guidelines" not in lowered
+
+    def test_prompt_builder_does_not_accept_attached_tool_names(self):
+        """Tool attachment belongs to tool schemas, not prompt construction."""
+        for method in (
+            PromptBuilder.build,
+            PromptBuilder.build_from_markdown,
+            PromptBuilder.build_system_prompt,
+        ):
+            assert "enabled_tools" not in inspect.signature(method).parameters
 
     def test_markdown_prompt_requires_tool_success_before_claiming_completion(self):
         """Platform guardrails must survive custom markdown instructions."""
@@ -231,8 +248,8 @@ class TestPromptBuilder:
 
         assert "never claim a tool-backed action completed" in prompt.lower()
 
-    def test_appointment_guidelines_require_exact_availability_results(self):
-        """Calendar appointment guidance must prevent inferred availability."""
+    def test_custom_instructions_can_describe_a_specific_tool(self):
+        """User-authored agent instructions remain the customization boundary."""
         now = datetime.now(timezone.utc)
         org = Organization(
             id=UUID("00000000-0000-0000-0000-000000000001"),
@@ -254,13 +271,11 @@ class TestPromptBuilder:
         prompt = PromptBuilder.build_from_markdown(
             org,
             agent,
-            "# Custom",
-            enabled_tools=["Google_calendar_appointment"],
+            "# Custom\nUse Google Calendar Appointment for business bookings.",
         )
 
         lowered = prompt.lower()
-        assert "exact times returned by the availability tool" in lowered
-        assert "missing organization policy" in lowered
+        assert "google calendar appointment" in lowered
 
     def test_build_routes_to_markdown_when_set(self):
         """Test that build() uses markdown when instructions_markdown is set."""
@@ -351,7 +366,9 @@ class TestPromptBuilder:
                 self.description = description
 
         skills = [
-            SkillSummary("appointment-booking", "Appointment Booking", "Handle scheduling"),
+            SkillSummary(
+                "appointment-booking", "Appointment Booking", "Handle scheduling"
+            ),
             SkillSummary("call-transfer", "Call Transfer", "Escalate to human"),
         ]
 
@@ -362,9 +379,13 @@ class TestPromptBuilder:
         assert "appointment-booking" in prompt
         assert "Handle scheduling" in prompt
         assert "call-transfer" in prompt
-        assert "load_skill" in prompt
+        assert "skill-loading capability" in prompt
+        assert "load_skill" not in prompt
         # Full skill content should NOT be present (progressive disclosure)
-        assert "# Appointment Booking" not in prompt.split("AVAILABLE SKILLS")[1].split("SYSTEM GUARDRAILS")[0]
+        assert (
+            "# Appointment Booking"
+            not in prompt.split("AVAILABLE SKILLS")[1].split("SYSTEM GUARDRAILS")[0]
+        )
 
     def test_build_no_skills_section_when_empty(self):
         """Test that no skills section appears when agent has no skills."""
@@ -447,7 +468,8 @@ class TestCurrentDatetimeInjection:
         # Guidance so the model treats this as the reference point.
         assert "today" in section.lower()
         assert "Reference instant (ISO 8601)" in section
-        assert "Never offer, suggest, or book appointment times" in section
+        assert "time-sensitive fact" in section
+        assert "appointment" not in section.lower()
 
     def test_build_current_datetime_section_invalid_tz_falls_back_to_utc(self):
         # An unknown IANA zone must NOT raise; it falls back to UTC.
@@ -489,7 +511,9 @@ class TestCurrentDatetimeInjection:
         )
         assert "# CURRENT DATE AND TIME" in prompt
         # The datetime section must come BEFORE the identity section (salient anchor).
-        assert prompt.index("# CURRENT DATE AND TIME") < prompt.index("# IDENTITY AND PERSONA")
+        assert prompt.index("# CURRENT DATE AND TIME") < prompt.index(
+            "# IDENTITY AND PERSONA"
+        )
 
     def test_build_from_markdown_includes_current_datetime_section_first(self):
         now = datetime.now(timezone.utc)
@@ -516,7 +540,9 @@ class TestCurrentDatetimeInjection:
         )
         assert "# CURRENT DATE AND TIME" in prompt
         # Datetime section precedes the user's own markdown instructions.
-        assert prompt.index("# CURRENT DATE AND TIME") < prompt.index("# My Custom Instructions")
+        assert prompt.index("# CURRENT DATE AND TIME") < prompt.index(
+            "# My Custom Instructions"
+        )
 
     def test_build_without_current_datetime_has_no_section(self):
         # Back-compat: omitting current_datetime leaves the prompt unchanged.

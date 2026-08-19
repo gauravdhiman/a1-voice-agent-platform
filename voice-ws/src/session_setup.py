@@ -13,7 +13,6 @@ from src.speech.factory import build_speech_components
 from src.tools.assembly import (
     AssembledTools,
     assemble_agent_tools,
-    format_tool_runtime_instructions,
 )
 
 from shared.organization.service import BaseOrganizationService
@@ -101,16 +100,12 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             org=org,
             agent=agent,
             default_rules=DEFAULT_VOICE_SYSTEM_PROMPT,
-            enabled_tools=tools.enabled_tool_names,
             agent_skills=tools.skill_summaries,
             current_datetime=current_datetime,
         )
         if org is not None
         else f"{current_datetime}\n\n{DEFAULT_VOICE_SYSTEM_PROMPT}"
     )
-    tool_runtime = format_tool_runtime_instructions(tools)
-    if tool_runtime:
-        instructions = f"{instructions}\n\n{tool_runtime}"
     logger.info(
         "Prepared voice session agent=%s timezone=%s functions=%s unavailable=%s",
         agent.id,

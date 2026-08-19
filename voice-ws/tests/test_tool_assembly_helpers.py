@@ -8,6 +8,9 @@ from typing import Any
 from src.tools.assembly import build_function_schema, create_legacy_tool_handler
 
 from shared.voice_agents.tools.base.tool_context import ToolContext
+from shared.voice_agents.tools.implementations.google_calendar_appointment import (
+    GoogleCalendarAppointmentTool,
+)
 from shared.voice_agents.tools.implementations.google_sheets import GoogleSheetsTool
 
 
@@ -56,6 +59,19 @@ class TestToolAssemblyHelpers:
         assert schema.properties["subject"]["type"] == "string"
         assert schema.properties["count"]["type"] == "integer"
         assert schema.required == ["subject"]
+
+    def test_native_tool_docstring_becomes_model_facing_schema_description(
+        self,
+    ) -> None:
+        """Tool capability guidance belongs to the native function schema."""
+        schema = build_function_schema(
+            GoogleCalendarAppointmentTool.find_available_slots
+        )
+
+        assert "free starts" in schema.description.lower()
+        assert "time window" in schema.description.lower()
+        assert "duration_minutes" in schema.properties
+        assert "window_start" in schema.properties
 
     def test_build_function_schema_includes_array_items_for_gemini(self) -> None:
         """Gemini Live requires array parameters to declare item schemas."""

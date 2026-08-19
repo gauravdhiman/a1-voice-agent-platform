@@ -9,11 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
-from src.tools.assembly import (
-    AssembledTools,
-    create_legacy_tool_handler,
-    format_tool_runtime_instructions,
-)
+from src.tools.assembly import create_legacy_tool_handler
 
 
 class _FakeFunctionCallParams:
@@ -41,7 +37,11 @@ class TestToolRuntimeReliability:
         prompt = DEFAULT_VOICE_SYSTEM_PROMPT.lower()
         assert "never invent" in prompt or "do not invent" in prompt
         assert "successful tool" in prompt or "tool result" in prompt
-        assert "booking" in prompt or "availability" in prompt
+        assert "follow each tool" in prompt
+        assert "google calendar" not in prompt
+        assert "gmail" not in prompt
+        assert "booking" not in prompt
+        assert "availability" not in prompt
         assert "before saying" in prompt or "before claiming" in prompt
         assert "pending tool" in prompt or "tool call has not" in prompt
 
@@ -56,45 +56,9 @@ class TestToolRuntimeReliability:
         assert "error" in params.result
         assert "calendar offline" in params.result
 
-    def test_format_tool_runtime_instructions_lists_functions_and_failures(
-        self,
-    ) -> None:
-        """Session prompt must list callable functions and unavailable tools."""
-        from pipecat.adapters.schemas.function_schema import FunctionSchema
-
-        assembled = AssembledTools(
-            schemas=[
-                FunctionSchema(
-                    name="check_availability",
-                    description="Check free/busy",
-                    properties={},
-                    required=[],
-                ),
-                FunctionSchema(
-                    name="create_event",
-                    description="Create calendar event",
-                    properties={},
-                    required=[],
-                ),
-            ],
-            unavailable_tools=[
-                "Google_calendar_mcp: connection refused to local MCP connector"
-            ],
-        )
-
-        section = format_tool_runtime_instructions(assembled)
-
-        assert "check_availability" in section
-        assert "create_event" in section
-        assert "UNAVAILABLE TOOLS" in section
-        assert "Google_calendar_mcp" in section
-        assert "Never invent" in section or "never invent" in section.lower()
-        assert "wait for the tool result" in section.lower()
-        assert "only repeat times returned" in section.lower()
-
     @pytest.mark.asyncio
     async def test_assemble_records_mcp_failures_as_unavailable(self) -> None:
-        """MCP discovery failures must be tracked for prompt injection."""
+        """MCP discovery failures must be tracked for observability."""
         from src.tools.assembly import assemble_agent_tools
 
         agent_tool = MagicMock()
