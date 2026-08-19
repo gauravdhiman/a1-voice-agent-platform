@@ -265,6 +265,29 @@ class TestGoogleCalendarAppointmentService:
 
         assert result["slots"][0]["start_time"] == "2026-08-20T08:00:00-07:00"
 
+    async def test_find_available_slots_aligns_candidates_to_local_clock_boundaries(
+        self, monkeypatch
+    ) -> None:
+        """Rolling searches must not create second or arbitrary-minute starts."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"calendars": {"primary": {"busy": []}}})
+
+        service = _service(monkeypatch, handler)
+        result = await service.find_available_slots(
+            window_start="2026-08-20T08:07:23-07:00",
+            window_end="2026-08-20T10:00:00-07:00",
+            duration_minutes=30,
+            slot_interval_minutes=30,
+        )
+
+        assert [slot["start_time"] for slot in result["slots"]] == [
+            "2026-08-20T08:30:00-07:00",
+            "2026-08-20T09:00:00-07:00",
+            "2026-08-20T09:30:00-07:00",
+        ]
+        assert all("." not in slot["start_time"] for slot in result["slots"])
+
     async def test_update_excludes_target_event_when_rechecking_new_slot(
         self, monkeypatch
     ) -> None:

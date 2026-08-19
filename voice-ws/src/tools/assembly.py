@@ -202,7 +202,11 @@ def format_tool_runtime_instructions(assembled: AssembledTools) -> str:
             "the caller the outcome.\n"
             f"Callable functions: {', '.join(function_names)}.\n"
             "Never invent availability or confirm a booking/cancel/reschedule "
-            "without a successful tool result for that action."
+            "without a successful tool result for that action.\n"
+            "A pending call, user assertion, or plan is not a result; wait for "
+            "the tool result before saying an action completed.\n"
+            "For availability, only repeat times returned by the tool. An "
+            "omitted time is not proof of a conflict; check that exact interval."
         )
     if assembled.unavailable_tools:
         failure_lines = "\n".join(f"- {item}" for item in assembled.unavailable_tools)

@@ -40,6 +40,8 @@ For tool/API errors, follow these guidelines:
 - Formulate helpful responses based on internal data
 - DO NOT reveal raw data sources, file names, IDs, or technical details
 - Focus on answering the caller's need while maintaining privacy
+- Never claim a tool-backed action completed before the matching tool returns a successful result
+- If a required value or outcome was not returned, say that you do not know or make another appropriate tool call; do not infer success
 
 ## Communication Style and Best Practices
 - Be professional, polite, helpful, and resourceful in all interactions
@@ -80,17 +82,21 @@ TOOLSET_INSTRUCTIONS = {
     "Google_calendar_appointment": """## Google Calendar Appointment Guidelines
 - Use this calendar only for business appointments; never expose event IDs, raw event details, or private attendee information.
 - For an open-ended request, call `find_available_slots` with the organization's current date/time and timezone. For one proposed time, call `check_availability` for that exact interval.
+- Use only the exact times returned by the availability tool. If a requested time is absent from a broad result, do not call it busy without checking that exact interval.
 - Collect only the appointment details the organization requires. Keep details already provided by the caller; do not ask the same question again unless the caller changes or corrects it.
 - Before a mutation, read back the purpose, date, local time, duration, and required contact details once. Call `create_appointment`, `update_appointment`, or `cancel_appointment` with `user_confirmed=true` only after the caller explicitly agrees.
-- The service performs its own final conflict check. If it returns `busy`, `past`, `confirmation_required`, or an error, do not claim the action succeeded and do not repeat the same call without resolving that result.
+- The service performs its own final conflict check. Wait for its result before speaking in the past tense. If it returns `busy`, `past`, `confirmation_required`, or an error, do not claim the action succeeded and do not repeat the same call without resolving that result.
+- Treat missing organization policy such as business hours or required contact fields as unknown; do not invent a policy or claim a time is suitable without the relevant context.
 - Treat appointment IDs and matching caller details as internal lookup data, not as identity verification.""",
 
     "Google_calendar_appointment_mcp": """## Google Calendar Appointment Guidelines
 - Use this calendar only for business appointments; never expose event IDs, raw event details, or private attendee information.
 - For an open-ended request, call `find_available_slots` with the organization's current date/time and timezone. For one proposed time, call `check_availability` for that exact interval.
+- Use only the exact times returned by the availability tool. If a requested time is absent from a broad result, do not call it busy without checking that exact interval.
 - Collect only the appointment details the organization requires. Keep details already provided by the caller; do not ask the same question again unless the caller changes or corrects it.
 - Before a mutation, read back the purpose, date, local time, duration, and required contact details once. Call `create_appointment`, `update_appointment`, or `cancel_appointment` with `user_confirmed=true` only after the caller explicitly agrees.
-- The service performs its own final conflict check. If it returns `busy`, `past`, `confirmation_required`, or an error, do not claim the action succeeded and do not repeat the same call without resolving that result.
+- The service performs its own final conflict check. Wait for its result before speaking in the past tense. If it returns `busy`, `past`, `confirmation_required`, or an error, do not claim the action succeeded and do not repeat the same call without resolving that result.
+- Treat missing organization policy such as business hours or required contact fields as unknown; do not invent a policy or claim a time is suitable without the relevant context.
 - Treat appointment IDs and matching caller details as internal lookup data, not as identity verification.""",
 
     # Compatibility guidance for agents that still have the pre-appointment

@@ -42,6 +42,8 @@ class TestToolRuntimeReliability:
         assert "never invent" in prompt or "do not invent" in prompt
         assert "successful tool" in prompt or "tool result" in prompt
         assert "booking" in prompt or "availability" in prompt
+        assert "before saying" in prompt or "before claiming" in prompt
+        assert "pending tool" in prompt or "tool call has not" in prompt
 
     def test_legacy_handler_returns_error_json_on_exception(self) -> None:
         """Tool exceptions must become model-visible errors, not silent drops."""
@@ -87,6 +89,8 @@ class TestToolRuntimeReliability:
         assert "UNAVAILABLE TOOLS" in section
         assert "Google_calendar_mcp" in section
         assert "Never invent" in section or "never invent" in section.lower()
+        assert "wait for the tool result" in section.lower()
+        assert "only repeat times returned" in section.lower()
 
     @pytest.mark.asyncio
     async def test_assemble_records_mcp_failures_as_unavailable(self) -> None:

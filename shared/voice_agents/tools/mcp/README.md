@@ -92,8 +92,10 @@ Google REST API remains the provider boundary.
 model the live descriptions from this connector (via `tools/list`). Mutation
 tools require one explicit confirmation flag, while the shared service performs
 a fresh conflict check before writing. Caller email and phone are first-class
-fields; organization policy decides which are required. DOB, insurance, and
-other sensitive health data are not silently persisted to the calendar.
+fields; organization policy decides which are required. Availability results use
+predictable local clock boundaries instead of rolling starts from the current
+minute. DOB, insurance, and other sensitive health data are not silently
+persisted to the calendar.
 
 **The connector auto-starts with `voice-ws-dev`.**
 

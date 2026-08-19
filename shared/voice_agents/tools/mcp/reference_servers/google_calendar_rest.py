@@ -526,9 +526,12 @@ def build_google_calendar_rest_server() -> FastMCP:
     ) -> str:
         """Find future free appointment starts in a requested time window.
 
-        Use this when the caller asks what times are open.  The search is based
+        Use this when the caller asks what times are open. The search is based
         on the organization's calendar and appointment duration, not caller
-        name, phone, or email.  Timestamps must be ISO 8601 with a timezone.
+        name, phone, or email. Timestamps must be ISO 8601 with a timezone.
+        Returned starts are aligned to predictable local clock boundaries; use
+        the organization's normal interval, typically fifteen or thirty
+        minutes, rather than deriving an interval from the current minute.
         """
         return json.dumps(
             await _appointment_service(ctx).find_available_slots(

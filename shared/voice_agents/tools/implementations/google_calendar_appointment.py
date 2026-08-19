@@ -117,7 +117,10 @@ class GoogleCalendarAppointmentTool(BaseTool):
             window_start: ISO 8601 timestamp with timezone for the search start.
             window_end: ISO 8601 timestamp with timezone for the search end.
             duration_minutes: Required appointment length from the business rule.
-            slot_interval_minutes: Distance between candidate starts.
+            slot_interval_minutes: Distance between candidate starts. The
+                service aligns returned starts to local clock boundaries, so
+                use the organization's normal interval (typically 15 or 30)
+                rather than deriving one from the current minute.
 
         Returns:
             JSON-safe availability result with normalized slots and timezone.

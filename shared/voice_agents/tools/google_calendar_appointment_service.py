@@ -131,11 +131,11 @@ class GoogleCalendarAppointmentService:
         if end <= now:
             return self._past_interval(start, end)
         start = max(start, now)
+        candidate = self._align_to_slot_grid(start, slot_interval_minutes)
         availability = await self._freebusy(start, end)
         if availability["status"] == "error":
             return availability
         busy = availability.get("busy_periods", [])
-        candidate = start
         slots: list[dict[str, Any]] = []
         delta = timedelta(minutes=duration_minutes)
         increment = timedelta(minutes=slot_interval_minutes)
@@ -769,6 +769,31 @@ class GoogleCalendarAppointmentService:
         if current.tzinfo is None:
             current = current.replace(tzinfo=self.timezone)
         return current.astimezone(self.timezone)
+
+    @staticmethod
+    def _align_to_slot_grid(value: datetime, interval_minutes: int) -> datetime:
+        """Round a candidate up to the local midnight-based slot grid.
+
+        Availability searches may begin at the current instant or at an
+        arbitrary caller-provided minute.  Using that instant as the first
+        candidate creates starts such as ``10:07:23`` and can omit ordinary
+        starts such as ``10:00``.  A local-midnight grid keeps returned times
+        predictable while preserving the requested interval.
+
+        Args:
+            value: Timezone-aware candidate start in the organization's zone.
+            interval_minutes: Positive distance between candidate starts.
+
+        Returns:
+            The earliest grid-aligned timestamp that is not before ``value``.
+        """
+        day_start = value.replace(hour=0, minute=0, second=0, microsecond=0)
+        elapsed_seconds = int((value - day_start).total_seconds())
+        interval_seconds = interval_minutes * 60
+        remainder = elapsed_seconds % interval_seconds
+        if remainder:
+            value += timedelta(seconds=interval_seconds - remainder)
+        return value.replace(second=0, microsecond=0)
 
     def _with_context(self, result: dict[str, Any]) -> dict[str, Any]:
         """Add timezone and execution time to every scheduling result."""

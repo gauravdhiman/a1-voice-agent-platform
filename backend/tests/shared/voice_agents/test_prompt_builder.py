@@ -207,6 +207,61 @@ class TestPromptBuilder:
 
         assert "Google Calendar Tool Guidelines" in prompt
 
+    def test_markdown_prompt_requires_tool_success_before_claiming_completion(self):
+        """Platform guardrails must survive custom markdown instructions."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build_from_markdown(org, agent, "# Custom")
+
+        assert "never claim a tool-backed action completed" in prompt.lower()
+
+    def test_appointment_guidelines_require_exact_availability_results(self):
+        """Calendar appointment guidance must prevent inferred availability."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test",
+            slug="test",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Agent",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build_from_markdown(
+            org,
+            agent,
+            "# Custom",
+            enabled_tools=["Google_calendar_appointment"],
+        )
+
+        lowered = prompt.lower()
+        assert "exact times returned by the availability tool" in lowered
+        assert "missing organization policy" in lowered
+
     def test_build_routes_to_markdown_when_set(self):
         """Test that build() uses markdown when instructions_markdown is set."""
         now = datetime.now(timezone.utc)
