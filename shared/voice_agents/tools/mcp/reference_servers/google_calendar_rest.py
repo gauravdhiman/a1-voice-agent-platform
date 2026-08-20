@@ -661,24 +661,22 @@ def build_google_calendar_rest_server() -> FastMCP:
         caller_email: str = "",
         notes: str = "",
     ) -> str:
-        """Update an existing appointment after caller confirmation.
+        """Update an existing appointment after explicit caller confirmation.
 
-        Use this for every change to an existing appointment: rescheduling or
-        moving it, extending or shortening its duration, changing its purpose,
-        or adding and correcting caller details. Do not call
-        ``check_availability`` first; this operation checks the proposed
-        interval and excludes the appointment being changed from its own
-        conflict check. For a duration change, ``new_duration_minutes`` is the
-        final total duration, not the number of minutes to add. For example,
-        changing a 60-minute appointment to 90 minutes requires
-        ``new_duration_minutes=90``. Omit ``new_start_time`` to keep the
-        current start time. Never call ``create_appointment`` for an existing
-        booking.
-
-        The appointment id is the Google event id returned by
-        ``create_appointment`` or ``find_appointments``; if it is not already
-        known, find the matching appointment first and pass the returned id.
-        Never invent an id.
+        Use this for every existing-appointment change: rescheduling or
+        moving it, extending or shortening it, changing its purpose or caller
+        name, adding or replacing an email or phone number, and updating
+        notes. Do not call ``check_availability`` to edit an existing
+        appointment; this operation checks the proposed interval and excludes
+        the appointment being changed from its own conflict check. Use the id
+        returned by ``find_appointments`` or an earlier mutation. For a
+        duration change, ``new_duration_minutes`` is the final total duration,
+        not the number of minutes to add or remove. Omit ``new_start_time`` to
+        keep the current start time. Any new start time must be ISO 8601 with a
+        numeric timezone offset. Never call ``create_appointment`` for an
+        existing booking or invent an id. If the result is an error, follow
+        ``error.next_action`` and do not claim success without a successful
+        ``updated`` result.
         """
         return json.dumps(
             await _appointment_service(ctx).update_appointment(

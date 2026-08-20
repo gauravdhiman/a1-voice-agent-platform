@@ -4,6 +4,12 @@
 
 This document outlines the testing strategy and best practices for ensuring the quality and reliability of the application.
 
+For agent/tool robustness evaluations, use the dedicated
+[Agent Evaluation System](./agent-evaluations.md). It runs deterministic
+model-facing workflows without real OAuth or provider writes and can replay
+captured model/tool traces. Manual voice calls and live provider tests remain
+the final integration layer, not the only regression mechanism.
+
 ## Types of Tests
 
 - **Unit Tests**: Focus on individual components or functions in isolation.

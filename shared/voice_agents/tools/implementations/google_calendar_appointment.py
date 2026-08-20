@@ -135,17 +135,21 @@ class GoogleCalendarAppointmentTool(BaseTool):
     async def check_availability(
         self, context: ToolContext, start_time: str, duration_minutes: int
     ) -> dict[str, Any]:
-        """Check one exact interval for a possible new appointment.
+        """Check one exact future interval for a possible new appointment.
 
         Use this only when the caller is considering a new booking and there
-        is no existing appointment being changed. If the caller wants to
-        reschedule, extend, shorten, or edit an existing appointment, use
-        ``update_appointment`` instead. Do not use this tool as a pre-check for
-        an existing appointment because its own calendar event is busy by
-        design; ``update_appointment`` performs the conflict check while
-        excluding the appointment being changed.
+        is no existing appointment being changed. Do not use it to reschedule,
+        extend, shorten, or edit an existing appointment; use
+        ``update_appointment`` with its appointment id for every existing-
+        appointment change. Do not use this as a pre-check for an existing
+        appointment because its own calendar event is busy by design;
+        ``update_appointment`` excludes the appointment being changed.
+        ``start_time`` must be an ISO 8601 datetime with a numeric timezone
+        offset.
 
-        The result reports whether the requested interval is free or busy.
+        Returns a result with ``status`` of ``available``, ``busy``, ``past``,
+        or ``error``. Error results include an actionable ``error.next_action``
+        and may identify the argument that must be corrected.
         """
         return await self._service(context).check_availability(
             start_time=start_time, duration_minutes=duration_minutes
@@ -161,13 +165,15 @@ class GoogleCalendarAppointmentTool(BaseTool):
         caller_email: str = "",
         limit: int = 20,
     ) -> dict[str, Any]:
-        """Find existing appointments before changing an existing booking.
+        """Find existing appointments by time window and optional caller fields.
 
         Use this when the appointment id is not already in the conversation.
-        Search by the appointment's time window and provide caller details to
-        narrow the results. Caller details help match an appointment but are
-        not identity verification. Pass the returned ``appointment.id`` to
-        ``update_appointment`` or ``cancel_appointment``; never invent an id.
+        Search is primarily temporal; caller name, phone, and email narrow the
+        results but are not identity verification. Use the returned
+        ``appointment.id`` with ``update_appointment`` or
+        ``cancel_appointment``; never invent an id. Both window datetimes must
+        include numeric timezone offsets, and no appointment should be
+        invented when this returns an error or no match.
         """
         return await self._service(context).find_appointments(
             window_start=window_start,
@@ -203,6 +209,11 @@ class GoogleCalendarAppointmentTool(BaseTool):
         tool configuration.  Do not put date of birth, insurance data, or
         other sensitive health information in ``notes`` unless the
         organization's calendar-retention policy explicitly permits it.
+        Set ``user_confirmed`` to true only after the caller confirms the final
+        purpose, date, start time, duration, and required contact details.
+        Datetimes must include a numeric timezone offset. On an error, follow
+        the returned ``error.next_action`` and do not claim that booking
+        succeeded.
         """
         return await self._service(context).create_appointment(
             caller_name=caller_name,
@@ -228,24 +239,26 @@ class GoogleCalendarAppointmentTool(BaseTool):
         caller_email: str = "",
         notes: str = "",
     ) -> dict[str, Any]:
-        """Update an existing appointment after caller confirmation.
+        """Update an existing appointment after explicit caller confirmation.
 
-        Use this for every change to an existing appointment: rescheduling or
-        moving it, extending or shortening its duration, changing its purpose,
-        or adding and correcting caller details. Do not call
-        ``check_availability`` first; this operation checks the proposed
-        interval and excludes the appointment being changed from its own
-        conflict check. For a duration change, ``new_duration_minutes`` is the
-        final total duration, not the number of minutes to add. For example,
-        changing a 60-minute appointment to 90 minutes requires
-        ``new_duration_minutes=90``. Omit ``new_start_time`` to keep the
-        current start time. Never call ``create_appointment`` for an existing
-        booking.
+        Use this function for every change to an existing appointment:
+        rescheduling or moving it, extending or shortening it, changing the
+        purpose or caller name, adding, replacing, or correcting an email or
+        phone number and other caller details, and updating notes. Do not call
+        ``check_availability`` to edit an
+        existing appointment; this operation checks the proposed interval and
+        excludes the appointment being changed from its own conflict check.
+        Use the ``appointment_id`` returned by ``find_appointments`` or an
+        earlier mutation, and never invent an id. ``new_duration_minutes`` is
+        the final total duration, not the number of minutes to add or remove.
+        Omit ``new_start_time`` to keep the current start time. Any supplied
+        new start time must be ISO 8601 with a numeric timezone offset. Never
+        call ``create_appointment`` for an existing booking.
 
-        The appointment id is the Google event id returned by
-        ``create_appointment`` or ``find_appointments``; if it is not already
-        known, find the matching appointment first and pass the returned id.
-        Never invent an id.
+        Set ``user_confirmed`` to true only after the caller confirms the
+        requested change. A busy result means the new interval conflicts with
+        another event; an error includes ``error.next_action``. Never claim an
+        update succeeded without a successful ``updated`` result.
         """
         return await self._service(context).update_appointment(
             appointment_id=appointment_id,
@@ -262,7 +275,12 @@ class GoogleCalendarAppointmentTool(BaseTool):
     async def cancel_appointment(
         self, context: ToolContext, appointment_id: str, user_confirmed: bool
     ) -> dict[str, Any]:
-        """Cancel one appointment after explicit caller confirmation."""
+        """Cancel one existing appointment after explicit confirmation.
+
+        Use the appointment id returned by ``find_appointments``. Set
+        ``user_confirmed`` to true only after the caller confirms cancellation,
+        and report success only after a ``cancelled`` result.
+        """
         return await self._service(context).cancel_appointment(
             appointment_id=appointment_id, user_confirmed=user_confirmed
         )

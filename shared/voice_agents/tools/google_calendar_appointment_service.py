@@ -64,6 +64,8 @@ class GoogleCalendarAppointmentService:
             callers should omit it so each operation uses the current time.
         idempotency_key: Optional session/action key used to make retried
             inserts addressable by a deterministic Google event id.
+        client_factory: Optional HTTP client factory used by deterministic
+            evaluations. Production callers should omit it.
     """
 
     def __init__(
@@ -76,8 +78,14 @@ class GoogleCalendarAppointmentService:
         require_email: bool = False,
         now_provider: Optional[Callable[[], datetime]] = None,
         idempotency_key: Optional[str] = None,
+        client_factory: Optional[Callable[[], httpx.AsyncClient]] = None,
     ) -> None:
-        """Initialize a service for one connected organization calendar."""
+        """Initialize a service for one connected organization calendar.
+
+        ``client_factory`` is an optional transport seam for deterministic
+        integration evaluations.  Production callers leave it unset and the
+        service uses its normal short-lived HTTP client factory.
+        """
         self.access_token = access_token.strip()
         self.calendar_id = calendar_id.strip() or "primary"
         self.timezone_name = timezone_name.strip() or "UTC"
@@ -86,6 +94,7 @@ class GoogleCalendarAppointmentService:
         self.require_email = require_email
         self.now_provider = now_provider
         self.idempotency_key = idempotency_key.strip() if idempotency_key else None
+        self.client_factory = client_factory or _default_client_factory
 
     async def find_available_slots(
         self,
@@ -154,6 +163,9 @@ class GoogleCalendarAppointmentService:
             {
                 "status": "ok",
                 "message": "Available appointment slots found.",
+                "next_action": (
+                    "proceed_to_booking" if slots else "ask_for_different_window"
+                ),
                 "window_start": self._format(start),
                 "window_end": self._format(end),
                 "duration_minutes": duration_minutes,
@@ -169,7 +181,7 @@ class GoogleCalendarAppointmentService:
         duration_error = self._validate_duration(duration_minutes)
         if duration_error:
             return duration_error
-        parsed_start = self._parse_datetime(start_time)
+        parsed_start = self._parse_datetime(start_time, field="start_time")
         if isinstance(parsed_start, dict):
             return parsed_start
         start = parsed_start
@@ -184,6 +196,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "past",
                     "message": "That time has already passed.",
+                    "next_action": "choose_future_time",
                     "start_time": self._format(start),
                     "end_time": self._format(end),
                 }
@@ -196,6 +209,11 @@ class GoogleCalendarAppointmentService:
                     "That appointment time is available."
                     if status == "available"
                     else "That appointment time is already occupied."
+                ),
+                "next_action": (
+                    "proceed_to_confirmation"
+                    if status == "available"
+                    else "choose_another_time"
                 ),
                 "start_time": self._format(start),
                 "end_time": self._format(end),
@@ -283,7 +301,7 @@ class GoogleCalendarAppointmentService:
         )
         if validation:
             return validation
-        parsed_start = self._parse_datetime(start_time)
+        parsed_start = self._parse_datetime(start_time, field="start_time")
         if isinstance(parsed_start, dict):
             return parsed_start
         start = parsed_start
@@ -295,6 +313,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "confirmation_required",
                     "message": "Ask the caller to confirm the appointment details before booking.",
+                    "next_action": "ask_for_confirmation",
                     "start_time": self._format(start),
                     "end_time": self._format(end),
                 }
@@ -314,6 +333,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "past",
                     "message": "That time has already passed.",
+                    "next_action": "choose_future_time",
                     "start_time": self._format(start),
                     "end_time": self._format(end),
                 }
@@ -339,6 +359,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "busy",
                     "message": "That appointment time is no longer available.",
+                    "next_action": "choose_another_time",
                     "start_time": self._format(start),
                     "end_time": self._format(end),
                 }
@@ -539,6 +560,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "confirmation_required",
                     "message": "Ask the caller to confirm the appointment changes before updating.",
+                    "next_action": "ask_for_confirmation",
                 }
             )
         if new_duration_minutes in (None, "", 0):
@@ -553,6 +575,9 @@ class GoogleCalendarAppointmentService:
             return self._error(
                 "invalid_argument",
                 "new_duration_minutes must be between 1 and 1440 when provided.",
+                field="new_duration_minutes",
+                expected_format="positive integer from 1 through 1440",
+                hint="Provide the final total appointment duration, not the number of extra minutes.",
             )
 
         status, existing = await self._call_google(
@@ -569,7 +594,7 @@ class GoogleCalendarAppointmentService:
 
         start = old_start
         if new_start_time.strip():
-            parsed_start = self._parse_datetime(new_start_time)
+            parsed_start = self._parse_datetime(new_start_time, field="new_start_time")
             if isinstance(parsed_start, dict):
                 return parsed_start
             start = parsed_start
@@ -578,7 +603,12 @@ class GoogleCalendarAppointmentService:
             if new_duration_minutes
             else int((old_end - old_start).total_seconds() // 60)
         )
-        duration_error = self._validate_duration(duration)
+        duration_error = self._validate_duration(
+            duration,
+            field=(
+                "new_duration_minutes" if new_duration_minutes else "duration_minutes"
+            ),
+        )
         if duration_error:
             return duration_error
         end = start + timedelta(minutes=duration)
@@ -608,6 +638,7 @@ class GoogleCalendarAppointmentService:
                     {
                         "status": "busy",
                         "message": "The new appointment time is occupied.",
+                        "next_action": "choose_another_time",
                         "start_time": self._format(start),
                         "end_time": self._format(end),
                     }
@@ -696,6 +727,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "confirmation_required",
                     "message": "Ask the caller to confirm cancellation before cancelling the appointment.",
+                    "next_action": "ask_for_confirmation",
                 }
             )
         status, body = await self._call_google(
@@ -718,6 +750,7 @@ class GoogleCalendarAppointmentService:
                 {
                     "status": "past",
                     "message": "The requested time has already passed.",
+                    "next_action": "choose_future_time",
                 }
             )
         status, body = await self._call_google(
@@ -785,7 +818,7 @@ class GoogleCalendarAppointmentService:
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
-        client = _default_client_factory()
+        client = self.client_factory()
         try:
             response = await client.request(
                 method,
@@ -816,19 +849,30 @@ class GoogleCalendarAppointmentService:
         """Validate generic appointment policy before confirmation or I/O."""
         for name in ("caller_name", "purpose"):
             if not str(fields[name]).strip():
-                return self._error("invalid_argument", f"{name} is required.")
-        duration_error = self._validate_duration(fields["duration_minutes"])
+                return self._error(
+                    "invalid_argument",
+                    f"{name} is required.",
+                    field=name,
+                    hint=f"Provide a non-empty {name}.",
+                )
+        duration_error = self._validate_duration(
+            fields["duration_minutes"], field="duration_minutes"
+        )
         if duration_error:
             return duration_error
         if self.require_phone and not str(fields["caller_phone"]).strip():
             return self._error(
                 "missing_customer_detail",
                 "A phone number is required for this organization.",
+                field="caller_phone",
+                hint="Ask the caller for a phone number before booking.",
             )
         if self.require_email and not str(fields["caller_email"]).strip():
             return self._error(
                 "missing_customer_detail",
                 "An email address is required for this organization.",
+                field="caller_email",
+                hint="Ask the caller for an email address before booking.",
             )
         if len(str(fields["caller_name"])) > 200 or len(str(fields["purpose"])) > 300:
             return self._error("invalid_argument", "Appointment text is too long.")
@@ -838,15 +882,18 @@ class GoogleCalendarAppointmentService:
             )
         return None
 
-    @staticmethod
-    def _validate_duration(duration_minutes: Any) -> Optional[dict[str, Any]]:
-        """Validate an appointment duration accepted by Google Calendar."""
+    def _validate_duration(
+        self, duration_minutes: Any, *, field: str = "duration_minutes"
+    ) -> Optional[dict[str, Any]]:
+        """Validate an appointment duration and explain how to correct it."""
         if not isinstance(duration_minutes, int) or not 1 <= duration_minutes <= 1440:
-            return {
-                "status": "error",
-                "code": "invalid_argument",
-                "message": "duration_minutes must be between 1 and 1440.",
-            }
+            return self._error(
+                "invalid_argument",
+                f"{field} must be a positive integer from 1 through 1440.",
+                field=field,
+                expected_format="positive integer from 1 through 1440",
+                hint="Use the final total appointment duration in minutes.",
+            )
         return None
 
     @staticmethod
@@ -860,21 +907,45 @@ class GoogleCalendarAppointmentService:
             return int(value.strip())
         return None
 
-    def _parse_datetime(self, value: str) -> datetime | dict[str, Any]:
-        """Parse an offset-aware ISO timestamp and normalize it to org time."""
+    def _parse_datetime(
+        self, value: str, *, field: Optional[str] = None
+    ) -> datetime | dict[str, Any]:
+        """Parse an offset-aware ISO timestamp and normalize it to org time.
+
+        ``field`` is included in validation errors so a model can correct the
+        exact argument instead of guessing which datetime was rejected.
+        """
+        expected_format = "ISO 8601 datetime with numeric UTC offset"
+        example = self._now().replace(hour=10, minute=30, second=0, microsecond=0)
+        hint = (
+            "Include the UTC offset; for example, "
+            f"{self._format(example)}. Do not send a naive local datetime."
+        )
         if not isinstance(value, str) or not value.strip():
             return self._error(
-                "invalid_argument", "A timezone-aware ISO datetime is required."
+                "invalid_argument",
+                "A timezone-aware ISO datetime is required.",
+                field=field,
+                expected_format=expected_format,
+                hint=hint,
             )
         try:
             parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
         except ValueError:
             return self._error(
-                "invalid_argument", "Use an ISO 8601 datetime with a timezone offset."
+                "invalid_argument",
+                "Use an ISO 8601 datetime with a timezone offset.",
+                field=field,
+                expected_format=expected_format,
+                hint=hint,
             )
         if parsed.tzinfo is None:
             return self._error(
-                "invalid_argument", "The datetime must include a timezone offset."
+                "invalid_argument",
+                "The datetime must include a timezone offset.",
+                field=field,
+                expected_format=expected_format,
+                hint=hint,
             )
         return parsed.astimezone(self.timezone)
 
@@ -882,10 +953,10 @@ class GoogleCalendarAppointmentService:
         self, window_start: str, window_end: str
     ) -> tuple[datetime, datetime] | dict[str, Any]:
         """Parse and validate an inclusive/exclusive search window."""
-        start = self._parse_datetime(window_start)
+        start = self._parse_datetime(window_start, field="window_start")
         if isinstance(start, dict):
             return start
-        end = self._parse_datetime(window_end)
+        end = self._parse_datetime(window_end, field="window_end")
         if isinstance(end, dict):
             return end
         if end <= start:
@@ -936,9 +1007,50 @@ class GoogleCalendarAppointmentService:
             **result,
         }
 
-    def _error(self, code: str, message: str) -> dict[str, Any]:
-        """Build a model-readable, non-sensitive validation/transport error."""
-        return self._with_context({"status": "error", "code": code, "message": message})
+    def _error(
+        self,
+        code: str,
+        message: str,
+        *,
+        field: Optional[str] = None,
+        hint: Optional[str] = None,
+        expected_format: Optional[str] = None,
+        retryable: Optional[bool] = None,
+    ) -> dict[str, Any]:
+        """Build a stable, actionable, non-sensitive tool error.
+
+        The top-level ``code`` and ``message`` remain for compatibility.  The
+        nested ``error`` object gives model adapters structured recovery data:
+        the field to correct, an expected format, a hint, a retry flag, and the
+        next action implied by the error code.
+        """
+        next_actions = {
+            "invalid_argument": "retry_with_corrected_arguments",
+            "missing_customer_detail": "ask_for_missing_detail",
+            "temporary_failure": "retry_later",
+            "authentication_required": "reauthorize",
+            "not_found": "ask_user_to_verify_appointment",
+            "conflict": "choose_another_time",
+        }
+        details: dict[str, Any] = {
+            "code": code,
+            "message": message,
+            "next_action": next_actions.get(code, "explain_failure"),
+            "retryable": (
+                retryable
+                if retryable is not None
+                else code in {"conflict", "temporary_failure"}
+            ),
+        }
+        if field:
+            details["field"] = field
+        if expected_format:
+            details["expected_format"] = expected_format
+        if hint:
+            details["hint"] = hint
+        return self._with_context(
+            {"status": "error", "code": code, "message": message, "error": details}
+        )
 
     def _past_interval(self, start: datetime, end: datetime) -> dict[str, Any]:
         """Build the consistent response for an interval that cannot be booked."""
@@ -946,6 +1058,7 @@ class GoogleCalendarAppointmentService:
             {
                 "status": "past",
                 "message": "That time has already passed.",
+                "next_action": "choose_future_time",
                 "start_time": self._format(start),
                 "end_time": self._format(end),
             }

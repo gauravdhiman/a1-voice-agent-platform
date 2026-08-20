@@ -1,0 +1,41 @@
+name: Agent evaluations
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-agent-evals:
+    name: Deterministic agent/tool evaluations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install backend test dependencies
+        run: python -m pip install --disable-pip-version-check -r backend/requirements-dev.txt
+
+      - name: Run evaluation unit tests
+        run: pytest backend/tests/evals -q
+
+      - name: Run deterministic evaluation suite
+        run: python scripts/run-agent-evals.py --json-out artifacts/agent-evals.json
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-evaluation-report
+          path: artifacts/agent-evals.json
+          if-no-files-found: ignore

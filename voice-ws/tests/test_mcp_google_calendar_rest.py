@@ -31,6 +31,9 @@ from shared.voice_agents.tools.mcp.models import McpServerConfig
 from shared.voice_agents.tools.mcp.reference_servers import google_calendar_rest as gcr
 
 
+_TEST_NOW = datetime(2026, 7, 1, tzinfo=timezone.utc)
+
+
 @pytest_asyncio.fixture
 async def google_calendar_rest_mcp_config(unused_tcp_port, monkeypatch):
     """Run the connector over Streamable HTTP for an in-process MCP test."""
@@ -399,7 +402,10 @@ class TestCheckAvailability:
 
         _patch_transport(monkeypatch, handler)
         result = await gcr.check_availability_logic(
-            "TOK", "2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z"
+            "TOK",
+            "2026-08-20T10:00:00Z",
+            "2026-08-20T11:00:00Z",
+            reference_now=_TEST_NOW,
         )
         assert result == {"status": "busy"}
         assert posted["timeMin"] == "2026-08-20T10:00:00Z"
@@ -411,7 +417,10 @@ class TestCheckAvailability:
             monkeypatch, lambda req: _ok({"calendars": {"primary": {"busy": []}}})
         )
         assert await gcr.check_availability_logic(
-            "TOK", "2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z"
+            "TOK",
+            "2026-08-20T10:00:00Z",
+            "2026-08-20T11:00:00Z",
+            reference_now=_TEST_NOW,
         ) == {"status": "free"}
 
     async def test_busy_when_google_keys_primary_as_email(self, monkeypatch):
@@ -443,6 +452,7 @@ class TestCheckAvailability:
             "2026-08-20T10:00:00-07:00",
             "2026-08-20T10:30:00-07:00",
             calendar_id="primary",
+            reference_now=_TEST_NOW,
         )
         assert result == {"status": "busy"}
 
@@ -453,7 +463,10 @@ class TestCheckAvailability:
             lambda req: _ok({"calendars": {"user@example.com": {"busy": []}}}),
         )
         assert await gcr.check_availability_logic(
-            "TOK", "2026-08-20T10:00:00-07:00", "2026-08-20T10:30:00-07:00"
+            "TOK",
+            "2026-08-20T10:00:00-07:00",
+            "2026-08-20T10:30:00-07:00",
+            reference_now=_TEST_NOW,
         ) == {"status": "free"}
 
     async def test_past_window_returns_past_without_calling_google(self, monkeypatch):
@@ -613,13 +626,16 @@ class TestRestConnectorFullPipeline:
             )
 
         _patch_transport(monkeypatch, handler)
+        future_start = (datetime.now(timezone.utc) + timedelta(days=30)).astimezone(
+            timezone(timedelta(hours=-7))
+        )
         async with McpClient(google_calendar_rest_mcp_config) as client:
             res = await client.call_tool(
                 "create_appointment",
                 {
                     "caller_name": "Jane Doe",
                     "purpose": "Cleaning",
-                    "start_time": "2026-08-20T14:00:00-07:00",
+                    "start_time": future_start.isoformat(),
                     "duration_minutes": 30,
                     "user_confirmed": True,
                 },
@@ -692,7 +708,6 @@ class TestToolDescriptionsPromptFrontDeskBehavior:
 
         async with McpClient(google_calendar_rest_mcp_config) as client:
             tools = {t.name: t for t in await client.list_tools()}
-
         update_desc = (tools["update_appointment"].description or "").lower()
         check_desc = (tools["check_availability"].description or "").lower()
 
@@ -701,6 +716,9 @@ class TestToolDescriptionsPromptFrontDeskBehavior:
         assert "new_duration_minutes" in update_desc
         assert "new booking" in check_desc
         assert "existing appointment" in check_desc
+        normalized = " ".join(update_desc.replace("`", "").split())
+        assert "email" in normalized
+        assert "do not call check_availability" in normalized
 
 
 class TestSchemasAreGeminiClean:

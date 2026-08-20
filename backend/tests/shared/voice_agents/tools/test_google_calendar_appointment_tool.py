@@ -48,3 +48,24 @@ class TestGoogleCalendarAppointmentTool:
         assert "new_duration_minutes" in update_doc.lower()
         assert "new booking" in availability_doc.lower()
         assert "existing appointment" in availability_doc.lower()
+
+    def test_update_description_directs_all_existing_appointment_changes(self) -> None:
+        """The native schema must steer mutations to update, not availability."""
+        registry = PlatformToolRegistry()
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+        function = next(
+            item
+            for item in registry.get_tool_functions("Google_calendar_appointment")
+            if item.__name__ == "update_appointment"
+        )
+        description = " ".join(
+            (function.__doc__ or "").lower().replace("`", "").split()
+        )
+
+        assert "reschedul" in description
+        assert "extend" in description
+        assert "shorten" in description
+        assert "email" in description
+        assert "do not call check_availability" in description
