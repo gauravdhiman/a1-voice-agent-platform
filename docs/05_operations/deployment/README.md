@@ -19,7 +19,8 @@ Production infrastructure for **247ai.live**:
 | **[Runbook](runbook.md)** | Full architecture, first-time setup, DNS, webhooks, security |
 | **[Environment variables](environment-variables.md)** | Every env var by service; `.env.prod` is the manual-deploy file and `ENV_PROD` is its CI equivalent |
 | **[Local Docker](local-docker.md)** | docker-compose and manual image builds for development |
-| **[CI / GitHub Actions](ci-github-actions.md)** | Auto-deploy workflow and required secrets |
+| **[CI / GitHub Actions](ci-github-actions.md)** | Staging auto-deploy, manual production promotion, and required secrets |
+| **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, shared staging, and production promotion model |
 
 ## Repo artifacts
 
@@ -28,14 +29,16 @@ Production infrastructure for **247ai.live**:
 | `scripts/deploy.sh` | Single entry point: `all`, `gcp`, `backend`, `frontend`, `voice-ws`, `migrate`, `domains` |
 | `.env.prod.example` | Production env template (copy → `.env.prod`, gitignored) |
 | `.env.staging.example` | Staging env template (copy → `.env.staging`, gitignored) |
-| `scripts/bootstrap-staging-db.sh` | First-time staging migrate + Stripe seed |
+| `scripts/bootstrap-staging-db.sh` | Legacy/repair staging migrate + Stripe seed |
 | `scripts/deploy/` | Lower-level GCP, OCI, Alembic scripts |
 | `deploy/` | Docker compose, Caddyfile, Cloud Build stubs |
-| `.github/workflows/deploy-cloud.yml` | CI deploy on `main` |
+| `scripts/worktree-stack.sh` | Full isolated local Supabase + application stack per worktree |
+| `.github/workflows/deploy-cloud.yml` | CI deploy to staging on `main` |
+| `.github/workflows/promote-production.yml` | Manual protected production promotion |
 
 ## Credentials
 
-- **Application secrets:** `.env.prod` for manual deployment, or the GitHub Repository secret `ENV_PROD` for CI (never commit the file).
+- **Application secrets:** `.env.prod` for emergency/local deployment, or the protected GitHub `production` environment secret `ENV_PROD` for CI (never commit the file).
 - **OCI VM SSH:** `~/.ssh/oci_voice_ws` (default). Set `OCI_SSH_HOST` when deploying voice-ws.
 - **OCI API / GCP:** local CLI config; CI uses GitHub secrets — see [CI](ci-github-actions.md).
 

@@ -54,11 +54,18 @@ The voice-ws worker is an **inbound WebSocket server** (port 7860; routes
 and Twilio Media Streams connect to `wss://voice.247ai.live/twilio`. Caddy on
 the VM terminates TLS (auto Let's Encrypt) and reverse-proxies to `voice-ws:7860`.
 
-## Deploy script (single entry point)
+## Release and deploy entry points
 
-All production deploys go through **`./scripts/deploy.sh`**. Credentials stay in
-**`.env.prod`** only (gitignored). Copy **`.env.prod.example`** to `.env.prod`
-and fill in values — never commit `.env.prod`.
+The normal release path is **merge to protected `main`**, automatic deployment
+to cloud staging, release smoke tests, and then the manual
+**`Promote to production`** GitHub Actions workflow. Credentials stay in
+protected GitHub environment secrets; they are never committed.
+
+`./scripts/deploy.sh` remains the single lower-level entry point for operator
+recovery or explicitly approved local deployment work. Credentials stay in
+**`.env.prod`** only when using it locally (gitignored). Copy
+**`.env.prod.example`** to `.env.prod` and fill in values — never commit
+`.env.prod`.
 
 See [quick-reference.md](quick-reference.md) for the command cheat sheet.
 
@@ -74,7 +81,7 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | 2 | Cloud Run domain mappings (`api` + `www`) | `./scripts/deploy.sh domains` |
 | 3 | Cloudflare DNS CNAMEs (`api`, `www`) + A record (`voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
-| 5 | Production DB migrations + phone-number data verification | Required migration job in GitHub Actions; manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` |
+| 5 | Production DB migrations + phone-number data verification | Required migration job in the protected `Promote to production` workflow; manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` |
 | 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
 | 7 | Vendor webhooks (Stripe, Twilio, Google OAuth) | You |
 
@@ -93,7 +100,8 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | `scripts/oci-env.sh` | OCI CLI session auth helper |
 | `deploy/oci/docker-compose.voice-ws.yml` | voice-ws + Caddy stack |
 | `deploy/oci/Caddyfile` | TLS reverse proxy for `voice.247ai.live` |
-| `.github/workflows/deploy-cloud.yml` | CI auto-deploy on `main` |
+| `.github/workflows/deploy-cloud.yml` | CI auto-deploy to staging on `main` |
+| `.github/workflows/promote-production.yml` | Manual production promotion |
 
 ## Phone-number data migration release procedure
 
@@ -103,11 +111,14 @@ Cloud Run deployment. The migration is atomic and fail-closed: invalid values,
 duplicate legacy ownership, and conflicts with existing `phone_numbers` rows
 stop the release before application code is deployed.
 
-The GitHub Actions production job performs this sequence automatically:
+The protected production promotion job performs this sequence automatically:
 
 1. Run `./scripts/deploy.sh migrate` against the production database.
 2. Run `python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod`.
 3. Deploy Cloud Run only when both commands succeed.
+
+The staging workflow performs the same compatibility, migration, and verifier
+sequence using `.env.staging` before staging deployment.
 
 For a manually approved recovery or staged rollout:
 
@@ -204,8 +215,10 @@ concurrency reason so an organization administrator can resolve it.
    curl -s https://www.247ai.live
    curl -s https://voice.247ai.live/health
    ```
-3. Migrations run automatically as a required GitHub Actions job before Cloud Run deployment. For manual recovery, run `./scripts/deploy.sh migrate`.
-4. Redeploy after code changes:
+3. For a normal release, run the `Promote to production` workflow with the
+   full 40-character SHA of the staging-tested commit. For manual recovery,
+   run `./scripts/deploy.sh migrate`.
+4. Redeploy after an explicitly approved manual code change:
    ```bash
    ./scripts/deploy.sh gcp
    OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh voice-ws
@@ -244,7 +257,8 @@ on the VM, then `docker compose up -d --build`.
 ## Security reminders
 
 - **Never commit** `.env.prod` or credential copies.
-- Store production env in GitHub secret `ENV_PROD` for CI.
+- Store production env in the protected GitHub `production` environment secret
+  `ENV_PROD` for CI.
 - Rotate secrets if any env file was ever pushed to a remote.
 
 ## Related documentation

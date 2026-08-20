@@ -92,11 +92,12 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 3. **[Runbook](05_operations/deployment/runbook.md)** — architecture, first-time setup, DNS, webhooks
 4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.prod` reference
 5. **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
-6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — auto-deploy secrets and workflow
+6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — staging auto-deploy, manual production promotion, and workflow secrets
+7. **[Worktree isolation and release strategy](05_operations/deployment/worktree-and-release-strategy.md)** — local Supabase sandboxes, shared staging, and production promotion
 
 #### Other operations
 
-1. **[Cloud staging environment](05_operations/staging_environment.md)** — `gdzwiwukcwbqohfwxxrx` DB for local pre-prod validation
+1. **[Cloud staging environment](05_operations/staging_environment.md)** — shared release-validation DB; not for concurrent worktree sandboxes
 2. **[Stripe Management](05_operations/stripe_management.md)** — CLI tool for managing Stripe products
 
 ### Phone Numbers

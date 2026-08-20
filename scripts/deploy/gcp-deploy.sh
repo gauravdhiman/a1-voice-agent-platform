@@ -16,6 +16,12 @@ BACKEND_SERVICE="${GCP_BACKEND_SERVICE:-backend-247ai}"
 FRONTEND_SERVICE="${GCP_FRONTEND_SERVICE:-frontend-247ai}"
 ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPONENT="${GCP_DEPLOY_COMPONENT:-all}"
+RELEASE_TAG="${RELEASE_TAG:-latest}"
+
+if ! [[ "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+  echo "Invalid RELEASE_TAG: $RELEASE_TAG" >&2
+  exit 1
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE" >&2
@@ -59,8 +65,8 @@ NEXT_PUBLIC_API_URL="$(read_env NEXT_PUBLIC_API_URL)"
 NEXT_PUBLIC_APP_NAME="$(read_env NEXT_PUBLIC_APP_NAME)"
 NEXT_PUBLIC_APP_DESCRIPTION="$(read_env NEXT_PUBLIC_APP_DESCRIPTION)"
 
-BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:latest"
-FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:latest"
+BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${RELEASE_TAG}"
+FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${RELEASE_TAG}"
 
 echo "==> Ensuring Artifact Registry repository..."
 if ! gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/null 2>&1; then
@@ -79,7 +85,7 @@ deploy_backend() {
   backend_env="$(mktemp)"
   python3 scripts/deploy/gcp-env-from-cloud.py backend --env-file "$ENV_FILE" > "$backend_env"
 
-  echo "==> Deploying backend to Cloud Run ($BACKEND_SERVICE)..."
+  echo "==> Deploying backend to Cloud Run ($BACKEND_SERVICE, tag ${RELEASE_TAG})..."
   gcloud run deploy "$BACKEND_SERVICE" \
     --image="$BACKEND_IMAGE" \
     --region="$REGION" \
@@ -109,7 +115,7 @@ deploy_frontend() {
     frontend
   docker push "$FRONTEND_IMAGE"
 
-  echo "==> Deploying frontend to Cloud Run ($FRONTEND_SERVICE)..."
+  echo "==> Deploying frontend to Cloud Run ($FRONTEND_SERVICE, tag ${RELEASE_TAG})..."
   gcloud run deploy "$FRONTEND_SERVICE" \
     --image="$FRONTEND_IMAGE" \
     --region="$REGION" \

@@ -1,8 +1,14 @@
 # Deployment quick reference
 
-Production target: **247ai.live**. Start with the [deployment index](README.md) for the full doc map.
+Production target: **247ai.live**. The normal path is merge to protected
+`main` → automatic staging deployment → release smoke tests → manual
+production promotion. Start with the [deployment index](README.md) for the
+full doc map.
 
-## One-command deploy
+See [CI / GitHub Actions](ci-github-actions.md) for the required GitHub
+environment secrets and variables.
+
+## Manual or recovery deploy
 
 Credentials live in **`.env.prod`** only (gitignored). Template: **`.env.prod.example`**.
 
@@ -26,6 +32,20 @@ OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh all
 ./scripts/deploy.sh domains
 ./scripts/deploy.sh --help
 ```
+
+These commands remain useful for operator recovery and local infrastructure
+work. They are not the normal production release gate; use **Actions → Promote
+to production** after staging validation.
+
+## CI release path
+
+1. Merge a reviewed pull request into protected `main`.
+2. Let `Deploy Cloud (staging)` run its compatibility check, migration, and
+   staging application deployment.
+3. Run the browser/PSTN release gate against staging.
+4. Run `Promote to production` with the full 40-character SHA of the
+   staging-tested commit and obtain the required production-environment
+   approval.
 
 | Component | What it deploys |
 |-----------|-----------------|

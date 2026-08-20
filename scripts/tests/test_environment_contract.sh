@@ -56,8 +56,15 @@ assert_contains "$ROOT/docker-compose.dev.yml" '${ENV_FILE:-.env.local}'
 assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'RELEASE_TAG="${RELEASE_TAG:-latest}"'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${RELEASE_TAG}"'
 assert_not_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--allow-unauthenticated'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'SSH_KEY="${HOME}/${SSH_KEY#\~/}"'
+
+if RELEASE_TAG='not a valid tag' bash "$ROOT/scripts/deploy/gcp-deploy.sh" >/dev/null 2>&1; then
+  echo "Expected an invalid release tag to fail before deployment" >&2
+  exit 1
+fi
 
 for compose_file in docker-compose.dev.yml docker-compose.yml; do
   assert_contains "$ROOT/$compose_file" 'VOICE_RECORDING_ENABLED=${VOICE_RECORDING_ENABLED:-false}'
@@ -75,18 +82,42 @@ assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_ENDPOINT=https://e168c1b
 assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-production'
 
 workflow="$ROOT/.github/workflows/deploy-cloud.yml"
+production_workflow="$ROOT/.github/workflows/promote-production.yml"
 migration_requirements="$ROOT/scripts/deploy/requirements-migrations.txt"
 [[ -f "$migration_requirements" ]] || { echo "Missing migration requirements: $migration_requirements" >&2; exit 1; }
 assert_contains "$migration_requirements" 'alembic==1.14.0'
 assert_contains "$migration_requirements" 'psycopg2-binary==2.9.11'
-assert_contains "$workflow" 'migrate-production:'
-assert_contains "$workflow" 'Run production database migrations'
-assert_contains "$workflow" './scripts/deploy.sh migrate'
-assert_contains "$workflow" 'needs: migrate-production'
+assert_contains "$workflow" 'name: Deploy Cloud (staging)'
+assert_contains "$workflow" 'group: deploy-staging'
+assert_contains "$workflow" 'migrate-staging:'
+assert_contains "$workflow" 'environment: staging'
+assert_contains "$workflow" 'ENV_STAGING: ${{ secrets.ENV_STAGING }}'
+assert_contains "$workflow" 'check_alembic_compatibility.py --env-file .env.staging'
+assert_contains "$workflow" './scripts/deploy.sh migrate --env-file .env.staging'
+assert_contains "$workflow" 'GCP_PROJECT_ID: ${{ vars.STAGING_GCP_PROJECT_ID }}'
+assert_not_contains "$workflow" 'migrate-production:'
+assert_not_contains "$workflow" 'secrets.ENV_PROD'
 assert_not_contains "$workflow" 'if: ${{ secrets.OCI_SSH_KEY != '\'''\'' }}'
-assert_contains "$workflow" 'id: check-oci-ssh-key'
-assert_contains "$workflow" 'OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}'
-assert_contains "$workflow" 'if: steps.check-oci-ssh-key.outputs.configured == '\''true'\'''
+assert_contains "$workflow" 'id: check-oci-ssh'
+assert_contains "$workflow" 'OCI_SSH_KEY: ${{ secrets.STAGING_OCI_SSH_KEY }}'
+assert_contains "$workflow" 'if: steps.check-oci-ssh.outputs.configured == '\''true'\'''
+
+[[ -f "$production_workflow" ]] || {
+  echo "Missing manual production workflow: $production_workflow" >&2
+  exit 1
+}
+assert_contains "$production_workflow" 'name: Promote to production'
+assert_contains "$production_workflow" 'group: promote-production'
+assert_contains "$production_workflow" 'workflow_dispatch:'
+assert_contains "$production_workflow" 'PROMOTION_REF: ${{ inputs.ref }}'
+assert_contains "$production_workflow" 'full 40-character commit SHA'
+assert_contains "$production_workflow" 'ref: ${{ inputs.ref }}'
+assert_contains "$production_workflow" 'environment: production'
+assert_contains "$production_workflow" 'ENV_PROD: ${{ secrets.ENV_PROD }}'
+assert_contains "$production_workflow" 'check_alembic_compatibility.py --env-file .env.prod'
+assert_contains "$production_workflow" './scripts/deploy.sh migrate --env-file .env.prod'
+assert_contains "$workflow" 'echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"'
+assert_contains "$production_workflow" 'echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"'
 
 # The startup guide must describe selection, never copy-to-.env switching.
 assert_contains "$ROOT/README_STARTUP.md" './start.sh start dev --env staging'

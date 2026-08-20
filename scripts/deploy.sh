@@ -34,6 +34,10 @@
 #   ./scripts/deploy.sh migrate
 #   ./scripts/deploy.sh verify-data
 #
+# Cloud Run image tags default to ``latest`` for local/manual use. CI sets
+# RELEASE_TAG to the checked-out commit SHA so staging and production can use
+# an immutable release tag.
+#
 # Full runbook: docs/05_operations/deployment/runbook.md
 set -euo pipefail
 

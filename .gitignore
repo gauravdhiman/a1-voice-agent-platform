@@ -123,6 +123,9 @@ yarn-error.log*
 # Local call recordings are private development artifacts and must never enter Git.
 .local-data/call-recordings/
 
+# Per-worktree generated Supabase projects, credentials, and Compose state.
+.worktree-state/
+
 # graphify (codebase knowledge-graph tooling)
 # Generated graph output, cache, and report — never commit these.
 graphify-out/

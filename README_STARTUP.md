@@ -25,8 +25,9 @@ chmod +x start.sh
 ./start.sh start dev
 ```
 
-This uses `.env.local` and local Supabase by default. To run the same local
-Docker services against cloud staging, select it explicitly:
+This uses `.env.local` and an already-running local Supabase project by
+default. To run the same local Docker services against cloud staging, select it
+explicitly:
 
 ```bash
 ./start.sh start dev --env staging
@@ -151,11 +152,12 @@ Required variables:
 | File | Purpose | Supabase project |
 |------|---------|------------------|
 | `.env.local` | Default local development | Local Supabase (`http://127.0.0.1:54321`) |
-| `.env.staging` | Local Docker against cloud staging | `gdzwiwukcwbqohfwxxrx` ([staging project](https://supabase.com/dashboard/project/gdzwiwukcwbqohfwxxrx)) |
+| `.env.staging` | Selected release-candidate validation against shared cloud staging | `gdzwiwukcwbqohfwxxrx` ([staging project](https://supabase.com/dashboard/project/gdzwiwukcwbqohfwxxrx)) |
 | `.env.prod` | Production Compose and deployment | `zymiyfilulmtrmyyhvzw` |
 
 > **Warning:** Production Supabase is for deployment and migration only. Use
-> `.env.staging` for cloud validation. See
+> `.env.staging` only for one selected release candidate's cloud validation;
+> use `scripts/worktree-stack.sh` for concurrent worktree testing. See
 > [staging_environment.md](docs/05_operations/staging_environment.md).
 
 The startup script selects the environment without copying files:
@@ -171,17 +173,49 @@ cp .env.prod.example .env.prod         # first-time deployment setup
 ```
 
 ```bash
-./start.sh start dev                   # .env.local
+./start.sh start dev                   # .env.local + existing local Supabase
 ./start.sh start dev --env staging     # .env.staging
 ./start.sh start prod                  # .env.prod
 ```
 
 ### Running multiple worktrees in parallel
 
-The startup script resolves one host-port map for the whole stack. Use a port
-offset to shift frontend, backend, voice-ws, and OTEL together; the offset also
-gets incorporated into the Compose project name so stop/restart commands remain
-isolated:
+The startup script resolves one host-port map for the application stack. Use a
+port offset to shift frontend, backend, voice-ws, and OTEL together; the offset
+also gets incorporated into the Compose project name so stop/restart commands
+remain isolated. This does **not** isolate the selected Supabase database, so
+do not use multiple worktrees with `.env.staging` for concurrent migrations or
+mutable test data.
+
+For complete per-worktree isolation, use the full-stack launcher:
+
+```bash
+./scripts/worktree-stack.sh up
+./scripts/worktree-stack.sh status
+./scripts/worktree-stack.sh down       # stop while preserving local data
+./scripts/worktree-stack.sh purge --yes # explicit destructive cleanup
+```
+
+It creates a dedicated local Supabase project, runs Alembic and seed setup,
+and starts the app services against that local database. The generated
+worktree Supabase profile keeps DB/Auth/REST/Storage/Realtime enabled while
+omitting nonessential Studio, analytics, Inbucket, and Edge Runtime services
+so multiple stacks can run without exhausting Docker resources. See
+[`docs/05_operations/deployment/worktree-and-release-strategy.md`](docs/05_operations/deployment/worktree-and-release-strategy.md).
+
+Each worktree receives the same staging-shaped manual-test fixture: the
+`Pleasant Pediatric` organization, agent `Alex`, and the native
+`Google_calendar_appointment` tool (without copied OAuth state). The launcher
+prints these fixed local credentials:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Regular user | `regular-user@247ai.local` | `Password123!` |
+| Org admin | `org-admin@247ai.local` | `Password123!` |
+| Platform admin | `platform-admin@247ai.local` | `Password123!` |
+
+If you intentionally need only the application-container offset, the legacy
+launcher still supports:
 
 ```bash
 ./start.sh start dev --port-offset 20
@@ -210,11 +244,15 @@ For production deployment, use:
 ./scripts/deploy.sh --env-file PATH  # explicit override when needed
 ```
 
-**Starting local Supabase** (required for local dev):
+**Starting the shared local Supabase project** (only needed for the lightweight
+`start.sh` flow):
 ```bash
 supabase start        # start local Supabase
 supabase status       # confirm running at http://127.0.0.1:54321
 ```
+
+The per-worktree launcher creates and manages its own Supabase CLI project and
+does not use this shared default project.
 
 **Running migrations against local Supabase**:
 ```bash
