@@ -5,6 +5,10 @@
 **Region:** `us-west-2`  
 **Purpose:** Isolated cloud database for local Docker validation before production deploy.
 
+This is a shared release-validation environment, not a database for concurrent
+Git worktrees. Use a worktree-specific local Supabase stack for interactive
+feature testing. See [Worktree Isolation and Release Promotion Strategy](deployment/worktree-and-release-strategy.md).
+
 Production Supabase (`zymiyfilulmtrmyyhvzw`) powers **247ai.live** — never point local `.env.local` or `.env.staging` at production for feature testing.
 
 ---
@@ -34,11 +38,36 @@ The startup script selects the file for you. No file copying is needed:
 Use `./start.sh config --env staging` to verify the selected file and Supabase
 URL without printing secrets.
 
+### Shared-database rule
+
+Compose project names and port offsets isolate application containers, but all
+stacks using `.env.staging` still share this Supabase project. Do not run
+branch-specific migrations or destructive test-data changes from multiple
+worktrees against staging. Select one release candidate for staging validation;
+run other worktrees against their own local Supabase instances.
+
 ---
 
-## First-time staging bootstrap
+## Staging migration state and bootstrap
 
-The staging project starts **empty** and **behind** on Alembic (was at `20260127000001`). Run the bootstrap script once after filling credentials.
+The staging database was checked read-only on 2026-08-19 and reported
+`20260818000001`, which was the repository head before this change. No
+corrective migration was applied manually during the worktree-environment
+change. This branch adds `20260819000001`, which grants the backend service
+role access to existing and future public application tables/sequences in a
+fresh local Supabase project. The normal CI workflow will run a compatibility
+preflight and then `upgrade head` for the selected release candidate, bringing
+staging forward safely.
+
+Check any future checkout before touching shared staging:
+
+```bash
+python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
+```
+
+The legacy bootstrap script is still available for a newly recreated or
+intentionally reset staging project. Do not run it merely because the
+database is at the current head.
 
 ### 1. Create `.env.staging`
 
@@ -97,7 +126,8 @@ Copy Stripe keys from production `.env.prod` for now (same Stripe account). Spli
 ./scripts/bootstrap-staging-db.sh
 ```
 
-This runs three steps in order:
+When the staging project is empty or at an older known revision, this runs
+three steps in order:
 
 ```mermaid
 flowchart LR
@@ -144,7 +174,8 @@ ON CONFLICT DO NOTHING;
 ## Manual migration commands
 
 ```bash
-# Staging — specific revision
+# Staging — check first, then apply a specific revision only when necessary
+python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ENV_FILE=.env.staging REVISION=20260807000001 ./scripts/deploy/run-alembic.sh
 ENV_FILE=.env.staging REVISION=head ./scripts/deploy/run-alembic.sh
 
@@ -172,7 +203,7 @@ After bootstrap, confirm in [Supabase SQL editor](https://supabase.com/dashboard
 
 ```sql
 SELECT version_num FROM alembic_version;
--- expect: 20260807000002 (or current head)
+-- expect: the selected release candidate's Alembic head
 
 SELECT COUNT(*) AS plans FROM subscription_plans;
 SELECT COUNT(*) AS products FROM plan_products;

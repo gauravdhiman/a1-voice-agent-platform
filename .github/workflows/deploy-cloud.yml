@@ -1,22 +1,24 @@
-name: Deploy Cloud (main)
+name: Deploy Cloud (staging)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-env:
-  GCP_PROJECT_ID: project-bb848762-18cb-4cd6-858
-  GCP_REGION: us-central1
-  # OCI voice-ws VM (public IP — not a secret; DNS: voice.247ai.live)
-  OCI_SSH_HOST: 132.145.130.61
-  OCI_SSH_USER: ubuntu
+# This workflow deliberately deploys only to the GitHub ``staging``
+# environment. Production promotion lives in promote-production.yml and is
+# protected by a separate manual approval gate.
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
 
 jobs:
-  migrate-production:
+  migrate-staging:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    environment: staging
     steps:
       - uses: actions/checkout@v4
 
@@ -24,28 +26,56 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Write .env.prod from GitHub secret
-        run: printf '%s\n' "${{ secrets.ENV_PROD }}" > .env.prod
+      - name: Write .env.staging from GitHub environment secret
+        env:
+          ENV_STAGING: ${{ secrets.ENV_STAGING }}
+        run: |
+          test -n "${ENV_STAGING:-}" || {
+            echo "The staging environment secret ENV_STAGING is required." >&2
+            exit 1
+          }
+          printf '%s\n' "$ENV_STAGING" > .env.staging
 
       - name: Install migration dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
 
-      - name: Run production database migrations
+      - name: Check staging migration compatibility
+        run: python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
+
+      - name: Run staging database migrations
         run: |
           chmod +x scripts/deploy.sh scripts/deploy/run-alembic-cloud.sh scripts/deploy/run-alembic.sh
-          ./scripts/deploy.sh migrate
+          ./scripts/deploy.sh migrate --env-file .env.staging
 
       - name: Verify phone-number data migration
-        run: python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod
+        run: python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
 
-  deploy-gcp:
+  deploy-gcp-staging:
     runs-on: ubuntu-latest
-    needs: migrate-production
+    needs: migrate-staging
+    environment: staging
     permissions:
       contents: read
       id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.STAGING_GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.STAGING_GCP_REGION }}
+      GCP_BACKEND_SERVICE: ${{ vars.STAGING_GCP_BACKEND_SERVICE }}
+      GCP_FRONTEND_SERVICE: ${{ vars.STAGING_GCP_FRONTEND_SERVICE }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pin deployment images to this commit
+        run: echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Validate staging deployment target
+        run: |
+          for variable in GCP_PROJECT_ID GCP_REGION GCP_BACKEND_SERVICE GCP_FRONTEND_SERVICE; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "Missing GitHub staging variable: ${variable}" >&2
+              exit 1
+            fi
+          done
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -55,46 +85,55 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Write .env.prod from GitHub secret
-        run: printf '%s\n' "${{ secrets.ENV_PROD }}" > .env.prod
+      - name: Write .env.staging from GitHub environment secret
+        env:
+          ENV_STAGING: ${{ secrets.ENV_STAGING }}
+        run: printf '%s\n' "$ENV_STAGING" > .env.staging
 
-      - name: Deploy backend and frontend to Cloud Run
+      - name: Deploy backend and frontend to staging Cloud Run
         run: |
           chmod +x scripts/deploy.sh
-          ./scripts/deploy.sh gcp
+          ./scripts/deploy.sh gcp --env-file .env.staging
 
-  deploy-voice-ws:
+  deploy-voice-ws-staging:
     runs-on: ubuntu-latest
-    needs: deploy-gcp
+    needs: deploy-gcp-staging
+    environment: staging
+    env:
+      OCI_SSH_HOST: ${{ vars.STAGING_OCI_SSH_HOST }}
+      OCI_SSH_USER: ${{ vars.STAGING_OCI_SSH_USER || 'ubuntu' }}
     steps:
-      - name: Check OCI SSH configuration
-        id: check-oci-ssh-key
+      - name: Check staging voice-ws configuration
+        id: check-oci-ssh
         env:
-          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+          OCI_SSH_KEY: ${{ secrets.STAGING_OCI_SSH_KEY }}
         shell: bash
         run: |
-          if [[ -n "${OCI_SSH_KEY:-}" ]]; then
+          if [[ -n "${OCI_SSH_HOST:-}" && -n "${OCI_SSH_KEY:-}" ]]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "OCI_SSH_KEY is not configured; skipping voice-ws deployment."
+            echo "STAGING_OCI_SSH_HOST or STAGING_OCI_SSH_KEY is not configured; skipping voice-ws deployment."
           fi
 
       - uses: actions/checkout@v4
-        if: steps.check-oci-ssh-key.outputs.configured == 'true'
+        if: steps.check-oci-ssh.outputs.configured == 'true'
 
-      - name: Prepare .env.prod and SSH key
-        if: steps.check-oci-ssh-key.outputs.configured == 'true'
-        run: |
-          printf '%s\n' "${{ secrets.ENV_PROD }}" > .env.prod
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/oci_voice_ws
-          chmod 600 ~/.ssh/oci_voice_ws
-
-      - name: Deploy voice-ws to OCI VM
-        if: steps.check-oci-ssh-key.outputs.configured == 'true'
+      - name: Prepare .env.staging and SSH key
+        if: steps.check-oci-ssh.outputs.configured == 'true'
         env:
-          OCI_SSH_KEY: ~/.ssh/oci_voice_ws
+          ENV_STAGING: ${{ secrets.ENV_STAGING }}
+          OCI_SSH_KEY_SECRET: ${{ secrets.STAGING_OCI_SSH_KEY }}
+        run: |
+          printf '%s\n' "$ENV_STAGING" > .env.staging
+          mkdir -p ~/.ssh
+          printf '%s\n' "$OCI_SSH_KEY_SECRET" > ~/.ssh/oci_voice_ws_staging
+          chmod 600 ~/.ssh/oci_voice_ws_staging
+
+      - name: Deploy voice-ws to staging OCI VM
+        if: steps.check-oci-ssh.outputs.configured == 'true'
+        env:
+          OCI_SSH_KEY: ~/.ssh/oci_voice_ws_staging
         run: |
           chmod +x scripts/deploy.sh
-          ./scripts/deploy.sh voice-ws
+          ./scripts/deploy.sh voice-ws --env-file .env.staging

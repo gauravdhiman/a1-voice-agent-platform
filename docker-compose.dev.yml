@@ -22,6 +22,8 @@ services:
       dockerfile: Dockerfile.dev
     ports:
       - "${HOST_BACKEND_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./shared:/app/shared
@@ -112,6 +114,8 @@ services:
         - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:${HOST_OTEL_HTTP_PORT:-4318}/v1/logs
     ports:
       - "${HOST_FRONTEND_PORT:-3000}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -150,6 +154,8 @@ services:
     command: ["bash", "/app/entrypoint.dev.sh"]
     ports:
       - "${HOST_VOICE_WS_PORT:-7860}:7860"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./voice-ws:/app
       - ./shared:/app/shared

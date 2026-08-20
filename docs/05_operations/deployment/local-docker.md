@@ -20,11 +20,30 @@ deploys use GCP Cloud Run + OCI — see [deployment/README.md](README.md).
 # Create .env.local once from .env.local.example and edit it with credentials.
 # For staging instead, use: ./start.sh start dev --env staging
 
-./start.sh start dev                   # all services, local Supabase
+./start.sh start dev                   # app services; uses an already-running local Supabase
 ./start.sh start dev --env staging     # all services, cloud staging Supabase
 ./start.sh logs dev
 ./start.sh stop dev
 ```
+
+`start.sh` manages the application Compose project only; it does not create or
+isolate a Supabase project. For a complete isolated environment per Git
+worktree, use the worktree launcher instead:
+
+```bash
+./scripts/worktree-stack.sh up
+./scripts/worktree-stack.sh status
+./scripts/worktree-stack.sh down       # preserves local database volumes
+```
+
+The launcher creates a worktree-specific Supabase CLI project, applies the
+worktree's Alembic migrations, synchronizes master data, and seeds the same
+three local email/password accounts plus a staging-shaped `Pleasant Pediatric`
+organization, `Alex` appointment agent, and native Google Calendar appointment
+tool link. OAuth state is intentionally not copied. It then starts
+frontend/backend/voice-ws on a deterministic port slot. See [the worktree and
+release strategy](worktree-and-release-strategy.md) for setup, cleanup, and the
+shared-staging rule.
 
 ## Manual image builds
 

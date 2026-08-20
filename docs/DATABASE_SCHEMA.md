@@ -1738,6 +1738,7 @@ erDiagram
 66. `20260817000001` - Seed the enabled `tools.oauth_reauthorization_required` notification event and its built-in template metadata for organization-admin reminders when native or MCP OAuth connections cannot renew automatically.
 67. `20260817000002` - Rename legacy Google Calendar catalog rows to appointment-specific names when the canonical destination is unused. This preserves the migration history already applied to staging.
 68. `20260818000001` - Add/canonicalize the published `Google_calendar_appointment` native catalog row and `Google_calendar_appointment_mcp` platform-owned MCP catalog row. Existing legacy names are renamed only when the canonical destination is unused; agent attachments remain on the same tool row. The MCP row points to the loopback connector started with voice-ws.
+69. `20260819000001` - Grant the Supabase `service_role` schema, table, and sequence access required by the backend and master-data seeder in fresh local projects. Existing public objects are granted dynamically, and default privileges cover future Alembic-created tables and sequences.
 
 ---
 
