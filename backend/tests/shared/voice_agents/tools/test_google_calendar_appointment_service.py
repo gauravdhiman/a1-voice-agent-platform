@@ -29,7 +29,11 @@ def _install_google_transport(
 
 
 def _service(
-    monkeypatch, handler, *, now: datetime | None = None
+    monkeypatch,
+    handler,
+    *,
+    now: datetime | None = None,
+    idempotency_key: str | None = None,
 ) -> GoogleCalendarAppointmentService:
     """Build a service with the test clock and mocked Google transport."""
     _install_google_transport(monkeypatch, handler)
@@ -39,6 +43,7 @@ def _service(
         timezone_name="America/Phoenix",
         now_provider=lambda: now
         or datetime(2026, 8, 20, 8, 0, tzinfo=ZoneInfo("America/Phoenix")),
+        idempotency_key=idempotency_key,
     )
 
 
@@ -159,6 +164,83 @@ class TestGoogleCalendarAppointmentService:
         assert result["status"] == "busy"
         assert requests == ["POST"]
         assert "no longer" in result["message"].lower()
+
+    async def test_create_retry_merges_new_email_into_same_session_booking(
+        self, monkeypatch
+    ) -> None:
+        """A repeated create request must update its own booking, not fail busy."""
+        requests: list[tuple[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path))
+            if request.method == "POST":
+                return httpx.Response(
+                    200,
+                    json={
+                        "calendars": {
+                            "primary": {
+                                "busy": [
+                                    {
+                                        "start": "2026-08-20T17:30:00Z",
+                                        "end": "2026-08-20T18:30:00Z",
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                )
+            if request.method == "GET":
+                event_id = request.url.path.rsplit("/", 1)[-1]
+                return httpx.Response(
+                    200,
+                    json={
+                        "id": event_id,
+                        "summary": "Appointment: Jane Doe — Dental cleaning",
+                        "description": (
+                            "Purpose: Dental cleaning\n"
+                            "Phone: +15551234567\n"
+                            "Booked by 24x7 AI appointment assistant."
+                        ),
+                        "start": {"dateTime": "2026-08-20T10:30:00-07:00"},
+                        "end": {"dateTime": "2026-08-20T11:30:00-07:00"},
+                    },
+                )
+            assert request.method == "PATCH"
+            body = json.loads(request.content)
+            assert body["attendees"] == [{"email": "jane@example.com"}]
+            assert "Phone: +15551234567" in body["description"]
+            assert "Email: jane@example.com" in body["description"]
+            return httpx.Response(
+                200,
+                json={
+                    "id": request.url.path.rsplit("/", 1)[-1],
+                    "summary": "Appointment: Jane Doe — Dental cleaning",
+                    "start": {"dateTime": "2026-08-20T10:30:00-07:00"},
+                    "end": {"dateTime": "2026-08-20T11:30:00-07:00"},
+                },
+            )
+
+        service = _service(
+            monkeypatch,
+            handler,
+            idempotency_key="voice-session-1",
+        )
+        result = await service.create_appointment(
+            caller_name="Jane Doe",
+            purpose="Dental cleaning",
+            start_time="2026-08-20T10:30:00-07:00",
+            duration_minutes=60,
+            caller_phone="+15551234567",
+            caller_email="jane@example.com",
+            user_confirmed=True,
+        )
+
+        assert result["status"] == "updated"
+        assert (
+            result["message"] == "Appointment details updated on the existing booking."
+        )
+        assert result["appointment"]["caller_email"] == "jane@example.com"
+        assert [method for method, _path in requests] == ["POST", "GET", "PATCH"]
 
     async def test_create_refuses_interval_that_has_already_started(
         self, monkeypatch
@@ -341,6 +423,67 @@ class TestGoogleCalendarAppointmentService:
         )
 
         assert result["status"] == "updated"
+        assert requests == [
+            ("GET", "/calendar/v3/calendars/primary/events/event-123"),
+            ("GET", "/calendar/v3/calendars/primary/events"),
+            ("PATCH", "/calendar/v3/calendars/primary/events/event-123"),
+        ]
+
+    async def test_update_extension_excludes_target_event_from_its_new_interval(
+        self, monkeypatch
+    ) -> None:
+        """Extending an appointment must not treat its original event as busy."""
+        requests: list[tuple[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path))
+            if request.method == "GET" and request.url.path.endswith("/event-123"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "id": "event-123",
+                        "summary": "Appointment: Jane Doe — Cleaning",
+                        "start": {"dateTime": "2026-08-20T10:30:00-07:00"},
+                        "end": {"dateTime": "2026-08-20T11:30:00-07:00"},
+                    },
+                )
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {
+                                "id": "event-123",
+                                "summary": "Appointment: Jane Doe — Cleaning",
+                                "start": {"dateTime": "2026-08-20T10:30:00-07:00"},
+                                "end": {"dateTime": "2026-08-20T11:30:00-07:00"},
+                            }
+                        ]
+                    },
+                )
+            assert request.method == "PATCH"
+            body = json.loads(request.content)
+            assert body["start"]["dateTime"] == "2026-08-20T10:30:00-07:00"
+            assert body["end"]["dateTime"] == "2026-08-20T12:00:00-07:00"
+            return httpx.Response(
+                200,
+                json={
+                    "id": "event-123",
+                    "start": {"dateTime": "2026-08-20T10:30:00-07:00"},
+                    "end": {"dateTime": "2026-08-20T12:00:00-07:00"},
+                },
+            )
+
+        service = _service(monkeypatch, handler)
+        result = await service.update_appointment(
+            appointment_id="event-123",
+            new_duration_minutes=90,
+            user_confirmed=True,
+        )
+
+        assert result["status"] == "updated"
+        assert result["appointment"]["duration_minutes"] == 90
+        assert result["appointment"]["end_time"] == "2026-08-20T12:00:00-07:00"
         assert requests == [
             ("GET", "/calendar/v3/calendars/primary/events/event-123"),
             ("GET", "/calendar/v3/calendars/primary/events"),

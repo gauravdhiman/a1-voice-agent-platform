@@ -300,6 +300,12 @@ class GoogleCalendarAppointmentService:
                 }
             )
 
+        event_id = self._deterministic_event_id(
+            caller_name=caller_name,
+            purpose=purpose,
+            start=start,
+            duration_minutes=duration_minutes,
+        )
         availability = await self._freebusy(start, end)
         if availability["status"] == "error":
             return availability
@@ -313,6 +319,22 @@ class GoogleCalendarAppointmentService:
                 }
             )
         if availability.get("busy_periods"):
+            if event_id:
+                existing = await self._get_event(event_id)
+                if existing is not None:
+                    retry_result = await self._merge_idempotent_create(
+                        existing=existing,
+                        appointment_id=event_id,
+                        caller_name=caller_name,
+                        purpose=purpose,
+                        caller_phone=caller_phone,
+                        caller_email=caller_email,
+                        notes=notes,
+                        start=start,
+                        end=end,
+                    )
+                    if retry_result is not None:
+                        return retry_result
             return self._with_context(
                 {
                     "status": "busy",
@@ -336,12 +358,6 @@ class GoogleCalendarAppointmentService:
         }
         if caller_email.strip():
             event["attendees"] = [{"email": caller_email.strip()}]
-        event_id = self._deterministic_event_id(
-            caller_name=caller_name,
-            purpose=purpose,
-            start=start,
-            duration_minutes=duration_minutes,
-        )
         if event_id:
             event["id"] = event_id
 
@@ -376,6 +392,123 @@ class GoogleCalendarAppointmentService:
                     caller_name,
                     purpose,
                     caller_email,
+                ),
+            }
+        )
+
+    async def _merge_idempotent_create(
+        self,
+        *,
+        existing: dict[str, Any],
+        appointment_id: str,
+        caller_name: str,
+        purpose: str,
+        caller_phone: str,
+        caller_email: str,
+        notes: str,
+        start: datetime,
+        end: datetime,
+    ) -> Optional[dict[str, Any]]:
+        """Recover a same-session retry without creating a duplicate event.
+
+        The model may repeat ``create_appointment`` after a caller supplies a
+        missing email or phone number. The deterministic event id proves that
+        this is the same booking request within the current voice session; it
+        does not grant ownership of arbitrary calendar events. Only an event
+        with the original interval, assistant-created summary, and booking
+        marker is eligible for this recovery path.
+
+        Args:
+            existing: Google event returned for the deterministic retry id.
+            appointment_id: Stable Google event id for the current session.
+            caller_name: Caller name from the repeated booking request.
+            purpose: Appointment purpose from the repeated booking request.
+            caller_phone: Newly supplied or replacement caller phone.
+            caller_email: Newly supplied or replacement caller email.
+            notes: Newly supplied appointment notes.
+            start: Normalized original appointment start.
+            end: Normalized original appointment end.
+
+        Returns:
+            An ``updated`` or ``already_booked`` result when the event matches
+            the same idempotent request; otherwise ``None`` so the caller gets
+            the normal busy response for an unrelated calendar event.
+        """
+        if existing.get("status") == "cancelled":
+            return None
+        existing_start = self._event_datetime(existing.get("start"))
+        existing_end = self._event_datetime(existing.get("end"))
+        expected_summary = f"Appointment: {caller_name.strip()} — {purpose.strip()}"
+        if (
+            existing_start != start
+            or existing_end != end
+            or str(existing.get("summary") or "") != expected_summary
+            or "Booked by 24x7 AI appointment assistant."
+            not in str(existing.get("description") or "")
+        ):
+            return None
+
+        existing_details = self._description_values(
+            str(existing.get("description") or "")
+        )
+        existing_email = existing_details["email"] or self._first_attendee_email(
+            existing.get("attendees")
+        )
+        resolved_phone = caller_phone.strip() or existing_details["phone"]
+        resolved_email = caller_email.strip() or existing_email
+        resolved_notes = notes.strip() or existing_details["notes"]
+        patch: dict[str, Any] = {}
+
+        if (
+            caller_email.strip()
+            and caller_email.strip().lower() != existing_email.lower()
+        ):
+            patch["attendees"] = self._replace_caller_attendee(
+                existing.get("attendees"), existing_email, caller_email
+            )
+        if caller_phone.strip() or caller_email.strip() or notes.strip():
+            patch["description"] = self._description(
+                purpose=purpose,
+                caller_phone=resolved_phone,
+                caller_email=resolved_email,
+                notes=resolved_notes,
+            )
+
+        if not patch:
+            return self._with_context(
+                {
+                    "status": "already_booked",
+                    "message": "The appointment was already booked for this request.",
+                    "appointment": self._appointment_from_values(
+                        appointment_id,
+                        start,
+                        end,
+                        caller_name,
+                        purpose,
+                        resolved_email,
+                    ),
+                }
+            )
+
+        status, body = await self._call_google(
+            "PATCH",
+            f"/calendars/{self.calendar_id}/events/{appointment_id}",
+            params={"sendUpdates": "all" if resolved_email else "none"},
+            json_body=patch,
+        )
+        if status not in (200, 201):
+            return self._google_error(status, body)
+        return self._with_context(
+            {
+                "status": "updated",
+                "message": "Appointment details updated on the existing booking.",
+                "appointment": self._appointment_from_values(
+                    appointment_id,
+                    start,
+                    end,
+                    caller_name,
+                    purpose,
+                    resolved_email,
                 ),
             }
         )
@@ -1004,6 +1137,14 @@ class GoogleCalendarAppointmentService:
             if separator and field.strip().lower() in values:
                 values[field.strip().lower()] = value.strip()
         return values
+
+    @staticmethod
+    def _first_attendee_email(attendees: Any) -> str:
+        """Return the first usable attendee email from an existing event."""
+        for attendee in attendees if isinstance(attendees, list) else []:
+            if isinstance(attendee, dict) and attendee.get("email"):
+                return str(attendee["email"]).strip()
+        return ""
 
     @staticmethod
     def _replace_caller_attendee(

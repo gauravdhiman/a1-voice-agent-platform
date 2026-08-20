@@ -1,6 +1,9 @@
 """Contract tests for the native Google Calendar Appointment adapter."""
 
 from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
+from shared.voice_agents.tools.implementations.google_calendar_appointment import (
+    GoogleCalendarAppointmentTool,
+)
 
 
 class TestGoogleCalendarAppointmentTool:
@@ -26,3 +29,22 @@ class TestGoogleCalendarAppointmentTool:
             "update_appointment",
             "cancel_appointment",
         }
+
+    def test_model_guidance_distinguishes_create_from_update(self) -> None:
+        """Tool documentation must steer detail changes to update, not create."""
+        create_doc = GoogleCalendarAppointmentTool.create_appointment.__doc__ or ""
+        update_doc = GoogleCalendarAppointmentTool.update_appointment.__doc__ or ""
+        availability_doc = (
+            GoogleCalendarAppointmentTool.check_availability.__doc__ or ""
+        )
+
+        assert "only when no existing appointment" in create_doc.lower()
+        assert "adding" in update_doc.lower()
+        assert "correcting" in update_doc.lower()
+        assert "caller details" in update_doc.lower()
+        assert "reschedul" in update_doc.lower()
+        assert "extend" in update_doc.lower()
+        assert "shorten" in update_doc.lower()
+        assert "new_duration_minutes" in update_doc.lower()
+        assert "new booking" in availability_doc.lower()
+        assert "existing appointment" in availability_doc.lower()

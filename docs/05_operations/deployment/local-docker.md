@@ -39,11 +39,16 @@ worktree, use the worktree launcher instead:
 The launcher creates a worktree-specific Supabase CLI project, applies the
 worktree's Alembic migrations, synchronizes master data, and seeds the same
 three local email/password accounts plus a staging-shaped `Pleasant Pediatric`
-organization, `Alex` appointment agent, and native Google Calendar appointment
-tool link. OAuth state is intentionally not copied. It then starts
+organization, `Alex` appointment agent with Call History enabled, and native
+Google Calendar appointment tool link. OAuth state is intentionally not copied. It then starts
 frontend/backend/voice-ws on a deterministic port slot. See [the worktree and
 release strategy](worktree-and-release-strategy.md) for setup, cleanup, and the
 shared-staging rule.
+
+The isolated worktree launcher enables recordings for the seeded opted-in test
+agent and stores them locally under that worktree's ignored
+`.local-data/call-recordings/` directory. The regular local Compose profile
+keeps recording disabled unless `VOICE_RECORDING_ENABLED=true` is set.
 
 ## Manual image builds
 

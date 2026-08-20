@@ -339,6 +339,15 @@ prepare_app_env() {
   set_env_value "$APP_ENV" "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" "http://localhost:${OTEL_HTTP_PORT}/v1/logs"
   set_env_value "$APP_ENV" "MCP_ALLOW_LOCAL_URLS" "true"
 
+  # Isolated worktrees are local test environments. Keep opted-in call
+  # recordings on the worktree filesystem so manual call-history testing does
+  # not depend on R2 credentials or shared remote storage. The general local
+  # environment example remains disabled by default for privacy.
+  set_env_value "$APP_ENV" "VOICE_RECORDING_ENABLED" "true"
+  set_env_value "$APP_ENV" "VOICE_RECORDING_TEE" "false"
+  set_env_value "$APP_ENV" "RECORDING_STORAGE_BACKEND" "local"
+  set_env_value "$APP_ENV" "RECORDING_STORAGE_LOCAL_ROOT" ".local-data/call-recordings"
+
   # Supabase status values are added by sync_supabase_credentials after the
   # local project starts. Keep source-env values during config-only generation.
   set_env_value "$APP_ENV" "SUPABASE_URL" "http://host.docker.internal:${SUPABASE_API_PORT}"

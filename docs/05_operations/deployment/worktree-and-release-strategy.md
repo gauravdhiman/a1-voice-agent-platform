@@ -110,13 +110,21 @@ the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/gettin
 and Docker before using the launcher.
 
 The default seed mirrors the current staging fixture: `Pleasant Pediatric` in
-`Peoria, AZ` (`America/Phoenix`) with the active agent `Alex` and the current
-dental-receptionist instructions. It creates the same fixture IDs in every
+`Peoria, AZ` (`America/Phoenix`) with the active agent `Alex`, the current
+dental-receptionist instructions, and call recording enabled so the agent
+detail page exposes Call History. It creates the same fixture IDs in every
 isolated database, attaches the native `Google_calendar_appointment` tool, and
 leaves its OAuth state empty so each worktree can authorize it independently.
 The staging agent's unrelated remote MCP links and encrypted OAuth state are
 not copied. The agent and organization rows are updated on repeat runs, while
 credit balances are left unchanged after their first insert.
+
+For isolated manual testing, the launcher also enables the runtime recording
+gate and forces `RECORDING_STORAGE_BACKEND=local`. Opted-in calls are written
+under the worktree's ignored `.local-data/call-recordings/` directory and are
+served through the authenticated backend. This does not change the general
+local environment default, which keeps recording disabled unless explicitly
+enabled.
 
 | Role | Email | Password | Organization |
 | --- | --- | --- | --- |

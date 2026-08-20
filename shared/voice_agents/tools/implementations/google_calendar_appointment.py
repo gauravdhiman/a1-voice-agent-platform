@@ -135,7 +135,18 @@ class GoogleCalendarAppointmentTool(BaseTool):
     async def check_availability(
         self, context: ToolContext, start_time: str, duration_minutes: int
     ) -> dict[str, Any]:
-        """Check one exact interval for conflicts on the business calendar."""
+        """Check one exact interval for a possible new appointment.
+
+        Use this only when the caller is considering a new booking and there
+        is no existing appointment being changed. If the caller wants to
+        reschedule, extend, shorten, or edit an existing appointment, use
+        ``update_appointment`` instead. Do not use this tool as a pre-check for
+        an existing appointment because its own calendar event is busy by
+        design; ``update_appointment`` performs the conflict check while
+        excluding the appointment being changed.
+
+        The result reports whether the requested interval is free or busy.
+        """
         return await self._service(context).check_availability(
             start_time=start_time, duration_minutes=duration_minutes
         )
@@ -150,7 +161,14 @@ class GoogleCalendarAppointmentTool(BaseTool):
         caller_email: str = "",
         limit: int = 20,
     ) -> dict[str, Any]:
-        """Find existing appointments by time window and optional caller fields."""
+        """Find existing appointments before changing an existing booking.
+
+        Use this when the appointment id is not already in the conversation.
+        Search by the appointment's time window and provide caller details to
+        narrow the results. Caller details help match an appointment but are
+        not identity verification. Pass the returned ``appointment.id`` to
+        ``update_appointment`` or ``cancel_appointment``; never invent an id.
+        """
         return await self._service(context).find_appointments(
             window_start=window_start,
             window_end=window_end,
@@ -173,6 +191,12 @@ class GoogleCalendarAppointmentTool(BaseTool):
         notes: str = "",
     ) -> dict[str, Any]:
         """Book a confirmed appointment after a fresh availability check.
+
+        Use this only when no existing appointment satisfies the caller's
+        request. Do not use it to add or correct contact details or reschedule
+        an appointment already returned by a tool; use ``update_appointment``
+        with the returned ``appointment.id`` instead. A same-session retry is
+        handled idempotently by the service so it cannot create a duplicate.
 
         The caller's email is optional because organizations differ, but it is
         available as a first-class argument and can be made required through
@@ -204,7 +228,25 @@ class GoogleCalendarAppointmentTool(BaseTool):
         caller_email: str = "",
         notes: str = "",
     ) -> dict[str, Any]:
-        """Update appointment details or move it after confirmation."""
+        """Update an existing appointment after caller confirmation.
+
+        Use this for every change to an existing appointment: rescheduling or
+        moving it, extending or shortening its duration, changing its purpose,
+        or adding and correcting caller details. Do not call
+        ``check_availability`` first; this operation checks the proposed
+        interval and excludes the appointment being changed from its own
+        conflict check. For a duration change, ``new_duration_minutes`` is the
+        final total duration, not the number of minutes to add. For example,
+        changing a 60-minute appointment to 90 minutes requires
+        ``new_duration_minutes=90``. Omit ``new_start_time`` to keep the
+        current start time. Never call ``create_appointment`` for an existing
+        booking.
+
+        The appointment id is the Google event id returned by
+        ``create_appointment`` or ``find_appointments``; if it is not already
+        known, find the matching appointment first and pass the returned id.
+        Never invent an id.
+        """
         return await self._service(context).update_appointment(
             appointment_id=appointment_id,
             new_start_time=new_start_time,

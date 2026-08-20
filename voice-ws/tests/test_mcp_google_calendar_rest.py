@@ -684,6 +684,24 @@ class TestToolDescriptionsPromptFrontDeskBehavior:
         desc = (tools["check_availability"].description or "").lower()
         assert "free" in desc and "busy" in desc
 
+    async def test_update_description_covers_all_existing_appointment_changes(
+        self, google_calendar_rest_mcp_config
+    ):
+        """MCP guidance must route existing changes to update_appointment."""
+        from shared.voice_agents.tools.mcp.client import McpClient
+
+        async with McpClient(google_calendar_rest_mcp_config) as client:
+            tools = {t.name: t for t in await client.list_tools()}
+
+        update_desc = (tools["update_appointment"].description or "").lower()
+        check_desc = (tools["check_availability"].description or "").lower()
+
+        for phrase in ("reschedul", "extend", "shorten", "existing appointment"):
+            assert phrase in update_desc
+        assert "new_duration_minutes" in update_desc
+        assert "new booking" in check_desc
+        assert "existing appointment" in check_desc
+
 
 class TestSchemasAreGeminiClean:
     """Every tool schema the connector reports must pass Gemini's strict

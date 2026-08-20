@@ -95,6 +95,9 @@ assert_file_contains "$app_env" 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54341
 assert_file_contains "$app_env" 'DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54342/postgres'
 assert_file_contains "$app_env" 'HOST_FRONTEND_PORT=3020'
 assert_file_contains "$app_env" 'HOST_BACKEND_PORT=8020'
+assert_file_contains "$app_env" 'VOICE_RECORDING_ENABLED=true'
+assert_file_contains "$app_env" 'RECORDING_STORAGE_BACKEND=local'
+assert_file_contains "$app_env" 'RECORDING_STORAGE_LOCAL_ROOT=.local-data/call-recordings'
 assert_file_contains "$state_dir/metadata.env" 'TEST_ORGANIZATION_NAME=Pleasant Pediatric'
 assert_file_contains "$state_dir/metadata.env" 'TEST_AGENT_ID=59252f36-255e-4e71-9250-c4ce3ac27eaa'
 

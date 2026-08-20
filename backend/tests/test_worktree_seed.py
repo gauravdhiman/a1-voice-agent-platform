@@ -37,7 +37,7 @@ def test_seed_records_include_business_context_for_manual_calls() -> None:
     assert "Always confirm appointment details" in agent["custom_instructions"]
     assert "Pleasant Pediatric" in agent["instructions_markdown"]
     assert agent["is_active"] is True
-    assert agent["call_recording_enabled"] is False
+    assert agent["call_recording_enabled"] is True
 
 
 def test_seed_accounts_use_shared_manual_login_credentials() -> None:

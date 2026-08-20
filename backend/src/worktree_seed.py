@@ -122,9 +122,10 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
             ),
             "use_platform_credits": False,
             "is_published_on_public_page": False,
-            # Local calls should not create recordings or require a phone
-            # number that belongs to the shared staging environment.
-            "call_recording_enabled": False,
+            # Match staging so the agent detail page exposes Call History in
+            # every isolated worktree. Local calls still use the local stack;
+            # no staging recording object or OAuth state is copied.
+            "call_recording_enabled": True,
             "preset_id": None,
         },
         "accounts": [
