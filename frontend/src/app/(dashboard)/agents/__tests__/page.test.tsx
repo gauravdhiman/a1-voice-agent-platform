@@ -16,12 +16,12 @@
  *   - Every <AgentCard> receives `canDelete` matching the page-level
  *     permission (regular members: false, admins: true).
  *
- * Cross-org delete limitation (TODO, out of scope here): the page
- * lists agents across all orgs. A page-level canDelete derived from
- * the current org is wrong for non-current-org agents. The simple
- * rule for now matches the org-scoped /skills page: a page-level
- * canDelete is good enough for the user-facing surface, and the
- * backend re-validates per-org.
+ * Organization scope contract:
+ *   - Organization users load and see only agents for the active
+ *     organization selected in the organization switcher.
+ *   - Platform admins retain the cross-organization list and filter.
+ *   - The page still applies a client-side scope check as defense in depth;
+ *     the organization-scoped API remains the authorization boundary.
  */
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,6 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockUseOrganization = vi.fn();
 const mockUseUserPermissions = vi.fn();
 const mockUseMyAgents = vi.fn();
+const mockUseOrgAgents = vi.fn();
 const mockUseDeleteAgent = vi.fn();
 const mockUseSearchParams = vi.fn();
 const mockPush = vi.fn();
@@ -66,7 +67,8 @@ vi.mock("@/hooks/use-user-permissions", () => ({
 }));
 
 vi.mock("@/hooks/use-agent-queries", () => ({
-  useMyAgents: () => mockUseMyAgents(),
+  useMyAgents: (enabled?: boolean) => mockUseMyAgents(enabled),
+  useOrgAgents: (orgId: string) => mockUseOrgAgents(orgId),
   useDeleteAgent: () => mockUseDeleteAgent(),
 }));
 
@@ -117,6 +119,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     mockUseOrganization.mockReturnValue({
       organizations: [{ id: "org-1", name: "Acme" }],
       currentOrganization: { id: "org-1", name: "Acme" },
+      loading: false,
     });
     // Default: org admin (matches the original tests' expectations
     // for the 'New Agent' button + per-card trash/Edit/Tools icons).
@@ -132,6 +135,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     mockUseDeleteAgent.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue(undefined),
     });
+    mockUseOrgAgents.mockImplementation(() => mockUseMyAgents());
   });
 
   afterEach(() => {
@@ -163,6 +167,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
   });
 
   it("renders the 'New Agent' button for a platform admin", () => {
+    mockHasRole.mockImplementation((role: string) => role === "platform_admin");
     mockUseUserPermissions.mockReturnValue({
       canCreateAgent: true,
       isPlatformAdmin: true,
@@ -180,9 +185,73 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
     render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
 
+    expect(mockUseMyAgents).toHaveBeenCalledWith(true);
     expect(
       screen.getByRole("button", { name: /new agent/i }),
     ).toBeInTheDocument();
+  });
+
+  it("loads the active organization for org users and hides out-of-scope agents", () => {
+    mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: true,
+      isPlatformAdmin: false,
+      isOrgAdmin: true,
+    });
+    mockUseMyAgents.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    });
+    mockUseOrgAgents.mockReturnValue({
+      data: [FIXTURE_AGENT, FIXTURE_AGENT_OTHER_ORG],
+      isLoading: false,
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
+
+    expect(mockUseOrgAgents).toHaveBeenCalledWith("org-1");
+    expect(mockUseMyAgents).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText("Fixture Agent")).toBeInTheDocument();
+    expect(screen.queryByText("Other Org Agent")).not.toBeInTheDocument();
+  });
+
+  it("keeps a platform admin cross-organization even without an active org", () => {
+    mockHasRole.mockImplementation((role: string) => role === "platform_admin");
+    mockUseOrganization.mockReturnValue({
+      organizations: [],
+      currentOrganization: null,
+      loading: false,
+    });
+    mockUseUserPermissions.mockReturnValue({
+      canCreateAgent: false,
+      isPlatformAdmin: false,
+      isOrgAdmin: false,
+    });
+    mockUseMyAgents.mockReturnValue({
+      data: [FIXTURE_AGENT_OTHER_ORG],
+      isLoading: false,
+      error: null,
+    });
+    mockUseOrgAgents.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
+
+    expect(mockUseMyAgents).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Other Org Agent")).toBeInTheDocument();
   });
 
   it("does NOT render the 'New Agent' button for a regular org member", () => {
@@ -534,17 +603,18 @@ describe("/agents page (N1 permission-aware UI)", () => {
     expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=persona");
   });
 
-  it("regular user can open the read-only detail view for an agent in another org too", () => {
-    // Read-only access is universal — a regular member can also
-    // view agents belonging to other orgs (the page lists all orgs).
-    // The fix must not gate the click on org membership.
+  it("does not render an agent from another organization for an org user", () => {
+    // Organization users are scoped to the active organization. The
+    // backend normally enforces this through /organization/{org_id}; this
+    // assertion also protects the UI if a stale or malformed response
+    // contains an agent from another organization.
     mockUseUserPermissions.mockReturnValue({
       canCreateAgent: false,
       isPlatformAdmin: false,
       isOrgAdmin: false,
     });
     mockHasRole.mockReset().mockReturnValue(false);
-    mockUseMyAgents.mockReturnValue({
+    mockUseOrgAgents.mockReturnValue({
       data: [FIXTURE_AGENT_OTHER_ORG],
       isLoading: false,
       error: null,
@@ -556,12 +626,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
     render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
 
-    const cardButton = screen.getByRole("button", {
-      name: /other org agent/i,
-    });
-    fireEvent.click(cardButton);
-
-    expect(mockPush).toHaveBeenCalledWith("/agents/agent-2?tab=persona");
+    expect(screen.queryByText("Other Org Agent")).not.toBeInTheDocument();
   });
 
   it("org admin's per-card Edit button still navigates to the detail page (not double-fired)", () => {

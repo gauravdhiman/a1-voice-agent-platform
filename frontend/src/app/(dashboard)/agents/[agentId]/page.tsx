@@ -34,6 +34,7 @@ import { PresetPicker, useSelectedPresetReadiness } from "@/components/agents/pr
 import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 import { AgentPhoneNumberSelector } from "@/components/agents/agent-phone-number-selector";
 import { AgentInstructionsHelpText } from "@/components/agents/agent-instructions-help-text";
+import { AgentDetailSaveBar } from "@/components/agents/agent-detail-save-bar";
 import { AgentCallRecordings } from "@/components/calls/agent-call-recordings";
 import { ToolDisconnectDialog } from "@/components/tools/tool-disconnect-dialog";
 import { DeleteButton } from "@/components/ui/delete-button";
@@ -72,7 +73,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Bot, Settings, Save, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
+import { Bot, Settings, ArrowLeft, Loader2, Wrench, Info, Eye, EyeOff, Phone, ExternalLink, FileText, ChevronDown, Zap, FolderOpen } from "lucide-react";
 import { MarkdownRenderer } from "@/components/markdown";
 import {
   DropdownMenu,
@@ -1111,19 +1112,6 @@ export default function AgentDetailPage() {
               </CardContent>
             </Card>
 
-            {canEdit && (
-              <div className="flex space-x-2">
-                <Button
-                  onClick={handleSaveAgent}
-                  disabled={saving || updateAgentMutation.isPending}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  {saving || updateAgentMutation.isPending
-                    ? "Saving..."
-                    : "Save Changes"}
-                </Button>
-              </div>
-            )}
           </div>
         </TabsContent>
 
@@ -1518,6 +1506,12 @@ export default function AgentDetailPage() {
           </Card>
         </TabsContent>
       </AnimatedTabs>
+
+      <AgentDetailSaveBar
+        canEdit={canEdit}
+        saving={saving || updateAgentMutation.isPending}
+        onSave={handleSaveAgent}
+      />
 
       {agent && (
         <TestCallModal

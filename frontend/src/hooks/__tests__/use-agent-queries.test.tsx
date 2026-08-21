@@ -1,12 +1,24 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { getAgentTools, getAgentSystemPrompt, getPlatformTools } = vi.hoisted(() => ({
+const {
+  getAgentTools,
+  getAgentSystemPrompt,
+  getPlatformTools,
+  getMyAgents,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+} = vi.hoisted(() => ({
   getAgentTools: vi.fn(),
   getAgentSystemPrompt: vi.fn(),
   getPlatformTools: vi.fn(),
+  getMyAgents: vi.fn(),
+  createAgent: vi.fn(),
+  updateAgent: vi.fn(),
+  deleteAgent: vi.fn(),
 }));
 
 vi.mock("@/services/agent-service", () => ({
@@ -14,21 +26,30 @@ vi.mock("@/services/agent-service", () => ({
     getAgentTools,
     getAgentSystemPrompt,
     getPlatformTools,
+    getMyAgents,
+    createAgent,
+    updateAgent,
+    deleteAgent,
   },
 }));
 
 import {
   useAgentSystemPrompt,
   useAgentTools,
+  useCreateAgent,
+  useDeleteAgent,
+  useMyAgents,
   usePlatformTools,
+  useUpdateAgent,
+  agentQueryKeys,
 } from "../use-agent-queries";
 
-function createWrapper() {
-  const queryClient = new QueryClient({
+function createWrapper(queryClient?: QueryClient) {
+  const client = queryClient ?? new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
 }
 
@@ -59,6 +80,80 @@ describe("agent detail query loading", () => {
     });
 
     expect(getPlatformTools).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch all organizations when the all-agent query is disabled", () => {
+    renderHook(() => useMyAgents(false), {
+      wrapper: createWrapper(),
+    });
+
+    expect(getMyAgents).not.toHaveBeenCalled();
+  });
+
+  it("invalidates organization agent lists after creating an agent", async () => {
+    createAgent.mockResolvedValueOnce({ id: "agent-1" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useCreateAgent(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        organization_id: "org-1",
+        name: "New agent",
+      } as never);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: agentQueryKeys.organizations(),
+    });
+  });
+
+  it("invalidates organization agent lists after updating an agent", async () => {
+    updateAgent.mockResolvedValueOnce({ id: "agent-1" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useUpdateAgent(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        agentId: "agent-1",
+        data: { name: "Updated agent" },
+      });
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: agentQueryKeys.organizations(),
+    });
+  });
+
+  it("invalidates organization agent lists after deleting an agent", async () => {
+    deleteAgent.mockResolvedValueOnce(undefined);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useDeleteAgent(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("agent-1");
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: agentQueryKeys.organizations(),
+    });
   });
 
   it("passes draft visibility to the platform tools request when enabled", async () => {

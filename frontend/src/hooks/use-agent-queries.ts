@@ -14,6 +14,7 @@ import { toast } from "sonner";
 export const agentQueryKeys = {
   all: ["agents"] as const,
   myAgents: () => [...agentQueryKeys.all, "my"] as const,
+  organizations: () => [...agentQueryKeys.all, "organization"] as const,
   organization: (orgId: string) =>
     [...agentQueryKeys.all, "organization", orgId] as const,
   detail: (id: string) => [...agentQueryKeys.all, id] as const,
@@ -25,12 +26,15 @@ export const agentQueryKeys = {
   agentTools: (agentId: string) => ["tools", "agent", agentId] as const,
 };
 
-// Get all agents for the current user
-export function useMyAgents() {
+// Get all agents for the current user. The optional enabled flag lets pages
+// with an active organization scope avoid fetching the cross-organization
+// dataset at all.
+export function useMyAgents(enabled = true) {
   return useQuery({
     queryKey: agentQueryKeys.myAgents(),
     queryFn: () => agentService.getMyAgents(),
     staleTime: 30 * 1000, // 30 seconds
+    enabled,
   });
 }
 
@@ -143,6 +147,9 @@ export function useCreateAgent() {
       toast.success("Agent created successfully");
       // Invalidate to get fresh data
       queryClient.invalidateQueries({ queryKey: agentQueryKeys.myAgents() });
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.organizations(),
+      });
     },
   });
 }
@@ -214,6 +221,9 @@ export function useUpdateAgent() {
         queryKey: agentQueryKeys.detail(agentId),
       });
       queryClient.invalidateQueries({ queryKey: agentQueryKeys.myAgents() });
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.organizations(),
+      });
     },
   });
 }
@@ -252,6 +262,9 @@ export function useDeleteAgent() {
     },
     onSuccess: () => {
       toast.success("Agent deleted successfully");
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.organizations(),
+      });
     },
   });
 }
