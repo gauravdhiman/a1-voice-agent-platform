@@ -1,21 +1,46 @@
 # Deployment quick reference
 
 Production target: **247ai.live**. The normal path is merge to protected
-`main` → automatic staging deployment → release smoke tests → manual
-production promotion. Start with the [deployment index](README.md) for the
-full doc map.
+`main` → local staging validation (`./scripts/validate-staging.sh` with
+`--env staging`) → release smoke tests → manual production promotion.
+Start with the [deployment index](README.md) for the full doc map.
 
-See [CI / GitHub Actions](ci-github-actions.md) for the required GitHub
-environment secrets and variables.
+See [CI / GitHub Actions](ci-github-actions.md) for required secrets.
 
-## Manual or recovery deploy
+## Staging validation (local — the normal path)
+
+Staging runs **locally** (frontend, backend, voice-ws) against the shared
+cloud staging Supabase. No Cloud Run staging deployment.
+
+```bash
+# one-time setup
+cp .env.staging.example .env.staging  # fill SUPABASE_SERVICE_KEY, DATABASE_URL, etc.
+# see docs/05_operations/staging_environment.md
+
+# after every merge to main (or any release candidate)
+./scripts/validate-staging.sh
+# or without Docker:
+./scripts/validate-staging.sh --migrate-only
+# then run browser + PSTN smoke tests at http://localhost:3000
+```
+
+Manual equivalent:
+
+```bash
+python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
+./scripts/deploy.sh migrate --env-file .env.staging
+python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
+./start.sh start dev --env staging
+```
+
+## Manual or recovery deploy (production, and optional staging Cloud Run)
 
 Credentials live in **`.env.prod`** only (gitignored). Template: **`.env.prod.example`**.
 
 ```bash
 chmod +x scripts/deploy.sh   # once
 
-# GCP backend + frontend
+# GCP backend + frontend (production)
 ./scripts/deploy.sh gcp
 
 # voice-ws on OCI (SSH key defaults to ~/.ssh/oci_voice_ws)
@@ -33,16 +58,16 @@ OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh all
 ./scripts/deploy.sh --help
 ```
 
-These commands remain useful for operator recovery and local infrastructure
-work. They are not the normal production release gate; use **Actions → Promote
-to production** after staging validation.
+These commands remain useful for operator recovery. Production releases should
+use **Actions → Promote to production** after local staging validation.
 
 ## CI release path
 
 1. Merge a reviewed pull request into protected `main`.
-2. Let `Deploy Cloud (staging)` run its compatibility check, migration, and
-   staging application deployment.
-3. Run the browser/PSTN release gate against staging.
+2. On your machine (or a designated release machine), run
+   `./scripts/validate-staging.sh` — it checks migration compatibility,
+   migrates staging, and restarts the local staging stack (`--env staging`).
+3. Run the browser/PSTN release gate against `http://localhost:3000`.
 4. Run `Promote to production` with the full 40-character SHA of the
    staging-tested commit and obtain the required production-environment
    approval.

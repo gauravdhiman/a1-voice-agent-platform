@@ -47,7 +47,6 @@ worktrees against staging. Select one release candidate for staging validation;
 run other worktrees against their own local Supabase instances.
 
 ---
-
 ## Staging migration state and bootstrap
 
 The staging database was checked read-only on 2026-08-19 and reported
@@ -55,12 +54,14 @@ The staging database was checked read-only on 2026-08-19 and reported
 corrective migration was applied manually during the worktree-environment
 change. This branch adds `20260819000001`, which grants the backend service
 role access to existing and future public application tables/sequences in a
-fresh local Supabase project. The normal CI workflow will run a compatibility
-preflight and then `upgrade head` for the selected release candidate, bringing
-staging forward safely.
+fresh local Supabase project. Run the local validator for the selected release
+candidate to bring staging forward safely:
+
+```bash
+./scripts/validate-staging.sh           # check + migrate + restart local stack
+```
 
 Check any future checkout before touching shared staging:
-
 ```bash
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ```
@@ -172,6 +173,15 @@ ON CONFLICT DO NOTHING;
 ---
 
 ## Manual migration commands
+
+The normal path is the validator:
+
+```bash
+./scripts/validate-staging.sh                 # check + migrate + verify + restart
+./scripts/validate-staging.sh --migrate-only  # check + migrate + verify
+```
+
+For granular control:
 
 ```bash
 # Staging — check first, then apply a specific revision only when necessary

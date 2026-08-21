@@ -56,10 +56,12 @@ the VM terminates TLS (auto Let's Encrypt) and reverse-proxies to `voice-ws:7860
 
 ## Release and deploy entry points
 
-The normal release path is **merge to protected `main`**, automatic deployment
-to cloud staging, release smoke tests, and then the manual
+The normal release path is **merge to protected `main`** → **local staging
+validation** (`./scripts/validate-staging.sh` which runs `--env staging` with
+the cloud staging database) → release smoke tests → manual
 **`Promote to production`** GitHub Actions workflow. Credentials stay in
-protected GitHub environment secrets; they are never committed.
+protected GitHub environment secrets for production and in the gitignored
+`.env.staging` / `.env.prod` files for local use; they are never committed.
 
 `./scripts/deploy.sh` remains the single lower-level entry point for operator
 recovery or explicitly approved local deployment work. Credentials stay in
@@ -83,14 +85,14 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
 | 5 | Production DB migrations + phone-number data verification | Required migration job in the protected `Promote to production` workflow; manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` |
 | 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
-| 7 | Vendor webhooks (Stripe, Twilio, Google OAuth) | You |
-
 ## Scripts and artifacts
 
 | Path | Purpose |
 |------|---------|
-| **`scripts/deploy.sh`** | Single entry point |
+| **`scripts/validate-staging.sh`** | Local staging validator (migrate + `start.sh --env staging` + health checks) |
+| **`scripts/deploy.sh`** | Single entry point for production |
 | `.env.prod.example` | Production env template |
+| `.env.staging.example` | Staging env template (local app + cloud DB) |
 | `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend to Cloud Run |
 | `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
 | `scripts/deploy/gcp-map-domains.sh` | Cloud Run domain mappings |
@@ -100,7 +102,7 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | `scripts/oci-env.sh` | OCI CLI session auth helper |
 | `deploy/oci/docker-compose.voice-ws.yml` | voice-ws + Caddy stack |
 | `deploy/oci/Caddyfile` | TLS reverse proxy for `voice.247ai.live` |
-| `.github/workflows/deploy-cloud.yml` | CI auto-deploy to staging on `main` |
+| `.github/workflows/deploy-cloud.yml` | Manual-only staging recovery (no longer auto on `main`) |
 | `.github/workflows/promote-production.yml` | Manual production promotion |
 
 ## Phone-number data migration release procedure
@@ -117,8 +119,10 @@ The protected production promotion job performs this sequence automatically:
 2. Run `python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod`.
 3. Deploy Cloud Run only when both commands succeed.
 
-The staging workflow performs the same compatibility, migration, and verifier
-sequence using `.env.staging` before staging deployment.
+Local staging validation performs the same compatibility, migration, and verifier
+sequence using `.env.staging` before starting the local stack (see
+`./scripts/validate-staging.sh`). The manual staging Cloud Run workflow does the
+same when dispatched.
 
 For a manually approved recovery or staged rollout:
 
