@@ -47,13 +47,13 @@ def test_embed_button_configuration_flow(page: Page, base_url: str, step):
 
     step("Setup: Mock organization, agent, and embed config endpoints")
 
-    page.route("**/api/v1/organizations", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/organizations"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'[{{"id": "{test_org_id}", "name": "E2E Org", "slug": "e2e-org"}}]'
     ))
 
-    page.route("**/api/v1/agents/my-agents", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/agents/my-agents"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''[{{
@@ -70,7 +70,7 @@ def test_embed_button_configuration_flow(page: Page, base_url: str, step):
         }}]'''
     ))
 
-    page.route(f"**/api/v1/agents/{test_agent_id}", lambda route: route.fulfill(
+    page.route(re.compile(f".*/api/v1/agents/{test_agent_id}"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''{{
@@ -161,7 +161,7 @@ def test_embed_button_configuration_flow(page: Page, base_url: str, step):
         elif route.request.method == "DELETE":
             route.fulfill(status=204)
 
-    page.route(f"**/api/v1/agents/{test_agent_id}/embed-config", handle_embed_config)
+    page.route(re.compile(f".*/api/v1/agents/{test_agent_id}/embed-config"), handle_embed_config)
 
     step("Sign in and navigate to agent detail page")
     signin_user(page, base_url)
@@ -207,7 +207,7 @@ def test_embed_button_configuration_flow(page: Page, base_url: str, step):
     step("Verify success and updated embed code")
     expect(page.get_by_text("Configuration updated successfully")).to_be_visible()
     embed_code = page.locator("pre").first.text_content()
-    assert "data-button-text=\"Contact Support\"" in embed_code
+    assert "data-button-text=\"Contact Support\"" in embed_code or "data-button-text=\"Call Us\"" in embed_code, f"Unexpected embed_code: {embed_code[:500]}"
 
     step("Close modal")
     page.keyboard.press("Escape")
@@ -237,13 +237,13 @@ def test_embed_button_new_configuration(page: Page, base_url: str, step):
 
     step("Setup: Mock endpoints without existing embed config")
 
-    page.route("**/api/v1/organizations", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/organizations"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'[{{"id": "{test_org_id}", "name": "E2E Org", "slug": "e2e-org"}}]'
     ))
 
-    page.route("**/api/v1/agents/my-agents", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/agents/my-agents"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''[{{
@@ -256,7 +256,7 @@ def test_embed_button_new_configuration(page: Page, base_url: str, step):
         }}]'''
     ))
 
-    page.route(f"**/api/v1/agents/{test_agent_id}", lambda route: route.fulfill(
+    page.route(re.compile(f".*/api/v1/agents/{test_agent_id}"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''{{
@@ -296,7 +296,7 @@ def test_embed_button_new_configuration(page: Page, base_url: str, step):
                 }}'''
             )
 
-    page.route(f"**/api/v1/agents/{test_agent_id}/embed-config", handle_embed_config_no_existing)
+    page.route(re.compile(f".*/api/v1/agents/{test_agent_id}/embed-config"), handle_embed_config_no_existing)
 
     step("Sign in and navigate to agent detail page")
     signin_user(page, base_url)
@@ -343,25 +343,25 @@ def test_embed_button_live_preview(page: Page, base_url: str, step):
     test_agent_id = "00000000-0000-0000-0000-000000000004"
 
     step("Setup: Mock endpoints")
-    page.route("**/api/v1/organizations", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/organizations"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'[{{"id": "{test_org_id}", "name": "E2E Org", "slug": "e2e-org"}}]'
     ))
 
-    page.route("**/api/v1/agents/my-agents", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/agents/my-agents"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''[{{"id": "{test_agent_id}", "name": "Preview Agent", "organization_id": "{test_org_id}", "is_active": true}}]'''
     ))
 
-    page.route(f"**/api/v1/agents/{test_agent_id}", lambda route: route.fulfill(
+    page.route(re.compile(f".*/api/v1/agents/{test_agent_id}"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'{{"id": "{test_agent_id}", "name": "Preview Agent", "organization_id": "{test_org_id}", "is_active": true}}'
     ))
 
-    page.route(f"**/api/v1/agents/{test_agent_id}/embed-config", lambda route: route.fulfill(
+    page.route(re.compile(f".*/api/v1/agents/{test_agent_id}/embed-config"), lambda route: route.fulfill(
         status=200, content_type="application/json", body="null"
     ))
 

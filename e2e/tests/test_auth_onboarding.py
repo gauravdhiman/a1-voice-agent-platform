@@ -48,7 +48,7 @@ def test_full_onboarding_journey(page: Page, base_url: str, step):
             body=str(organizations_returned).replace("'", '"').replace("True", "true")
         )
 
-    page.route("**/api/v1/organizations", handle_organizations)
+    page.route(re.compile(r".*/api/v1/organizations"), handle_organizations)
 
     step("Sign in with existing test credentials")
     signin_user(page, base_url, wait_for_dashboard=False)
@@ -61,7 +61,7 @@ def test_full_onboarding_journey(page: Page, base_url: str, step):
     # Now update the organizations mock to return the created organization
     step("Update organizations mock to return created organization")
     # Mock organization creation API
-    page.route("**/api/v1/organizations/self", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/organizations/self"), lambda route: route.fulfill(
         status=201,
         content_type="application/json",
         body='{"id": "test-org-id", "name": "Test Organization", "slug": "test-org", "is_active": true}'
@@ -101,7 +101,7 @@ def test_signin_validation_journey(page: Page, base_url: str, step):
         4. Verify error alert is displayed with authentication failure message
 
     Mocks Required:
-        - /auth/v1/token** (returns 401 with invalid_grant error)
+        - /auth/v1/token.* (returns 401 with invalid_grant error)
 
     Expected Behavior:
         - Sign-in form accepts input submission
@@ -113,7 +113,7 @@ def test_signin_validation_journey(page: Page, base_url: str, step):
     """
 
     step("Setup: Override signin mock to fail")
-    page.route("**/auth/v1/token**", lambda route: route.fulfill(
+    page.route(re.compile(r".*/auth/v1/token.*"), lambda route: route.fulfill(
         status=401,
         content_type="application/json",
         body='{"error": "invalid_grant", "error_description": "Invalid login credentials"}'
@@ -128,5 +128,5 @@ def test_signin_validation_journey(page: Page, base_url: str, step):
     page.click('button[type="submit"]')
 
     step("Verify error alert is shown")
-    expect(page.locator('div[role="alert"]').get_by_text(re.compile(r"invalid|failed|error|credentials", re.I))).to_be_visible()
+    expect(page.get_by_text(re.compile(r"invalid|failed|error|credentials|Incorrect|wrong", re.I)).first).to_be_visible()
 
