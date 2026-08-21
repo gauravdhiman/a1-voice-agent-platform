@@ -155,6 +155,24 @@ sequenceDiagram
     LLM-->>User: "I've scheduled your meeting for 2pm"
 ```
 
+## Dashboard Organization Scope
+
+The dashboard's `/agents` page follows the organization selected in the left
+navigation switcher:
+
+- Organization users load agents through the organization-scoped API and see
+  only agents belonging to the active organization.
+- The organization selector is hidden for organization users because changing
+  scope is handled by the shared organization switcher.
+- Platform admins retain the cross-organization list and organization filter.
+- Agent configuration is kept while switching Persona, Skills, Tools, and
+  Settings tabs. Editors use the page-level **Save Changes** action below the
+  tabs; tool and skill attachment actions continue to save independently.
+
+The organization-scoped API remains the authorization boundary. The frontend
+also filters the returned list defensively so stale data cannot appear under a
+different active organization.
+
 ## Tool System
 
 ### What Are Tools?

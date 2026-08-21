@@ -20,25 +20,35 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { useMyAgents, useDeleteAgent } from "@/hooks/use-agent-queries";
+import {
+  useMyAgents,
+  useOrgAgents,
+  useDeleteAgent,
+} from "@/hooks/use-agent-queries";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { AgentCard } from "@/components/agents/agent-card";
 import type { VoiceAgent } from "@/types/agent";
 
 export default function AgentsPage() {
-  const { organizations } = useOrganization();
-  const { canCreateAgent: canCreateOnCurrentOrg } = useUserPermissions();
+  const {
+    organizations,
+    currentOrganization,
+    loading: organizationsLoading,
+  } = useOrganization();
   const { user } = useAuth();
+  const { canCreateAgent: canCreateOnCurrentOrg } = useUserPermissions();
+  // Resolve this role directly from the authenticated user. The permissions
+  // facade intentionally scopes most flags to the active organization, but a
+  // platform admin remains platform-scoped even when no organization is
+  // selected yet.
+  const isPlatformAdmin = Boolean(user?.hasRole("platform_admin"));
   // Page-level "New Agent" CTA uses agent:create on the *current* org
   // (from /me.permissions). Regular members have agent:read only.
   const canCreateAgent = canCreateOnCurrentOrg;
-  // Per-agent permission helper. The /agents page lists agents across
-  // all orgs (it has an "All Organizations" filter), so a single
-  // page-level canDelete derived from the CURRENT org would leak a
-  // trash icon on agents the user cannot actually delete. The right
-  // check is "can this user act on THIS specific agent?" — a
-  // platform_admin can act on any agent, and an org_admin can act
-  // on agents in their org.
+  // Per-agent permission helper. Platform admins can act across the
+  // platform, while organization admins can act only on agents belonging
+  // to the agent's organization. This remains correct if a platform admin
+  // uses the cross-organization view.
   const canActOnAgent = useCallback(
     (agent: VoiceAgent): boolean => {
       if (user?.hasRole("platform_admin")) return true;
@@ -75,8 +85,18 @@ export default function AgentsPage() {
     [router],
   );
 
-  // Fetch agents with React Query
-  const { data: agents = [], isLoading, error } = useMyAgents();
+  // Organization users use the active organization as the source of truth;
+  // platform admins retain the cross-organization view and filter.
+  const myAgentsQuery = useMyAgents(isPlatformAdmin);
+  const orgAgentsQuery = useOrgAgents(currentOrganization?.id ?? "");
+  const agents = useMemo(
+    () => (isPlatformAdmin ? myAgentsQuery.data : orgAgentsQuery.data) ?? [],
+    [isPlatformAdmin, myAgentsQuery.data, orgAgentsQuery.data],
+  );
+  const isLoading =
+    organizationsLoading ||
+    (isPlatformAdmin ? myAgentsQuery.isLoading : orgAgentsQuery.isLoading);
+  const error = isPlatformAdmin ? myAgentsQuery.error : orgAgentsQuery.error;
 
   // Fetch organizations (reuse from context if available, otherwise get all)
   const allOrganizations = useMemo(() => organizations || [], [organizations]);
@@ -85,10 +105,22 @@ export default function AgentsPage() {
   const filteredAgents = useMemo(() => {
     let filtered = agents;
 
-    if (selectedOrgId !== "all") {
+    if (isPlatformAdmin && selectedOrgId !== "all") {
       filtered = filtered.filter(
         (agent) => agent.organization_id === selectedOrgId,
       );
+    }
+
+    // The API is already organization-scoped for non-platform users. Keep
+    // this check in the view as defense in depth against stale or malformed
+    // responses crossing the active-organization boundary.
+    if (!isPlatformAdmin) {
+      const activeOrganizationId = currentOrganization?.id;
+      filtered = activeOrganizationId
+        ? filtered.filter(
+            (agent) => agent.organization_id === activeOrganizationId,
+          )
+        : [];
     }
 
     if (searchQuery) {
@@ -101,7 +133,13 @@ export default function AgentsPage() {
     }
 
     return filtered;
-  }, [agents, selectedOrgId, searchQuery]);
+  }, [
+    agents,
+    currentOrganization?.id,
+    isPlatformAdmin,
+    searchQuery,
+    selectedOrgId,
+  ]);
 
   const deleteAgentMutation = useDeleteAgent();
 
@@ -154,7 +192,9 @@ export default function AgentsPage() {
           <div>
             <h1 className="text-2xl font-bold">Voice Agents</h1>
             <p className="text-sm text-muted-foreground">
-              Manage your AI voice agents across all organizations
+              {isPlatformAdmin
+                ? "Manage your AI voice agents across all organizations"
+                : `Manage AI voice agents for ${currentOrganization?.name || "your organization"}`}
             </p>
           </div>
         </div>
@@ -182,29 +222,33 @@ export default function AgentsPage() {
             <CardHeader>
               <CardTitle>Filter & Search</CardTitle>
               <CardDescription>
-                Find agents by organization or name
+                {isPlatformAdmin
+                  ? "Find agents by organization or name"
+                  : "Find agents by name in the active organization"}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <select
-                      value={selectedOrgId}
-                      onChange={(e) => setSelectedOrgId(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    >
-                      <option value="all">All Organizations</option>
-                      {allOrganizations.map((org) => (
-                        <option key={org.id} value={org.id}>
-                          {org.name}
-                        </option>
-                      ))}
-                    </select>
+                {isPlatformAdmin && (
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <select
+                        value={selectedOrgId}
+                        onChange={(e) => setSelectedOrgId(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      >
+                        <option value="all">All Organizations</option>
+                        {allOrganizations.map((org) => (
+                          <option key={org.id} value={org.id}>
+                            {org.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1">
+                )}
+                <div className={isPlatformAdmin ? "flex-1" : "w-full"}>
                   <input
                     type="text"
                     placeholder="Search agents..."
@@ -231,9 +275,11 @@ export default function AgentsPage() {
                   <Bot className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
                   <h3 className="text-lg font-semibold mb-2">No agents found</h3>
                   <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                    {searchQuery || selectedOrgId !== "all"
+                    {searchQuery || (isPlatformAdmin && selectedOrgId !== "all")
                       ? "No agents match your search or filter criteria."
-                      : "You haven't created any voice agents yet."}
+                      : isPlatformAdmin
+                        ? "You haven't created any voice agents yet."
+                        : "There are no voice agents in the active organization yet."}
                   </p>
                   {canCreateAgent && (
                     <Button onClick={handleAddAgent}>
@@ -270,29 +316,33 @@ export default function AgentsPage() {
             <CardHeader>
               <CardTitle>Filter & Search</CardTitle>
               <CardDescription>
-                Find agents by organization or name
+                {isPlatformAdmin
+                  ? "Find agents by organization or name"
+                  : "Find agents by name in the active organization"}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <select
-                      value={selectedOrgId}
-                      onChange={(e) => setSelectedOrgId(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    >
-                      <option value="all">All Organizations</option>
-                      {allOrganizations.map((org) => (
-                        <option key={org.id} value={org.id}>
-                          {org.name}
-                        </option>
-                      ))}
-                    </select>
+                {isPlatformAdmin && (
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <select
+                        value={selectedOrgId}
+                        onChange={(e) => setSelectedOrgId(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      >
+                        <option value="all">All Organizations</option>
+                        {allOrganizations.map((org) => (
+                          <option key={org.id} value={org.id}>
+                            {org.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1">
+                )}
+                <div className={isPlatformAdmin ? "flex-1" : "w-full"}>
                   <input
                     type="text"
                     placeholder="Search agents..."
@@ -318,9 +368,11 @@ export default function AgentsPage() {
                 <Bot className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
                 <h3 className="text-lg font-semibold mb-2">No agents found</h3>
                 <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                  {searchQuery || selectedOrgId !== "all"
+                  {searchQuery || (isPlatformAdmin && selectedOrgId !== "all")
                     ? "No agents match your search or filter criteria."
-                    : "You haven't created any voice agents yet."}
+                    : isPlatformAdmin
+                      ? "You haven't created any voice agents yet."
+                      : "There are no voice agents in the active organization yet."}
                 </p>
                 {canCreateAgent && (
                   <Button onClick={handleAddAgent}>
