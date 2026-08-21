@@ -19,21 +19,20 @@ Production infrastructure for **247ai.live**:
 | **[Runbook](runbook.md)** | Full architecture, first-time setup, DNS, webhooks, security |
 | **[Environment variables](environment-variables.md)** | Every env var by service; `.env.prod` is the manual-deploy file and `ENV_PROD` is its CI equivalent |
 | **[Local Docker](local-docker.md)** | docker-compose and manual image builds for development |
-| **[CI / GitHub Actions](ci-github-actions.md)** | Staging auto-deploy, manual production promotion, and required secrets |
-| **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, shared staging, and production promotion model |
+| **[CI / GitHub Actions](ci-github-actions.md)** | Local staging validation, manual production promotion, and required secrets |
+| **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, local staging (shared cloud DB), and production promotion model |
 
 ## Repo artifacts
 
-| Path | Purpose |
-|------|---------|
 | `scripts/deploy.sh` | Single entry point: `all`, `gcp`, `backend`, `frontend`, `voice-ws`, `migrate`, `domains` |
 | `.env.prod.example` | Production env template (copy → `.env.prod`, gitignored) |
-| `.env.staging.example` | Staging env template (copy → `.env.staging`, gitignored) |
+| `.env.staging.example` | Staging env template — local app + cloud DB (copy → `.env.staging`, gitignored) |
+| `scripts/validate-staging.sh` | Local staging validator (migrate + `start.sh --env staging` + health checks) |
 | `scripts/bootstrap-staging-db.sh` | Legacy/repair staging migrate + Stripe seed |
 | `scripts/deploy/` | Lower-level GCP, OCI, Alembic scripts |
 | `deploy/` | Docker compose, Caddyfile, Cloud Build stubs |
 | `scripts/worktree-stack.sh` | Full isolated local Supabase + application stack per worktree |
-| `.github/workflows/deploy-cloud.yml` | CI deploy to staging on `main` |
+| `.github/workflows/deploy-cloud.yml` | Manual staging recovery only (no longer auto on `main`) |
 | `.github/workflows/promote-production.yml` | Manual protected production promotion |
 
 ## Credentials

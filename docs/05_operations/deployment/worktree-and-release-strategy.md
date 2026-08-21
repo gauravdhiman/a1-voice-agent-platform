@@ -10,8 +10,8 @@ mutable application state. The platform has three different testing needs:
 
 1. Fast local development and unit tests.
 2. Interactive agent calls against a complete, isolated environment.
-3. Release validation against one shared cloud staging environment before
-   production promotion.
+3. Release validation against one shared cloud staging database before
+   production promotion — **with the application running locally**.
 
 These needs should not be served by pointing several worktrees at the same
 Supabase database.
@@ -21,13 +21,13 @@ Supabase database.
 | Environment | Application code | Database and services | Intended use |
 | --- | --- | --- | --- |
 | Worktree sandbox | One worktree | A dedicated local Supabase stack and Docker project | Interactive feature development and agent calls |
-| Shared staging | Selected release commit | Cloud staging Supabase | Release-level integration and smoke tests |
+| Local staging (shared DB) | Selected release commit, run locally | Cloud staging Supabase (`gdzwiwukcwbqohfwxxrx`), local FE/BE/voice-ws | Release-level integration and smoke tests |
 | Production | Promoted staging commit | Production Supabase and production service hosts | Customer traffic only |
 
 Docker Compose project names and host-port offsets isolate containers, but they
 do not isolate a remote database. `start.sh` remains the lightweight
 application-only launcher; `scripts/worktree-stack.sh` is the complete isolated
-stack launcher.
+stack launcher; `scripts/validate-staging.sh` is the shared-staging validator.
 
 ## Worktree sandbox design
 
@@ -136,6 +136,31 @@ These are intentionally fixed local-only credentials so every worktree has the
 same manual-test entry point. The launcher does not accept per-worktree login
 overrides; changing them would make parallel worktree testing harder to repeat.
 
+## Local staging validation (shared DB, local app)
+
+Staging is **not** a cloud Cloud Run environment. The application runs locally,
+the database is the shared cloud staging Supabase:
+
+```bash
+# after merging to main (or checking out any release candidate):
+./scripts/validate-staging.sh              # migrate + restart local staging stack
+./scripts/validate-staging.sh --migrate-only  # migrate without starting Docker
+
+# manual equivalent:
+python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
+./scripts/deploy.sh migrate --env-file .env.staging
+python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
+./start.sh start dev --env staging
+```
+
+`./start.sh start dev --env staging` starts the same `docker-compose.dev.yml`
+services as local dev, but with `ENV_FILE=.env.staging` pointing at the cloud
+staging Supabase (`gdzwiwukcwbqohfwxxrx`). Compose project `247ai-staging` and
+port offsets keep it isolated from `247ai-local` worktree stacks.
+
+See `docs/05_operations/staging_environment.md` for `.env.staging` setup,
+bootstrap, and verification checklist.
+
 ## Migration ownership
 
 Each database has one migration owner at a time:
@@ -143,17 +168,18 @@ Each database has one migration owner at a time:
 - A worktree sandbox is owned by the code in that worktree. Run its Alembic
   migrations locally after the database is created.
 - Shared staging is owned by the release candidate being validated. A random
-  worktree must not upgrade or downgrade it.
+  worktree must not upgrade or downgrade it — use `validate-staging.sh` on the
+  release checkout only.
 - Production migrations run only through the protected production deployment
   workflow.
 
 Migrations are forward-only operational changes. A process must not run an
 older branch's `alembic upgrade head` against a database whose revision is
-newer or unknown to that branch. The launcher and deployment workflows perform
-a read-only compatibility check before their migration step. The check rejects
-a database revision that is not present in the checked-out migration graph; it
-does not mutate the database. An older or empty database is allowed and is
-upgraded by the following Alembic step.
+newer or unknown to that branch. The launcher, staging validator, and
+deployment workflows perform a read-only compatibility check before their
+migration step. The check rejects a database revision that is not present in
+the checked-out migration graph; it does not mutate the database. An older or
+empty database is allowed and is upgraded by the following Alembic step.
 
 ## Recommended Git and deployment flow
 
@@ -165,25 +191,27 @@ flowchart LR
     W[Feature worktree] --> P[Pull request to main]
     P --> C[CI: tests, migration checks, build]
     C --> M[Merge to protected main]
-    M --> S[Deploy exact commit to cloud staging]
-    S --> R[Release browser and PSTN smoke tests]
+    M --> S[Local staging validation<br/>validate-staging.sh<br/>local app + cloud DB]
+    S --> R[Release browser and PSTN smoke tests<br/>on localhost:3000]
     R --> A[Manual production approval]
     A --> Q[Promote exact tested commit SHA to production]
 ```
 
 The important separation is between merging to `main` and promoting to
-production. `main` should first deploy to staging. Production should be a
-separate, explicitly approved promotion of the exact artifact that passed
-staging. This prevents the tested code and the deployed code from diverging.
+production. `main` should first be validated against staging **locally**.
+Production should be a separate, explicitly approved promotion of the exact
+commit that passed local staging. This prevents the tested code and the
+deployed code from diverging.
 
 The implemented workflows are:
 
-- `.github/workflows/deploy-cloud.yml` — push to `main` (and manual dispatch)
-  deploys only to the protected GitHub `staging` environment. It writes
-  `ENV_STAGING`, checks migration compatibility, migrates staging, and deploys
-  configured staging Cloud Run/OCI targets.
+- `scripts/validate-staging.sh` — local staging validator (migrate + `start.sh`
+  with `--env staging` + health checks). This is the normal staging path.
+- `.github/workflows/deploy-cloud.yml` — manual dispatch only; retained for
+  recovery if a Cloud Run staging deployment is ever needed. It no longer runs
+  on push to `main`.
 - `.github/workflows/promote-production.yml` — manual dispatch only. The
-  operator supplies the full commit SHA that passed staging; the
+  operator supplies the full commit SHA that passed local staging; the
   protected `production` environment then gates production migration and
   deployment.
 
@@ -211,7 +239,7 @@ for isolated worktree databases.
 | --- | --- | --- | --- |
 | Unit/component tests | Fixtures and mocks | Mocked | Fast regression coverage |
 | Worktree sandbox | Full local Supabase per worktree | Disabled, mocked, or dedicated test accounts | Interactive agent development |
-| Cloud staging | One shared release database | Staging credentials and release-test resources | Release confidence |
+| Local staging (shared DB) | One shared cloud staging DB, local app per validator | Staging credentials and release-test resources | Release confidence |
 | Production | Production data | Production credentials and resources | Customer operation |
 
 The shared staging environment should have a documented release-test
@@ -234,5 +262,6 @@ Delivered by this change:
 - deterministic email/password seed data;
 - explicit, scoped cleanup for containers and volumes;
 - a complete local interactive-call stack;
-- a staging deployment workflow using staging secrets and migrations; and
+- a local staging validator (`scripts/validate-staging.sh`) using the shared
+  cloud staging database; and
 - a protected, manually dispatched production promotion workflow.

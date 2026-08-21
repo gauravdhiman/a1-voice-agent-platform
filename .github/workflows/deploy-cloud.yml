@@ -1,8 +1,23 @@
-name: Deploy Cloud (staging)
+name: Deploy Cloud (staging) — DISABLED (local staging)
+
+# ---------------------------------------------------------------------------
+# Staging is now validated LOCALLY, not in GitHub Actions.
+#
+#   Application:  local Docker (frontend, backend, voice-ws) via
+#                 ./start.sh start dev --env staging
+#   Database:     cloud staging Supabase (gdzwiwukcwbqohfwxxrx) via .env.staging
+#   Validation:   ./scripts/validate-staging.sh  (migrate + health checks)
+#
+# This workflow is kept for MANUAL recovery only. The automatic
+# push-to-main → Cloud Run staging deployment has been removed per
+# 2026-08: staging uses the local app + cloud DB model already
+# documented in docs/05_operations/staging_environment.md.
+#
+# Production promotion is unchanged and remains manual:
+#   Actions → Promote to production → enter 40-char SHA
+# ---------------------------------------------------------------------------
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # This workflow deliberately deploys only to the GitHub ``staging``
