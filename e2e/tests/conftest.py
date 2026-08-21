@@ -74,13 +74,37 @@ def pytest_runtest_makereport(item, call):
                 report.extra = extra
 
 def setup_boundary_mocks(page: Page):
-    """Intercepts EXTERNAL boundaries only (Supabase Auth)."""
-    
-    # Fixed test user ID matching init-test-db.sql
-    test_user_id = "00000000-0000-0000-0000-000000000000"
+    """Intercepts EXTERNAL boundaries only (Supabase Auth) and suppresses the product tour.
 
-    # 1. Mock Supabase Auth (External Service)
-    page.route("**/auth/v1/signup**", lambda route: route.fulfill(
+    The dashboard product tour (react-joyride) auto-starts on first login and
+    overlays the page with a spotlight that intercepts pointer events. Without
+    suppression every E2E click inside signin_user or the test itself would be
+    swallowed. We seed localStorage so readProductTourStatus returns a terminal
+    value before the provider mounts.
+    """
+
+    # Suppress the product tour for every role the E2E user might have
+    test_user_id = "00000000-0000-0000-0000-000000000000"
+    page.add_init_script(
+        """(function () {
+            const userId = '00000000-0000-0000-0000-000000000000';
+            const version = 'v1';
+            const roles = ['member', 'org_admin', 'platform_admin'];
+            const branches = ['main', 'agents', 'calls', 'skills', 'agent-details'];
+            // The actual keys are 24x7-ai.product-tour.v1.<role>.<userId>[.<branch>]
+            // We seed every role so the mocks in this file can't get out of sync
+            // with the tour's role resolution.
+            for (const role of roles) {
+                const base = `24x7-ai.product-tour.${version}.${role}.${userId}`;
+                for (const branch of branches) {
+                    const key = branch === 'main' ? base : `${base}.${branch}`;
+                    try { localStorage.setItem(key, 'completed'); } catch (_) {}
+                }
+            }
+        })();"""
+    )
+
+    page.route(re.compile(r".*/auth/v1/signup.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'{{"user": {{"id": "{test_user_id}", "email": "test@gmail.com"}}, "session": null}}'
@@ -105,7 +129,7 @@ def setup_boundary_mocks(page: Page):
                 }}
             }}'''
         )
-    page.route("**/auth/v1/token**", handle_token)
+    page.route(re.compile(r".*/auth/v1/token.*"), handle_token)
 
     def handle_user_request(route):
         route.fulfill(
@@ -121,11 +145,11 @@ def setup_boundary_mocks(page: Page):
             }}'''
         )
 
-    page.route("**/auth/v1/user**", handle_user_request)
+    page.route(re.compile(r".*/auth/v1/user.*"), handle_user_request)
 
     # 2. Mock /api/v1/auth/me (Bridges external user to backend)
     # We mock this because it's the very first call and ensures the user exists for the FE
-    page.route("**/api/v1/auth/me", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/auth/me.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''{{
@@ -152,14 +176,68 @@ def setup_boundary_mocks(page: Page):
                         ]
                     }}
                 }}
-            ]
+            ],
+            "current_organization_id": "00000000-0000-0000-0000-000000000001",
+            "permissions": {{"*": ["*"]}},
+            "has_organizations": true
         }}'''
     ))
 
+    # 2b. Mock /api/v1/auth/signin — the actual sign-in endpoint the UI calls.
+    #     auth-service.ts posts {email, password} and expects {access_token, refresh_token}.
+    #     Without this mock the UI shows "An unexpected error occurred".
+    def handle_signin(route):
+        # Simulate credential check: only the E2E test credentials succeed
+        try:
+            body = route.request.post_data_json or {}
+        except Exception:
+            body = {}
+        # Accept both the conftest test user and any test@gmail path the helpers use
+        if body.get("email") in ("test@gmail.com", "test@cogninets.local", "test@247ai.local"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=f'''{{
+                    "access_token": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMC0wMDAwMDAwMDAwMDAwIiwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjo5OTk5OTk5OTk5fQ.c2lnbmF0dXJl",
+                    "refresh_token": "mock-refresh-token-e2e",
+                    "token_type": "bearer",
+                    "expires_in": 3600,
+                    "user": {{
+                        "id": "{test_user_id}",
+                        "email": "test@gmail.com",
+                        "first_name": "Test",
+                        "last_name": "User",
+                        "created_at": "2026-01-21T00:00:00Z",
+                        "updated_at": "2026-01-21T00:00:00Z",
+                        "roles": []
+                    }}
+                }}'''
+            )
+        else:
+            route.fulfill(
+                status=400,
+                content_type="application/json",
+                body='{"detail": {"message": "Invalid credentials", "code": "invalid_credentials"}}'
+            )
+
+    page.route(re.compile(r".*/api/v1/auth/signin.*"), handle_signin)
+
+    # 2b2. Mock check-email — called on blur of email field; without it the
+    #     form shows inline validation errors and the CORS 404 confuses setSession
+    page.route(re.compile(r".*/api/v1/auth/check-email.*"), lambda route: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body='{"exists": true, "sign_in_methods": ["password"], "message": null}'
+    ))
+
+    # 2c. Mock Supabase setSession via /auth/v1/token?grant_type=refresh_token
+    #     After backend signin, the frontend calls supabase.auth.setSession with the
+    #     tokens. In E2E those tokens are mocked JWTs; we intercept the underlying
+    #     Supabase REST call that setSession triggers.
     # 3. Mock /api/v1/organizations (Required for OrganizationCheck component)
     # This is needed for the dashboard to load properly after sign-in
     test_org_id = "00000000-0000-0000-0000-000000000001"
-    page.route("**/api/v1/organizations", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/organizations.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''[{{
@@ -171,12 +249,42 @@ def setup_boundary_mocks(page: Page):
         }}]'''
     ))
 
-    # 4. Mock /api/v1/agents/my-agents (Required for dashboard agents list)
-    page.route("**/api/v1/agents/my-agents", lambda route: route.fulfill(
+    # 4. Mock /api/v1/agents/my-agents (platform_admin cross-org view)
+    page.route(re.compile(r".*/api/v1/agents/my-agents.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body='''[]'''
     ))
+
+    # 5. Mock /api/v1/agents/organization/.* (org-scoped agents — new in #61)
+    #    The agents page now uses the active org for non-platform users.
+    #    Keep this alongside my-agents so both roles resolve.
+    page.route(re.compile(r".*/api/v1/agents/organization/.*"), lambda route: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body='''[]'''
+    ))
+
+    # 6. Mock common dashboard hydration endpoints so page loads do not 404.
+    #    Safe defaults; individual tests override with specific data.
+    # Generic calls mock covering both list (/calls/organization/{id}) and analytics
+    # so dashboard + calls page do not 404/CORS when conftest is the only mock.
+    # Tests that need specific calls data override with their own page.route before signin.
+    def _handle_calls(route):
+        url = route.request.url
+        if "analytics" in url:
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='''{"total_calls_week": 0, "total_calls_month": 0, "avg_duration_seconds": 0, "calls_by_status": [], "calls_by_hour": [], "calls_by_agent": []}'''
+            )
+        else:
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='''{"items": [], "total": 0, "page": 1, "page_size": 25, "total_pages": 0}'''
+            )
+    page.route(re.compile(r".*/api/v1/calls.*"), _handle_calls)
 
 @pytest.fixture(autouse=True)
 def apply_mocks(page: Page):

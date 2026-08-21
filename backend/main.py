@@ -273,16 +273,26 @@ async def lifespan(app: FastAPI):
     # Remove any pre-encryption OAuth client secrets before the refresh worker
     # starts. The migration is idempotent and fails closed: continuing while a
     # known credential migration is broken would leave secrets in auth_config.
-    migrated_client_secrets, migration_error = (
-        await tool_service.migrate_legacy_oauth_client_secrets()
-    )
-    if migration_error:
-        raise RuntimeError(migration_error)
-    if migrated_client_secrets:
+    # In the isolated E2E stack (ENVIRONMENT=test) the Supabase REST endpoint
+    # is a mock (mock-key) so the migration would 401 before it can even read;
+    # the E2E database is fresh with no real secrets to migrate, so we skip it
+    # there rather than crashing the backend. Production and staging still fail
+    # closed — a real secret-store failure must not be silently ignored.
+    if settings.environment == "test":
         logging.info(
-            "Migrated %s legacy OAuth client-secret row(s) to encrypted storage",
-            migrated_client_secrets,
+            "Skipping legacy OAuth client-secret migration in test environment"
         )
+    else:
+        migrated_client_secrets, migration_error = (
+            await tool_service.migrate_legacy_oauth_client_secrets()
+        )
+        if migration_error:
+            raise RuntimeError(migration_error)
+        if migrated_client_secrets:
+            logging.info(
+                "Migrated %s legacy OAuth client-secret row(s) to encrypted storage",
+                migrated_client_secrets,
+            )
 
     # Start token refresh service
     logging.info("Starting token refresh service...")

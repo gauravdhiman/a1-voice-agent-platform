@@ -50,7 +50,7 @@ def setup_billing_context(page, total_credits: int = 1250):
     purchased_credits = max(250, total_credits - subscription_credits)
     expiring_soon = max(100, int(total_credits * 0.08))
     
-    page.route("**/api/v1/billing/balance", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/billing/balance"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'''{{
@@ -77,7 +77,7 @@ def setup_billing_plans_context(page):
         setup_billing_plans_context(page)
         ```
     """
-    page.route("**/api/v1/billing/plans**", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/billing/plans.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body='''[
@@ -94,6 +94,8 @@ def setup_billing_plans_context(page):
                 "included_credits": 5000,
                 "max_users": 10,
                 "features": {"agents": 10, "credits": 5000},
+                "entitlements": {"agents": 10, "credits": 5000},
+                "entitlement_metadata": {},
                 "is_active": true,
                 "trial_period_days": null,
                 "created_at": "2026-01-21T00:00:00Z",
@@ -117,7 +119,7 @@ def setup_credit_products_context(page):
         setup_credit_products_context(page)
         ```
     """
-    page.route("**/api/v1/billing/credit-products?*", lambda route: route.fulfill(
+    page.route(re.compile(r".*/api/v1/billing/credit-products.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body='''[

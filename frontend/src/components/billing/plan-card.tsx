@@ -85,7 +85,7 @@ export function toPlanCardData(plan: CustomerPlanVersion): PlanCardData {
     price_amount_cents: plan.price_amount_cents,
     currency: plan.currency,
     billing_interval: plan.billing_interval,
-    entitlements: Object.entries(plan.entitlements).map(([key, value]) => ({
+    entitlements: Object.entries(plan.entitlements ?? {}).map(([key, value]) => ({
       key,
       label:
         plan.entitlement_metadata?.[key]?.display_name ??
