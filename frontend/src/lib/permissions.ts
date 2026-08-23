@@ -72,6 +72,7 @@ export const P = {
   },
   callLog: {
     read: "call_log:read",
+    delete: "call_log:delete",
   },
   member: {
     read: "member:read",

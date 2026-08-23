@@ -83,6 +83,59 @@ class CallLogService {
   async downloadRecording(callLogId: string): Promise<Blob> {
     return apiClient.getBlob(`${this.base}/${callLogId}/recording`);
   }
+
+  /**
+   * Deletes one private call recording through the authenticated backend.
+   *
+   * The audio object is removed from storage; the call log row itself is
+   * kept for audit. Requires `call_log:delete` (org admin).
+   *
+   * @param callLogId - Call log identifier owning the recording
+   * @throws {Error} When the user lacks permission or the recording is absent
+   */
+  async deleteRecording(callLogId: string): Promise<void> {
+    await apiClient.delete(`${this.base}/${callLogId}/recording`);
+  }
+
+  /**
+   * Deletes several recordings in one audited request.
+   *
+   * Per-item outcomes are returned so partially failed batches surface
+   * exactly which recordings were kept. Call-log rows are never removed.
+   *
+   * @param orgId - Organization every call log must belong to
+   * @param callLogIds - One or more (max 100) call log identifiers
+   * @returns Map of call log id to per-item deletion status
+   * @throws {Error} When the caller lacks org-admin delete rights
+   *
+   * @example
+   * ```typescript
+   * const result = await callLogService.deleteRecordings(orgId, ids);
+   * if (!result.success) console.error(result.error);
+   * ```
+   */
+  async deleteRecordings(
+    orgId: string,
+    callLogIds: string[],
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    data?: { items: { call_log_id: string; status: string }[]; deleted_count: number };
+  }> {
+    try {
+      const response = await apiClient.post<{
+        items: { call_log_id: string; status: string }[];
+        deleted_count: number;
+      }>(`${this.base}/recordings/delete-batch`, {
+        call_log_ids: callLogIds,
+        organization_id: orgId,
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
 }
 
 export const callLogService = new CallLogService();
+
