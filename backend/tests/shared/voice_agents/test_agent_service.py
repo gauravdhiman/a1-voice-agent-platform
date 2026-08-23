@@ -13,7 +13,7 @@ path — these service-level tests do.
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from uuid import uuid4
 
 import pytest
@@ -160,3 +160,139 @@ class TestUpdateAgentPublicPagePublish:
         update_data = table_mock.update.call_args.args[0]
         assert update_data["is_active"] is True
         assert "is_published_on_public_page" not in update_data
+
+
+class TestDemoAgentConfiguration:
+    """Demo-agent state transitions must preserve slug and public-copy rules."""
+
+    @pytest.mark.asyncio
+    async def test_enabling_demo_checks_slug_and_persists_public_fields(
+        self, agent_service, mock_supabase_client
+    ):
+        """Enabling demo mode stores the normalized slug and visitor copy."""
+        agent_id = uuid4()
+        org_id = uuid4()
+        row = _agent_row(agent_id, org_id)
+        row.update(
+            {
+                "is_demo": True,
+                "demo_slug": "acme-demo",
+                "public_description": "A public demo",
+            }
+        )
+
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.side_effect = [
+            MagicMock(data=[{"is_demo": False, "demo_slug": None}]),
+            MagicMock(data=[row]),
+        ]
+
+        with patch.object(
+            agent_service,
+            "_is_demo_slug_taken",
+            new=AsyncMock(return_value=(False, None)),
+        ), patch.object(
+            agent_service,
+            "_with_phone_number_mappings",
+            side_effect=lambda rows: rows,
+        ):
+            result, error = await agent_service.update_agent(
+                agent_id,
+                VoiceAgentUpdate(
+                    is_demo=True,
+                    demo_slug="Acme Demo",
+                    public_description="  A public demo  ",
+                ),
+            )
+
+        assert error is None
+        assert result is not None
+        update_data = table_mock.update.call_args.args[0]
+        assert update_data["is_demo"] is True
+        assert update_data["demo_slug"] == "acme-demo"
+        assert update_data["public_description"] == "A public demo"
+
+    @pytest.mark.asyncio
+    async def test_disabling_demo_clears_slug(self, agent_service, mock_supabase_client):
+        """Turning demo mode off must not leave a public demo slug behind."""
+        agent_id = uuid4()
+        org_id = uuid4()
+        row = _agent_row(agent_id, org_id)
+        row.update({"is_demo": False, "demo_slug": None})
+
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.side_effect = [
+            MagicMock(data=[{"is_demo": True, "demo_slug": "old-demo"}]),
+            MagicMock(data=[row]),
+        ]
+
+        with patch.object(
+            agent_service,
+            "_with_phone_number_mappings",
+            side_effect=lambda rows: rows,
+        ):
+            result, error = await agent_service.update_agent(
+                agent_id, VoiceAgentUpdate(is_demo=False)
+            )
+
+        assert error is None
+        assert result is not None
+        update_data = table_mock.update.call_args.args[0]
+        assert update_data["is_demo"] is False
+        assert update_data["demo_slug"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_demo_agent_by_slug_requires_demo_and_active_state(
+        self, agent_service, mock_supabase_client
+    ):
+        """The demo lookup filters by slug/demo flag and rejects inactive rows."""
+        agent_id = uuid4()
+        org_id = uuid4()
+        row = _agent_row(agent_id, org_id)
+        row.update({"is_demo": True, "demo_slug": "acme-demo", "is_active": True})
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.return_value = MagicMock(data=[row])
+
+        with patch.object(
+            agent_service,
+            "_with_phone_number_mappings",
+            side_effect=lambda rows: rows,
+        ):
+            result, error = await agent_service.get_demo_agent_by_slug(" ACME-DEMO ")
+
+        assert error is None
+        assert result is not None
+        assert result.demo_slug == "acme-demo"
+        assert table_mock.eq.call_args_list[0].args == ("demo_slug", "acme-demo")
+        assert table_mock.eq.call_args_list[1].args == ("is_demo", True)
+
+
+class TestPublicAgentQueries:
+    """Public organization queries must apply the active/published boundary."""
+
+    @pytest.mark.asyncio
+    async def test_get_public_page_agents_filters_by_org_active_and_published(
+        self, agent_service, mock_supabase_client
+    ):
+        """Only active agents explicitly published by the organization are queried."""
+        agent_id = uuid4()
+        org_id = uuid4()
+        row = _agent_row(agent_id, org_id)
+        row.update({"is_active": True, "is_published_on_public_page": True})
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.return_value = MagicMock(data=[row])
+
+        with patch.object(
+            agent_service,
+            "_with_phone_number_mappings",
+            side_effect=lambda rows: rows,
+        ):
+            result, error = await agent_service.get_public_page_agents(org_id)
+
+        assert error is None
+        assert [agent.id for agent in result] == [agent_id]
+        assert table_mock.eq.call_args_list == [
+            call("organization_id", str(org_id)),
+            call("is_published_on_public_page", True),
+            call("is_active", True),
+        ]

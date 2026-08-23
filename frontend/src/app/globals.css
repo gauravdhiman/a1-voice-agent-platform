@@ -452,4 +452,41 @@ html {
   .dialog-content[data-state="closed"] {
     animation: modal-fade-out 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
+
+  /* ── Voice audio orb (AgentAudioOrb) ─────────────────────────────── */
+  /* Breathing core: scales between 1 and --orb-scale (set per state). */
+  @keyframes orb-breathe {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(var(--orb-scale, 1.1));
+    }
+  }
+
+  .animate-orb-breathe {
+    animation: orb-breathe var(--orb-breathe-dur, 2.2s) ease-in-out infinite;
+    will-change: transform;
+  }
+
+  /* Expanding halo ring: grows outward and fades while speaking. */
+  @keyframes orb-halo {
+    0% {
+      transform: scale(0.55);
+      opacity: 0.9;
+    }
+    70% {
+      opacity: 0.25;
+    }
+    100% {
+      transform: scale(1.35);
+      opacity: 0;
+    }
+  }
+
+  .animate-orb-halo {
+    animation: orb-halo var(--orb-halo-dur, 1.6s) cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+    will-change: transform, opacity;
+  }
 }

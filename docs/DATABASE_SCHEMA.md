@@ -229,18 +229,21 @@ Stores voice agent configurations for each organization.
 | is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
 | is_published_on_public_page | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit publish flag for the org public page (`/o/{slug}`). Distinct from `is_active`; both must be true for public listing/calls — migration 20260731000001 |
 | call_recording_enabled | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Explicit per-agent opt-in for call recordings. Runtime recording gates must also allow recording — migration 20260814000001 |
+| is_demo | BOOLEAN | NOT NULL, DEFAULT FALSE | When true, this agent is a demo agent that bypasses credit and concurrency checks and is available on a dedicated public page at `/demo/{demo_slug}`. Platform-admin only; defaults to false — migration 20260820000001 |
+| demo_slug | VARCHAR(100) | NULLABLE, UNIQUE (partial `WHERE demo_slug IS NOT NULL`) | Unique slug for the demo public page (e.g. `acme-dental-demo`); required when `is_demo` is true, must be lowercase alphanumeric plus hyphens. Only demo agents use this column — migration 20260820000001 |
+| public_description | TEXT | NULLABLE | Customer-facing description shown on the public demo page (`/demo/{demo_slug}`). Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); this is marketing copy explaining what the agent does and its scope. UI gated under `is_demo` (platform-admin only) with fallback `public_description → mission → persona` on the page — migration 20260820000002 |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
-
 **Foreign Keys**:
 - `organization_id` → `organizations.id` (CASCADE)
 - `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the System Default preset row — migration 20260729000002)
-
 **Indexes**:
 
 - `ix_voice_agents_preset_id` on `preset_id` — migration 20260729000001
 - `ix_voice_agents_organization_active` on `(organization_id, is_active)` —
   migration `20260812000009`
+- `ix_voice_agents_is_demo` on `(is_demo) WHERE is_demo = true` — migration 20260820000001
+- `uq_voice_agents_demo_slug` unique partial on `(demo_slug) WHERE demo_slug IS NOT NULL` — migration 20260820000001
 **RLS**: Enabled
 **Real-time**: Enabled
 
@@ -1739,6 +1742,8 @@ erDiagram
 67. `20260817000002` - Rename legacy Google Calendar catalog rows to appointment-specific names when the canonical destination is unused. This preserves the migration history already applied to staging.
 68. `20260818000001` - Add/canonicalize the published `Google_calendar_appointment` native catalog row and `Google_calendar_appointment_mcp` platform-owned MCP catalog row. Existing legacy names are renamed only when the canonical destination is unused; agent attachments remain on the same tool row. The MCP row points to the loopback connector started with voice-ws.
 69. `20260819000001` - Grant the Supabase `service_role` schema, table, and sequence access required by the backend and master-data seeder in fresh local projects. Existing public objects are granted dynamically, and default privileges cover future Alembic-created tables and sequences.
+70. `20260820000001` - Add `voice_agents.is_demo BOOLEAN NOT NULL DEFAULT false` + `voice_agents.demo_slug VARCHAR(100) NULLABLE` (unique partial `WHERE demo_slug IS NOT NULL`) + partial index `ix_voice_agents_is_demo WHERE is_demo = true`. When true, the agent is a demo agent that bypasses credit/concurrency checks (`shared/billing/voice_session_entitlement.py:assert_voice_session_allowed` early-return via `agent_is_demo` and `voice-ws/src/call_tracking.py:_bill_completed_call` no-op) and is exposed on a dedicated public page at `/demo/{demo_slug}` (`backend/src/voice_agents/demo_public_routes.py`). Platform-admin only (API `has_role("platform_admin")` guard on `is_demo`/`demo_slug` writes; slug uniqueness enforced via `uq_voice_agents_demo_slug` and service check).
+71. `20260820000002` - Add `voice_agents.public_description TEXT NULLABLE` for the customer-facing demo page copy. Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); shown on `/demo/{demo_slug}` with fallback `public_description → mission → persona`. UI gated under `is_demo` (amber card) and platform-admin only for writes, but column is nullable for all agents so drafting does not require demo enabled.
 
 ---
 

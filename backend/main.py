@@ -34,6 +34,7 @@ from src.security import (
 from src.security.validation_errors import sanitize_validation_errors
 from src.voice_agents import (
     agent_router,
+    demo_public_router,
     embed_router,
     platform_skill_router,
     preset_router,
@@ -180,10 +181,10 @@ def create_app() -> FastAPI:
 
     # Include voice-engine preset routes (platform admin CRUD + published listing)
     app.include_router(preset_router)
-
     # Include embed routes (public, no auth required)
     app.include_router(embed_router)
     app.include_router(public_org_router)
+    app.include_router(demo_public_router)
 
     # Include voice templates routes
     app.include_router(voice_templates_router)

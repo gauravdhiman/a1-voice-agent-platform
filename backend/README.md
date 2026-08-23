@@ -128,6 +128,13 @@ backend/
 
 For detailed API documentation, see [Phone Numbers PRD](../docs/PRD-phone-numbers.md).
 
+### Public agent pages
+
+The unauthenticated public organization and demo-agent endpoints are described
+in [Public Organization and Demo Agent Pages](../docs/02_features/voice_agents/public_agent_pages.md).
+The implementation lives in `src/organization/public_routes.py` and
+`src/voice_agents/demo_public_routes.py`.
+
 ### Example Response
 
 ```bash

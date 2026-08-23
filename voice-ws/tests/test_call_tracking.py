@@ -52,6 +52,10 @@ class _Query:
                     }
                 ]
             )
+        if self.operation == "select" and self.table == "voice_agents":
+            if getattr(self.client, "is_demo_missing", False):
+                raise Exception("column is_demo does not exist")
+            return _Result([{"is_demo": bool(getattr(self.client, "is_demo", False))}])
         if self.operation == "select" and self.table == "credit_events":
             return _Result(
                 [
@@ -61,8 +65,6 @@ class _Query:
                     }
                 ]
             )
-        if self.operation == "insert" and self.table == "credit_transactions":
-            self.client.transaction_payload = self.payload
             return _Result([{"id": str(self.client.transaction_id)}])
         if self.operation == "insert" and self.table == "call_logs":
             self.client.inserts.append(self.payload)
@@ -84,8 +86,6 @@ class _Rpc:
 class _Result:
     def __init__(self, data):
         self.data = data
-
-
 class _Client:
     def __init__(self):
         self.organization_id = uuid4()
@@ -97,6 +97,8 @@ class _Client:
         self.rpc_args = None
         self.rpc_payload = None
         self.event_cost = 10
+        self.is_demo = False
+        self.is_demo_missing = False
         self.rpc_result = {
             "success": True,
             "balance_after": 80,
@@ -217,3 +219,41 @@ async def test_completed_call_with_zero_rate_is_recorded_without_a_debit():
         table == "call_logs" and payload.get("credits_consumed") == 0
         for table, payload in client.updates
     )
+
+
+@pytest.mark.asyncio
+async def test_demo_agent_skips_billing_and_marks_zero_credits():
+    """Demo agents are not billed — zero credits, no RPC."""
+    client = _Client()
+    client.is_demo = True
+
+    await _bill_completed_call(
+        client,
+        call_log_id="call-log-1",
+        organization_id=client.organization_id,
+        duration_seconds=300,
+        agent_id=str(client.transaction_id),
+    )
+
+    assert client.rpc_payload is None
+    assert any(
+        table == "call_logs" and payload.get("credits_consumed") == 0
+        for table, payload in client.updates
+    )
+
+
+@pytest.mark.asyncio
+async def test_demo_agent_missing_column_falls_through_to_normal_billing():
+    """Pre-migration DB without is_demo column falls through to normal billing."""
+    client = _Client()
+    client.is_demo_missing = True
+
+    await _bill_completed_call(
+        client,
+        call_log_id="call-log-1",
+        organization_id=client.organization_id,
+        duration_seconds=61,
+        agent_id=str(client.transaction_id),
+    )
+
+    assert client.rpc_payload is not None

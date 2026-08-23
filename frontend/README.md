@@ -114,6 +114,23 @@ Built with [Shadcn/ui](https://ui.shadcn.com/) for consistent, accessible compon
 npx shadcn@latest add [component-name]
 ```
 
+### Public voice demo visualizers
+
+The public demo supports two final visualizers through the `visualizer` query
+parameter:
+
+- `?visualizer=radial` — default high-energy radial field
+- `?visualizer=lk-bars` — matched-energy agent and user bar pulses
+
+Missing or obsolete visualizer values fall back to `radial`.
+
+Public agent surfaces are documented in
+[`docs/02_features/voice_agents/public_agent_pages.md`](../docs/02_features/voice_agents/public_agent_pages.md):
+
+- `/o/{organization-slug}` lists active agents explicitly published by an organization.
+- `/demo/{demo-slug}` exposes an active platform demo without visitor authentication.
+- Demo pages use `?visualizer=radial` by default or `?visualizer=lk-bars` for the bar treatment.
+
 ## 🔧 Configuration
 
 ### Environment Variables

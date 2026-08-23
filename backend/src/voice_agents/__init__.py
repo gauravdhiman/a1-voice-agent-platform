@@ -1,3 +1,4 @@
+from src.voice_agents.demo_public_routes import demo_public_router
 from src.voice_agents.embed_routes import embed_router
 from src.voice_agents.platform_skill_routes import platform_skill_router
 from src.voice_agents.preset_routes import preset_router
@@ -14,4 +15,5 @@ __all__ = [
     skill_router,
     platform_skill_router,
     preset_router,
+    demo_public_router,
 ]

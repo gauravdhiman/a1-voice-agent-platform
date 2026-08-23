@@ -235,3 +235,45 @@ async def test_assert_voice_session_allowed_allows_with_purchased_credits(monkey
     )
 
     await assert_voice_session_allowed(org_id)
+
+
+@pytest.mark.asyncio
+async def test_assert_voice_session_allowed_bypasses_for_demo_agent(monkeypatch):
+    """Demo agents skip both concurrency and credit gates."""
+    org_id = uuid4()
+    client = MagicMock()
+    # No table calls should be needed beyond the early-return; mock would fail if queried
+    client.table.side_effect = AssertionError("should not query DB for demo bypass")
+    monkeypatch.setattr(
+        "shared.billing.voice_session_entitlement.supabase_config",
+        MagicMock(client=client),
+    )
+    await assert_voice_session_allowed(org_id, agent_is_demo=True)
+    client.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_assert_voice_session_allowed_demo_false_still_enforces(monkeypatch):
+    """agent_is_demo=False still enforces normal checks."""
+    org_id = uuid4()
+    client = MagicMock()
+    sub_execute = MagicMock(data=[{"status": "active", "plan_version_id": str(uuid4())}])
+    ent_execute = MagicMock(data=[])
+    catalog_execute = MagicMock(data=[])
+    min_cost_execute = MagicMock(data=[{"credit_cost": 10}])
+    org_execute = MagicMock(data=[{"credit_balance": 0, "admin_credit_balance": 0, "purchased_credit_balance": 0}])
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.limit.return_value = table
+    table.in_.return_value = table
+    table.order.return_value = table
+    table.execute.side_effect = [sub_execute, ent_execute, catalog_execute, min_cost_execute, org_execute]
+    client.table.return_value = table
+    monkeypatch.setattr(
+        "shared.billing.voice_session_entitlement.supabase_config",
+        MagicMock(client=client),
+    )
+    with pytest.raises(VoiceSessionEntitlementError) as exc_info:
+        await assert_voice_session_allowed(org_id, agent_is_demo=False)
+    assert exc_info.value.code == "INSUFFICIENT_CREDITS"

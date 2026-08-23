@@ -126,5 +126,64 @@ class CallArtifactService:
             )
             return False, str(exc)
 
+    async def mark_recording_deleted(
+        self,
+        artifact: dict[str, Any],
+        *,
+        deleted_by: str,
+        reason: str = "user_requested",
+    ) -> tuple[bool, Optional[str]]:
+        """Tombstone one recording artifact after its object was removed.
+
+        The database row is retained for auditability (mirroring
+        :meth:`mark_recording_missing`), but the status flips to ``deleted``
+        so call-log queries stop advertising a playable recording. Existing
+        metadata is preserved and a ``deletion`` block records who deleted
+        the audio, when, and why.
+
+        Args:
+            artifact: Completed recording metadata row containing its
+                database ID and optional existing metadata.
+            deleted_by: Identifier of the authenticated user who requested
+                the deletion (used for audit).
+            reason: Machine-readable deletion reason; defaults to
+                ``user_requested`` for admin-initiated deletes.
+
+        Returns:
+            A ``(success, error)`` tuple. Database failures are reported via
+            ``error`` without raising.
+
+        Example:
+            ```python
+            ok, error = await call_artifact_service.mark_recording_deleted(
+                artifact, deleted_by=str(user_id)
+            )
+            ```
+        """
+        try:
+            artifact_id = artifact.get("id")
+            if not artifact_id:
+                return False, "Recording artifact identifier is missing"
+            now = datetime.now(timezone.utc).isoformat()
+            metadata = dict(artifact.get("metadata") or {})
+            metadata["deletion"] = {
+                "reason": reason,
+                "deleted_by": deleted_by,
+                "deleted_at": now,
+            }
+            self.supabase.table("call_artifacts").update(
+                {
+                    "status": "deleted",
+                    "metadata": metadata,
+                    "updated_at": now,
+                }
+            ).eq("id", str(artifact_id)).execute()
+            return True, None
+        except Exception as exc:  # noqa: BLE001 - service boundary
+            logger.error(
+                "Error marking recording artifact deleted: %s", exc, exc_info=True
+            )
+            return False, str(exc)
+
 
 call_artifact_service = CallArtifactService()

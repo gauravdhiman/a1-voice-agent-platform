@@ -155,6 +155,7 @@ async def _handle_pipecat_incoming(
         await assert_voice_session_allowed(
             agent.organization_id,
             current_call_sid=call_sid,
+            agent_is_demo=bool(getattr(agent, "is_demo", False)),
         )
     except VoiceSessionEntitlementError as exc:
         _public_code, public_message = get_public_voice_session_error(exc.code)

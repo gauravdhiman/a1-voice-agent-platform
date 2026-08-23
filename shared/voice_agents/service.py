@@ -119,6 +119,30 @@ class VoiceAgentService:
                 e,
             )
             return agent_rows
+    async def _is_demo_slug_taken(
+        self, slug: str, exclude_id: Optional[UUID] = None
+    ) -> tuple[bool, Optional[str]]:
+        """Check if a demo slug is already taken.
+
+        Args:
+            slug: Normalized demo slug to check.
+            exclude_id: Agent ID to exclude (for updates).
+
+        Returns:
+            Tuple of (is_taken, error). Error is set if query fails.
+        """
+        try:
+            query = self.supabase.table("voice_agents").select("id").eq("demo_slug", slug).limit(1)
+            response = query.execute()
+            if not response.data:
+                return False, None
+            if exclude_id and str(response.data[0].get("id")) == str(exclude_id):
+                return False, None
+            return True, None
+        except Exception as e:
+            logger.error("Error checking demo slug uniqueness for %s: %s", slug, e, exc_info=True)
+            return False, str(e)
+
 
     @tracer.start_as_current_span("voice_agent.create_agent")
     async def create_agent(
@@ -127,6 +151,17 @@ class VoiceAgentService:
         """Create a new voice agent."""
         agent_operations_counter.add(1, {"operation": "create_agent"})
         try:
+            # Demo agents require a unique slug when is_demo is true.
+            if getattr(agent_data, "is_demo", False):
+                if not getattr(agent_data, "demo_slug", None):
+                    return None, "Demo slug is required when is_demo is true"
+                taken, err = await self._is_demo_slug_taken(agent_data.demo_slug)
+                if err:
+                    return None, err
+                if taken:
+                    return None, "Demo slug already taken"
+            # Non-demo agents should not retain a demo slug.
+            demo_slug_value = agent_data.demo_slug if getattr(agent_data, "is_demo", False) else None
             response = (
                 self.supabase.table("voice_agents")
                 .insert(
@@ -141,6 +176,9 @@ class VoiceAgentService:
                         "custom_instructions": agent_data.custom_instructions,
                         "instructions_markdown": agent_data.instructions_markdown,
                         "call_recording_enabled": agent_data.call_recording_enabled,
+                        "is_demo": bool(getattr(agent_data, "is_demo", False)),
+                        "demo_slug": demo_slug_value,
+                        "public_description": getattr(agent_data, "public_description", None),
                         "preset_id": (
                             str(agent_data.preset_id) if agent_data.preset_id else None
                         ),
@@ -315,20 +353,70 @@ class VoiceAgentService:
     ) -> tuple[Optional[VoiceAgent], Optional[str]]:
         """Update a voice agent."""
         try:
-            # `mode="json"` coerces non-JSON-native fields (e.g. preset_id
-            # UUID -> str) so the payload is serializable by Postgrest's stdlib
-            # json encoder. Without it, a preset_id UUID raises
-            # "Object of type UUID is not JSON serializable" on the Supabase
-            # update (HTTP 400).
             update_data = agent_data.model_dump(exclude_unset=True, mode="json")
             if not update_data:
                 return await self.get_agent_by_id(agent_id)
 
             # Inactive agents must not remain listed on the public org page.
-            # Clearing publish here closes the activate→publish→deactivate loophole
-            # where a deactivated agent would otherwise stay publicly callable.
             if update_data.get("is_active") is False:
                 update_data["is_published_on_public_page"] = False
+
+            # Demo flag/slug handling — only relevant when either field is touched.
+            if "is_demo" in update_data or "demo_slug" in update_data:
+                # Fetch current demo state for validation (avoid extra fetch if both supplied)
+                current_is_demo = None
+                current_demo_slug = None
+                try:
+                    cur_resp = (
+                        self.supabase.table("voice_agents")
+                        .select("is_demo, demo_slug")
+                        .eq("id", str(agent_id))
+                        .limit(1)
+                        .execute()
+                    )
+                    if cur_resp.data:
+                        current_is_demo = bool(cur_resp.data[0].get("is_demo"))
+                        current_demo_slug = cur_resp.data[0].get("demo_slug")
+                except Exception:
+                    # Best-effort: fall through to validation based on update_data alone
+                    pass
+
+                new_is_demo = update_data.get("is_demo", current_is_demo)
+                new_slug = update_data.get("demo_slug", current_demo_slug)
+
+                if new_is_demo is True:
+                    # Demo enabled requires a slug — infer from either field
+                    effective_slug = update_data.get("demo_slug") if "demo_slug" in update_data else new_slug
+                    if not effective_slug:
+                        return None, "Demo slug is required when is_demo is true"
+                    # Normalize already handled by model validator, but ensure lower
+                    effective_slug = str(effective_slug).strip().lower()
+                    taken, err = await self._is_demo_slug_taken(effective_slug, exclude_id=agent_id)
+                    if err:
+                        return None, err
+                    if taken:
+                        return None, "Demo slug already taken"
+                    update_data["demo_slug"] = effective_slug
+                    update_data["is_demo"] = True
+                elif new_is_demo is False:
+                    # Turning off demo clears the slug regardless of supplied value
+                    update_data["is_demo"] = False
+                    update_data["demo_slug"] = None
+                else:
+                    # demo_slug change for already-demo agent (is_demo not in payload)
+                    if "demo_slug" in update_data and current_is_demo:
+                        slug_val = update_data["demo_slug"]
+                        if slug_val:
+                            taken, err = await self._is_demo_slug_taken(slug_val, exclude_id=agent_id)
+                            if err:
+                                return None, err
+                            if taken:
+                                return None, "Demo slug already taken"
+                        else:
+                            return None, "Demo slug cannot be empty for a demo agent"
+                    elif "demo_slug" in update_data and not current_is_demo:
+                        # Non-demo agent should not retain a demo slug
+                        update_data["demo_slug"] = None
 
             response = (
                 self.supabase.table("voice_agents")
@@ -342,6 +430,35 @@ class VoiceAgentService:
             return VoiceAgent(**agent_dict), None
         except Exception as e:
             logger.error(f"Error updating agent {agent_id}: {e}")
+            return None, str(e)
+
+    @tracer.start_as_current_span("voice_agent.get_demo_agent_by_slug")
+    async def get_demo_agent_by_slug(
+        self, demo_slug: str
+    ) -> tuple[Optional[VoiceAgent], Optional[str]]:
+        """Fetch a demo agent by its public demo slug.
+
+        Only returns the agent if it is marked as demo and active.
+        """
+        try:
+            normalized = str(demo_slug).strip().lower()
+            response = (
+                self.supabase.table("voice_agents")
+                .select("*")
+                .eq("demo_slug", normalized)
+                .eq("is_demo", True)
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None, "Demo agent not found"
+            agent_dict = self._with_phone_number_mappings([response.data[0]])[0]
+            agent = VoiceAgent(**agent_dict)
+            if not agent.is_active:
+                return None, "Demo agent is not active"
+            return agent, None
+        except Exception as e:
+            logger.error("Error getting demo agent by slug %s: %s", demo_slug, e, exc_info=True)
             return None, str(e)
 
     @tracer.start_as_current_span("voice_agent.delete_agent")

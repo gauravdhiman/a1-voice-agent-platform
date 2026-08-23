@@ -153,3 +153,49 @@ class TestCallRecording:
         update = VoiceAgentUpdate(call_recording_enabled=True)
 
         assert update.call_recording_enabled is True
+
+
+class TestPublicAgentConfiguration:
+    """Validate public organization and demo-agent model fields."""
+
+    def test_public_and_demo_fields_default_to_private(self):
+        """New agents must remain private and non-demo by default."""
+        agent = VoiceAgentBase(name="Test")
+
+        assert agent.is_published_on_public_page is False
+        assert agent.is_demo is False
+        assert agent.demo_slug is None
+        assert agent.public_description is None
+
+    def test_demo_slug_is_normalized_for_create_and_update(self):
+        """Demo slugs are lowercased and whitespace becomes hyphens."""
+        created = VoiceAgentCreate(
+            name="Demo",
+            organization_id=UUID("00000000-0000-0000-0000-000000000001"),
+            is_demo=True,
+            demo_slug="  Acme Dental Demo  ",
+        )
+        updated = VoiceAgentUpdate(demo_slug="  Follow Up Demo  ")
+
+        assert created.demo_slug == "acme-dental-demo"
+        assert updated.demo_slug == "follow-up-demo"
+
+    @pytest.mark.parametrize(
+        "slug",
+        ["a", "has_underscore", "has/slash", "has.dot", "x" * 101],
+    )
+    def test_demo_slug_rejects_invalid_values(self, slug):
+        """Demo slugs must use the documented URL-safe format and length."""
+        with pytest.raises(ValidationError, match="Demo slug"):
+            VoiceAgentBase(name="Demo", demo_slug=slug)
+
+    def test_public_description_is_trimmed_and_supported_on_update(self):
+        """Marketing copy is trimmed and can be changed independently."""
+        agent = VoiceAgentBase(
+            name="Demo",
+            public_description="  A helpful public description.  ",
+        )
+        update = VoiceAgentUpdate(public_description="  Updated copy.  ")
+
+        assert agent.public_description == "A helpful public description."
+        assert update.public_description == "Updated copy."

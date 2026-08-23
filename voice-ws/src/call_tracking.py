@@ -98,7 +98,7 @@ async def end_call_tracking(
     try:
         lookup = (
             client.table("call_logs")
-            .select("organization_id, started_at")
+            .select("organization_id, agent_id, started_at")
             .eq("id", call_log_id)
             .limit(1)
             .execute()
@@ -135,10 +135,10 @@ async def end_call_tracking(
             call_log_id=call_log_id,
             organization_id=UUID(str(row["organization_id"])),
             duration_seconds=duration_seconds,
+            agent_id=row.get("agent_id"),
         )
     except Exception:
         logger.exception("Failed to finalize call log id=%s", call_log_id)
-
 
 async def _bill_completed_call(
     client: object,
@@ -146,14 +146,45 @@ async def _bill_completed_call(
     call_log_id: str,
     organization_id: UUID,
     duration_seconds: int,
+    agent_id: Optional[str] = None,
 ) -> None:
     """Debit voice minutes and attach the ledger row to a completed call.
 
     Billing is best-effort during websocket teardown: a ledger failure is
     logged, but it must not keep the worker from closing the call cleanly.
     The atomic RPC still prevents concurrent sessions from overspending.
+
+    Demo agents (``voice_agents.is_demo = true``) are not billed:
+    the call is recorded with ``credits_consumed=0`` and no ledger row.
     """
     try:
+        # Demo-agent fast-path: no debit, just mark zero consumption.
+        if agent_id:
+            try:
+                demo_result = (
+                    client.table("voice_agents")
+                    .select("is_demo")
+                    .eq("id", str(agent_id))
+                    .limit(1)
+                    .execute()
+                )
+                if demo_result.data and bool(demo_result.data[0].get("is_demo")):
+                    logger.info(
+                        "Skipping billing for demo agent agent_id=%s call_id=%s",
+                        agent_id,
+                        call_log_id,
+                    )
+                    client.table("call_logs").update({"credits_consumed": 0}).eq(
+                        "id", call_log_id
+                    ).execute()
+                    return
+            except Exception:
+                logger.debug(
+                    "Demo-agent check failed for agent_id=%s — proceeding to normal billing",
+                    agent_id,
+                    exc_info=True,
+                )
+
         event_result = (
             client.table("credit_events")
             .select("id, credit_cost")

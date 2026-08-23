@@ -33,6 +33,30 @@ the final integration layer, not the only regression mechanism.
 3.  **CI/CD Integration**: Ensure tests are run automatically in the continuous integration pipeline.
 4.  **Code Coverage**: Aim for high code coverage, but prioritize meaningful tests over coverage percentage.
 
+## Public agent and demo-page coverage
+
+The public-agent feature is intentionally tested across the same boundaries it
+uses in production:
+
+| Layer | Coverage |
+| --- | --- |
+| Shared model | Defaults, slug normalization/validation, and public-description handling |
+| Shared service | Active/published filtering, demo slug uniqueness checks, demo enable/disable transitions |
+| Backend routes | Public organization access/list/token endpoints, demo metadata/token endpoints, and platform-admin-only demo writes |
+| Frontend services | Public metadata, access-token, call-token, and safe error contracts |
+| Browser E2E | Open/protected organization pages, public demo page, visualizer default/selection, and dashboard controls |
+
+Run the isolated browser suite with:
+
+```bash
+./scripts/run-e2e.sh
+```
+
+The relevant Playwright scenarios are in
+[`e2e/tests/test_public_agent_pages.py`](../../e2e/tests/test_public_agent_pages.py).
+They use boundary mocks for auth and public API responses, while the runner
+still builds the real frontend/backend stack and applies the real migrations.
+
 ## Best Practices
 
 - **Clear and Concise Tests**: Tests should be easy to read and understand.

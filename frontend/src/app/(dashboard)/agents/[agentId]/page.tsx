@@ -191,6 +191,9 @@ export default function AgentDetailPage() {
     use_platform_credits: boolean;
     instructions_markdown: string;
     preset_id: string | null;
+    is_demo: boolean;
+    demo_slug: string;
+    public_description: string;
   }>({
     name: "",
     persona: "",
@@ -201,9 +204,10 @@ export default function AgentDetailPage() {
     use_platform_credits: false,
     instructions_markdown: "",
     preset_id: null,
+    is_demo: false,
+    demo_slug: "",
+    public_description: "",
   });
-
-  // Fetch data using React Query
   const {
     data: agent,
     isLoading: agentLoading,
@@ -372,6 +376,9 @@ export default function AgentDetailPage() {
       use_platform_credits: agent.use_platform_credits || false,
       instructions_markdown: agent.instructions_markdown || "",
       preset_id: agent.preset_id ?? null,
+      is_demo: Boolean((agent as unknown as { is_demo?: boolean }).is_demo),
+      demo_slug: (agent as unknown as { demo_slug?: string | null }).demo_slug || "",
+      public_description: (agent as unknown as { public_description?: string | null }).public_description || "",
     });
 
     if (!agent.instructions_markdown?.trim()) {
@@ -390,7 +397,6 @@ export default function AgentDetailPage() {
           // Keep the placeholder available when legacy Markdown generation fails.
         });
     }
-
     return () => {
       cancelled = true;
     };
@@ -440,26 +446,44 @@ export default function AgentDetailPage() {
   const handleSaveAgent = useCallback(async () => {
     if (!agentId) return;
 
+    // Demo slug validation — only enforced for platform admins when demo is on
+    if (isPlatformAdmin && agentForm.is_demo && !agentForm.demo_slug.trim()) {
+      toast.error("Demo slug is required when demo is enabled");
+      return;
+    }
+    if (isPlatformAdmin && agentForm.is_demo && !/^[a-z0-9-]+$/.test(agentForm.demo_slug.trim().toLowerCase())) {
+      toast.error("Demo slug can only contain lowercase letters, numbers, and hyphens");
+      return;
+    }
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = {
+        ...agentForm,
+        instructions_markdown: buildAgentInstructionsMarkdown({
+          role: agentForm.persona,
+          tone: agentForm.tone,
+          markdown: agentForm.instructions_markdown,
+        }),
+      };
+      // Strip demo fields for non-platform-admins so the backend guard never sees them.
+      if (!isPlatformAdmin) {
+        delete (payload as Record<string, unknown>).is_demo;
+        delete (payload as Record<string, unknown>).demo_slug;
+        delete (payload as Record<string, unknown>).public_description;
+      } else if (!payload.is_demo) {
+        // Non-demo agents should not retain a stale demo slug (public description is kept as draft)
+        (payload as Record<string, unknown>).demo_slug = null;
+      }
       await updateAgentMutation.mutateAsync({
         agentId,
-        data: {
-          ...agentForm,
-          instructions_markdown: buildAgentInstructionsMarkdown({
-            role: agentForm.persona,
-            tone: agentForm.tone,
-            markdown: agentForm.instructions_markdown,
-          }),
-        },
+        data: payload as unknown as typeof agentForm,
       });
     } catch (error) {
       console.error("Failed to save agent:", error);
     } finally {
       setSaving(false);
     }
-  }, [agentId, agentForm, updateAgentMutation]);
-
+  }, [agentId, agentForm, updateAgentMutation, isPlatformAdmin]);
   const handleDeleteAgent = async () => {
     setDeleteDialogOpen(true);
   };
@@ -1088,6 +1112,90 @@ export default function AgentDetailPage() {
                       When enabled, your team can review recordings of this agent&apos;s calls. Inform callers and follow applicable consent requirements.
                     </p>
                   </div>
+
+                  {isPlatformAdmin && (
+                    <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="is-demo"
+                          checked={agentForm.is_demo}
+                          onCheckedChange={(checked) =>
+                            setAgentForm({
+                              ...agentForm,
+                              is_demo: checked === true,
+                              demo_slug: checked ? agentForm.demo_slug : "",
+                            })
+                          }
+                          disabled={!canEdit}
+                        />
+                        <Label htmlFor="is-demo" className="text-sm font-medium text-amber-900 cursor-pointer">
+                          Demo agent (bypasses credits, public at /demo/&#123;slug&#125;)
+                        </Label>
+                      </div>
+                      <p className="text-xs text-amber-800">
+                        Platform-admin only. Demo agents bypass credit and concurrency checks and are available on a dedicated public page with a unique slug. Business context should live in the agent&apos;s instructions.
+                      </p>
+                      {agentForm.is_demo && (
+                        <div className="space-y-3 pt-1">
+                          <div className="space-y-2">
+                            <Label htmlFor="demo-slug" className="text-xs">
+                              Demo slug *
+                            </Label>
+                            <Input
+                              id="demo-slug"
+                              value={agentForm.demo_slug}
+                              onChange={(e) =>
+                                setAgentForm({
+                                  ...agentForm,
+                                  demo_slug: e.target.value.toLowerCase().replace(/\s+/g, "-"),
+                                })
+                              }
+                              placeholder="e.g. acme-dental-demo"
+                              disabled={!canEdit}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Unique across all demo agents. Lowercase letters, numbers, hyphens only. Public page: <code>/demo/{agentForm.demo_slug || "your-slug"}</code>
+                              {agentForm.demo_slug && (
+                                <span>
+                                  {" "}
+                                  —{" "}
+                                  <a
+                                    href={`/demo/${agentForm.demo_slug}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                                  >
+                                    {typeof window !== "undefined" ? `${window.location.origin}/demo/${agentForm.demo_slug}` : `/demo/${agentForm.demo_slug}`} ↗
+                                  </a>
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="public-description" className="text-xs">
+                              Public description
+                            </Label>
+                            <Textarea
+                              id="public-description"
+                              value={agentForm.public_description}
+                              onChange={(e) =>
+                                setAgentForm({
+                                  ...agentForm,
+                                  public_description: e.target.value,
+                                })
+                              }
+                              placeholder="e.g. This demo agent helps book dental appointments, answers FAQs about cleanings and insurance, and showcases our 24x7 AI voice experience."
+                              disabled={!canEdit}
+                              rows={3}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Shown on <code>/demo/{agentForm.demo_slug || "your-slug"}</code> to visitors. If empty, the agent&apos;s mission will be shown.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
