@@ -30,8 +30,7 @@
 | Role | Grants |
 |------|--------|
 | `platform_admin` | Wildcard `*:*` (resolver short-circuit). Not org-scoped. |
-| `org_admin` (on org) | All N1 org-scoped permissions **except** `platform:admin`. Includes agent/phone/skill CRUD, member CRUD, `billing:manage`, organization update, etc. |
-| `regular_user` (on org) | **Read only** on org-scoped resources: `agent:read`, `phone_number:read`, `skill:read`, `call_log:read`, `member:read`, `organization:read`. **No** billing. **No** writes. |
+| `org_admin` (on org) | All N1 org-scoped permissions **except** `platform:admin`. Includes agent/phone/skill CRUD, member CRUD, `billing:manage`, `call_log:delete` (recording audio only — call log rows are kept for audit), organization update, etc. |
 
 ## Resource × action matrix (N1 + seed)
 
@@ -40,7 +39,7 @@
 | `agent` | ✓ | ✓ | ✓ | ✓ | |
 | `phone_number` | ✓ | ✓ | ✓ | ✓ | |
 | `skill` | ✓ | ✓ | ✓ | ✓ | |
-| `call_log` | ✓ | | | | |
+| `call_log` | ✓ | | | ✓ (recordings only; org admin) | |
 | `member` | ✓ | ✓ (invite) | ✓ (roles) | ✓ (remove) | |
 | `organization` | ✓ | ✓ | ✓ | ✓ | |
 | `billing` | ✓ (seed) | | ✓ (seed) | | `manage`, `subscribe` |

@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { ApiRequestError } from "@/lib/api/client";
 import { callLogService } from "@/services/call-log-service";
 import type { CallLog, CallLogsResponse } from "@/services/call-log-service";
@@ -23,6 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -34,6 +41,7 @@ import {
   PhoneMissed,
   PhoneOff,
   RefreshCw,
+  Trash2,
   Zap,
 } from "lucide-react";
 
@@ -84,6 +92,11 @@ export interface CallLogListProps {
   emptyDescription?: string;
   /** Optional product-tour hook for the card. */
   dataTour?: string;
+
+  /** Whether the current user may delete recordings (org admins). */
+  canDeleteRecordings?: boolean;
+  /** Organization id used to scope batch recording deletion. */
+  organizationId?: string;
 }
 
 function statusBadge(status: string) {
@@ -146,6 +159,8 @@ export function CallLogList({
   agentNameMap = {},
   showAgentColumn = true,
   canViewRecordings,
+  canDeleteRecordings = false,
+  organizationId,
   title = "Recent Calls",
   subtitle,
   emptyTitle = "No calls yet",
@@ -162,6 +177,104 @@ export function CallLogList({
   const [recordingUnavailableIds, setRecordingUnavailableIds] = useState<
     Set<string>
   >(() => new Set());
+
+  // --- Recording deletion (org admins) ---
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletedFlashIds, setDeletedFlashIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  /** Toggles one call's selection for batch recording deletion. */
+  const toggleSelected = useCallback((callId: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(callId)) {
+        next.delete(callId);
+      } else {
+        next.add(callId);
+      }
+      return next;
+    });
+  }, []);
+
+  /** Clears the current selection after a completed or cancelled bulk op. */
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  /** Deletes one recording after plain confirmation; keeps the call log. */
+  const handleConfirmSingleDelete = useCallback(async () => {
+    if (!singleDeleteId) return;
+    setDeleteInProgress(true);
+    setDeleteError(null);
+    try {
+      await callLogService.deleteRecording(singleDeleteId);
+      setDeletedFlashIds((previous) => {
+        const next = new Set(previous);
+        next.add(singleDeleteId);
+        return next;
+      });
+      setSingleDeleteId(null);
+      await onRefresh();
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiRequestError && err.status === 403
+          ? "Only organization admins can delete recordings."
+          : "Could not delete the recording. Please try again.",
+      );
+    } finally {
+      setDeleteInProgress(false);
+    }
+  }, [singleDeleteId, onRefresh]);
+
+  /**
+   * Deletes every selected recording in one audited batch request.
+   * Surfaces per-item outcomes so partially failed batches are visible.
+   */
+  const handleConfirmBulkDelete = useCallback(async () => {
+    if (!organizationId || selectedIds.size === 0) return;
+    setDeleteInProgress(true);
+    setDeleteError(null);
+    try {
+      const result = await callLogService.deleteRecordings(
+        organizationId,
+        [...selectedIds],
+      );
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? "Batch deletion failed");
+      }
+      const deleted = new Set(
+        result.data.items
+          .filter((item) => item.status === "deleted")
+          .map((item) => item.call_log_id),
+      );
+      const kept = selectedIds.size - result.data.deleted_count;
+      setDeletedFlashIds((previous) => {
+        const next = new Set(previous);
+        for (const id of deleted) next.add(id);
+        return next;
+      });
+      // On a partially failed batch, keep the dialog open so the outcome
+      // summary stays visible and the admin can retry the failed items.
+      if (kept === 0) {
+        setBulkDeleteOpen(false);
+        clearSelection();
+      } else {
+        setDeleteError(
+          `${result.data.deleted_count} deleted, ${kept} could not be removed.`,
+        );
+      }
+      await onRefresh();
+    } catch (err) {
+      setDeleteError((err as Error).message);
+    } finally {
+      setDeleteInProgress(false);
+    }
+  }, [organizationId, selectedIds, clearSelection, onRefresh]);
 
   const handleListen = useCallback(async (callId: string) => {
     setRecordingCallId(callId);
@@ -245,6 +358,35 @@ export function CallLogList({
             </Button>
           </div>
         </CardHeader>
+        {canDeleteRecordings && selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-6 py-3">
+            <span
+              className="text-sm font-medium text-foreground"
+              data-tour="recording-bulk-count"
+            >
+              {selectedIds.size} recording{selectedIds.size !== 1 ? "s" : ""}{" "}
+              selected
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearSelection}
+              disabled={deleteInProgress}
+            >
+              Clear selection
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkDeleteOpen(true)}
+              disabled={deleteInProgress}
+              data-tour="recording-bulk-delete"
+            >
+              <Trash2 className="mr-1 h-4 w-4" />
+              Delete recordings
+            </Button>
+          </div>
+        )}
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
@@ -269,6 +411,36 @@ export function CallLogList({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
+                      {canDeleteRecordings && (
+                        <th className="w-10 px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={
+                              data.items.length > 0 &&
+                              data.items.every((call) =>
+                                selectedIds.has(call.id),
+                              )
+                            }
+                            onChange={(event) => {
+                              const next = new Set<string>();
+                              if (event.target.checked) {
+                                for (const call of data.items) {
+                                  if (
+                                    call.recording_available &&
+                                    !deletedFlashIds.has(call.id)
+                                  ) {
+                                    next.add(call.id);
+                                  }
+                                }
+                              }
+                              setSelectedIds(next);
+                            }}
+                            aria-label="Select all calls on this page for recording deletion"
+                            data-tour="recording-select-all"
+                            className="h-4 w-4 cursor-pointer accent-primary"
+                          />
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left font-medium text-muted-foreground">
                         Date &amp; Time
                       </th>
@@ -307,6 +479,14 @@ export function CallLogList({
                         recordingUnavailableIds={recordingUnavailableIds}
                         recordingLoadingId={recordingLoadingId}
                         onListen={handleListen}
+                        canDeleteRecordings={canDeleteRecordings}
+                        deleted={
+                          deletedFlashIds.has(call.id) ||
+                          !call.recording_available
+                        }
+                        selected={selectedIds.has(call.id)}
+                        onToggleSelect={toggleSelected}
+                        onRequestDelete={setSingleDeleteId}
                       />
                     ))}
                   </tbody>
@@ -324,6 +504,13 @@ export function CallLogList({
                     recordingUnavailableIds={recordingUnavailableIds}
                     recordingLoadingId={recordingLoadingId}
                     onListen={handleListen}
+                    canDeleteRecordings={canDeleteRecordings}
+                    deleted={
+                      deletedFlashIds.has(call.id) || !call.recording_available
+                    }
+                    selected={selectedIds.has(call.id)}
+                    onToggleSelect={toggleSelected}
+                    onRequestDelete={setSingleDeleteId}
                   />
                 ))}
               </div>
@@ -398,7 +585,168 @@ export function CallLogList({
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={singleDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteInProgress) {
+            setSingleDeleteId(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Delete recording
+            </DialogTitle>
+            <DialogDescription>
+              The audio file will be permanently deleted. The call log entry,
+              analytics, and credits history are kept. This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setSingleDeleteId(null)}
+              disabled={deleteInProgress}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleConfirmSingleDelete()}
+              disabled={deleteInProgress}
+              data-tour="recording-delete-confirm"
+            >
+              {deleteInProgress ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                "Delete recording"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <BulkRecordingDeleteDialog
+        open={bulkDeleteOpen}
+        selectedCount={selectedIds.size}
+        inProgress={deleteInProgress}
+        error={deleteError}
+        onOpenChange={(open) => {
+          if (!open && !deleteInProgress) {
+            setBulkDeleteOpen(false);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={() => void handleConfirmBulkDelete()}
+      />
     </>
+  );
+}
+
+/**
+ * Confirmation dialog for deleting several recordings at once.
+ *
+ * Requires typing the exact number of selected recordings so a stale
+ * selection or wrong filter cannot be confirmed by muscle memory.
+ */
+function BulkRecordingDeleteDialog({
+  open,
+  selectedCount,
+  inProgress,
+  error,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  selectedCount: number;
+  inProgress: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  const [confirmationText, setConfirmationText] = useState("");
+  useEffect(() => {
+    if (!open) setConfirmationText("");
+  }, [open]);
+  const isConfirmationValid =
+    confirmationText.trim() === String(selectedCount) && selectedCount > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            Delete {selectedCount} recording{selectedCount !== 1 ? "s" : ""}
+          </DialogTitle>
+          <DialogDescription>
+            {selectedCount} audio file{selectedCount !== 1 ? "s" : ""} will be{" "}
+            permanently deleted. Call log entries, analytics, and credit
+            history are kept. This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        {error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="bulk-recording-delete-count">
+            Type{" "}
+            <strong className="font-mono">{selectedCount}</strong> to confirm:
+          </Label>
+          <Input
+            id="bulk-recording-delete-count"
+            value={confirmationText}
+            onChange={(event) => setConfirmationText(event.target.value)}
+            placeholder={String(selectedCount)}
+            disabled={inProgress}
+            inputMode="numeric"
+            className="font-mono"
+            data-tour="recording-bulk-delete-input"
+          />
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={inProgress}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={inProgress || !isConfirmationValid}
+            data-tour="recording-bulk-delete-confirm"
+          >
+            {inProgress ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              `Delete ${selectedCount} recording${selectedCount !== 1 ? "s" : ""}`
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -410,34 +758,76 @@ interface CallLogRowProps {
   recordingUnavailableIds: Set<string>;
   recordingLoadingId: string | null;
   onListen: (callId: string) => void;
+
+  /** Whether the delete-recording action is offered on this row. */
+  canDeleteRecordings: boolean;
+  /** Whether this row's recording is already deleted. */
+  deleted?: boolean;
+  /** Whether this row is selected for batch deletion. */
+  selected?: boolean;
+  /** Toggles the row's batch-selection checkbox. */
+  onToggleSelect?: (callId: string) => void;
+  /** Opens the single-delete confirmation for this row. */
+  onRequestDelete?: (callId: string) => void;
 }
 
 function CallLogRecordingAction({
   call,
   canViewRecordings,
+  canDeleteRecordings,
+  deleted = false,
   recordingUnavailableIds,
   recordingLoadingId,
   onListen,
-}: Pick<CallLogRowProps, "call" | "canViewRecordings" | "recordingUnavailableIds" | "recordingLoadingId" | "onListen">) {
-  if (!canViewRecordings) return null;
-  if (!call.recording_available || recordingUnavailableIds.has(call.id)) {
-    return <span className="text-xs text-muted-foreground">Unavailable</span>;
-  }
+  onRequestDelete,
+}: Pick<
+  CallLogRowProps,
+  | "call"
+  | "canViewRecordings"
+  | "canDeleteRecordings"
+  | "deleted"
+  | "recordingUnavailableIds"
+  | "recordingLoadingId"
+  | "onListen"
+  | "onRequestDelete"
+>) {
+  const unavailable =
+    deleted || !call.recording_available || recordingUnavailableIds.has(call.id);
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => onListen(call.id)}
-      disabled={recordingLoadingId === call.id}
-      aria-label={`Listen to recording for call ${call.id}`}
-    >
-      {recordingLoadingId === call.id ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : (
-        <Headphones className="h-4 w-4" />
+    <div className="inline-flex items-center justify-end gap-1">
+      {canViewRecordings &&
+        (unavailable ? (
+          <span className="text-xs text-muted-foreground">Unavailable</span>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onListen(call.id)}
+            disabled={recordingLoadingId === call.id}
+            aria-label={`Listen to recording for call ${call.id}`}
+          >
+            {recordingLoadingId === call.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Headphones className="h-4 w-4" />
+            )}
+            <span className="ml-1">Listen</span>
+          </Button>
+        ))}
+      {canDeleteRecordings && !unavailable && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onRequestDelete?.(call.id)}
+          disabled={recordingLoadingId === call.id}
+          aria-label={`Delete recording for call ${call.id}`}
+          data-tour={`recording-delete-${call.id}`}
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       )}
-      <span className="ml-1">Listen</span>
-    </Button>
+    </div>
   );
 }
 
@@ -446,12 +836,33 @@ function CallLogTableRow({
   agentNameMap,
   showAgentColumn,
   canViewRecordings,
+  canDeleteRecordings,
+  deleted = false,
+  selected = false,
   recordingUnavailableIds,
   recordingLoadingId,
   onListen,
+  onToggleSelect,
+  onRequestDelete,
 }: CallLogRowProps) {
   return (
-    <tr className="transition-colors hover:bg-muted/20">
+    <tr
+      className={`transition-colors hover:bg-muted/20 ${
+        selected ? "bg-primary/5" : ""
+      }`}
+    >
+      {canDeleteRecordings && (
+        <td className="w-10 px-4 py-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect?.(call.id)}
+            aria-label={`Select call ${call.id} for recording deletion`}
+            data-tour={`recording-select-${call.id}`}
+            className="h-4 w-4 cursor-pointer accent-primary"
+          />
+        </td>
+      )}
       <td className="whitespace-nowrap px-6 py-3 text-foreground">
         {formatDateTime(call.created_at)}
       </td>
@@ -478,14 +889,17 @@ function CallLogTableRow({
           {call.credits_consumed || 0}
         </span>
       </td>
-      {canViewRecordings && (
+      {(canViewRecordings || canDeleteRecordings) && (
         <td className="px-6 py-3 text-right">
           <CallLogRecordingAction
             call={call}
             canViewRecordings={canViewRecordings}
+            canDeleteRecordings={canDeleteRecordings}
+            deleted={deleted}
             recordingUnavailableIds={recordingUnavailableIds}
             recordingLoadingId={recordingLoadingId}
             onListen={onListen}
+            onRequestDelete={onRequestDelete}
           />
         </td>
       )}
@@ -498,14 +912,29 @@ function CallLogMobileCard({
   agentNameMap,
   showAgentColumn,
   canViewRecordings,
+  canDeleteRecordings,
+  deleted = false,
+  selected = false,
   recordingUnavailableIds,
   recordingLoadingId,
   onListen,
+  onToggleSelect,
+  onRequestDelete,
 }: CallLogRowProps) {
   return (
-    <div className="space-y-1 px-4 py-3">
+    <div className={`space-y-1 px-4 py-3 ${selected ? "bg-primary/5" : ""}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {canDeleteRecordings && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect?.(call.id)}
+              aria-label={`Select call ${call.id} for recording deletion`}
+              data-tour={`recording-select-${call.id}`}
+              className="h-4 w-4 cursor-pointer accent-primary"
+            />
+          )}
           <StatusIcon status={call.status} />
           <span className="font-mono text-sm font-medium">
             {call.caller_number ?? "Unknown"}
@@ -519,15 +948,18 @@ function CallLogMobileCard({
         <span>{formatDuration(call.duration)}</span>
         <span>·</span>
         <span>{call.credits_consumed || 0} credits</span>
-        {canViewRecordings && (
+        {(canViewRecordings || canDeleteRecordings) && (
           <>
             <span>·</span>
             <CallLogRecordingAction
               call={call}
               canViewRecordings={canViewRecordings}
+              canDeleteRecordings={canDeleteRecordings}
+              deleted={deleted}
               recordingUnavailableIds={recordingUnavailableIds}
               recordingLoadingId={recordingLoadingId}
               onListen={onListen}
+              onRequestDelete={onRequestDelete}
             />
           </>
         )}

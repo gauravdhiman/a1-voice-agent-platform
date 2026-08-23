@@ -52,6 +52,9 @@ export interface UserPermissions {
   canManageSkills: boolean;
   canManagePhoneNumbers: boolean;
 
+  // Call recordings (org admins; audio only, call log rows kept)
+  canDeleteRecordings: boolean;
+
   // Role flags
   isPlatformAdmin: boolean;
   isOrgAdmin: boolean;
@@ -76,6 +79,7 @@ const DENIED: UserPermissions = {
   canDeleteAgent: false,
   canManageSkills: false,
   canManagePhoneNumbers: false,
+  canDeleteRecordings: false,
   isPlatformAdmin: false,
   isOrgAdmin: false,
   isLoading: false,
@@ -135,6 +139,7 @@ export function useUserPermissions(): UserPermissions {
         check(P.phoneNumber.create) ||
         check(P.phoneNumber.update) ||
         check(P.phoneNumber.delete),
+      canDeleteRecordings: check(P.callLog.delete),
       isPlatformAdmin,
       isOrgAdmin,
       isLoading,

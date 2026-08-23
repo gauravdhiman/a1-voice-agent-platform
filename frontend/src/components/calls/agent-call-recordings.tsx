@@ -3,6 +3,7 @@
 import React from "react";
 import { useCallLogs } from "@/hooks/use-call-logs";
 import { CallLogList } from "@/components/calls/call-log-list";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 
 interface AgentCallRecordingsProps {
   /** Organization that owns the agent and its call records. */
@@ -18,7 +19,9 @@ interface AgentCallRecordingsProps {
  *
  * The tab intentionally loads all calls for the agent. Recording playback is
  * shown only on rows with a completed recording, matching the organization
- * Calls page while omitting the redundant Agent column.
+ * Calls page while omitting the redundant Agent column. Organization admins
+ * holding ``call_log:delete`` can also delete recording audio here; the
+ * underlying call log rows are always kept for audit.
  */
 export function AgentCallRecordings({
   organizationId,
@@ -26,6 +29,8 @@ export function AgentCallRecordings({
   agentName,
 }: AgentCallRecordingsProps) {
   const [page, setPage] = React.useState(1);
+  const { isOrgAdmin, isPlatformAdmin, canDeleteRecordings } =
+    useUserPermissions();
   const { data, isLoading, isFetching, error, refetch } = useCallLogs(
     organizationId,
     {
@@ -43,8 +48,10 @@ export function AgentCallRecordings({
       error={error}
       onRefresh={() => refetch()}
       onPageChange={setPage}
+      canViewRecordings={isOrgAdmin || isPlatformAdmin}
       showAgentColumn={false}
-      canViewRecordings
+      canDeleteRecordings={canDeleteRecordings}
+      organizationId={organizationId}
       title="Call History"
       subtitle={`Calls handled by ${agentName}`}
       emptyTitle="No calls yet"

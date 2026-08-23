@@ -46,7 +46,8 @@ export default function CallsPage() {
     organization: validatedOrganization,
   } = useOrganizationById(orgId || null);
   const { data: agents = [] } = useMyAgents();
-  const { isOrgAdmin, isPlatformAdmin } = useUserPermissions();
+  const { isOrgAdmin, isPlatformAdmin, canDeleteRecordings } =
+    useUserPermissions();
 
   const [agentFilter, setAgentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -268,6 +269,8 @@ export default function CallsPage() {
         agentNameMap={agentNameMap}
         showAgentColumn
         canViewRecordings={isOrgAdmin || isPlatformAdmin}
+        canDeleteRecordings={canDeleteRecordings}
+        organizationId={orgId || undefined}
         title="Recent Calls"
         dataTour="calls-results"
       />

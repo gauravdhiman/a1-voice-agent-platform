@@ -165,6 +165,39 @@ local merge/rebase and validation are complete, push the verified branch to the
 remote and raise the pull request for review. Keep the user informed of any
 conflicts, test failures, force-push requirement, or other merge risk.
 
+
+### Per-Worktree Isolated Docker Stacks
+
+Every Git worktree can run its **own complete, isolated Docker stack** —
+Supabase (DB/Auth/Storage) plus backend, frontend, and voice-ws containers —
+with its own ports and container names. Never assume the currently running
+Docker stack belongs to the worktree you are editing: check
+`docker inspect <container> --format '{{json .Mounts}}'` first. If the
+running stack mounts a different worktree's directory, start this worktree's
+stack instead of copying files into the other one.
+
+Use `./scripts/worktree-stack.sh` from the worktree root:
+
+```bash
+./scripts/worktree-stack.sh config   # Show derived name, ports, test accounts (no changes)
+./scripts/worktree-stack.sh up       # Start Supabase + app containers for THIS worktree
+./scripts/worktree-stack.sh status   # Inspect running services
+./scripts/worktree-stack.sh down     # Stop this worktree's stack (keeps volumes)
+./scripts/worktree-stack.sh purge --yes  # Stop AND delete volumes/state
+```
+
+Key facts:
+- Ports are offset per worktree (e.g. frontend `3320`, backend `8320`,
+  voice-ws `8180`); run `config` first and use those URLs.
+- Test accounts are auto-seeded per worktree (all `Password123!`):
+  `regular-user@247ai.local`, `org-admin@247ai.local`,
+  `platform-admin@247ai.local`.
+- Migrations and master-data seeds run automatically during `up`.
+- A failed first `up` (e.g. Supabase `LegacyStartDbSetupError`) usually
+  clears with: `supabase stop --workdir .worktree-state/supabase-project
+  --no-backup`, then re-run `up`.
+
+
 ### End-to-End (E2E) Testing
 
 End-to-end tests use a "Grey Box" approach with an isolated Docker stack to ensure zero side effects on production/development data.
@@ -619,6 +652,29 @@ branches (auth denial, errors, empty input, concurrency guards). It is acceptabl
 for project-wide coverage to be below 100%, but **new/changed code should not
 ship with uncovered branches**. Run coverage locally (`pytest --cov`) and review
 the diff's uncovered lines before considering a task done.
+
+### Keep Tests In Sync With Code (continuous, not end-of-task)
+
+Tests are part of the change, not a follow-up. While developing:
+
+- **Same-commit rule**: every behavioral code edit lands together with the
+  test update in the same work session — never defer tests to "after the
+  feature works".
+- **New endpoint/permission/UI gate** → add its RBAC-denial test (regular
+  user gets 403), its happy-path test, and its failure-branch test before
+  moving to the next file.
+- **Changed contract** → first fix the existing test that encodes the old
+  contract, confirm it fails against new code, then make it pass.
+- **Test drift is a bug**: if a suite passes while asserting stale behavior,
+  or a source file has no test referencing it after a behavioral change,
+  treat it as broken and repair immediately.
+- **Frontend parity**: every `P.*` permission constant added in
+  `frontend/src/lib/permissions.ts` needs a hook flag + component gating
+  test; run vitest on the host (`cd frontend && npx vitest run <file>`) —
+  not inside dev containers.
+- Run the narrowest relevant suite per step; run the full affected suites
+  before handing back. Coverage of changed paths must not regress.
+
 
 ### Python Tests
 
