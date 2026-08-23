@@ -33,6 +33,12 @@ export interface VoiceAgent {
   /** Whether calls handled by this agent may be recorded. Defaults to false. */
   call_recording_enabled: boolean;
   use_platform_credits: boolean;
+  /** When true, this agent is a demo agent (platform-admin only, bypasses credits, public at /demo/{slug}). */
+  is_demo?: boolean;
+  /** Unique slug for the demo public page (required when is_demo true). */
+  demo_slug?: string | null;
+  /** Customer-facing description shown on the public demo page (marketing copy). */
+  public_description?: string | null;
   instructions_markdown: string | null;
   /**
    * Voice-engine preset referenced by this agent (Phase 4). `null` = use the
@@ -41,8 +47,7 @@ export interface VoiceAgent {
    * only if the default row is missing/unparseable). The worker fetches the
    * preset row live on every call. Set via the agent picker ("voice profile");
    * the org user picks by preset name + description only and never sees
-   * engine/stage
-   * detail. May be `null` for agents created before presets shipped.
+   * engine/stage detail. May be `null` for agents created before presets shipped.
    */
   preset_id: string | null;
   created_by: string;
@@ -63,6 +68,10 @@ export interface VoiceAgentCreate {
   /** Whether calls handled by this agent may be recorded. Defaults to false. */
   call_recording_enabled?: boolean;
   use_platform_credits?: boolean;
+  /** Platform-admin only: demo flag and public description (set via edit after creation). */
+  is_demo?: boolean;
+  demo_slug?: string | null;
+  public_description?: string | null;
   instructions_markdown?: string | null;
   /** Voice-engine preset id; `null` = system default. */
   preset_id?: string | null;
@@ -78,12 +87,15 @@ export interface VoiceAgentUpdate {
   custom_instructions?: string | null;
   is_active?: boolean;
   is_published_on_public_page?: boolean;
-  /** Whether calls handled by this agent may be recorded. */
   call_recording_enabled?: boolean;
   use_platform_credits?: boolean;
+  /** Platform-admin only: mark as demo agent. */
+  is_demo?: boolean;
+  /** Platform-admin only: unique slug for /demo/{slug} (required when is_demo true). */
+  demo_slug?: string | null;
+  /** Customer-facing description for the public demo page. */
+  public_description?: string | null;
   instructions_markdown?: string | null;
-  /** Voice-engine preset id; `null` clears it (falls back to the system default). */
-  preset_id?: string | null;
 }
 
 export interface PlatformToolFunction {

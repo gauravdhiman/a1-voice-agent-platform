@@ -55,6 +55,7 @@ async def assert_voice_session_allowed(
     *,
     min_event_name: str = DEFAULT_VOICE_MINUTE_EVENT,
     current_call_sid: Optional[str] = None,
+    agent_is_demo: bool = False,
 ) -> None:
     """Raise ``VoiceSessionEntitlementError`` if the org cannot start a call.
 
@@ -63,12 +64,19 @@ async def assert_voice_session_allowed(
     - Combined credit balance (plan + purchased) for at least one billable
       voice minute. An active call is allowed to complete and settle in full.
 
+    Demo agents (``voice_agents.is_demo = true``) bypass both checks so
+    showcase calls never block on billing. The caller should pass
+    ``agent_is_demo=True`` when the session is for a demo agent; the check
+    is best-effort and remains platform-admin-gated at the API layer.
+
     Args:
         organization_id: Tenant owning the voice agent.
         min_event_name: Credit event used to estimate minimum session cost.
         current_call_sid: Optional provider call identifier for a PSTN call
             already persisted by the backend webhook. That row is excluded
             from the active count before admitting the same call.
+        agent_is_demo: When true, bypass credit and concurrency checks for
+            this session (demo agent showcase).
 
     Raises:
         VoiceSessionEntitlementError: When concurrent or credit pre-check fails.
@@ -78,8 +86,14 @@ async def assert_voice_session_allowed(
         logger.warning("Supabase unavailable — skipping voice entitlement pre-check")
         return
 
-    entitlements = await _resolve_org_entitlements(client, organization_id)
+    if agent_is_demo:
+        logger.info(
+            "Voice session allowed for demo agent organization_id=%s (bypass)",
+            organization_id,
+        )
+        return
 
+    entitlements = await _resolve_org_entitlements(client, organization_id)
     concurrent = entitlements["limits"].get("max_concurrent_calls")
     if concurrent is not None:
         effective, is_unlimited = _parse_entitlement_value(concurrent)

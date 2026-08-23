@@ -133,12 +133,65 @@ class VoiceAgentBase(BaseModel):
             "runtime recording feature is enabled."
         ),
     )
+    is_demo: bool = Field(
+        default=False,
+        description=(
+            "When true, this agent is a demo agent that bypasses credit and "
+            "concurrency checks and is available on a dedicated public page "
+            "at /demo/{demo_slug}. Platform-admin only; defaults to false."
+        ),
+    )
+    demo_slug: Optional[str] = Field(
+        None,
+        max_length=100,
+        description=(
+            "Unique slug for the demo public page (e.g. acme-dental-demo). "
+            "Required when is_demo is true; must be lowercase alphanumeric "
+            "plus hyphens and unique across all demo agents."
+        ),
+    )
+    public_description: Optional[str] = Field(
+        None,
+        max_length=1000,
+        description=(
+            "Customer-facing description shown on the public demo page "
+            "(/demo/{demo_slug}). Distinct from LLM prompt fields "
+            "(persona/mission/custom_instructions) — this is marketing copy "
+            "explaining what the agent does and its scope. Shown only when "
+            "the agent is public; fallback on the demo page is mission → persona."
+        ),
+    )
 
     @field_validator("phone_number", mode="before")
     @classmethod
     def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
         """Normalize spacing and validate the canonical E.164 format."""
         return normalize_phone_number(v)
+
+    @field_validator("demo_slug", mode="before")
+    @classmethod
+    def validate_demo_slug(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize and validate demo slug when supplied."""
+        if v is None or v == "":
+            return None
+        v = str(v).strip().lower()
+        v = re.sub(r"\s+", "-", v)
+        if not re.match(r"^[a-z0-9-]+$", v):
+            raise ValueError("Demo slug can only contain lowercase letters, numbers, and hyphens")
+        if len(v) < 2 or len(v) > 100:
+            raise ValueError("Demo slug must be between 2 and 100 characters")
+        return v
+
+    @field_validator("public_description", mode="before")
+    @classmethod
+    def validate_public_description(cls, v: Optional[str]) -> Optional[str]:
+        """Trim and validate public description."""
+        if v is None or v == "":
+            return None
+        v = str(v).strip()
+        if len(v) > 1000:
+            raise ValueError("Public description must be at most 1000 characters")
+        return v
 
 
 class VoiceAgentCreate(VoiceAgentBase):
@@ -227,7 +280,54 @@ class VoiceAgentUpdate(BaseModel):
             "to the runtime recording feature gate."
         ),
     )
+    is_demo: Optional[bool] = Field(
+        None,
+        description=(
+            "Mark this agent as a demo agent that bypasses voice credit checks "
+            "and is available on a dedicated public demo page. Platform-admin only."
+        ),
+    )
+    demo_slug: Optional[str] = Field(
+        None,
+        max_length=100,
+        description=(
+            "Unique slug for the demo public page. Required when is_demo is true. "
+            "Must be unique across all demo agents."
+        ),
+    )
+    public_description: Optional[str] = Field(
+        None,
+        max_length=1000,
+        description=(
+            "Customer-facing description for the public demo page. Distinct from "
+            "LLM prompt fields; shown to visitors before calling."
+        ),
+    )
 
+    @field_validator("demo_slug", mode="before")
+    @classmethod
+    def validate_demo_slug_update(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize and validate demo slug on update."""
+        if v is None or v == "":
+            return None
+        v = str(v).strip().lower()
+        v = re.sub(r"\s+", "-", v)
+        if not re.match(r"^[a-z0-9-]+$", v):
+            raise ValueError("Demo slug can only contain lowercase letters, numbers, and hyphens")
+        if len(v) < 2 or len(v) > 100:
+            raise ValueError("Demo slug must be between 2 and 100 characters")
+        return v
+
+    @field_validator("public_description", mode="before")
+    @classmethod
+    def validate_public_description_update(cls, v: Optional[str]) -> Optional[str]:
+        """Trim and validate public description on update."""
+        if v is None or v == "":
+            return None
+        v = str(v).strip()
+        if len(v) > 1000:
+            raise ValueError("Public description must be at most 1000 characters")
+        return v
 
 class VoiceAgent(VoiceAgentBase):
     """Model for a voice agent with all attributes."""

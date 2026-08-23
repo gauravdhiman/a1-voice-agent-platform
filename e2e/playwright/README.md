@@ -12,13 +12,22 @@ playwright install chromium
 
 ## Running Tests
 
-Start servers and run tests:
+The supported runner builds an isolated Docker stack, initializes a disposable
+database, applies all migrations, runs the full suite, and tears the stack down:
+
 ```bash
-python e2e/playwright/test_playwright.py
-python e2e/playwright/test_all_pages.py
+./scripts/run-e2e.sh
+```
+
+Use `--video-on` when every test needs a browser recording. For quick collection
+or a focused local check, run pytest directly after the stack is available:
+
+```bash
+pytest -q e2e/tests/test_public_agent_pages.py
 ```
 
 ## Test Files
 
 - `test_playwright.py` - Basic backend and frontend health checks
 - `test_all_pages.py` - Comprehensive testing of all public and protected pages
+- `../tests/test_public_agent_pages.py` - Organization publishing, passphrase-gated public pages, demo pages, visualizer selection, and dashboard demo/public controls

@@ -107,6 +107,56 @@ async def test_list_agents_requires_token_when_passphrase_enabled(mock_supabase)
 
 
 @pytest.mark.asyncio
+async def test_list_agents_returns_active_published_agents(mock_supabase):
+    """The public listing delegates to the service's publish/active filter."""
+    _org_svc, table = mock_supabase
+    chain = table.select.return_value.eq.return_value.limit.return_value
+    chain.execute.return_value = Mock(data=[_org_row()])
+    published_agent = SimpleNamespace(
+        id=AGENT_ID,
+        name="Published Agent",
+        persona="Receptionist",
+        mission="Book appointments",
+    )
+
+    with patch(
+        "src.organization.public_routes.voice_agent_service.get_public_page_agents",
+        new=AsyncMock(return_value=([published_agent], None)),
+    ):
+        result = await list_public_org_agents(SLUG, x_public_access_token=None)
+
+    assert len(result.agents) == 1
+    assert result.agents[0].name == "Published Agent"
+    assert result.agents[0].persona == "Receptionist"
+
+
+@pytest.mark.asyncio
+async def test_public_call_token_rejects_unpublished_agent(mock_supabase):
+    """Visitors cannot start calls for agents not explicitly published."""
+    _org_svc, table = mock_supabase
+    chain = table.select.return_value.eq.return_value.limit.return_value
+    chain.execute.return_value = Mock(data=[_org_row()])
+
+    agent = SimpleNamespace(
+        id=AGENT_ID,
+        organization_id=ORG_ID,
+        is_active=True,
+        is_published_on_public_page=False,
+        is_demo=False,
+    )
+
+    with patch(
+        "src.organization.public_routes.voice_agent_service.get_agent_by_id",
+        new=AsyncMock(return_value=(agent, None)),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await generate_public_call_token(SLUG, AGENT_ID, None)
+
+    assert exc.value.status_code == 400
+    assert "not available" in exc.value.detail
+
+
+@pytest.mark.asyncio
 async def test_generate_call_token_for_published_agent(mock_supabase):
     _org_svc, table = mock_supabase
     chain = table.select.return_value.eq.return_value.limit.return_value

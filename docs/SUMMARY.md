@@ -52,18 +52,19 @@ Comprehensive documentation organized by feature.
 
 1. **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system and lifecycle
 2. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
-3. **[Embed Call Button Plan](03_implementation/EMBED_CALL_BUTTON_PLAN.md)** - Embeddable call button feature architecture
-4. **[voice-ws README](../voice-ws/README.md)** - Pipecat WebSocket voice voice-ws (browser + Twilio Media Streams)
-5. **[Shared Module README](../shared/README.md)** - Shared code for backend and voice-ws
-6. **[Outbound phone calls](03_implementation/outbound_phone_calls.md)** - Planned outbound PSTN design (reuses Media Streams)
-7. **[Call transfer to a human](03_implementation/call_transfer_to_human.md)** - AI routes calls to human agents; silent-monitor + single-call recording design
-7. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
-8. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
-9. **[Voice Templates Management (Admin)](02_features/voice_agents/voice_templates_admin.md)** - Platform-admin CRUD for Markdown-backed templates used by agent creation and editing
-10. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
-11. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
-12. **[Free-Tier Credit Refresh](03_implementation/free_tier_credit_refresh.md)** - pg_cron-triggered monthly credit renewal; atomic RPC race hardening
-13. **[Credit Usage Enforcement and Notifications](03_implementation/credit_usage_enforcement_and_notifications.md)** - system-wide usage rates, final-call settlement, phone-number grace periods, and durable low-credit emails
+3. **[Public Organization and Demo Agent Pages](02_features/voice_agents/public_agent_pages.md)** - Public agent publishing, demo agents, API contracts, billing behavior, and tests
+4. **[Embed Call Button Plan](03_implementation/EMBED_CALL_BUTTON_PLAN.md)** - Embeddable call button feature architecture
+5. **[voice-ws README](../voice-ws/README.md)** - Pipecat WebSocket voice voice-ws (browser + Twilio Media Streams)
+6. **[Shared Module README](../shared/README.md)** - Shared code for backend and voice-ws
+7. **[Outbound phone calls](03_implementation/outbound_phone_calls.md)** - Planned outbound PSTN design (reuses Media Streams)
+8. **[Call transfer to a human](03_implementation/call_transfer_to_human.md)** - AI routes calls to human agents; silent-monitor + single-call recording design
+9. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
+10. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
+11. **[Voice Templates Management (Admin)](02_features/voice_agents/voice_templates_admin.md)** - Platform-admin CRUD for Markdown-backed templates used by agent creation and editing
+12. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
+13. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
+14. **[Free-Tier Credit Refresh](03_implementation/free_tier_credit_refresh.md)** - pg_cron-triggered monthly credit renewal; atomic RPC race hardening
+15. **[Credit Usage Enforcement and Notifications](03_implementation/credit_usage_enforcement_and_notifications.md)** - system-wide usage rates, final-call settlement, phone-number grace periods, and durable low-credit emails
 
 ### Multi-Tenancy & RBAC
 

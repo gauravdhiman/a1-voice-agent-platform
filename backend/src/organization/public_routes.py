@@ -226,7 +226,9 @@ async def generate_public_call_token(
         )
 
     try:
-        await assert_voice_session_allowed(agent.organization_id)
+        await assert_voice_session_allowed(
+            agent.organization_id, agent_is_demo=bool(getattr(agent, "is_demo", False))
+        )
     except VoiceSessionEntitlementError as exc:
         public_code, public_message = get_public_voice_session_error(exc.code)
         logger.info(

@@ -4,6 +4,7 @@
  * Used by dashboard test call, embed widget, and public org call pages.
  */
 
+import { LevelMediaManager } from "@/lib/level-media-manager";
 import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 import { WebSocketTransport } from "@pipecat-ai/websocket-transport";
 
@@ -17,8 +18,16 @@ export interface PipecatCallCallbacks {
   onDisconnected?: () => void;
   onError?: (error: Error) => void;
   onSpeakingChange?: (state: PipecatSpeakingState) => void;
+  /** Fired when the bot's remote audio track becomes available (or is lost). */
+  onBotAudioTrack?: (track: MediaStreamTrack | null) => void;
+  /** Fired when the local microphone track becomes available (or is lost). */
+  onLocalAudioTrack?: (track: MediaStreamTrack | null) => void;
+  /**
+   * Provides the app-level LevelMediaManager used by the transport so the UI
+   * can read real bot audio levels for visualisation.
+   */
+  onLevelManager?: (manager: LevelMediaManager) => void;
 }
-
 /** Turn Pipecat callback payloads into a readable Error for UI display. */
 export function normalizeVoiceClientError(err: unknown): Error {
   if (err instanceof Error && typeof err.message === "string" && err.message) {
@@ -67,8 +76,10 @@ export async function connectPipecatVoiceCall(
   wsUrl: string,
   callbacks: PipecatCallCallbacks = {},
 ): Promise<PipecatClient> {
+  const levelManager = new LevelMediaManager();
+  callbacks.onLevelManager?.(levelManager);
   const client = new PipecatClient({
-    transport: new WebSocketTransport(),
+    transport: new WebSocketTransport({ mediaManager: levelManager }),
     enableMic: true,
     enableCam: false,
     callbacks: {
@@ -94,6 +105,21 @@ export async function connectPipecatVoiceCall(
   });
 
   await client.connect({ ws_url: buildPipecatWebSocketUrl(wsUrl, token) });
+
+  // Expose live audio tracks for visualization once the transport has them.
+  const emitTracks = () => {
+    try {
+      const tracks = client.tracks();
+      callbacks.onBotAudioTrack?.(tracks.bot?.audio ?? null);
+      callbacks.onLocalAudioTrack?.(tracks.local.audio ?? null);
+    } catch {
+      /* transport not ready */
+    }
+  };
+  emitTracks();
+  client.on(RTVIEvent.TrackStarted, emitTracks);
+  client.on(RTVIEvent.TrackStopped, emitTracks);
+
   return client;
 }
 

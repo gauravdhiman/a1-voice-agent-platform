@@ -25,6 +25,8 @@ Voice agents are AI-powered assistants that handle real-time voice conversations
 - ✅ **OAuth integration** - secure authentication with external services (Google Calendar, etc.)
 - ✅ **Agent greeting** - personalized greeting when agent enters conversation
 - ✅ **Embed call button** - add voice calling to any external website
+- ✅ **Public organization showcase** - publish selected active agents at `/o/{slug}`
+- ✅ **Platform demo agents** - expose credit-exempt demos at `/demo/{demo_slug}`
 
 ## Architecture
 
@@ -172,6 +174,16 @@ navigation switcher:
 The organization-scoped API remains the authorization boundary. The frontend
 also filters the returned list defensively so stale data cannot appear under a
 different active organization.
+
+## Public organization and demo pages
+
+Public surfaces are documented in [Public Organization and Demo Agent Pages](./public_agent_pages.md).
+An organization can publish individual active agents on `/o/{slug}` and may
+protect that list with a passphrase. Platform admins can separately mark an
+active agent as a demo, assign a unique slug, and provide visitor-facing copy
+for `/demo/{demo_slug}`. Demo calls bypass credit/concurrency admission and
+final voice-minute billing; regular public organization calls use normal
+entitlements.
 
 ## Tool System
 

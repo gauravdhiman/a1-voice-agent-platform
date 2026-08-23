@@ -122,6 +122,22 @@ async def create_agent(
     """
     current_user_id, user_profile = _auth
 
+    # Demo status, slug, and public copy are platform_admin-only (prevents
+    # org_admins from self-exempting billing or publishing platform-owned demos).
+    if (
+        getattr(agent_data, "is_demo", False)
+        or getattr(agent_data, "demo_slug", None)
+        or getattr(agent_data, "public_description", None)
+    ):
+        if not user_profile.has_role("platform_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Only platform administrators can create demo agents, set "
+                    "demo slugs, or set public demo descriptions"
+                ),
+            )
+
     # Validate the preset assignment (must exist + be published) before creating.
     preset_error = await _validate_preset_assignment(agent_data.preset_id)
     if preset_error:
@@ -143,7 +159,6 @@ async def create_agent(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return agent
-
 
 @agent_router.get("/organization/{org_id}", response_model=List[VoiceAgent])
 @tracer.start_as_current_span("voice_agent.routes.get_org_agents")
@@ -269,7 +284,9 @@ async def get_test_token(
     )
 
     try:
-        await assert_voice_session_allowed(agent.organization_id)
+        await assert_voice_session_allowed(
+            agent.organization_id, agent_is_demo=bool(getattr(agent, "is_demo", False))
+        )
     except VoiceSessionEntitlementError as exc:
         logger.info(
             "Browser voice session denied before token creation agent_id=%s "
@@ -279,7 +296,6 @@ async def get_test_token(
             exc.code,
         )
         raise _voice_session_http_exception(exc) from exc
-
     try:
         token, session_id = voice_session_service.create_session_token(
             agent_id=str(agent_id),
@@ -447,6 +463,22 @@ async def update_agent(
         agent.organization_id,
         error_message="Insufficient permissions to update this agent",
     )
+
+    # Demo status, slug, and public copy are platform_admin-only (even org_admins
+    # cannot self-exempt or modify platform-owned public demo presentation).
+    if {
+        "is_demo",
+        "demo_slug",
+        "public_description",
+    } & agent_data.model_fields_set:
+        if not user_profile.has_role("platform_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Only platform administrators can change demo status, demo "
+                    "slugs, or public demo descriptions"
+                ),
+            )
 
     # Validate the preset assignment when it is being changed. ``preset_id`` is
     # Optional on VoiceAgentUpdate; only validate when explicitly supplied
