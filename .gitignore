@@ -123,6 +123,9 @@ yarn-error.log*
 # Local call recordings are private development artifacts and must never enter Git.
 .local-data/call-recordings/
 
+# Git worktree checkouts are managed by Git, not versioned project files.
+.worktrees/
+
 # Per-worktree generated Supabase projects, credentials, and Compose state.
 .worktree-state/
 
