@@ -1,93 +1,129 @@
 # Testing Guidelines
 
-## Overview
+Testing is a maintained product surface. A code change is incomplete when
+its tests, fixtures, evaluation scenarios, or browser workflows still describe
+the old behavior.
 
-This document outlines the testing strategy and best practices for ensuring the quality and reliability of the application.
+## Test layers
 
-For agent/tool robustness evaluations, use the dedicated
-[Agent Evaluation System](./agent-evaluations.md). It runs deterministic
-model-facing workflows without real OAuth or provider writes and can replay
-captured model/tool traces. Manual voice calls and live provider tests remain
-the final integration layer, not the only regression mechanism.
+| Layer | Tools | Purpose |
+| --- | --- | --- |
+| Unit/component | pytest, Vitest, React Testing Library, MSW | Fast deterministic logic and UI coverage |
+| API/integration | pytest with mocked or dedicated dependencies | Route, service, authz, persistence, and provider boundaries |
+| Agent/tool evaluation | evals/, pytest, trace replay | Tool contract, ordering, arguments, side effects, and recovery |
+| Browser E2E | Python Playwright and isolated Docker stack | Critical user journeys across frontend/backend |
+| Browser smoke | Browser automation skill | Focused user-perspective validation when UI risk warrants it |
+| Live voice | Staging browser/PSTN calls | Transport, realtime provider, latency, recording, and entitlement behavior |
 
-## Types of Tests
+No layer proves the others. Deterministic tests cannot prove Gemini Live
+responsiveness; a successful manual call cannot replace a regression test.
 
-- **Unit Tests**: Focus on individual components or functions in isolation.
+## Change-to-test rules
 
-  - **Frameworks**: `pytest` (Python), `Jest` (JavaScript/TypeScript)
-  - **Best Practices**: Test small, isolated units; mock external dependencies.
-
-- **Integration Tests**: Verify the interaction between different components or services.
-
-  - **Frameworks**: `pytest` (Python), `React Testing Library` (JavaScript/TypeScript)
-  - **Best Practices**: Test common workflows; use real dependencies where appropriate.
-
-- **End-to-End (E2E) Tests**: Simulate user interactions with the entire application.
-  - **Frameworks**: `Cypress`, `Playwright`
-  - **Best Practices**: Cover critical user journeys; run on a deployed environment.
-
-## Testing Workflow
-
-1.  **Write Tests First (TDD)**: Consider writing tests before implementing features.
-2.  **Run Tests Locally**: Execute tests frequently during development.
-3.  **CI/CD Integration**: Ensure tests are run automatically in the continuous integration pipeline.
-4.  **Code Coverage**: Aim for high code coverage, but prioritize meaningful tests over coverage percentage.
+- New or changed behavior gets a test in the nearest layer and coverage for
+  success, validation, failure, and cleanup paths that are relevant.
+- New routes and permissions require happy-path, denial, and tenant-isolation
+  tests. Never rely on UI hiding to enforce authorization.
+- Contract changes update existing assertions first, then implementation and
+  dependent callers. Do not weaken an assertion merely to make a suite pass.
+- Schema changes add migration compatibility/postcondition coverage and update
+  docs/DATABASE_SCHEMA.md.
+- Tool or MCP changes add contract tests and a deterministic evaluation
+  scenario/trace when model-facing selection, arguments, ordering,
+  confirmation, idempotency, or errors can change.
+- UI changes update component/service tests and the durable E2E journey. Keep
+  loading, empty, error, accessibility, and permission states covered.
+- Production incidents become redacted replay traces or deterministic
+  regression scenarios before the fix is considered complete.
 
 ## Public agent and demo-page coverage
 
-The public-agent feature is intentionally tested across the same boundaries it
-uses in production:
+The public-agent surface must be covered across the same boundaries used in
+production:
 
-| Layer | Coverage |
+| Layer | Required coverage |
 | --- | --- |
-| Shared model | Defaults, slug normalization/validation, and public-description handling |
-| Shared service | Active/published filtering, demo slug uniqueness checks, demo enable/disable transitions |
-| Backend routes | Public organization access/list/token endpoints, demo metadata/token endpoints, and platform-admin-only demo writes |
-| Frontend services | Public metadata, access-token, call-token, and safe error contracts |
-| Browser E2E | Open/protected organization pages, public demo page, visualizer default/selection, and dashboard controls |
+| Shared model/service | Defaults, slug validation, published filtering, uniqueness, and enable/disable transitions |
+| Backend routes | Public organization access/list/token endpoints, demo metadata/token endpoints, platform-admin-only writes, and safe errors |
+| Frontend services | Public metadata, access-token, call-token, and error contracts |
+| Browser E2E | Open/protected organization pages, public demo page, visualizer defaults/selection, and dashboard controls |
 
-Run the isolated browser suite with:
+The durable browser scenarios are in
+[`e2e/tests/test_public_agent_pages.py`](../../e2e/tests/test_public_agent_pages.py)
+and use boundary mocks while the runner builds the real application stack and
+applies migrations.
 
-```bash
+Prefer red-green-refactor: prove the new test fails for the intended reason,
+implement the smallest fix, then refactor while tests remain green. Use
+meaningful branch coverage; new/changed logic should be directly covered. If a
+branch cannot be tested, record the reason and follow-up.
+
+## Commands
+
+From the repository root:
+
+~~~bash
+pytest -q
+pytest backend/tests/path/to/test_file.py -q
+pytest -m 'not slow' -q
+
+pytest backend/tests/evals -q
+python scripts/run-agent-evals.py
+python scripts/run-agent-evals.py --json-out /tmp/agent-evals.json
+~~~
+
+For frontend tests and checks:
+
+~~~bash
+cd frontend
+npm ci
+npm run lint
+npx tsc --noEmit
+npm run test:run -- src/path/to/test.test.tsx
+npm run test:coverage
+~~~
+
+The frontend test runner is Vitest 4, not Jest. Vitest requires Node 20+ and
+should run on the host when the development container has incompatible
+dependencies. Report pre-existing typecheck failures separately; do not hide
+new source errors behind a blanket ignore.
+
+## Isolated browser E2E
+
+Run the full disposable lifecycle:
+
+~~~bash
 ./scripts/run-e2e.sh
-```
+./scripts/run-e2e.sh --video-on
+~~~
 
-The relevant Playwright scenarios are in
-[`e2e/tests/test_public_agent_pages.py`](../../e2e/tests/test_public_agent_pages.py).
-They use boundary mocks for auth and public API responses, while the runner
-still builds the real frontend/backend stack and applies the real migrations.
+The runner builds docker-compose.e2e.yml, applies the test schema and
+migrations, runs Python Playwright tests against ports 3001/8001, stores the
+HTML report under e2e/reports, and tears down only its named transient stack.
+Do not copy its down -v cleanup to persistent local Supabase or worktree
+stacks.
 
-## Best Practices
+Use the `agent-browser`/browser automation skill for focused UI smoke checks.
+Extend existing
+durable E2E coverage instead of writing a throwaway Playwright script for each
+task. Smoke-created rows, roles, files, screenshots, videos, downloads, and
+temporary scripts must be removed before handoff.
 
-- **Clear and Concise Tests**: Tests should be easy to read and understand.
-- **Maintainable Tests**: Avoid brittle tests that break with minor code changes.
-- **Fast Feedback**: Tests should run quickly to provide rapid feedback.
-- **Descriptive Test Names**: Test names should clearly indicate what they are testing.
-- **Mocking and Stubbing**: Use mocks and stubs for external services and complex dependencies.
+## Agent evaluation
 
-## Example (Python - Pytest)
+The deterministic suite in evals/ is the PR regression layer. It uses fake or
+stateful test providers and does not require real OAuth, calendar writes, or
+paid realtime calls. See agent-evaluations.md for scenario and trace formats.
 
-```python
-# tests/test_example.py
+Model-backed and live-provider checks belong in staging/nightly/manual lanes.
+Record the model/provider, prompt and tool-schema hashes, git SHA, latency,
+tool sequence, arguments, results, and failure classification so regressions
+can be compared without treating an external outage as an application bug.
 
-def test_addition():
-    assert 1 + 1 == 2
+## Release validation
 
-def test_subtraction():
-    assert 5 - 3 == 2
-```
-
-## Example (JavaScript - Jest)
-
-```javascript
-// frontend/src/components/__tests__/Button.test.js
-import { render, screen } from "@testing-library/react";
-import Button from "../Button";
-
-describe("Button", () => {
-  it("renders with correct text", () => {
-    render(<Button>Click Me</Button>);
-    expect(screen.getByText("Click Me")).toBeInTheDocument();
-  });
-});
-```
+Before production promotion, follow the mandatory browser and PSTN gate in
+docs/05_operations/deployment/runbook.md. Health endpoints alone are
+insufficient: inspect backend and voice-ws logs, verify call audio and call
+finalization, and block on authentication, entitlement, concurrency, or
+WebSocket failures.
