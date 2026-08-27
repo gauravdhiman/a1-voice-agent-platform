@@ -1,476 +1,944 @@
-# Call Transfer to a Human (AI Router + Silent Monitor)
+# Human Call Transfer
 
-> Feasibility analysis and target architecture for routing an in-progress AI
-> voice call to a human agent while keeping the AI on the call silently, and
-> recording the entire call as one auditable unit under call logs.
+> Execution-ready design for transferring an active AI voice call to a
+> configured human representative. This document is a proposal; it does not
+> claim that the feature is implemented.
 
-## Verdict
+**Status:** Deferred pending validated customer demand; phone-first execution plan retained for future implementation
 
-**Feasible — yes.** The platform already has ~80% of the required plumbing:
+**Primary decision:** Implement this as a native platform tool backed by a
+server-side call-control service. Store named transfer destinations in
+structured agent-tool configuration. Do not put phone numbers in prompts and
+do not allow the model to supply an arbitrary destination number.
 
-- **Call lifecycle:** inbound Twilio → backend webhook → one `call_logs` row
-  keyed by `CallSid` → voice-ws Media Stream session → status callback
-  finalizes the same row (`backend/src/voice_agents/voice_routes.py`,
-  `voice-ws/src/call_tracking.py`).
-- **Call recording:** voice-ws transport-adjacent `RecordingAudioTap` +
-  `RecordingCoordinator`
-  mixed-audio capture, private R2/local storage, `call_artifacts` metadata,
-  authenticated playback in the Calls page (`voice-ws/src/recording.py`,
-  `shared/call_recordings/`, `frontend/src/app/(dashboard)/calls/page.tsx`).
-- **Session JWT** already carries `call_sid`; the token is a plain signed JWT
-  (reusable, not single-use) — reconnect-safe
-  (`shared/voice_agents/voice_session_service.py`).
-- **Entitlement pre-check** already excludes the in-progress call's own
-  `call_sid` from the active-call count
-  (`shared/billing/voice_session_entitlement.py`).
-- **Tool system:** agents already invoke platform tools from speech; the
-  `ToolContext` passed to every tool is explicitly reserved for session/call
-  metadata (`shared/voice_agents/tools/base/tool_context.py`).
+## 1. Executive decision
 
-The genuinely new pieces are the **transfer mechanism** on the Twilio leg and
-**single-recording continuity** across the pre/post-transfer sessions. Both
-have clean, provider-supported designs (below).
+The first production-capable version should support:
 
-Notable: the marketing site already promises this behavior (`index.html` FAQ:
-"24x7 AI recognizes escalation signals and transfers the call to you... You
-configure the fallback number in your dashboard"), and a `call-transfer` skill
-was seeded then retired as a stub ("no concrete transfer mechanism to integrate
-with" — `docs/02_features/voice_agents/skills_library.md`). This design is that
-missing mechanism.
+- An inbound Twilio/PSTN call that is currently connected to the AI.
+- A model-facing `transfer_call` tool with a named `route_id`, not a phone
+  number.
+- Cold transfer to a configured E.164 PSTN destination using Twilio `<Dial>`.
+- Sales, support, front-desk, billing, and other agent-specific routes.
+- One active transfer per call, idempotent retries, provider status tracking,
+  and a safe fallback to the AI when the human cannot be reached.
+- Explicit, actionable tool results. The model must never claim that a human
+  answered until the provider reports that outcome.
+- Transfer-aware call logging, billing, authorization, and observability.
 
----
+The first version should not pretend that a browser WebSocket call is already
+equivalent to a Twilio call. The current browser path has no Twilio `CallSid`
+or PSTN media leg. Browser-to-PSTN transfer therefore requires a separate
+bridge or a browser transport decision and should be a separately gated phase.
 
-## How it works — the 60-second version
+The first version should also avoid warm-transfer complexity, AI whispering,
+SIP/Client destinations, and a promise of one continuous recording unless the
+recording path is implemented and tested end to end.
 
-Plain-language walkthrough of the end-to-end behavior once this lands:
+### Product prioritization and interim strategy
 
-1. **One call already has one identity.** Routing, AI conversation, and
-   wrap-up (call log, recording, billing) are all keyed to one provider call ID
-   (`CallSid`). The platform already treats one phone call as one auditable
-   unit — that is the foundation everything below builds on.
-2. **The AI learns a new tool: `transfer_call`.** The org configures named
-   destinations — e.g. `sales: +1…`, `customer-care: +1…`, `billing: +1…` — on
-   the agent, the same way any tool is configured today. When the caller asks
-   to speak to a person (or the AI decides the intent needs one), the AI calls
-   this tool with the destination name.
-3. **The transfer is a *redirect*, not a new call.** The backend tells
-   Twilio to keep the caller's existing call and now dial the destination
-   number — one REST instruction, **same CallSid**. The caller hears the
-   human's line ring; the human answers; the original caller and the human are
-   now talking on what is still the *same platform call*.
-4. **The AI goes silent — guaranteed.** For the human phase, Twilio connects
-   a **listen-only** stream carrying both humans' audio. The AI can hear and
-   record everything, and it physically cannot speak: the stream type forbids
-   it. There is no "remember to mute the AI" logic to get wrong.
-5. **One recording for audit.** The AI phase (session A) and the human phase
-   (session B) are recorded as two audio segments, then merged into a single
-   WAV attached to the same call-log entry. The Calls page keeps one row per
-   call with one Listen button — plus a new "Transferred to +1…" badge.
-6. **Billing and limits don't change.** One call = one duration = one credit
-   debit (idempotent by call), counted once against the concurrent-call limit,
-   whether or not a transfer happened.
+The technical design is sound, but the product decision is to **defer the full
+live-transfer feature** until a validated customer or paid design partner makes
+it important. This is a prioritization decision, not a statement that the
+feature is impossible.
 
-What it looks like end to end:
+The reason is the combined cost of:
+
+- Twilio voice-leg and recording charges, plus ongoing Gemini/worker cost if
+  the AI remains active during a handoff.
+- Provider-specific call lifecycle, parent/child correlation, callbacks,
+  fallback behavior, and browser-versus-PSTN differences.
+- Recording consent, privacy, healthcare/compliance, caller-ID, and retention
+  decisions.
+- A substantial PSTN/browser test matrix that cannot be validated reliably by
+  unit tests alone.
+- The risk of building a broad abstraction before any customer has confirmed
+  the workflow, destination types, or required service-level behavior.
+
+The immediate product alternative should be a lightweight **human follow-up
+workflow**, not a partial live-transfer implementation:
+
+1. Detect that the caller wants a human or that the agent cannot complete the
+   request.
+2. Capture only the information needed for a callback: caller name, callback
+   number, request summary, urgency, and any business-approved details.
+3. Persist a callback request or lead with an idempotent status.
+4. Notify the business through a configured internal channel and/or create a
+   record in the configured CRM when one exists.
+5. Tell the caller that the request was recorded and state the configured
+   expectation honestly. Never promise a callback time that the system cannot
+   guarantee.
+
+```mermaid
+flowchart LR
+    Caller[Caller asks for a human] --> Agent[AI agent identifies an escalation]
+    Agent --> Capture[Capture minimum callback details]
+    Capture --> Request[(Callback request)]
+    Request --> Notify[Email or approved internal notification]
+    Request -.-> CRM[CRM adapter when configured]
+    Notify --> Staff[Business staff follows up]
+    Staff --> Caller
+    Agent --> Response[Explain that follow-up was recorded]
+```
+
+This workflow should reuse existing platform capabilities where they are
+actually appropriate. The current repository contains a Gmail tool and a
+Telegram service used for platform-admin alerts; the Telegram service should
+not be repurposed as a general customer-data channel without a separate
+tenant-scoped design. There is no generic CRM tool that should be assumed to be
+available. If no customer channel is configured, an internal callback-request
+record is still preferable to claiming that a live transfer occurred.
+
+### Roadmap and demand gates
+
+For restaurants, gyms, HVAC companies, and similar local businesses, treat the
+following as hypotheses to validate rather than assumptions to encode into the
+platform:
+
+1. Reliable voice experience, business context, hours, and escalation-safe
+   responses.
+2. Lead/callback capture and internal follow-up.
+3. Appointment or booking workflows where customers actually use them.
+4. Integration with the customer’s existing system of record, such as a CRM,
+   scheduling system, or dispatch system.
+5. Live transfer only when the business has staffed destinations and a proven
+   need for immediate connection.
+
+Resume the live-transfer implementation when at least one of these is true:
+
+- A paid customer or design partner requires it for launch or renewal.
+- Multiple independent prospects request it with the same workflow and
+  destination shape.
+- Callback follow-up is demonstrably losing qualified leads or revenue.
+- A target segment’s operating model requires immediate human escalation and
+  has a clear owner, number, availability policy, and compliance posture.
+
+A single customer request can justify a narrowly scoped pilot, but it should
+not automatically justify a generalized multi-provider, browser, SIP, warm
+transfer platform feature.
+
+## 2. Goals and non-goals
+
+### Goals
+
+1. Let a caller say “connect me to sales” or “I need a human about billing”
+   and reach the configured destination for that route.
+2. Let an agent choose among several destinations without exposing sensitive
+   phone numbers in prompts, transcripts, tool arguments, or model output.
+3. Keep the operation safe under model retries, duplicate tool calls, provider
+   timeouts, WebSocket disconnects, and callback retries.
+4. Preserve tenant isolation and enforce the route configured for the active
+   agent and organization.
+5. Make the behavior testable without requiring a live model for every
+   regression. Add deterministic tool/evaluation tests and a provider-backed
+   PSTN release gate.
+6. Give operators enough state to explain whether a transfer was requested,
+   ringing, connected, rejected, failed, or returned to the AI.
+
+### Non-goals for the first implementation
+
+- Transferring an arbitrary number chosen by the model or caller.
+- A conference where the AI listens or speaks to the human representative.
+- Whispering caller context to the human before connecting the caller.
+- SIP, Twilio Client, or arbitrary external telephony providers as destinations.
+- DTMF menus. They may be added later as another route-selection mechanism.
+- A browser-to-PSTN transfer using the current direct Pipecat WebSocket path.
+- Claiming a single merged recording until recording continuity is proven.
+
+## 3. Current platform facts and gaps
+
+The implementation should extend the existing boundaries rather than create a
+second voice runtime.
+
+| Area | Current behavior | Required change |
+| --- | --- | --- |
+| Twilio inbound call | `backend/src/voice_agents/voice_routes.py` verifies the webhook, resolves the agent, creates or updates a call log, issues a voice-session JWT, and returns `<Connect><Stream>`. | Preserve the parent call identity and add transfer callbacks/control. |
+| Phone media | `voice-ws/src/main.py` accepts `/twilio`; `voice-ws/src/bot.py` builds the Pipecat pipeline and registers tools. | Add a transfer-aware lifecycle so a provider-controlled handoff is not treated as an ordinary failure. |
+| Native tools | `voice-ws/src/tools/assembly.py` registers native tools from the shared registry and injects `ToolContext`. | Add a native `Human Call Transfer` tool and a trusted call-control boundary. |
+| Runtime context | `shared/voice_agents/tools/base/tool_context.py` carries organization and session metadata. | Add only trusted call-channel metadata needed for eligibility; never accept `call_sid` or organization identity from model arguments. |
+| Call tracking | `voice-ws/src/call_tracking.py` finalizes and bills when the AI session ends. | Make finalization transfer-aware and idempotent; provider callbacks remain authoritative for the parent call. |
+| Twilio integration | `backend/src/phone_numbers/twilio_service.py` manages phone-number operations. | Add a focused call-control service or module for updating active calls, generating TwiML, and validating callbacks. |
+| Tool configuration UI | `frontend/src/components/tools/tool-config-drawer.tsx` assumes simple string properties. | Add a route-list editor or a typed configuration form for destinations. |
+| Local environments | `backend/src/worktree_seed.py` provisions deterministic organizations, users, agents, and tool attachments. | Add safe fixture configuration without copying real phone numbers or credentials. |
+| Browser calls | Browser calls use direct Pipecat `/ws`; they are not Twilio calls. | Return a clear unsupported-channel result in phone-first scope, or implement a separate bridge phase. |
+
+## 4. Provider semantics that shape the design
+
+These details are implementation constraints, not optional prompt guidance.
+
+### 4.1 Twilio uses parent and child call legs
+
+Updating an active parent call with `<Dial>` creates a dialed child call leg.
+The child has its own Call SID and references the parent through
+`parentCallSid`. A transfer record must therefore store both identifiers when
+available. It must not assume that the original `CallSid` remains the only
+provider identifier.
+
+The backend should use the Twilio Calls API to update the active parent call
+with generated TwiML. The tool must not call Twilio directly from the model or
+from a browser.
+
+### 4.2 Stream parameters cannot be query strings
+
+Twilio `<Stream>` WebSocket URLs do not support arbitrary query-string
+parameters. If a reconnect token or transfer phase is needed, pass it through
+Twilio `<Parameter>` custom parameters and validate it server-side. Do not
+design a reconnect flow around `wss://.../twilio?token=...`.
+
+### 4.3 Cold transfer is the reliable first step
+
+`<Dial>` should connect the caller to the human and remove the AI from the
+conversation. A monitor stream that keeps the AI silently listening is a
+different topology with additional lifecycle, recording, privacy, and
+billing risks. It should not be the MVP dependency.
+
+### 4.4 Public callbacks require a real HTTPS endpoint
+
+Twilio status and action callbacks must use a publicly reachable HTTPS URL in
+staging and production. Local HTTP callbacks are suitable only for the
+documented local/test launcher path. Callback signatures must be verified.
+
+### 4.5 Browser calls are a different channel
+
+The current browser `/ws` transport has no Twilio parent Call SID. To support
+browser-to-PSTN transfer, choose one of these later:
+
+1. Move browser calling to the Twilio Voice JavaScript SDK so the browser has
+   a Twilio call identity and can use the same provider call-control model.
+2. Build a media bridge that originates a Twilio call and bridges its media to
+   the existing browser session. This is more flexible but materially more
+   complex and must handle codecs, backpressure, disconnection, and billing.
+
+The recommendation is to make phone transfer production-ready first, then
+choose the browser transport based on product requirements.
+
+## 5. User-facing behavior
+
+The intended interaction is:
+
+1. The caller asks for a person or for a department.
+2. The model identifies the configured route from the tool description and
+   calls `transfer_call` with the route ID.
+3. The tool validates the active call and starts the transfer.
+4. The model says only that it is connecting the caller; it does not say that
+   the transfer succeeded yet.
+5. Twilio dials the configured destination.
+6. If the representative answers, the caller is connected and the AI stops
+   participating.
+7. If the destination is busy, unavailable, or unanswered, the configured
+   fallback returns the caller to the AI or ends the call politely.
+
+```mermaid
+flowchart TD
+    A[Caller requests a human] --> B{Configured route is identifiable?}
+    B -- No --> C[Ask one concise clarification question]
+    B -- Yes --> D[Model calls transfer_call with route_id]
+    D --> E[Validate trusted call context and route]
+    E -- Invalid or unsupported --> F[Return actionable error to model]
+    E -- Valid --> G[Create idempotent transfer record]
+    G --> H[Update Twilio parent call with Dial TwiML]
+    H -- Provider request fails --> I[Mark transfer failed and return to AI]
+    H -- Provider accepts --> J[Dial human destination]
+    J -- Answered --> K[Connect caller to human; AI stops]
+    J -- Busy, no answer, or failed --> L{Fallback enabled?}
+    L -- Yes --> M[Resume AI with a safe explanation]
+    L -- No --> N[End call with safe explanation]
+```
+
+## 6. Native tool contract
+
+### 6.1 Identity and registration
+
+| Item | Proposed value |
+| --- | --- |
+| Display name | **Human Call Transfer** |
+| Stable platform-tool name | `Human_call_transfer` |
+| Model-facing function | `transfer_call` |
+| Implementation style | Native shared tool, registered through the existing platform-tool registry |
+| Initial provider | Twilio Voice |
+| Initial destination type | `phone` with E.164 target |
+
+The stable internal name should not be tied to one department. Department
+selection belongs in configuration. If the existing registry has a naming
+convention that requires a different identifier, preserve the display name and
+make the internal name stable before implementation begins.
+
+### 6.2 Function arguments
+
+```json
+{
+  "route_id": "sales",
+  "reason": "Caller requested help with a new policy"
+}
+```
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `route_id` | string | Yes | Stable ID of an enabled configured route, such as `sales` or `front_desk`. The model must choose from the routes described by the tool. |
+| `reason` | string | No | Short operational reason for the audit record. It is not used to select a destination and must not contain unnecessary sensitive data. |
+
+The function must not accept `phone_number`, `organization_id`, `agent_id`,
+`call_sid`, `user_confirmed`, or caller identity fields. These values either
+come from trusted runtime context or are not needed for transfer.
+
+### 6.3 Model-facing description
+
+The tool description must be generated from the enabled route configuration
+for the active agent and contain:
+
+- What the tool does and that it transfers the current call to a human.
+- The enabled route IDs and human-readable labels.
+- The rule that the tool is for an existing active call, not a callback promise.
+- The rule that the model must use this tool for any requested human handoff.
+- The rule that changing a destination, adding a person, or inventing a number
+  is not supported.
+- The rule to report the exact actionable error when the tool rejects a call.
+- The rule to say “I’m connecting you” rather than claim success before the
+  provider confirms it.
+
+This is tool-specific contract text, not default platform prompt content. The
+agent’s configurable instructions may add business-specific routing policy,
+but phone numbers and security rules remain server-owned.
+
+### 6.4 Result contract
+
+Every result must be structured and model-readable. A representative shape is:
+
+```json
+{
+  "status": "transfer_initiated",
+  "transfer_id": "tr_01J...",
+  "route_id": "sales",
+  "message": "The sales representative is being called.",
+  "next_action": "Wait for the transfer outcome; do not claim that the representative has answered."
+}
+```
+
+| Status | Meaning | Model-safe next action |
+| --- | --- | --- |
+| `transfer_initiated` | Twilio accepted the provider update and dialing has started. | Tell the caller the connection is being attempted. |
+| `transfer_connected` | Provider callback confirms the human leg answered. | Do not continue AI conversation unless the runtime explicitly resumes it. |
+| `transfer_failed` | Provider or platform failure prevented the transfer. | Explain briefly and offer the configured fallback. |
+| `transfer_unavailable` | Route is missing, disabled, not authorized, or unsupported for this channel. | Do not retry unchanged; use `next_action`. |
+| `transfer_in_progress` | An active transfer already exists for this call. | Do not create another transfer; wait for the existing outcome. |
+| `transfer_completed` | The human leg ended and the parent call is finalized or returned to AI. | Continue only if the runtime says the AI session is active. |
+
+Errors must include a stable `error_code`, a safe `message`, a `retryable`
+boolean, the incorrect field when applicable, and a `next_action`. Example:
+
+```json
+{
+  "status": "transfer_unavailable",
+  "error_code": "CHANNEL_NOT_SUPPORTED",
+  "message": "Human transfer is currently available for phone calls only.",
+  "retryable": false,
+  "next_action": "Continue helping the caller or explain that a human transfer is unavailable on this call."
+}
+```
+
+## 7. Structured route configuration
+
+Routes belong to the agent-tool configuration because different agents can
+route the same department differently. The UI should edit this structure; the
+model should see route IDs and labels, never the target numbers.
+
+```json
+{
+  "routes": [
+    {
+      "id": "sales",
+      "label": "Sales",
+      "type": "phone",
+      "target": "+15551234567",
+      "enabled": true
+    },
+    {
+      "id": "customer_support",
+      "label": "Customer Support",
+      "type": "phone",
+      "target": "+15557654321",
+      "enabled": true
+    }
+  ],
+  "fallback": "resume_ai",
+  "ring_timeout_seconds": 30,
+  "caller_id_policy": "business_number"
+}
+```
+
+### Configuration rules
+
+- `id` is stable, lowercase, and unique within the tool configuration.
+- `label` is user-facing and safe to expose to the model.
+- `type` is `phone` in phase one. Reserve `twilio_client` and `sip` for later
+  rather than accepting them before their call-control paths exist.
+- `target` is validated as an E.164 number and never accepted from a tool
+  invocation.
+- `enabled` allows an operator to disable a route without deleting history.
+- `fallback` initially supports `resume_ai` and `end_call`.
+- `ring_timeout_seconds` is bounded by server policy; the model cannot change it.
+- `caller_id_policy` initially resolves to the organization’s configured
+  business number or another explicitly approved Twilio number.
+- Configuration changes take effect on new transfer attempts and do not mutate
+  an existing transfer record’s destination snapshot.
+
+The configuration editor must validate required fields, E.164 format, unique
+route IDs, at least one enabled route, bounded timeout, and allowed enum
+values. It must not display or log provider credentials.
+
+## 8. Target architecture
+
+The native tool is an intent boundary. Twilio credentials and provider call
+control remain in the backend. The voice runtime supplies trusted call context
+and receives an actionable result.
+
+```mermaid
+flowchart LR
+    CallerPhone[Caller on PSTN] --> ParentCall[Twilio parent call]
+    BrowserCaller[Browser caller] --> BrowserWS[Current browser WebSocket]
+    ParentCall --> VoiceWS[voice-ws /twilio]
+    BrowserWS --> BrowserAI[voice-ws /ws AI session]
+    VoiceWS --> ToolRegistry[Shared native tool registry]
+    BrowserAI --> ToolRegistry
+    ToolRegistry --> TransferTool[Human Call Transfer tool]
+    TransferTool --> ContextGuard[Trusted context and policy guard]
+    ContextGuard --> ControlAPI[Backend call-control service]
+    ControlAPI --> AgentConfig[(Agent tool configuration)]
+    ControlAPI --> TransferDB[(call_transfers)]
+    ControlAPI --> TwilioREST[Twilio Calls API]
+    TwilioREST --> ChildLeg[Twilio child dial leg]
+    ChildLeg --> Human[Configured human representative]
+    TwilioREST --> StatusCallback[HTTPS status and action callbacks]
+    StatusCallback --> ControlAPI
+    ControlAPI --> CallLog[(call_logs and billing)]
+    BrowserAI -.-> Unsupported[Phase one: explicit channel unsupported]
+```
+
+The dotted browser path is intentional. It prevents an agent from pretending
+that a direct browser session was transferred when no PSTN bridge exists.
+
+## 9. Phone transfer sequence
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Caller
-    participant Twilio
-    participant AI as AI Agent (voice-ws)
-    participant Backend as 24x7 Backend
-    participant Human as Human Agent
-    participant Aud as Call Logs + Recording
+    participant TwilioParent as Twilio parent call
+    participant VoiceWS as voice-ws
+    participant Model
+    participant Tool as native transfer tool
+    participant Backend as backend control API
+    participant DB as transfer database
+    participant TwilioAPI as Twilio Calls API
+    participant Human
 
-    Caller->>Twilio: Dials the platform number
-    Twilio->>Backend: Incoming call (CallSid)
-    Backend->>Twilio: "Run the AI agent" (stream TwiML + JWT)
-    Twilio->>AI: Caller audio
-    AI->>Twilio: AI audio
-    Caller->>AI: "Transfer me to billing"
-    AI->>Backend: transfer_call(destination=billing)
-    Backend->>Twilio: Redirect this same call to billing's number
-    Twilio->>Human: Rings (caller hears ringback)
-    Twilio->>AI: New listen-only stream — both voices
-    Human->>Caller: Human–human conversation (AI listens & records)
-    Caller->>Twilio: Hangs up
-    Twilio->>Backend: Call ended
-    Backend->>Aud: One call log · one duration · one recording
-```
-
-## What changes — at a glance
-
-| Area | Today | After this feature |
-| --- | --- | --- |
-| Twilio call instructions | `<Connect><Stream>` — AI only | Same + one REST update to `<Start><Stream track="both_tracks">` + `<Dial>` when transferring |
-| Call identity | One CallSid per call | Unchanged — transfer is a redirect of the same call |
-| voice-ws | One Pipecat session per call | Session A (AI, unchanged) + optional session B (monitor: listens and records only, no LLM/TTS) |
-| Agent capabilities | Tools: calendar, sheets, MCP, skills… | New `call_transfer` platform tool; destinations configured per agent |
-| Recording | One WAV per session, one artifact row | Two segments merged into one WAV; still one artifact row per call |
-| Call logs / Calls page | Status, duration, Listen playback | Same + "Transferred to +1…" badge and new audit columns |
-| Billing | One idempotent credit debit per call at teardown | Unchanged — one final debit covering the full duration |
-| Concurrency limits | Counted from active call-log rows | Unchanged — the same call counts once across both phases |
-| Web (browser) calls | Transfer not applicable | Unchanged in v1 (see §7 for the v2 bridge) |
-
-## Architecture — high level
-
-New pieces are green; existing components keep their current shape.
-
-```mermaid
-graph TB
-    Caller[Caller — any phone] -->|PSTN| Twilio[Twilio]
-    Twilio -->|incoming webhook / status callback| Backend[24x7 Backend<br/>transfer endpoint + TwiML]
-    Backend ==>|REST redirect to human — same call| Twilio
-    Twilio <==>|Media Stream WebSocket| WS[voice-ws]
-
-    subgraph VWS[voice-ws]
-        SessA[Session A — AI agent<br/>STT → LLM + tools → TTS]
-        SessB[Session B — monitor<br/>listens + records both voices]
+    Caller->>TwilioParent: Requests a human representative
+    TwilioParent->>VoiceWS: Sends caller audio over /twilio
+    VoiceWS->>Model: Presents the conversation and tool contract
+    Model->>Tool: transfer_call(route_id, reason)
+    Tool->>Backend: Trusted request with call session and idempotency key
+    Backend->>Backend: Verify voice JWT, purpose, agent, organization, and active call
+    Backend->>DB: Reserve one active transfer for the parent Call SID
+    DB-->>Backend: Transfer record created
+    Backend->>TwilioAPI: Update parent call with Dial TwiML
+    TwilioAPI-->>Backend: Provider request accepted
+    Backend->>DB: Mark transfer initiated
+    Backend-->>Tool: transfer_initiated with safe next action
+    Tool-->>Model: Tell caller the connection is being attempted
+    TwilioAPI->>Human: Dial configured child leg
+    Human-->>TwilioAPI: Answers or declines
+    TwilioAPI->>Backend: Signed status/action callback
+    Backend->>DB: Record child SID and terminal status
+    alt Human answers
+        TwilioAPI->>TwilioParent: Bridge caller to human
+        Backend->>DB: Mark connected and keep parent lifecycle open
+        TwilioParent-->>Caller: Human conversation
+    else Busy, no answer, or provider failure
+        Backend->>DB: Mark failed with provider-safe code
+        Backend->>TwilioAPI: Apply configured fallback TwiML
+        TwilioAPI->>VoiceWS: Reconnect AI only when fallback is resume_ai
+        VoiceWS-->>Caller: Explain that a human was unavailable
     end
-
-    WS --> SessA
-    WS --> SessB
-
-    SessA ==>|transfer_call tool| Backend
-    Twilio ==>|Dial| Human[Human agent — sales / care / billing]
-    SessB -.silently listens + records.-> Human
-    WS --> Store[(Call recordings — R2 / local)]
-    Backend --> DB[(Postgres — call_logs + call_artifacts)]
-    UI[Calls page — one row, one Listen] --> Backend
-
-    classDef new fill:#d9f2d9,stroke:#2e7d32,stroke-width:2px;
-    class SessB,Human new;
-    style Backend fill:#e8eef7
 ```
 
-> The rest of this document is the deep technical design behind these two
-> diagrams: exact TwiML, reconnect mechanics, recording continuity, billing
-> edge cases, and the build plan.
+The exact callback ordering must be verified against a Twilio trial account.
+The implementation must tolerate callbacks arriving more than once or out of
+order and must not bill or finalize twice.
 
----
-
-## 1. Requirements mapped to current state
-
-| Requirement | Feasible? | Basis |
-| --- | --- | --- |
-| AI asks caller for intent, routes to sales/care/billing number | Yes | New `call_transfer` platform tool; LLM decides; destinations in tool config |
-| Transfer keeps caller on the same call | Yes | Twilio REST `POST /Calls/{CallSid}` with new TwiML — same CallSid, caller leg never disconnects |
-| AI stays on the call silently (listening, not speaking) | Yes | Provider-enforced: `<Start><Stream track="both_tracks">` is **unidirectional** — the WebSocket cannot inject audio |
-| Human–human audio recorded too | Yes | `both_tracks` stream delivers both parties to voice-ws; existing recorder captures it; segments merged into one file |
-| One call log entry / one recording / one audit unit | Yes | Same `CallSid` throughout → same `call_logs` row → same `call_log_id` → one `call_artifacts.recording` row (merged WAV) |
-| Web (browser) calls transfer to a human phone | No (v1) | Browser WebSocket has no PSTN leg; needs a second dial-out leg bridged into the session (v2, §7) |
-
----
-
-## 2. Current call flow (what exists today)
+## 10. Transfer lifecycle
 
 ```mermaid
-sequenceDiagram
-    participant Caller
-    participant Twilio
-    participant Backend
-    participant WS as voice-ws
-    participant DB as Postgres
-    participant R2 as R2 / local store
-
-    Caller->>Twilio: Dials platform number
-    Twilio->>Backend: POST /api/v1/voice/twilio/incoming (CallSid)
-    Backend->>DB: create call_logs row (status=initiated)
-    Backend->>Twilio: TwiML <Connect><Stream wss://…/twilio?token=JWT>
-    Twilio->>WS: Media Stream WebSocket (bidirectional)
-    WS->>DB: reuse call log row by call_sid
-    Note over WS: Pipecat pipeline: STT → LLM+tools → TTS
-    WS->>WS: Recording taps capture caller/agent PCM tracks
-    Caller->>WS: speaks
-    WS->>Caller: agent audio
-    Caller->>Twilio: hangs up
-    Twilio->>WS: stream closed
-    WS->>DB: finalize call log + bill (idempotent RPC by call_log_id)
-    WS->>R2: upload recording.wav, artifact = completed
+stateDiagram-v2
+    [*] --> requested
+    requested --> rejected: validation or policy failure
+    requested --> initiated: provider update accepted
+    initiated --> ringing: child leg started
+    ringing --> connected: child leg answered
+    ringing --> failed: busy, no-answer, or provider failure
+    initiated --> failed: callback or timeout failure
+    connected --> completed: human leg ended
+    connected --> canceled: parent call ended
+    failed --> fallback: fallback is resume_ai
+    failed --> completed: fallback is end_call
+    fallback --> completed: AI resumes or call ends
+    rejected --> [*]
+    completed --> [*]
+    canceled --> [*]
 ```
 
----
+`requested` and `initiated` are distinct so a database reservation is not
+mistaken for provider acceptance. The API and tool results should expose the
+stable status names, while provider-specific statuses remain in redacted
+diagnostic fields.
 
-## 3. Target architecture
+## 11. Backend control boundary
 
-### 3.1 Transfer mechanics (the keystone)
+The suggested boundary is an internal authenticated endpoint, called by the
+voice runtime and never exposed as a model-facing HTTP tool:
 
-Twilio constraint (verified against current Twilio docs):
-
-- `<Stream>` is only valid inside `<Start>` (unidirectional, listen-only) or
-  `<Connect>` (bidirectional). It **cannot** be nested inside `<Dial>`.
-- `<Connect><Stream>` receives only the caller track and takes control of the
-  call — it blocks any subsequent `<Dial>` until it ends.
-- `<Start><Stream track="both_tracks">` followed by `<Dial>` streams **both**
-  participants of the bridged human call and is **listen-only by design**.
-
-Transfer therefore uses a **REST TwiML update** on the in-progress call
-(`POST /2010-04-01/Accounts/{sid}/Calls/{CallSid}.json` with `Twiml=…`):
-
-```xml
-<Response>
-  <Start>
-    <Stream name="human-leg" track="both_tracks"
-            url="wss://{VOICE_WS_TWILIO_URL}/twilio?token={JWT}">
-      <Parameter name="token" value="{JWT}"/>
-    </Stream>
-  </Start>
-  <Dial answerOnBridge="true" timeout="30">+15551234567</Dial>
-</Response>
+```text
+POST /api/v1/internal/voice/calls/{call_sid}/transfers
+POST /api/v1/voice/twilio/transfer-status
 ```
 
-Effects:
+The exact route names may follow the repository’s existing conventions, but
+the separation is required:
 
-- **Same CallSid** — the caller's call is redirected to dial the human agent.
-  One call, one call log, one duration, one bill.
-- Executing new TwiML ends the old `<Connect><Stream>` leg → voice-ws session A
-  tears down; Twilio immediately opens a **new** WebSocket to the same
-  `/twilio` endpoint with the same JWT (same `call_sid` claim). Session B =
-  "monitor session".
-- Session B's stream is unidirectional, so the AI **cannot speak** into the
-  human call — "silent AI" is enforced by the provider, not by application
-  discipline. The AI still receives both parties' audio (record; optionally
-  transcribe).
-- `<Start>` connects **before** the human answers, so there is no recording gap
-  at the hand-off. The caller hears ringback while the human's phone rings.
+1. `voice-ws` receives the model tool call and passes trusted runtime context.
+2. Backend verifies the signed voice-session token or an equivalent internal
+   service credential. The request must bind `call_sid`, `agent_id`, and
+   `organization_id` to the same active session.
+3. Backend loads the current agent-tool configuration and resolves `route_id`.
+4. Backend creates or reuses the idempotent transfer record.
+5. Backend generates provider TwiML and updates the Twilio parent call.
+6. Twilio calls the public HTTPS callback; backend verifies the signature and
+   updates state.
+7. Backend applies fallback and finalization exactly once.
 
-Why not `<Conference>`? A conference enables whisper/barge-in (AI hears one
-party while speaking to the other) but requires restructuring the call into a
-conference room plus a separate media participant leg. It is the right upgrade
-path for "coaching/barge-in" later (§7); overkill for routing + silent monitor
-now.
+The backend must not trust a caller-supplied organization ID, agent ID, target
+number, or ownership claim. The model never gets Twilio credentials.
 
-### 3.2 Two-phase session: AI phase → monitor phase
+## 12. Data model and ownership
+
+Use a separate transfer table instead of overloading `call_logs`. A call can
+have a transfer attempt, a retry after a terminal failure, a parent leg, and a
+child leg. Keeping transfer history separate makes the lifecycle auditable.
 
 ```mermaid
-sequenceDiagram
-    participant Caller
-    participant Twilio
-    participant Backend
-    participant WS as voice-ws
-    participant DB as Postgres
-    participant R2 as R2 / local store
+erDiagram
+    ORGANIZATIONS ||--o{ AGENTS : owns
+    AGENTS ||--o{ AGENT_TOOLS : configures
+    CALL_LOGS ||--o{ CALL_TRANSFERS : records
+    AGENT_TOOLS ||--o{ CALL_TRANSFERS : resolves
+    ORGANIZATIONS ||--o{ CALL_TRANSFERS : scopes
 
-    Note over Caller,WS: Phase A — AI agent (existing flow)
-    Caller->>WS: "please transfer me to billing"
-    WS->>WS: LLM calls transfer_call(destination=billing)
-    WS->>Backend: POST /api/v1/voice/twilio/transfer (session JWT, billing)
-    Backend->>Twilio: REST update with Start Stream + Dial TwiML
-    Backend->>DB: call_logs.transfer_status=initiated, transfer_destination
-    Twilio->>WS: (close old stream) — session A teardown
-    WS->>R2: upload segment A (segments/000.wav), artifact stays pending
-    Note over WS: run_bot teardown SKIPS finalize + billing (flagged)
-    Twilio->>WS: new stream (both_tracks) — session B, monitor mode
-    Note over WS: monitor handler: decode mulaw, capture audio, no LLM/TTS
-    Caller->>Human: conversation (human answered)
-    Human->>Caller: conversation
-    WS->>WS: capture both tracks into RecordingCoordinator
-    Caller->>Twilio: hangs up
-    Twilio->>WS: stream closed — session B teardown
-    WS->>R2: upload segment B, read A, merge → recording.wav
-    WS->>DB: artifact=completed, finalize call log + bill (full duration)
+    ORGANIZATIONS {
+        uuid id PK
+    }
+    AGENTS {
+        uuid id PK
+        uuid organization_id FK
+    }
+    AGENT_TOOLS {
+        uuid id PK
+        uuid agent_id FK
+        string tool_name
+        json config_json
+        boolean enabled
+    }
+    CALL_LOGS {
+        uuid id PK
+        uuid organization_id FK
+        uuid agent_id FK
+        string parent_call_sid
+        string status
+    }
+    CALL_TRANSFERS {
+        uuid id PK
+        uuid call_log_id FK
+        uuid organization_id FK
+        uuid agent_id FK
+        uuid agent_tool_id FK
+        string parent_call_sid
+        string child_call_sid
+        string route_id
+        string destination_type
+        string status
+        string error_code
+        string idempotency_key
+        datetime requested_at
+        datetime connected_at
+        datetime completed_at
+    }
 ```
 
-### 3.3 Call identity, billing, audit — all single-unit
+### `call_transfers` requirements
 
-| Concern | Behavior |
+- Foreign keys to the call log, organization, agent, and configured tool when
+  those relationships exist in the current schema.
+- Unique idempotency key for one logical attempt.
+- An index on `(parent_call_sid, status)` and organization-scoped lookup keys.
+- A partial uniqueness rule or transactional lock preventing two active
+  transfers for the same parent call.
+- A destination snapshot containing route ID and safe display label; avoid
+  putting the raw number in application logs or model-visible output.
+- Provider diagnostics stored separately from user-facing message and redacted
+  before logs/traces.
+- Timestamps for requested, provider accepted, ringing, connected, completed,
+  failed, and fallback where applicable.
+
+The migration must document indexes, constraints, RLS, retention, and downgrade
+behavior in `docs/DATABASE_SCHEMA.md` before implementation is released.
+
+## 13. Lifecycle, billing, and recording rules
+
+### 13.1 Call finalization
+
+The current AI WebSocket can close when Twilio replaces `<Connect><Stream>`
+with `<Dial>`. That disconnect is not necessarily the end of the parent call.
+The finalizer must:
+
+- Detect an active `requested`, `initiated`, `ringing`, or `connected` transfer.
+- Mark the AI segment as paused or handed off rather than finalizing the whole
+  parent call immediately.
+- Let the Twilio parent status callback or transfer coordinator finalize the
+  parent call.
+- Use an atomic idempotent transition/RPC so reconnects and duplicate callbacks
+  cannot double-bill or double-close the call.
+- Preserve a clear reason when the call ends during a transfer.
+
+### 13.2 Billing and concurrency
+
+The product decision should remain “one parent call, one billable call” unless
+pricing explicitly says otherwise. The child dial leg must not consume a second
+AI voice credit or bypass concurrent-call accounting. The transfer state must
+be included in entitlement and active-call queries.
+
+### 13.3 Recording
+
+The existing voice-ws recording path captures audio available to the AI
+pipeline. A cold Twilio `<Dial>` leg is not automatically guaranteed to appear
+in that local mixer. Therefore:
+
+- Do not advertise “one continuous recording” until it is proven.
+- Preserve the AI segment as the current artifact.
+- Decide whether the human leg is recorded by Twilio, a server-side monitor
+  stream, or not recorded. Each option has consent, retention, and cost
+  implications.
+- If Twilio recording is selected, ingest its recording callback into the
+  existing private artifact path, correlate it by parent/child Call SID, and
+  test retention and playback permissions.
+- The Calls UI should show transfer status and recording completeness rather
+  than implying that a missing human segment is present.
+
+## 14. Security and privacy
+
+- Validate Twilio webhook signatures on incoming and transfer callbacks.
+- Keep Twilio credentials and destination numbers server-side.
+- Do not put numbers in prompts, tool descriptions, transcripts, logs,
+  screenshots, eval fixtures, or error messages.
+- Redact phone numbers and provider request bodies in structured logs.
+- Enforce organization and agent ownership in backend services, not only in
+  the configuration UI.
+- Treat route configuration as sensitive operational data and protect it with
+  the existing tenant/RLS model.
+- Use short-lived, purpose-bound session credentials for runtime control. Do
+  not make the transfer endpoint a general-purpose call-control API.
+- Add rate limits and an active-transfer guard to prevent model loops or abuse.
+- Preserve a caller-consent/recording policy hook even if transfer itself does
+  not require a second confirmation.
+- Never expose internal error details such as Twilio credentials, SQL errors,
+  JWT contents, or organization IDs to the caller.
+
+## 15. Observability and operations
+
+Emit structured events and traces with stable non-sensitive identifiers:
+
+```text
+transfer.requested
+transfer.rejected
+transfer.provider_accepted
+transfer.ringing
+transfer.connected
+transfer.failed
+transfer.fallback_started
+transfer.completed
+```
+
+Each event should include organization ID, agent ID, call-log ID, transfer ID,
+route ID, parent Call SID hash or redacted value, provider status, latency, and
+retry classification. Do not include the raw destination number or transcript.
+
+Create dashboards/alerts for:
+
+- Transfer success rate by route and provider status.
+- Time from request to provider acceptance and to human answer.
+- Busy/no-answer/provider-failure rates.
+- Fallback rate and AI-resume success rate.
+- Duplicate/idempotency conflicts.
+- Calls incorrectly finalized or billed during transfer.
+- Missing or incomplete recording artifacts.
+
+The runbook must explain how to correlate a call log, parent Call SID, child
+Call SID, transfer record, provider callback, and recording artifact without
+exposing secrets.
+
+## 16. Implementation map
+
+The following files are likely touch points. Confirm names and existing service
+conventions before coding; do not create parallel registries or runtimes.
+
+### Shared/native tool
+
+- Add a native implementation under
+  `shared/voice_agents/tools/implementations/`.
+- Register it through the existing shared platform-tool registry.
+- Define typed input/output models and the docstring contract.
+- Use `ToolContext` only for trusted runtime metadata. Prefer a narrowly typed
+  call-control capability/context over passing a raw bearer token through
+  generic tool state.
+
+### Voice runtime
+
+- Extend `voice-ws/src/tools/assembly.py` only as needed to expose route IDs and
+  pass trusted context.
+- Add a small transfer coordinator/client with bounded timeouts and explicit
+  error mapping.
+- Update `voice-ws/src/call_tracking.py` and `voice-ws/src/bot.py` so a Twilio
+  handoff is not treated as an ordinary AI-session failure.
+- Keep `/ws` behavior explicit: return `CHANNEL_NOT_SUPPORTED` until a browser
+  bridge exists.
+
+### Backend/provider control
+
+- Add a focused Twilio call-control service next to the existing phone-number
+  service, or a clearly separated module within it.
+- Add authenticated internal transfer initiation and public signed callback
+  routes under the existing voice route conventions.
+- Generate TwiML server-side; never concatenate an unvalidated model string
+  into TwiML.
+- Add parent/child call correlation and idempotent callback handling.
+
+### Database and configuration
+
+- Add an Alembic migration for `call_transfers`, indexes, constraints, RLS,
+  and any call-log status additions.
+- Update `docs/DATABASE_SCHEMA.md` and relevant implementation docs.
+- Add a typed configuration validator shared by API and runtime paths.
+- Add safe deterministic worktree seed data with fake E.164 numbers only, or
+  leave the tool unattached by default if the local fixture cannot safely run a
+  provider transfer.
+
+### Frontend
+
+- Add a typed route-list editor to the tool configuration UI.
+- Show validation, enabled/disabled routes, and safe labels; never reveal a
+  provider secret or include raw numbers in client logs.
+- Add permission, loading, empty, and invalid-configuration states.
+
+### Documentation and release
+
+- Update `docs/03_implementation/` with the final contract and provider flow.
+- Update `docs/02_features/` only if the product behavior is enabled for users.
+- Update testing/evaluation docs with the scenario matrix.
+- Update environment/deployment docs for callback URLs, TLS, secrets, and
+  Twilio trial/staging setup.
+- Do not enable the feature in production until the PSTN release gate passes.
+
+## 17. Phased execution plan
+
+### Phase 0: provider and contract spike
+
+1. Confirm Twilio account capabilities, caller-ID policy, recording policy, and
+   staging callback URL.
+2. In a disposable Twilio trial flow, update an in-progress parent call with
+   `<Dial>` and verify the child Call SID, parent correlation, action callback,
+   status callbacks, and fallback TwiML.
+3. Verify that the current `/twilio` WebSocket closes during handoff and that
+   call tracking does not bill/finalize prematurely.
+4. Capture provider callback ordering and exact status values in a fixture;
+   do not hard-code assumptions from a single happy-path call.
+
+**Exit criteria:** parent/child lifecycle and callback behavior are documented
+from an actual trial call, with no production data or credentials in fixtures.
+
+### Phase 1: phone-first production feature
+
+1. Implement the typed tool contract and structured route config.
+2. Implement backend initiation, TwiML generation, provider callbacks, and
+   idempotency.
+3. Implement transfer-aware call lifecycle, billing, and fallback.
+4. Add migration, RLS, audit fields, metrics, and redacted logs.
+5. Add configuration UI and safe local seed behavior.
+6. Add unit, API, integration, deterministic eval, and PSTN smoke coverage.
+
+**Exit criteria:** all acceptance criteria in section 20 pass, including
+provider failure and duplicate callback scenarios.
+
+### Phase 1.5: recording continuity
+
+Choose and implement the approved recording strategy. Correlate human-leg
+recordings with the parent call, enforce retention/consent policy, and expose
+recording completeness in the Calls UI. This phase is required before claiming
+full-call recording.
+
+### Phase 2: browser-to-PSTN transfer
+
+Choose the browser transport, then implement and test the bridge. The design
+must cover media codecs, browser disconnects, PSTN answer/failure, transfer
+billing, browser permissions, and recording. Do not silently route browser
+calls through the phone implementation.
+
+### Phase 3: warm transfer and additional destinations
+
+Only after cold transfer is reliable, consider human context handoff,
+conference/whisper behavior, Twilio Client destinations, SIP, DTMF routing,
+and multi-destination escalation policies.
+
+## 18. Test and evaluation matrix
+
+### Unit and contract tests
+
+- Route schema accepts valid E.164 phone destinations and rejects malformed,
+  duplicate, disabled, and unsupported routes.
+- Tool schema exposes route IDs/labels but never target numbers.
+- Missing `call_sid`, wrong purpose, expired session, and mismatched agent/org
+  return `CHANNEL_NOT_SUPPORTED` or an authorization error without provider
+  calls.
+- Invalid `route_id` returns a non-retryable actionable error.
+- A second request while a transfer is active returns `transfer_in_progress`.
+- A terminal failure can be retried with a new idempotency key; the same key
+  cannot create a second provider call.
+- Provider timeout, 4xx, 5xx, malformed callback, and signature failure map to
+  safe stable error codes.
+- The model-facing result never says connected for `transfer_initiated`.
+
+### Backend/API/integration tests
+
+- Organization A cannot resolve or use organization B’s route.
+- Agent A cannot use agent B’s configured destination.
+- TwiML is generated only from validated server configuration.
+- Parent and child Call SIDs are correlated correctly.
+- Duplicate and out-of-order callbacks converge to one terminal state.
+- No-answer/busy/failed status applies the selected fallback exactly once.
+- AI WebSocket disconnect during transfer does not double-finalize or double-bill.
+- Parent call completion finalizes the call even when the AI session is gone.
+- Transfer callback authentication, rate limiting, and replay handling work.
+
+### Deterministic agent/tool evaluations
+
+Add scenarios to the repository’s evaluation framework for:
+
+| Scenario | Expected tool behavior |
 | --- | --- |
-| Call identity | One Twilio `CallSid` for the whole call (REST update, not hangup+redial). Backend webhook and status callback keep working unchanged. |
-| Call log | One row. `start_call_tracking` already reuses the row by `call_sid` (`voice-ws/src/call_tracking.py`); status callback maps `in-progress`/`completed` onto the same row. |
-| Duration | Final `end_call_tracking` computes from `started_at` (original call start) — covers AI + human phases. |
-| Billing | One debit via the idempotent `consume_voice_call_credits` RPC keyed by `call_log_id`. **Critical:** session A's teardown must NOT run `end_call_tracking` when a transfer is pending — an early finalize would bill the mid-call duration and the idempotent RPC would then no-op on the correct final duration. |
-| Concurrency limit | The same call counts once: session B's pre-check excludes its own `call_sid` (`_count_active_calls`), and the row stays in an ACTIVE status across the gap (never marked completed between phases). |
-| Recording | One artifact row `(call_log_id, artifact_type='recording')`; one final WAV (merged segments, same mulaw 8 kHz mono on both phases). |
-| Audit view | Unchanged Calls page: `recording_available` + "Listen" playback + consent banner already implemented; add a "Transferred to +1…" indicator. |
+| “Connect me to sales.” | One `transfer_call(route_id="sales")`; no invented number. |
+| “I need a person about billing.” | Correct configured billing route. |
+| “Call this number instead: …” | Refuse arbitrary destination and explain the supported routes. |
+| Ambiguous “someone from the office.” | Ask a concise route clarification. |
+| Tool unavailable on a browser call. | Do not claim transfer; give the configured unsupported-channel response. |
+| Duplicate model tool call. | One transfer attempt and an in-progress/idempotent result. |
+| Provider initiation failure. | Explain failure and follow fallback; no false success. |
+| Human answers. | No additional AI speech after handoff. |
+| Human does not answer. | Resume AI or end call according to configuration. |
+| Sensitive route configuration. | Never expose the target number. |
 
-### 3.4 Recording continuity (segment + merge)
+Record tool sequence, arguments, result status, error code, prompt/schema
+hashes, latency, and outcome. These evaluations test platform behavior, not
+live Gemini/realtime provider latency.
 
-Each voice-ws session owns its own in-memory audio buffer and uploads at
-teardown. Two sessions → two objects. Design:
+### Browser and PSTN release gates
 
-1. Session A (AI phase): upload `segments/000.wav`; artifact row upsert stays
-   `pending` with `metadata.segments = ["segments/000.wav"]`.
-2. Session B (monitor phase): capture starts at stream connect (before the
-   human answers); at teardown upload `segments/001.wav`, read `000`, merge
-   (same codec/params — both Twilio mulaw 8 kHz mono; WAV concat is
-   header-recompute + byte append), upload final `recording.wav`, upsert
-   artifact `completed` with merged sha256/size/duration.
-3. **Gap case:** caller hangs up while the human's phone is still ringing or
-   nobody answers — session B may be brief or never start. The backend status
-   callback (`completed`) becomes the finalizer: if the artifact is still
-   `pending` with segments, merge what exists (even a single segment is a valid
-   recording).
-4. **Failure case:** merge or final upload fails → artifact marked `failed`
-   with `metadata.parts` retained so support/retry tooling can finish it. The
-   call log and billing are unaffected (recording is best-effort by design).
-5. Merge logic lives in `shared/call_recordings/` so voice-ws and backend share
-   one implementation.
+- Browser UI can configure, validate, enable, and disable routes.
+- Authenticated phone call reaches Twilio, AI, transfer tool, human number,
+  callback, call log, billing, and safe terminal state.
+- Busy, no-answer, wrong number, timeout, caller hang-up, duplicate request,
+  and provider outage are tested.
+- Recording behavior is explicitly verified and labeled complete/incomplete.
+- Logs show correlation without secrets or raw destination numbers.
+- Existing non-transfer browser, PSTN, tool, and call-history tests remain green.
 
-Browser calls (session A only, no transfer) keep today's single-upload path
-unchanged. A future web→PSTN bridge (§7, v2) crosses codecs (16 kHz PCM browser
-vs 8 kHz mulaw Twilio) and needs resampling at merge — out of scope for v1.
+## 19. Open questions and recommended decisions
 
----
+These decisions should be resolved before implementation starts. The
+recommendation is the default execution path unless product or provider
+constraints override it.
 
-## 4. What needs to be built
+| ID | Question | Recommendation | Decision needed |
+| --- | --- | --- | --- |
+| OQ-1 | Is browser-to-PSTN transfer required in the first release? | No. Ship phone-first and make browser behavior explicitly unsupported. | Product owner |
+| OQ-2 | Should the first transfer be cold or warm? | Cold transfer. Add monitor/whisper only after lifecycle and privacy are proven. | Product/engineering |
+| OQ-3 | What should happen when the human does not answer? | Resume AI by default; allow an org-configured `end_call` fallback. | Product owner |
+| OQ-4 | Which caller ID should the human see? | Use an approved business Twilio number, not the caller’s personal number. | Telephony/compliance |
+| OQ-5 | Must the human leg be recorded? | Decide by organization/consent policy before enabling production transfer. | Product/compliance |
+| OQ-6 | Is a single continuous recording mandatory? | Do not promise it in phase one; require phase 1.5 if mandatory. | Product/compliance |
+| OQ-7 | Where should routes be configured? | Per-agent native tool configuration; add org defaults only when inheritance is needed. | Product/engineering |
+| OQ-8 | Does transfer require a second caller confirmation? | No repeated confirmation by default; require explicit caller intent and honor an org policy hook. | Product/compliance |
+| OQ-9 | Is the feature entitlement-controlled? | Add a feature/entitlement gate before production if transfer has telephony cost. | Billing/product |
+| OQ-10 | Should one call allow multiple transfer attempts? | One active attempt; permit a new attempt only after a terminal failure. | Product/engineering |
+| OQ-11 | How should voice-ws authenticate the internal endpoint? | Use a purpose-bound voice-session JWT or a narrowly scoped service credential; bind it to the call and agent. | Security/engineering |
+| OQ-12 | Are Twilio Client or SIP destinations needed now? | No. Reserve destination types and reject them until implemented. | Product |
+| OQ-13 | Should a caller be able to request a named employee? | Not in phase one; use configured departments/routes to avoid directory and privacy complexity. | Product |
 
-### 4.1 Backend
+## 20. Acceptance criteria
 
-1. **`POST /api/v1/voice/twilio/transfer`** — authenticated with the
-   `voice_ws_session` JWT (verified via shared `voice_session_service`, same as
-   voice-ws). Validates: session purpose=phone, claims' `call_sid` matches the
-   body, org owns the agent. Builds the transfer TwiML (reuses
-   `resolve_twilio_stream_base_url`) and calls Twilio REST
-   `client.calls(call_sid).update(twiml=…)` via the existing `TwilioService`
-   credentials. Records `transfer_status=initiated`, `transfer_destination`,
-   `transferred_at` on the call log row. Idempotent: a second call for the same
-   `call_log_id` no-ops.
-   - Alternative (documented, not recommended): voice-ws calls Twilio REST
-     directly — it already holds `TWILIO_ACCOUNT_SID`/`AUTH_TOKEN` for
-     `auto_hang_up`. Keeps TwiML + public-URL resolution in one place
-     (backend) instead, which is why the endpoint is preferred.
-2. **Alembic migration** for audit columns (after user review/approval, per
-   repo policy):
-   - `call_logs.transfer_destination VARCHAR(30) NULL`
-   - `call_logs.transferred_at TIMESTAMPTZ NULL`
-   - `call_logs.transfer_status VARCHAR(20) NULL` (`initiated | connected |
-     failed | none`)
-   - Update `docs/DATABASE_SCHEMA.md` (table, indexes, migration history,
-     ER diagram) when the migration lands.
-3. **Status-callback finalizer** (§3.4 gap case): on `completed`/`no-answer`,
-   if artifact is `pending` with segments → merge + mark completed/failed.
-4. Optional: `call_logs.direction` column — already moot for transfers
-   (inbound), so defer unless the outbound feature lands.
+The implementation is ready for review only when all of the following are
+true:
 
-### 4.2 voice-ws
+- The native tool is discoverable only when enabled and has a precise typed
+  schema/docstring.
+- The model receives route IDs and labels, never target phone numbers.
+- A phone call can transfer to each enabled route using a validated Twilio
+  parent call.
+- Parent and child Call SIDs, route, status, callback outcome, and timestamps
+  are correlated in `call_transfers`.
+- Duplicate model calls, retries, callbacks, and WebSocket disconnects are
+  idempotent.
+- A provider failure returns a meaningful actionable error and follows the
+  configured fallback without a false success message.
+- Organization, agent, channel, entitlement, and active-call authorization is
+  enforced server-side.
+- Billing and call finalization happen exactly once for the parent call.
+- Recording behavior is documented and visible as complete/incomplete; no
+  unsupported single-recording claim is made.
+- Browser calls receive an explicit unsupported result until a tested bridge is
+  implemented.
+- Configuration UI, migration/schema documentation, tool docs, tests, evals,
+  runbooks, and environment examples are updated together.
+- Focused tests, affected suites, deterministic evaluations, and the PSTN
+  release gate pass; live-provider latency is reported separately.
 
-1. **`call_transfer` tool wiring.** The transfer decision is an LLM tool call.
-   Two layers:
-   - `shared/voice_agents/tools/implementations/call_transfer.py` — new
-     `BaseTool`; config = named destinations (`{"billing": "+1…", "sales":
-     "+1…", "default": "+1…"}`) via the standard agent-tool config drawer (no
-     new table). Function: `transfer_call(destination: str)`.
-   - **Session context:** the tool needs `call_sid` + `session_id` + `purpose`.
-     `ToolContext` is the designed extension point — populate it in
-     `assemble_agent_tools`/handler creation with claims data. Guard: if
-     `purpose != "phone"` or no `call_sid`, return
-     `{"error": "transfer unavailable on this channel"}` and the LLM tells the
-     caller the platform can't transfer web calls yet.
-2. **Transfer orchestration in `run_bot`.** When the tool fires:
-   1. Set a session flag `transfer_pending` and record the destination.
-   2. Let the LLM finish its closing line ("I'm transferring you to billing
-      now…") — the REST update must be **deferred until the assistant turn's
-      TTS completes**, otherwise the stream teardown cuts the announcement off.
-      Implementation: a frame processor that triggers the transfer on
-      `LLMFullResponseEndFrame` (or a small configurable grace delay).
-   3. POST to the backend transfer endpoint; on success set
-      `transfer_initiated=True`.
-3. **Teardown guard (critical):** in `run_bot`'s `finally`, if
-   `transfer_initiated` → upload segment A, **skip** `end_call_tracking` and
-   billing; session B owns finalization. If the tool fired but the REST call
-   failed → finalize normally (call continues as AI-only).
-4. **Monitor session** (session B): the reconnect hits the existing `/twilio`
-   endpoint with the same JWT. Instead of `run_bot`, a lightweight handler:
-   - Reuses `parse_telephony_websocket` for the Start handshake and
-     `resolve_session_token`.
-   - Decodes mulaw chunks (`audioop.ulaw2lin`) into PCM and feeds the existing
-     `RecordingCoordinator.capture_track_audio` through the same caller/agent
-     track contract — **no Pipecat pipeline, no LLM, no TTS** (stream is
-     listen-only anyway; this guarantees silence and avoids serializer
-     assumptions about `track="outbound"` chunks).
-   - Looks up the call log row by `call_sid`, prepares the coordinator with the
-     same `call_log_id`, uploads segment B, runs the shared merge, marks
-     artifact completed, then `end_call_tracking` (finalize + bill).
-   - Optional but cheap: pipe both tracks to the same STT provider for a
-     human-phase transcript (transcription itself is still a future phase per
-     `call_recording_and_transcription.md`).
+## 21. References
 
-### 4.3 Frontend
+### Repository references
 
-1. Agent tools drawer: `call_transfer` tool appears automatically via the
-   platform tool registry (`platform-tools-manager.tsx` pattern); config UI =
-   the standard `config_schema` form (destinations, optional intro message).
-2. Calls page: show transfer badge (`Transferred → +1…`, transferred_at) when
-   `transfer_destination` is set; playback unchanged.
-
-### 4.4 Config / env
-
-- No new required env for v1 (reuses `TWILIO_ACCOUNT_SID`/`AUTH_TOKEN`,
-  `VOICE_WS_TWILIO_URL`, `VOICE_RECORDING_ENABLED`).
-- Optional tunables: transfer grace delay (ms), `Dial timeout`, "transfer
-  allowed" org feature flag (maps cleanly onto the existing entitlement
-  definitions if the product wants it gated).
-- Document in `docs/ENV_VARS.md` and the `.env.*.example` templates.
-
----
-
-## 5. Feasibility caveats and risks
-
-| Risk | Severity | Mitigation |
-| --- | --- | --- |
-| Twilio stream teardown semantics on TwiML update (old `<Connect>` WS close timing) | Medium | Documented Twilio behavior; confirm in the P0 spike with Twilio trial number before building. The design tolerates either order (session B connects independently; segments merge regardless). |
-| Announcement cut off at transfer ("I'm transferring you…") | Medium | Defer REST update until `LLMFullResponseEndFrame`/grace delay; verify in spike. |
-| Double-billing if session A finalizes mid-transfer | High | Teardown guard (§4.2.3); integration test asserting the second teardown is the only bill. |
-| Recording gap if monitor stream fails to connect | Low | `<Start>` connects before dial; artifact keeps segment A + `failed` state if B never uploads; gap is seconds at worst. |
-| Merge across differing formats (future web bridge) | Medium | v1 is phone-only (mulaw 8 kHz both phases); guard + documented limitation for v2. |
-| Two-party consent for recording human agents | Medium | Existing recording consent banner + org opt-in (`VOICE_RECORDING_ENABLED`) extend to transferred calls; product owner must confirm jurisdiction coverage (already flagged in `call_recording_and_transcription.md`). |
-| `call_transfer` tool available on web calls | Low | Tool returns channel-unavailable; prompt instructions tell the agent. |
-| Session JWT 15-minute TTL on very long calls | Low | Pre-existing limitation; transfer issues a fresh token with the same `call_sid`/`session_id` (and a `mode=monitor` claim for session B). |
-| Human deadline — 15-min TTL reapplies to monitor phase | Low | Monitor mode doesn't need the LLM; if it expires mid-call, recording continues (already connected); document. |
-| Cost | — | The dialed human leg is a normal Twilio outbound leg (seconds billed), plus one extra Media Stream per transferred call; voice minutes billed to the org as today (product decision: transfer minutes billable? Probably yes — platform owns monitoring/recording). |
-
----
-
-## 6. Testing strategy (repo TDD requirements)
-
-1. **Unit:** transfer TwiML builder (params, both_tracks, wss base resolution);
-   mulaw decode + WAV segment merge (equal/unequal lengths, single segment,
-   missing part); `transfer_call` tool (valid/invalid destination, non-phone
-   purpose, missing call_sid); teardown guard (transfer skips finalize &
-   billing; failed transfer finalizes); idempotent transfer endpoint.
-2. **Integration (mocked Twilio):** incoming webhook → transfer endpoint →
-   asserts REST `calls.update` payload and call-log audit columns; status
-   callback finalizer merges pending segments.
-3. **E2E-style manual (grey-box, mirror `run-e2e.sh`):** local Twilio trial
-   number (ngrok, `VOICE_WS_TWILIO_URL`) → call agent → say "transfer to
-   billing" → human answers a second phone → verify: single call log row,
-   single merged WAV containing both phases (AI + human dialogue), correct
-   duration/billing, playback in Calls UI.
-4. **Release gate:** the existing browser/PSTN calling release gate must pass
-   with transfer enabled; `1006` on the transferred call is *expected* at the
-   phase boundary — assert the monitor stream reconnects and the artifact
-   completes.
-
-## 7. Phased plan
-
-| Phase | Scope | Notes |
-| --- | --- | --- |
-| P0 spike (½–1 day) | Twilio trial: REST TwiML update of an in-progress `<Connect><Stream>` call → verify old WS closes, new `both_tracks` WS opens with same token, audio arrives, `<Dial>` rings human | De-risks §5 items 1–2; no code |
-| P1 MVP | Backend transfer endpoint + migration + finalizer; `call_transfer` tool + `ToolContext` session data; voice-ws teardown guard + monitor session + segment merge; Calls-page badge; docs (DATABASE_SCHEMA, ENV_VARS, this doc) | PSTN-only; silent AI + full-call recording = done |
-| P2 | Web→PSTN bridge (second dial-out leg joined into the session) with codec conversion at merge; DTMF routing ("press 1 for sales") in addition to LLM routing; conference-based whisper/barge-in for live agent coaching; transcript of human phase via the future transcription worker | Each independently shippable |
-
-## 8. Explicitly out of scope (v1)
-
-- Browser/embed/public-page call transfer to a phone human (needs P2 bridge).
-- Whisper/barge-in (AI speaks only to the human agent, or interrupts).
-- Warm transfer with context handoff to the human ("the caller is asking
-  about…, here's the summary") — easy to add later: the LLM can emit a summary
-  into the monitor session's transcript; surfaced to the human via SMS/UI
-  notification. Product candidate.
-
----
-
-## References
-
+- `backend/src/voice_agents/voice_routes.py` — Twilio inbound and status
+  callback boundaries.
+- `voice-ws/src/main.py` — `/ws` and `/twilio` WebSocket entry points.
+- `voice-ws/src/bot.py` — pipeline, tool registration, recording, and cleanup.
+- `voice-ws/src/tools/assembly.py` — native tool assembly and result handling.
+- `voice-ws/src/call_tracking.py` — call lifecycle and billing finalization.
+- `shared/voice_agents/tools/base/tool_context.py` — trusted runtime context.
+- `shared/voice_agents/voice_session_service.py` — voice-session JWT claims.
+- `backend/src/phone_numbers/twilio_service.py` — existing Twilio service
+  boundary.
+- `frontend/src/components/tools/tool-config-drawer.tsx` — current generic
+  tool configuration UI.
 - `docs/03_implementation/call_recording_and_transcription.md` — recording
-  pipeline this feature extends (capture, R2, artifacts, retention, consent).
-- `docs/03_implementation/outbound_phone_calls.md` — the same `<Connect><Stream>`
-  pattern for outbound; the transfer's `<Dial>` leg is the mirror image.
-- `docs/01_architecture/twilio_call_flow.md` — inbound flow diagram.
-- Twilio docs: `<Start>`/`<Stream>`, `track` semantics (`both_tracks`),
-  `<Dial>`, updating in-progress calls via REST, call recording.
-- Code: `backend/src/voice_agents/voice_routes.py`,
-  `voice-ws/src/bot.py`, `voice-ws/src/recording.py`,
-  `voice-ws/src/call_tracking.py`, `voice-ws/src/main.py`,
-  `shared/call_recordings/storage.py`,
-  `shared/voice_agents/tools/base/tool_context.py`.
+  constraints and artifact handling.
+- `docs/01_architecture/twilio_call_flow.md` — current Twilio call flow.
+- `docs/04_development_guides/agent-evaluations.md` — deterministic eval
+  conventions.
+- `docs/05_operations/deployment/` — callback TLS, secrets, and release gates.
+
+### Provider references
+
+- [Twilio Call resource](https://www.twilio.com/docs/voice/api/call-resource)
+  — active call updates and parent/child call relationships.
+- [Modify calls in progress](https://www.twilio.com/docs/voice/tutorials/how-to-modify-calls-in-progress)
+  — updating an active call with new TwiML.
+- [Twilio `<Dial>`](https://www.twilio.com/docs/voice/twiml/dial) — dialing a
+  human destination, answer behavior, and action/status callbacks.
+- [Twilio `<Stream>`](https://www.twilio.com/docs/voice/twiml/stream) — stream
+  direction, custom parameters, and WebSocket constraints.
+- [Twilio Voice JavaScript SDK](https://www.twilio.com/docs/voice/sdks/javascript)
+  — possible future browser transport for a Twilio-backed call identity.
