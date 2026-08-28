@@ -6,9 +6,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-
-from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
-
 from src.organization.public_routes import (
     PublicAccessRequest,
     generate_public_call_token,
@@ -16,6 +13,8 @@ from src.organization.public_routes import (
     list_public_org_agents,
     verify_public_org_access,
 )
+
+from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
 
 ORG_ID = str(uuid4())
 AGENT_ID = uuid4()
@@ -187,6 +186,78 @@ async def test_generate_call_token_for_published_agent(mock_supabase):
     assert result.token == "voice.jwt.token"
     assert result.wsUrl == "ws://localhost:7860/ws"
     assert result.sessionId == "sess-public-1"
+
+
+@pytest.mark.asyncio
+async def test_public_demo_call_token_reserves_budget_and_returns_remaining(
+    mock_supabase,
+):
+    from shared.billing.voice_session_entitlement import DemoCallReservation
+
+    _org_svc, table = mock_supabase
+    chain = table.select.return_value.eq.return_value.limit.return_value
+    chain.execute.return_value = Mock(data=[_org_row()])
+    agent = SimpleNamespace(
+        id=AGENT_ID,
+        organization_id=ORG_ID,
+        is_active=True,
+        is_published_on_public_page=True,
+        is_demo=True,
+        demo_calls_remaining=3,
+        demo_max_call_duration_seconds=600,
+    )
+
+    with patch(
+        "src.organization.public_routes.voice_agent_service.get_agent_by_id",
+        new=AsyncMock(return_value=(agent, None)),
+    ), patch(
+        "src.organization.public_routes.reserve_demo_call_if_needed",
+        new=AsyncMock(
+            return_value=DemoCallReservation("reservation-1", "session-1", 2, 600)
+        ),
+    ) as reserve, patch(
+        "src.organization.public_routes.public_page_service.generate_call_token",
+        return_value=("voice.jwt.token", "ws://localhost:7860/ws", "session-1"),
+    ), patch(
+        "src.organization.public_routes.assert_voice_session_allowed",
+        new=AsyncMock(),
+    ):
+        result = await generate_public_call_token(SLUG, AGENT_ID, None)
+
+    reserve.assert_awaited_once_with(agent)
+    assert result.demo_calls_remaining == 2
+    assert result.demo_max_call_duration_seconds == 600
+
+
+@pytest.mark.asyncio
+async def test_public_demo_call_token_returns_exhausted_trial_message(mock_supabase):
+    _org_svc, table = mock_supabase
+    chain = table.select.return_value.eq.return_value.limit.return_value
+    chain.execute.return_value = Mock(data=[_org_row()])
+    agent = SimpleNamespace(
+        id=AGENT_ID,
+        organization_id=ORG_ID,
+        is_active=True,
+        is_published_on_public_page=True,
+        is_demo=True,
+    )
+
+    with patch(
+        "src.organization.public_routes.voice_agent_service.get_agent_by_id",
+        new=AsyncMock(return_value=(agent, None)),
+    ), patch(
+        "src.organization.public_routes.reserve_demo_call_if_needed",
+        new=AsyncMock(
+            side_effect=VoiceSessionEntitlementError(
+                "DEMO_CALL_LIMIT_REACHED", "all demo calls used"
+            )
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await generate_public_call_token(SLUG, AGENT_ID, None)
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail["code"] == "DEMO_TRIAL_EXHAUSTED"
 
 
 @pytest.mark.asyncio

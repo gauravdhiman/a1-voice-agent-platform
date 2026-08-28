@@ -137,8 +137,9 @@ class VoiceAgentBase(BaseModel):
         default=False,
         description=(
             "When true, this agent is a demo agent that bypasses credit and "
-            "concurrency checks and is available on a dedicated public page "
-            "at /demo/{demo_slug}. Platform-admin only; defaults to false."
+            "concurrency checks, is subject to its demo call limits, and is "
+            "available on a dedicated public page at /demo/{demo_slug}. "
+            "Platform-admin only; defaults to false."
         ),
     )
     demo_slug: Optional[str] = Field(
@@ -161,6 +162,22 @@ class VoiceAgentBase(BaseModel):
             "the agent is public; fallback on the demo page is mission → persona."
         ),
     )
+    demo_calls_remaining: int = Field(
+        default=-1,
+        ge=-1,
+        description=(
+            "Number of demo call reservations remaining. Zero disables new "
+            "calls; -1 means unlimited. Applied only when is_demo is true."
+        ),
+    )
+    demo_max_call_duration_seconds: int = Field(
+        default=-1,
+        ge=-1,
+        description=(
+            "Maximum duration for each demo call in seconds. A positive value "
+            "caps the call; -1 means unlimited. Applied only when is_demo is true."
+        ),
+    )
 
     @field_validator("phone_number", mode="before")
     @classmethod
@@ -177,7 +194,9 @@ class VoiceAgentBase(BaseModel):
         v = str(v).strip().lower()
         v = re.sub(r"\s+", "-", v)
         if not re.match(r"^[a-z0-9-]+$", v):
-            raise ValueError("Demo slug can only contain lowercase letters, numbers, and hyphens")
+            raise ValueError(
+                "Demo slug can only contain lowercase letters, numbers, and hyphens"
+            )
         if len(v) < 2 or len(v) > 100:
             raise ValueError("Demo slug must be between 2 and 100 characters")
         return v
@@ -191,6 +210,16 @@ class VoiceAgentBase(BaseModel):
         v = str(v).strip()
         if len(v) > 1000:
             raise ValueError("Public description must be at most 1000 characters")
+        return v
+
+    @field_validator("demo_max_call_duration_seconds")
+    @classmethod
+    def validate_demo_max_call_duration(cls, v: int) -> int:
+        """Allow ``-1`` for unlimited or require a positive duration."""
+        if v != -1 and v <= 0:
+            raise ValueError(
+                "Demo max call duration must be -1 (unlimited) or greater than 0"
+            )
         return v
 
 
@@ -303,6 +332,22 @@ class VoiceAgentUpdate(BaseModel):
             "LLM prompt fields; shown to visitors before calling."
         ),
     )
+    demo_calls_remaining: Optional[int] = Field(
+        None,
+        ge=-1,
+        description=(
+            "Number of demo call reservations remaining. Zero disables new "
+            "calls; -1 means unlimited. Platform-admin only."
+        ),
+    )
+    demo_max_call_duration_seconds: Optional[int] = Field(
+        None,
+        ge=-1,
+        description=(
+            "Maximum duration for each demo call in seconds. A positive value "
+            "caps the call; -1 means unlimited. Platform-admin only."
+        ),
+    )
 
     @field_validator("demo_slug", mode="before")
     @classmethod
@@ -313,7 +358,9 @@ class VoiceAgentUpdate(BaseModel):
         v = str(v).strip().lower()
         v = re.sub(r"\s+", "-", v)
         if not re.match(r"^[a-z0-9-]+$", v):
-            raise ValueError("Demo slug can only contain lowercase letters, numbers, and hyphens")
+            raise ValueError(
+                "Demo slug can only contain lowercase letters, numbers, and hyphens"
+            )
         if len(v) < 2 or len(v) > 100:
             raise ValueError("Demo slug must be between 2 and 100 characters")
         return v
@@ -328,6 +375,17 @@ class VoiceAgentUpdate(BaseModel):
         if len(v) > 1000:
             raise ValueError("Public description must be at most 1000 characters")
         return v
+
+    @field_validator("demo_max_call_duration_seconds")
+    @classmethod
+    def validate_demo_max_call_duration_update(cls, v: Optional[int]) -> Optional[int]:
+        """Allow ``-1`` for unlimited or require a positive duration."""
+        if v is not None and v != -1 and v <= 0:
+            raise ValueError(
+                "Demo max call duration must be -1 (unlimited) or greater than 0"
+            )
+        return v
+
 
 class VoiceAgent(VoiceAgentBase):
     """Model for a voice agent with all attributes."""

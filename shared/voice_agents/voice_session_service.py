@@ -33,6 +33,8 @@ class VoiceSessionClaims:
     session_id: str
     purpose: str
     call_sid: Optional[str] = None
+    demo_reservation_id: Optional[str] = None
+    demo_max_call_duration_seconds: Optional[int] = None
     token_type: str = VOICE_SESSION_TOKEN_TYPE
 
 
@@ -67,6 +69,8 @@ class VoiceSessionService:
         expires_in: Optional[timedelta] = None,
         session_id: Optional[str] = None,
         call_sid: Optional[str] = None,
+        demo_reservation_id: Optional[str] = None,
+        demo_max_call_duration_seconds: Optional[int] = None,
     ) -> tuple[str, str]:
         """Create a signed session JWT for the voice-ws WebSocket.
 
@@ -77,6 +81,9 @@ class VoiceSessionService:
             expires_in: Optional TTL override.
             session_id: Optional pre-assigned session id; generated if omitted.
             call_sid: Optional provider call identifier for phone sessions.
+            demo_reservation_id: Optional one-time reservation for a demo call.
+            demo_max_call_duration_seconds: Optional duration captured when the
+                demo reservation was created; ``-1`` means unlimited.
 
         Returns:
             Tuple of ``(jwt_token, session_id)``.
@@ -86,6 +93,21 @@ class VoiceSessionService:
         """
         if not self.jwt_secret:
             raise ValueError("JWT secret is not configured for voice sessions")
+        if demo_reservation_id is not None and (
+            not isinstance(demo_reservation_id, str) or not demo_reservation_id
+        ):
+            raise ValueError("Demo reservation id must be a non-empty string")
+        if demo_max_call_duration_seconds is not None and (
+            isinstance(demo_max_call_duration_seconds, bool)
+            or not isinstance(demo_max_call_duration_seconds, int)
+            or (
+                demo_max_call_duration_seconds != -1
+                and demo_max_call_duration_seconds <= 0
+            )
+        ):
+            raise ValueError(
+                "Demo max call duration must be -1 (unlimited) or greater than 0"
+            )
 
         sid = session_id or str(uuid.uuid4())
         now = datetime.now(timezone.utc)
@@ -102,6 +124,10 @@ class VoiceSessionService:
         }
         if call_sid:
             payload["call_sid"] = call_sid
+        if demo_reservation_id is not None:
+            payload["demo_reservation_id"] = demo_reservation_id
+        if demo_max_call_duration_seconds is not None:
+            payload["demo_max_call_duration_seconds"] = demo_max_call_duration_seconds
         token = jwt.encode(payload, self.jwt_secret, algorithm="HS256")
         logger.info(
             "Created voice_ws session token session_id=%s agent_id=%s purpose=%s",
@@ -141,8 +167,21 @@ class VoiceSessionService:
         session_id = payload.get("session_id")
         purpose = payload.get("purpose")
         call_sid = payload.get("call_sid")
-        if call_sid is not None and (
-            not isinstance(call_sid, str) or not call_sid
+        demo_reservation_id = payload.get("demo_reservation_id")
+        demo_max_call_duration_seconds = payload.get("demo_max_call_duration_seconds")
+        if call_sid is not None and (not isinstance(call_sid, str) or not call_sid):
+            return None
+        if demo_reservation_id is not None and (
+            not isinstance(demo_reservation_id, str) or not demo_reservation_id
+        ):
+            return None
+        if demo_max_call_duration_seconds is not None and (
+            isinstance(demo_max_call_duration_seconds, bool)
+            or not isinstance(demo_max_call_duration_seconds, int)
+            or (
+                demo_max_call_duration_seconds != -1
+                and demo_max_call_duration_seconds <= 0
+            )
         ):
             return None
         if not all(
@@ -156,6 +195,8 @@ class VoiceSessionService:
             session_id=session_id,
             purpose=purpose,
             call_sid=call_sid,
+            demo_reservation_id=demo_reservation_id,
+            demo_max_call_duration_seconds=demo_max_call_duration_seconds,
             token_type=VOICE_SESSION_TOKEN_TYPE,
         )
 

@@ -15,6 +15,9 @@ export interface PublicAgentSummary {
   name: string;
   persona: string | null;
   mission: string | null;
+  is_demo: boolean;
+  demo_calls_remaining: number | null;
+  demo_max_call_duration_seconds: number | null;
 }
 
 export interface PublicOrgAgentsResponse {
@@ -25,4 +28,6 @@ export interface PublicCallTokenResponse {
   token: string;
   wsUrl: string;
   sessionId: string;
+  demo_calls_remaining?: number | null;
+  demo_max_call_duration_seconds?: number | null;
 }

@@ -214,6 +214,13 @@ The launcher prints these fixed local credentials:
 | Org admin | `org-admin@247ai.local` | `Password123!` |
 | Platform admin | `platform-admin@247ai.local` | `Password123!` |
 
+The worktree launcher also carries non-placeholder voice-provider credentials
+into the generated `.worktree-state/app.env`. It checks the worktree's
+`.env.local` first and then the main checkout's `.env.local`, refreshing those
+values on each `config` or `up`. A worktree `up` fails before starting services
+if `GEMINI_API_KEY` is missing or still a template placeholder; use
+`--source-env PATH` to select another private environment file.
+
 If you intentionally need only the application-container offset, the legacy
 launcher still supports:
 

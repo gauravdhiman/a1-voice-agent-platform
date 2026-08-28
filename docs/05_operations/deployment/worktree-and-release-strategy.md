@@ -46,6 +46,11 @@ The launcher does the following:
 - derive a unique slug, Compose project name, Supabase project ID, ports, and
   volume names from the worktree;
 - generate an ignored, worktree-specific environment file;
+- copy non-placeholder voice-provider credentials from the worktree's
+  `.env.local`, or from the main checkout's `.env.local` when the worktree does
+  not have its own environment file; refresh those credentials on every setup;
+- require a configured `GEMINI_API_KEY` before starting the application so a
+  placeholder cannot leave voice-ws running but unable to answer calls;
 - start that worktree's local Supabase services;
 - obtain the local Supabase URL and keys without committing them;
 - run the worktree's Alembic migrations against only its local database;
@@ -108,6 +113,15 @@ output. It prints the standard local login accounts/password and service URLs
 after a successful `up`; the password is not persisted in the metadata file. Install
 the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started)
 and Docker before using the launcher.
+
+Voice provider credentials are read from the canonical local environment file.
+For a worktree checkout, the launcher first checks that worktree's `.env.local`,
+then the main repository checkout's `.env.local`, and only uses
+`.env.local.example` as a placeholder fallback. If no valid `GEMINI_API_KEY` is
+available, `up` stops with an actionable error; use `--source-env PATH` when a
+different private environment file should be used. The generated `app.env` is
+refreshed on each `config` or `up`, so adding or rotating the key after the
+first setup is picked up automatically.
 
 The default seed mirrors the current staging fixture: `Pleasant Pediatric` in
 `Peoria, AZ` (`America/Phoenix`) with the active agent `Alex`, the current

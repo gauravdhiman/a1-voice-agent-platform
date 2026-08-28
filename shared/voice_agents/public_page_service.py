@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import jwt
 
+from shared.billing.voice_session_entitlement import DemoCallReservation
 from shared.config.settings import settings
 from shared.voice_agents.voice_session_service import voice_session_service
 
@@ -28,7 +29,9 @@ class PublicPageService:
     """JWT access tokens and Pipecat voice session tokens for public org pages."""
 
     def __init__(self) -> None:
-        self.jwt_secret: str = settings.jwt_secret_key or "public-page-dev-secret-change-in-prod"
+        self.jwt_secret: str = (
+            settings.jwt_secret_key or "public-page-dev-secret-change-in-prod"
+        )
         self.access_token_expiry = timedelta(hours=12)
         self.call_token_expiry = timedelta(hours=1)
 
@@ -63,7 +66,10 @@ class PublicPageService:
             raise PublicPageAccessError("Access token slug mismatch")
 
     def generate_call_token(
-        self, *, agent_id: str
+        self,
+        *,
+        agent_id: str,
+        demo_reservation: Optional[DemoCallReservation] = None,
     ) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Generate a Pipecat voice session for a public-page visitor call.
 
@@ -77,6 +83,15 @@ class PublicPageService:
                 user_id=visitor_id,
                 purpose="public",
                 expires_in=self.call_token_expiry,
+                session_id=(demo_reservation.session_id if demo_reservation else None),
+                demo_reservation_id=(
+                    demo_reservation.reservation_id if demo_reservation else None
+                ),
+                demo_max_call_duration_seconds=(
+                    demo_reservation.max_call_duration_seconds
+                    if demo_reservation
+                    else None
+                ),
             )
             base = (settings.voice_ws_public_url or "ws://localhost:7860").rstrip("/")
             ws_url = f"{base}/ws"

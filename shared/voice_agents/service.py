@@ -7,9 +7,9 @@ from typing import List, Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
-from supabase import Client
 
 from shared.config import supabase_config
+from supabase import Client
 
 from .models import DeleteResponse, VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 
@@ -119,6 +119,7 @@ class VoiceAgentService:
                 e,
             )
             return agent_rows
+
     async def _is_demo_slug_taken(
         self, slug: str, exclude_id: Optional[UUID] = None
     ) -> tuple[bool, Optional[str]]:
@@ -132,7 +133,12 @@ class VoiceAgentService:
             Tuple of (is_taken, error). Error is set if query fails.
         """
         try:
-            query = self.supabase.table("voice_agents").select("id").eq("demo_slug", slug).limit(1)
+            query = (
+                self.supabase.table("voice_agents")
+                .select("id")
+                .eq("demo_slug", slug)
+                .limit(1)
+            )
             response = query.execute()
             if not response.data:
                 return False, None
@@ -140,9 +146,10 @@ class VoiceAgentService:
                 return False, None
             return True, None
         except Exception as e:
-            logger.error("Error checking demo slug uniqueness for %s: %s", slug, e, exc_info=True)
+            logger.error(
+                "Error checking demo slug uniqueness for %s: %s", slug, e, exc_info=True
+            )
             return False, str(e)
-
 
     @tracer.start_as_current_span("voice_agent.create_agent")
     async def create_agent(
@@ -161,7 +168,9 @@ class VoiceAgentService:
                 if taken:
                     return None, "Demo slug already taken"
             # Non-demo agents should not retain a demo slug.
-            demo_slug_value = agent_data.demo_slug if getattr(agent_data, "is_demo", False) else None
+            demo_slug_value = (
+                agent_data.demo_slug if getattr(agent_data, "is_demo", False) else None
+            )
             response = (
                 self.supabase.table("voice_agents")
                 .insert(
@@ -178,7 +187,13 @@ class VoiceAgentService:
                         "call_recording_enabled": agent_data.call_recording_enabled,
                         "is_demo": bool(getattr(agent_data, "is_demo", False)),
                         "demo_slug": demo_slug_value,
-                        "public_description": getattr(agent_data, "public_description", None),
+                        "public_description": getattr(
+                            agent_data, "public_description", None
+                        ),
+                        "demo_calls_remaining": agent_data.demo_calls_remaining,
+                        "demo_max_call_duration_seconds": (
+                            agent_data.demo_max_call_duration_seconds
+                        ),
                         "preset_id": (
                             str(agent_data.preset_id) if agent_data.preset_id else None
                         ),
@@ -386,12 +401,18 @@ class VoiceAgentService:
 
                 if new_is_demo is True:
                     # Demo enabled requires a slug — infer from either field
-                    effective_slug = update_data.get("demo_slug") if "demo_slug" in update_data else new_slug
+                    effective_slug = (
+                        update_data.get("demo_slug")
+                        if "demo_slug" in update_data
+                        else new_slug
+                    )
                     if not effective_slug:
                         return None, "Demo slug is required when is_demo is true"
                     # Normalize already handled by model validator, but ensure lower
                     effective_slug = str(effective_slug).strip().lower()
-                    taken, err = await self._is_demo_slug_taken(effective_slug, exclude_id=agent_id)
+                    taken, err = await self._is_demo_slug_taken(
+                        effective_slug, exclude_id=agent_id
+                    )
                     if err:
                         return None, err
                     if taken:
@@ -407,7 +428,9 @@ class VoiceAgentService:
                     if "demo_slug" in update_data and current_is_demo:
                         slug_val = update_data["demo_slug"]
                         if slug_val:
-                            taken, err = await self._is_demo_slug_taken(slug_val, exclude_id=agent_id)
+                            taken, err = await self._is_demo_slug_taken(
+                                slug_val, exclude_id=agent_id
+                            )
                             if err:
                                 return None, err
                             if taken:
@@ -458,7 +481,9 @@ class VoiceAgentService:
                 return None, "Demo agent is not active"
             return agent, None
         except Exception as e:
-            logger.error("Error getting demo agent by slug %s: %s", demo_slug, e, exc_info=True)
+            logger.error(
+                "Error getting demo agent by slug %s: %s", demo_slug, e, exc_info=True
+            )
             return None, str(e)
 
     @tracer.start_as_current_span("voice_agent.delete_agent")

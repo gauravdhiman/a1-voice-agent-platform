@@ -134,6 +134,8 @@ def test_public_demo_page_renders_description_and_visualizer_choice(
                 "mission": "Answer questions",
                 "tone": "Warm",
                 "public_description": "Book a dental visit and answer common questions.",
+                "demo_calls_remaining": 3,
+                "demo_max_call_duration_seconds": 600,
                 "organization_id": "00000000-0000-0000-0000-000000000203",
                 "organization_name": "Acme Dental",
             },
@@ -148,11 +150,51 @@ def test_public_demo_page_renders_description_and_visualizer_choice(
     expect(
         page.get_by_text("Book a dental visit and answer common questions.")
     ).to_be_visible()
+    expect(page.get_by_text("Calls: 3 trial calls remaining")).to_be_visible()
+    expect(page.get_by_text("Duration: Maximum 10 minutes per call")).to_be_visible()
     expect(page.get_by_role("button", name="Talk to Acme Concierge")).to_be_visible()
 
     step("Verify the default visualizer remains radial")
     page.goto(f"{base_url}/demo/{demo_slug}")
     expect(page.locator('[data-demo-visualizer="radial"]')).to_be_visible()
+
+
+def test_exhausted_public_demo_page_disables_trial_call(
+    page: Page, base_url: str, step
+):
+    """An exhausted demo is visible but cannot start another call."""
+    demo_slug = "exhausted-demo"
+    page.route(
+        re.compile(rf".*/api/v1/public/demo/{demo_slug}$"),
+        lambda route: _fulfill_json(
+            route,
+            {
+                "id": "00000000-0000-0000-0000-000000000105",
+                "name": "Exhausted Concierge",
+                "demo_slug": demo_slug,
+                "persona": "Helpful concierge",
+                "mission": "Answer questions",
+                "tone": "Warm",
+                "public_description": "A limited trial demo.",
+                "organization_id": "00000000-0000-0000-0000-000000000203",
+                "organization_name": "Acme Dental",
+                "demo_calls_remaining": 0,
+                "demo_max_call_duration_seconds": 600,
+            },
+        ),
+    )
+
+    page.goto(f"{base_url}/demo/{demo_slug}")
+
+    expect(page.get_by_text("This demo is currently unavailable")).to_be_visible()
+    expect(
+        page.get_by_text(
+            "This demo agent has used all available trial calls. Please contact the platform administrator for further details or to have the demo re-enabled."
+        )
+    ).to_be_visible()
+    expect(page.get_by_text("Calls: No trial calls remaining")).to_have_count(0)
+    expect(page.get_by_text("Duration: Maximum 10 minutes per call")).to_have_count(0)
+    assert page.get_by_role("button", name="Demo unavailable").is_disabled()
 
 
 def test_platform_admin_can_publish_and_mark_demo_agent(
@@ -171,6 +213,8 @@ def test_platform_admin_can_publish_and_mark_demo_agent(
         "is_demo": False,
         "demo_slug": None,
         "public_description": None,
+        "demo_calls_remaining": -1,
+        "demo_max_call_duration_seconds": -1,
         "persona": "Receptionist",
         "tone": "Professional",
         "mission": "Help callers",
@@ -225,6 +269,8 @@ def test_platform_admin_can_publish_and_mark_demo_agent(
     page.locator("#is-demo").click()
     page.get_by_label("Demo slug *").fill("acme-demo")
     page.get_by_label("Public description").fill("A customer-facing demo description")
+    page.get_by_label("Demo calls remaining").fill("3")
+    page.get_by_label("Maximum call duration (minutes)").fill("10")
 
     step("Save the agent and verify the API payload")
     with page.expect_response(
@@ -240,3 +286,5 @@ def test_platform_admin_can_publish_and_mark_demo_agent(
     assert (
         update_payloads[0]["public_description"] == "A customer-facing demo description"
     )
+    assert update_payloads[0]["demo_calls_remaining"] == 3
+    assert update_payloads[0]["demo_max_call_duration_seconds"] == 600

@@ -2,9 +2,10 @@
 Tests for embed routes.
 """
 
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
+
+import pytest
 
 from shared.billing.voice_session_entitlement import VoiceSessionEntitlementError
 
@@ -15,9 +16,10 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_info_success(self):
         """Test successful retrieval of agent info for embed."""
-        from src.voice_agents.embed_routes import get_agent_info
-        from shared.voice_agents.models import VoiceAgent
         from fastapi import Request
+        from src.voice_agents.embed_routes import get_agent_info
+
+        from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
 
@@ -34,19 +36,23 @@ class TestEmbedRoutes:
         mock_request = Mock(spec=Request)
         mock_request.headers = {"origin": "https://example.com"}
 
-        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
+        with patch(
+            "src.voice_agents.embed_routes.voice_agent_service"
+        ) as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
             mock_supabase = Mock()
             mock_execute = (
                 mock_supabase.table.return_value.select.return_value.eq.return_value.execute
             )
             mock_execute.return_value = Mock(
-                data=[{
-                    "id": str(UUID("00000000-0000-0000-0000-000000000003")),
-                    "agent_id": str(test_agent_id),
-                    "is_active": True,
-                    "allowed_domains": None,
-                }]
+                data=[
+                    {
+                        "id": str(UUID("00000000-0000-0000-0000-000000000003")),
+                        "agent_id": str(test_agent_id),
+                        "is_active": True,
+                        "allowed_domains": None,
+                    }
+                ]
             )
             mock_voice_service.supabase = mock_supabase
 
@@ -59,14 +65,16 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_info_agent_not_found(self):
         """Test agent info when agent doesn't exist."""
-        from src.voice_agents.embed_routes import get_agent_info
         from fastapi import HTTPException, Request
+        from src.voice_agents.embed_routes import get_agent_info
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         mock_request = Mock(spec=Request)
         mock_request.headers = {}
 
-        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
+        with patch(
+            "src.voice_agents.embed_routes.voice_agent_service"
+        ) as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(
                 return_value=(None, "Agent not found")
             )
@@ -79,9 +87,10 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_info_agent_inactive(self):
         """Test agent info when agent is inactive."""
-        from src.voice_agents.embed_routes import get_agent_info
-        from shared.voice_agents.models import VoiceAgent
         from fastapi import HTTPException, Request
+        from src.voice_agents.embed_routes import get_agent_info
+
+        from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
 
@@ -98,7 +107,9 @@ class TestEmbedRoutes:
         mock_request = Mock(spec=Request)
         mock_request.headers = {}
 
-        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
+        with patch(
+            "src.voice_agents.embed_routes.voice_agent_service"
+        ) as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
 
             with pytest.raises(HTTPException) as exc_info:
@@ -110,9 +121,10 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_get_agent_info_domain_not_authorized(self):
         """Test agent info when domain is not authorized."""
-        from src.voice_agents.embed_routes import get_agent_info
-        from shared.voice_agents.models import VoiceAgent
         from fastapi import HTTPException, Request
+        from src.voice_agents.embed_routes import get_agent_info
+
+        from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
 
@@ -129,16 +141,20 @@ class TestEmbedRoutes:
         mock_request = Mock(spec=Request)
         mock_request.headers = {"origin": "https://unauthorized.com"}
 
-        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
+        with patch(
+            "src.voice_agents.embed_routes.voice_agent_service"
+        ) as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
             mock_supabase = Mock()
             mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = Mock(
-                data=[{
-                    "id": str(UUID("00000000-0000-0000-0000-000000000003")),
-                    "agent_id": str(test_agent_id),
-                    "is_active": True,
-                    "allowed_domains": ["allowed.com", "example.com"],
-                }]
+                data=[
+                    {
+                        "id": str(UUID("00000000-0000-0000-0000-000000000003")),
+                        "agent_id": str(test_agent_id),
+                        "is_active": True,
+                        "allowed_domains": ["allowed.com", "example.com"],
+                    }
+                ]
             )
             mock_voice_service.supabase = mock_supabase
 
@@ -154,9 +170,10 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_success(self):
         """Test successful generation of public embed token."""
-        from src.voice_agents.embed_routes import generate_public_embed_token
-        from shared.voice_agents.models import VoiceAgent
         from fastapi import Request
+        from src.voice_agents.embed_routes import generate_public_embed_token
+
+        from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_config_id = UUID("00000000-0000-0000-0000-000000000003")
@@ -172,23 +189,32 @@ class TestEmbedRoutes:
         )
 
         mock_request = Mock(spec=Request)
-        mock_request.headers = {"origin": "https://example.com", "user-agent": "TestAgent"}
+        mock_request.headers = {
+            "origin": "https://example.com",
+            "user-agent": "TestAgent",
+        }
         mock_request.client = Mock(host="127.0.0.1")
 
-        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
+        with patch(
+            "src.voice_agents.embed_routes.voice_agent_service"
+        ) as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
             mock_supabase = Mock()
             mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = Mock(
-                data=[{
-                    "id": str(test_config_id),
-                    "agent_id": str(test_agent_id),
-                    "is_active": True,
-                    "allowed_domains": None,
-                    "daily_call_limit": 100,
-                }],
+                data=[
+                    {
+                        "id": str(test_config_id),
+                        "agent_id": str(test_agent_id),
+                        "is_active": True,
+                        "allowed_domains": None,
+                        "daily_call_limit": 100,
+                    }
+                ],
                 count=0,
             )
-            mock_supabase.table.return_value.insert.return_value.execute.return_value = Mock()
+            mock_supabase.table.return_value.insert.return_value.execute.return_value = (
+                Mock()
+            )
             mock_voice_service.supabase = mock_supabase
 
             with patch("src.voice_agents.embed_routes.embed_service") as mock_embed:
@@ -215,11 +241,84 @@ class TestEmbedRoutes:
                 assert result.sessionId == "sess-embed-123"
 
     @pytest.mark.asyncio
+    async def test_generate_public_embed_token_reserves_demo_budget(self):
+        """Public embed calls reserve demo budget and return the new count."""
+        from fastapi import Request
+        from src.voice_agents.embed_routes import generate_public_embed_token
+
+        from shared.billing.voice_session_entitlement import DemoCallReservation
+        from shared.voice_agents.models import VoiceAgent
+
+        test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+        test_config_id = UUID("00000000-0000-0000-0000-000000000003")
+        agent = VoiceAgent(
+            id=test_agent_id,
+            organization_id=UUID("00000000-0000-0000-0000-000000000002"),
+            name="Demo Agent",
+            phone_number=None,
+            is_active=True,
+            is_demo=True,
+            demo_calls_remaining=1,
+            demo_max_call_duration_seconds=600,
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+        )
+        mock_request = Mock(spec=Request)
+        mock_request.headers = {"origin": "https://example.com"}
+        mock_request.client = Mock(host="127.0.0.1")
+
+        with patch("src.voice_agents.embed_routes.voice_agent_service") as service:
+            service.get_agent_by_id = AsyncMock(return_value=(agent, None))
+            table = Mock()
+            table.select.return_value.eq.return_value.execute.return_value = Mock(
+                data=[
+                    {
+                        "id": str(test_config_id),
+                        "agent_id": str(test_agent_id),
+                        "is_active": True,
+                        "allowed_domains": None,
+                        "daily_call_limit": 100,
+                    }
+                ],
+                count=0,
+            )
+            table.insert.return_value.execute.return_value = Mock()
+            service.supabase.table.return_value = table
+
+            with patch("src.voice_agents.embed_routes.embed_service") as embed:
+                embed.check_rate_limit.return_value = True
+                embed.generate_embed_token.return_value = (
+                    "embed-token",
+                    "voice-token",
+                    "ws://localhost:7860/ws",
+                    "session-1",
+                )
+                with patch(
+                    "src.voice_agents.embed_routes.reserve_demo_call_if_needed",
+                    new=AsyncMock(
+                        return_value=DemoCallReservation(
+                            "reservation-1", "session-1", 0, 600
+                        )
+                    ),
+                ) as reserve, patch(
+                    "src.voice_agents.embed_routes.assert_voice_session_allowed",
+                    new=AsyncMock(),
+                ):
+                    result = await generate_public_embed_token(
+                        agent_id=test_agent_id, request=mock_request
+                    )
+
+        reserve.assert_awaited_once_with(agent)
+        assert result.demo_calls_remaining == 0
+        assert result.demo_max_call_duration_seconds == 600
+
+    @pytest.mark.asyncio
     async def test_generate_public_embed_token_returns_safe_unavailable_error(self):
         """Public callers receive contact-business guidance, not billing details."""
-        from src.voice_agents.embed_routes import generate_public_embed_token
-        from shared.voice_agents.models import VoiceAgent
         from fastapi import HTTPException, Request
+        from src.voice_agents.embed_routes import generate_public_embed_token
+
+        from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_config_id = UUID("00000000-0000-0000-0000-000000000003")
@@ -280,9 +379,10 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_rate_limited(self):
         """Test embed token generation when rate limited."""
-        from src.voice_agents.embed_routes import generate_public_embed_token
-        from shared.voice_agents.models import VoiceAgent
         from fastapi import HTTPException, Request
+        from src.voice_agents.embed_routes import generate_public_embed_token
+
+        from shared.voice_agents.models import VoiceAgent
 
         test_agent_id = UUID("00000000-0000-0000-0000-000000000001")
         test_config_id = UUID("00000000-0000-0000-0000-000000000003")
@@ -301,17 +401,21 @@ class TestEmbedRoutes:
         mock_request.headers = {"origin": "https://example.com"}
         mock_request.client = Mock(host="127.0.0.1")
 
-        with patch("src.voice_agents.embed_routes.voice_agent_service") as mock_voice_service:
+        with patch(
+            "src.voice_agents.embed_routes.voice_agent_service"
+        ) as mock_voice_service:
             mock_voice_service.get_agent_by_id = AsyncMock(return_value=(agent, None))
             mock_supabase = Mock()
             mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = Mock(
-                data=[{
-                    "id": str(test_config_id),
-                    "agent_id": str(test_agent_id),
-                    "is_active": True,
-                    "allowed_domains": None,
-                    "daily_call_limit": 10,
-                }],
+                data=[
+                    {
+                        "id": str(test_config_id),
+                        "agent_id": str(test_agent_id),
+                        "is_active": True,
+                        "allowed_domains": None,
+                        "daily_call_limit": 10,
+                    }
+                ],
                 count=10,
             )
             mock_voice_service.supabase = mock_supabase

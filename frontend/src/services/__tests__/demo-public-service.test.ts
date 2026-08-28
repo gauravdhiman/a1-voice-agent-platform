@@ -20,6 +20,8 @@ describe("demoPublicService", () => {
           public_description: "Try our voice assistant.",
           organization_id: "org-1",
           organization_name: "Acme",
+          demo_calls_remaining: 3,
+          demo_max_call_duration_seconds: 600,
         }),
         { status: 200 },
       ),
@@ -41,6 +43,8 @@ describe("demoPublicService", () => {
           token: "voice-token",
           wsUrl: "wss://voice.example/ws",
           sessionId: "session-1",
+          demo_calls_remaining: 2,
+          demo_max_call_duration_seconds: 600,
         }),
         { status: 200 },
       ),
@@ -49,6 +53,7 @@ describe("demoPublicService", () => {
     const result = await demoPublicService.getCallToken("acme-demo");
 
     expect(result.sessionId).toBe("session-1");
+    expect(result.demo_calls_remaining).toBe(2);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/public/demo/acme-demo/call-token"),
       expect.objectContaining({
@@ -73,6 +78,25 @@ describe("demoPublicService", () => {
 
     await expect(demoPublicService.getCallToken("acme-demo")).rejects.toThrow(
       /contact the business/i,
+    );
+  });
+
+  it("surfaces the exhausted trial message from the API", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "DEMO_TRIAL_EXHAUSTED",
+            message:
+              "This demo agent has used all available trial calls. Please contact the platform administrator for further details or to have the demo re-enabled.",
+          },
+        }),
+        { status: 429 },
+      ),
+    );
+
+    await expect(demoPublicService.getCallToken("acme-demo")).rejects.toThrow(
+      /contact the platform administrator.*re-enabled/i,
     );
   });
 });

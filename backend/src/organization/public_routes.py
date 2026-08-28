@@ -12,10 +12,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
+from src.organization.service import organization_service
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
     assert_voice_session_allowed,
+    is_demo_agent,
+    reserve_demo_call_if_needed,
 )
 from shared.organization.public_page_security import verify_public_page_passphrase
 from shared.voice_agents.public_page_service import (
@@ -23,8 +27,6 @@ from shared.voice_agents.public_page_service import (
     public_page_service,
 )
 from shared.voice_agents.service import voice_agent_service
-from src.voice_agents.public_voice_messages import get_public_voice_session_error
-from src.organization.service import organization_service
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,9 @@ class PublicAgentSummary(BaseModel):
     name: str
     persona: Optional[str] = None
     mission: Optional[str] = None
+    is_demo: bool = False
+    demo_calls_remaining: Optional[int] = None
+    demo_max_call_duration_seconds: Optional[int] = None
 
 
 class PublicOrgAgentsResponse(BaseModel):
@@ -74,6 +79,8 @@ class PublicCallTokenResponse(BaseModel):
     token: str
     wsUrl: str
     sessionId: str
+    demo_calls_remaining: Optional[int] = None
+    demo_max_call_duration_seconds: Optional[int] = None
 
 
 async def _load_public_org(url_slug: str) -> dict:
@@ -181,7 +188,9 @@ async def list_public_org_agents(
     org = await _load_public_org(slug)
     _require_access_token(org, slug, x_public_access_token)
 
-    agents, error = await voice_agent_service.get_public_page_agents(UUID(str(org["id"])))
+    agents, error = await voice_agent_service.get_public_page_agents(
+        UUID(str(org["id"]))
+    )
     if error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -195,6 +204,17 @@ async def list_public_org_agents(
                 name=agent.name,
                 persona=agent.persona,
                 mission=agent.mission,
+                is_demo=is_demo_agent(agent),
+                demo_calls_remaining=(
+                    getattr(agent, "demo_calls_remaining", None)
+                    if is_demo_agent(agent)
+                    else None
+                ),
+                demo_max_call_duration_seconds=(
+                    getattr(agent, "demo_max_call_duration_seconds", None)
+                    if is_demo_agent(agent)
+                    else None
+                ),
             )
             for agent in agents
         ]
@@ -216,18 +236,24 @@ async def generate_public_call_token(
 
     agent, error = await voice_agent_service.get_agent_by_id(agent_id)
     if error or not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+        )
     if str(agent.organization_id) != str(org["id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+        )
     if not agent.is_active or not agent.is_published_on_public_page:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Agent is not available on the public page",
         )
 
+    reservation = None
     try:
+        reservation = await reserve_demo_call_if_needed(agent)
         await assert_voice_session_allowed(
-            agent.organization_id, agent_is_demo=bool(getattr(agent, "is_demo", False))
+            agent.organization_id, agent_is_demo=is_demo_agent(agent)
         )
     except VoiceSessionEntitlementError as exc:
         public_code, public_message = get_public_voice_session_error(exc.code)
@@ -237,12 +263,16 @@ async def generate_public_call_token(
             exc.code,
         )
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+                if exc.code == "DEMO_CALL_LIMIT_REACHED"
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
             detail={"code": public_code, "message": public_message},
         ) from exc
 
     voice_token, ws_url, session_id = public_page_service.generate_call_token(
-        agent_id=str(agent_id)
+        agent_id=str(agent_id), demo_reservation=reservation
     )
     if not voice_token or not ws_url or not session_id:
         raise HTTPException(
@@ -254,4 +284,8 @@ async def generate_public_call_token(
         token=voice_token,
         wsUrl=ws_url,
         sessionId=session_id,
+        demo_calls_remaining=(reservation.calls_remaining if reservation else None),
+        demo_max_call_duration_seconds=(
+            reservation.max_call_duration_seconds if reservation else None
+        ),
     )

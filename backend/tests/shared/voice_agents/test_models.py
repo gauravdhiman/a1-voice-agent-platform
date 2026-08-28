@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
+
 from shared.voice_agents.models import (
     VoiceAgent,
     VoiceAgentBase,
@@ -51,6 +52,11 @@ class TestPhoneNumberValidation:
     def test_empty_string_phone_number_becomes_none(self):
         """Test empty string phone number is converted to None."""
         agent = VoiceAgentBase(name="Test", phone_number="")
+        assert agent.phone_number is None
+
+    def test_whitespace_only_phone_number_becomes_none(self):
+        """Whitespace-only optional phone numbers are treated as empty."""
+        agent = VoiceAgentBase(name="Test", phone_number=" \t\n")
         assert agent.phone_number is None
 
     def test_missing_phone_number_defaults_to_none(self):
@@ -166,6 +172,34 @@ class TestPublicAgentConfiguration:
         assert agent.is_demo is False
         assert agent.demo_slug is None
         assert agent.public_description is None
+        assert agent.demo_calls_remaining == -1
+        assert agent.demo_max_call_duration_seconds == -1
+
+    def test_demo_limits_accept_finite_and_unlimited_values(self):
+        from shared.voice_agents.models import VoiceAgentBase, VoiceAgentUpdate
+
+        base = VoiceAgentBase(
+            name="Demo",
+            demo_calls_remaining=3,
+            demo_max_call_duration_seconds=600,
+        )
+        update = VoiceAgentUpdate(
+            demo_calls_remaining=0,
+            demo_max_call_duration_seconds=-1,
+        )
+
+        assert base.demo_calls_remaining == 3
+        assert base.demo_max_call_duration_seconds == 600
+        assert update.demo_calls_remaining == 0
+        assert update.demo_max_call_duration_seconds == -1
+
+    def test_demo_max_call_duration_rejects_zero_and_negative_values(self):
+        from shared.voice_agents.models import VoiceAgentBase, VoiceAgentUpdate
+
+        with pytest.raises(ValueError, match="Demo max call duration"):
+            VoiceAgentBase(name="Demo", demo_max_call_duration_seconds=0)
+        with pytest.raises(ValueError):
+            VoiceAgentUpdate(demo_max_call_duration_seconds=-2)
 
     def test_demo_slug_is_normalized_for_create_and_update(self):
         """Demo slugs are lowercased and whitespace becomes hyphens."""
@@ -199,3 +233,32 @@ class TestPublicAgentConfiguration:
 
         assert agent.public_description == "A helpful public description."
         assert update.public_description == "Updated copy."
+
+    def test_blank_public_demo_fields_are_normalized_to_none(self):
+        """Blank optional demo metadata can clear an existing value."""
+        agent = VoiceAgentBase(name="Demo", demo_slug="", public_description="")
+        update = VoiceAgentUpdate(demo_slug="", public_description="")
+
+        assert agent.demo_slug is None
+        assert agent.public_description is None
+        assert update.demo_slug is None
+        assert update.public_description is None
+
+    def test_public_description_rejects_oversized_create_and_update_values(self):
+        """Public copy has the same length limit on create and update."""
+        with pytest.raises(ValidationError, match="Public description"):
+            VoiceAgentBase(name="Demo", public_description="x" * 1001)
+        with pytest.raises(ValidationError, match="Public description"):
+            VoiceAgentUpdate(public_description="x" * 1001)
+
+    def test_update_demo_slug_rejects_invalid_and_too_short_values(self):
+        """Updates enforce the same URL-safe demo slug contract as creates."""
+        with pytest.raises(ValidationError, match="Demo slug"):
+            VoiceAgentUpdate(demo_slug="has_underscore")
+        with pytest.raises(ValidationError, match="Demo slug"):
+            VoiceAgentUpdate(demo_slug="a")
+
+    def test_update_demo_duration_rejects_zero(self):
+        """Zero is not a valid finite per-call duration."""
+        with pytest.raises(ValidationError, match="Demo max call duration"):
+            VoiceAgentUpdate(demo_max_call_duration_seconds=0)

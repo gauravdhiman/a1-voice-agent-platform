@@ -20,6 +20,8 @@ from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
     assert_voice_session_allowed,
+    is_demo_agent,
+    reserve_demo_call_if_needed,
 )
 from shared.config.settings import settings
 from shared.voice_agents.service import voice_agent_service
@@ -151,11 +153,13 @@ async def _handle_pipecat_incoming(
             "Internal configuration error. Voice stream URL is not public."
         )
 
+    reservation = None
     try:
+        reservation = await reserve_demo_call_if_needed(agent)
         await assert_voice_session_allowed(
             agent.organization_id,
             current_call_sid=call_sid,
-            agent_is_demo=bool(getattr(agent, "is_demo", False)),
+            agent_is_demo=is_demo_agent(agent),
         )
     except VoiceSessionEntitlementError as exc:
         _public_code, public_message = get_public_voice_session_error(exc.code)
@@ -173,6 +177,11 @@ async def _handle_pipecat_incoming(
             user_id=str(from_number or "anonymous"),
             purpose="phone",
             call_sid=call_sid,
+            session_id=(reservation.session_id if reservation else None),
+            demo_reservation_id=(reservation.reservation_id if reservation else None),
+            demo_max_call_duration_seconds=(
+                reservation.max_call_duration_seconds if reservation else None
+            ),
         )
     except ValueError as exc:
         logger.error("Failed to create voice session token: %s", exc)

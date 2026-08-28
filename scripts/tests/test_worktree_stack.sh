@@ -46,6 +46,7 @@ SUPABASE_URL=https://placeholder.supabase.co
 SUPABASE_SERVICE_KEY=source-service-key
 DATABASE_URL=postgresql://placeholder
 JWT_SECRET_KEY=source-jwt-secret
+GEMINI_API_KEY=source-gemini-key
 EOF
 
 state_dir="$test_dir/state"
@@ -98,6 +99,7 @@ assert_file_contains "$app_env" 'HOST_BACKEND_PORT=8020'
 assert_file_contains "$app_env" 'VOICE_RECORDING_ENABLED=true'
 assert_file_contains "$app_env" 'RECORDING_STORAGE_BACKEND=local'
 assert_file_contains "$app_env" 'RECORDING_STORAGE_LOCAL_ROOT=.local-data/call-recordings'
+assert_file_contains "$app_env" 'GEMINI_API_KEY=source-gemini-key'
 assert_file_contains "$state_dir/metadata.env" 'TEST_ORGANIZATION_NAME=Pleasant Pediatric'
 assert_file_contains "$state_dir/metadata.env" 'TEST_AGENT_ID=59252f36-255e-4e71-9250-c4ce3ac27eaa'
 
@@ -105,6 +107,26 @@ if [[ "$config_output" == *"source-service-key"* ]]; then
   echo "Config output leaked a service key" >&2
   exit 1
 fi
+
+python3 - "$source_env" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+for index, line in enumerate(lines):
+    if line.startswith("GEMINI_API_KEY="):
+        lines[index] = "GEMINI_API_KEY=rotated-gemini-key"
+        break
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+"$STACK" config \
+  --name appointment-worktree \
+  --port-offset 20 \
+  --source-env "$source_env" \
+  --state-dir "$state_dir" >/dev/null
+assert_file_contains "$app_env" 'GEMINI_API_KEY=rotated-gemini-key'
 
 if "$STACK" config --name invalid-port --port-offset 10001 --state-dir "$test_dir/invalid" >/dev/null 2>&1; then
   echo "Expected an out-of-range port offset to fail" >&2

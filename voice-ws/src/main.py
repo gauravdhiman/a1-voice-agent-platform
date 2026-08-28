@@ -10,29 +10,33 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Optional
+from uuid import UUID
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pipecat.runner.utils import parse_telephony_websocket
-
-from uuid import UUID
+from src.bot import run_bot
+from src.twilio_session import build_twilio_serializer, resolve_session_token
 
 from shared.billing.voice_session_entitlement import (
+    DEMO_CALL_RESERVATION_INVALID,
     VoiceSessionEntitlementError,
     assert_voice_session_allowed,
+    consume_demo_call_reservation,
+    is_demo_agent,
 )
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import VoiceSessionService
 
-from src.bot import run_bot
-from src.twilio_session import build_twilio_serializer, resolve_session_token
-
 load_dotenv()
 
 logging.basicConfig(
-    level=logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO,
+    level=(
+        logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO
+    ),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("voice-ws")
@@ -64,15 +68,42 @@ if instrument_fastapi is not None:
 session_service = VoiceSessionService()
 
 
-async def _precheck_voice_session(claims) -> None:
-    """Enforce concurrent and credit entitlements before accepting a session."""
-    agent, agent_error = await voice_agent_service.get_agent_by_id(UUID(claims.agent_id))
+async def _precheck_voice_session(claims) -> Optional[int]:
+    """Enforce entitlements and consume demo reservations before admission.
+
+    Returns the duration cap captured in a demo reservation, or ``None`` for
+    normal sessions and unlimited demo sessions.
+    """
+    agent, agent_error = await voice_agent_service.get_agent_by_id(
+        UUID(claims.agent_id)
+    )
     if agent_error or agent is None or not agent.organization_id:
-        return
+        if claims.demo_reservation_id:
+            raise VoiceSessionEntitlementError(
+                DEMO_CALL_RESERVATION_INVALID,
+                "This demo call session is no longer available.",
+            )
+        return None
+    if is_demo_agent(agent):
+        if not claims.demo_reservation_id:
+            raise VoiceSessionEntitlementError(
+                DEMO_CALL_RESERVATION_INVALID,
+                "This demo call session is no longer available.",
+            )
+        await consume_demo_call_reservation(
+            agent_id=UUID(claims.agent_id),
+            session_id=claims.session_id,
+            reservation_id=claims.demo_reservation_id,
+        )
+        duration = claims.demo_max_call_duration_seconds
+        if duration is not None and duration > 0:
+            return duration
+        return None
     await assert_voice_session_allowed(
         agent.organization_id,
         current_call_sid=claims.call_sid,
     )
+    return None
 
 
 @app.get("/health")
@@ -98,7 +129,7 @@ async def websocket_endpoint(
         return
 
     try:
-        await _precheck_voice_session(claims)
+        max_call_duration_seconds = await _precheck_voice_session(claims)
     except VoiceSessionEntitlementError as exc:
         logger.warning(
             "Rejecting WebSocket session_id=%s code=%s: %s",
@@ -121,7 +152,11 @@ async def websocket_endpoint(
         claims.agent_id,
     )
     try:
-        await run_bot(websocket, claims)
+        await run_bot(
+            websocket,
+            claims,
+            max_call_duration_seconds=max_call_duration_seconds,
+        )
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected session_id=%s", claims.session_id)
     except Exception:
@@ -177,7 +212,7 @@ async def twilio_websocket_endpoint(
             return
 
         try:
-            await _precheck_voice_session(claims)
+            max_call_duration_seconds = await _precheck_voice_session(claims)
         except VoiceSessionEntitlementError as exc:
             logger.warning(
                 "Rejecting Twilio WebSocket session_id=%s code=%s: %s",
@@ -198,7 +233,12 @@ async def twilio_websocket_endpoint(
             stream_id,
             call_id,
         )
-        await run_bot(websocket, claims, serializer=serializer)
+        await run_bot(
+            websocket,
+            claims,
+            serializer=serializer,
+            max_call_duration_seconds=max_call_duration_seconds,
+        )
     except WebSocketDisconnect:
         logger.info("Twilio WebSocket disconnected before/during session")
     except Exception:

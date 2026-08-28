@@ -4,7 +4,8 @@ Unauthenticated visitors browse a demo agent at ``/demo/{demo_slug}``
 and start voice calls without logging in. Only agents marked
 ``is_demo = true`` with a unique ``demo_slug`` are exposed here.
 Demo agents bypass credit and concurrency checks so showcase calls
-never block on billing.
+never block on billing, but can be bounded by platform-admin-configured demo
+call budgets.
 """
 
 from __future__ import annotations
@@ -14,18 +15,22 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
     assert_voice_session_allowed,
+    is_demo_agent,
+    reserve_demo_call_if_needed,
 )
 from shared.voice_agents.public_page_service import public_page_service
 from shared.voice_agents.service import voice_agent_service
-from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 logger = logging.getLogger(__name__)
 
-demo_public_router = APIRouter(prefix="/api/v1/public/demo", tags=["Public Demo Agents"])
+demo_public_router = APIRouter(
+    prefix="/api/v1/public/demo", tags=["Public Demo Agents"]
+)
 
 
 class DemoAgentPublicResponse(BaseModel):
@@ -40,6 +45,9 @@ class DemoAgentPublicResponse(BaseModel):
     public_description: str | None = None
     organization_id: UUID
     organization_name: str | None = None
+    demo_calls_remaining: int = -1
+    demo_max_call_duration_seconds: int = -1
+
 
 class DemoCallTokenResponse(BaseModel):
     """Pipecat voice session credentials for a demo-agent visitor call."""
@@ -47,6 +55,8 @@ class DemoCallTokenResponse(BaseModel):
     token: str
     wsUrl: str
     sessionId: str
+    demo_calls_remaining: int | None = None
+    demo_max_call_duration_seconds: int | None = None
 
 
 @demo_public_router.get("/{demo_slug}", response_model=DemoAgentPublicResponse)
@@ -55,7 +65,9 @@ async def get_demo_agent_public(demo_slug: str) -> DemoAgentPublicResponse:
     normalized = demo_slug.strip().lower()
     agent, error = await voice_agent_service.get_demo_agent_by_slug(normalized)
     if error or not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo agent not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Demo agent not found"
+        )
     # Resolve organization name for display (best-effort, not required for auth)
     org_name = None
     try:
@@ -77,43 +89,80 @@ async def get_demo_agent_public(demo_slug: str) -> DemoAgentPublicResponse:
         public_description=getattr(agent, "public_description", None),
         organization_id=agent.organization_id,
         organization_name=org_name,
+        demo_calls_remaining=getattr(agent, "demo_calls_remaining", -1),
+        demo_max_call_duration_seconds=getattr(
+            agent, "demo_max_call_duration_seconds", -1
+        ),
     )
-@demo_public_router.post("/{demo_slug}/call-token", response_model=DemoCallTokenResponse)
+
+
+@demo_public_router.post(
+    "/{demo_slug}/call-token", response_model=DemoCallTokenResponse
+)
 async def generate_demo_call_token(demo_slug: str) -> DemoCallTokenResponse:
     """Generate a Pipecat voice session token for a demo-agent visitor call.
 
-    Demo agents bypass the normal credit/concurrency gate; non-demo slugs
-    are treated as not found.
+    Demo agents bypass the normal credit/concurrency gate, while their
+    configured demo call budget is reserved atomically before a token is issued.
+    Non-demo slugs are treated as not found.
     """
     normalized = demo_slug.strip().lower()
     agent, error = await voice_agent_service.get_demo_agent_by_slug(normalized)
     if error or not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo agent not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Demo agent not found"
+        )
 
-    # Demo agents bypass credit/concurrency checks; still run the gate for
-    # non-demo agents if the endpoint is ever called with one (defense in depth).
+    reservation = None
     try:
-        if not agent.is_demo:
-            await assert_voice_session_allowed(agent.organization_id)
-        else:
-            # Explicit bypass with logging for observability — pass demo flag
-            # so the check is auditable even though it early-returns.
-            await assert_voice_session_allowed(agent.organization_id, agent_is_demo=True)
+        reservation = await reserve_demo_call_if_needed(agent)
+        await assert_voice_session_allowed(
+            agent.organization_id,
+            agent_is_demo=is_demo_agent(agent),
+        )
     except VoiceSessionEntitlementError as exc:
         public_code, public_message = get_public_voice_session_error(exc.code)
-        logger.info("Demo voice session denied demo_slug=%s code=%s", demo_slug, exc.code)
+        logger.info(
+            "Demo voice session denied demo_slug=%s code=%s", demo_slug, exc.code
+        )
         raise HTTPException(
-            status_code={
-                "INSUFFICIENT_CREDITS": status.HTTP_402_PAYMENT_REQUIRED,
-                "MAX_CONCURRENT_CALLS": status.HTTP_409_CONFLICT,
-            }.get(exc.code, status.HTTP_403_FORBIDDEN),
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+                if exc.code == "DEMO_CALL_LIMIT_REACHED"
+                else {
+                    "INSUFFICIENT_CREDITS": status.HTTP_402_PAYMENT_REQUIRED,
+                    "MAX_CONCURRENT_CALLS": status.HTTP_409_CONFLICT,
+                }.get(exc.code, status.HTTP_503_SERVICE_UNAVAILABLE)
+            ),
             detail={"code": public_code, "message": public_message},
         ) from exc
 
-    token, ws_url, session_id = public_page_service.generate_call_token(agent_id=str(agent.id))
+    token, ws_url, session_id = public_page_service.generate_call_token(
+        agent_id=str(agent.id), demo_reservation=reservation
+    )
     if not token or not ws_url or not session_id:
-        logger.error("Failed to generate demo call token demo_slug=%s agent_id=%s", demo_slug, agent.id)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate call token")
+        logger.error(
+            "Failed to generate demo call token demo_slug=%s agent_id=%s",
+            demo_slug,
+            agent.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate call token",
+        )
 
-    logger.info("Demo call token issued demo_slug=%s agent_id=%s session_id=%s", demo_slug, agent.id, session_id)
-    return DemoCallTokenResponse(token=token, wsUrl=ws_url, sessionId=session_id)
+    logger.info(
+        "Demo call token issued demo_slug=%s agent_id=%s session_id=%s",
+        demo_slug,
+        agent.id,
+        session_id,
+    )
+    return DemoCallTokenResponse(
+        token=token,
+        wsUrl=ws_url,
+        sessionId=session_id,
+        demo_calls_remaining=(reservation.calls_remaining if reservation else None),
+        demo_max_call_duration_seconds=(
+            reservation.max_call_duration_seconds if reservation else None
+        ),
+    )
