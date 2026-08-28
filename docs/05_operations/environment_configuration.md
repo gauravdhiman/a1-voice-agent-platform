@@ -70,6 +70,11 @@ unclear ownership.
    production Compose file, migration helpers, GitHub Actions workflow, and
    deployment docs all use `.env.prod`. CI stores its contents in the
    `ENV_PROD` repository secret.
+9. **Keep worktree provider settings synchronized.** The full isolated
+   worktree launcher reads non-placeholder voice-provider credentials from the
+   worktree `.env.local` or the main checkout `.env.local`, refreshes them into
+   `.worktree-state/app.env` on every setup, and fails fast when
+   `GEMINI_API_KEY` is not configured.
 
 Deployment helper names that contain `cloud` (for example,
 `gcp-env-from-cloud.py` or `deploy-cloud.yml`) describe the cloud hosting

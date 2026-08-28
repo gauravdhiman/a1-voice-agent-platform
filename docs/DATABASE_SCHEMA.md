@@ -232,6 +232,8 @@ Stores voice agent configurations for each organization.
 | is_demo | BOOLEAN | NOT NULL, DEFAULT FALSE | When true, this agent is a demo agent that bypasses credit and concurrency checks and is available on a dedicated public page at `/demo/{demo_slug}`. Platform-admin only; defaults to false — migration 20260820000001 |
 | demo_slug | VARCHAR(100) | NULLABLE, UNIQUE (partial `WHERE demo_slug IS NOT NULL`) | Unique slug for the demo public page (e.g. `acme-dental-demo`); required when `is_demo` is true, must be lowercase alphanumeric plus hyphens. Only demo agents use this column — migration 20260820000001 |
 | public_description | TEXT | NULLABLE | Customer-facing description shown on the public demo page (`/demo/{demo_slug}`). Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); this is marketing copy explaining what the agent does and its scope. UI gated under `is_demo` (platform-admin only) with fallback `public_description → mission → persona` on the page — migration 20260820000002 |
+| demo_calls_remaining | INTEGER | NOT NULL, DEFAULT -1, CHECK >= -1 | Remaining demo call reservations. `0` disables new demo calls; positive values decrement atomically at token issuance; `-1` means unlimited — migration 20260827000001 |
+| demo_max_call_duration_seconds | INTEGER | NOT NULL, DEFAULT -1, CHECK = -1 OR > 0 | Maximum duration captured for each new demo reservation. `-1` means unlimited; active calls keep the duration captured at reservation — migration 20260827000001 |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
 **Foreign Keys**:
@@ -244,8 +246,33 @@ Stores voice agent configurations for each organization.
   migration `20260812000009`
 - `ix_voice_agents_is_demo` on `(is_demo) WHERE is_demo = true` — migration 20260820000001
 - `uq_voice_agents_demo_slug` unique partial on `(demo_slug) WHERE demo_slug IS NOT NULL` — migration 20260820000001
+- `ix_demo_call_reservations_agent_created_at` on `(agent_id, created_at)` — migration 20260827000001
 **RLS**: Enabled
 **Real-time**: Enabled
+
+---
+
+### demo_call_reservations
+
+Internal one-time reservations for public demo voice sessions. A reservation is
+created by the service-role `reserve_demo_voice_call` RPC while locking the
+demo agent row, then changed from `reserved` to `consumed` by
+`consume_demo_voice_call` when `voice-ws` admits the signed session. The table
+has no public RLS policy; direct access is restricted to the service role.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Reservation identifier embedded in the voice-session JWT |
+| agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent whose budget was reserved |
+| session_id | VARCHAR(100) | NOT NULL, UNIQUE | Voice-session id; makes token issuance idempotent |
+| status | VARCHAR(20) | NOT NULL, DEFAULT `reserved`, CHECK `reserved` or `consumed` | One-time reservation state |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Reservation timestamp |
+| consumed_at | TIMESTAMPTZ | NULLABLE | WebSocket admission timestamp |
+
+**RLS**: Enabled; service-role RPCs only.
+
+**Migration**: `20260827000001_add_demo_call_limits.py` (merge migration from
+`20260820000002` and `20260821000001`).
 
 ---
 

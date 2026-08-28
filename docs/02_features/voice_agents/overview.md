@@ -180,10 +180,12 @@ different active organization.
 Public surfaces are documented in [Public Organization and Demo Agent Pages](./public_agent_pages.md).
 An organization can publish individual active agents on `/o/{slug}` and may
 protect that list with a passphrase. Platform admins can separately mark an
-active agent as a demo, assign a unique slug, and provide visitor-facing copy
-for `/demo/{demo_slug}`. Demo calls bypass credit/concurrency admission and
-final voice-minute billing; regular public organization calls use normal
-entitlements.
+active agent as a demo, assign a unique slug, provide visitor-facing copy, and
+set a remaining-call budget plus a per-call duration cap for `/demo/{demo_slug}`.
+Use `-1` for either limit to make that dimension unlimited; setting remaining
+calls to `0` disables new demo calls. Demo calls bypass credit/concurrency
+admission and final voice-minute billing, while regular public organization
+calls use normal entitlements.
 
 ## Tool System
 

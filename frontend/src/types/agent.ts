@@ -39,6 +39,10 @@ export interface VoiceAgent {
   demo_slug?: string | null;
   /** Customer-facing description shown on the public demo page (marketing copy). */
   public_description?: string | null;
+  /** Remaining demo call reservations; -1 means unlimited. */
+  demo_calls_remaining?: number;
+  /** Maximum demo call duration in seconds; -1 means unlimited. */
+  demo_max_call_duration_seconds?: number;
   instructions_markdown: string | null;
   /**
    * Voice-engine preset referenced by this agent (Phase 4). `null` = use the
@@ -68,10 +72,14 @@ export interface VoiceAgentCreate {
   /** Whether calls handled by this agent may be recorded. Defaults to false. */
   call_recording_enabled?: boolean;
   use_platform_credits?: boolean;
-  /** Platform-admin only: demo flag and public description (set via edit after creation). */
+  /** Platform-admin only: demo flag, public copy, and optional trial limits. */
   is_demo?: boolean;
   demo_slug?: string | null;
   public_description?: string | null;
+  /** Platform-admin only: remaining demo call reservations; -1 means unlimited. */
+  demo_calls_remaining?: number;
+  /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */
+  demo_max_call_duration_seconds?: number;
   instructions_markdown?: string | null;
   /** Voice-engine preset id; `null` = system default. */
   preset_id?: string | null;
@@ -95,6 +103,10 @@ export interface VoiceAgentUpdate {
   demo_slug?: string | null;
   /** Customer-facing description for the public demo page. */
   public_description?: string | null;
+  /** Platform-admin only: remaining demo call reservations; -1 means unlimited. */
+  demo_calls_remaining?: number;
+  /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */
+  demo_max_call_duration_seconds?: number;
   instructions_markdown?: string | null;
 }
 

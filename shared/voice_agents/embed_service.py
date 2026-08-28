@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 import jwt
 
+from shared.billing.voice_session_entitlement import DemoCallReservation
 from shared.config.settings import settings
 from shared.voice_agents.voice_session_service import voice_session_service
 
@@ -40,7 +41,9 @@ class EmbedService:
     """
 
     def __init__(self) -> None:
-        self.jwt_secret: str = settings.jwt_secret_key or "embed-dev-secret-key-change-in-production"
+        self.jwt_secret: str = (
+            settings.jwt_secret_key or "embed-dev-secret-key-change-in-production"
+        )
         self.embed_token_expiry: timedelta = timedelta(hours=1)
 
     def generate_embed_token(
@@ -49,6 +52,7 @@ class EmbedService:
         embed_config_id: str,
         domain: Optional[str],
         ip_address: Optional[str],
+        demo_reservation: Optional[DemoCallReservation] = None,
     ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
         """Generate tokens for an embed-based browser voice call.
 
@@ -57,6 +61,7 @@ class EmbedService:
             embed_config_id: UUID of the embed configuration.
             domain: Domain that initiated the request (for validation/audit).
             ip_address: Visitor IP address (for tracking).
+            demo_reservation: Optional one-time reservation for a demo call.
 
         Returns:
             Tuple of ``(embed_token, voice_token, ws_url, session_id)`` or
@@ -69,6 +74,15 @@ class EmbedService:
                 user_id=visitor_id,
                 purpose="embed",
                 expires_in=self.embed_token_expiry,
+                session_id=(demo_reservation.session_id if demo_reservation else None),
+                demo_reservation_id=(
+                    demo_reservation.reservation_id if demo_reservation else None
+                ),
+                demo_max_call_duration_seconds=(
+                    demo_reservation.max_call_duration_seconds
+                    if demo_reservation
+                    else None
+                ),
             )
 
             embed_payload: dict[str, Any] = {

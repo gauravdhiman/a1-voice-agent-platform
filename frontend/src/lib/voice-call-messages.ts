@@ -12,6 +12,9 @@ export const PUBLIC_VOICE_ASSISTANT_UNAVAILABLE_MESSAGE =
 export const PUBLIC_VOICE_ASSISTANT_BUSY_MESSAGE =
   "This voice assistant is currently busy helping other callers. Please try again in a few minutes or contact the business for assistance.";
 
+export const PUBLIC_DEMO_TRIAL_EXHAUSTED_MESSAGE =
+  "This demo agent has used all available trial calls. Please contact the platform administrator for further details or to have the demo re-enabled.";
+
 const PUBLIC_VOICE_CONNECTION_ERROR_MESSAGE =
   "We couldn't connect to the voice assistant. Please try again later or contact the business if the problem continues.";
 
@@ -36,7 +39,8 @@ function readVoiceErrorDetails(error: unknown): VoiceErrorDetails {
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
     const detailRecord = detail as Record<string, unknown>;
     return {
-      code: typeof detailRecord.code === "string" ? detailRecord.code : undefined,
+      code:
+        typeof detailRecord.code === "string" ? detailRecord.code : undefined,
       message:
         typeof detailRecord.message === "string"
           ? detailRecord.message
@@ -65,6 +69,15 @@ export function getPublicVoiceCallErrorMessage(error: unknown): string {
   const rawMessage =
     details.message || (error instanceof Error ? error.message : "");
   const normalized = rawMessage.toLowerCase();
+
+  if (
+    details.code === "DEMO_TRIAL_EXHAUSTED" ||
+    details.code === "DEMO_CALL_LIMIT_REACHED" ||
+    normalized.includes("trial calls") ||
+    normalized.includes("demo agent has used all available")
+  ) {
+    return PUBLIC_DEMO_TRIAL_EXHAUSTED_MESSAGE;
+  }
 
   if (
     details.code === "VOICE_ASSISTANT_BUSY" ||

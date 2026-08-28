@@ -12,14 +12,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
+from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
     assert_voice_session_allowed,
+    is_demo_agent,
+    reserve_demo_call_if_needed,
 )
 from shared.voice_agents.embed_service import embed_service
 from shared.voice_agents.service import voice_agent_service
-from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ class PublicEmbedTokenResponse(BaseModel):
     token: str
     wsUrl: str
     sessionId: str
+    demo_calls_remaining: Optional[int] = None
+    demo_max_call_duration_seconds: Optional[int] = None
 
 
 class AgentInfoResponse(BaseModel):
@@ -41,6 +45,9 @@ class AgentInfoResponse(BaseModel):
     id: UUID
     name: str
     is_active: bool
+    is_demo: bool = False
+    demo_calls_remaining: Optional[int] = None
+    demo_max_call_duration_seconds: Optional[int] = None
 
 
 @embed_router.get("/agent/{agent_id}/info", response_model=AgentInfoResponse)
@@ -114,6 +121,17 @@ async def get_agent_info(
         id=agent.id,
         name=agent.name,
         is_active=agent.is_active,
+        is_demo=is_demo_agent(agent),
+        demo_calls_remaining=(
+            getattr(agent, "demo_calls_remaining", None)
+            if is_demo_agent(agent)
+            else None
+        ),
+        demo_max_call_duration_seconds=(
+            getattr(agent, "demo_max_call_duration_seconds", None)
+            if is_demo_agent(agent)
+            else None
+        ),
     )
 
 
@@ -209,9 +227,11 @@ async def generate_public_embed_token(
             detail="Failed to check rate limits",
         )
 
+    reservation = None
     try:
+        reservation = await reserve_demo_call_if_needed(agent)
         await assert_voice_session_allowed(
-            agent.organization_id, agent_is_demo=bool(getattr(agent, "is_demo", False))
+            agent.organization_id, agent_is_demo=is_demo_agent(agent)
         )
     except VoiceSessionEntitlementError as exc:
         public_code, public_message = get_public_voice_session_error(exc.code)
@@ -221,7 +241,11 @@ async def generate_public_embed_token(
             exc.code,
         )
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+                if exc.code == "DEMO_CALL_LIMIT_REACHED"
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
             detail={"code": public_code, "message": public_message},
         ) from exc
 
@@ -229,13 +253,12 @@ async def generate_public_embed_token(
     domain = request.headers.get("origin", "")
     ip_address = request.client.host if request.client else None
 
-    embed_token, voice_token, ws_url, session_id = (
-        embed_service.generate_embed_token(
-            agent_id=str(agent_id),
-            embed_config_id=str(embed_config["id"]),
-            domain=domain,
-            ip_address=ip_address,
-        )
+    embed_token, voice_token, ws_url, session_id = embed_service.generate_embed_token(
+        agent_id=str(agent_id),
+        embed_config_id=str(embed_config["id"]),
+        domain=domain,
+        ip_address=ip_address,
+        demo_reservation=reservation,
     )
 
     if not embed_token or not voice_token or not ws_url or not session_id:
@@ -264,4 +287,8 @@ async def generate_public_embed_token(
         token=voice_token,
         wsUrl=ws_url,
         sessionId=session_id,
+        demo_calls_remaining=(reservation.calls_remaining if reservation else None),
+        demo_max_call_duration_seconds=(
+            reservation.max_call_duration_seconds if reservation else None
+        ),
     )

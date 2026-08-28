@@ -23,6 +23,10 @@ export interface DemoAgentPublic {
   organization_id: string;
   /** Optional owning organization name for display. */
   organization_name: string | null;
+  /** Remaining trial calls; zero disables new calls and -1 is unlimited. */
+  demo_calls_remaining: number;
+  /** Maximum duration in seconds; -1 is unlimited. */
+  demo_max_call_duration_seconds: number;
 }
 
 export interface DemoCallTokenResponse {
@@ -32,6 +36,10 @@ export interface DemoCallTokenResponse {
   wsUrl: string;
   /** Session identifier used for voice-session tracking. */
   sessionId: string;
+  /** Remaining trial calls after this token was reserved. */
+  demo_calls_remaining?: number | null;
+  /** Duration cap captured for this call; -1 means unlimited. */
+  demo_max_call_duration_seconds?: number | null;
 }
 
 /**

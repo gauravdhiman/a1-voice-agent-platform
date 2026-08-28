@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+from contextlib import suppress
 from typing import Optional
 
 from fastapi import WebSocket
@@ -36,6 +38,24 @@ logger = logging.getLogger(__name__)
 _GREETING_INSTRUCTION = "Greet the user warmly and ask how you can help."
 
 
+async def _cancel_pipeline_after(
+    task: PipelineTask,
+    duration_seconds: int,
+    session_id: str,
+) -> None:
+    """Cancel a pipeline when a bounded demo call reaches its time limit."""
+    try:
+        await asyncio.sleep(duration_seconds)
+    except asyncio.CancelledError:
+        return
+    logger.info(
+        "Demo call duration limit reached session_id=%s duration_seconds=%s",
+        session_id,
+        duration_seconds,
+    )
+    await task.cancel()
+
+
 async def _close_mcp_clients(clients: list[object]) -> None:
     """Close every session-owned MCP client without masking teardown errors."""
     for client in clients:
@@ -50,12 +70,15 @@ async def run_bot(
     claims: VoiceSessionClaims,
     *,
     serializer: Optional[FrameSerializer] = None,
+    max_call_duration_seconds: Optional[int] = None,
 ) -> None:
     """Run one authenticated Pipecat voice session.
 
     The selected agent preset determines whether this builds Gemini Live or a
     modular Deepgram → OpenAI/Cerebras → Cartesia pipeline. Browser protobuf and
-    Twilio serializers share the same transport and assembly path.
+    Twilio serializers share the same transport and assembly path. A positive
+    ``max_call_duration_seconds`` starts at transport connection time and
+    cancels the pipeline when reached.
     """
     frame_serializer = serializer or BrowserWebSocketFrameSerializer()
     bundle = await prepare_voice_session(claims)
@@ -143,12 +166,26 @@ async def run_bot(
         Pipeline(processors),
         params=PipelineParams(allow_interruptions=True, enable_metrics=True),
     )
+    duration_task: Optional[asyncio.Task[None]] = None
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(_transport, _client) -> None:
         """Queue a first user instruction so the agent greets on connect."""
+        nonlocal duration_task
         context.add_message({"role": "user", "content": _GREETING_INSTRUCTION})
         await task.queue_frames([LLMRunFrame()])
+        if (
+            duration_task is None
+            and max_call_duration_seconds
+            and max_call_duration_seconds > 0
+        ):
+            duration_task = asyncio.create_task(
+                _cancel_pipeline_after(
+                    task,
+                    max_call_duration_seconds,
+                    claims.session_id,
+                )
+            )
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(_transport, _client) -> None:
@@ -158,6 +195,10 @@ async def run_bot(
     try:
         await PipelineRunner(handle_sigint=False).run(task)
     finally:
+        if duration_task is not None:
+            duration_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await duration_task
         if audio_buffer:
             try:
                 await audio_buffer.stop_recording()

@@ -47,8 +47,9 @@ Options:
   --name NAME         Stable worktree name used in project IDs and credentials
   --port-offset N     Explicit non-zero host-port offset; default is deterministic
                       from this worktree path
-  --source-env PATH   Copy provider settings from this env file on first setup
-                      (defaults to .env.local, then .env.local.example)
+  --source-env PATH   Copy provider settings from this env file
+                      (defaults to this worktree's or main checkout's .env.local,
+                       then .env.local.example)
   --state-dir PATH    Store generated config and credentials at this path
   --skip-master-data  Skip the explicit platform master-data synchronization
   --yes               Confirm destructive purge
@@ -170,6 +171,71 @@ read_env_value() {
     print
     exit
   }' "$file"
+}
+
+git_repository_root() {
+  local git_common_dir
+  git_common_dir="$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null || true)"
+  if [[ -z "$git_common_dir" ]]; then
+    printf '%s' "$ROOT"
+    return 0
+  fi
+  if [[ "$git_common_dir" != /* ]]; then
+    git_common_dir="$ROOT/$git_common_dir"
+  fi
+  cd "$(dirname "$git_common_dir")" && pwd
+}
+
+default_source_env() {
+  local shared_root candidate fallback
+  shared_root="$(git_repository_root)"
+  fallback=""
+  for candidate in "$ROOT/.env.local" "$shared_root/.env.local"; do
+    if [[ -f "$candidate" ]]; then
+      [[ -n "$fallback" ]] || fallback="$candidate"
+      if ! is_placeholder_env_value "$(read_env_value "$candidate" "GEMINI_API_KEY")"; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    fi
+  done
+  if [[ -n "$fallback" ]]; then
+    printf '%s' "$fallback"
+    return 0
+  fi
+  printf '%s/.env.local.example' "$ROOT"
+}
+
+is_placeholder_env_value() {
+  local value="$1"
+  local normalized
+  normalized="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$normalized" in
+    ""|placeholder|*placeholder*|your-*-api-key|your_*_api_key|change-me*|replace-me*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+sync_voice_provider_settings() {
+  local source_env="$1"
+  local key value
+  for key in \
+    GEMINI_API_KEY \
+    DEEPGRAM_API_KEY \
+    OPENAI_API_KEY \
+    CARTESIA_API_KEY \
+    CEREBRAS_API_KEY \
+    OPENROUTER_API_KEY \
+    FISH_API_KEY; do
+    value="$(read_env_value "$source_env" "$key")"
+    if [[ -n "$value" ]] && ! is_placeholder_env_value "$value"; then
+      set_env_value "$APP_ENV" "$key" "$value"
+    fi
+  done
 }
 
 derive_identity() {
@@ -306,15 +372,21 @@ PY
 
 prepare_app_env() {
   mkdir -p "$STATE_DIR"
+  local source_env="${SOURCE_ENV_OVERRIDE:-$(default_source_env)}"
+  if [[ ! -f "$source_env" ]]; then
+    source_env="${ROOT}/.env.local.example"
+  fi
+  [[ -f "$source_env" ]] || die "no source env found; expected .env.local or .env.local.example"
   if [[ ! -f "$APP_ENV" ]]; then
-    local source_env="${SOURCE_ENV_OVERRIDE:-${ROOT}/.env.local}"
-    if [[ ! -f "$source_env" ]]; then
-      source_env="${ROOT}/.env.local.example"
-    fi
-    [[ -f "$source_env" ]] || die "no source env found; expected .env.local or .env.local.example"
     cp "$source_env" "$APP_ENV"
     chmod 600 "$APP_ENV"
   fi
+
+  # Provider credentials are intentionally refreshed on every setup. The
+  # generated app.env persists between runs, while the canonical .env.local
+  # may be created or rotated after the first worktree setup. Never replace a
+  # previously valid key with a template placeholder.
+  sync_voice_provider_settings "$source_env"
 
   set_env_value "$APP_ENV" "ENV_FILE" "$APP_ENV"
   set_env_value "$APP_ENV" "ENVIRONMENT" "development"
@@ -353,6 +425,14 @@ prepare_app_env() {
   set_env_value "$APP_ENV" "SUPABASE_URL" "http://host.docker.internal:${SUPABASE_API_PORT}"
   set_env_value "$APP_ENV" "NEXT_PUBLIC_SUPABASE_URL" "http://127.0.0.1:${SUPABASE_API_PORT}"
   set_env_value "$APP_ENV" "DATABASE_URL" "postgresql://postgres:postgres@host.docker.internal:${SUPABASE_DB_PORT}/postgres"
+}
+
+validate_voice_provider_settings() {
+  local gemini_key
+  gemini_key="$(read_env_value "$APP_ENV" "GEMINI_API_KEY")"
+  if is_placeholder_env_value "$gemini_key"; then
+    die "GEMINI_API_KEY is not configured for this worktree; set it in the main checkout's .env.local or pass --source-env PATH"
+  fi
 }
 
 supabase_status_env() {
@@ -506,6 +586,13 @@ show_config() {
   echo "Voice WebSocket host port: $APP_VOICE_WS_PORT"
   echo "App Compose project: $APP_COMPOSE_PROJECT"
   echo "App env: $APP_ENV"
+  local gemini_key
+  gemini_key="$(read_env_value "$APP_ENV" "GEMINI_API_KEY")"
+  if is_placeholder_env_value "$gemini_key"; then
+    echo "Gemini API key: not configured"
+  else
+    echo "Gemini API key: configured"
+  fi
   echo "Supabase config: $SUPABASE_CONFIG"
   show_test_accounts
 }
@@ -586,6 +673,7 @@ up_stack() {
   require_docker
   render_supabase_config
   prepare_app_env
+  validate_voice_provider_settings
   write_metadata
   check_ports
   start_supabase

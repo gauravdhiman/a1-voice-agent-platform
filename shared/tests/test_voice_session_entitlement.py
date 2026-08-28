@@ -62,9 +62,7 @@ async def test_assert_voice_session_allowed_raises_on_concurrent_limit(monkeypat
             }
         ]
     )
-    active_calls_execute = MagicMock(
-        data=[{"id": "1"}, {"id": "2"}], count=2
-    )
+    active_calls_execute = MagicMock(data=[{"id": "1"}, {"id": "2"}], count=2)
 
     table = MagicMock()
     table.select.return_value = table
@@ -163,9 +161,7 @@ async def test_assert_voice_session_allowed_raises_on_insufficient_credits(monke
     ent_execute = MagicMock(data=[])
     catalog_execute = MagicMock(data=[])
     min_cost_execute = MagicMock(data=[{"credit_cost": 10, "is_active": True}])
-    org_execute = MagicMock(
-        data=[{"credit_balance": 3, "purchased_credit_balance": 2}]
-    )
+    org_execute = MagicMock(data=[{"credit_balance": 3, "purchased_credit_balance": 2}])
 
     table = MagicMock()
     table.select.return_value = table
@@ -257,18 +253,34 @@ async def test_assert_voice_session_allowed_demo_false_still_enforces(monkeypatc
     """agent_is_demo=False still enforces normal checks."""
     org_id = uuid4()
     client = MagicMock()
-    sub_execute = MagicMock(data=[{"status": "active", "plan_version_id": str(uuid4())}])
+    sub_execute = MagicMock(
+        data=[{"status": "active", "plan_version_id": str(uuid4())}]
+    )
     ent_execute = MagicMock(data=[])
     catalog_execute = MagicMock(data=[])
     min_cost_execute = MagicMock(data=[{"credit_cost": 10}])
-    org_execute = MagicMock(data=[{"credit_balance": 0, "admin_credit_balance": 0, "purchased_credit_balance": 0}])
+    org_execute = MagicMock(
+        data=[
+            {
+                "credit_balance": 0,
+                "admin_credit_balance": 0,
+                "purchased_credit_balance": 0,
+            }
+        ]
+    )
     table = MagicMock()
     table.select.return_value = table
     table.eq.return_value = table
     table.limit.return_value = table
     table.in_.return_value = table
     table.order.return_value = table
-    table.execute.side_effect = [sub_execute, ent_execute, catalog_execute, min_cost_execute, org_execute]
+    table.execute.side_effect = [
+        sub_execute,
+        ent_execute,
+        catalog_execute,
+        min_cost_execute,
+        org_execute,
+    ]
     client.table.return_value = table
     monkeypatch.setattr(
         "shared.billing.voice_session_entitlement.supabase_config",

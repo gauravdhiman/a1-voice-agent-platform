@@ -3,17 +3,37 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { Loader2, Mic, MicOff, PhoneOff, ArrowLeft, Sparkles, Building2 } from "lucide-react";
+import {
+  Loader2,
+  Mic,
+  MicOff,
+  PhoneOff,
+  ArrowLeft,
+  Sparkles,
+  Building2,
+} from "lucide-react";
 import { AgentAudioRadialV4 } from "@/components/agents-ui/agent-audio-radial-v4";
 import { AgentAudioVisualizerBarV4 } from "@/components/agents-ui/agent-audio-visualizer-livekit-bar-v4";
 import { resolveDemoVisualizer } from "@/components/agents-ui/demo-visualizer-config";
 import type { LevelMediaManager } from "@/lib/level-media-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { demoPublicService, type DemoAgentPublic } from "@/services/demo-public-service";
+import {
+  demoPublicService,
+  type DemoAgentPublic,
+} from "@/services/demo-public-service";
 import type { PipecatClient } from "@pipecat-ai/client-js";
-import { connectPipecatVoiceCall, disconnectPipecatVoiceCall } from "@/lib/pipecat-voice-client";
+import {
+  connectPipecatVoiceCall,
+  disconnectPipecatVoiceCall,
+} from "@/lib/pipecat-voice-client";
 import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
+import {
+  DEMO_TRIAL_EXHAUSTED_MESSAGE,
+  formatDemoCallsRemaining,
+  formatDemoDuration,
+  isDemoCallLimitReached,
+} from "@/lib/demo-call-limits";
 
 /**
  * Reads normalized local microphone bands for the public demo visualizers.
@@ -33,7 +53,9 @@ function useTrackVolumeBands(
   analyzeWhenInactive = false,
   smoothingTimeConstant = 0.75,
 ): number[] {
-  const [bands, setBands] = React.useState<number[]>(() => Array.from({ length: barCount }, () => 0));
+  const [bands, setBands] = React.useState<number[]>(() =>
+    Array.from({ length: barCount }, () => 0),
+  );
   React.useEffect(() => {
     if (!track || (!isActive && !analyzeWhenInactive)) {
       setBands(Array.from({ length: barCount }, () => 0.08));
@@ -47,7 +69,8 @@ function useTrackVolumeBands(
     try {
       const AC =
         window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
       if (!AC) return;
       ctx = new AC();
       if (ctx.state === "suspended") void ctx.resume();
@@ -71,7 +94,8 @@ function useTrackVolumeBands(
       const next: number[] = [];
       for (let i = 0; i < barCount; i++) {
         let sum = 0;
-        for (let b = 0; b < perBand; b++) sum += freq[lo + i * perBand + b] ?? 0;
+        for (let b = 0; b < perBand; b++)
+          sum += freq[lo + i * perBand + b] ?? 0;
         const v = sum / (perBand * 255);
         const boost = 1 + (i / barCount) * 1.1;
         next.push(Math.min(1, v * boost * 1.4));
@@ -105,15 +129,23 @@ export default function DemoAgentPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [callState, setCallState] = React.useState<"idle" | "connecting" | "connected" | "ended">("idle");
+  const [callState, setCallState] = React.useState<
+    "idle" | "connecting" | "connected" | "ended"
+  >("idle");
   const [callError, setCallError] = React.useState<string | null>(null);
   const [isMuted, setIsMuted] = React.useState(false);
   const [isAgentSpeaking, setIsAgentSpeaking] = React.useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = React.useState(false);
-  const [agentTrack, setAgentTrack] = React.useState<MediaStreamTrack | null>(null);
-  const [localTrack, setLocalTrack] = React.useState<MediaStreamTrack | null>(null);
+  const [agentTrack, setAgentTrack] = React.useState<MediaStreamTrack | null>(
+    null,
+  );
+  const [localTrack, setLocalTrack] = React.useState<MediaStreamTrack | null>(
+    null,
+  );
   const levelManagerRef = React.useRef<LevelMediaManager | null>(null);
-  const [agentVolumeBands, setAgentVolumeBands] = React.useState<number[]>(Array.from({ length: 5 }, () => 0.08));
+  const [agentVolumeBands, setAgentVolumeBands] = React.useState<number[]>(
+    Array.from({ length: 5 }, () => 0.08),
+  );
   const userVolumeBands = useTrackVolumeBands(
     isMuted ? null : localTrack,
     5,
@@ -159,10 +191,23 @@ export default function DemoAgentPage() {
   }, []);
 
   const handleStartCall = React.useCallback(async () => {
+    if (!agent) {
+      return;
+    }
+    if (isDemoCallLimitReached(agent.demo_calls_remaining)) {
+      setCallError(DEMO_TRIAL_EXHAUSTED_MESSAGE);
+      return;
+    }
     setCallError(null);
     setCallState("connecting");
     try {
-      const { token, wsUrl } = await demoPublicService.getCallToken(slug);
+      const { token, wsUrl, demo_calls_remaining } =
+        await demoPublicService.getCallToken(slug);
+      if (typeof demo_calls_remaining === "number") {
+        setAgent((current) =>
+          current ? { ...current, demo_calls_remaining } : current,
+        );
+      }
       const client = await connectPipecatVoiceCall(token, wsUrl, {
         onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
           setIsAgentSpeaking(isAgentSpeaking);
@@ -192,7 +237,7 @@ export default function DemoAgentPage() {
       setLocalTrack(null);
       setCallState("idle");
     }
-  }, [slug]);
+  }, [agent, slug]);
 
   const handleHangUp = React.useCallback(async () => {
     await disconnect();
@@ -209,7 +254,11 @@ export default function DemoAgentPage() {
     }
     const id = setInterval(() => {
       const lvl = levelManagerRef.current?.readLevels().level ?? 0.45;
-      setAgentVolumeBands(Array.from({ length: 5 }, () => Math.min(1, lvl * 0.75 + Math.random() * 0.22)));
+      setAgentVolumeBands(
+        Array.from({ length: 5 }, () =>
+          Math.min(1, lvl * 0.75 + Math.random() * 0.22),
+        ),
+      );
     }, 80);
     return () => clearInterval(id);
   }, [isAgentSpeaking, useLiveKitBars]);
@@ -217,7 +266,10 @@ export default function DemoAgentPage() {
   const toggleMute = React.useCallback(() => {
     const next = !isMuted;
     setIsMuted(next);
-    const client = pipecatRef.current as unknown as { setMicMuted?: (v: boolean) => void; setMicrophoneMuted?: (v: boolean) => void };
+    const client = pipecatRef.current as unknown as {
+      setMicMuted?: (v: boolean) => void;
+      setMicrophoneMuted?: (v: boolean) => void;
+    };
     try {
       if (client?.setMicMuted) client.setMicMuted(next);
       else if (client?.setMicrophoneMuted) client.setMicrophoneMuted(next);
@@ -244,13 +296,26 @@ export default function DemoAgentPage() {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gradient-to-b from-muted/40 to-background p-6 text-center">
         <p className="text-lg font-semibold">Demo not found</p>
-        <p className="max-w-sm text-sm text-muted-foreground">{error || "This demo link is invalid or the agent is no longer a demo."}</p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          {error ||
+            "This demo link is invalid or the agent is no longer a demo."}
+        </p>
         <Button asChild variant="outline">
           <Link href="/">Go home</Link>
         </Button>
       </div>
     );
   }
+
+  const callsRemainingLabel = formatDemoCallsRemaining(
+    agent.demo_calls_remaining,
+  );
+  const durationLabel = formatDemoDuration(
+    agent.demo_max_call_duration_seconds,
+  );
+  const demoCallLimitReached = isDemoCallLimitReached(
+    agent.demo_calls_remaining,
+  );
 
   if (callState === "ended") {
     return (
@@ -260,7 +325,9 @@ export default function DemoAgentPage() {
         </div>
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">Call ended</h2>
-          <p className="text-sm text-muted-foreground">Thanks for trying {agent.name}!</p>
+          <p className="text-sm text-muted-foreground">
+            Thanks for trying {agent.name}!
+          </p>
         </div>
         <Button onClick={() => setCallState("idle")}>Back to demo</Button>
       </div>
@@ -272,20 +339,31 @@ export default function DemoAgentPage() {
       return (
         <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Connecting to {agent.name}…</p>
-          <p className="text-xs text-muted-foreground">Please allow microphone access when prompted</p>
+          <p className="text-sm text-muted-foreground">
+            Connecting to {agent.name}…
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Please allow microphone access when prompted
+          </p>
         </div>
       );
     }
     return (
       <div className="flex min-h-dvh flex-col bg-background">
         <header className="flex items-center gap-3 border-b px-4 py-3">
-          <Button variant="ghost" size="icon" onClick={handleHangUp} aria-label="Back">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleHangUp}
+            aria-label="Back"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-semibold">{agent.name}</h1>
-            <p className="text-xs text-muted-foreground truncate">{agent.public_description || agent.mission || "Demo agent"}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {agent.public_description || agent.mission || "Demo agent"}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
@@ -306,12 +384,16 @@ export default function DemoAgentPage() {
                 size="lg"
                 state={isAgentSpeaking ? "speaking" : "listening"}
                 barCount={5}
-                volumeBands={agentTrack ? agentTrackVolumeBands : agentVolumeBands}
+                volumeBands={
+                  agentTrack ? agentTrackVolumeBands : agentVolumeBands
+                }
                 color="#22d3ee"
               />
             ) : (
               <AgentAudioRadialV4
-                getAudioLevel={() => levelManagerRef.current?.readLevels().level ?? null}
+                getAudioLevel={() =>
+                  levelManagerRef.current?.readLevels().level ?? null
+                }
                 active={isAgentSpeaking}
                 size={220}
                 barCount={72}
@@ -327,7 +409,9 @@ export default function DemoAgentPage() {
             {useLiveKitBars ? (
               <AgentAudioVisualizerBarV4
                 size="lg"
-                state={isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"}
+                state={
+                  isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"
+                }
                 barCount={5}
                 volumeBands={userVolumeBands}
                 color={isMuted ? "#9ca3af" : "#818cf8"}
@@ -356,7 +440,11 @@ export default function DemoAgentPage() {
             onClick={toggleMute}
             aria-label={isMuted ? "Unmute" : "Mute"}
           >
-            {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+            {isMuted ? (
+              <MicOff className="h-6 w-6" />
+            ) : (
+              <Mic className="h-6 w-6" />
+            )}
           </Button>
           <Button
             type="button"
@@ -389,34 +477,84 @@ export default function DemoAgentPage() {
 
         <Card className="overflow-hidden" data-demo-visualizer={visualizer}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-2xl leading-tight">{agent.name}</CardTitle>
-            {agent.tone && <p className="text-xs text-muted-foreground">Tone: {agent.tone}</p>}
+            <CardTitle className="text-2xl leading-tight">
+              {agent.name}
+            </CardTitle>
+            {agent.tone && (
+              <p className="text-xs text-muted-foreground">
+                Tone: {agent.tone}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
             {(() => {
-              const desc = agent.public_description?.trim() || agent.mission?.trim() || agent.persona?.trim() || null;
+              const desc =
+                agent.public_description?.trim() ||
+                agent.mission?.trim() ||
+                agent.persona?.trim() ||
+                null;
               return desc ? (
                 <div className="rounded-lg border bg-muted/30 p-4">
-                  <h3 className="mb-1 text-sm font-semibold">About this agent</h3>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{desc}</p>
+                  <h3 className="mb-1 text-sm font-semibold">
+                    About this agent
+                  </h3>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                    {desc}
+                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Try a live voice conversation with this demo agent. Your call bypasses credit checks and is not billed.
+                  Try a live voice conversation with this demo agent. Demo calls
+                  do not use platform credits, but this demo may have trial
+                  limits.
                 </p>
               );
             })()}
+            <div
+              className={`rounded-lg border p-4 text-sm ${
+                demoCallLimitReached
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-amber-200 bg-amber-50/70 text-amber-950"
+              }`}
+            >
+              <p className="font-medium">
+                {demoCallLimitReached
+                  ? "This demo is currently unavailable"
+                  : "Demo trial availability"}
+              </p>
+              {!demoCallLimitReached ? (
+                <div className="mt-1 space-y-1 text-xs opacity-80">
+                  {callsRemainingLabel ? (
+                    <div>Calls: {callsRemainingLabel}</div>
+                  ) : null}
+                  {durationLabel ? <div>Duration: {durationLabel}</div> : null}
+                </div>
+              ) : null}
+              {demoCallLimitReached ? (
+                <p className="mt-2 text-xs">{DEMO_TRIAL_EXHAUSTED_MESSAGE}</p>
+              ) : null}
+            </div>
             {callError && (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                 {callError}
               </div>
             )}
 
-            <Button size="lg" className="w-full h-12 text-base" onClick={handleStartCall}>
+            <Button
+              size="lg"
+              className="h-12 w-full text-base"
+              onClick={handleStartCall}
+              disabled={demoCallLimitReached}
+            >
               <Mic className="mr-2 h-5 w-5" />
-              Talk to {agent.name}
+              {demoCallLimitReached
+                ? "Demo unavailable"
+                : `Talk to ${agent.name}`}
             </Button>
-            <p className="text-center text-xs text-muted-foreground">You&apos;ll be asked to allow microphone access • Powered by 24x7 AI</p>
+            <p className="text-center text-xs text-muted-foreground">
+              You&apos;ll be asked to allow microphone access • Powered by 24x7
+              AI
+            </p>
           </CardContent>
         </Card>
 

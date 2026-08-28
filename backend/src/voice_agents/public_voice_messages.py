@@ -10,6 +10,10 @@ PUBLIC_VOICE_ASSISTANT_BUSY_MESSAGE = (
     "This voice assistant is currently busy helping other callers. Please try "
     "again in a few minutes or contact the business for assistance."
 )
+PUBLIC_DEMO_CALL_LIMIT_MESSAGE = (
+    "This demo agent has used all available trial calls. Please contact the "
+    "platform administrator for further details or to have the demo re-enabled."
+)
 
 
 def get_public_voice_session_error(code: str) -> tuple[str, str]:
@@ -23,6 +27,8 @@ def get_public_voice_session_error(code: str) -> tuple[str, str]:
         A tuple of ``(public_code, message)`` suitable for a public API response
         or a spoken TwiML message. Internal plan and credit details are omitted.
     """
+    if code == "DEMO_CALL_LIMIT_REACHED":
+        return "DEMO_TRIAL_EXHAUSTED", PUBLIC_DEMO_CALL_LIMIT_MESSAGE
     if code == "MAX_CONCURRENT_CALLS":
         return "VOICE_ASSISTANT_BUSY", PUBLIC_VOICE_ASSISTANT_BUSY_MESSAGE
     return "VOICE_ASSISTANT_UNAVAILABLE", PUBLIC_VOICE_ASSISTANT_UNAVAILABLE_MESSAGE

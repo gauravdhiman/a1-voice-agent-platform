@@ -194,6 +194,8 @@ export default function AgentDetailPage() {
     is_demo: boolean;
     demo_slug: string;
     public_description: string;
+    demo_calls_remaining: number;
+    demo_max_call_duration_minutes: number;
   }>({
     name: "",
     persona: "",
@@ -207,6 +209,8 @@ export default function AgentDetailPage() {
     is_demo: false,
     demo_slug: "",
     public_description: "",
+    demo_calls_remaining: -1,
+    demo_max_call_duration_minutes: -1,
   });
   const {
     data: agent,
@@ -379,6 +383,12 @@ export default function AgentDetailPage() {
       is_demo: Boolean((agent as unknown as { is_demo?: boolean }).is_demo),
       demo_slug: (agent as unknown as { demo_slug?: string | null }).demo_slug || "",
       public_description: (agent as unknown as { public_description?: string | null }).public_description || "",
+      demo_calls_remaining: agent.demo_calls_remaining ?? -1,
+      demo_max_call_duration_minutes:
+        agent.demo_max_call_duration_seconds == null ||
+        agent.demo_max_call_duration_seconds === -1
+          ? -1
+          : Math.max(1, Math.round(agent.demo_max_call_duration_seconds / 60)),
     });
 
     if (!agent.instructions_markdown?.trim()) {
@@ -455,6 +465,23 @@ export default function AgentDetailPage() {
       toast.error("Demo slug can only contain lowercase letters, numbers, and hyphens");
       return;
     }
+    if (
+      isPlatformAdmin &&
+      (!Number.isInteger(agentForm.demo_calls_remaining) ||
+        agentForm.demo_calls_remaining < -1)
+    ) {
+      toast.error("Demo calls remaining must be -1 or a whole number of calls");
+      return;
+    }
+    if (
+      isPlatformAdmin &&
+      (!Number.isInteger(agentForm.demo_max_call_duration_minutes) ||
+        (agentForm.demo_max_call_duration_minutes !== -1 &&
+          agentForm.demo_max_call_duration_minutes <= 0))
+    ) {
+      toast.error("Demo call duration must be -1 or greater than zero minutes");
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -470,9 +497,18 @@ export default function AgentDetailPage() {
         delete (payload as Record<string, unknown>).is_demo;
         delete (payload as Record<string, unknown>).demo_slug;
         delete (payload as Record<string, unknown>).public_description;
+        delete (payload as Record<string, unknown>).demo_calls_remaining;
+        delete (payload as Record<string, unknown>).demo_max_call_duration_minutes;
       } else if (!payload.is_demo) {
         // Non-demo agents should not retain a stale demo slug (public description is kept as draft)
         (payload as Record<string, unknown>).demo_slug = null;
+      }
+      delete (payload as Record<string, unknown>).demo_max_call_duration_minutes;
+      if (isPlatformAdmin) {
+        (payload as Record<string, unknown>).demo_max_call_duration_seconds =
+          agentForm.demo_max_call_duration_minutes === -1
+            ? -1
+            : agentForm.demo_max_call_duration_minutes * 60;
       }
       await updateAgentMutation.mutateAsync({
         agentId,
@@ -1129,11 +1165,11 @@ export default function AgentDetailPage() {
                           disabled={!canEdit}
                         />
                         <Label htmlFor="is-demo" className="text-sm font-medium text-amber-900 cursor-pointer">
-                          Demo agent (bypasses credits, public at /demo/&#123;slug&#125;)
+                          Demo agent (credit-exempt, public at /demo/&#123;slug&#125;)
                         </Label>
                       </div>
                       <p className="text-xs text-amber-800">
-                        Platform-admin only. Demo agents bypass credit and concurrency checks and are available on a dedicated public page with a unique slug. Business context should live in the agent&apos;s instructions.
+                        Platform-admin only. Demo agents bypass platform credit and concurrency checks, but can be protected with a trial-call budget and per-call duration cap. Use -1 for unlimited.
                       </p>
                       {agentForm.is_demo && (
                         <div className="space-y-3 pt-1">
@@ -1170,6 +1206,52 @@ export default function AgentDetailPage() {
                                 </span>
                               )}
                             </p>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="demo-calls-remaining" className="text-xs">
+                                Demo calls remaining
+                              </Label>
+                              <Input
+                                id="demo-calls-remaining"
+                                type="number"
+                                min={-1}
+                                step={1}
+                                value={agentForm.demo_calls_remaining}
+                                onChange={(e) =>
+                                  setAgentForm({
+                                    ...agentForm,
+                                    demo_calls_remaining: Number(e.target.value),
+                                  })
+                                }
+                                disabled={!canEdit}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                0 disables new calls. Use -1 for unlimited calls.
+                              </p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="demo-max-call-duration" className="text-xs">
+                                Maximum call duration (minutes)
+                              </Label>
+                              <Input
+                                id="demo-max-call-duration"
+                                type="number"
+                                min={-1}
+                                step={1}
+                                value={agentForm.demo_max_call_duration_minutes}
+                                onChange={(e) =>
+                                  setAgentForm({
+                                    ...agentForm,
+                                    demo_max_call_duration_minutes: Number(e.target.value),
+                                  })
+                                }
+                                disabled={!canEdit}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Use -1 for unlimited duration. The timer starts when a caller connects.
+                              </p>
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="public-description" className="text-xs">

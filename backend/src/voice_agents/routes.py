@@ -19,6 +19,8 @@ from src.organization.service import OrganizationService
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
     assert_voice_session_allowed,
+    is_demo_agent,
+    reserve_demo_call_if_needed,
 )
 from shared.config.settings import settings
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
@@ -39,6 +41,8 @@ class TestTokenResponse(BaseModel):
     token: str
     wsUrl: str
     sessionId: str
+    demo_calls_remaining: Optional[int] = None
+    demo_max_call_duration_seconds: Optional[int] = None
 
 
 def _voice_session_http_exception(exc: VoiceSessionEntitlementError) -> HTTPException:
@@ -57,6 +61,8 @@ def _voice_session_http_exception(exc: VoiceSessionEntitlementError) -> HTTPExce
     status_code = {
         "INSUFFICIENT_CREDITS": status.HTTP_402_PAYMENT_REQUIRED,
         "MAX_CONCURRENT_CALLS": status.HTTP_409_CONFLICT,
+        "DEMO_CALL_LIMIT_REACHED": status.HTTP_429_TOO_MANY_REQUESTS,
+        "DEMO_CALL_RESERVATION_UNAVAILABLE": status.HTTP_503_SERVICE_UNAVAILABLE,
     }.get(exc.code, status.HTTP_403_FORBIDDEN)
     return HTTPException(
         status_code=status_code,
@@ -122,19 +128,22 @@ async def create_agent(
     """
     current_user_id, user_profile = _auth
 
-    # Demo status, slug, and public copy are platform_admin-only (prevents
+    # Demo status, presentation, and budgets are platform_admin-only (prevents
     # org_admins from self-exempting billing or publishing platform-owned demos).
-    if (
-        getattr(agent_data, "is_demo", False)
-        or getattr(agent_data, "demo_slug", None)
-        or getattr(agent_data, "public_description", None)
-    ):
+    protected_demo_fields = {
+        "is_demo",
+        "demo_slug",
+        "public_description",
+        "demo_calls_remaining",
+        "demo_max_call_duration_seconds",
+    }
+    if protected_demo_fields & agent_data.model_fields_set:
         if not user_profile.has_role("platform_admin"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     "Only platform administrators can create demo agents, set "
-                    "demo slugs, or set public demo descriptions"
+                    "demo slugs, demo descriptions, or demo call limits"
                 ),
             )
 
@@ -159,6 +168,7 @@ async def create_agent(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return agent
+
 
 @agent_router.get("/organization/{org_id}", response_model=List[VoiceAgent])
 @tracer.start_as_current_span("voice_agent.routes.get_org_agents")
@@ -283,10 +293,15 @@ async def get_test_token(
         error_message="Insufficient permissions to test this agent",
     )
 
+    reservation = None
     try:
-        await assert_voice_session_allowed(
-            agent.organization_id, agent_is_demo=bool(getattr(agent, "is_demo", False))
-        )
+        reservation = await reserve_demo_call_if_needed(agent)
+        if is_demo_agent(agent):
+            await assert_voice_session_allowed(
+                agent.organization_id, agent_is_demo=True
+            )
+        else:
+            await assert_voice_session_allowed(agent.organization_id)
     except VoiceSessionEntitlementError as exc:
         logger.info(
             "Browser voice session denied before token creation agent_id=%s "
@@ -301,6 +316,11 @@ async def get_test_token(
             agent_id=str(agent_id),
             user_id=str(current_user_id),
             purpose="test_call",
+            session_id=(reservation.session_id if reservation else None),
+            demo_reservation_id=(reservation.reservation_id if reservation else None),
+            demo_max_call_duration_seconds=(
+                reservation.max_call_duration_seconds if reservation else None
+            ),
         )
     except ValueError as exc:
         logger.error("Failed to create voice_ws session token: %s", exc)
@@ -316,6 +336,10 @@ async def get_test_token(
         token=token,
         wsUrl=ws_url,
         sessionId=session_id,
+        demo_calls_remaining=(reservation.calls_remaining if reservation else None),
+        demo_max_call_duration_seconds=(
+            reservation.max_call_duration_seconds if reservation else None
+        ),
     )
 
 
@@ -470,13 +494,15 @@ async def update_agent(
         "is_demo",
         "demo_slug",
         "public_description",
+        "demo_calls_remaining",
+        "demo_max_call_duration_seconds",
     } & agent_data.model_fields_set:
         if not user_profile.has_role("platform_admin"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     "Only platform administrators can change demo status, demo "
-                    "slugs, or public demo descriptions"
+                    "slugs, descriptions, or demo call limits"
                 ),
             )
 
@@ -539,6 +565,8 @@ class EmbedTokenResponse(BaseModel):
     token: str
     wsUrl: str
     sessionId: str
+    demo_calls_remaining: Optional[int] = None
+    demo_max_call_duration_seconds: Optional[int] = None
 
 
 @agent_router.get(
@@ -767,6 +795,21 @@ async def get_embed_token(
             detail="Failed to fetch embed configuration",
         )
 
+    reservation = None
+    try:
+        reservation = await reserve_demo_call_if_needed(agent)
+        await assert_voice_session_allowed(
+            agent.organization_id,
+            agent_is_demo=is_demo_agent(agent),
+        )
+    except VoiceSessionEntitlementError as exc:
+        logger.info(
+            "Authenticated embed voice session denied agent_id=%s code=%s",
+            agent_id,
+            exc.code,
+        )
+        raise _voice_session_http_exception(exc) from exc
+
     # Generate embed token
     domain = request.headers.get("origin", "")
     ip_address = request.client.host if request.client else None
@@ -776,6 +819,7 @@ async def get_embed_token(
         embed_config_id=str(embed_config["id"]),
         domain=domain,
         ip_address=ip_address,
+        demo_reservation=reservation,
     )
 
     if not embed_token or not voice_token or not ws_url or not session_id:
@@ -789,6 +833,10 @@ async def get_embed_token(
         token=voice_token,
         wsUrl=ws_url,
         sessionId=session_id,
+        demo_calls_remaining=(reservation.calls_remaining if reservation else None),
+        demo_max_call_duration_seconds=(
+            reservation.max_call_duration_seconds if reservation else None
+        ),
     )
 
 
