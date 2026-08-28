@@ -46,11 +46,15 @@ The launcher does the following:
 - derive a unique slug, Compose project name, Supabase project ID, ports, and
   volume names from the worktree;
 - generate an ignored, worktree-specific environment file;
-- copy non-placeholder voice-provider credentials from the worktree's
-  `.env.local`, or from the main checkout's `.env.local` when the worktree does
-  not have its own environment file; refresh those credentials on every setup;
-- require a configured `GEMINI_API_KEY` before starting the application so a
-  placeholder cannot leave voice-ws running but unable to answer calls;
+- resolve provider settings from the explicit `--source-env`, the worktree's
+  `.env.local`, the main checkout's `.env.local`, or the example file; prefer a
+  source with a usable `GEMINI_API_KEY`, refresh non-placeholder voice-provider
+  credentials on every setup, and repair stale Gemini values;
+- require a configured `GEMINI_API_KEY` before `up` so a placeholder cannot
+  leave voice-ws running but unable to answer calls;
+- generate and persist a unique URL-safe base64 Fernet `ENCRYPTION_KEY` for
+  each new worktree (a valid existing key is preserved across restarts); this
+  key protects organization provider credentials in that worktree's database;
 - start that worktree's local Supabase services;
 - obtain the local Supabase URL and keys without committing them;
 - run the worktree's Alembic migrations against only its local database;

@@ -22,6 +22,7 @@ from src.tools.skill_tools import (
     create_load_skill_reference_function,
 )
 
+from shared.voice_agents.key_resolver import resolve_org_provider_credential
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.tool_models import ToolSource
 from shared.voice_agents.tool_service import tool_service
@@ -29,6 +30,30 @@ from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRe
 from shared.voice_agents.tools.base.tool_context import ToolContext
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_runtime_sensitive_config(
+    tool_name: str,
+    stored_sensitive_config: dict[str, Any] | None,
+    organization: Any | None,
+) -> dict[str, Any]:
+    """Resolve narrowly scoped runtime secrets for native tools.
+
+    Organization-owned credentials are loaded from the encrypted organization
+    record and injected only into the matching native tool instance. They are
+    never placed in the public ``agent_tools.config`` payload or model schema.
+    Resend intentionally ignores any legacy per-agent ``api_key`` so the
+    organization-level credential remains the only source of truth.
+    """
+    resolved = dict(stored_sensitive_config or {})
+    if tool_name != "Resend_email":
+        return resolved
+
+    resolved.pop("api_key", None)
+    resend_api_key = resolve_org_provider_credential(organization, "resend")
+    if isinstance(resend_api_key, str) and resend_api_key.strip():
+        resolved["api_key"] = resend_api_key.strip()
+    return resolved
 
 
 @dataclass
@@ -166,7 +191,13 @@ def create_legacy_tool_handler(
             for name, value in dict(params.arguments).items()
             if name != "context"
         }
-        logger.info("Invoking legacy tool %s with args=%s", tool_name, arguments)
+        # Tool arguments may contain PII, message bodies, or credentials. Keep
+        # the key names for diagnostics without logging the values.
+        logger.info(
+            "Invoking legacy tool %s with arg_names=%s",
+            tool_name,
+            sorted(arguments),
+        )
         try:
             result = await bound_method(
                 context=runtime_context or ToolContext(), **arguments
@@ -197,10 +228,29 @@ def _add_handler(
     assembled.schemas.append(schema)
 
 
+def _is_function_unselected(
+    registry: PlatformToolRegistry,
+    function: Callable[..., Any],
+    unselected_functions: set[str],
+) -> bool:
+    """Match persisted function toggles by raw or display function name.
+
+    The platform stores native function selections using the readable names
+    shown in the UI (for example, ``Send Resend Email``), while the runtime
+    receives Python function names from the registry. Accept both forms so a
+    disabled function cannot be re-enabled accidentally at call assembly time.
+    """
+    function_name = function.__name__
+    return function_name in unselected_functions or (
+        registry._format_function_name(function_name) in unselected_functions
+    )
+
+
 async def assemble_agent_tools(
     agent_id: Any,
     organization_id: Any,
     runtime_context: ToolContext | None = None,
+    organization: Any | None = None,
 ) -> AssembledTools:
     """Build every enabled legacy, MCP, and skill tool for one voice agent.
 
@@ -209,6 +259,8 @@ async def assemble_agent_tools(
         organization_id: Organization UUID used by progressive skill handlers.
         runtime_context: Trusted session metadata injected into native tools and
             translated into namespaced headers for in-process MCP connectors.
+        organization: Runtime organization record. Native tools may resolve
+            narrowly scoped encrypted organization credentials from it.
 
     Returns:
         The assembled schemas, handler map, open MCP clients, tool names, and
@@ -253,14 +305,29 @@ async def assemble_agent_tools(
                 f"{tool_name}: shared implementation is not registered"
             )
             continue
-        instance = tool_class(
-            config=agent_tool.config or {},
-            sensitive_config=agent_tool.sensitive_config or {},
-        )
+        try:
+            instance = tool_class(
+                config=agent_tool.config or {},
+                sensitive_config=_resolve_runtime_sensitive_config(
+                    tool_name,
+                    agent_tool.sensitive_config,
+                    organization,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - isolate invalid tool config
+            logger.error(
+                "Failed to configure native tool '%s' error_type=%s",
+                tool_name,
+                type(exc).__name__,
+            )
+            assembled.unavailable_tools.append(
+                f"{tool_name}: native tool configuration failed"
+            )
+            continue
         assembled.enabled_tool_names.append(tool_name)
         skipped = set(agent_tool.unselected_functions or [])
         for function in registry.get_tool_functions(tool_name):
-            if function.__name__ in skipped:
+            if _is_function_unselected(registry, function, skipped):
                 continue
             schema = build_function_schema(function)
             handler = create_legacy_tool_handler(

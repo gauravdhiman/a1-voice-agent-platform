@@ -12,6 +12,7 @@ export const SIMPLE_PROVIDER_KEYS = [
   "cerebras",
   "openrouter",
   "fish",
+  "resend",
 ] as const;
 
 export type SimpleProviderKey = (typeof SIMPLE_PROVIDER_KEYS)[number];
@@ -26,6 +27,7 @@ export const PROVIDER_LABELS: Record<ProviderCredentialKey, string> = {
   cerebras: "Cerebras",
   openrouter: "OpenRouter",
   fish: "Fish Audio",
+  resend: "Resend",
 };
 
 export interface ProviderCredsDraft {
@@ -36,6 +38,7 @@ export interface ProviderCredsDraft {
   cerebras: string;
   openrouter: string;
   fish: string;
+  resend: string;
 }
 
 export type ProviderCredentialsInput = Record<string, string | null>;

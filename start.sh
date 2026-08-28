@@ -365,6 +365,14 @@ validate_env_file() {
     fi
 }
 
+# Local development needs a real Fernet key because the backend encrypts
+# organization provider credentials. Generate it in the ignored local env file
+# when setup left the template placeholder in place; staging and production
+# remain deployment-managed and are never auto-generated here.
+ensure_local_encryption_key() {
+    python3 "$PROJECT_DIR/scripts/ensure-local-encryption-key.py" "$ENV_FILE"
+}
+
 # Function to check if containers are already running
 check_containers_running() {
     local mode=$1
@@ -648,6 +656,9 @@ show_status() {
 
 # Validate the selected environment and resolve the complete host-facing port map.
 initialize_runtime_config() {
+    if [[ "$ENVIRONMENT_NAME" = "local" && -f "$ENV_FILE" ]]; then
+        ensure_local_encryption_key
+    fi
     validate_env_file
     resolve_port_config
 }

@@ -32,6 +32,9 @@ The repository now contains a reusable evaluation core in `evals/`:
 - `evals/calendar.py` is the first adapter. It runs the real shared Google
   Calendar appointment service against a stateful fake Google HTTP API, so it
   never needs OAuth credentials or writes to a real calendar.
+- `evals/resend.py` exercises the native Resend route catalog and send contract
+  against a fake provider, including privacy, configuration, partial delivery,
+  timeout, validation, and retry behavior.
 - `scripts/run-agent-evals.py` produces a human summary and an optional JSON
   artifact suitable for CI and trend comparison.
 
@@ -49,13 +52,20 @@ Run the deterministic suite from the repository root:
 python scripts/run-agent-evals.py
 ```
 
+Run one deterministic tool suite while developing:
+
+```bash
+python scripts/run-agent-evals.py --suite calendar
+python scripts/run-agent-evals.py --suite resend
+```
+
 Write a machine-readable report:
 
 ```bash
 python scripts/run-agent-evals.py --json-out /tmp/agent-evals.json
 ```
 
-Run the unit tests for the runner and Calendar adapter:
+Run the unit tests for the runner and deterministic adapters:
 
 ```bash
 pytest backend/tests/evals -q
@@ -94,6 +104,16 @@ The initial suite includes 16 critical workflows:
 - past-time and invalid-duration validation;
 - provider outage mapping; and
 - successful cancellation.
+
+The Resend suite adds seven workflows:
+
+- route discovery without recipient addresses;
+- configured-route fan-out;
+- raw-recipient rejection;
+- explicit missing-provider configuration;
+- partial delivery reporting;
+- invalid subject rejection; and
+- timeout classification as retryable.
 
 The scenarios intentionally assert outcomes and side effects rather than exact
 natural-language wording. This keeps the fast suite stable while still proving

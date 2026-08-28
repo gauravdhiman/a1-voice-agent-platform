@@ -224,6 +224,53 @@ async def _assert_agent_tool_admin(
     return agent_tool
 
 
+def _validate_native_tool_config(
+    platform_tool: Optional[PlatformTool], config: Optional[dict[str, Any]]
+) -> Optional[dict[str, Any]]:
+    """Validate and canonicalize native tool configuration before persistence.
+
+    ``agent_tools.config`` is JSONB and otherwise accepts arbitrary payloads.
+    Validate it with the code-owned tool model at the API boundary so an
+    invalid configuration cannot be saved successfully and then make the
+    voice worker fail to assemble the agent's tools at call time. Resend also
+    gets serialized from its validated model so legacy per-agent ``api_key``
+    fields cannot be carried forward in the public configuration.
+    """
+    if platform_tool is None or config is None:
+        return config
+    source = getattr(platform_tool.tool_source, "value", platform_tool.tool_source)
+    if source != ToolSource.LEGACY.value:
+        return config
+
+    from shared.voice_agents.tools.base.platform_tool_registry import (
+        platform_tool_registry,
+    )
+
+    if platform_tool_registry.get_tool_class(platform_tool.name) is None:
+        platform_tool_registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+    tool_class = platform_tool_registry.get_tool_class(platform_tool.name)
+    if tool_class is None:
+        return config
+    try:
+        tool_instance = tool_class(config=config, sensitive_config={})
+    except Exception as exc:  # noqa: BLE001 - hide config values from responses
+        logger.warning(
+            "Rejected invalid native tool configuration tool=%s error_type=%s",
+            platform_tool.name,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid configuration for tool '{platform_tool.name}'.",
+        ) from exc
+
+    if platform_tool.name == "Resend_email":
+        return tool_instance.config.model_dump(exclude_none=True)
+    return config
+
+
 # Platform Tools (platform-admin only for authoring/publish; org admins attach)
 @tool_router.post(
     "/platform", response_model=PlatformTool, status_code=status.HTTP_201_CREATED
@@ -787,6 +834,11 @@ async def configure_agent_tool(
                     "MCP tool."
                 ),
             )
+
+    if agent_tool_data.config is not None:
+        agent_tool_data.config = _validate_native_tool_config(
+            platform_tool, agent_tool_data.config
+        )
 
     agent_tool, error = await tool_service.configure_agent_tool(agent_tool_data)
     if error:
@@ -1714,7 +1766,12 @@ async def update_agent_tool(
     # CRIT: must verify the caller is an admin on the agent's org before
     # allowing this write (any logged-in user could otherwise rewrite the
     # tool config by guessing the UUID).
-    await _assert_agent_tool_admin(agent_tool_id, user_profile)
+    agent_tool = await _assert_agent_tool_admin(agent_tool_id, user_profile)
+    if update_data.config is not None:
+        update_data.config = _validate_native_tool_config(
+            agent_tool.tool if agent_tool else None,
+            update_data.config,
+        )
 
     updated_tool, error = await tool_service.update_agent_tool(
         agent_tool_id, update_data

@@ -10,10 +10,7 @@ from uuid import UUID
 
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from src.speech.factory import build_speech_components
-from src.tools.assembly import (
-    AssembledTools,
-    assemble_agent_tools,
-)
+from src.tools.assembly import AssembledTools, assemble_agent_tools
 
 from shared.organization.service import BaseOrganizationService
 from shared.organization.timezone import resolve_organization_timezone
@@ -87,6 +84,7 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             organization_timezone=session_timezone,
             session_id=claims.session_id,
         ),
+        organization=org,
     )
     speech_config = await resolve_speech_config_for_agent(agent, agent.id)
     api_keys = resolve_api_keys(

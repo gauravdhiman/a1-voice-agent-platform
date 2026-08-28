@@ -32,6 +32,9 @@ class ConnectionStatus(str, Enum):
     CONNECTED_AUTH_INVALID = (
         "connected_auth_invalid"  # Connected, requires auth, invalid/missing tokens
     )
+    CONFIGURATION_REQUIRED = (
+        "configuration_required"  # Attached but missing required tool configuration
+    )
 
 
 class ToolSource(str, Enum):

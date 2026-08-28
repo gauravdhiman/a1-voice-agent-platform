@@ -21,7 +21,11 @@ from unittest.mock import patch
 
 import pytest
 
-from shared.voice_agents.key_resolver import normalize_stage_provider, resolve_api_keys
+from shared.voice_agents.key_resolver import (
+    normalize_stage_provider,
+    resolve_api_keys,
+    resolve_org_provider_credential,
+)
 from shared.voice_agents.speech_config import (
     LLMStageConfig,
     PipelineSpeechConfig,
@@ -184,6 +188,24 @@ class TestKeyResolver:
         assert api_keys == {"google": "org-gemini-from-blob"}
         # Sanity: the org really has no plaintext attribute to fall back on.
         assert not hasattr(org, "google_api_key")
+
+    def test_resend_credential_reads_from_decrypted_org_blob(
+        self, patch_decrypt, clean_env
+    ):
+        """Native outbound tools resolve Resend from the org credential blob."""
+        del clean_env
+        org, creds = _org({"resend": "re_org_key"})
+        patch_decrypt.return_value = creds
+
+        assert resolve_org_provider_credential(org, "resend") == "re_org_key"
+
+    def test_missing_org_credential_returns_none(self, patch_decrypt, clean_env):
+        """A missing org credential fails closed without a platform fallback."""
+        del clean_env
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+
+        assert resolve_org_provider_credential(org, "resend") is None
 
     def test_use_platform_credits_forces_env_on_pipeline(
         self, patch_decrypt, clean_env

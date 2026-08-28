@@ -31,6 +31,18 @@ function renderToolCard(props: Record<string, unknown> = {}) {
 }
 
 describe("ToolCard premium gating", () => {
+  it("shows a red configuration-required state for an attached incomplete tool", () => {
+    renderToolCard({
+      connectionStatus: ConnectionStatus.CONFIGURATION_REQUIRED,
+      isConfigured: true,
+    });
+
+    expect(screen.getByText("Configuration required")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit Configuration" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders a Premium badge for premium tools", () => {
     renderToolCard({ tool: { ...baseTool, is_premium: true } });
 

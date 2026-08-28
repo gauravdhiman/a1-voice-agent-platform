@@ -45,10 +45,28 @@ frontend/backend/voice-ws on a deterministic port slot. See [the worktree and
 release strategy](worktree-and-release-strategy.md) for setup, cleanup, and the
 shared-staging rule.
 
+Provider settings for a worktree are copied from `--source-env` when supplied,
+otherwise from the worktree's `.env.local`, the main checkout's `.env.local`,
+or the example file. The generated `.worktree-state/app.env` is ignored local
+state. On every `config` or `up`, a non-placeholder `GEMINI_API_KEY` from that
+source is synchronized into the generated runtime env, including after a key
+rotation. If the source has no usable value, an existing real worktree value
+is preserved; `up` refuses to start when the resulting value is missing or an
+example key instead of allowing a voice worker to start with an unusable
+credential.
+
 The isolated worktree launcher enables recordings for the seeded opted-in test
 agent and stores them locally under that worktree's ignored
 `.local-data/call-recordings/` directory. The regular local Compose profile
 keeps recording disabled unless `VOICE_RECORDING_ENABLED=true` is set.
+
+Local development also needs a valid Fernet `ENCRYPTION_KEY` because the
+backend encrypts organization provider credentials before storing them. The
+setup script and `start.sh` generate and persist a local key automatically when
+the template placeholder is present. The worktree launcher generates a
+separate key per worktree and preserves it across restarts. Staging and
+production keys must remain deployment-managed secrets and are never generated
+by these local helpers.
 
 ## Manual image builds
 

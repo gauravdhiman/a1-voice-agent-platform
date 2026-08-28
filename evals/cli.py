@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .calendar import build_calendar_scenarios, run_calendar_suite
+from .resend import build_resend_scenarios, run_resend_suite
 from .trace import evaluate_trace
 
 
@@ -164,14 +165,24 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     }
     gate_passed = True
 
-    if args.suite == "calendar":
+    if args.suite in {"calendar", "all"}:
         if args.list_scenarios:
-            report["scenarios"] = [
+            report.setdefault("scenarios", []).extend(
                 scenario.scenario_id for scenario in build_calendar_scenarios()
-            ]
+            )
         else:
             suite = await run_calendar_suite()
             report["suites"]["calendar"] = suite.to_dict()
+            gate_passed = gate_passed and suite.passed
+
+    if args.suite in {"resend", "all"}:
+        if args.list_scenarios:
+            report.setdefault("scenarios", []).extend(
+                scenario.scenario_id for scenario in build_resend_scenarios()
+            )
+        else:
+            suite = await run_resend_suite()
+            report["suites"]["resend"] = suite.to_dict()
             gate_passed = gate_passed and suite.passed
 
     for trace_path in args.trace or []:
@@ -199,14 +210,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Run provider-independent agent evaluations. The default suite "
-            "uses a fake Google API and never needs OAuth credentials."
+            "uses provider fakes and never needs external credentials."
         )
     )
     parser.add_argument(
         "--suite",
-        choices=("calendar",),
-        default="calendar",
-        help="Deterministic suite to run (default: calendar).",
+        choices=("all", "calendar", "resend"),
+        default="all",
+        help="Deterministic suite to run (default: all).",
     )
     parser.add_argument(
         "--list-scenarios",
@@ -232,8 +243,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     report, passed = asyncio.run(_run(args))
 
-    if "calendar" in report["suites"]:
-        print(format_suite_summary(report["suites"]["calendar"]))
+    for suite_name in sorted(report["suites"]):
+        print(f"[{suite_name}]")
+        print(format_suite_summary(report["suites"][suite_name]))
     for trace in report["traces"]:
         print(
             f"Trace {trace['scenario_id']}: "

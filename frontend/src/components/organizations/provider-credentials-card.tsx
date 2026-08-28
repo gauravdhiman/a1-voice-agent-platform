@@ -46,6 +46,7 @@ export const EMPTY_DRAFT: ProviderCredsDraft = {
   cerebras: "",
   openrouter: "",
   fish: "",
+  resend: "",
 };
 
 /**
@@ -103,9 +104,10 @@ export function ProviderCredentialsCard({
           <span>Third-party API Credentials</span>
         </CardTitle>
         <CardDescription>
-          Per-provider API keys for the modular voice engine. Keys are encrypted
-          at rest and never shown after saving. Use each row to add, update, or
-          remove a specific provider without affecting the others.
+          Per-provider API keys for the modular voice engine and outbound
+          integrations. Keys are encrypted at rest and never shown after
+          saving. Use each row to add, update, or remove a specific provider
+          without affecting the others.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-5 pt-0">

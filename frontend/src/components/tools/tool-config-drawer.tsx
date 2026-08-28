@@ -39,12 +39,21 @@ import {
   McpFunctionSearch,
 } from "@/components/tools/mcp-function-search";
 import { ExpandableDescription } from "@/components/tools/expandable-description";
+import {
+  getResendEmailConfigError,
+  parseResendEmailRoutes,
+  RESEND_EMAIL_TOOL_NAME,
+  ResendEmailConfigEditor,
+  ResendEmailRouteConfig,
+} from "@/components/tools/resend-email-config";
 
 export interface ToolConfigDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tool: PlatformTool;
   agentTool: AgentTool | null;
+  organizationId?: string;
+  resendCredentialConfigured?: boolean;
   onSaveConfig: (
     agentToolId: string,
     config: Record<string, unknown>,
@@ -67,6 +76,8 @@ export function ToolConfigDrawer({
   onOpenChange,
   tool,
   agentTool,
+  organizationId,
+  resendCredentialConfigured,
   onSaveConfig,
   onToggleFunction,
   onOAuth,
@@ -94,10 +105,8 @@ export function ToolConfigDrawer({
   const currentTime = useLiveTime();
 
   React.useEffect(() => {
-    if (agentTool?.config) {
-      setLocalConfig(agentTool.config);
-      setHasUnsavedChanges(false);
-    }
+    setLocalConfig(agentTool?.config ?? {});
+    setHasUnsavedChanges(false);
   }, [agentTool?.config, open]);
 
   React.useEffect(() => {
@@ -128,6 +137,18 @@ export function ToolConfigDrawer({
   const toolUnselectedFunctions = agentTool?.unselected_functions || [];
   const isToolEnabled = agentTool?.is_enabled ?? false;
   const hasFunctions = functions.length > 0;
+  const isResendEmailTool = tool.name === RESEND_EMAIL_TOOL_NAME;
+  const resendRoutes = React.useMemo(
+    () => parseResendEmailRoutes(localConfig.routes),
+    [localConfig.routes],
+  );
+  const resendFromEmail =
+    typeof localConfig.from_email === "string" ? localConfig.from_email : "";
+  const resendFromName =
+    typeof localConfig.from_name === "string" ? localConfig.from_name : "";
+  const resendConfigError = isResendEmailTool
+    ? getResendEmailConfigError(resendFromEmail, resendFromName, resendRoutes)
+    : null;
 
   const isOAuth = tool.auth_type === "oauth2";
   const isApiKey = tool.auth_type === "api_key";
@@ -142,8 +163,22 @@ export function ToolConfigDrawer({
 
   const handleSaveConfig = async () => {
     if (!agentTool) return;
+    if (isResendEmailTool && resendConfigError) return;
     await onSaveConfig(agentTool.id, localConfig);
     setHasUnsavedChanges(false);
+  };
+
+  const handleResendSenderChange = (
+    field: "from_email" | "from_name",
+    value: string,
+  ) => {
+    setLocalConfig((current) => ({ ...current, [field]: value }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleResendRoutesChange = (routes: ResendEmailRouteConfig[]) => {
+    setLocalConfig((current) => ({ ...current, routes }));
+    setHasUnsavedChanges(true);
   };
 
   const handleOAuth = async () => {
@@ -528,7 +563,7 @@ export function ToolConfigDrawer({
                   <Button
                     size="sm"
                     onClick={handleSaveConfig}
-                    disabled={isSaving}
+                    disabled={isSaving || Boolean(resendConfigError)}
                   >
                     {isSaving ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -537,30 +572,66 @@ export function ToolConfigDrawer({
                   </Button>
                 )}
               </div>
-              <div className="grid gap-3">
-                {Object.entries(schema.properties).map(([key, prop]) => (
-                  <div key={key} className="space-y-1">
-                    <Label
-                      htmlFor={`drawer-${tool.id}-${key}`}
-                      className="text-[10px] uppercase text-muted-foreground"
-                    >
-                      {prop.title || key}
-                    </Label>
-                    <Input
-                      id={`drawer-${tool.id}-${key}`}
-                      placeholder={prop.description || ""}
-                      value={
-                        (localConfig[key] as string) ||
-                        (prop.default as string) ||
-                        ""
+              {isResendEmailTool && resendCredentialConfigured === false && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    This organization has not configured a Resend API key. Add
+                    it under{" "}
+                    <a
+                      className="font-medium underline underline-offset-2"
+                      href={
+                        organizationId
+                          ? `/organization?org_id=${organizationId}&tab=credentials`
+                          : "/organization?tab=credentials"
                       }
-                      onChange={(e) => handleConfigChange(key, e.target.value)}
-                      className="h-9 text-sm"
-                      disabled={!canEdit}
-                    />
-                  </div>
-                ))}
-              </div>
+                    >
+                      Organization → Credentials
+                    </a>{" "}
+                    before testing delivery.
+                  </p>
+                </div>
+              )}
+              {isResendEmailTool ? (
+                <ResendEmailConfigEditor
+                  routes={resendRoutes}
+                  fromEmail={resendFromEmail}
+                  fromName={resendFromName}
+                  onFromEmailChange={(value) =>
+                    handleResendSenderChange("from_email", value)
+                  }
+                  onFromNameChange={(value) =>
+                    handleResendSenderChange("from_name", value)
+                  }
+                  onChange={handleResendRoutesChange}
+                  canEdit={canEdit}
+                />
+              ) : (
+                <div className="grid gap-3">
+                  {Object.entries(schema.properties).map(([key, prop]) => (
+                    <div key={key} className="space-y-1">
+                      <Label
+                        htmlFor={`drawer-${tool.id}-${key}`}
+                        className="text-[10px] uppercase text-muted-foreground"
+                      >
+                        {prop.title || key}
+                      </Label>
+                      <Input
+                        id={`drawer-${tool.id}-${key}`}
+                        placeholder={prop.description || ""}
+                        value={
+                          (localConfig[key] as string) ||
+                          (prop.default as string) ||
+                          ""
+                        }
+                        onChange={(e) => handleConfigChange(key, e.target.value)}
+                        className="h-9 text-sm"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               {hasUnsavedChanges && (
                 <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400">
                   <AlertCircle className="h-3.5 w-3.5" />

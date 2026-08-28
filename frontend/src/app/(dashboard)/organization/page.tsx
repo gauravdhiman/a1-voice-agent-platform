@@ -132,6 +132,7 @@ export default function OrganizationPage() {
     cerebras: "",
     openrouter: "",
     fish: "",
+    resend: "",
   });
   const [providerCredsTouched, setProviderCredsTouched] = useState<
     Record<string, boolean>
@@ -339,6 +340,7 @@ export default function OrganizationPage() {
       cerebras: "",
       openrouter: "",
       fish: "",
+      resend: "",
     });
     setProviderCredsTouched({});
   };

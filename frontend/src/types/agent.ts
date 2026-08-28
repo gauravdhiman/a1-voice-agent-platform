@@ -13,6 +13,7 @@ export enum ConnectionStatus {
   CONNECTED_NO_AUTH = "connected_no_auth", // Connected, tool doesn't require auth
   CONNECTED_AUTH_VALID = "connected_auth_valid", // Connected, requires auth, valid tokens
   CONNECTED_AUTH_INVALID = "connected_auth_invalid", // Connected, requires auth, invalid/missing tokens
+  CONFIGURATION_REQUIRED = "configuration_required", // Attached but missing required tool configuration
 }
 
 export interface VoiceAgent {

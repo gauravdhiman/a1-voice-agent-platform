@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-
 from src.organization.models import OrganizationUpdate
 from src.organization.service import OrganizationService
 
@@ -21,7 +20,8 @@ from src.organization.service import OrganizationService
 def organization_service(mock_supabase_client):
     """Create an OrganizationService wired to the mocked Supabase client."""
     with patch("shared.organization.service.supabase_config") as mock_config:
-        mock_config.client = mock_supabase_client
+        mock_config.is_configured.return_value = True
+        mock_config.service_client = mock_supabase_client
         return OrganizationService()
 
 
@@ -394,6 +394,7 @@ class TestProviderCredentialsStatus:
         "cerebras",
         "openrouter",
         "fish",
+        "resend",
     }
 
     def test_status_from_blob_with_multiple_providers(self):
@@ -401,6 +402,7 @@ class TestProviderCredentialsStatus:
             mock_dec.return_value = {
                 "google": "G1",
                 "openai": "sk-xxx",
+                "resend": "re_org_key",
             }
             org = OrganizationService._organization_from_dict(
                 _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
@@ -409,6 +411,7 @@ class TestProviderCredentialsStatus:
         status = org.provider_credentials_status
         assert status["google"] is True
         assert status["openai"] is True
+        assert status["resend"] is True
         assert status["deepgram"] is False
         assert status["cartesia"] is False
         assert status["cerebras"] is False

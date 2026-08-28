@@ -12,6 +12,7 @@ const emptyDraft = {
   cerebras: "",
   openrouter: "",
   fish: "",
+  resend: "",
 };
 
 describe("buildProviderCredentialsInput", () => {
