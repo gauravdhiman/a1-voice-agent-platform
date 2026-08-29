@@ -1773,6 +1773,8 @@ erDiagram
 71. `20260820000002` - Add `voice_agents.public_description TEXT NULLABLE` for the customer-facing demo page copy. Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); shown on `/demo/{demo_slug}` with fallback `public_description → mission → persona`. UI gated under `is_demo` (amber card) and platform-admin only for writes, but column is nullable for all agents so drafting does not require demo enabled.
 72. `20260821000001` - Add the `call_log:delete` permission and grant it to `org_admin` only. Enables organization administrators to delete call recordings (audio objects) while call-log rows remain intact for audit; deleted artifacts are tombstoned with `status='deleted'` plus a `deletion` metadata block (`deleted_by`, `deleted_at`, `reason`).
 73. `20260822000001` - Merge the demo-agent and call-log permission migration branches so every supported environment has one Alembic head for `upgrade head`. This revision changes no tables or data.
+74. `20260827000001` - Add bounded public demo call budgets and one-time call reservations. This migration is joined to the staging merge history by `20260828000001`.
+75. `20260828000001` - Merge the previously validated staging head with the remote demo-call-limit migration head. This revision changes no tables or data and preserves one connected release-order head.
 
 ---
 
