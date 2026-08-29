@@ -79,8 +79,12 @@ shared/
 │   │   │   ├── platform_tool_registry.py    # Tool registry for voice-ws
 │   │   │   └── __init__.py
 │   │   └── implementations/            # Concrete tool implementations
-│   │       ├── google_calendar.py      # Google Calendar tool
-│   │       └── gmail.py                # Gmail tool
+│   │       ├── google_calendar_appointment.py # Google Calendar appointment tool
+│   │       ├── gmail.py                # Gmail tool
+│   │       └── resend_email.py         # Route-based Resend follow-up tool
+│   └── __init__.py
+├── notifications/
+│   ├── email_providers.py              # Shared async provider adapter contract
 │   └── __init__.py
 ├── config/
 │   ├── opentelemetry.py   # OpenTelemetry setup

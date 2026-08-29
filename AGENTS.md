@@ -99,6 +99,9 @@ Canonical environment files:
   `.env.local`/`.env.local.example`, `.env.staging`/`.env.staging.example`,
   `.env.prod`/`.env.prod.example`, and service-specific equivalents. Examples
   contain placeholders only.
+- Local setup and worktree launchers generate and persist valid Fernet
+  `ENCRYPTION_KEY` values automatically; never run a local backend with the
+  template placeholder. Staging and production keys remain deployment-managed.
 - Local Google ID-token sign-in is configured in `supabase/config.toml` from
   `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` and
   `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`; keep Google's nonce check
@@ -176,6 +179,10 @@ Rules:
 - Each isolated DB may use the same fixture IDs and credentials because the
   databases are separate. OAuth state and provider tokens are never copied
   from staging or production.
+- The launcher resolves provider settings from `--source-env`, the worktree's
+  `.env.local`, the main checkout's `.env.local`, or the example file. It must
+  synchronize a usable selected-source `GEMINI_API_KEY` before starting and
+  fail clearly rather than launching voice-ws with a missing/example credential.
 - down preserves local data. purge is destructive; verify the exact worktree
   state directory and use it only when reclaiming that worktree.
 - Never combine application containers from one worktree with another
@@ -486,6 +493,9 @@ Reliability and performance:
   preview first, review the plan, then apply only approved seedable domains.
   Do not seed paid plans, customer credentials, OAuth state, or production
   customer data from a worktree fixture.
+- The shared staging validator must synchronize `platform_tools` from the
+  checked-out native registry after migrations; native rows are published by
+  that sync, while application startup remains free of master-data writes.
 - Keep environment example files synchronized with their real variable names.
   Examples contain placeholders only. Review duplicate keys, stale comments,
   unsafe defaults, and missing required variables; update the matching example

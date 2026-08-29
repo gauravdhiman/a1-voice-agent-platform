@@ -9,12 +9,6 @@ from typing import Optional
 from uuid import UUID
 
 from opentelemetry import metrics, trace
-
-from shared.common.errors import ErrorCode
-from shared.common.security import decrypt_data, encrypt_data
-from shared.config import settings
-from shared.organization.service import BaseOrganizationService
-from shared.organization.timezone import normalize_timezone_input
 from src.notifications.models import SendNotificationRequest
 from src.notifications.service import notification_service
 from src.organization.invitation_models import (
@@ -26,6 +20,12 @@ from src.organization.models import Organization, OrganizationCreate, Organizati
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
+
+from shared.common.errors import ErrorCode
+from shared.common.security import decrypt_data, encrypt_data
+from shared.config import settings
+from shared.organization.service import BaseOrganizationService
+from shared.organization.timezone import normalize_timezone_input
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,7 @@ class OrganizationService(BaseOrganizationService):
             "cerebras": bool(creds.get("cerebras")),
             "openrouter": bool(creds.get("openrouter")),
             "fish": bool(creds.get("fish")),
+            "resend": bool(creds.get("resend")),
         }
         return Organization(
             id=org_dict["id"],
@@ -412,7 +413,7 @@ class OrganizationService(BaseOrganizationService):
             # providers), and the plaintext column is cleared so the secret
             # exists only in encrypted form. ``provider_credentials_input``
             # carries the other providers (deepgram/openai/cartesia/cerebras/
-            # openrouter/fish) plus google when the credentials card
+            # openrouter/fish/resend) plus google when the credentials card
             # is used. An empty ``google_api_key`` clears the
             # google entry from the blob.
             cred_updates: dict = {}

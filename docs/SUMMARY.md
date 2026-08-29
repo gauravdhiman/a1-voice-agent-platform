@@ -65,6 +65,7 @@ Comprehensive documentation organized by feature.
 13. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
 14. **[Free-Tier Credit Refresh](03_implementation/free_tier_credit_refresh.md)** - pg_cron-triggered monthly credit renewal; atomic RPC race hardening
 15. **[Credit Usage Enforcement and Notifications](03_implementation/credit_usage_enforcement_and_notifications.md)** - system-wide usage rates, final-call settlement, phone-number grace periods, and durable low-credit emails
+16. **[Resend Agent Email Tool](03_implementation/resend_email_agent_tool.md)** - organization-configured follow-up email routes for native voice agents
 
 ### Multi-Tenancy & RBAC
 
@@ -131,6 +132,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 2. **[Tool System](03_implementation/tool_system.md)** - Tool architecture and Pipecat runtime integration
 3. **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Dynamic tool loading design
 4. **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Tool implementation details including Gmail tool
+5. **[Resend Agent Email Tool](03_implementation/resend_email_agent_tool.md)** - Native route-based Resend tool, contract, configuration, and operational limits
 
 ### Notifications
 

@@ -11,8 +11,9 @@ class TestPlatformToolRegistry:
     @pytest.fixture
     def registry(self):
         """Get the platform tool registry instance."""
-        from shared.voice_agents.tools.base.platform_tool_registry import \
-            platform_tool_registry
+        from shared.voice_agents.tools.base.platform_tool_registry import (
+            platform_tool_registry,
+        )
 
         return platform_tool_registry
 
@@ -273,6 +274,63 @@ class TestPlatformToolRegistry:
                 "context" in sig.parameters
             ), f"Function {func.__name__} missing context param"
 
+    def test_future_annotated_tool_functions_are_discovered(self, registry):
+        """Postponed annotations must not hide native tools from the catalog."""
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        functions = registry.get_tool_functions("Resend_email")
+
+        assert {function.__name__ for function in functions} == {
+            "list_resend_email_routes",
+            "send_resend_email",
+        }
+
+    def test_future_annotated_tool_schema_preserves_argument_types(self, registry):
+        """Catalog schemas should expose primitive argument types accurately."""
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        function = next(
+            item
+            for item in registry.get_tool_functions("Resend_email")
+            if item.__name__ == "send_resend_email"
+        )
+        schema = registry._extract_schema_from_function(function)
+
+        assert schema is not None
+        assert schema["parameters"]["required"] == ["route_id", "subject", "body"]
+        assert schema["parameters"]["properties"] == {
+            "route_id": {"type": "string"},
+            "subject": {"type": "string"},
+            "body": {"type": "string"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_sync_publishes_code_owned_native_tools(self):
+        """Native catalog rows remain visible after a schema synchronization."""
+        from unittest.mock import AsyncMock
+
+        from shared.voice_agents.tools.base.platform_tool_registry import (
+            PlatformToolRegistry,
+        )
+
+        fresh = PlatformToolRegistry()
+        fresh.register_tools_from_package("shared.voice_agents.tools.implementations")
+        tool_service = Mock()
+        tool_service.upsert_platform_tool = AsyncMock(return_value=(Mock(), None))
+
+        await fresh.sync_with_db(tool_service)
+
+        resend_data = next(
+            call.args[0]
+            for call in tool_service.upsert_platform_tool.await_args_list
+            if call.args[0].name == "Resend_email"
+        )
+        assert resend_data.is_published is True
+
     def test_tool_functions_have_docstrings(self, registry):
         """Test all tool functions have docstrings."""
         # Register tools first
@@ -478,7 +536,7 @@ class TestPlatformToolRegistry:
         # Check for expected functions
         expected_functions = [
             "get_sheet_values",
-            "append_row", 
+            "append_row",
             "update_cell",
             "search_in_sheet",
             "create_spreadsheet",

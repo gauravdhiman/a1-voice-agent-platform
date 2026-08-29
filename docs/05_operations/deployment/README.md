@@ -27,7 +27,7 @@ Production infrastructure for **247ai.live**:
 | `scripts/deploy.sh` | Single entry point: `all`, `gcp`, `backend`, `frontend`, `voice-ws`, `migrate`, `domains` |
 | `.env.prod.example` | Production env template (copy → `.env.prod`, gitignored) |
 | `.env.staging.example` | Staging env template — local app + cloud DB (copy → `.env.staging`, gitignored) |
-| `scripts/validate-staging.sh` | Local staging validator (migrate + `start.sh --env staging` + health checks) |
+| `scripts/validate-staging.sh` | Local staging validator (migrate + native-tool sync + `start.sh --env staging` + health checks) |
 | `scripts/bootstrap-staging-db.sh` | Legacy/repair staging migrate + Stripe seed |
 | `scripts/deploy/` | Lower-level GCP, OCI, Alembic scripts |
 | `deploy/` | Docker compose, Caddyfile, Cloud Build stubs |

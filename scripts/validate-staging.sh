@@ -8,7 +8,7 @@
 # Run it after merging to main and before manual production promotion.
 #
 # Usage:
-#   ./scripts/validate-staging.sh              # migrate + restart local staging stack
+#   ./scripts/validate-staging.sh              # migrate + sync tools + restart local staging stack
 #   ./scripts/validate-staging.sh --no-start   # migrate + verify only (no Docker)
 #   ./scripts/validate-staging.sh --migrate-only
 #   ./scripts/validate-staging.sh --help
@@ -73,14 +73,14 @@ python3 "${ROOT}/scripts/deploy/read-env-cloud.py" "$ENV_FILE" SUPABASE_URL 2>/d
 echo ""
 
 # 1. Compatibility check (read-only, safe for shared staging)
-echo "==> [1/4] Checking Alembic compatibility against staging..."
+echo "==> [1/5] Checking Alembic compatibility against staging..."
 python3 "${ROOT}/scripts/deploy/check_alembic_compatibility.py" --env-file "$ENV_FILE"
 echo "    Compatibility OK"
 echo ""
 
 # 2. Migrate
 if [[ "$DO_MIGRATE" == "true" ]]; then
-  echo "==> [2/4] Running staging migrations (upgrade head)..."
+  echo "==> [2/5] Running staging migrations (upgrade head)..."
   chmod +x "${ROOT}/scripts/deploy.sh" "${ROOT}/scripts/deploy/run-alembic.sh" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"
   "${ROOT}/scripts/deploy.sh" migrate --env-file "$ENV_FILE"
   echo ""
@@ -88,14 +88,25 @@ fi
 
 # 3. Verify phone-number backfill postconditions
 if [[ "$DO_VERIFY" == "true" ]]; then
-  echo "==> [3/4] Verifying phone-number data migration..."
+  echo "==> [3/5] Verifying phone-number data migration..."
   python3 "${ROOT}/scripts/deploy/verify_phone_number_backfill.py" --env-file "$ENV_FILE"
   echo ""
 fi
 
-# 4. Start local stack against staging (--env staging)
+# 4. Materialize the code-owned native tool catalog from this release.
 if [[ "$DO_START" == "true" ]]; then
-  echo "==> [4/4] Starting local application stack against staging..."
+  echo "==> [4/5] Synchronizing native tools in staging..."
+  COMPOSE_PROJECT_NAME=247ai-staging \
+    ENV_FILE="$ENV_FILE" \
+    "${ROOT}/scripts/deploy/sync-native-tools.sh"
+  echo ""
+else
+  echo "==> [4/5] Skipped native tool synchronization (--migrate-only)."
+fi
+
+# 5. Start local stack against staging (--env staging)
+if [[ "$DO_START" == "true" ]]; then
+  echo "==> [5/5] Starting local application stack against staging..."
   echo "    Command: ./start.sh start dev --env staging"
   "${ROOT}/start.sh" start dev --env staging
   echo ""
@@ -128,7 +139,7 @@ if [[ "$DO_START" == "true" ]]; then
     echo "    docs/05_operations/deployment/runbook.md#mandatory-release-gate-ai-agent-calling)."
   fi
 else
-  echo "==> [4/4] Skipped Docker start (--migrate-only). To start later:"
+  echo "==> [5/5] Skipped Docker start (--migrate-only). To start later:"
   echo "    ./start.sh start dev --env staging"
 fi
 

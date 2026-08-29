@@ -65,6 +65,7 @@ curl http://localhost:7860/health
 | `GEMINI_API_KEY` | Platform Gemini key fallback |
 | `DEEPGRAM_API_KEY` / `OPENAI_API_KEY` / `CARTESIA_API_KEY` / `CEREBRAS_API_KEY` / `OPENROUTER_API_KEY` / `FISH_API_KEY` | Pipeline provider key fallbacks |
 | `AGENT_DEFAULT_TIMEZONE` | Prompt datetime section |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | Platform-owned notification sender configuration; the native `Resend_email` follow-up tool uses the organization's encrypted Resend key and attachment sender configuration |
 | `VOICE_RECORDING_ENABLED` | Platform gate for audio persistence (default `false`); the agent must also opt in |
 | `RECORDING_STORAGE_BACKEND` | `local` for development or `r2` for staging/production |
 | `RECORDING_ENCRYPTION_MODE` | `provider_managed` (customer-managed is reserved) |
@@ -90,3 +91,8 @@ boundaries but does not allow downstream model or pipeline delays to inflate
 the caller track. Recording is best-effort and never masks call billing. Org
 admins and platform admins can listen from the Call Log UI through the
 authenticated backend playback endpoint.
+
+Native tool contracts live in `shared/voice_agents/tools/implementations/` and
+are assembled here with a trusted per-call `ToolContext`. See the [Resend
+Agent Email Tool](../docs/03_implementation/resend_email_agent_tool.md) for
+route configuration, provider acceptance semantics, and error handling.

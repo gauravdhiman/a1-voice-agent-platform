@@ -7,9 +7,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from src.tools.assembly import create_legacy_tool_handler
 
 from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
-from src.tools.assembly import create_legacy_tool_handler
 
 
 class _FakeFunctionCallParams:
@@ -56,6 +56,24 @@ class TestToolRuntimeReliability:
         assert "error" in params.result
         assert "calendar offline" in params.result
 
+    def test_resend_uses_org_credential_and_discards_legacy_agent_key(self) -> None:
+        """The native Resend tool receives only the org-owned runtime secret."""
+        from src.tools.assembly import _resolve_runtime_sensitive_config
+
+        organization = MagicMock()
+        with patch(
+            "src.tools.assembly.resolve_org_provider_credential",
+            return_value="re_org_key",
+        ) as resolve_credential:
+            sensitive = _resolve_runtime_sensitive_config(
+                "Resend_email",
+                {"api_key": "re_wrong_agent_key", "other": "value"},
+                organization,
+            )
+
+        assert sensitive == {"api_key": "re_org_key", "other": "value"}
+        resolve_credential.assert_called_once_with(organization, "resend")
+
     @pytest.mark.asyncio
     async def test_assemble_records_mcp_failures_as_unavailable(self) -> None:
         """MCP discovery failures must be tracked for observability."""
@@ -94,4 +112,6 @@ class TestToolRuntimeReliability:
 
         assert assembled.schemas == []
         assert assembled.enabled_tool_names == []
-        assert any("Google_calendar_mcp" in item for item in assembled.unavailable_tools)
+        assert any(
+            "Google_calendar_mcp" in item for item in assembled.unavailable_tools
+        )

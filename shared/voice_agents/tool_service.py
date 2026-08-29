@@ -365,10 +365,14 @@ class ToolService:
             # without ``is_premium`` on every worker startup, which would
             # otherwise reset an admin-set premium flag to False. Preserve the
             # DB value on updates of existing LEGACY rows (inserts keep the
-            # model default). MCP rows always send ``is_premium`` explicitly
-            # (author-form checkbox), so they pass through unchanged.
+            # model default). Legacy tools are code-owned and must remain
+            # published; the draft/publish lifecycle belongs to MCP rows.
+            # MCP rows always send ``is_premium`` explicitly (author-form
+            # checkbox), so they pass through unchanged.
             if tool_data.tool_source is ToolSource.LEGACY and existing.data:
                 data_dict.pop("is_premium", None)
+            if tool_data.tool_source is ToolSource.LEGACY:
+                data_dict["is_published"] = True
 
             # Always write clearable fields on update so blanking them in the UI
             # is not a no-op (exclude_none would otherwise drop them).

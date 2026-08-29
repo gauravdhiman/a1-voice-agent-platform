@@ -11,7 +11,7 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, get_type_hints
 
 from shared.voice_agents.tool_models import PlatformToolCreate
 from shared.voice_agents.tool_service import ToolService
@@ -38,7 +38,9 @@ class PlatformToolRegistry:
         Dynamically discover and register all BaseTool subclasses in a package.
         Extracts public tool methods by inspecting function objects.
         """
-        logger.info(f"Platform Registry: Registering tools from package: {package_path}")
+        logger.info(
+            f"Platform Registry: Registering tools from package: {package_path}"
+        )
         package = importlib.import_module(package_path)
         for loader, module_name, is_pkg in pkgutil.walk_packages(
             package.__path__, package.__name__ + "."
@@ -109,8 +111,12 @@ class PlatformToolRegistry:
         """Return True when ``func`` looks like a shared ``BaseTool`` method."""
         if inspect.iscoroutinefunction(func):
             sig = inspect.signature(func)
-            for param in sig.parameters.values():
-                if param.annotation is ToolContext:
+            try:
+                type_hints = get_type_hints(func)
+            except Exception:  # noqa: BLE001 - optional annotations may not resolve
+                type_hints = {}
+            for name, param in sig.parameters.items():
+                if type_hints.get(name, param.annotation) is ToolContext:
                     return True
 
         # Legacy decorator metadata (optional third-party markers).
@@ -158,6 +164,10 @@ class PlatformToolRegistry:
                     auth_type=metadata.auth_type,
                     auth_config=metadata.auth_config,
                     is_active=True,
+                    # In-tree native tools are code-owned catalog entries,
+                    # not draft MCP servers. Keep them visible to org admins
+                    # whenever the registry materializes or refreshes them.
+                    is_published=True,
                 )
 
                 # Upsert to database (create or update by name)
@@ -203,6 +213,10 @@ class PlatformToolRegistry:
                 description = ""
 
             sig = inspect.signature(func)
+            try:
+                type_hints = get_type_hints(func)
+            except Exception:  # noqa: BLE001 - preserve legacy best effort
+                type_hints = {}
             parameters = {"type": "object", "properties": {}, "required": []}
 
             for param_name, param in sig.parameters.items():
@@ -210,15 +224,15 @@ class PlatformToolRegistry:
                 if param_name == "self":
                     continue
 
-                if param.annotation != inspect.Parameter.empty:
-                    if param.annotation is ToolContext:
+                annotation = type_hints.get(param_name, param.annotation)
+                if annotation != inspect.Parameter.empty:
+                    if annotation is ToolContext:
                         continue
 
                 param_info = {"type": "string"}
 
                 # Try to get type annotation
-                if param.annotation != inspect.Parameter.empty:
-                    annotation = param.annotation
+                if annotation != inspect.Parameter.empty:
                     if annotation == int:
                         param_info["type"] = "integer"
                     elif annotation == float:

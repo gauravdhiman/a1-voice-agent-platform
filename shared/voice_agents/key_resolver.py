@@ -143,6 +143,22 @@ def _org_credentials(org: Optional[Any]) -> dict[str, Any]:
     return creds
 
 
+def resolve_org_provider_credential(org: Optional[Any], provider: str) -> Any:
+    """Return one decrypted organization provider credential for runtime use.
+
+    Args:
+        org: Organization-like object exposing the encrypted
+            ``provider_credentials`` blob.
+        provider: Stable provider key, such as ``google`` or ``resend``.
+
+    Returns:
+        The requested credential value, or ``None`` when the organization has
+        not configured it. The value is intended for a narrowly scoped server
+        runtime path and must never be serialized into prompts or API models.
+    """
+    return _org_credentials(org).get(provider)
+
+
 def resolve_api_keys(
     speech_config: SpeechConfig,
     org: Optional[Any] = None,
@@ -227,9 +243,7 @@ def is_preset_ready(
         speech_config,
         org,
         use_platform_credits,
-        allow_platform_fallback=(
-            not org_credentials_only or use_platform_credits
-        ),
+        allow_platform_fallback=(not org_credentials_only or use_platform_credits),
     )
     for provider in needed:
         if provider not in api_keys:
@@ -239,4 +253,9 @@ def is_preset_ready(
     return True
 
 
-__all__ = ["resolve_api_keys", "is_preset_ready", "normalize_stage_provider"]
+__all__ = [
+    "resolve_api_keys",
+    "is_preset_ready",
+    "normalize_stage_provider",
+    "resolve_org_provider_credential",
+]

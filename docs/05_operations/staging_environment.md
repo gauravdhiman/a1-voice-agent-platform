@@ -63,8 +63,8 @@ startup command also applies the idempotent migration gate, so a direct local
 staging start cannot silently run against an older schema:
 
 ```bash
-./scripts/validate-staging.sh           # check + migrate + restart local stack
-./start.sh start dev --env staging      # migrate + start local app directly
+./scripts/validate-staging.sh           # check + migrate + sync tools + restart local stack
+./start.sh start dev --env staging      # migrate + start local app directly (no catalog sync)
 ```
 
 Check any future checkout before touching shared staging:
@@ -183,7 +183,7 @@ ON CONFLICT DO NOTHING;
 The normal path is the validator:
 
 ```bash
-./scripts/validate-staging.sh                 # check + migrate + verify + restart
+./scripts/validate-staging.sh                 # check + migrate + verify + sync tools + restart
 ./scripts/validate-staging.sh --migrate-only  # check + migrate + verify
 ```
 
@@ -193,6 +193,7 @@ For granular control:
 # Staging — check first, then apply a specific revision only when necessary
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ENV_FILE=.env.staging REVISION=20260807000001 ./scripts/deploy/run-alembic.sh
+./scripts/deploy/sync-native-tools.sh --env-file .env.staging
 ENV_FILE=.env.staging REVISION=head ./scripts/deploy/run-alembic.sh
 
 # Production (247ai.live) — use with care

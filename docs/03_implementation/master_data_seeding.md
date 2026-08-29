@@ -150,6 +150,8 @@ container orchestrator, run it as a completion-tracked release/bootstrap Job.
 - Platform skills call the existing `skill_service.seed_platform_skills()`.
   Content hashes skip unchanged skills; normal runs do not prune old rows.
 - Platform tools call runtime registry discovery and database schema sync.
+  Native rows are published as code-owned catalog entries; the MCP
+  draft/publish lifecycle is not changed by a native sync.
 - System pricing derives from the finite `SYSTEM_PRICING` tuple. A normal seed
   creates missing rows, skips unchanged rows, and preserves administrator-set
   credit rates and activation state; reset restores source defaults.
@@ -175,8 +177,13 @@ Staging rows are not a production source of truth.
 - The existing skill seed-definition tests remain the content-quality gate.
 - Apply database migrations through the normal version-controlled release
   process.
-- In staging, back up the database, generate and review the plan, apply only
-  approved domains, inspect the ledger, and restart the app to confirm startup
-  performs no seed writes.
+- In staging, back up the database, run `scripts/validate-staging.sh`, inspect
+  the native-tool seed ledger, and restart the app only after the validator
+  completes. The application startup path itself performs no seed writes.
 - Before production, generate the plan from the exact release artifact and run
   the apply command as a separately approved one-off release task.
+
+The shared-staging validator invokes the dedicated
+`scripts/deploy/sync-native-tools.sh` bootstrap after migrations. This keeps
+the regular application startup path read-only while ensuring the release
+candidate's native tools are materialized before staging smoke tests.

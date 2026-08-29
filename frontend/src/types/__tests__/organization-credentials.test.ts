@@ -39,6 +39,7 @@ describe("Organization provider_credentials_status (read)", () => {
         cerebras: false,
         openrouter: false,
         fish: false,
+        resend: true,
       },
     };
     expect(org.provider_credentials_status?.google).toBe(true);

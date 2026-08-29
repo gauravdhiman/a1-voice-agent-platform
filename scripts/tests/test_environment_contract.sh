@@ -56,6 +56,14 @@ assert_contains "$ROOT/start.sh" 'run_startup_migrations'
 assert_contains "$ROOT/start.sh" 'alembic upgrade head'
 assert_contains "$ROOT/start.sh" 'compose "$COMPOSE_FILE_DEV" up -d --build'
 assert_contains "$ROOT/start.sh" 'compose "$COMPOSE_FILE_PROD" up -d --build'
+assert_contains "$ROOT/scripts/validate-staging.sh" 'sync-native-tools.sh'
+assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'preview --domain platform_tools'
+assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'apply --plan'
+[[ -x "$ROOT/scripts/deploy/sync-native-tools.sh" ]] || {
+  echo "Native tool synchronization script is not executable" >&2
+  exit 1
+}
+assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'docker compose'
 assert_contains "$ROOT/docker-compose.dev.yml" '${ENV_FILE:-.env.local}'
 assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'

@@ -167,6 +167,21 @@ export function ToolCard({
             "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
           actionText,
         };
+      case ConnectionStatus.CONFIGURATION_REQUIRED:
+        return {
+          label: "Configuration required",
+          icon: XCircle,
+          iconColor: "text-red-700 dark:text-red-300",
+          badgeVariant: "secondary" as const,
+          bgColor: "bg-red-50 dark:bg-red-950/20",
+          borderColor: "border-red-200 dark:border-red-800",
+          badgeBg:
+            "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+          badgeText: "text-red-700 dark:text-red-300",
+          iconBoxBg:
+            "bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700",
+          actionText,
+        };
       case ConnectionStatus.NOT_CONNECTED:
       default:
         return {

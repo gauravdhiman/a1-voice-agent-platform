@@ -47,9 +47,9 @@ Options:
   --name NAME         Stable worktree name used in project IDs and credentials
   --port-offset N     Explicit non-zero host-port offset; default is deterministic
                       from this worktree path
-  --source-env PATH   Copy provider settings from this env file
-                      (defaults to this worktree's or main checkout's .env.local,
-                       then .env.local.example)
+  --source-env PATH   Copy provider settings from this env file and repair
+                      placeholder values (defaults to this worktree's .env.local,
+                      then the main checkout's .env.local, then the example)
   --state-dir PATH    Store generated config and credentials at this path
   --skip-master-data  Skip the explicit platform master-data synchronization
   --yes               Confirm destructive purge
@@ -161,6 +161,21 @@ path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 }
 
+ensure_local_encryption_key() {
+  local file="$1"
+  local force_generate="${2:-false}"
+
+  # Worktree app.env files are local, ignored state. Never copy the source
+  # environment's encryption key into a new worktree: each isolated database
+  # gets its own key, while an existing worktree keeps its key stable so its
+  # encrypted credentials remain decryptable across restarts.
+  if [[ "$force_generate" == true ]]; then
+    python3 "$ROOT/scripts/ensure-local-encryption-key.py" "$file" --force
+  else
+    python3 "$ROOT/scripts/ensure-local-encryption-key.py" "$file"
+  fi
+}
+
 read_env_value() {
   local file="$1"
   local key="$2"
@@ -174,50 +189,67 @@ read_env_value() {
 }
 
 git_repository_root() {
-  local git_common_dir
-  git_common_dir="$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null || true)"
-  if [[ -z "$git_common_dir" ]]; then
+  local common_dir
+  common_dir="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ -z "$common_dir" ]]; then
+    common_dir="$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null || true)"
+  fi
+  if [[ -z "$common_dir" ]]; then
     printf '%s' "$ROOT"
     return 0
   fi
-  if [[ "$git_common_dir" != /* ]]; then
-    git_common_dir="$ROOT/$git_common_dir"
+
+  if [[ "$common_dir" != /* ]]; then
+    common_dir="$(cd "$ROOT/$common_dir" 2>/dev/null && pwd -P)" || {
+      printf '%s' "$ROOT"
+      return 0
+    }
   fi
-  cd "$(dirname "$git_common_dir")" && pwd
+  dirname "$common_dir"
 }
 
-default_source_env() {
-  local shared_root candidate fallback
-  shared_root="$(git_repository_root)"
+resolve_source_env() {
+  if [[ -n "$SOURCE_ENV_OVERRIDE" ]]; then
+    [[ -f "$SOURCE_ENV_OVERRIDE" ]] || die "source env does not exist: $SOURCE_ENV_OVERRIDE"
+    printf '%s' "$SOURCE_ENV_OVERRIDE"
+    return 0
+  fi
+
+  local repository_root candidate fallback
+  repository_root="$(git_repository_root)"
   fallback=""
-  for candidate in "$ROOT/.env.local" "$shared_root/.env.local"; do
+  for candidate in "$ROOT/.env.local" "$repository_root/.env.local"; do
     if [[ -f "$candidate" ]]; then
       [[ -n "$fallback" ]] || fallback="$candidate"
-      if ! is_placeholder_env_value "$(read_env_value "$candidate" "GEMINI_API_KEY")"; then
+      if ! is_placeholder_env_value "$(read_env_value "$candidate" GEMINI_API_KEY)"; then
         printf '%s' "$candidate"
         return 0
       fi
     fi
   done
+
   if [[ -n "$fallback" ]]; then
     printf '%s' "$fallback"
     return 0
   fi
-  printf '%s/.env.local.example' "$ROOT"
+
+  [[ -f "$ROOT/.env.local.example" ]] || die "no source env found; expected .env.local or .env.local.example"
+  printf '%s' "$ROOT/.env.local.example"
 }
 
 is_placeholder_env_value() {
-  local value="$1"
+  local value="${1:-}"
   local normalized
   normalized="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+
+  [[ -z "$normalized" ]] && return 0
+  [[ "$normalized" =~ [[:space:]] ]] && return 0
   case "$normalized" in
-    ""|placeholder|*placeholder*|your-*-api-key|your_*_api_key|change-me*|replace-me*)
+    *placeholder*|your-*|your_*|replace-*|replace_*|change-me*|changeme|example|example-*|dummy|dummy-*|test-key|test-key-*)
       return 0
       ;;
-    *)
-      return 1
-      ;;
   esac
+  return 1
 }
 
 sync_voice_provider_settings() {
@@ -238,6 +270,15 @@ sync_voice_provider_settings() {
   done
 }
 
+require_gemini_api_key() {
+  local source_env="$1"
+  local app_key
+  app_key="$(read_env_value "$APP_ENV" GEMINI_API_KEY)"
+  if is_placeholder_env_value "$app_key"; then
+    die "GEMINI_API_KEY is missing or still an example value in $APP_ENV; set a valid key in $source_env or pass --source-env"
+  fi
+}
+
 derive_identity() {
   local requested_name
   requested_name="${NAME_OVERRIDE:-$(basename "$ROOT")}"
@@ -255,6 +296,17 @@ derive_identity() {
 
   if [[ -n "$PORT_OFFSET_OVERRIDE" ]]; then
     PORT_OFFSET="$PORT_OFFSET_OVERRIDE"
+  elif [[ -f "$STATE_DIR/metadata.env" ]]; then
+    # Reconfiguration must not silently move an existing worktree to another
+    # port slot. Keep the stored slot unless the caller explicitly supplies a
+    # new --port-offset.
+    local stored_port_offset
+    stored_port_offset="$(awk -F= '$1 == "PORT_OFFSET" { print $2; exit }' "$STATE_DIR/metadata.env")"
+    if [[ "$stored_port_offset" =~ ^[0-9]+$ ]] && (( stored_port_offset >= 1 )); then
+      PORT_OFFSET="$stored_port_offset"
+    else
+      PORT_OFFSET=$((10 + (checksum % 90) * 10))
+    fi
   else
     # Ten-port slots keep each app and Supabase service set together while
     # leaving enough room for many parallel worktrees. A collision is checked
@@ -372,14 +424,13 @@ PY
 
 prepare_app_env() {
   mkdir -p "$STATE_DIR"
-  local source_env="${SOURCE_ENV_OVERRIDE:-$(default_source_env)}"
-  if [[ ! -f "$source_env" ]]; then
-    source_env="${ROOT}/.env.local.example"
-  fi
-  [[ -f "$source_env" ]] || die "no source env found; expected .env.local or .env.local.example"
+  local source_env
+  source_env="$(resolve_source_env)"
+  local copied_source=false
   if [[ ! -f "$APP_ENV" ]]; then
     cp "$source_env" "$APP_ENV"
     chmod 600 "$APP_ENV"
+    copied_source=true
   fi
 
   # Provider credentials are intentionally refreshed on every setup. The
@@ -388,6 +439,11 @@ prepare_app_env() {
   # previously valid key with a template placeholder.
   sync_voice_provider_settings "$source_env"
 
+  if [[ "$COMMAND" == "up" ]]; then
+    require_gemini_api_key "$source_env"
+  fi
+
+  ensure_local_encryption_key "$APP_ENV" "$copied_source"
   set_env_value "$APP_ENV" "ENV_FILE" "$APP_ENV"
   set_env_value "$APP_ENV" "ENVIRONMENT" "development"
   set_env_value "$APP_ENV" "DEBUG" "true"

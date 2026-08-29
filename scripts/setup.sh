@@ -23,6 +23,11 @@ else
     echo "✅ .env.local already exists"
 fi
 
+# The template intentionally contains a placeholder. Generate one stable,
+# local-only Fernet key so organization provider credentials can be encrypted
+# immediately; never copy this key to staging or production.
+python3 scripts/ensure-local-encryption-key.py .env.local
+
 echo ""
 echo "🔧 Installing dependencies..."
 

@@ -5,8 +5,13 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from src.tools.assembly import build_function_schema, create_legacy_tool_handler
+from src.tools.assembly import (
+    _is_function_unselected,
+    build_function_schema,
+    create_legacy_tool_handler,
+)
 
+from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
 from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.tools.implementations.google_calendar_appointment import (
     GoogleCalendarAppointmentTool,
@@ -132,3 +137,19 @@ class TestToolAssemblyHelpers:
         asyncio.run(handler(params))
 
         assert params.result == '{"subject": "status", "count": 2}'
+
+    def test_function_toggle_accepts_runtime_and_display_names(self) -> None:
+        """UI-persisted display names must disable runtime functions too."""
+        registry = PlatformToolRegistry()
+
+        assert _is_function_unselected(
+            registry,
+            _example_tool,
+            {"_example_tool"},
+        )
+        assert _is_function_unselected(
+            registry,
+            _example_tool,
+            {"Example Tool"},
+        )
+        assert not _is_function_unselected(registry, _example_tool, {"Other Tool"})
