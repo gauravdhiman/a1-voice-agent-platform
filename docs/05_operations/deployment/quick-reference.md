@@ -18,7 +18,7 @@ cp .env.staging.example .env.staging  # fill SUPABASE_SERVICE_KEY, DATABASE_URL,
 # see docs/05_operations/staging_environment.md
 
 # after every merge to main (or any release candidate)
-./scripts/validate-staging.sh
+./scripts/validate-staging.sh  # migrates and synchronizes code-owned native tools
 # or without Docker:
 ./scripts/validate-staging.sh --migrate-only
 # then run browser + PSTN smoke tests at http://localhost:3000
@@ -30,7 +30,7 @@ Manual equivalent:
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ./scripts/deploy.sh migrate --env-file .env.staging
 python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
-./start.sh start dev --env staging   # rechecks migrations and rebuilds local images
+./start.sh start dev --env staging   # direct start only; no catalog synchronization
 ```
 
 ## Manual or recovery deploy (production, and optional staging Cloud Run)
@@ -66,7 +66,8 @@ use **Actions → Promote to production** after local staging validation.
 1. Merge a reviewed pull request into protected `main`.
 2. On your machine (or a designated release machine), run
    `./scripts/validate-staging.sh` — it checks migration compatibility,
-   migrates staging, and restarts the local staging stack (`--env staging`).
+   migrates staging, synchronizes code-owned native tools, and restarts the
+   local staging stack (`--env staging`).
    The startup gate also rechecks the idempotent migration and rebuilds images
    before services run.
 3. Run the browser/PSTN release gate against `http://localhost:3000`.

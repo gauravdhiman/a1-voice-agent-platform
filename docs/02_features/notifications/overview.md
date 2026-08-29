@@ -30,6 +30,23 @@ reconnection.
 Telegram/WhatsApp delivery and organization-configurable notification
 frequency are not part of this integration yet.
 
+## Agent-facing Resend email tool
+
+The native [`Resend_email` agent tool](../../03_implementation/resend_email_agent_tool.md)
+is separate from this event-driven notification system. It lets an agent send
+a caller-requested follow-up to an organization-configured logical route such
+as `customer_support` or `front_desk`. It does not create a notification row,
+enqueue a durable event, or expose arbitrary recipient addresses to the model.
+
+Both systems share the provider adapter in
+`shared/notifications/email_providers.py`, but they retain separate contracts:
+the notification processor owns templates, delivery logs, and retries, while
+the agent tool returns the immediate Resend acceptance/error result to the
+voice runtime. The agent tool reads the organization's encrypted Resend API key
+from Organization → Credentials and keeps its verified sender identity and
+logical recipient routes in the agent-tool attachment. The platform environment
+key and sender settings remain reserved for platform-owned notifications.
+
 ## What It Provides
 
 - ✅ **Email Notifications**: Transactional emails for all critical events

@@ -1584,6 +1584,7 @@ class TestUpsertPreservesLegacyPremiumFlag:
         # The update payload must NOT carry is_premium — the DB value wins.
         update_call = mock_supabase_client.table.return_value.update.call_args
         assert "is_premium" not in update_call.args[0]
+        assert update_call.args[0]["is_published"] is True
 
     async def test_mcp_upsert_does_carry_premium_flag(
         self, tool_service, mock_supabase_client

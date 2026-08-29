@@ -1,6 +1,6 @@
 """Tests for the agent evaluation command-line reporting."""
 
-from evals.cli import compare_reports, format_suite_summary
+from evals.cli import _run, compare_reports, format_suite_summary
 
 
 def test_summary_reports_pass_rate_and_failures() -> None:
@@ -50,3 +50,25 @@ def test_compare_reports_identifies_regressions_and_improvements() -> None:
     assert comparison["regressions"] == ["calendar:a"]
     assert comparison["improvements"] == ["calendar:b"]
     assert comparison["score_deltas"]["calendar"] == -0.5
+
+
+def test_resend_suite_is_available_to_the_shared_evaluation_cli() -> None:
+    """The default evaluation entry point includes non-Calendar native tools."""
+    import argparse
+    import asyncio
+
+    report, passed = asyncio.run(
+        _run(
+            argparse.Namespace(
+                suite="resend",
+                list_scenarios=False,
+                trace=None,
+                json_out=None,
+                baseline=None,
+            )
+        )
+    )
+
+    assert passed is True
+    assert report["suites"]["resend"]["passed"] is True
+    assert report["suites"]["resend"]["scenario_count"] >= 5

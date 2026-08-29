@@ -108,7 +108,8 @@ Normal apply:
 
 - creates missing platform-owned rows;
 - skips unchanged platform skills using content hashes;
-- synchronizes platform tool schemas;
+- synchronizes platform tool schemas and keeps code-owned native rows published;
+- leaves the MCP draft/publish lifecycle unchanged;
 - creates missing notification events without replacing existing rows;
 - creates missing system-pricing rows and skips unchanged rows while preserving
   existing administrator-set credit rates and activation state;
@@ -190,6 +191,21 @@ version-controlled migration.
 
 That is expected. Application startup has no master-data write path. Run this
 runbook as an explicitly approved bootstrap or release task instead.
+
+### Shared staging shortcut
+
+The canonical shared-staging validator runs the narrower native-tool sync after
+the migration and before starting the local application:
+
+```bash
+./scripts/validate-staging.sh
+```
+
+It materializes every native implementation currently present in the checked-
+out release under `platform_tools`, including new tools such as
+`Resend_email`. `--migrate-only` intentionally skips this Docker-backed seed;
+run `scripts/deploy/sync-native-tools.sh --env-file .env.staging` separately
+when a migration-only validation also needs to refresh the catalog.
 
 ## Production deployment pattern
 

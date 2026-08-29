@@ -27,12 +27,12 @@ Staging uses the **local application + cloud database** model:
 cp .env.staging.example .env.staging   # set SUPABASE_SERVICE_KEY, DATABASE_URL, etc.
 
 # after every merge to main (or any release candidate):
-./scripts/validate-staging.sh
+./scripts/validate-staging.sh  # also synchronizes code-owned native tools
 # equivalent manual steps:
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ./scripts/deploy.sh migrate --env-file .env.staging
 python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
-./start.sh start dev --env staging   # also rechecks migrations and rebuilds local services
+./start.sh start dev --env staging   # direct start only; use the validator for catalog sync
 ```
 
 Then run the mandatory browser + PSTN smoke tests against `http://localhost:3000`

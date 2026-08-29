@@ -22,7 +22,7 @@ export interface Organization {
    * Per-provider "is a key configured?" map (booleans only — never the decrypted
    * values), derived from the encrypted `provider_credentials` blob on read
    * (Phase 4). Keys: google, deepgram, openai, cartesia, cerebras, openrouter,
-   * fish.
+   * fish, resend.
    * Drives the Configured/Not-configured pills on the org-settings page.
    */
   provider_credentials_status?: Record<string, boolean>;
@@ -80,7 +80,7 @@ export interface OrganizationUpdate {
    * provider to leave it unchanged (the backend preserves omitted keys and
    * drops `None`). The backend merges this with the existing decrypted blob and
    * re-encrypts; this field is never persisted directly. Keys: google, deepgram,
-   * openai, cartesia, cerebras, openrouter, fish.
+   * openai, cartesia, cerebras, openrouter, fish, resend.
    */
   provider_credentials_input?: Record<string, string | null>;
   public_page_enabled?: boolean;

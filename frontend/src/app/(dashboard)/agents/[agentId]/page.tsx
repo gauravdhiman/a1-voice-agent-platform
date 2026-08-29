@@ -26,7 +26,7 @@ import { billingService } from "@/services/billing-service";
 import type { PlatformTool, AgentTool } from "@/types/agent";
 import type { OrgEntitlements } from "@/types/billing";
 import type { Organization } from "@/types/organization";
-import { AuthStatus } from "@/types/agent";
+import { AuthStatus, ConnectionStatus } from "@/types/agent";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { TestCallModal } from "@/components/agents/test-call-modal";
 import { EmbedButtonConfig } from "@/components/agents/embed-button-config";
@@ -57,6 +57,10 @@ import {
   ToolFilterType,
 } from "@/components/tools";
 import { buildAgentToolsDisplay } from "@/components/tools/tools-display";
+import {
+  isResendEmailConfigurationReady,
+  RESEND_EMAIL_TOOL_NAME,
+} from "@/components/tools/resend-email-config";
 import {
   AnimatedTabs,
   TabsList,
@@ -1667,6 +1671,13 @@ export default function AgentDetailPage() {
                             tool,
                             Boolean(agentTool),
                           );
+                        const resendConfigurationRequired =
+                          tool.name === RESEND_EMAIL_TOOL_NAME &&
+                          Boolean(agentTool) &&
+                          !isResendEmailConfigurationReady(
+                            agentTool?.config,
+                            organization?.provider_credentials_status?.resend,
+                          );
 
                         return (
                           <ToolCard
@@ -1676,7 +1687,11 @@ export default function AgentDetailPage() {
                               agentTool?.auth_status ||
                               AuthStatus.NOT_AUTHENTICATED
                             }
-                            connectionStatus={agentTool?.connection_status}
+                            connectionStatus={
+                              resendConfigurationRequired
+                                ? ConnectionStatus.CONFIGURATION_REQUIRED
+                                : agentTool?.connection_status
+                            }
                             tokenExpiresAt={agentTool?.token_expires_at ?? null}
                             isConfigured={!!agentTool}
                             isConnecting={connectingToolId === tool.id}
@@ -1728,6 +1743,10 @@ export default function AgentDetailPage() {
           tool={selectedTool}
           agentTool={
             localAgentTools.find((at) => at.tool_id === selectedTool.id) || null
+          }
+          organizationId={agent.organization_id}
+          resendCredentialConfigured={
+            organization?.provider_credentials_status?.resend
           }
           onSaveConfig={handleSaveToolConfig}
           onToggleFunction={handleToggleFunction}
