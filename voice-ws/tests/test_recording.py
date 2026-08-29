@@ -192,10 +192,13 @@ async def test_recording_tap_clock_survives_pipecat_processor_setup():
         organization_id=uuid4(),
         storage=_Storage(),
     )
+    def capture_clock() -> float:
+        return 100.0
+
     tap = RecordingAudioTap(
         coordinator,
         track="caller",
-        clock=lambda: 100.0,
+        clock=capture_clock,
     )
     # Direct mode avoids starting an internal processor task in this lifecycle
     # test; the production pipeline still exercises normal queued processing.
@@ -217,7 +220,9 @@ async def test_recording_tap_clock_survives_pipecat_processor_setup():
     )
     await tap.process_frame(frame, FrameDirection.DOWNSTREAM)
 
-    assert tap._clock is framework_clock
+    assert tap.processor_setup.clock is framework_clock
+    assert tap._capture_clock is capture_clock
+    assert tap._capture_clock() == 100.0
     assert coordinator._tracks["caller"].audio == bytearray(frame.audio)
     tap.push_frame.assert_awaited_once_with(frame, FrameDirection.DOWNSTREAM)
 
@@ -257,12 +262,14 @@ async def test_caller_only_capture_keeps_a_stereo_agent_silence_channel():
         organization_id=uuid4(),
         storage=storage,
         client=client,
+        session_started_at=100.0,
     )
     coordinator.capture_track_audio(
         "caller",
         b"\x05\x00" * 16000,
         sample_rate=16000,
         num_channels=1,
+        captured_at=100.0,
     )
 
     result = await coordinator.persist()

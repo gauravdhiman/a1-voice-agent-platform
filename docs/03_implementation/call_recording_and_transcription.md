@@ -90,8 +90,10 @@ sequenceDiagram
    the caller track. Captured audio frame lengths determine duration. Recording
    failures do not prevent call finalization or credit accounting; the artifact
    is marked `failed` for support/retry tooling.
-3. The voice-ws Pipecat dependency is pinned. Upgrade it only with recording
-   regression coverage across browser-rate and telephony-rate PCM paths.
+3. The voice-ws Pipecat dependency is pinned to `1.8.1` (reviewed on
+   2026-08-28). Upgrade it only after comparing the baseline and candidate
+   voice suites, including browser-rate and telephony-rate recording paths;
+   the browser Pipecat packages are a separate compatibility surface.
 4. Enqueue transcription after the recording row is committed. The worker
    should retry transient provider failures and make the artifact status
    visible as `pending`, `processing`, `completed`, or `failed`.

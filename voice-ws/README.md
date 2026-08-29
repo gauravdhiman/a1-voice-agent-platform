@@ -8,6 +8,12 @@ Cartesia/Fish pipeline (direct providers only).
 The legacy LiveKit **`worker/`** package was removed from the repo; git history
 retains it for reference only.
 
+The Python voice runtime pins `pipecat-ai` to `1.8.1`. The browser packages
+(`@pipecat-ai/client-js` and `@pipecat-ai/websocket-transport`) are versioned
+independently and are unchanged by this runtime upgrade. Upgrade the Python
+runtime only with the voice regression suite, recording checks, and live
+staging call gates described in the repository testing and release guides.
+
 At call teardown, this worker rounds connected duration up to whole minutes and
 settles the complete charge through the atomic billing RPC. An admitted call is
 allowed to finish even if the final settlement creates a temporary negative
