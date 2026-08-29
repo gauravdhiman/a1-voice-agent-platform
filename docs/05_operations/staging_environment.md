@@ -35,6 +35,13 @@ The startup script selects the file for you. No file copying is needed:
 ./start.sh start prod                # production Supabase (.env.prod)
 ```
 
+Every application `start`/`restart` runs `alembic upgrade head` in the
+backend container before Docker services start, and rebuilds images so runtime
+dependencies stay synchronized with the checked-out requirements. A migration
+failure prevents the app from starting. Because `.env.staging` is a shared
+database, only one release candidate should run the staging startup or
+validator at a time.
+
 Use `./start.sh config --env staging` to verify the selected file and Supabase
 URL without printing secrets.
 
@@ -49,16 +56,15 @@ run other worktrees against their own local Supabase instances.
 ---
 ## Staging migration state and bootstrap
 
-The staging database was checked read-only on 2026-08-19 and reported
-`20260818000001`, which was the repository head before this change. No
-corrective migration was applied manually during the worktree-environment
-change. This branch adds `20260819000001`, which grants the backend service
-role access to existing and future public application tables/sequences in a
-fresh local Supabase project. Run the local validator for the selected release
-candidate to bring staging forward safely:
+The staging database must be checked read-only before a shared migration. The
+validator performs that compatibility check, applies `alembic upgrade head`,
+verifies data postconditions, and starts the local application stack. The
+startup command also applies the idempotent migration gate, so a direct local
+staging start cannot silently run against an older schema:
 
 ```bash
 ./scripts/validate-staging.sh           # check + migrate + restart local stack
+./start.sh start dev --env staging      # migrate + start local app directly
 ```
 
 Check any future checkout before touching shared staging:

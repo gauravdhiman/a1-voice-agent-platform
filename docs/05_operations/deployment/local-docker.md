@@ -26,6 +26,13 @@ deploys use GCP Cloud Run + OCI — see [deployment/README.md](README.md).
 ./start.sh stop dev
 ```
 
+`start` and `restart` run `alembic upgrade head` through the backend image
+before bringing up application services, and use `docker compose up -d
+--build` so dependency changes are installed. A migration or image build
+failure stops startup; do not bypass it by starting individual application
+containers manually. The staging command mutates the shared staging database,
+so use it for one release candidate at a time.
+
 `start.sh` manages the application Compose project only; it does not create or
 isolate a Supabase project. For a complete isolated environment per Git
 worktree, use the worktree launcher instead:

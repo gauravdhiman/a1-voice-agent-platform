@@ -33,15 +33,23 @@ explicitly:
 ./start.sh start dev --env staging
 ```
 
+Every `start` and `restart` command first runs `alembic upgrade head` in the
+backend container and then starts the stack with `docker compose up -d
+--build`. If migrations fail, the application services are not started.
+Rebuilding on each start also ensures dependency changes used by voice
+recordings are present in the running image.
+
 **Production Mode:**
 
 ```bash
 ./start.sh start prod
 ```
 
-This uses `.env.prod`. It starts the production Compose stack locally; actual
-247ai.live deployment uses `./scripts/deploy.sh`, which also defaults to
-`.env.prod`.
+This uses `.env.prod`, applies migrations to that selected database, and starts
+the production Compose stack locally. Run it only with explicit production
+release authorization. Actual 247ai.live deployment uses the protected
+production promotion workflow, whose migration job must complete before any
+Cloud Run or OCI deployment.
 
 ### Stopping Containers
 
@@ -237,7 +245,8 @@ explicit non-uniform map, set `HOST_FRONTEND_PORT`, `HOST_BACKEND_PORT`,
 URLs, API URL, WebSocket URL, CORS origin, OAuth callback, and frontend OTEL
 URLs are derived automatically.
 
-For first-time staging setup, bootstrap the database before starting the app:
+For first-time staging setup, bootstrap an empty database before starting the
+app. For an existing database, the startup migration gate is sufficient:
 
 ```bash
 ./scripts/bootstrap-staging-db.sh
@@ -261,7 +270,7 @@ supabase status       # confirm running at http://127.0.0.1:54321
 The per-worktree launcher creates and manages its own Supabase CLI project and
 does not use this shared default project.
 
-**Running migrations against local Supabase**:
+**Running migrations manually** (the startup commands already do this):
 ```bash
 docker compose -f docker-compose.dev.yml run --rm backend-dev alembic upgrade head
 ```
