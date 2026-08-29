@@ -12,6 +12,10 @@ import {
   WavMediaManager,
 } from "@pipecat-ai/websocket-transport";
 
+/** Browser WebSocket voice input contract shared with the server transport. */
+export const BROWSER_RECORDER_CHUNK_BYTES = 512;
+export const BROWSER_RECORDER_SAMPLE_RATE = 16_000;
+
 export interface AudioLevels {
   /** Overall RMS 0..1 */
   level: number;
@@ -24,6 +28,13 @@ export class LevelMediaManager extends WavMediaManager {
   private analyser: AnalyserNode | null = null;
   private audioCtx: AudioContext | null = null;
   private freqData: Uint8Array<ArrayBuffer> | null = null;
+
+  constructor() {
+    // WavMediaManager defaults to 24 kHz, but WebSocketTransport labels
+    // browser input as 16 kHz. Keep the recorder and wire format aligned or
+    // the server will play caller audio 1.5x too slowly and muffled.
+    super(BROWSER_RECORDER_CHUNK_BYTES, BROWSER_RECORDER_SAMPLE_RATE);
+  }
 
   /** Latest levels, read by the rAF loop in the visualiser. */
   readonly levels: AudioLevels = { level: 0, bass: 0, mid: 0, treble: 0 };

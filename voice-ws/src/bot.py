@@ -19,14 +19,13 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.serializers.base_serializer import FrameSerializer
 from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
 from src.call_tracking import end_call_tracking, start_call_tracking
-from src.recording import RecordingCoordinator
+from src.recording import RecordingAudioTap, RecordingCoordinator
 from src.recording_policy import should_record_agent_call
 from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
 from src.session_setup import prepare_voice_session
@@ -106,7 +105,8 @@ async def run_bot(
 
     call_log_id = None
     recording_coordinator: Optional[RecordingCoordinator] = None
-    audio_buffer: Optional[AudioBufferProcessor] = None
+    caller_recording_tap: Optional[RecordingAudioTap] = None
+    agent_recording_tap: Optional[RecordingAudioTap] = None
     if bundle.agent.organization_id:
         call_log_id = await start_call_tracking(
             session_id=claims.session_id,
@@ -127,20 +127,14 @@ async def run_bot(
                 organization_id=bundle.agent.organization_id,
             )
             await recording_coordinator.prepare()
-            audio_buffer = AudioBufferProcessor(
-                auto_start_recording=True,
-                num_channels=2,
+            caller_recording_tap = RecordingAudioTap(
+                recording_coordinator,
+                track="caller",
             )
-
-            @audio_buffer.event_handler("on_audio_data")
-            async def on_audio_data(_buffer, audio, sample_rate, num_channels) -> None:
-                """Forward Pipecat's final mixed PCM buffer to the coordinator."""
-                if recording_coordinator:
-                    recording_coordinator.capture_audio(
-                        bytes(audio),
-                        sample_rate=sample_rate,
-                        num_channels=num_channels,
-                    )
+            agent_recording_tap = RecordingAudioTap(
+                recording_coordinator,
+                track="agent",
+            )
 
         except Exception:  # noqa: BLE001 - recording cannot block a call
             logger.exception(
@@ -148,19 +142,23 @@ async def run_bot(
                 claims.session_id,
             )
             recording_coordinator = None
-            audio_buffer = None
+            caller_recording_tap = None
+            agent_recording_tap = None
 
     output_processor = transport.output()
-    if audio_buffer:
-        # AudioBufferProcessor observes both inbound and outbound audio when it
-        # follows transport.output(), matching Pipecat's mixed-call pattern.
-        output_processor = Pipeline([output_processor, audio_buffer])
 
     processors = [transport.input()]
+    if caller_recording_tap:
+        # Capture caller audio before it can be delayed by model processing or
+        # output playback pacing.
+        processors.append(caller_recording_tap)
     if bundle.speech.mode == "pipeline":
         processors.extend([bundle.speech.stt, user_aggregator, llm, bundle.speech.tts])
     else:
         processors.extend([user_aggregator, llm])
+    if agent_recording_tap:
+        # Capture generated agent audio before transport playback pacing.
+        processors.append(agent_recording_tap)
     processors.extend([output_processor, assistant_aggregator])
     task = PipelineTask(
         Pipeline(processors),
@@ -199,11 +197,6 @@ async def run_bot(
             duration_task.cancel()
             with suppress(asyncio.CancelledError):
                 await duration_task
-        if audio_buffer:
-            try:
-                await audio_buffer.stop_recording()
-            except Exception:  # noqa: BLE001 - cleanup must continue
-                logger.exception("Failed to stop recording buffer")
         if recording_coordinator:
             try:
                 await recording_coordinator.persist()

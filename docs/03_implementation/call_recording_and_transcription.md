@@ -60,7 +60,7 @@ sequenceDiagram
     participant Admin as Admin Dashboard
 
     Caller->>Worker: Start voice session after recording consent
-    Worker->>Worker: Capture mixed input and output audio
+    Worker->>Worker: Capture caller and agent PCM at transport boundaries
     Worker->>Storage: Upload private recording object
     Worker->>Database: Save recording artifact metadata
     Worker->>Database: Finalize call duration and credit ledger link
@@ -76,20 +76,44 @@ sequenceDiagram
 
 ## Runtime implementation plan
 
-1. `AudioBufferProcessor` captures the inbound and outbound audio observed by
-   the Pipecat pipeline and emits one mixed PCM buffer at teardown.
-2. On normal or abnormal session teardown, encode the buffer as WAV, upload it
-   through the configured local/R2 adapter, and upsert the `recording` artifact
-   row. Recording failures do not prevent call finalization or credit
-   accounting; the artifact is marked `failed` for support/retry tooling.
-3. Enqueue transcription after the recording row is committed. The worker
+1. `RecordingAudioTap` captures raw caller frames immediately after
+   `transport.input()` and raw agent frames immediately before
+   `transport.output()`. This keeps model latency and output playback pacing
+   out of the recording clock. The browser `LevelMediaManager` and
+   `WebSocketTransport` must both use the 16 kHz browser-input contract;
+   `WavMediaManager`'s 24 kHz default must not be used for this path.
+2. On teardown, `RecordingCoordinator` resamples each complete mono track once
+   at the lowest native track rate, interleaves caller-left/agent-right stereo,
+   encodes the result as WAV, and uploads it through the configured local/R2
+   adapter. It retains only genuine timing gaps observed at the transport
+   boundary; downstream model or pipeline backpressure cannot add silence to
+   the caller track. Captured audio frame lengths determine duration. Recording
+   failures do not prevent call finalization or credit accounting; the artifact
+   is marked `failed` for support/retry tooling.
+3. The voice-ws Pipecat dependency is pinned. Upgrade it only with recording
+   regression coverage across browser-rate and telephony-rate PCM paths.
+4. Enqueue transcription after the recording row is committed. The worker
    should retry transient provider failures and make the artifact status
    visible as `pending`, `processing`, `completed`, or `failed`.
-4. Generate a concise summary, key takeaways, and action items from the
+5. Generate a concise summary, key takeaways, and action items from the
    transcript. Store those as separate `summary` content with model/version
    metadata for reproducibility.
-5. Add an authorized artifact endpoint that returns metadata and streams the
+6. Add an authorized artifact endpoint that returns metadata and streams the
    recording. Do not proxy storage credentials or object paths to the browser.
+
+## Audio regression guard
+
+The previous implementation placed Pipecat's `AudioBufferProcessor` after the
+output transport. That made caller audio pass through the output sample-rate
+conversion and measured caller gaps after downstream processing. In affected
+calls, those behaviors produced caller artifacts and synthetic silence, making
+the WAV longer than the call. The transport-adjacent taps avoid both failure
+modes. A browser recorder that emits 24 kHz samples while the WebSocket frame
+declares 16 kHz produces the same symptom in a different form: caller audio is
+stretched by 1.5x and loses its expected voice bandwidth. The browser recorder
+rate and frame label are therefore tested as one contract. The Pipecat version
+is pinned so future audio-runtime changes require the recording regression
+suite.
 
 ## Security, consent, and retention
 
