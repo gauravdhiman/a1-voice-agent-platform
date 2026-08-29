@@ -162,6 +162,7 @@ export default function DemoAgentPage() {
   );
 
   const pipecatRef = React.useRef<PipecatClient | null>(null);
+  const connectionAttemptRef = React.useRef(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -184,8 +185,10 @@ export default function DemoAgentPage() {
   }, [slug]);
 
   const disconnect = React.useCallback(async () => {
-    await disconnectPipecatVoiceCall(pipecatRef.current);
+    connectionAttemptRef.current += 1;
+    const client = pipecatRef.current;
     pipecatRef.current = null;
+    await disconnectPipecatVoiceCall(client);
     setAgentTrack(null);
     setLocalTrack(null);
   }, []);
@@ -198,39 +201,61 @@ export default function DemoAgentPage() {
       setCallError(DEMO_TRIAL_EXHAUSTED_MESSAGE);
       return;
     }
+    const attempt = ++connectionAttemptRef.current;
+    const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
     setCallError(null);
     setCallState("connecting");
     try {
       const { token, wsUrl, demo_calls_remaining } =
         await demoPublicService.getCallToken(slug);
+      if (!isCurrentAttempt()) return;
       if (typeof demo_calls_remaining === "number") {
         setAgent((current) =>
           current ? { ...current, demo_calls_remaining } : current,
         );
       }
       const client = await connectPipecatVoiceCall(token, wsUrl, {
+        onClientCreated: (createdClient) => {
+          if (isCurrentAttempt()) {
+            pipecatRef.current = createdClient;
+          } else {
+            void disconnectPipecatVoiceCall(createdClient);
+          }
+        },
         onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+          if (!isCurrentAttempt()) return;
           setIsAgentSpeaking(isAgentSpeaking);
           setIsUserSpeaking(isUserSpeaking);
         },
-        onBotAudioTrack: (track) => setAgentTrack(track),
-        onLocalAudioTrack: (track) => setLocalTrack(track),
+        onBotAudioTrack: (track) => {
+          if (!isCurrentAttempt()) return;
+          setAgentTrack(track);
+        },
+        onLocalAudioTrack: (track) => {
+          if (!isCurrentAttempt()) return;
+          setLocalTrack(track);
+        },
         onLevelManager: (mgr) => {
+          if (!isCurrentAttempt()) return;
           levelManagerRef.current = mgr as unknown as LevelMediaManager;
         },
         onDisconnected: () => {
+          if (!isCurrentAttempt()) return;
           setAgentTrack(null);
           setLocalTrack(null);
           setCallState("ended");
         },
         onError: (err) => {
+          if (!isCurrentAttempt()) return;
           setCallError(getPublicVoiceCallErrorMessage(err) || err.message);
           setCallState("idle");
         },
       });
+      if (!isCurrentAttempt()) return;
       pipecatRef.current = client;
       setCallState("connected");
     } catch (e) {
+      if (!isCurrentAttempt()) return;
       const msg = e instanceof Error ? e.message : "Failed to start call";
       setCallError(getPublicVoiceCallErrorMessage(e) || msg);
       setAgentTrack(null);

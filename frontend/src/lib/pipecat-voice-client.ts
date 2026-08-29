@@ -17,6 +17,8 @@ export interface PipecatSpeakingState {
 }
 
 export interface PipecatCallCallbacks {
+  /** Fired as soon as the client exists, before its WebSocket connects. */
+  onClientCreated?: (client: PipecatClient) => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
   onError?: (error: Error) => void;
@@ -97,6 +99,7 @@ export async function connectPipecatVoiceCall(
       },
     },
   });
+  callbacks.onClientCreated?.(client);
 
   client.on(RTVIEvent.BotStartedSpeaking, () => {
     callbacks.onSpeakingChange?.({ isAgentSpeaking: true, isUserSpeaking: false });

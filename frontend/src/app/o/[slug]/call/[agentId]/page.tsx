@@ -29,34 +29,55 @@ function PublicCallContent() {
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
 
   const pipecatRef = useRef<PipecatClient | null>(null);
+  const connectionAttemptRef = useRef(0);
 
   const disconnect = useCallback(() => {
-    void disconnectPipecatVoiceCall(pipecatRef.current);
+    connectionAttemptRef.current += 1;
+    const client = pipecatRef.current;
     pipecatRef.current = null;
+    void disconnectPipecatVoiceCall(client);
   }, []);
 
   const connect = useCallback(async () => {
-    const accessToken = readStoredAccessToken(slug);
-    const data = await publicOrgPageService.getCallToken(
-      slug,
-      agentId,
-      accessToken,
-    );
+    const attempt = ++connectionAttemptRef.current;
+    const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
 
-    const { token, wsUrl, sessionId } = data;
-    if (!token || !wsUrl || !sessionId) {
-      throw new Error("Invalid token response");
+    try {
+      const accessToken = readStoredAccessToken(slug);
+      const data = await publicOrgPageService.getCallToken(
+        slug,
+        agentId,
+        accessToken,
+      );
+
+      if (!isCurrentAttempt()) return;
+      const { token, wsUrl, sessionId } = data;
+      if (!token || !wsUrl || !sessionId) {
+        throw new Error("Invalid token response");
+      }
+
+      const client = await connectPipecatVoiceCall(token, wsUrl, {
+        onClientCreated: (createdClient) => {
+          if (isCurrentAttempt()) {
+            pipecatRef.current = createdClient;
+          } else {
+            void disconnectPipecatVoiceCall(createdClient);
+          }
+        },
+        onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+          if (!isCurrentAttempt()) return;
+          setIsAgentSpeaking(isAgentSpeaking);
+          setIsUserSpeaking(isUserSpeaking);
+        },
+      });
+
+      if (!isCurrentAttempt()) return;
+      pipecatRef.current = client;
+      setIsConnecting(false);
+    } catch (error) {
+      if (!isCurrentAttempt()) return;
+      throw error;
     }
-
-    const client = await connectPipecatVoiceCall(token, wsUrl, {
-      onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
-        setIsAgentSpeaking(isAgentSpeaking);
-        setIsUserSpeaking(isUserSpeaking);
-      },
-    });
-
-    pipecatRef.current = client;
-    setIsConnecting(false);
   }, [slug, agentId]);
 
   const handleHangUp = useCallback(() => {

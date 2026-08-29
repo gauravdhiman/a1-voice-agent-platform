@@ -159,6 +159,13 @@ async def test_end_call_tracking_records_duration_and_credit_transaction():
         for table, payload in client.updates
         if table == "call_logs"
     )
+    status_updates = [
+        payload
+        for table, payload in client.updates
+        if table == "call_logs" and "status" in payload
+    ]
+    assert status_updates[0]["status"] == "completed"
+    assert status_updates[0]["ended_at"]
     duration_updates = [
         payload
         for table, payload in client.updates
