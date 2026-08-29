@@ -30,11 +30,15 @@ export function usePublicEmbedCall(agentId: string | null) {
   });
 
   const pipecatRef = useRef<PipecatClient | null>(null);
+  const connectionAttemptRef = useRef(0);
 
   const connect = useCallback(async () => {
     if (!agentId) {
       throw new Error("No agent ID provided");
     }
+
+    const attempt = ++connectionAttemptRef.current;
+    const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
 
     try {
       const response = await fetch(
@@ -51,6 +55,7 @@ export function usePublicEmbedCall(agentId: string | null) {
         const error = await response.json();
         throw new Error(error.detail || "Failed to get embed token");
       }
+      if (!isCurrentAttempt()) return { success: false };
 
       const data = await response.json();
       const { token, wsUrl, sessionId } = data;
@@ -58,9 +63,18 @@ export function usePublicEmbedCall(agentId: string | null) {
       if (!token || !wsUrl || !sessionId) {
         throw new Error("Invalid token response");
       }
+      if (!isCurrentAttempt()) return { success: false };
 
       const client = await connectPipecatVoiceCall(token, wsUrl, {
+        onClientCreated: (createdClient) => {
+          if (isCurrentAttempt()) {
+            pipecatRef.current = createdClient;
+          } else {
+            void disconnectPipecatVoiceCall(createdClient);
+          }
+        },
         onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+          if (!isCurrentAttempt()) return;
           setState((prev) => ({
             ...prev,
             isAgentSpeaking,
@@ -69,6 +83,7 @@ export function usePublicEmbedCall(agentId: string | null) {
         },
       });
 
+      if (!isCurrentAttempt()) return { success: false };
       pipecatRef.current = client;
 
       setState({
@@ -82,14 +97,17 @@ export function usePublicEmbedCall(agentId: string | null) {
 
       return { success: true };
     } catch (error) {
+      if (!isCurrentAttempt()) return { success: false };
       console.error("Embed call connection error:", error);
       throw error;
     }
   }, [agentId]);
 
   const disconnect = useCallback(() => {
-    void disconnectPipecatVoiceCall(pipecatRef.current);
+    connectionAttemptRef.current += 1;
+    const client = pipecatRef.current;
     pipecatRef.current = null;
+    void disconnectPipecatVoiceCall(client);
 
     setState({
       token: null,

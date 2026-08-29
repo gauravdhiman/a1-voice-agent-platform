@@ -25,6 +25,16 @@
 
 Health check: `curl http://localhost:7860/health`
 
+## Call status and teardown
+
+The voice worker creates an `initiated` call-log row for an admitted session
+and finalizes it as `completed`, with duration and end time, in the session
+teardown path. Browser call clients must retain the Pipecat client as soon as
+it is created, before the WebSocket handshake completes. This lets Hang Up
+close a call that is ended immediately after connection and allows the worker
+to run its finalization path; late connection results from an already-cancelled
+attempt are discarded and disconnected.
+
 ## Not in Phase 1
 
 - Phone / Twilio Media Streams → see [Phase 2](voice_ws_phase2.md)

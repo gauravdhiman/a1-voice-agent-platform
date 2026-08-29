@@ -26,16 +26,22 @@ function EmbedCallContent() {
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
 
   const pipecatRef = useRef<PipecatClient | null>(null);
+  const connectionAttemptRef = useRef(0);
 
   const disconnect = useCallback(() => {
-    void disconnectPipecatVoiceCall(pipecatRef.current);
+    connectionAttemptRef.current += 1;
+    const client = pipecatRef.current;
     pipecatRef.current = null;
+    void disconnectPipecatVoiceCall(client);
   }, []);
 
   const connect = useCallback(async () => {
     if (!agentId) {
       throw new Error("No agent ID provided");
     }
+
+    const attempt = ++connectionAttemptRef.current;
+    const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
 
     try {
       const response = await fetch(
@@ -50,26 +56,39 @@ function EmbedCallContent() {
         const errData = await response.json().catch(() => null);
         throw new Error(getPublicVoiceCallErrorMessage(errData));
       }
+      if (!isCurrentAttempt()) return;
 
       const { token, wsUrl, sessionId } = await response.json();
 
       if (!token || !wsUrl || !sessionId) {
         throw new Error("Invalid token response");
       }
+      if (!isCurrentAttempt()) return;
 
       const client = await connectPipecatVoiceCall(token, wsUrl, {
         onError: (voiceError) => {
+          if (!isCurrentAttempt()) return;
           setError(getPublicVoiceCallErrorMessage(voiceError));
         },
+        onClientCreated: (createdClient) => {
+          if (isCurrentAttempt()) {
+            pipecatRef.current = createdClient;
+          } else {
+            void disconnectPipecatVoiceCall(createdClient);
+          }
+        },
         onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+          if (!isCurrentAttempt()) return;
           setIsAgentSpeaking(isAgentSpeaking);
           setIsUserSpeaking(isUserSpeaking);
         },
       });
 
+      if (!isCurrentAttempt()) return;
       pipecatRef.current = client;
       setIsConnecting(false);
     } catch (err) {
+      if (!isCurrentAttempt()) return;
       const publicMessage = getPublicVoiceCallErrorMessage(err);
       console.error("Embed call error:", err);
       throw new Error(publicMessage);

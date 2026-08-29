@@ -50,6 +50,7 @@ export function useTestCall({
   const [isMuted, setIsMuted] = useState(false);
 
   const pipecatRef = useRef<PipecatClient | null>(null);
+  const connectionAttemptRef = useRef(0);
 
   const resetCallState = useCallback(() => {
     setIsMuted(false);
@@ -63,6 +64,9 @@ export function useTestCall({
   }, []);
 
   const endCall = useCallback(() => {
+    // Invalidate an in-flight connection before clearing the client. The
+    // connection helper can finish after the user hangs up.
+    connectionAttemptRef.current += 1;
     // Clear the ref before disconnecting. Pipecat can synchronously emit
     // onDisconnected during disconnect(), and the callback must not attempt
     // to send a second close message on an already-closed socket.
@@ -104,6 +108,8 @@ export function useTestCall({
       isConnecting: true,
       error: null,
     }));
+    const attempt = ++connectionAttemptRef.current;
+    const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
 
     try {
       const { agentService } = await import("@/services/agent-service");
@@ -112,12 +118,23 @@ export function useTestCall({
       if (!bootstrap.token || !bootstrap.wsUrl) {
         throw new Error("Failed to get Pipecat voice session");
       }
+      if (!isCurrentAttempt()) return;
 
       const client = await connectPipecatVoiceCall(
         bootstrap.token,
         bootstrap.wsUrl,
         {
+          onClientCreated: (client) => {
+            if (isCurrentAttempt()) {
+              // Keep the client reachable while connect() is still awaiting
+              // the transport handshake so Hang Up can close the socket.
+              pipecatRef.current = client;
+            } else {
+              void disconnectPipecatVoiceCall(client);
+            }
+          },
           onConnected: () => {
+            if (!isCurrentAttempt()) return;
             setState((prev) => ({
               ...prev,
               isConnecting: false,
@@ -126,9 +143,11 @@ export function useTestCall({
             onConnected?.();
           },
           onDisconnected: () => {
+            if (!isCurrentAttempt()) return;
             handleTransportDisconnected();
           },
           onError: (error) => {
+            if (!isCurrentAttempt()) return;
             setState((prev) => ({
               ...prev,
               isConnecting: false,
@@ -137,6 +156,7 @@ export function useTestCall({
             onError?.(error);
           },
           onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+            if (!isCurrentAttempt()) return;
             setState((prev) => ({
               ...prev,
               isAgentSpeaking,
@@ -146,8 +166,10 @@ export function useTestCall({
         },
       );
 
+      if (!isCurrentAttempt()) return;
       pipecatRef.current = client;
     } catch (err) {
+      if (!isCurrentAttempt()) return;
       const error =
         err instanceof Error ? err : new Error("Failed to start test call");
       console.error("Test call error:", error);
