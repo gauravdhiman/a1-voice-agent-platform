@@ -10,7 +10,8 @@ pydantic>=2.0.0
 pydantic-settings>=2.0.0
 # Keep the voice runtime reproducible; Pipecat audio-pipeline changes can
 # alter live-call and recording behavior and must be upgraded deliberately.
-pipecat-ai[websocket,google,deepgram,openai,openrouter,cartesia,fish,silero]==1.7.0
+# Last reviewed against the upstream 1.8.1 release on 2026-08-28.
+pipecat-ai[websocket,google,deepgram,openai,openrouter,cartesia,fish,silero]==1.8.1
 numpy==2.4.6
 soxr==1.0.0
 mcp>=1.28.1,<2

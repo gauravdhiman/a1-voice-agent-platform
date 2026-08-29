@@ -133,9 +133,9 @@ class RecordingAudioTap(FrameProcessor):
         super().__init__(name=f"recording-{track}-tap")
         self._coordinator = coordinator
         self._track = track
-        # FrameProcessor owns ``_clock`` and replaces it during setup with
-        # Pipecat's BaseClock instance. Keep the capture clock separate from
-        # that framework lifecycle attribute.
+        # Keep capture timing separate from Pipecat's processor lifecycle
+        # clock. Pipecat owns the framework clock and its setup representation
+        # can change across runtime releases.
         self._capture_clock = clock
         self._capture_enabled = True
 
