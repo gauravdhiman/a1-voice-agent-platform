@@ -1,5 +1,6 @@
 """Tests for shared voice session entitlement pre-checks."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -7,7 +8,11 @@ import pytest
 
 from shared.billing.voice_session_entitlement import (
     VoiceSessionEntitlementError,
+    _count_active_calls,
     _evaluate_credit_headroom,
+    _get_credit_balance,
+    _parse_entitlement_value,
+    _resolve_org_entitlements,
     assert_voice_session_allowed,
 )
 
@@ -35,6 +40,113 @@ class TestEvaluateCreditHeadroom:
         allowed, message = _evaluate_credit_headroom(0, 10)
         assert allowed is False
         assert message
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, (None, False)),
+        ({}, (None, False)),
+        ({"type": "unlimited"}, (None, True)),
+        ({"type": "integer", "value": 5}, (5, False)),
+        ({"type": "boolean", "value": 1}, (True, False)),
+        ({"type": "text", "value": "enabled"}, ("enabled", False)),
+    ],
+)
+def test_parse_entitlement_value_supports_catalog_value_shapes(raw, expected):
+    assert _parse_entitlement_value(raw) == expected
+
+
+@pytest.mark.asyncio
+async def test_assert_voice_session_allowed_skips_when_supabase_is_unavailable(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "shared.billing.voice_session_entitlement.supabase_config",
+        SimpleNamespace(client=None),
+    )
+
+    await assert_voice_session_allowed(uuid4())
+
+
+@pytest.mark.asyncio
+async def test_resolve_org_entitlements_returns_empty_when_free_plan_is_missing():
+    client = MagicMock()
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.limit.return_value = table
+    table.order.return_value = table
+    table.execute.side_effect = [MagicMock(data=[]), MagicMock(data=[])]
+    client.table.return_value = table
+
+    result = await _resolve_org_entitlements(client, uuid4())
+
+    assert result == {"limits": {}, "features": {}}
+
+
+@pytest.mark.asyncio
+async def test_resolve_org_entitlements_uses_defaults_and_parses_features():
+    client = MagicMock()
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.limit.return_value = table
+    table.order.return_value = table
+    table.execute.side_effect = [
+        MagicMock(data=[{"status": "active", "plan_version_id": "plan-1"}]),
+        MagicMock(data=[]),
+        MagicMock(
+            data=[
+                {
+                    "key": "max_concurrent_calls",
+                    "kind": "limit",
+                    "default_when_absent": {"type": "integer", "value": 2},
+                },
+                {
+                    "key": "transcription_enabled",
+                    "kind": "feature",
+                    "default_when_absent": {"type": "boolean", "value": True},
+                },
+            ]
+        ),
+    ]
+    client.table.return_value = table
+
+    result = await _resolve_org_entitlements(client, uuid4())
+
+    assert result == {
+        "limits": {"max_concurrent_calls": {"type": "integer", "value": 2}},
+        "features": {"transcription_enabled": True},
+    }
+
+
+@pytest.mark.asyncio
+async def test_count_active_calls_falls_back_to_rows_when_count_is_unavailable():
+    client = MagicMock()
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.in_.return_value = table
+    table.execute.return_value = MagicMock(
+        data=[{"id": "call-1"}, {"id": "call-2"}], count=None
+    )
+    client.table.return_value = table
+
+    assert await _count_active_calls(client, uuid4()) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_credit_balance_returns_zero_when_organization_is_missing():
+    client = MagicMock()
+    table = MagicMock()
+    table.select.return_value = table
+    table.eq.return_value = table
+    table.limit.return_value = table
+    table.execute.return_value = MagicMock(data=[])
+    client.table.return_value = table
+
+    assert await _get_credit_balance(client, uuid4()) == 0
 
 
 @pytest.mark.asyncio

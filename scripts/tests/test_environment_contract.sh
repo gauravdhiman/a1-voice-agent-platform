@@ -52,6 +52,10 @@ diff -u \
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.local"'
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.staging"'
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.prod"'
+assert_contains "$ROOT/start.sh" 'run_startup_migrations'
+assert_contains "$ROOT/start.sh" 'alembic upgrade head'
+assert_contains "$ROOT/start.sh" 'compose "$COMPOSE_FILE_DEV" up -d --build'
+assert_contains "$ROOT/start.sh" 'compose "$COMPOSE_FILE_PROD" up -d --build'
 assert_contains "$ROOT/docker-compose.dev.yml" '${ENV_FILE:-.env.local}'
 assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
@@ -80,6 +84,9 @@ assert_contains "$ROOT/.env.staging.example" 'RECORDING_R2_ENDPOINT=https://e168
 assert_contains "$ROOT/.env.staging.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-staging'
 assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_ENDPOINT=https://e168c1bca6abb23e49bae87a6a8ea38b.r2.cloudflarestorage.com'
 assert_contains "$ROOT/.env.prod.example" 'RECORDING_R2_BUCKET=247ai-call-recordings-production'
+assert_contains "$ROOT/voice-ws/requirements.txt" 'boto3>='
+assert_contains "$ROOT/.github/workflows/migration-graph.yml" 'check_alembic_compatibility.py --repository-only'
+assert_contains "$ROOT/.github/workflows/agent-evals.yml" 'check_alembic_compatibility.py --repository-only'
 
 workflow="$ROOT/.github/workflows/deploy-cloud.yml"
 production_workflow="$ROOT/.github/workflows/promote-production.yml"

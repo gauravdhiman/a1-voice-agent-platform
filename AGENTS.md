@@ -468,6 +468,9 @@ Reliability and performance:
 - Create Alembic migrations for schema changes. Review generated SQL and
   downgrade/data-loss behavior; migrations are forward-only in deployment
   practice unless a reviewed rollback plan says otherwise.
+- Every integration branch must have exactly one Alembic head. Parallel
+  worktrees may create temporary branches, but the integration branch must
+  include a reviewed merge revision before it is merged or released.
 - Use `alembic revision --autogenerate -m "description"` only to draft a
   migration, then review the generated SQL and postconditions. Never run a
   shared staging or production migration without explicit release approval.

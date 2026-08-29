@@ -32,7 +32,7 @@ cp .env.staging.example .env.staging   # set SUPABASE_SERVICE_KEY, DATABASE_URL,
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ./scripts/deploy.sh migrate --env-file .env.staging
 python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
-./start.sh start dev --env staging   # frontend/backend/voice-ws locally, DB = cloud staging
+./start.sh start dev --env staging   # also rechecks migrations and rebuilds local services
 ```
 
 Then run the mandatory browser + PSTN smoke tests against `http://localhost:3000`
@@ -48,8 +48,17 @@ avoids adding a second cloud environment while still exercising the real
 staging database and the full voice stack.
 
 If the database contains a revision not present in the checked-out migration
-graph, the compatibility check stops before Alembic can mutate it. An empty or
-older staging database is allowed and is upgraded normally.
+graph, the compatibility check stops before Alembic can mutate it. The
+repository must also have exactly one Alembic head; branch migrations must be
+merged before release validation. An empty or older staging database is
+allowed and is upgraded normally. The direct `start.sh` path runs the same
+idempotent upgrade inside the backend container and refuses to start if it
+fails.
+
+The `Migration graph` workflow also runs on pull requests and checks the
+repository without a database. This catches parallel-worktree migration
+branches at integration time. If it reports multiple heads, add and review an
+Alembic merge revision on the integration branch before merging or releasing.
 
 ## Staging workflow (GitHub Actions — manual recovery only)
 

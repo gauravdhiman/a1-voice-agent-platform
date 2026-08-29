@@ -50,8 +50,8 @@ def validate_revision_state(
 
     Raises:
         MigrationCompatibilityError: If the database contains a revision that
-            is absent from the checkout, or if the checkout has no migration
-            head.
+            is absent from the checkout, or if the checkout does not have
+            exactly one migration head.
     """
     current = tuple(sorted(set(current_heads)))
     heads = tuple(sorted(set(repository_heads)))
@@ -64,6 +64,12 @@ def validate_revision_state(
         )
     if not heads:
         raise MigrationCompatibilityError("checkout contains no Alembic head")
+    if len(heads) > 1:
+        raise MigrationCompatibilityError(
+            "checkout contains multiple Alembic heads: "
+            + ", ".join(heads)
+            + "; create an Alembic merge revision before upgrading"
+        )
 
     return MigrationCompatibilityResult(
         current_heads=current,
@@ -90,6 +96,11 @@ def _migration_script(root: Path) -> ScriptDirectory:
     return ScriptDirectory.from_config(config)
 
 
+def get_repository_heads(root: Path) -> tuple[str, ...]:
+    """Return the sorted Alembic heads defined by the checkout."""
+    return tuple(sorted(_migration_script(root).get_heads()))
+
+
 def check_database(env_file: Path, root: Path) -> MigrationCompatibilityResult:
     """Read the target database revision and compare it with repository heads.
 
@@ -114,7 +125,7 @@ def check_database(env_file: Path, root: Path) -> MigrationCompatibilityResult:
 
     script = _migration_script(root)
     known_revisions = {revision.revision for revision in script.walk_revisions()}
-    repository_heads = set(script.get_heads())
+    repository_heads = set(get_repository_heads(root))
 
     engine = create_engine(database_url, pool_pre_ping=True)
     try:
@@ -142,13 +153,17 @@ def _format_revisions(revisions: tuple[str, ...]) -> str:
 def main(argv: list[str] | None = None) -> int:
     """Run the migration compatibility preflight and return a process code."""
     parser = argparse.ArgumentParser(
-        description="Check a database revision before running Alembic upgrades."
+        description="Check an Alembic repository graph or database before upgrades."
     )
     parser.add_argument(
         "--env-file",
-        required=True,
         type=Path,
         help="Environment file containing DATABASE_URL",
+    )
+    parser.add_argument(
+        "--repository-only",
+        action="store_true",
+        help="Validate the repository migration graph without connecting to a database",
     )
     parser.add_argument(
         "--root",
@@ -159,6 +174,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.repository_only:
+            repository_heads = get_repository_heads(args.root.resolve())
+            result = validate_revision_state(
+                (),
+                repository_heads,
+                repository_heads,
+            )
+            print(
+                "Repository migration graph is compatible: "
+                f"repository_heads={_format_revisions(result.repository_heads)}"
+            )
+            return 0
+
+        if args.env_file is None:
+            parser.error("--env-file is required unless --repository-only is used")
+
         result = check_database(args.env_file.resolve(), args.root.resolve())
     except MigrationCompatibilityError as exc:
         print(f"Migration compatibility check failed: {exc}", file=sys.stderr)

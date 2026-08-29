@@ -107,6 +107,26 @@ docker compose -f docker-compose.dev.yml run --rm backend-dev alembic revision -
    alembic upgrade head
    ```
 
+When multiple worktrees create migrations at the same time, each worktree may
+temporarily create a separate Alembic branch. Before merging into `main`,
+inspect the graph without connecting to a database:
+
+```bash
+python scripts/deploy/check_alembic_compatibility.py --repository-only
+```
+
+If it reports multiple heads, create the merge revision on the integration
+branch after all feature migrations are present:
+
+```bash
+cd backend
+alembic merge -m "merge migration heads" <head-one> <head-two>
+```
+
+Review the merge revision and rerun the repository check. It intentionally has
+no schema operations; its purpose is to join already-applied migration
+branches into one release-order head.
+
 ## Important Notes
 
 - This project uses a hybrid approach: Alembic for schema migrations and Supabase client for runtime data operations

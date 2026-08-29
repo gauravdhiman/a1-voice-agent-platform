@@ -26,6 +26,9 @@ jobs:
       - name: Install backend test dependencies
         run: python -m pip install --disable-pip-version-check -r backend/requirements-dev.txt
 
+      - name: Verify Alembic migration graph
+        run: python scripts/deploy/check_alembic_compatibility.py --repository-only
+
       - name: Run evaluation unit tests
         run: pytest backend/tests/evals -q
 

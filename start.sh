@@ -8,6 +8,8 @@
 #   ./start.sh start prod                   # production Supabase, .env.prod
 #
 # Use --env-file PATH when working with a temporary or generated env file.
+# Start and restart apply Alembic migrations before starting services and
+# rebuild images so dependency changes cannot be hidden by a stale image.
 
 set -euo pipefail
 
@@ -301,6 +303,20 @@ compose() {
         -f "$compose_file" "$@"
 }
 
+# Apply the checked-out schema before any application service starts. Running
+# the migration command in the backend image keeps local and cloud-database
+# startup independent of host Python dependencies and makes failures fail
+# closed instead of starting an app against an incompatible schema.
+run_startup_migrations() {
+    local compose_file="$1"
+    local backend_service="$2"
+
+    echo -e "${BLUE}Applying Alembic migrations before starting ${ENVIRONMENT_NAME}...${NC}"
+    compose "$compose_file" run --rm --no-deps --build \
+        "$backend_service" alembic upgrade head
+    echo -e "${GREEN}Database migrations applied successfully.${NC}"
+}
+
 # Show selection metadata without starting Docker containers or exposing secrets.
 show_config() {
     validate_env_file
@@ -436,33 +452,33 @@ build_prod() {
 
 # Function to start development voice-ws
 start_voice_ws_dev() {
+    local migration_mode="${1:-}"
+
     echo -e "${GREEN}Starting development voice-ws...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
 
-    # Check if worker is already running
-    if check_voice_ws_running "dev"; then
-        echo -e "${YELLOW}Development voice-ws is already running${NC}"
-        return 0
+    if [[ "$migration_mode" != "--skip-migrations" ]]; then
+        run_startup_migrations "$COMPOSE_FILE_DEV" "backend-dev"
     fi
 
-    compose "$COMPOSE_FILE_DEV" up -d voice-ws-dev
+    compose "$COMPOSE_FILE_DEV" up -d --build voice-ws-dev
     echo -e "${GREEN}Development voice-ws started successfully!${NC}"
 }
 
 # Function to start production voice-ws
 start_voice_ws_prod() {
+    local migration_mode="${1:-}"
+
     echo -e "${GREEN}Starting production voice-ws...${NC}"
     cd "$PROJECT_DIR"
     validate_env_file
 
-    # Check if worker is already running
-    if check_voice_ws_running "prod"; then
-        echo -e "${YELLOW}Production voice-ws is already running${NC}"
-        return 0
+    if [[ "$migration_mode" != "--skip-migrations" ]]; then
+        run_startup_migrations "$COMPOSE_FILE_PROD" "backend"
     fi
 
-    compose "$COMPOSE_FILE_PROD" up -d voice-ws
+    compose "$COMPOSE_FILE_PROD" up -d --build voice-ws
     echo -e "${GREEN}Production voice-ws started successfully!${NC}"
 }
 
@@ -472,19 +488,13 @@ start_dev() {
     cd "$PROJECT_DIR"
     validate_env_file
 
-    # Check if containers are already running
-    if check_containers_running "dev"; then
-        echo -e "${YELLOW}Development containers are already running${NC}"
-        show_dev_urls
-        return 0
-    fi
-
-    compose "$COMPOSE_FILE_DEV" up -d
+    run_startup_migrations "$COMPOSE_FILE_DEV" "backend-dev"
+    compose "$COMPOSE_FILE_DEV" up -d --build
     echo -e "${GREEN}Development containers started successfully!${NC}"
     show_dev_urls
 
-    # Start voice-ws
-    start_voice_ws_dev
+    # Reconcile voice-ws explicitly as well; the migration already ran above.
+    start_voice_ws_dev --skip-migrations
 }
 
 # Function to start production containers
@@ -493,19 +503,13 @@ start_prod() {
     cd "$PROJECT_DIR"
     validate_env_file
 
-    # Check if containers are already running
-    if check_containers_running "prod"; then
-        echo -e "${YELLOW}Production containers are already running${NC}"
-        show_prod_urls
-        return 0
-    fi
-
-    compose "$COMPOSE_FILE_PROD" up -d
+    run_startup_migrations "$COMPOSE_FILE_PROD" "backend"
+    compose "$COMPOSE_FILE_PROD" up -d --build
     echo -e "${GREEN}Production containers started successfully!${NC}"
     show_prod_urls
 
-    # Start voice-ws
-    start_voice_ws_prod
+    # Reconcile voice-ws explicitly as well; the migration already ran above.
+    start_voice_ws_prod --skip-migrations
 }
 
 # Function to show development URLs
