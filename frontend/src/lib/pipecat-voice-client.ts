@@ -4,7 +4,10 @@
  * Used by dashboard test call, embed widget, and public org call pages.
  */
 
-import { LevelMediaManager } from "@/lib/level-media-manager";
+import {
+  BROWSER_RECORDER_SAMPLE_RATE,
+  LevelMediaManager,
+} from "@/lib/level-media-manager";
 import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 import { WebSocketTransport } from "@pipecat-ai/websocket-transport";
 
@@ -78,8 +81,12 @@ export async function connectPipecatVoiceCall(
 ): Promise<PipecatClient> {
   const levelManager = new LevelMediaManager();
   callbacks.onLevelManager?.(levelManager);
+  const transport = new WebSocketTransport({
+    mediaManager: levelManager,
+    recorderSampleRate: BROWSER_RECORDER_SAMPLE_RATE,
+  });
   const client = new PipecatClient({
-    transport: new WebSocketTransport({ mediaManager: levelManager }),
+    transport,
     enableMic: true,
     enableCam: false,
     callbacks: {

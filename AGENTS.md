@@ -554,6 +554,12 @@ Production voice release gate:
   adapters under voice-ws; do not reintroduce the removed worker path.
 - After changing voice-ws requirements, rebuild the image; restart alone does
   not install dependencies.
+- Record caller audio immediately after transport input and agent audio before
+  transport output pacing; never derive recording silence from processing
+  wall-clock gaps, and upgrade the pinned Pipecat runtime deliberately.
+- Browser `LevelMediaManager` and `WebSocketTransport` must share the 16 kHz
+  recorder contract; never rely on `WavMediaManager`'s 24 kHz default, or
+  caller audio will be stretched and muffled in recordings.
 - The development voice-ws entrypoint starts the local
   Google_calendar_mcp connector. If tools disappear, recreate the voice-ws
   service rather than replacing the entrypoint with plain Uvicorn.

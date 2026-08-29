@@ -12,7 +12,8 @@
   keyed by `CallSid` → voice-ws Media Stream session → status callback
   finalizes the same row (`backend/src/voice_agents/voice_routes.py`,
   `voice-ws/src/call_tracking.py`).
-- **Call recording:** voice-ws `RecordingCoordinator` + `AudioBufferProcessor`
+- **Call recording:** voice-ws transport-adjacent `RecordingAudioTap` +
+  `RecordingCoordinator`
   mixed-audio capture, private R2/local storage, `call_artifacts` metadata,
   authenticated playback in the Calls page (`voice-ws/src/recording.py`,
   `shared/call_recordings/`, `frontend/src/app/(dashboard)/calls/page.tsx`).
@@ -179,7 +180,7 @@ sequenceDiagram
     Twilio->>WS: Media Stream WebSocket (bidirectional)
     WS->>DB: reuse call log row by call_sid
     Note over WS: Pipecat pipeline: STT → LLM+tools → TTS
-    WS->>WS: AudioBufferProcessor captures mixed audio
+    WS->>WS: Recording taps capture caller/agent PCM tracks
     Caller->>WS: speaks
     WS->>Caller: agent audio
     Caller->>Twilio: hangs up
@@ -254,7 +255,7 @@ sequenceDiagram
     Caller->>WS: "please transfer me to billing"
     WS->>WS: LLM calls transfer_call(destination=billing)
     WS->>Backend: POST /api/v1/voice/twilio/transfer (session JWT, billing)
-    Backend->>Twilio: POST /Calls/{CallSid} TwiML=&lt;Start&gt;&lt;Stream both_tracks/&gt;+&lt;Dial&gt;
+    Backend->>Twilio: REST update with Start Stream + Dial TwiML
     Backend->>DB: call_logs.transfer_status=initiated, transfer_destination
     Twilio->>WS: (close old stream) — session A teardown
     WS->>R2: upload segment A (segments/000.wav), artifact stays pending
@@ -373,9 +374,10 @@ vs 8 kHz mulaw Twilio) and needs resampling at merge — out of scope for v1.
    - Reuses `parse_telephony_websocket` for the Start handshake and
      `resolve_session_token`.
    - Decodes mulaw chunks (`audioop.ulaw2lin`) into PCM and feeds the existing
-     `RecordingCoordinator.capture_audio` — **no Pipecat pipeline, no LLM, no
-     TTS** (stream is listen-only anyway; this guarantees silence and avoids
-     serializer assumptions about `track="outbound"` chunks).
+     `RecordingCoordinator.capture_track_audio` through the same caller/agent
+     track contract — **no Pipecat pipeline, no LLM, no TTS** (stream is
+     listen-only anyway; this guarantees silence and avoids serializer
+     assumptions about `track="outbound"` chunks).
    - Looks up the call log row by `call_sid`, prepares the coordinator with the
      same `call_log_id`, uploads segment B, runs the shared merge, marks
      artifact completed, then `end_call_tracking` (finalize + bill).
