@@ -54,6 +54,8 @@ manual deployment, it is the local `.env.prod` file.
 | `SUPABASE_SERVICE_KEY` | Supabase service_role key | **Yes** |
 | `SUPABASE_ANON_KEY` | Supabase anon key | **Yes** |
 | `DATABASE_URL` | PostgreSQL connection string (Alembic) | **Yes** |
+| `ENCRYPTION_KEY` | Current Fernet key for organization provider credentials and OAuth token encryption | **Yes** |
+| `ENCRYPTION_KEY_FALLBACKS` | Optional comma-separated previous Fernet keys during controlled rotation | **Yes** |
 | `STRIPE_SECRET_KEY` | Stripe secret key | **Yes** |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | **Yes** |
 | `TWILIO_ACCOUNT_SID` | Twilio account SID | No |
@@ -105,6 +107,8 @@ manual deployment, it is the local `.env.prod` file.
 | `SUPABASE_SERVICE_KEY` | Same as backend | **Yes** |
 | `SUPABASE_ANON_KEY` | Same as backend | **Yes** |
 | `JWT_SECRET_KEY` | Must match backend | **Yes** |
+| `ENCRYPTION_KEY` | Same current Fernet key as backend; required to decrypt organization credentials and OAuth connections | **Yes** |
+| `ENCRYPTION_KEY_FALLBACKS` | Same optional key-rotation fallbacks as backend | **Yes** |
 | `GEMINI_API_KEY` | Gemini realtime fallback | **Yes** |
 | `DEEPGRAM_API_KEY` | STT pipeline fallback | **Yes** |
 | `OPENAI_API_KEY` | LLM pipeline fallback | **Yes** |

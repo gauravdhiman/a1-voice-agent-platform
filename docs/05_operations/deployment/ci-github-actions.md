@@ -66,7 +66,8 @@ Alembic merge revision on the integration branch before merging or releasing.
 
 1. Materializes the protected `staging` environment's `ENV_STAGING` secret.
 2. Runs the read-only Alembic compatibility check.
-3. Runs `./scripts/deploy.sh migrate --env-file .env.staging`.
+3. Runs `./scripts/deploy.sh migrate --env-file .env.staging`; the lower-level
+   GCP/OCI deployers repeat this idempotent gate before publishing a service.
 4. Verifies the phone-number data migration.
 5. Optionally deploys configured staging Cloud Run services (if staging GCP vars are set).
 6. Optionally deploys staging voice-ws (if `STAGING_OCI_SSH_HOST`/`STAGING_OCI_SSH_KEY` are set).
@@ -112,7 +113,8 @@ unless the repository enforces immutable tags. It then:
 
 1. Checks out that ref in the protected `production` environment.
 2. Runs the same migration compatibility check and migration verification
-   against production.
+   against production. The lower-level GCP/OCI deployers repeat the
+   idempotent migration gate before publishing each service.
 3. Deploys the checked-out ref to the production Cloud Run services.
 4. Deploys the checked-out ref to the production voice-ws VM when configured.
 
@@ -136,8 +138,12 @@ deployment scripts: `PRODUCTION_GCP_PROJECT_ID`, `PRODUCTION_GCP_REGION`,
 
 Production migration is intentionally in the same protected workflow as the
 application deployment. A migration failure prevents the application jobs from
-running. The compatibility check is read-only and is not a replacement for
-backups, rollback planning, or reviewing a migration's data-safety behavior.
+running. The GCP and OCI deploy scripts also run the same compatibility-gated,
+idempotent migration step, so manual component redeployments cannot publish
+code ahead of the database. Successful cloud migrations request a PostgREST
+schema-cache reload. The compatibility check is read-only and is not a
+replacement for backups, rollback planning, or reviewing a migration's
+data-safety behavior.
 
 ## Local versus CI
 

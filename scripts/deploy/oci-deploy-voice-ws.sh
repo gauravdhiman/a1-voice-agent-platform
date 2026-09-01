@@ -7,6 +7,7 @@
 #
 # Prerequisites on the VM: Docker, docker compose plugin, ports 80/443 open
 # (OCI security list + iptables), and a DNS A record voice.247ai.live -> VM IP.
+# The cloud database migration gate runs before any remote files are replaced.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -79,8 +80,17 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+echo "==> Validating voice-ws deployment environment..."
+python3 scripts/deploy/gcp-env-from-cloud.py voice-ws \
+  --env-file "$ENV_FILE" >/dev/null
+
+echo "==> Checking and applying database migrations before voice-ws deployment..."
+ENV_FILE="$ENV_FILE" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"
+
 echo "==> Generating .env.voice-ws from $ENV_FILE..."
-python3 scripts/deploy/gcp-env-from-cloud.py voice-ws --env-file "$ENV_FILE" > /tmp/.env.voice-ws
+voice_env_file="$(mktemp /tmp/247ai-voice-ws-env.XXXXXX)"
+trap 'rm -f "$voice_env_file"' EXIT
+python3 scripts/deploy/gcp-env-from-cloud.py voice-ws --env-file "$ENV_FILE" > "$voice_env_file"
 
 echo "==> Syncing source + compose + Caddyfile to ${OCI_USER}@${OCI_HOST}:${REMOTE_DIR}..."
 ssh "${SSH_OPTS[@]}" "${OCI_USER}@${OCI_HOST}" "rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}"
@@ -95,14 +105,27 @@ rsync -az \
 scp "${SSH_OPTS[@]}" \
   deploy/oci/docker-compose.voice-ws.yml \
   deploy/oci/Caddyfile \
-  /tmp/.env.voice-ws \
   "${OCI_USER}@${OCI_HOST}:${REMOTE_DIR}/"
+scp "${SSH_OPTS[@]}" \
+  "$voice_env_file" \
+  "${OCI_USER}@${OCI_HOST}:${REMOTE_DIR}/.env.voice-ws"
 
 echo "==> Building and starting voice-ws + Caddy on the VM..."
 ssh "${SSH_OPTS[@]}" "${OCI_USER}@${OCI_HOST}" bash -s <<EOF
 set -euo pipefail
 cd ${REMOTE_DIR}
 docker compose -f docker-compose.voice-ws.yml up -d --build --remove-orphans
+voice_container_id="\$(docker compose -f docker-compose.voice-ws.yml ps -q voice-ws)"
+if [[ -z "\${voice_container_id}" ]]; then
+  echo "voice-ws container was not created" >&2
+  exit 1
+fi
+voice_nano_cpus="\$(docker inspect --format='{{.HostConfig.NanoCpus}}' "\${voice_container_id}")"
+if [[ "\${voice_nano_cpus}" != "2000000000" ]]; then
+  echo "voice-ws CPU limit is \${voice_nano_cpus} nano CPUs; expected 2000000000" >&2
+  exit 1
+fi
+echo "voice-ws CPU limit: \${voice_nano_cpus} nano CPUs (2 OCPU ceiling)"
 docker compose -f docker-compose.voice-ws.yml ps
 echo "--- voice-ws logs (last 20) ---"
 docker compose -f docker-compose.voice-ws.yml logs --tail=20 voice-ws
@@ -110,7 +133,6 @@ echo "--- caddy logs (last 20) ---"
 docker compose -f docker-compose.voice-ws.yml logs --tail=20 caddy
 EOF
 
-rm -f /tmp/.env.voice-ws
 cat <<EOF
 
 voice-ws deploy complete.

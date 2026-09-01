@@ -56,6 +56,21 @@ def validate_recording_configuration(env: dict[str, str]) -> None:
         )
 
 
+def validate_encryption_configuration(env: dict[str, str]) -> None:
+    """Fail deployment when server-side encryption has no current key.
+
+    Args:
+        env: Parsed environment values that will be emitted to a server.
+
+    Raises:
+        ValueError: If the current Fernet key is missing or empty.
+    """
+    if not env.get("ENCRYPTION_KEY", "").strip():
+        raise ValueError(
+            "server-side encryption requires: ENCRYPTION_KEY"
+        )
+
+
 def normalize_cors_origins(value: str) -> str:
     """Normalize CORS origins to the JSON string expected by Pydantic settings.
 
@@ -114,6 +129,11 @@ BACKEND_KEYS = {
     "APP_BASE_URL",
     "ENVIRONMENT",
     "DEBUG",
+    # Fernet credentials protect organization provider keys and OAuth tokens.
+    # They must reach every server-side runtime; omitting them makes existing
+    # encrypted data unreadable and causes all new encrypted writes to fail.
+    "ENCRYPTION_KEY",
+    "ENCRYPTION_KEY_FALLBACKS",
     "CORS_ORIGINS",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_KEY",
@@ -156,6 +176,10 @@ BACKEND_KEYS = {
 WORKER_KEYS = {
     "ENVIRONMENT",
     "DEBUG",
+    # Keep the worker's decryption keyring aligned with the backend so it can
+    # resolve organization provider credentials and OAuth-backed tools.
+    "ENCRYPTION_KEY",
+    "ENCRYPTION_KEY_FALLBACKS",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_KEY",
     "SUPABASE_ANON_KEY",
@@ -208,8 +232,9 @@ def main() -> int:
     env = parse_env_file(path)
     try:
         validate_recording_configuration(env)
+        validate_encryption_configuration(env)
     except ValueError as exc:
-        print(f"Invalid recording configuration: {exc}", file=sys.stderr)
+        print(f"Invalid deployment configuration: {exc}", file=sys.stderr)
         return 2
     keys = BACKEND_KEYS if args.service == "backend" else WORKER_KEYS
     sys.stdout.write(to_yaml(env, keys))

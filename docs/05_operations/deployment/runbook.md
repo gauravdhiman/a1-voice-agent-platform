@@ -7,6 +7,7 @@
 ```mermaid
 flowchart LR
     subgraph Cloudflare["Cloudflare DNS (247ai.live)"]
+        DNSapex["247ai.live A/AAAA<br/>(proxied)"]
         DNSwww["www.247ai.live CNAME"]
         DNSapi["api.247ai.live CNAME"]
         DNSvoice["voice.247ai.live A"]
@@ -26,6 +27,8 @@ flowchart LR
         ST[Stripe]
         GOOG[Google OAuth]
     end
+    DNSapex --> EdgeRedirect["Cloudflare Page Rule<br/>301 → www"]
+    EdgeRedirect --> FE
     DNSwww --> FE
     DNSapi --> BE
     DNSvoice --> CADDY
@@ -45,6 +48,7 @@ flowchart LR
 | Component | Host | Domain |
 |-----------|------|--------|
 | Frontend (Next.js) | GCP Cloud Run | `https://www.247ai.live` |
+| Apex alias (301 redirect) | Cloudflare edge → canonical frontend | `https://247ai.live` |
 | Backend (FastAPI) | GCP Cloud Run | `https://api.247ai.live` |
 | voice-ws (Pipecat WS) | Oracle ARM VM + Caddy | `wss://voice.247ai.live` |
 | Database + Auth | Supabase cloud | (project URL in `.env.prod`) |
@@ -80,8 +84,8 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 |------|------|-------|
 | 0 | Smoke test on `*.run.app` URLs (optional) | You |
 | 1 | Verify `247ai.live` in GCP (`gcloud domains list-user-verified`) | You |
-| 2 | Cloud Run domain mappings (`api` + `www`) | `./scripts/deploy.sh domains` |
-| 3 | Cloudflare DNS CNAMEs (`api`, `www`) + A record (`voice`) | You |
+| 2 | Cloud Run domain mappings (`api` + `www` + apex) | `./scripts/deploy.sh domains` |
+| 3 | Cloudflare DNS (`api`, `www`, apex, and `voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
 | 5 | Production DB migrations + phone-number data verification | Required migration job in the protected `Promote to production` workflow; manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` |
 | 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
@@ -166,6 +170,25 @@ Production non-secret values (secrets stay in `.env.prod` only):
 `JWT_SECRET_KEY` is shared by backend and voice-ws. Both services receive it
 via `gcp-env-from-cloud.py`.
 
+### Encryption-key recovery and rotation
+
+`ENCRYPTION_KEY` and `ENCRYPTION_KEY_FALLBACKS` are server-side variables and
+must be sent to both backend and voice-ws. The deployment filter validates the
+current key before generating service environments. If an older release wrote
+encrypted data while using the removed development fallback, preview and then
+run the guarded one-time repair with the current production key:
+
+```bash
+python3 scripts/deploy/rotate-legacy-encrypted-data.py --env-file .env.prod
+python3 scripts/deploy/rotate-legacy-encrypted-data.py --env-file .env.prod --apply
+```
+
+The repair updates only known encrypted columns, rotates rows that decrypt with
+the historical fallback, verifies each payload with the current key, and never
+prints secret material. Do not add the historical fallback to a long-lived
+production environment; rotate the data and keep only the deployment-managed
+current key (plus explicitly controlled rotation fallbacks).
+
 ## Mandatory release gate: AI agent calling
 
 AI agent calling is a production-critical path. A deployment is **not
@@ -210,6 +233,42 @@ retry or contact the business; PSTN callers hear the same guidance through
 TwiML. Authenticated platform users may receive the specific credit or
 concurrency reason so an organization administrator can resolve it.
 
+## Web domain canonicalization and SEO
+
+`https://www.247ai.live` is the one canonical public origin. The apex
+`https://247ai.live` is a redirect-only alias. Cloudflare returns a permanent
+`301` to the equivalent `www` URL while preserving the path and query string;
+the Next.js middleware provides a `308` fallback if a request reaches the
+frontend directly. Cloud Run `*.run.app` URLs receive the same fallback.
+
+Apply the Cloud Run mappings after the frontend service exists:
+
+```bash
+./scripts/deploy.sh domains
+```
+
+The command maps `api.247ai.live`, `www.247ai.live`, and `247ai.live`, then
+prints the DNS records Cloud Run expects. In Cloudflare, keep `api` and `www`
+DNS-only / grey-cloud, and set the apex A/AAAA records to proxied / orange-cloud
+so the redirect runs at the edge. Add a Page Rule for
+`https://247ai.live/*` forwarding to `https://www.247ai.live/$1` with status
+`301`. Do not make the apex a separate website or point it at a different
+service. Keep the canonical `www` mapping and the apex mapping on the same
+frontend service.
+
+Validate the redirect and canonical response after DNS propagation:
+
+```bash
+curl -sSIL https://247ai.live/
+curl -sSIL 'https://247ai.live/auth/signin?next=%2Fdashboard'
+curl -sSIL https://www.247ai.live/
+```
+
+The first two responses must be `301` with a `Location` on
+`https://www.247ai.live` and the same path/query. The canonical host must
+return `200`. The frontend also publishes a canonical link, Open Graph URL,
+`/sitemap.xml`, and `/robots.txt` using only the `www` origin.
+
 ## Quick resume checklist
 
 1. Confirm `.env.prod` exists (from `.env.prod.example`; gitignored).
@@ -233,7 +292,11 @@ concurrency reason so an organization administrator can resolve it.
 
 Requirements on the VM:
 
-- Oracle **A1 Flex** ARM (Always Free: up to 4 OCPU / 24GB), region **us-ashburn-1**
+- Oracle **A1 Flex** ARM (Always Free: up to 2 OCPU / 12GB total), region **us-ashburn-1**
+- The `voice-ws` container is capped at **2 OCPU** in Compose; keep the VM
+  shape within the same 2 OCPU / 12GB tenancy limit when using an Always Free
+  account.
+  See Oracle's [Always Free resource limits](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
 - Ubuntu minimal, Docker + compose plugin
 - OCI ingress: **22, 80, 443**; egress: all
 - DNS **A record** `voice.247ai.live` → VM IP (Cloudflare grey cloud / DNS-only)

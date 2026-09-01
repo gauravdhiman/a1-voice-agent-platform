@@ -5,6 +5,7 @@ Production infrastructure for **247ai.live**:
 | Component | Platform | URL |
 |-----------|----------|-----|
 | Frontend (`frontend-247ai`) | GCP Cloud Run | https://www.247ai.live |
+| Apex web alias | Cloudflare edge redirect → canonical Cloud Run frontend | https://247ai.live |
 | Backend (`backend-247ai`) | GCP Cloud Run | https://api.247ai.live |
 | voice-ws (Pipecat WebSocket) | Oracle Free Tier ARM VM + Caddy | wss://voice.247ai.live |
 | Database + Auth | Supabase | Production: `.env.prod` (`zymiyfilulmtrmyyhvzw`); staging: `.env.staging` (`gdzwiwukcwbqohfwxxrx`) |

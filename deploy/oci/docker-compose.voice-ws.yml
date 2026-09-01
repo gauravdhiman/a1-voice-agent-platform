@@ -22,6 +22,10 @@ services:
       - DEBUG=false
       - PYTHONPATH=/app
       - NLTK_DATA=/app/nltk_data
+    # Oracle Always Free Ampere A1 tenancies currently have 2 OCPUs total.
+    # Keep the worker bounded even if the VM has a larger shape during a
+    # transition or on a paid tenancy.
+    cpus: 2.0
     # No published host port — Caddy reaches voice-ws on the compose network.
   caddy:
     image: caddy:2
