@@ -364,7 +364,7 @@ When adding new features:
 ### Tool System
 
 - **Dynamic Loading**: Tools loaded from database at runtime
-- **Function-Level Control**: Enable/disable individual tool functions
+- **Function-Level Control**: Enable/disable individual tool functions or the full catalog
 - **OAuth Integration**: Secure token management
 - **Tool Wrapping**: Pipecat-compatible function schemas for LLM tool calls
 

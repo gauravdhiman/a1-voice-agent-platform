@@ -44,7 +44,7 @@ import {
 import { agentService } from "@/services/agent-service";
 import { toast } from "sonner";
 import { McpToolDeleteDialog } from "@/components/tools/mcp-tool-delete-dialog";
-import { McpFunctionCatalogDrawer } from "@/components/tools/mcp-function-catalog-drawer";
+import { ToolFunctionCatalogDrawer } from "@/components/tools/mcp-function-catalog-drawer";
 import { ExpandableDescription } from "@/components/tools/expandable-description";
 
 /**
@@ -1491,32 +1491,32 @@ export function PlatformToolsManager({
                         </span>
                       </div>
                     )}
-                    {tool.tool_source === "mcp" && (
+                    {tool.tool_functions_schema?.functions?.length ? (
                       <div className="mt-2 space-y-0.5 text-[11px]">
-                        {tool.tool_functions_schema?.functions?.length ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="link"
-                              size="sm"
-                              className="h-auto p-0 text-[11px] text-emerald-700 dark:text-emerald-300"
-                              onClick={() => setCatalogTool(tool)}
-                              aria-label={`View exposed functions for ${tool.name}`}
-                            >
-                              {tool.tool_functions_schema.functions.length}{" "}
-                              exposed function
-                              {tool.tool_functions_schema.functions.length === 1
-                                ? ""
-                                : "s"}
-                            </Button>
-                          </>
-                        ) : (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-[11px] text-emerald-700 dark:text-emerald-300"
+                          onClick={() => setCatalogTool(tool)}
+                          aria-label={`View exposed functions for ${tool.name}`}
+                        >
+                          {tool.tool_functions_schema.functions.length} exposed
+                          function
+                          {tool.tool_functions_schema.functions.length === 1
+                            ? ""
+                            : "s"}
+                        </Button>
+                      </div>
+                    ) : null}
+                    {tool.tool_source === "mcp" &&
+                      !tool.tool_functions_schema?.functions?.length && (
+                        <div className="mt-2 space-y-0.5 text-[11px]">
                           <p className="text-amber-700 dark:text-amber-300">
                             Catalog unavailable — authenticate to discover
                           </p>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     {tool.tool_source === "mcp" &&
@@ -1625,7 +1625,7 @@ export function PlatformToolsManager({
           onDeleted={() => setDeleteTarget(null)}
         />
       )}
-      <McpFunctionCatalogDrawer
+      <ToolFunctionCatalogDrawer
         open={catalogTool !== null}
         onOpenChange={(open) => {
           if (!open) setCatalogTool(null);

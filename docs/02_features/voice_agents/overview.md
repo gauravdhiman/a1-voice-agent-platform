@@ -21,7 +21,7 @@ Voice agents are AI-powered assistants that handle real-time voice conversations
 - ✅ **Custom system prompts** - define agent personality and behavior
 - ✅ **Multi-agent support** - create different agents for different use cases
 - ✅ **Phone number binding** - each agent can have dedicated phone number
-- ✅ **Function-level tool control** - enable/disable specific tool functions per agent
+- ✅ **Function-level tool control** - enable/disable specific tool functions per agent, with an All functions toggle for bulk changes
 - ✅ **OAuth integration** - secure authentication with external services (Google Calendar, etc.)
 - ✅ **Agent greeting** - personalized greeting when agent enters conversation
 - ✅ **Embed call button** - add voice calling to any external website
@@ -416,7 +416,10 @@ if func_name in unselected_functions:
     continue  # Skip this function
 ```
 
-Frontend UI shows checkboxes per function for easy toggling.
+Frontend UI shows switches per function for easy toggling, plus an All functions
+switch for large tool catalogs. Platform admins can inspect the
+same function name, description, and parameter schema in the Platform Tools
+catalog drawer for both native and MCP tools.
 
 ## Agent Greeting
 

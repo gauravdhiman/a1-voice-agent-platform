@@ -16,34 +16,34 @@ import {
 } from "@/components/tools/mcp-function-search";
 
 /**
- * MCP function catalog drawer for platform administrators.
+ * Platform tool function catalog drawer for platform administrators.
  *
  * The manage list intentionally stays compact. This drawer provides a
- * readable inspection surface for every discovered function, including its
+ * readable inspection surface for every exposed function, including its
  * description, required parameters, and parameter types, without making the
  * admin scan a truncated comma-separated string.
  */
-export interface McpFunctionCatalogDrawerProps {
+export interface ToolFunctionCatalogDrawerProps {
   /** Whether the catalog drawer is open. */
   open: boolean;
   /** Called when the drawer should be opened or closed. */
   onOpenChange: (open: boolean) => void;
-  /** MCP platform tool whose public function catalog should be inspected. */
+  /** Platform tool whose exposed function catalog should be inspected. */
   tool: PlatformTool | null;
 }
 
 /**
- * Renders the discovered MCP function catalog in a right-side drawer.
+ * Renders a platform tool's exposed function catalog in a right-side drawer.
  *
- * @param props - Drawer visibility, close handler, and selected MCP tool.
+ * @param props - Drawer visibility, close handler, and selected platform tool.
  * @returns A Sheet containing the function details, or an empty Sheet when no
  * tool is selected.
  */
-export function McpFunctionCatalogDrawer({
+export function ToolFunctionCatalogDrawer({
   open,
   onOpenChange,
   tool,
-}: McpFunctionCatalogDrawerProps) {
+}: ToolFunctionCatalogDrawerProps) {
   const functions = tool?.tool_functions_schema?.functions || [];
   const [functionSearch, setFunctionSearch] = React.useState("");
   const [expandedFunctionName, setExpandedFunctionName] = React.useState<
@@ -69,10 +69,10 @@ export function McpFunctionCatalogDrawer({
             <Code2 className="h-5 w-5 text-primary" />
             {tool
               ? `${tool.name.replace(/_/g, " ")} functions`
-              : "MCP functions"}
+              : "Tool functions"}
           </SheetTitle>
           <SheetDescription>
-            {functions.length} discovered public function
+            {functions.length} exposed function
             {functions.length === 1 ? "" : "s"} available to Org Admins.
           </SheetDescription>
         </SheetHeader>
@@ -116,7 +116,7 @@ export function McpFunctionCatalogDrawer({
 }
 
 interface FunctionCardProps {
-  /** One discovered MCP function definition. */
+  /** One exposed platform tool function definition. */
   functionDefinition: PlatformToolFunction;
   /** Whether the full function details are visible. */
   expanded: boolean;
@@ -125,9 +125,10 @@ interface FunctionCardProps {
 }
 
 /**
- * Displays one MCP function and its input schema in a compact inspection card.
+ * Displays one platform tool function and its input schema in a compact
+ * inspection card.
  *
- * @param props - Function definition returned by MCP tools/list.
+ * @param props - Function definition returned by the platform tool catalog.
  * @returns A function detail card.
  */
 function FunctionCard({
@@ -276,3 +277,9 @@ function FunctionCard({
     </section>
   );
 }
+
+/** @deprecated Use ToolFunctionCatalogDrawerProps instead. */
+export type McpFunctionCatalogDrawerProps = ToolFunctionCatalogDrawerProps;
+
+/** @deprecated Use ToolFunctionCatalogDrawer instead. */
+export const McpFunctionCatalogDrawer = ToolFunctionCatalogDrawer;

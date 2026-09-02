@@ -844,8 +844,9 @@ tool cards and native tool cards:
   `buildSavePayload` now maps those discovered tools into
   `platform_tools.tool_functions_schema = {functions: [{name, description,
   parameters: input_schema}]}` on save/publish. The agent `tool-config-drawer`
-  reads `tool.tool_functions_schema.functions` to render each tool with an
-  enable/disable `Switch` (parity with native tool cards). voice-ws still
+  reads `tool.tool_functions_schema.functions` to render each function with an
+  enable/disable `Switch` (parity with native tool cards), plus an `All
+  functions` switch for bulk changes. voice-ws still
   re-discovers tools **live** via `tools/list` at call time and filters by
   `agent_tools.unselected_functions` — the stored schema is display-only, but
   must be present for the drawer to show anything. Omitted when no tools were
@@ -863,13 +864,14 @@ tool cards and native tool cards:
   collapsed state; parameter descriptions remain fully readable.
 - **Readable platform catalog inspection.** Manage rows expose a clickable
   **N exposed functions** summary that opens a right-side function catalog
-  drawer. The drawer shows each function's name, description, parameter types,
-  and required parameters without forcing the admin to read a truncated inline
-  comma-separated list. Both the platform catalog and Org Admin function
-  drawers provide client-side search across function names only, with match
-  counts, clear actions, and an explicit empty state; the drawer is already
-  scoped to the selected MCP toolset, so the platform tool name is not treated
-  as a function match. Function and tool descriptions use the same explicit
+  drawer for every platform tool with a stored schema, including native and
+  MCP tools. The drawer shows each function's name, description, parameter
+  types, and required parameters without forcing the admin to read a truncated
+  inline comma-separated list. Both the platform catalog and Org Admin
+  function drawers provide client-side search across function names only, with
+  match counts, clear actions, and an explicit empty state; the drawer is
+  scoped to the selected toolset, so the platform tool name is not treated as a
+  function match. Function and tool descriptions use the same explicit
   expand/collapse affordance when their compact preview is truncated. OAuth
   discovery loading is row-scoped, so starting Linear discovery does not
   disable or spin Notion or Google Calendar.

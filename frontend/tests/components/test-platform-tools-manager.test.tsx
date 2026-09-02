@@ -858,6 +858,66 @@ describe("PlatformToolsManager", () => {
       expect(screen.getByText(/required/i)).toBeInTheDocument();
     });
 
+    it("opens the same exposed function catalog drawer for native tools", async () => {
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              createMockPlatformTool({
+                tool_source: "legacy",
+                name: "Google Calendar",
+                auth_type: "oauth2",
+                is_published: true,
+                tool_functions_schema: {
+                  functions: [
+                    {
+                      type: "function",
+                      name: "create_event",
+                      description: "Create a calendar event",
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          start_time: {
+                            type: "string",
+                            description: "Event start time",
+                          },
+                        },
+                        required: ["start_time"],
+                      },
+                    },
+                  ],
+                },
+              }),
+            ],
+          }),
+        ),
+      );
+      const { userEvent } = await import("@testing-library/user-event");
+      const user = userEvent.setup();
+      render(<PlatformToolsManager {...baseProps()} />);
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: /view exposed functions for google calendar/i,
+        }),
+      );
+
+      expect(
+        await screen.findByRole("heading", {
+          name: /google calendar functions/i,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Create a calendar event")).toBeInTheDocument();
+      expect(screen.getByText("create_event")).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /create_event/i }),
+      );
+      expect(screen.getByText("start_time")).toBeInTheDocument();
+      expect(screen.getByText("Event start time")).toBeInTheDocument();
+    });
+
     it("filters the exposed function catalog from the drawer search", async () => {
       server.use(
         http.get(`${API_BASE_URL}/api/v1/tools/platform`, () =>
