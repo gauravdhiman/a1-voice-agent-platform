@@ -63,6 +63,12 @@ export interface ToolConfigDrawerProps {
     functionName: string,
     isEnabled: boolean,
   ) => Promise<void>;
+  /** Enables or disables every function exposed by this tool in one update. */
+  onToggleAllFunctions: (
+    toolId: string,
+    functionNames: string[],
+    isEnabled: boolean,
+  ) => Promise<void>;
   onOAuth: (toolName: string) => Promise<void>;
   onLogout: (agentToolId: string) => Promise<void>;
   onSetApiKey: (agentToolId: string, apiKey: string) => Promise<void>;
@@ -80,6 +86,7 @@ export function ToolConfigDrawer({
   resendCredentialConfigured,
   onSaveConfig,
   onToggleFunction,
+  onToggleAllFunctions,
   onOAuth,
   onLogout,
   onSetApiKey,
@@ -102,6 +109,8 @@ export function ToolConfigDrawer({
     string | null
   >(null);
   const [functionSearch, setFunctionSearch] = React.useState("");
+  const [isBulkTogglingFunctions, setIsBulkTogglingFunctions] =
+    React.useState(false);
   const currentTime = useLiveTime();
 
   React.useEffect(() => {
@@ -137,6 +146,10 @@ export function ToolConfigDrawer({
   const toolUnselectedFunctions = agentTool?.unselected_functions || [];
   const isToolEnabled = agentTool?.is_enabled ?? false;
   const hasFunctions = functions.length > 0;
+  const enabledFunctionCount = functions.filter(
+    (func) => !toolUnselectedFunctions.includes(func.name),
+  ).length;
+  const allFunctionsEnabled = enabledFunctionCount === functions.length;
   const isResendEmailTool = tool.name === RESEND_EMAIL_TOOL_NAME;
   const resendRoutes = React.useMemo(
     () => parseResendEmailRoutes(localConfig.routes),
@@ -210,6 +223,31 @@ export function ToolConfigDrawer({
   const handleClearApiKey = async () => {
     if (!agentTool) return;
     await onLogout(agentTool.id);
+  };
+
+  const handleToggleAllFunctions = async (isEnabled: boolean) => {
+    if (
+      !agentTool ||
+      !isToolEnabled ||
+      !canEdit ||
+      isBulkTogglingFunctions
+    ) {
+      return;
+    }
+
+    setIsBulkTogglingFunctions(true);
+    try {
+      await onToggleAllFunctions(
+        tool.id,
+        functions.map((func) => func.name),
+        isEnabled,
+      );
+    } catch {
+      // The mutation owns the user-facing error toast. This prevents a
+      // rejected update from becoming an unhandled event promise here.
+    } finally {
+      setIsBulkTogglingFunctions(false);
+    }
   };
 
   // Check if token is locally expired (client-side detection)
@@ -657,15 +695,41 @@ export function ToolConfigDrawer({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center space-x-2 text-sm font-medium">
                   <Settings className="h-4 w-4" />
                   <span>Available Functions</span>
                 </div>
-                <Badge variant="secondary" className="h-5 text-[10px]">
-                  {functions.length - toolUnselectedFunctions.length} /{" "}
-                  {functions.length}
-                </Badge>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="drawer-toggle-all-functions"
+                      className="cursor-pointer text-xs font-medium"
+                    >
+                      All functions
+                    </Label>
+                    <Switch
+                      id="drawer-toggle-all-functions"
+                      checked={allFunctionsEnabled}
+                      onCheckedChange={(checked) =>
+                        void handleToggleAllFunctions(checked)
+                      }
+                      disabled={
+                        !isToolEnabled ||
+                        !canEdit ||
+                        isBulkTogglingFunctions
+                      }
+                      aria-label={
+                        allFunctionsEnabled
+                          ? "Disable all functions"
+                          : "Enable all functions"
+                      }
+                    />
+                  </div>
+                  <Badge variant="secondary" className="h-5 text-[10px]">
+                    {enabledFunctionCount} / {functions.length}
+                  </Badge>
+                </div>
               </div>
               <McpFunctionSearch
                 value={functionSearch}
@@ -772,7 +836,16 @@ export function ToolConfigDrawer({
                             onCheckedChange={(checked) =>
                               onToggleFunction(tool.id, func.name, checked)
                             }
-                            disabled={!isToolEnabled || !canEdit}
+                            aria-label={
+                              isEnabled
+                                ? `Disable ${func.name}`
+                                : `Enable ${func.name}`
+                            }
+                            disabled={
+                              !isToolEnabled ||
+                              !canEdit ||
+                              isBulkTogglingFunctions
+                            }
                             className="mt-1"
                           />
                           <ChevronDown

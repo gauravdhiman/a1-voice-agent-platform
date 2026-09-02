@@ -568,6 +568,22 @@ export default function AgentDetailPage() {
     [localAgentTools, toggleFunctionMutation],
   );
 
+  const handleToggleAllFunctions = useCallback(
+    async (toolId: string, functionNames: string[], isEnabled: boolean) => {
+      const existingAgentTool = localAgentTools.find(
+        (at) => at.tool_id === toolId,
+      );
+      if (!existingAgentTool) return;
+
+      await toggleFunctionMutation.mutateAsync({
+        agentToolId: existingAgentTool.id,
+        unselectedFunctions: isEnabled ? [] : functionNames,
+        isBulk: true,
+      });
+    },
+    [localAgentTools, toggleFunctionMutation],
+  );
+
   const handleSaveToolConfig = useCallback(
     async (agentToolId: string, config: Record<string, unknown>) => {
       try {
@@ -1750,6 +1766,7 @@ export default function AgentDetailPage() {
           }
           onSaveConfig={handleSaveToolConfig}
           onToggleFunction={handleToggleFunction}
+          onToggleAllFunctions={handleToggleAllFunctions}
           onOAuth={handleOAuth}
           onLogout={handleLogout}
           onSetApiKey={handleSetApiKey}

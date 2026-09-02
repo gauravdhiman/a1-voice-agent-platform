@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import type { PlatformToolFunction } from "@/types/agent";
 
 /**
- * Props for the compact client-side search control used by MCP function drawers.
+ * Props for the compact client-side search control used by platform tool
+ * function drawers.
  */
 export interface McpFunctionSearchProps {
   /** Current search query. */
@@ -18,7 +19,7 @@ export interface McpFunctionSearchProps {
 }
 
 /**
- * Filters MCP functions by their names so descriptions and parameter metadata
+ * Filters platform tool functions by their names so descriptions and parameter metadata
  * cannot produce surprising matches for a name-oriented search.
  *
  * @param functions - Discovered MCP function definitions.
@@ -40,7 +41,7 @@ export function filterMcpFunctions(
 
 /**
  * Renders the consistent search affordance shared by platform and org admin
- * MCP function drawers.
+ * function drawers.
  *
  * @param props - Search value, change handler, and result counts.
  * @returns A labeled search field with match feedback and a clear action.

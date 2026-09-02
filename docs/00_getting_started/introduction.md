@@ -23,7 +23,7 @@ At its core, this platform allows users to:
 - **Dynamic Tools**: Runtime tool loading from database
 - **Tool Wrapping**: Innovative pattern to make tools work with LLMs
 - **Agent Greeting**: Automatic greeting when agent enters room
-- **Function-Level Control**: Enable/disable individual tool functions
+- **Function-Level Control**: Enable/disable individual tool functions or the full catalog
 
 ### Multi-Tenancy
 

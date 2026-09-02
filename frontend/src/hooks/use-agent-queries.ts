@@ -339,7 +339,7 @@ export function useUpdateAgentTool() {
   });
 }
 
-// Mutation: Toggle tool function
+// Mutation: Toggle one or more tool functions
 export function useToggleFunction() {
   const queryClient = useQueryClient();
 
@@ -350,6 +350,7 @@ export function useToggleFunction() {
     }: {
       agentToolId: string;
       unselectedFunctions: string[];
+      isBulk?: boolean;
     }) =>
       agentService.updateAgentTool(agentToolId, {
         unselected_functions: unselectedFunctions,
@@ -383,7 +384,16 @@ export function useToggleFunction() {
 
       return { previousData };
     },
-    onSuccess: (_, { unselectedFunctions }) => {
+    onSuccess: (_, { unselectedFunctions, isBulk }) => {
+      if (isBulk) {
+        toast.success(
+          unselectedFunctions.length === 0
+            ? "All functions enabled"
+            : "All functions disabled",
+        );
+        return;
+      }
+
       const isEnabling = unselectedFunctions.length === 0;
       toast.success(isEnabling ? "Function enabled" : "Function disabled");
     },

@@ -50,6 +50,7 @@ const drawerProps = {
   onOpenChange: vi.fn(),
   onSaveConfig: vi.fn(async () => undefined),
   onToggleFunction: vi.fn(async () => undefined),
+  onToggleAllFunctions: vi.fn(async () => undefined),
   onOAuth: vi.fn(async () => undefined),
   onLogout: vi.fn(async () => undefined),
   onSetApiKey: vi.fn(async () => undefined),
@@ -150,7 +151,9 @@ describe("ToolConfigDrawer MCP credentials", () => {
       name: /list_pages/i,
     });
     expect(functionToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("switch")).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: /list_pages/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Optional search text")).not.toBeInTheDocument();
 
     await user.click(functionToggle);
@@ -159,6 +162,82 @@ describe("ToolConfigDrawer MCP credentials", () => {
     expect(screen.getByText("Optional search text")).toBeInTheDocument();
     expect(screen.getByText("query")).toBeInTheDocument();
     expect(screen.getByText("required", { exact: true })).toBeInTheDocument();
+  });
+
+  it("selects or deselects the complete function catalog in one update", async () => {
+    const { userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    const onToggleAllFunctions = vi.fn(async () => undefined);
+    const tool = {
+      ...makeTool(true),
+      tool_functions_schema: {
+        functions: [
+          {
+            type: "function",
+            name: "list_pages",
+            description: "List pages from the workspace",
+            parameters: { type: "object", properties: {} },
+          },
+          {
+            type: "function",
+            name: "archive_page",
+            description: "Archive a page in the workspace",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      },
+    };
+
+    const view = render(
+      <ToolConfigDrawer
+        {...drawerProps}
+        onToggleAllFunctions={onToggleAllFunctions}
+        tool={tool}
+        agentTool={{
+          ...agentTool,
+          unselected_functions: ["archive_page"],
+          tool,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    await user.type(
+      screen.getByRole("searchbox", { name: /search functions/i }),
+      "list",
+    );
+    expect(screen.queryByText("archive_page")).not.toBeInTheDocument();
+
+    const allFunctionsSwitch = screen.getByRole("switch", {
+      name: /all functions/i,
+    });
+    await user.click(allFunctionsSwitch);
+    expect(onToggleAllFunctions).toHaveBeenLastCalledWith(
+      "tool-1",
+      ["list_pages", "archive_page"],
+      true,
+    );
+
+    view.rerender(
+      <ToolConfigDrawer
+        {...drawerProps}
+        onToggleAllFunctions={onToggleAllFunctions}
+        tool={tool}
+        agentTool={{
+          ...agentTool,
+          unselected_functions: [],
+          tool,
+        }}
+      />,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: /all functions/i }),
+    );
+    expect(onToggleAllFunctions).toHaveBeenLastCalledWith(
+      "tool-1",
+      ["list_pages", "archive_page"],
+      false,
+    );
   });
 
   it("lets org admins expand long function descriptions", async () => {
