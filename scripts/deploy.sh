@@ -14,7 +14,7 @@
 #   voice-ws    OCI voice-ws WebSocket worker (Pipecat). Alias: voice, worker
 #   migrate     Run Alembic migrations against production Supabase
 #   verify-data Verify production phone-number data migration postconditions
-#   domains     Map api/www custom domains to Cloud Run services
+#   domains     Map api/www/apex custom domains to Cloud Run services
 #
 # Options:
 #   --env-file PATH   Env file (default: .env.prod at repo root)
@@ -37,6 +37,8 @@
 # Cloud Run image tags default to ``latest`` for local/manual use. CI sets
 # RELEASE_TAG to the checked-out commit SHA so staging and production can use
 # an immutable release tag.
+# Backend and voice-ws deployments run the compatibility-gated database
+# migration step before publishing or starting application code.
 #
 # Full runbook: docs/05_operations/deployment/runbook.md
 set -euo pipefail

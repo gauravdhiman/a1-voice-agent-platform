@@ -1,17 +1,37 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SITE_HOST } from "@/lib/site-config";
+
+const APEX_HOST = "247ai.live";
+const RUN_APP_HOST_SUFFIX = ".run.app";
+
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, "").split(":")[0];
+}
 
 /**
- * Redirect any request that arrives on the Cloud Run default hostname
- * (*.run.app) to the branded custom domain so users never stay on the
- * Google-generated URL.
+ * Returns whether a request host must be redirected to the canonical site
+ * host. Cloud Run's generated hostname is included so it cannot become an
+ * indexable duplicate of the branded domain.
+ */
+export function shouldRedirectToCanonicalHost(host: string): boolean {
+  const normalizedHost = normalizeHost(host);
+  return (
+    normalizedHost === APEX_HOST ||
+    normalizedHost.endsWith(RUN_APP_HOST_SUFFIX)
+  );
+}
+
+/**
+ * Redirect apex and Cloud Run default-host requests to the branded custom
+ * domain so every URL has one indexable host.
  */
 export function middleware(request: NextRequest) {
-  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
-  if (host.endsWith(".run.app")) {
+  const host = request.headers.get("host") || request.nextUrl.hostname;
+  if (shouldRedirectToCanonicalHost(host)) {
     const url = request.nextUrl.clone();
     url.protocol = "https:";
-    url.host = "www.247ai.live";
+    url.hostname = SITE_HOST;
     url.port = "";
     return NextResponse.redirect(url, 308);
   }

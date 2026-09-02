@@ -60,6 +60,10 @@ OCI_SSH_HOST=132.145.130.61 ./scripts/deploy.sh all
 
 These commands remain useful for operator recovery. Production releases should
 use **Actions → Promote to production** after local staging validation.
+Backend, GCP, and voice-ws deploy commands automatically run the read-only
+Alembic compatibility check and `upgrade head` before publishing a new
+application revision. A migration failure stops that deployment; a
+frontend-only deployment does not touch the database.
 
 ## CI release path
 
@@ -83,13 +87,14 @@ use **Actions → Promote to production** after local staging validation.
 | `frontend` | Next.js → `frontend-247ai` |
 | `voice-ws` / `voice` / `worker` | Pipecat WebSocket worker on OCI VM |
 | `migrate` | Alembic `upgrade head` against Supabase |
-| `domains` | Cloud Run mappings for `api.247ai.live` + `www.247ai.live` |
+| `domains` | Cloud Run mappings for `api.247ai.live` + `www.247ai.live` + `247ai.live` |
 
 ## Production URLs
 
 | Service | URL |
 |---------|-----|
 | Frontend | https://www.247ai.live |
+| Frontend apex alias (301 → www) | https://247ai.live |
 | Backend API | https://api.247ai.live |
 | voice-ws health | https://voice.247ai.live/health |
 | voice-ws WebSocket | wss://voice.247ai.live/ws |
@@ -99,6 +104,7 @@ use **Actions → Promote to production** after local staging validation.
 ```bash
 curl -s https://api.247ai.live/health
 curl -s https://www.247ai.live
+curl -sSIL https://247ai.live/
 curl -s https://voice.247ai.live/health
 ```
 
@@ -142,14 +148,26 @@ export OCI_SSH_KEY=~/.ssh/oci_voice_ws   # default private key
 
 Test: `ssh -i ~/.ssh/oci_voice_ws ubuntu@132.145.130.61 "echo ok"`
 
+The current [Oracle Always Free resource limit](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+for Ampere A1 is **2 OCPUs and 12 GB memory total** across the tenancy. Keep
+the VM shape within that allowance; the Compose deployment also caps the
+`voice-ws` container at 2 OCPUs.
+
 ## Custom domains (Cloudflare)
 
 1. Verify domain: `gcloud domains verify 247ai.live`
 2. Map domains: `./scripts/deploy.sh domains`
-3. Cloudflare DNS (grey cloud / DNS-only):
+3. Cloudflare DNS:
    - `www` CNAME → Cloud Run frontend target
    - `api` CNAME → Cloud Run backend target
+   - apex `@` A/AAAA → the Cloud Run apex targets printed by the mapping command, with the orange cloud enabled
    - `voice` A → OCI VM public IP
+4. Cloudflare Page Rule: `https://247ai.live/*` → `https://www.247ai.live/$1`,
+   status **301**. This preserves the path and query string.
+
+The apex and `www` records must both target the frontend service. The apex is
+the redirect-only alias; it must not publish separate content. Requests that
+reach the frontend directly also receive the Next.js canonical-host redirect.
 
 ## Post-deploy webhooks
 

@@ -22,6 +22,19 @@ assert_not_contains() {
   fi
 }
 
+assert_before() {
+  local file="$1"
+  local before="$2"
+  local after="$3"
+  local before_line after_line
+  before_line="$(grep -nF -- "$before" "$file" | head -1 | cut -d: -f1 || true)"
+  after_line="$(grep -nF -- "$after" "$file" | head -1 | cut -d: -f1 || true)"
+  if [[ -z "$before_line" || -z "$after_line" || "$before_line" -ge "$after_line" ]]; then
+    echo "Expected $file to run '$before' before '$after'" >&2
+    exit 1
+  fi
+}
+
 for file in .env.local.example .env.staging.example .env.prod.example; do
   [[ -f "$ROOT/$file" ]] || { echo "Missing template: $file" >&2; exit 1; }
 done
@@ -70,8 +83,26 @@ assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'RELEASE_TAG="${RELEASE_TAG:-latest}"'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${RELEASE_TAG}"'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'run-alembic-cloud.sh'
 assert_not_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--allow-unauthenticated'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'SSH_KEY="${HOME}/${SSH_KEY#\~/}"'
+assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'run-alembic-cloud.sh'
+assert_contains "$ROOT/deploy/oci/docker-compose.voice-ws.yml" 'cpus: 2.0'
+assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'voice_nano_cpus'
+assert_contains "$ROOT/scripts/deploy/run-alembic.sh" 'check_alembic_compatibility.py'
+assert_contains "$ROOT/scripts/deploy/run-alembic.sh" "pg_notify('pgrst', 'reload schema')"
+assert_before "$ROOT/scripts/deploy/gcp-deploy.sh" \
+  '  run_deployment_migrations' \
+  '  docker build --platform linux/amd64 -t "$BACKEND_IMAGE" -f backend/Dockerfile .'
+assert_before "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" \
+  'ENV_FILE="$ENV_FILE" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"' \
+  'rm -rf ${REMOTE_DIR}'
+assert_before "$ROOT/scripts/deploy/run-alembic.sh" \
+  'check_alembic_compatibility.py' \
+  'alembic upgrade "${REVISION}"'
+assert_before "$ROOT/scripts/deploy/run-alembic.sh" \
+  'alembic upgrade "${REVISION}"' \
+  "pg_notify('pgrst', 'reload schema')"
 
 if RELEASE_TAG='not a valid tag' bash "$ROOT/scripts/deploy/gcp-deploy.sh" >/dev/null 2>&1; then
   echo "Expected an invalid release tag to fail before deployment" >&2

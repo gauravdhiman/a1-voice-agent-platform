@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Deploy backend and/or frontend to Google Cloud Run using .env.prod.
 #
-# Usually invoked via ./scripts/deploy.sh — not directly.
+# Normally invoked via ./scripts/deploy.sh; direct use is also migration-gated.
 # Set GCP_DEPLOY_COMPONENT=backend|frontend|all (default: all).
+# Backend deployments run the compatibility-gated database migration step
+# before image build/push, including when this lower-level script is called
+# directly.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -35,6 +38,24 @@ case "$COMPONENT" in
     exit 1
     ;;
 esac
+
+run_deployment_migrations() {
+  echo "==> Checking and applying database migrations before GCP deployment..."
+  ENV_FILE="$ENV_FILE" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"
+}
+
+validate_backend_environment() {
+  echo "==> Validating backend deployment environment..."
+  python3 scripts/deploy/gcp-env-from-cloud.py backend \
+    --env-file "$ENV_FILE" >/dev/null
+}
+
+# Keep the schema gate in this lower-level deployer as well as the public
+# wrapper so direct component deployments cannot publish code ahead of the DB.
+if [[ "$COMPONENT" == "all" || "$COMPONENT" == "backend" ]]; then
+  validate_backend_environment
+  run_deployment_migrations
+fi
 
 gcloud config set project "$PROJECT_ID" >/dev/null
 # The GitHub Actions auth step provides gcloud credentials, but Docker does not
@@ -152,5 +173,6 @@ else
   echo "Backend:  $BACKEND_URL"
   echo "Frontend: $FRONTEND_URL"
   echo "Custom domains: https://api.247ai.live  /  https://www.247ai.live"
+  echo "Canonical redirect: https://247ai.live -> https://www.247ai.live"
   echo "(Direct *.run.app Host is blocked in production — use the custom domains.)"
 fi
