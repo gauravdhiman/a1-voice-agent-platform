@@ -127,6 +127,8 @@ export default function OnboardingPage() {
         await organizationService.completeOnboarding(currentOrganization.id);
       setCurrentOrganization(completedOrganization);
       await refreshOrganizations();
+      const { trackEvent } = await import("@/lib/analytics/posthog");
+      trackEvent("pilot_activated", {});
       router.replace("/dashboard");
     } catch (error) {
       completionInFlight.current = false;
