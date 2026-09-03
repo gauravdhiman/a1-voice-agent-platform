@@ -175,6 +175,23 @@ describe("StepPlanSelection", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("frames credit bundles as call minutes for owners", async () => {
+    vi.mocked(billingService.getAvailablePlanVersions).mockResolvedValue([
+      {
+        ...freePlan,
+        entitlements: {
+          included_credits_per_billing_period: { type: "integer", value: 4000 },
+        },
+      },
+    ]);
+
+    render(<StepPlanSelection organizationId="org-1" onActivated={vi.fn()} />);
+
+    expect(
+      await screen.findByText("400 call minutes included (≈114 calls)"),
+    ).not.toBeNull();
+  });
+
   it("preserves the plan selector when checkout is cancelled", async () => {
     render(
       <StepPlanSelection
