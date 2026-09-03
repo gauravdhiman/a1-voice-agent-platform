@@ -1,6 +1,9 @@
 """Interest-lead routes: public submission + platform-admin follow-up."""
 
-from __future__ import annotations
+# NOTE: no `from __future__ import annotations` here on purpose. FastAPI
+# inspects these annotations through decorator wrappers whose module
+# globals cannot resolve stringified models, which silently demotes body
+# models to query params (and breaks /openapi.json generation).
 
 import logging
 from typing import Optional
