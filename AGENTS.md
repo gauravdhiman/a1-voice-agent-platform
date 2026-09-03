@@ -371,6 +371,10 @@ Testing boundaries:
 - Frontend uses Vitest, not Jest. Vitest 4 requires Node 20+; run it on the
   host rather than the Node 20 dev container if the container has incompatible
   dependencies.
+- New frontend tests must avoid jest-dom matchers (`toBeInTheDocument`,
+  `toHaveAttribute`, etc.): global `tsc` lacks jest-dom types repo-wide, so
+  new files using them add type errors; prefer `toBeNull`/`toBeTruthy` and
+  Testing Library queries instead.
 - Pre-commit hooks enforce the configured Python and frontend quality checks
   (including Black, isort, Flake8, ESLint, and Prettier) when installed; run
   `pre-commit run --all-files` before handoff.

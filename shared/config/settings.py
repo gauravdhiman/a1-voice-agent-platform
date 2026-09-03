@@ -149,6 +149,19 @@ class Settings(BaseSettings):
         default=None, description="Stripe webhook endpoint secret"
     )
 
+    # Controlled-SaaS signup gate (Epic A: gated entry + interest funnel).
+    # When False, email signup and OAuth sign-in only succeed for invitation
+    # holders and allowlisted platform admins; everyone else is directed to
+    # the interest form. Flip to True to reopen open SaaS self-serve.
+    public_signup_enabled: bool = Field(
+        default=False,
+        description="Allow open public signup without invitation or allowlist",
+    )
+    platform_admin_allowlist: list[str] = Field(
+        default=[],
+        description="Comma-separated emails always allowed through the signup gate",
+    )
+
     # Resend Settings
     email_provider: str = Field(
         default="resend", description="Configured notification email provider"
@@ -364,6 +377,15 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 # If not valid JSON, split by comma and strip whitespace
                 return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    @validator("platform_admin_allowlist", pre=True)
+    def parse_admin_allowlist(cls, v):
+        """Parse the allowlist from a comma-separated string; normalize case."""
+        if isinstance(v, str):
+            return [email.strip().lower() for email in v.split(",") if email.strip()]
+        if isinstance(v, list):
+            return [str(email).strip().lower() for email in v if str(email).strip()]
         return v
 
     class Config:

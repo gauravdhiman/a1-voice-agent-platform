@@ -315,6 +315,42 @@ for retention cleanup.
 
 ---
 
+### interest_leads
+
+Private interest-lead capture for the controlled-SaaS funnel
+(`POST /api/v1/public/leads`, `/request-demo` page, outcome-form fallback).
+The source of truth for follow-up; demo-safe subsets are forwarded to public
+proof destinations (shared Sheet/Calendar) by the demo workflow, never the
+reverse. Distinct from `demo_outcome_receipts` (short-lived visitor receipts):
+leads persist until converted/dropped and are never shown to visitors.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Lead row identifier |
+| name | VARCHAR(120) | NOT NULL | Contact name |
+| business_name | VARCHAR(160) | NULLABLE | Business name |
+| email | VARCHAR(320) | NOT NULL | Contact email (indexed, never probed publicly) |
+| phone | VARCHAR(32) | NULLABLE | Callback number |
+| vertical | VARCHAR(40) | NULLABLE | Business vertical (`dental`, `hvac`, `restaurant`) |
+| message | TEXT | NULLABLE | What the business needs |
+| source | VARCHAR(40) | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `demo-call`, or `manual` | Capture channel |
+| demo_slug | VARCHAR(100) | NULLABLE | Demo agent slug when captured post-demo |
+| status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `contacted`, `invited`, `converted`, or `dropped` | Follow-up state |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Submission timestamp |
+| contacted_at | TIMESTAMPTZ | NULLABLE | First outreach timestamp (set by operator tooling) |
+
+**RLS**: Enabled with no public or authenticated-user policies; the service
+role is the only database reader/writer. Reads and status changes require
+the `platform_admin` role at the API boundary. Public submission returns a
+fixed ack envelope so submitters cannot probe which emails already exist.
+
+**Indexes**: `(status, created_at)` for the follow-up queue and `(email)`
+for duplicate review.
+
+**Migrations**: `20260903000001_add_interest_leads.py`.
+
+---
+
 ### voice_templates
 
 Global, platform-admin-managed reusable starting points for agent setup. The
@@ -1693,6 +1729,8 @@ erDiagram
     voice_agents ||--o{ call_logs : "handles"
     voice_agents ||--o{ demo_outcome_receipts : "produces"
     organizations ||--o{ demo_outcome_receipts : "owns"
+    %% interest_leads is standalone (no FKs; private funnel table, no relations)
+    interest_leads
     credit_transactions ||--o| call_logs : "explains call charge"
     organizations ||--o{ platform_credit_grants : "receives platform grants"
     credit_transactions ||--o| platform_credit_grants : "audited by"
@@ -1832,6 +1870,8 @@ erDiagram
 76. `20260830000001` - Add service-role-only `demo_outcome_receipts` for short-lived, signed visitor receipts containing allowlisted provider outcomes from public demo calls.
 77. `20260901000001` - Add the optional platform-admin-configured `voice_agents.demo_public_result_url` destination. The URL is returned only for successful actions in signed demo outcome receipts so the receipt can offer an external-result CTA without exposing it on the public landing page.
 78. `20260901000002` - Extend the service-role-only demo outcome receipt action allowlist with independent `email_delivery` actions for attached Gmail and Resend tools. The receipt stores only a safe provider/status summary and does not make provider tools call one another.
+79. `20260902000001` - Add generic, UI-safe runtime failure classification columns to `call_logs` (surfaced as `ix_call_logs_failure_code`); Twilio status callbacks preserve an existing failure classification instead of overwriting it with a later `completed` event.
+80. `20260903000001` - Add service-role-only `interest_leads` as the private source of truth for the controlled-SaaS funnel (`request-demo` / `outcome-form` / `demo-call` / `manual` sources; `new` → `contacted` → `invited` → `converted`/`dropped` follow-up states). No FKs, no public RLS policy; admin reads gated by the `platform_admin` role.
 
 ---
 
