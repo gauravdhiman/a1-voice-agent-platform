@@ -33,6 +33,7 @@ import {
   disconnectPipecatVoiceCall,
 } from "@/lib/pipecat-voice-client";
 import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
+import { trackEvent } from "@/lib/analytics/posthog";
 import {
   DEMO_TRIAL_EXHAUSTED_MESSAGE,
   formatDemoCallsRemaining,
@@ -212,6 +213,7 @@ export default function DemoAgentPage() {
     outcomeNavigatedRef.current = true;
     const receiptToken = receiptTokenRef.current;
     if (receiptToken) {
+      trackEvent("demo_completed", { demo_slug: slug });
       router.replace(
         `/demo/${encodeURIComponent(slug)}/outcome?token=${encodeURIComponent(receiptToken)}`,
       );
@@ -311,6 +313,7 @@ export default function DemoAgentPage() {
       // synchronously. A resolved client is nevertheless an active call for
       // purposes of routing post-connect failures to its receipt.
       callConnectedRef.current = true;
+      trackEvent("demo_played", { demo_slug: slug });
       setCallState("connected");
     } catch (e) {
       if (!isCurrentAttempt()) return;

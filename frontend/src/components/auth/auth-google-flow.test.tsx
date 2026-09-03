@@ -6,6 +6,7 @@ const useSearchParamsMock = vi.fn(() => new URLSearchParams());
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => useSearchParamsMock(),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
 
 vi.mock("@/contexts/auth-context", () => ({
