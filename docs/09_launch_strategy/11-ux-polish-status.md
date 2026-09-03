@@ -29,7 +29,7 @@
 | Frontend (demo, request-demo, landing, auth, outcome) | 58/58 pass incl. 2 new feedback tests |
 | tsc / ESLint on touched files | clean |
 | Seed closing sections | import-asserted for both agents |
-| E2E full stack | (record after run) |
+| E2E full stack | 69 pass, 1 fail — same pre-existing skills `.prose` failure (proven on clean baseline); new 404 + updated SEO tests green |
 
 ## Founder ops (no code)
 
