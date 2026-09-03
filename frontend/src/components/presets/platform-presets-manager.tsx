@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   Upload,
   Pencil,
+  Copy,
   Trash2,
 } from "lucide-react";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@/hooks/use-preset-queries";
 import { PresetConfigForm } from "@/components/presets/preset-config-form";
 import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
+import { getClonePresetName } from "@/lib/preset-copy";
 
 /**
  * PlatformPresetsManager — platform-admin surface for the voice-engine
@@ -55,7 +57,7 @@ import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
  *    issues `PUT /{id}`; otherwise `POST /` (upsert by name). On success the
  *    form resets and the manage list refetches.
  *  - **Manage existing presets** (`view === "manage"`): lists drafts +
- *    published presets with publish/unpublish, edit, and delete actions.
+ *    published presets with publish/unpublish, copy, edit, and delete actions.
  *
  * Conventions match `platform-tools-manager.tsx`: plain useState, no
  * react-hook-form, no window.* dialogs, and a right-side drawer for create/edit.
@@ -135,6 +137,36 @@ export function PlatformPresetsManager({
     setInlineError(null);
     setView("author");
   }, []);
+
+  /**
+   * Enter author mode with a new draft copied from an existing preset.
+   *
+   * The copy intentionally clears `editingId` so saving uses POST/upsert with
+   * a generated unique name instead of updating the source preset. The config
+   * and description are copied into the same author drawer used for creation.
+   */
+  const startClone = React.useCallback(
+    (preset: Preset) => {
+      setEditingId(null);
+      setEditingDefault(false);
+      setName(
+        getClonePresetName(
+          preset.name,
+          presets.map((existingPreset) => existingPreset.name),
+        ),
+      );
+      setDescription(
+        preset.description ??
+          (preset.is_default ? DEFAULT_PRESET_DISPLAY.description : ""),
+      );
+      setSeedConfig(preset.config);
+      setConfig(preset.config);
+      setConfigValid(true);
+      setInlineError(null);
+      setView("author");
+    },
+    [presets],
+  );
 
   /**
    * Enter author mode seeded from the system default preset. The default is
@@ -467,6 +499,16 @@ export function PlatformPresetsManager({
                     <div className="flex items-center gap-2">
                       <Button
                         size="sm"
+                        variant="ghost"
+                        onClick={() => startClone(preset)}
+                        disabled={isBusy}
+                        aria-label={`Copy ${DEFAULT_PRESET_DISPLAY.name}`}
+                        title="Create a copy"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => startEditDefault(preset)}
                         disabled={isBusy}
@@ -519,6 +561,16 @@ export function PlatformPresetsManager({
                             Publish
                           </>
                         )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => startClone(preset)}
+                        disabled={isBusy}
+                        aria-label={`Copy ${preset.name}`}
+                        title="Create a copy"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         size="sm"

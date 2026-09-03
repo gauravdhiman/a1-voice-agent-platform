@@ -359,6 +359,15 @@ async def check_availability(
 
 See [Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md) for implementation details.
 
+## Voice Preset Catalog
+
+Platform admins manage reusable voice profiles at `/platform/presets`. Each
+catalog row can be edited, published, unpublished, deleted when unused, or
+copied. Copy opens the same right-side author drawer in create mode with the
+source description and validated voice configuration prefilled. The new preset
+starts as a draft and receives a collision-safe name such as `Copy of Support
+Voice` or `Copy of Support Voice (2)`; the source preset is never modified.
+
 ## Function-Level Control
 
 ### Enable/Disable Functions Per Agent
