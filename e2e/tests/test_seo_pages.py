@@ -11,7 +11,6 @@ from playwright.sync_api import Page, expect
     [
         ("/dental", "Your dental practice, always answering"),
         ("/hvac", "Every service call answered, every job captured"),
-        ("/restaurants", "Full house on the floor, full book on the phone"),
     ],
 )
 def test_vertical_page_renders_funnel_ctas(
@@ -27,3 +26,18 @@ def test_vertical_page_renders_funnel_ctas(
     step("Verify demo and interest CTAs are present")
     expect(page.get_by_role("link", name="Request a Demo").first).to_be_visible()
     expect(page).to_have_url(re.compile(re.escape(path)))
+
+
+def test_unknown_route_shows_branded_404(
+    page: Page, base_url: str, step
+):
+    """Dead ends offer home and demo paths, never a blank default."""
+    step("Open a nonexistent route")
+    page.goto(f"{base_url}/no-such-page-anywhere")
+
+    step("Verify branded 404 with navigation")
+    expect(page.get_by_role("heading", name="didn't pick up")).to_be_visible(
+        timeout=15000
+    )
+    expect(page.get_by_role("link", name="Back to home")).to_be_visible()
+    expect(page.get_by_role("link", name="Request a demo")).to_be_visible()

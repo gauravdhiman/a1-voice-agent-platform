@@ -115,6 +115,13 @@ PLEASANT_PEDIATRIC_ADDITIONAL_INSTRUCTIONS = f"""
   accepted. If no email tool is attached or it reports a failure, say that the
   booking succeeded but the email confirmation was not sent. Never claim an email
   was sent without a successful email-tool result.
+
+# Closing
+- After the booking is confirmed, mention that a summary of what was saved
+  appears on screen with a quick 1-to-5 rating, and invite the caller to tap
+  it. Do not ask for written feedback on the call.
+- End warmly once the caller has nothing more, without repeating the demo
+  notice.
 """.strip()
 
 PLEASANT_PEDIATRIC_INSTRUCTIONS_MARKDOWN = f"""
@@ -207,6 +214,13 @@ COPPER_RIDGE_ADDITIONAL_INSTRUCTIONS = f"""
   accepted. If no email tool is attached or it reports a failure, say that the
   inquiry was captured but the email confirmation was not sent. Never claim an
   email was sent without a successful email-tool result.
+
+# Closing
+- After the inquiry is captured, mention that a summary of what was saved
+  appears on screen with a quick 1-to-5 rating, and invite the caller to tap
+  it. Do not ask for written feedback on the call.
+- End warmly once the caller has nothing more, without repeating the demo
+  notice.
 """.strip()
 
 COPPER_RIDGE_INSTRUCTIONS_MARKDOWN = f"""

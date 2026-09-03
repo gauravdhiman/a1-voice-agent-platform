@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, Phone } from "lucide-react";
+import { CalendarCheck, CheckCircle2 } from "lucide-react";
 import { SITE_NAME } from "@/lib/site-config";
 import { leadService } from "@/services/lead-service";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
@@ -99,22 +99,74 @@ export default function RequestDemoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
-      <header className="w-full border-b border-border/40">
-        <div className="container flex h-16 items-center max-w-3xl mx-auto px-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-blue-600 to-cyan-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Phone className="w-5 h-5 text-white" />
+    <div className="min-h-screen w-full flex">
+      {/* Left Side - Brand & Value Statement (Hidden on mobile) */}
+      <div className="hidden lg:flex w-1/2 bg-zinc-900 relative flex-col justify-between p-12 text-white">
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?q=80&w=2070&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/80 to-transparent" />
+
+        <div className="relative z-10">
+          <Link href="/" className="flex items-center space-x-2">
+            <div className="bg-white/10 backdrop-blur-sm w-10 h-10 rounded-lg flex items-center justify-center border border-white/20">
+              <span className="text-white font-bold text-xl">AI</span>
             </div>
-            <span className="text-xl font-bold tracking-tight">{SITE_NAME}</span>
+            <span className="text-xl font-bold tracking-tight">
+              {SITE_NAME}
+            </span>
           </Link>
         </div>
-      </header>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-xl space-y-6">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight">
+        <div className="relative z-10 max-w-lg">
+          <CalendarCheck className="h-10 w-10 text-white/50 mb-6" />
+          <h2 className="text-3xl font-bold leading-tight mb-4">
+            See your AI front desk on your own calls.
+          </h2>
+          <p className="text-lg text-white/80 leading-relaxed mb-8">
+            Tell us about your business and we will set everything up with
+            you - your number, your calendar, your words. Usually live
+            within 48 hours.
+          </p>
+          <ul className="space-y-4">
+            <li className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
+              <span className="text-white/80">
+                Personal setup call, not a self-serve maze
+              </span>
+            </li>
+            <li className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
+              <span className="text-white/80">
+                You approve every word before it answers
+              </span>
+            </li>
+            <li className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
+              <span className="text-white/80">
+                Pilot plans from $79/mo once it proves itself
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="relative z-10 text-sm text-white/40">
+          &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
+        </div>
+      </div>
+
+      {/* Right Side - Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-background">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center lg:text-left">
+            <div className="lg:hidden flex justify-center mb-6">
+              <Link href="/" className="flex items-center gap-3">
+                <div className="bg-primary w-10 h-10 rounded-lg flex items-center justify-center shadow-md">
+                  <span className="text-primary-foreground font-bold text-xl">
+                    AI
+                  </span>
+                </div>
+              </Link>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
               Request a demo
             </h1>
             <p className="text-muted-foreground mt-2">
@@ -123,8 +175,8 @@ export default function RequestDemoPage() {
             </p>
           </div>
 
-          <Card>
-            <CardContent className="pt-6">
+          <Card className="border-0 shadow-none p-0 bg-transparent">
+            <CardContent className="p-0">
               {submitted ? (
                 <div
                   className="text-center py-8 space-y-4"
@@ -307,7 +359,7 @@ export default function RequestDemoPage() {
             </Link>
           </p>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
