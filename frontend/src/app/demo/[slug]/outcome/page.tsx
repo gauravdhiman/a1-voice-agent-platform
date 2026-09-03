@@ -23,6 +23,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DemoFeedback } from "@/components/demo/demo-feedback";
 import {
   demoPublicService,
   type DemoOutcome,
@@ -446,6 +447,10 @@ export default function DemoOutcomePage() {
         <div className="mt-8 flex flex-col gap-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" /> Receipt expires after 24 hours</span>
           <span>Provider-backed result · No login required</span>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
+          <DemoFeedback demoSlug={slug} />
         </div>
       </div>
     </main>

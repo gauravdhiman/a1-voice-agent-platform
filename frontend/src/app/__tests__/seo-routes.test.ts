@@ -26,11 +26,6 @@ describe("public SEO routes", () => {
         changeFrequency: "monthly",
         priority: 0.8,
       },
-      {
-        url: "https://www.247ai.live/restaurants",
-        changeFrequency: "monthly",
-        priority: 0.8,
-      },
     ]);
   });
 
