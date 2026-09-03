@@ -82,6 +82,11 @@ export default function RequestDemoPage() {
       source: "request-demo",
     });
     if (result.success) {
+      const { trackEvent } = await import("@/lib/analytics/posthog");
+      trackEvent("interest_submitted", {
+        source: "request-demo",
+        ...(values.vertical ? { vertical: values.vertical } : {}),
+      });
       setSubmitted(true);
     } else {
       setSubmitError(
