@@ -162,6 +162,13 @@ class Settings(BaseSettings):
         description="Comma-separated emails always allowed through the signup gate",
     )
 
+    # Bot protection (Cloudflare Turnstile). Empty secret disables
+    # verification (local/dev); production must set both this and the
+    # frontend NEXT_PUBLIC_TURNSTILE_SITE_KEY.
+    turnstile_secret_key: Optional[str] = Field(
+        default=None, description="Cloudflare Turnstile secret key"
+    )
+
     # Resend Settings
     email_provider: str = Field(
         default="resend", description="Configured notification email provider"

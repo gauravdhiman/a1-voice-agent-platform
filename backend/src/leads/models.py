@@ -28,6 +28,11 @@ class InterestLeadCreate(BaseModel):
     demo_slug: Optional[str] = Field(
         None, max_length=100, description="Demo agent slug when captured post-demo"
     )
+    captcha_token: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description="Cloudflare Turnstile token (required when enforced)",
+    )
 
 
 class InterestLead(BaseModel):
