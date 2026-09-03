@@ -98,6 +98,26 @@ not reveal the underlying model). A **partial unique index**
 `ux_pipeline_presets_is_default` (`WHERE is_default = true`) enforces at most one
 default row.
 
+### Model capability validation and call failures
+
+The OpenRouter pipeline builder sends `reasoning.effort=none` and
+`reasoning.exclude=true` so reasoning does not add voice latency. The preset
+service therefore checks OpenRouter LLM models against the provider catalog when
+a configuration is published, when a live configuration is edited, and when
+the system default is edited. A model whose metadata requires reasoning is
+rejected with an actionable admin error. The resolver is provider-specific and
+cached; providers without a resolver remain valid so their adapters can be
+added independently. Draft-only authoring does not make a provider network
+request until the preset becomes live.
+
+If a legacy or already-published preset still reaches the runtime and Pipecat
+reports an `ErrorFrame` or runner exception, `voice-ws` records the first safe
+classification on `call_logs.failure_code` and `call_logs.failure_message` and
+finalizes the call as `failed`. The authenticated Calls UI displays that
+classification. Raw provider exceptions remain in runtime logs/telemetry and
+are never persisted in or returned by the call-log API. Migration
+`20260902000001_add_call_failure_details` adds the nullable fields and index.
+
 ### `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3)
 
 `resolve_api_keys(speech_config, org, use_platform_credits)` → the `api_keys` map

@@ -81,8 +81,11 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             organization_id=(
                 str(agent.organization_id) if agent.organization_id else None
             ),
+            agent_id=str(agent.id),
             organization_timezone=session_timezone,
             session_id=claims.session_id,
+            is_demo=bool(getattr(agent, "is_demo", False)),
+            demo_slug=getattr(agent, "demo_slug", None),
         ),
         organization=org,
     )

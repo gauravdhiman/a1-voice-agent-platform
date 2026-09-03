@@ -26,6 +26,7 @@ import {
   ChevronDown,
   Loader2,
   EyeOff,
+  CircleHelp,
 } from "lucide-react";
 import {
   AuthStatus,
@@ -46,6 +47,12 @@ import {
   ResendEmailConfigEditor,
   ResendEmailRouteConfig,
 } from "@/components/tools/resend-email-config";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface ToolConfigDrawerProps {
   open: boolean;
@@ -193,6 +200,12 @@ export function ToolConfigDrawer({
     setLocalConfig((current) => ({ ...current, routes }));
     setHasUnsavedChanges(true);
   };
+
+  const formatConfigLabel = (key: string) =>
+    key
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
 
   const handleOAuth = async () => {
     setIsConnecting(true);
@@ -645,30 +658,67 @@ export function ToolConfigDrawer({
                   canEdit={canEdit}
                 />
               ) : (
-                <div className="grid gap-3">
-                  {Object.entries(schema.properties).map(([key, prop]) => (
-                    <div key={key} className="space-y-1">
-                      <Label
-                        htmlFor={`drawer-${tool.id}-${key}`}
-                        className="text-[10px] uppercase text-muted-foreground"
-                      >
-                        {prop.title || key}
-                      </Label>
-                      <Input
-                        id={`drawer-${tool.id}-${key}`}
-                        placeholder={prop.description || ""}
-                        value={
-                          (localConfig[key] as string) ||
-                          (prop.default as string) ||
-                          ""
-                        }
-                        onChange={(e) => handleConfigChange(key, e.target.value)}
-                        className="h-9 text-sm"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <TooltipProvider delayDuration={300}>
+                  <div className="grid gap-3">
+                    {Object.entries(schema.properties).map(([key, prop]) => {
+                      const fieldLabel = prop.title || formatConfigLabel(key);
+                      const helpText =
+                        prop.description ||
+                        `Configure ${fieldLabel.toLowerCase()}.`;
+                      const placeholder =
+                        prop.default !== undefined
+                          ? String(prop.default)
+                          : `Enter ${fieldLabel.toLowerCase()}`;
+                      return (
+                        <div key={key} className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <Label
+                              htmlFor={`drawer-${tool.id}-${key}`}
+                              className="text-[10px] uppercase text-muted-foreground"
+                            >
+                              {fieldLabel}
+                            </Label>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                  aria-label={`Help for ${fieldLabel}`}
+                                >
+                                  <CircleHelp
+                                    className="h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                align="start"
+                                className="max-w-sm text-xs leading-relaxed"
+                              >
+                                {helpText}
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <Input
+                            id={`drawer-${tool.id}-${key}`}
+                            placeholder={placeholder}
+                            value={
+                              (localConfig[key] as string) ||
+                              (prop.default as string) ||
+                              ""
+                            }
+                            onChange={(e) =>
+                              handleConfigChange(key, e.target.value)
+                            }
+                            className="h-9 text-sm"
+                            disabled={!canEdit}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </TooltipProvider>
               )}
               {hasUnsavedChanges && (
                 <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400">

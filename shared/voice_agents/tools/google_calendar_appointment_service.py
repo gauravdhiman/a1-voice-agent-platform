@@ -396,7 +396,13 @@ class GoogleCalendarAppointmentService:
                         "status": "created",
                         "message": "The appointment was already booked for this request.",
                         "appointment": self._appointment_from_values(
-                            event_id, start, end, caller_name, purpose, caller_email
+                            event_id,
+                            start,
+                            end,
+                            caller_name,
+                            purpose,
+                            caller_email,
+                            record_url=existing.get("htmlLink"),
                         ),
                     }
                 )
@@ -413,6 +419,7 @@ class GoogleCalendarAppointmentService:
                     caller_name,
                     purpose,
                     caller_email,
+                    record_url=body.get("htmlLink"),
                 ),
             }
         )
@@ -507,6 +514,7 @@ class GoogleCalendarAppointmentService:
                         caller_name,
                         purpose,
                         resolved_email,
+                        record_url=existing.get("htmlLink"),
                     ),
                 }
             )
@@ -530,6 +538,7 @@ class GoogleCalendarAppointmentService:
                     caller_name,
                     purpose,
                     resolved_email,
+                    record_url=body.get("htmlLink") or existing.get("htmlLink"),
                 ),
             }
         )
@@ -711,6 +720,7 @@ class GoogleCalendarAppointmentService:
                     result_name,
                     result_purpose,
                     caller_email,
+                    record_url=body.get("htmlLink") or existing.get("htmlLink"),
                 ),
             }
         )
@@ -1178,9 +1188,10 @@ class GoogleCalendarAppointmentService:
         caller_name: str,
         purpose: str,
         caller_email: str,
+        record_url: Any = None,
     ) -> dict[str, Any]:
         """Build the stable appointment object returned after a mutation."""
-        return {
+        appointment = {
             "id": appointment_id,
             "start_time": self._format(start),
             "end_time": self._format(end),
@@ -1189,6 +1200,9 @@ class GoogleCalendarAppointmentService:
             "caller_name": caller_name.strip(),
             "caller_email": caller_email.strip() or None,
         }
+        if record_url:
+            appointment["record_url"] = record_url
+        return appointment
 
     def _description(
         self, *, purpose: str, caller_phone: str, caller_email: str, notes: str

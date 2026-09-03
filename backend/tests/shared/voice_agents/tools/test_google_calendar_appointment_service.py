@@ -126,6 +126,7 @@ class TestGoogleCalendarAppointmentService:
             "purpose": "Dental cleaning",
             "caller_name": "Jane Doe",
             "caller_email": "jane@example.com",
+            "record_url": "https://calendar.google.com/event/event-123",
         }
 
     async def test_create_refuses_busy_slot_without_posting_event(

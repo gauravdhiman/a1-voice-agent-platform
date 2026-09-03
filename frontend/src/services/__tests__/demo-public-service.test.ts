@@ -43,6 +43,7 @@ describe("demoPublicService", () => {
           token: "voice-token",
           wsUrl: "wss://voice.example/ws",
           sessionId: "session-1",
+          receiptToken: "receipt-token",
           demo_calls_remaining: 2,
           demo_max_call_duration_seconds: 600,
         }),
@@ -53,6 +54,7 @@ describe("demoPublicService", () => {
     const result = await demoPublicService.getCallToken("acme-demo");
 
     expect(result.sessionId).toBe("session-1");
+    expect(result.receiptToken).toBe("receipt-token");
     expect(result.demo_calls_remaining).toBe(2);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/public/demo/acme-demo/call-token"),
@@ -97,6 +99,35 @@ describe("demoPublicService", () => {
 
     await expect(demoPublicService.getCallToken("acme-demo")).rejects.toThrow(
       /contact the platform administrator.*re-enabled/i,
+    );
+  });
+
+  it("fetches the signed visitor outcome receipt", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          demo_slug: "acme-demo",
+          agent_name: "Alex",
+          organization_name: "Acme",
+          status: "completed",
+          actions: [],
+          expires_at: "2026-09-01T00:00:00Z",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await demoPublicService.getDemoOutcome(
+      "Acme Dental/Demo",
+      "signed receipt/token",
+    );
+
+    expect(result.status).toBe("completed");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/api/v1/public/demo/Acme%20Dental%2FDemo/outcome?token=signed%20receipt%2Ftoken",
+      ),
+      expect.objectContaining({ cache: "no-store" }),
     );
   });
 });

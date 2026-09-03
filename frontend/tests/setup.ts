@@ -76,12 +76,14 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}))
+// Mock ResizeObserver with a constructible implementation for Radix/floating-ui.
+class MockResizeObserver {
+  observe(_target: Element): void {}
+  unobserve(_target: Element): void {}
+  disconnect(): void {}
+}
+
+global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 
 // Mock Next.js router
 vi.mock('next/navigation', () => ({

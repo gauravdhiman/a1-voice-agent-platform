@@ -7,6 +7,7 @@ from typing import Any
 
 from src.tools.assembly import (
     _is_function_unselected,
+    _resolve_runtime_sensitive_config,
     build_function_schema,
     create_legacy_tool_handler,
 )
@@ -153,3 +154,20 @@ class TestToolAssemblyHelpers:
             {"Example Tool"},
         )
         assert not _is_function_unselected(registry, _example_tool, {"Other Tool"})
+
+    def test_resend_runtime_secret_comes_from_organization(self, monkeypatch) -> None:
+        """Resend ignores stale per-agent secrets and resolves the org key."""
+        monkeypatch.setattr(
+            "src.tools.assembly.resolve_org_provider_credential",
+            lambda _organization, provider: (
+                "org-resend-key" if provider == "resend" else None
+            ),
+        )
+
+        resolved = _resolve_runtime_sensitive_config(
+            "Resend_email",
+            {"api_key": "stale-agent-key", "other": "value"},
+            object(),
+        )
+
+        assert resolved == {"other": "value", "api_key": "org-resend-key"}

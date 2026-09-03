@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .calendar import build_calendar_scenarios, run_calendar_suite
+from .lead_capture import build_lead_capture_scenarios, run_lead_capture_suite
 from .resend import build_resend_scenarios, run_resend_suite
 from .trace import evaluate_trace
 
@@ -174,7 +175,15 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             suite = await run_calendar_suite()
             report["suites"]["calendar"] = suite.to_dict()
             gate_passed = gate_passed and suite.passed
-
+    if args.suite in {"lead_capture", "all"}:
+        if args.list_scenarios:
+            report.setdefault("scenarios", []).extend(
+                scenario.scenario_id for scenario in build_lead_capture_scenarios()
+            )
+        else:
+            suite = await run_lead_capture_suite()
+            report["suites"]["lead_capture"] = suite.to_dict()
+            gate_passed = gate_passed and suite.passed
     if args.suite in {"resend", "all"}:
         if args.list_scenarios:
             report.setdefault("scenarios", []).extend(
@@ -215,7 +224,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--suite",
-        choices=("all", "calendar", "resend"),
+        choices=("all", "calendar", "lead_capture", "resend"),
         default="all",
         help="Deterministic suite to run (default: all).",
     )

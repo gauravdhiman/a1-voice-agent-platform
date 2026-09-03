@@ -16,16 +16,16 @@ from pipecat.services.google.gemini_live.llm import (
 )
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
+from src.speech.thinking_text_filter import ThinkingChannelTextFilter
 
+from shared.voice_agents.model_capabilities import OPENROUTER_DEFAULT_MODEL
 from shared.voice_agents.speech_config import (
     PipelineSpeechConfig,
     RealtimeSpeechConfig,
     SpeechConfig,
 )
-from src.speech.thinking_text_filter import ThinkingChannelTextFilter
 
 CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
-OPENROUTER_DEFAULT_MODEL = "openai/gpt-4.1"
 FISH_DEFAULT_MODEL = "s2.1-pro-free"
 # Disable OpenRouter reasoning via extra_body — the OpenAI SDK rejects a top-level
 # ``reasoning`` kwarg on chat.completions.create(), but OpenRouter honors it in the
@@ -251,9 +251,7 @@ def build_speech_components(
         raise TypeError(f"Unsupported speech config: {type(speech_config).__name__}")
 
     stt = _build_pipeline_stt(speech_config.stt, api_keys)
-    llm = _build_pipeline_llm(
-        speech_config.llm, api_keys, system_instruction, tools
-    )
+    llm = _build_pipeline_llm(speech_config.llm, api_keys, system_instruction, tools)
     tts = _build_pipeline_tts(speech_config.tts, api_keys)
     vad_params = dict(speech_config.vad.params) if speech_config.vad else {}
     return PipelineComponents(

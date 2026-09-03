@@ -36,10 +36,63 @@ export interface DemoCallTokenResponse {
   wsUrl: string;
   /** Session identifier used for voice-session tracking. */
   sessionId: string;
+  /** Signed token that authorizes the visitor's private outcome receipt. */
+  receiptToken: string;
   /** Remaining trial calls after this token was reserved. */
   demo_calls_remaining?: number | null;
   /** Duration cap captured for this call; -1 means unlimited. */
   demo_max_call_duration_seconds?: number | null;
+}
+
+export type DemoOutcomeActionType =
+  | "lead_capture"
+  | "appointment_booking"
+  | "email_delivery";
+export type DemoOutcomeActionStatus = "succeeded" | "failed" | "pending";
+
+export interface DemoOutcomeProviderResult {
+  record_type?: string | null;
+  record_id?: string | null;
+  /** Provider-generated link, present only when it is safe to expose. */
+  record_url?: string | null;
+  record_status?: string | null;
+  note_id?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  message?: string | null;
+  [key: string]: unknown;
+}
+
+export interface DemoOutcomeAction {
+  /** Receipt row identifier. */
+  id: string;
+  /** Visitor-facing workflow label. */
+  action_type: DemoOutcomeActionType;
+  /** Provider that received the mutation. */
+  provider: string;
+  /** Whether the provider mutation succeeded, failed, or still needs action. */
+  status: DemoOutcomeActionStatus;
+  /** Platform-admin-configured public destination, present only after success. */
+  public_result_url?: string | null;
+  /** Stable safe error code, when the provider did not complete. */
+  error_code: string | null;
+  /** Confirmed fields captured during the call. */
+  captured_fields: Record<string, string | number | boolean | null>;
+  /** Safe provider identifiers and delivery summary. */
+  provider_result: DemoOutcomeProviderResult;
+  /** Receipt creation time. */
+  created_at: string;
+  /** Receipt expiry time. */
+  expires_at: string;
+}
+
+export interface DemoOutcome {
+  demo_slug: string;
+  agent_name: string;
+  organization_name: string | null;
+  status: "completed" | "needs_attention" | "no_action";
+  actions: DemoOutcomeAction[];
+  expires_at: string | null;
 }
 
 /**
@@ -93,6 +146,26 @@ class DemoPublicService {
       throw new Error(message);
     }
     return (await res.json()) as DemoCallTokenResponse;
+  }
+
+  /**
+   * Fetches the signed visitor receipt for a completed demo call.
+   *
+   * @param slug - Public demo slug from the current page.
+   * @param receiptToken - Short-lived token returned with the voice token.
+   * @returns Promise resolving to the visitor's private outcome.
+   * @throws {Error} When the token is missing, expired, or unavailable.
+   */
+  async getDemoOutcome(slug: string, receiptToken: string): Promise<DemoOutcome> {
+    const res = await fetch(
+      `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}/outcome?token=${encodeURIComponent(receiptToken)}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Demo outcome is unavailable");
+    }
+    return (await res.json()) as DemoOutcome;
   }
 }
 

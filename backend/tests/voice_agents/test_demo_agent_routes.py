@@ -34,6 +34,7 @@ def _make_agent(is_demo=False, demo_slug=None):
     a.organization_id = TEST_ORG_ID
     a.is_demo = is_demo
     a.demo_slug = demo_slug
+    a.demo_public_result_url = None
     a.demo_calls_remaining = -1
     a.demo_max_call_duration_seconds = -1
     return a
@@ -50,7 +51,10 @@ class TestCreateAgentDemoGuard:
 
         profile = _make_profile(is_platform_admin=False, org_id=str(TEST_ORG_ID))
         body = VoiceAgentCreate(
-            organization_id=TEST_ORG_ID, name="Demo", is_demo=True, demo_slug="my-demo"
+            organization_id=TEST_ORG_ID,
+            name="Demo",
+            is_demo=True,
+            demo_slug="my-demo",
         )
 
         with patch(
@@ -84,6 +88,39 @@ class TestCreateAgentDemoGuard:
             organization_id=TEST_ORG_ID,
             name="Demo",
             public_description="A customer-facing description",
+        )
+
+        with patch(
+            "src.voice_agents.routes._validate_preset_assignment",
+            new=AsyncMock(return_value=None),
+        ), patch(
+            "src.voice_agents.routes.entitlement_service.assert_limit",
+            new=AsyncMock(),
+        ), patch(
+            "src.voice_agents.routes.voice_agent_service.create_agent",
+            new=AsyncMock(return_value=(Mock(), None)),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await create_agent(
+                    agent_data=body,
+                    request=Mock(),
+                    _auth=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_org_admin_cannot_create_demo_result_url(self):
+        """The public receipt destination is platform-admin-only metadata."""
+        from src.voice_agents.routes import create_agent
+
+        from shared.voice_agents.models import VoiceAgentCreate
+
+        profile = _make_profile(is_platform_admin=False, org_id=str(TEST_ORG_ID))
+        body = VoiceAgentCreate(
+            organization_id=TEST_ORG_ID,
+            name="Demo",
+            demo_public_result_url="https://example.com/demo-results",
         )
 
         with patch(
@@ -143,7 +180,11 @@ class TestCreateAgentDemoGuard:
         from shared.voice_agents.service import voice_agent_service
 
         body = VoiceAgentCreate(
-            organization_id=TEST_ORG_ID, name="Demo", is_demo=True, demo_slug="my-demo"
+            organization_id=TEST_ORG_ID,
+            name="Demo",
+            is_demo=True,
+            demo_slug="my-demo",
+            demo_public_result_url="https://example.com/demo-results",
         )
         # Patch slug check and inject a mock supabase client directly on the service instance
         with patch.object(
@@ -165,6 +206,7 @@ class TestCreateAgentDemoGuard:
                         "name": "Demo",
                         "is_demo": True,
                         "demo_slug": "my-demo",
+                        "demo_public_result_url": "https://example.com/demo-results",
                         "is_active": True,
                         "phone_number": None,
                         "persona": None,
@@ -187,6 +229,9 @@ class TestCreateAgentDemoGuard:
                 agent, err = await voice_agent_service.create_agent(body)
                 assert err is None
                 assert agent.demo_slug == "my-demo"
+                assert mock_table.insert.call_args.args[0][
+                    "demo_public_result_url"
+                ] == ("https://example.com/demo-results")
             finally:
                 voice_agent_service.supabase_config = original_cfg
 
@@ -293,6 +338,32 @@ class TestUpdateAgentDemoGuard:
         assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_org_admin_cannot_update_demo_result_url(self):
+        """Only platform admins may change the public receipt destination."""
+        from src.voice_agents.routes import update_agent
+
+        from shared.voice_agents.models import VoiceAgentUpdate
+
+        profile = _make_profile(is_platform_admin=False, org_id=str(TEST_ORG_ID))
+        agent = _make_agent()
+        body = VoiceAgentUpdate(
+            demo_public_result_url="https://example.com/demo-results"
+        )
+
+        with patch(
+            "src.voice_agents.routes.voice_agent_service.get_agent_by_id",
+            new=AsyncMock(return_value=(agent, None)),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await update_agent(
+                    agent_id=TEST_AGENT_ID,
+                    agent_data=body,
+                    user_data=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
     async def test_platform_admin_can_enable_demo_with_slug(self):
         from shared.voice_agents.models import VoiceAgentUpdate
 
@@ -373,6 +444,7 @@ class TestDemoPublicRoutes:
         from shared.billing.voice_session_entitlement import DemoCallReservation
 
         demo_agent = _make_agent(is_demo=True, demo_slug="my-demo")
+        demo_agent.name = "Demo Agent"
         demo_agent.id = TEST_AGENT_ID
         demo_agent.organization_id = TEST_ORG_ID
         with patch(
@@ -389,10 +461,14 @@ class TestDemoPublicRoutes:
         ), patch(
             "src.voice_agents.demo_public_routes.public_page_service.generate_call_token",
             return_value=("tok", "wss://x/ws", "sess-1"),
+        ), patch(
+            "src.voice_agents.demo_public_routes.create_demo_outcome_token",
+            return_value="receipt-token",
         ):
             result = await generate_demo_call_token(demo_slug="my-demo")
             assert result.token == "tok"
             assert result.sessionId == "sess-1"
+            assert result.receiptToken == "receipt-token"
             assert result.demo_calls_remaining == 2
             assert result.demo_max_call_duration_seconds == 600
 
@@ -447,4 +523,136 @@ class TestDemoPublicRoutes:
         ):
             with pytest.raises(HTTPException) as exc_info:
                 await generate_demo_call_token(demo_slug="my-demo")
-            assert exc_info.value.status_code == 402
+        assert exc_info.value.status_code == 402
+
+    @pytest.mark.asyncio
+    async def test_get_demo_outcome_requires_bound_receipt(self):
+        """A valid receipt token is checked against both the slug and agent."""
+        from datetime import datetime, timezone
+
+        from src.voice_agents.demo_public_routes import get_demo_outcome_public
+
+        from shared.voice_agents.service import voice_agent_service
+
+        demo_agent = _make_agent(is_demo=True, demo_slug="my-demo")
+        demo_agent.name = "Demo Agent"
+        with patch(
+            "src.voice_agents.demo_public_routes.verify_demo_outcome_token",
+            return_value=Mock(
+                session_id="sess-1", agent_id=str(TEST_AGENT_ID), demo_slug="my-demo"
+            ),
+        ), patch.object(
+            voice_agent_service,
+            "get_demo_agent_by_slug",
+            new=AsyncMock(return_value=(demo_agent, None)),
+        ), patch(
+            "src.voice_agents.demo_public_routes.demo_outcome_service.list_for_session",
+            new=AsyncMock(
+                return_value=[
+                    {
+                        "id": str(TEST_AGENT_ID),
+                        "action_type": "lead_capture",
+                        "provider": "google_sheets",
+                        "status": "succeeded",
+                        "error_code": None,
+                        "captured_fields": {"caller_name": "Taylor Smith"},
+                        "provider_result": {
+                            "record_type": "lead_row",
+                            "record_id": "submission-1",
+                            "message": "Service inquiry captured in Google Sheets.",
+                        },
+                        "created_at": datetime.now(timezone.utc),
+                        "expires_at": datetime.now(timezone.utc),
+                    }
+                ]
+            ),
+        ):
+            response = Mock(headers={})
+            result = await get_demo_outcome_public(
+                demo_slug="my-demo", response=response, token="receipt-token"
+            )
+
+        assert result.status == "completed"
+        assert result.actions[0].captured_fields["caller_name"] == "Taylor Smith"
+        assert response.headers["Cache-Control"] == "private, no-store"
+        assert response.headers["Referrer-Policy"] == "no-referrer"
+        assert response.headers["X-Robots-Tag"] == "noindex, nofollow"
+
+    @pytest.mark.asyncio
+    async def test_get_demo_outcome_adds_configured_url_only_to_successful_actions(
+        self,
+    ):
+        """The optional demo CTA is exposed only after a confirmed handoff."""
+        from datetime import datetime, timezone
+
+        from src.voice_agents.demo_public_routes import get_demo_outcome_public
+
+        from shared.voice_agents.service import voice_agent_service
+
+        demo_agent = _make_agent(is_demo=True, demo_slug="my-demo")
+        demo_agent.name = "Demo Agent"
+        demo_agent.demo_public_result_url = (
+            "https://docs.google.com/spreadsheets/d/demo-sheet/edit?gid=0#gid=0"
+        )
+        now = datetime.now(timezone.utc)
+        rows = [
+            {
+                "id": str(TEST_AGENT_ID),
+                "action_type": "lead_capture",
+                "provider": "google_sheets",
+                "status": "succeeded",
+                "error_code": None,
+                "captured_fields": {"caller_name": "Taylor Smith"},
+                "provider_result": {"message": "Saved"},
+                "created_at": now,
+                "expires_at": now,
+            },
+            {
+                "id": str(UUID("00000000-0000-0000-0000-000000000102")),
+                "action_type": "lead_capture",
+                "provider": "google_sheets",
+                "status": "failed",
+                "error_code": "invalid_configuration",
+                "captured_fields": {"caller_name": "Taylor Smith"},
+                "provider_result": {"message": "Not configured"},
+                "created_at": now,
+                "expires_at": now,
+            },
+            {
+                "id": str(UUID("00000000-0000-0000-0000-000000000103")),
+                "action_type": "email_delivery",
+                "provider": "gmail",
+                "status": "succeeded",
+                "error_code": None,
+                "captured_fields": {},
+                "provider_result": {
+                    "record_type": "email",
+                    "record_id": "gmail-message-1",
+                    "message": "Gmail confirmed the email was sent.",
+                },
+                "created_at": now,
+                "expires_at": now,
+            },
+        ]
+        with patch(
+            "src.voice_agents.demo_public_routes.verify_demo_outcome_token",
+            return_value=Mock(
+                session_id="sess-1", agent_id=str(TEST_AGENT_ID), demo_slug="my-demo"
+            ),
+        ), patch.object(
+            voice_agent_service,
+            "get_demo_agent_by_slug",
+            new=AsyncMock(return_value=(demo_agent, None)),
+        ), patch(
+            "src.voice_agents.demo_public_routes.demo_outcome_service.list_for_session",
+            new=AsyncMock(return_value=rows),
+        ):
+            response = Mock(headers={})
+            result = await get_demo_outcome_public(
+                demo_slug="my-demo", response=response, token="receipt-token"
+            )
+
+        assert result.actions[0].public_result_url == demo_agent.demo_public_result_url
+        assert result.actions[1].public_result_url is None
+        assert result.actions[2].public_result_url is None
+        assert result.status == "needs_attention"

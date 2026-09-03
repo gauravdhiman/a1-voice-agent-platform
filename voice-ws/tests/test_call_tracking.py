@@ -86,6 +86,8 @@ class _Rpc:
 class _Result:
     def __init__(self, data):
         self.data = data
+
+
 class _Client:
     def __init__(self):
         self.organization_id = uuid4()
@@ -172,6 +174,36 @@ async def test_end_call_tracking_records_duration_and_credit_transaction():
         if table == "call_logs" and "duration" in payload
     ]
     assert duration_updates[0]["duration"] >= 60
+
+
+@pytest.mark.asyncio
+async def test_end_call_tracking_persists_safe_failure_details():
+    """A failed connected call keeps its stable runtime classification."""
+    client = _Client()
+
+    from src import call_tracking
+
+    original_client = call_tracking.supabase_config._client
+    call_tracking.supabase_config._client = client
+    try:
+        await end_call_tracking(
+            "call-log-1",
+            status="failed",
+            failure_code="model_reasoning_required",
+            failure_message="Review the model and reasoning configuration.",
+        )
+    finally:
+        call_tracking.supabase_config._client = original_client
+
+    status_updates = [
+        payload
+        for table, payload in client.updates
+        if table == "call_logs" and payload.get("status") == "failed"
+    ]
+    assert status_updates[0]["failure_code"] == "model_reasoning_required"
+    assert status_updates[0]["failure_message"] == (
+        "Review the model and reasoning configuration."
+    )
 
 
 @pytest.mark.asyncio

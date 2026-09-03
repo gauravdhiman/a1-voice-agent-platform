@@ -109,8 +109,8 @@ export function useDefaultPreset() {
 }
 
 // Mutation: Create a preset (upsert by name). Invalidates the preset list so the
-// new row appears immediately. Toasts a generic error; the manager surfaces the
-// backend 400 (invalid config) detail inline via the thrown error message.
+// new row appears immediately. The manager surfaces backend validation detail
+// inline via the thrown error message.
 export function useCreatePreset() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -182,8 +182,10 @@ export function usePublishPreset() {
       toast.success(published ? "Preset published" : "Preset unpublished");
       queryClient.invalidateQueries({ queryKey: presetQueryKeys.all });
     },
-    onError: () => {
-      toast.error("Failed to update publish state");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update publish state",
+      );
     },
   });
 }

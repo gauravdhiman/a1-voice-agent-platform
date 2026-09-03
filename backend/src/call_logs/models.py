@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CallLog(BaseModel):
@@ -17,6 +17,8 @@ class CallLog(BaseModel):
     caller_number: Optional[str]
     called_number: Optional[str]
     status: str
+    failure_code: Optional[str] = Field(None, max_length=100)
+    failure_message: Optional[str] = Field(None, max_length=1000)
     duration: Optional[int] = None
     credits_consumed: int = 0
     credit_transaction_id: Optional[UUID] = None
@@ -36,6 +38,8 @@ class CallLogCreate(BaseModel):
     caller_number: Optional[str] = None
     called_number: Optional[str] = None
     status: str = "initiated"
+    failure_code: Optional[str] = Field(None, max_length=100)
+    failure_message: Optional[str] = Field(None, max_length=1000)
     duration: int = 0
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
@@ -45,6 +49,8 @@ class CallLogUpdate(BaseModel):
     """Fields that can be updated on a call log."""
 
     status: Optional[str] = None
+    failure_code: Optional[str] = Field(None, max_length=100)
+    failure_message: Optional[str] = Field(None, max_length=1000)
     duration: Optional[int] = None
     ended_at: Optional[datetime] = None
 

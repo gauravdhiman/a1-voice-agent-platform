@@ -198,6 +198,7 @@ export default function AgentDetailPage() {
     is_demo: boolean;
     demo_slug: string;
     public_description: string;
+    demo_public_result_url: string;
     demo_calls_remaining: number;
     demo_max_call_duration_minutes: number;
   }>({
@@ -213,6 +214,7 @@ export default function AgentDetailPage() {
     is_demo: false,
     demo_slug: "",
     public_description: "",
+    demo_public_result_url: "",
     demo_calls_remaining: -1,
     demo_max_call_duration_minutes: -1,
   });
@@ -387,6 +389,9 @@ export default function AgentDetailPage() {
       is_demo: Boolean((agent as unknown as { is_demo?: boolean }).is_demo),
       demo_slug: (agent as unknown as { demo_slug?: string | null }).demo_slug || "",
       public_description: (agent as unknown as { public_description?: string | null }).public_description || "",
+      demo_public_result_url:
+        (agent as unknown as { demo_public_result_url?: string | null })
+          .demo_public_result_url || "",
       demo_calls_remaining: agent.demo_calls_remaining ?? -1,
       demo_max_call_duration_minutes:
         agent.demo_max_call_duration_seconds == null ||
@@ -469,6 +474,22 @@ export default function AgentDetailPage() {
       toast.error("Demo slug can only contain lowercase letters, numbers, and hyphens");
       return;
     }
+    if (isPlatformAdmin && agentForm.is_demo && agentForm.demo_public_result_url.trim()) {
+      try {
+        const resultUrl = new URL(agentForm.demo_public_result_url.trim());
+        if (
+          resultUrl.protocol !== "https:" ||
+          !resultUrl.hostname ||
+          resultUrl.username ||
+          resultUrl.password
+        ) {
+          throw new Error("invalid scheme");
+        }
+      } catch {
+        toast.error("Public result URL must be a valid HTTPS URL");
+        return;
+      }
+    }
     if (
       isPlatformAdmin &&
       (!Number.isInteger(agentForm.demo_calls_remaining) ||
@@ -501,6 +522,7 @@ export default function AgentDetailPage() {
         delete (payload as Record<string, unknown>).is_demo;
         delete (payload as Record<string, unknown>).demo_slug;
         delete (payload as Record<string, unknown>).public_description;
+        delete (payload as Record<string, unknown>).demo_public_result_url;
         delete (payload as Record<string, unknown>).demo_calls_remaining;
         delete (payload as Record<string, unknown>).demo_max_call_duration_minutes;
       } else if (!payload.is_demo) {
@@ -854,7 +876,7 @@ export default function AgentDetailPage() {
       {!voiceProfileReady && !voiceProfileReadinessLoading && agent && (
         <PresetSetupCallout
           credentialsSelfService={credentialsSelfService}
-          organizationId={agent.organization_id}
+          organizationId={agent?.organization_id}
         />
       )}
 
@@ -1292,6 +1314,27 @@ export default function AgentDetailPage() {
                             />
                             <p className="text-xs text-muted-foreground">
                               Shown on <code>/demo/{agentForm.demo_slug || "your-slug"}</code> to visitors. If empty, the agent&apos;s mission will be shown.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="demo-public-result-url" className="text-xs">
+                              Public result URL (optional)
+                            </Label>
+                            <Input
+                              id="demo-public-result-url"
+                              type="url"
+                              value={agentForm.demo_public_result_url}
+                              onChange={(e) =>
+                                setAgentForm({
+                                  ...agentForm,
+                                  demo_public_result_url: e.target.value,
+                                })
+                              }
+                              placeholder="https://docs.google.com/spreadsheets/d/..."
+                              disabled={!canEdit}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              After a successful provider handoff, the receipt page shows an <strong>Open result</strong> button to this HTTPS URL. Use only a dedicated public demo view or data store; leave blank to hide the button.
                             </p>
                           </div>
                         </div>

@@ -8,6 +8,8 @@ export interface CallLog {
   caller_number: string | null;
   called_number: string | null;
   status: string;
+  failure_code?: string | null;
+  failure_message?: string | null;
   duration: number | null;
   credits_consumed: number;
   credit_transaction_id: string | null;
@@ -138,4 +140,3 @@ class CallLogService {
 }
 
 export const callLogService = new CallLogService();
-

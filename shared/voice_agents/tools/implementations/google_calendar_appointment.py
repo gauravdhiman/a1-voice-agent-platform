@@ -215,7 +215,7 @@ class GoogleCalendarAppointmentTool(BaseTool):
         the returned ``error.next_action`` and do not claim that booking
         succeeded.
         """
-        return await self._service(context).create_appointment(
+        result = await self._service(context).create_appointment(
             caller_name=caller_name,
             purpose=purpose,
             start_time=start_time,
@@ -225,6 +225,7 @@ class GoogleCalendarAppointmentTool(BaseTool):
             notes=notes,
             user_confirmed=user_confirmed,
         )
+        return result
 
     async def update_appointment(
         self,
@@ -260,7 +261,7 @@ class GoogleCalendarAppointmentTool(BaseTool):
         another event; an error includes ``error.next_action``. Never claim an
         update succeeded without a successful ``updated`` result.
         """
-        return await self._service(context).update_appointment(
+        result = await self._service(context).update_appointment(
             appointment_id=appointment_id,
             new_start_time=new_start_time,
             new_duration_minutes=new_duration_minutes,
@@ -271,6 +272,7 @@ class GoogleCalendarAppointmentTool(BaseTool):
             notes=notes,
             user_confirmed=user_confirmed,
         )
+        return result
 
     async def cancel_appointment(
         self, context: ToolContext, appointment_id: str, user_confirmed: bool

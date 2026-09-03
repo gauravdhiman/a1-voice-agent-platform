@@ -4,7 +4,7 @@
  *
  * Contract:
  *  - `Organization` (read) carries `provider_credentials_status` — a per-
- *    provider boolean map (google/deepgram/openai/cartesia/cerebras/openrouter/fish),
+ *    provider boolean map (google/deepgram/openai/cartesia/cerebras/openrouter/fish/resend),
  *    never the decrypted values.
  *  - `OrganizationUpdate` (write) carries `provider_credentials_input` —
  *    touched providers only; a string to set, `null` to clear.

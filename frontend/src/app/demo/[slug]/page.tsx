@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Loader2,
   Mic,
@@ -11,6 +11,11 @@ import {
   ArrowLeft,
   Sparkles,
   Building2,
+  ExternalLink,
+  ShieldAlert,
+  CheckCircle2,
+  Clock3,
+  Database,
 } from "lucide-react";
 import { AgentAudioRadialV4 } from "@/components/agents-ui/agent-audio-radial-v4";
 import { AgentAudioVisualizerBarV4 } from "@/components/agents-ui/agent-audio-visualizer-livekit-bar-v4";
@@ -34,6 +39,9 @@ import {
   formatDemoDuration,
   isDemoCallLimitReached,
 } from "@/lib/demo-call-limits";
+
+const GMAIL_ALIAS_HELP_URL =
+  "https://support.google.com/mail/answer/22370?hl=en";
 
 /**
  * Reads normalized local microphone bands for the public demo visualizers.
@@ -121,6 +129,7 @@ function useTrackVolumeBands(
 export default function DemoAgentPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+  const router = useRouter();
   const searchParams = useSearchParams();
   const visualizer = resolveDemoVisualizer(searchParams.get("visualizer"));
   const useLiveKitBars = visualizer === "lk-bars";
@@ -133,6 +142,8 @@ export default function DemoAgentPage() {
     "idle" | "connecting" | "connected" | "ended"
   >("idle");
   const [callError, setCallError] = React.useState<string | null>(null);
+  const [hasAcknowledgedDemoPolicy, setHasAcknowledgedDemoPolicy] =
+    React.useState(false);
   const [isMuted, setIsMuted] = React.useState(false);
   const [isAgentSpeaking, setIsAgentSpeaking] = React.useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = React.useState(false);
@@ -163,6 +174,9 @@ export default function DemoAgentPage() {
 
   const pipecatRef = React.useRef<PipecatClient | null>(null);
   const connectionAttemptRef = React.useRef(0);
+  const receiptTokenRef = React.useRef<string | null>(null);
+  const callConnectedRef = React.useRef(false);
+  const outcomeNavigatedRef = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -193,8 +207,27 @@ export default function DemoAgentPage() {
     setLocalTrack(null);
   }, []);
 
+  const showOutcome = React.useCallback(() => {
+    if (outcomeNavigatedRef.current) return;
+    outcomeNavigatedRef.current = true;
+    const receiptToken = receiptTokenRef.current;
+    if (receiptToken) {
+      router.replace(
+        `/demo/${encodeURIComponent(slug)}/outcome?token=${encodeURIComponent(receiptToken)}`,
+      );
+      return;
+    }
+    setCallState("ended");
+  }, [router, slug]);
+
   const handleStartCall = React.useCallback(async () => {
     if (!agent) {
+      return;
+    }
+    if (!hasAcknowledgedDemoPolicy) {
+      setCallError(
+        "Please acknowledge the public-demo notice and use dummy information before starting the call.",
+      );
       return;
     }
     if (isDemoCallLimitReached(agent.demo_calls_remaining)) {
@@ -205,10 +238,13 @@ export default function DemoAgentPage() {
     const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
     setCallError(null);
     setCallState("connecting");
+    callConnectedRef.current = false;
+    outcomeNavigatedRef.current = false;
     try {
-      const { token, wsUrl, demo_calls_remaining } =
+      const { token, wsUrl, receiptToken, demo_calls_remaining } =
         await demoPublicService.getCallToken(slug);
       if (!isCurrentAttempt()) return;
+      receiptTokenRef.current = receiptToken;
       if (typeof demo_calls_remaining === "number") {
         setAgent((current) =>
           current ? { ...current, demo_calls_remaining } : current,
@@ -221,6 +257,9 @@ export default function DemoAgentPage() {
           } else {
             void disconnectPipecatVoiceCall(createdClient);
           }
+        },
+        onConnected: () => {
+          callConnectedRef.current = true;
         },
         onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
           if (!isCurrentAttempt()) return;
@@ -241,35 +280,55 @@ export default function DemoAgentPage() {
         },
         onDisconnected: () => {
           if (!isCurrentAttempt()) return;
+          callConnectedRef.current = false;
           setAgentTrack(null);
           setLocalTrack(null);
-          setCallState("ended");
+          showOutcome();
         },
         onError: (err) => {
           if (!isCurrentAttempt()) return;
+          setAgentTrack(null);
+          setLocalTrack(null);
+          // Pipecat can report a server-enforced duration timeout or a
+          // transport failure through onError without emitting a separate
+          // onDisconnected event. Once the call connected, the visitor still
+          // has a valid receipt token and should see the outcome page.
+          if (callConnectedRef.current && receiptTokenRef.current) {
+            callConnectedRef.current = false;
+            setIsAgentSpeaking(false);
+            setIsUserSpeaking(false);
+            showOutcome();
+            return;
+          }
           setCallError(getPublicVoiceCallErrorMessage(err) || err.message);
+          receiptTokenRef.current = null;
           setCallState("idle");
         },
       });
       if (!isCurrentAttempt()) return;
       pipecatRef.current = client;
+      // Some transports resolve connect() without invoking the callback
+      // synchronously. A resolved client is nevertheless an active call for
+      // purposes of routing post-connect failures to its receipt.
+      callConnectedRef.current = true;
       setCallState("connected");
     } catch (e) {
       if (!isCurrentAttempt()) return;
+      callConnectedRef.current = false;
       const msg = e instanceof Error ? e.message : "Failed to start call";
       setCallError(getPublicVoiceCallErrorMessage(e) || msg);
       setAgentTrack(null);
       setLocalTrack(null);
       setCallState("idle");
     }
-  }, [agent, slug]);
+  }, [agent, hasAcknowledgedDemoPolicy, showOutcome, slug]);
 
   const handleHangUp = React.useCallback(async () => {
     await disconnect();
-    setCallState("ended");
+    showOutcome();
     setIsAgentSpeaking(false);
     setIsUserSpeaking(false);
-  }, [disconnect]);
+  }, [disconnect, showOutcome]);
 
   React.useEffect(() => {
     if (!useLiveKitBars) return;
@@ -341,6 +400,11 @@ export default function DemoAgentPage() {
   const demoCallLimitReached = isDemoCallLimitReached(
     agent.demo_calls_remaining,
   );
+  const description =
+    agent.public_description?.trim() ||
+    agent.mission?.trim() ||
+    agent.persona?.trim() ||
+    "Try a live voice conversation with this demo agent.";
 
   if (callState === "ended") {
     return (
@@ -487,108 +551,228 @@ export default function DemoAgentPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-muted/40 to-background">
-      <div className="mx-auto max-w-2xl px-4 py-8 md:py-12">
-        <div className="mb-6 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1">
-            <Sparkles className="h-3 w-3" /> Demo
-          </span>
-          {agent.organization_name && (
-            <span className="inline-flex items-center gap-1">
-              <Building2 className="h-3 w-3" /> {agent.organization_name}
+    <div className="relative min-h-dvh overflow-hidden bg-gradient-to-br from-slate-50 via-background to-sky-50/60 dark:from-slate-950 dark:via-background dark:to-slate-950">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-24 -top-32 h-80 w-80 rounded-full bg-sky-200/50 blur-3xl dark:bg-sky-950/30"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 top-24 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl dark:bg-indigo-950/20"
+      />
+
+      <div className="relative mx-auto flex min-h-dvh max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <header className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-background/80 px-3 py-1.5 font-medium shadow-sm backdrop-blur dark:border-slate-800">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              24x7 AI <span className="font-normal text-muted-foreground">/ Demo</span>
             </span>
-          )}
-        </div>
-
-        <Card className="overflow-hidden" data-demo-visualizer={visualizer}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-2xl leading-tight">
-              {agent.name}
-            </CardTitle>
-            {agent.tone && (
-              <p className="text-xs text-muted-foreground">
-                Tone: {agent.tone}
-              </p>
+            {agent.organization_name && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-transparent px-2 py-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {agent.organization_name}
+              </span>
             )}
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {(() => {
-              const desc =
-                agent.public_description?.trim() ||
-                agent.mission?.trim() ||
-                agent.persona?.trim() ||
-                null;
-              return desc ? (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <h3 className="mb-1 text-sm font-semibold">
-                    About this agent
-                  </h3>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                    {desc}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Try a live voice conversation with this demo agent. Demo calls
-                  do not use platform credits, but this demo may have trial
-                  limits.
+          </div>
+          <Link
+            href="/"
+            className="hidden items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-foreground sm:inline-flex"
+          >
+            Back to home
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </Link>
+        </header>
+
+        <main className="grid flex-1 items-start gap-7 py-7 lg:grid-cols-[minmax(0,1fr)_minmax(390px,460px)] lg:items-center lg:gap-16 lg:py-10">
+          <section className="order-2 max-w-2xl lg:order-1">
+            <div className="max-w-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+                Interactive voice demo
+              </p>
+              <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-950 dark:text-white sm:text-6xl">
+                Try {agent.name} live.
+              </h1>
+              <p className="mt-5 hidden max-w-lg text-base leading-7 text-muted-foreground sm:text-lg lg:block">
+                {description}
+              </p>
+              {agent.tone && (
+                <p className="mt-3 text-xs font-medium text-muted-foreground">
+                  Conversation style: {agent.tone}
                 </p>
-              );
-            })()}
-            <div
-              className={`rounded-lg border p-4 text-sm ${
-                demoCallLimitReached
-                  ? "border-destructive/40 bg-destructive/5 text-destructive"
-                  : "border-amber-200 bg-amber-50/70 text-amber-950"
-              }`}
-            >
-              <p className="font-medium">
-                {demoCallLimitReached
-                  ? "This demo is currently unavailable"
-                  : "Demo trial availability"}
-              </p>
-              {!demoCallLimitReached ? (
-                <div className="mt-1 space-y-1 text-xs opacity-80">
-                  {callsRemainingLabel ? (
-                    <div>Calls: {callsRemainingLabel}</div>
-                  ) : null}
-                  {durationLabel ? <div>Duration: {durationLabel}</div> : null}
-                </div>
-              ) : null}
-              {demoCallLimitReached ? (
-                <p className="mt-2 text-xs">{DEMO_TRIAL_EXHAUSTED_MESSAGE}</p>
-              ) : null}
+              )}
             </div>
-            {callError && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                {callError}
+
+            <div className="mt-8 grid max-w-xl gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200/80 bg-background/70 p-4 shadow-sm backdrop-blur dark:border-slate-800">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
+                  <Mic className="h-4 w-4" aria-hidden="true" />
+                </div>
+                <p className="mt-4 text-sm font-semibold">Talk naturally</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Explain what you need in your own words and let the agent guide the conversation.
+                </p>
               </div>
-            )}
+              <div className="rounded-2xl border border-slate-200/80 bg-background/70 p-4 shadow-sm backdrop-blur dark:border-slate-800">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300">
+                  <Database className="h-4 w-4" aria-hidden="true" />
+                </div>
+                <p className="mt-4 text-sm font-semibold">See the handoff happen</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  The agent completes its configured follow-up so you can see the outcome for yourself.
+                </p>
+              </div>
+            </div>
 
-            <Button
-              size="lg"
-              className="h-12 w-full text-base"
-              onClick={handleStartCall}
-              disabled={demoCallLimitReached}
+            <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              {callsRemainingLabel ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  {callsRemainingLabel}
+                </span>
+              ) : null}
+              {durationLabel ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock3 className="h-3.5 w-3.5 text-primary" />
+                  {durationLabel}
+                </span>
+              ) : null}
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                No platform credits used
+              </span>
+            </div>
+          </section>
+
+          <aside className="order-1 w-full lg:order-2 lg:sticky lg:top-8">
+            <Card
+              className="gap-0 overflow-hidden border-slate-200/90 bg-card/95 py-0 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-800"
+              data-demo-visualizer={visualizer}
             >
-              <Mic className="mr-2 h-5 w-5" />
-              {demoCallLimitReached
-                ? "Demo unavailable"
-                : `Talk to ${agent.name}`}
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              You&apos;ll be asked to allow microphone access • Powered by 24x7
-              AI
-            </p>
-          </CardContent>
-        </Card>
+              <CardHeader className="border-b border-slate-200/80 px-5 pb-5 pt-5 dark:border-slate-800 sm:px-6">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-primary">
+                    Start here
+                  </span>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground">
+                    Live voice
+                  </span>
+                </div>
+                <CardTitle
+                  id="start-demo-title"
+                  className="mt-4 text-2xl tracking-tight"
+                >
+                  Talk to {agent.name}
+                </CardTitle>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  <span className="hidden lg:inline">
+                    Take the role of a prospective customer and let the agent handle the next step.
+                  </span>
+                  <span className="lg:hidden">{description}</span>
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4 px-5 py-5 sm:px-6">
+                {demoCallLimitReached ? (
+                  <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3.5 text-sm text-destructive">
+                    <p className="font-semibold">This demo is currently unavailable</p>
+                    <p className="mt-1 text-xs leading-5">
+                      {DEMO_TRIAL_EXHAUSTED_MESSAGE}
+                    </p>
+                  </div>
+                ) : null}
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Demo agents are for showcasing only.{" "}
+                <section
+                  aria-labelledby="demo-data-notice-title"
+                  className="rounded-2xl border border-amber-300/80 bg-amber-50/80 p-4 text-amber-950 shadow-sm dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-50"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-200/70 text-amber-800 dark:bg-amber-900/70 dark:text-amber-200">
+                      <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3
+                        id="demo-data-notice-title"
+                        className="text-sm font-semibold tracking-tight"
+                      >
+                        Public demo — use fictional details
+                      </h3>
+                      <p className="mt-1.5 text-xs leading-5 text-amber-900/80 dark:text-amber-100/80">
+                        This agent writes the information you share to a public demo data store that other visitors may see. Use dummy details only—never real names, email addresses, phone numbers, physical addresses, or confidential information.
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-amber-900/80 dark:text-amber-100/80">
+                        If you provide an email, we&apos;ll try to send a confirmation. Use a secondary inbox or Gmail alias such as{" "}
+                        <code className="break-words rounded bg-amber-100 px-1 py-0.5 text-[0.8em] dark:bg-amber-900/70">
+                          yourname+demo@gmail.com
+                        </code>
+                        .
+                      </p>
+                      <a
+                        href={GMAIL_ALIAS_HELP_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 underline decoration-amber-500/60 underline-offset-4 transition hover:text-amber-950 dark:text-amber-200 dark:hover:text-white"
+                      >
+                        Learn how Gmail aliases work
+                        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <label
+                    htmlFor="demo-data-policy"
+                    className="mt-3 flex cursor-pointer items-start gap-2.5 border-t border-amber-300/60 pt-3 text-xs font-semibold leading-5 dark:border-amber-800/70"
+                  >
+                    <input
+                      id="demo-data-policy"
+                      type="checkbox"
+                      checked={hasAcknowledgedDemoPolicy}
+                      onChange={(event) =>
+                        setHasAcknowledgedDemoPolicy(event.target.checked)
+                      }
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-amber-400 text-amber-700 accent-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-amber-50 dark:focus:ring-offset-amber-950"
+                    />
+                    <span>
+                      I understand this is a public demo and will use dummy information.
+                    </span>
+                  </label>
+                </section>
+
+                {callError && (
+                  <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                    {callError}
+                  </div>
+                )}
+
+                <Button
+                  size="lg"
+                  className="h-12 w-full text-base shadow-lg shadow-primary/15"
+                  onClick={handleStartCall}
+                  disabled={demoCallLimitReached || !hasAcknowledgedDemoPolicy}
+                >
+                  <Mic className="mr-2 h-5 w-5" />
+                  {demoCallLimitReached
+                    ? "Demo unavailable"
+                    : `Talk to ${agent.name}`}
+                </Button>
+                {!demoCallLimitReached && !hasAcknowledgedDemoPolicy ? (
+                  <p className="-mt-1 text-center text-xs text-muted-foreground">
+                    Check the notice to enable the call.
+                  </p>
+                ) : null}
+                <p className="text-center text-[0.7rem] leading-5 text-muted-foreground">
+                  Microphone access required • No platform credits used
+                </p>
+              </CardContent>
+            </Card>
+          </aside>
+        </main>
+
+        <footer className="flex items-center justify-center gap-1.5 pt-2 text-center text-xs text-muted-foreground">
+          <span>Demo agents are for showcasing only.</span>
           <Link href="/" className="underline underline-offset-4">
             Back to home
           </Link>
-        </p>
+        </footer>
       </div>
     </div>
   );

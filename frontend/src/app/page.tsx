@@ -97,6 +97,12 @@ export default function LandingPage() {
               Industries
             </a>
             <a
+              href="#demos"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Live demos
+            </a>
+            <a
               href="#pricing"
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -265,6 +271,68 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Live demos */}
+        <section id="demos" className="border-y border-border/40 bg-slate-950 py-20 text-white md:py-28">
+          <div className="container mx-auto max-w-7xl px-4 md:px-6">
+            <div className="mx-auto mb-12 max-w-3xl text-center">
+              <div className="mb-4 inline-flex items-center rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1.5 text-sm font-medium text-cyan-200">
+                Try it yourself
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+                See the handoff, not just the conversation
+              </h2>
+              <p className="mt-4 text-base leading-7 text-slate-300 md:text-lg">
+                Talk to a live demo agent, then review the exact fields it
+                captured and the business system it updated.
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Link
+                href="/demo/pleasant-pediatric-appointments"
+                className="group rounded-3xl border border-white/10 bg-white/[0.06] p-6 transition hover:-translate-y-1 hover:border-cyan-300/40 hover:bg-white/[0.1] md:p-8"
+              >
+                <div className="flex items-start justify-between gap-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/15 text-cyan-300">
+                    <CalendarCheck className="h-6 w-6" />
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-slate-500 transition group-hover:translate-x-1 group-hover:text-cyan-300" />
+                </div>
+                <p className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                  Appointment booking
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold">Book a dental visit</h3>
+                <p className="mt-3 max-w-md leading-7 text-slate-300">
+                  Alex checks availability, confirms the appointment, and writes
+                  the event to Google Calendar.
+                </p>
+                <p className="mt-6 text-sm font-medium text-cyan-200">Talk to Alex →</p>
+              </Link>
+
+              <Link
+                href="/demo/copper-ridge-service-request"
+                className="group rounded-3xl border border-white/10 bg-white/[0.06] p-6 transition hover:-translate-y-1 hover:border-orange-300/40 hover:bg-white/[0.1] md:p-8"
+              >
+                <div className="flex items-start justify-between gap-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-400/15 text-orange-300">
+                    <Wrench className="h-6 w-6" />
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-slate-500 transition group-hover:translate-x-1 group-hover:text-orange-300" />
+                </div>
+                <p className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">
+                  Lead capture
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold">Request HVAC service</h3>
+                <p className="mt-3 max-w-md leading-7 text-slate-300">
+                  Jordan gathers the full service request, confirms it with the
+                  caller, and records it in Google Sheets for follow-up.
+                </p>
+                <p className="mt-6 text-sm font-medium text-orange-200">Talk to Jordan →</p>
+              </Link>
             </div>
           </div>
         </section>

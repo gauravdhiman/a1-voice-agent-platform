@@ -5,6 +5,7 @@ Pydantic models for Voice Agent functionality.
 import re
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -37,6 +38,40 @@ def normalize_phone_number(value: Optional[str]) -> Optional[str]:
             "(e.g., +14155551234 or +441632960000)"
         )
     return value
+
+
+def normalize_demo_public_result_url(value: Optional[str]) -> Optional[str]:
+    """Normalize an optional public demo result URL.
+
+    Args:
+        value: URL configured by a platform administrator for a demo receipt.
+
+    Returns:
+        A trimmed HTTPS URL, or ``None`` when the setting is blank.
+
+    Raises:
+        ValueError: If the value is not an HTTPS URL with a hostname.
+    """
+    if value is None or value == "":
+        return None
+
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    try:
+        parsed = urlsplit(normalized)
+        hostname = parsed.hostname
+    except ValueError as exc:
+        raise ValueError("Demo public result URL must be a valid HTTPS URL") from exc
+
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise ValueError("Demo public result URL must be a valid HTTPS URL")
+    return normalized
 
 
 class VoiceAgentBase(BaseModel):
@@ -162,6 +197,15 @@ class VoiceAgentBase(BaseModel):
             "the agent is public; fallback on the demo page is mission → persona."
         ),
     )
+    demo_public_result_url: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description=(
+            "Optional HTTPS URL shown on a successful demo receipt as the "
+            "public result destination. Platform-admin only; use a dedicated "
+            "public demo view or data store."
+        ),
+    )
     demo_calls_remaining: int = Field(
         default=-1,
         ge=-1,
@@ -211,6 +255,12 @@ class VoiceAgentBase(BaseModel):
         if len(v) > 1000:
             raise ValueError("Public description must be at most 1000 characters")
         return v
+
+    @field_validator("demo_public_result_url", mode="before")
+    @classmethod
+    def validate_demo_public_result_url(cls, v: Optional[str]) -> Optional[str]:
+        """Trim and validate the optional demo receipt destination."""
+        return normalize_demo_public_result_url(v)
 
     @field_validator("demo_max_call_duration_seconds")
     @classmethod
@@ -332,6 +382,14 @@ class VoiceAgentUpdate(BaseModel):
             "LLM prompt fields; shown to visitors before calling."
         ),
     )
+    demo_public_result_url: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description=(
+            "Optional HTTPS URL shown on a successful demo receipt as the "
+            "public result destination. Platform-admin only."
+        ),
+    )
     demo_calls_remaining: Optional[int] = Field(
         None,
         ge=-1,
@@ -375,6 +433,12 @@ class VoiceAgentUpdate(BaseModel):
         if len(v) > 1000:
             raise ValueError("Public description must be at most 1000 characters")
         return v
+
+    @field_validator("demo_public_result_url", mode="before")
+    @classmethod
+    def validate_demo_public_result_url_update(cls, v: Optional[str]) -> Optional[str]:
+        """Trim and validate the optional demo receipt destination on update."""
+        return normalize_demo_public_result_url(v)
 
     @field_validator("demo_max_call_duration_seconds")
     @classmethod

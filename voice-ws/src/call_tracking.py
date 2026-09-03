@@ -85,8 +85,15 @@ async def end_call_tracking(
     call_log_id: Optional[str],
     *,
     status: str = "completed",
+    failure_code: Optional[str] = None,
+    failure_message: Optional[str] = None,
 ) -> None:
-    """Mark a tracked call log row as finished."""
+    """Mark a tracked call log row as finished.
+
+    ``failure_code`` and ``failure_message`` are safe, bounded classifications
+    produced by the voice runtime. Raw provider exceptions must never be sent
+    to this persistence boundary.
+    """
     if not call_log_id:
         return
     client = supabase_config.client
@@ -121,14 +128,17 @@ async def end_call_tracking(
                 else 0
             ),
         )
-        client.table("call_logs").update(
-            {
-                "status": status,
-                "duration": duration_seconds,
-                "ended_at": now,
-                "updated_at": now,
-            }
-        ).eq("id", call_log_id).execute()
+        final_update = {
+            "status": status,
+            "duration": duration_seconds,
+            "ended_at": now,
+            "updated_at": now,
+        }
+        if failure_code:
+            final_update["failure_code"] = failure_code[:100]
+            final_update["failure_message"] = (failure_message or "")[:1000]
+
+        client.table("call_logs").update(final_update).eq("id", call_log_id).execute()
 
         await _bill_completed_call(
             client,
@@ -139,6 +149,7 @@ async def end_call_tracking(
         )
     except Exception:
         logger.exception("Failed to finalize call log id=%s", call_log_id)
+
 
 async def _bill_completed_call(
     client: object,

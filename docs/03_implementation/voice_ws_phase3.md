@@ -67,6 +67,36 @@ DB rows to direct providers. An unmappable pipeline stage (or missing
 direct-provider key) logs an error and falls back to the Gemini realtime default
 so the call still connects.
 
+## Live preset validation and runtime failure visibility
+
+The voice runtime disables OpenRouter reasoning (`effort=none` and
+`exclude=true`) to keep pipeline latency predictable. A model whose OpenRouter
+catalog metadata marks reasoning as mandatory is therefore incompatible with
+the current runtime configuration.
+
+- Platform preset create/upsert, update, publication, and system-default edits
+  validate OpenRouter LLM stages against `GET https://openrouter.ai/api/v1/models`.
+  Successful catalog responses are cached in-process for ten minutes; the
+  platform `OPENROUTER_API_KEY` is never returned or persisted.
+- A draft that is not being used by a live/published preset may be authored
+  without a provider network check. Publication and edits to an already-live
+  configuration fail closed with an actionable admin message if the model is
+  missing, requires reasoning, credentials are absent, or the catalog cannot be
+  verified. Providers without an adapter are skipped so adding a provider stays
+  additive.
+- Runtime validation does not call the catalog on every voice session. If a
+  legacy/already-published row still reaches voice-ws and the provider rejects
+  it, the first Pipecat `ErrorFrame` or runner exception is classified into
+  `call_logs.failure_code`/`failure_message`, and the call status becomes
+  `failed`. The authenticated Calls UI renders the safe classification. Raw
+  provider exceptions remain in runtime logs/telemetry and are not exposed in
+  call-log responses.
+- Connected failed calls still settle elapsed voice usage. A later Twilio
+  callback cannot overwrite a recorded runtime failure with `completed`.
+
+The schema fields are introduced by
+`20260902000001_add_call_failure_details`.
+
 ## How to test
 
 1. **Realtime + tools:** Assign Gmail/Calendar (or MCP) tools + a skill to an

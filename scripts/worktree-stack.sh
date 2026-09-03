@@ -262,7 +262,10 @@ sync_voice_provider_settings() {
     CARTESIA_API_KEY \
     CEREBRAS_API_KEY \
     OPENROUTER_API_KEY \
-    FISH_API_KEY; do
+    FISH_API_KEY \
+    RESEND_API_KEY \
+    RESEND_FROM_EMAIL \
+    RESEND_FROM_NAME; do
     value="$(read_env_value "$source_env" "$key")"
     if [[ -n "$value" ]] && ! is_placeholder_env_value "$value"; then
       set_env_value "$APP_ENV" "$key" "$value"
@@ -345,8 +348,10 @@ derive_identity() {
   REGULAR_USER_EMAIL="regular-user@247ai.local"
   ORG_ADMIN_EMAIL="org-admin@247ai.local"
   PLATFORM_ADMIN_EMAIL="platform-admin@247ai.local"
-  TEST_ORGANIZATION_NAME="Pleasant Pediatric"
+  TEST_ORGANIZATION_NAME="24x7 AI Demo Studio"
   TEST_AGENT_ID="59252f36-255e-4e71-9250-c4ce3ac27eaa"
+  TEST_APPOINTMENT_DEMO_SLUG="pleasant-pediatric-appointments"
+  TEST_LEAD_DEMO_SLUG="copper-ridge-service-request"
 }
 
 write_metadata() {
@@ -362,6 +367,8 @@ SUPABASE_CONFIG=$SUPABASE_CONFIG
 APP_ENV=$APP_ENV
 TEST_ORGANIZATION_NAME=$TEST_ORGANIZATION_NAME
 TEST_AGENT_ID=$TEST_AGENT_ID
+TEST_APPOINTMENT_DEMO_SLUG=$TEST_APPOINTMENT_DEMO_SLUG
+TEST_LEAD_DEMO_SLUG=$TEST_LEAD_DEMO_SLUG
 EOF
   chmod 600 "$METADATA_FILE"
 }
@@ -432,6 +439,11 @@ prepare_app_env() {
     chmod 600 "$APP_ENV"
     copied_source=true
   fi
+
+  # Organization provider credentials are encrypted at rest. Keep each local
+  # worktree on a stable generated key without ever generating keys for
+  # staging or production environments.
+  python3 "$ROOT/scripts/ensure-local-encryption-key.py" "$APP_ENV"
 
   # Provider credentials are intentionally refreshed on every setup. The
   # generated app.env persists between runs, while the canonical .env.local
@@ -606,7 +618,7 @@ run_master_data_seed() {
 }
 
 run_worktree_seed() {
-  echo -e "${BLUE}Creating standard email/password test accounts and staging fixture...${NC}"
+  echo -e "${BLUE}Creating standard email/password test accounts and local demo fixture...${NC}"
   compose run --rm --no-deps --build \
     --env "WORKTREE_ID=${WORKTREE_ID}" \
     backend-dev python scripts/worktree_seed.py
@@ -656,6 +668,9 @@ show_config() {
 show_test_accounts() {
   echo "Test organization: ${TEST_ORGANIZATION_NAME}"
   echo "Test agent ID: ${TEST_AGENT_ID}"
+  echo "Demo URLs:"
+  echo "  appointment: http://localhost:${APP_FRONTEND_PORT}/demo/${TEST_APPOINTMENT_DEMO_SLUG}"
+  echo "  lead capture: http://localhost:${APP_FRONTEND_PORT}/demo/${TEST_LEAD_DEMO_SLUG}"
   echo "Test accounts (all use password ${TEST_PASSWORD}):"
   echo "  regular user: ${REGULAR_USER_EMAIL}"
   echo "  org admin: ${ORG_ADMIN_EMAIL}"

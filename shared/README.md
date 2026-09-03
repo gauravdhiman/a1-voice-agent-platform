@@ -71,6 +71,7 @@ shared/
 │   ├── speech_config.py   # Per-agent speech engine config (realtime vs pipeline; discriminated union)
 │   ├── preset_models.py   # Platform-admin preset Pydantic models (Phase 3)
 │   ├── preset_service.py  # Platform-admin preset catalog CRUD (Phase 3; mirrors tool_service)
+│   ├── model_capabilities.py # Provider-backed model capability validation for live presets
 │   ├── key_resolver.py    # Per-org provider key resolver: SpeechConfig + encrypted provider_credentials -> api_keys (Phase 3)
 │   ├── tools/             # Tool implementation framework
 │   │   ├── base/

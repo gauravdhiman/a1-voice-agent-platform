@@ -148,11 +148,33 @@ def test_public_demo_page_renders_description_and_visualizer_choice(
     expect(page.locator('[data-demo-visualizer="lk-bars"]')).to_be_visible()
     expect(page.get_by_text("Acme Dental")).to_be_visible()
     expect(
-        page.get_by_text("Book a dental visit and answer common questions.")
+        page.locator("main > section").get_by_text(
+            "Book a dental visit and answer common questions."
+        )
     ).to_be_visible()
-    expect(page.get_by_text("Calls: 3 trial calls remaining")).to_be_visible()
-    expect(page.get_by_text("Duration: Maximum 10 minutes per call")).to_be_visible()
-    expect(page.get_by_role("button", name="Talk to Acme Concierge")).to_be_visible()
+    expect(page.get_by_text("3 trial calls remaining")).to_be_visible()
+    expect(page.get_by_text("Maximum 10 minutes per call")).to_be_visible()
+    start_button = page.get_by_role("button", name="Talk to Acme Concierge")
+    expect(start_button).to_be_visible()
+    expect(start_button).to_be_disabled()
+    for viewport_width, viewport_height in ((1280, 720), (390, 844)):
+        page.set_viewport_size({"width": viewport_width, "height": viewport_height})
+        button_box = start_button.bounding_box()
+        assert button_box is not None
+        assert button_box["y"] + button_box["height"] <= viewport_height
+    expect(
+        page.get_by_text(
+            "This agent writes the information you share to a public demo data store that other visitors may see."
+        )
+    ).to_be_visible()
+    expect(
+        page.get_by_role("link", name="Learn how Gmail aliases work")
+    ).to_have_attribute("href", "https://support.google.com/mail/answer/22370?hl=en")
+    page.get_by_role(
+        "checkbox",
+        name="I understand this is a public demo and will use dummy information.",
+    ).check()
+    expect(start_button).to_be_enabled()
 
     step("Verify the default visualizer remains radial")
     page.goto(f"{base_url}/demo/{demo_slug}")
@@ -197,6 +219,127 @@ def test_exhausted_public_demo_page_disables_trial_call(
     assert page.get_by_role("button", name="Demo unavailable").is_disabled()
 
 
+def test_public_demo_outcome_page_shows_provider_backed_receipt(
+    page: Page, base_url: str, step
+):
+    """A visitor can inspect the fields and provider confirmed by a demo call."""
+    demo_slug = "copper-ridge-service-request"
+    page.route(
+        re.compile(rf".*/api/v1/public/demo/{demo_slug}/outcome\?token=.*"),
+        lambda route: _fulfill_json(
+            route,
+            {
+                "demo_slug": demo_slug,
+                "agent_name": "Jordan",
+                "organization_name": "Copper Ridge Heating & Air",
+                "status": "completed",
+                "actions": [
+                    {
+                        "id": "00000000-0000-0000-0000-000000000501",
+                        "action_type": "lead_capture",
+                        "provider": "google_sheets",
+                        "status": "succeeded",
+                        "error_code": None,
+                        "captured_fields": {
+                            "caller_name": "Maria Garcia",
+                            "service_needed": "AC repair",
+                            "issue_summary": "Warm air upstairs",
+                        },
+                        "provider_result": {
+                            "record_type": "lead_row",
+                            "record_id": "submission-123",
+                            "updated_range": "Lead submissions!A2",
+                            "message": "Service inquiry captured in Google Sheets.",
+                        },
+                        "created_at": "2026-08-30T10:00:00Z",
+                        "expires_at": "2026-09-06T10:00:00Z",
+                    },
+                    {
+                        "id": "00000000-0000-0000-0000-000000000503",
+                        "action_type": "email_delivery",
+                        "provider": "gmail",
+                        "status": "succeeded",
+                        "error_code": None,
+                        "captured_fields": {},
+                        "provider_result": {
+                            "record_type": "email",
+                            "record_id": "gmail-message-123",
+                            "message": "Gmail confirmed the email was sent.",
+                        },
+                        "created_at": "2026-08-30T10:00:01Z",
+                        "expires_at": "2026-09-06T10:00:01Z",
+                    },
+                ],
+                "expires_at": "2026-09-06T10:00:00Z",
+            },
+        ),
+    )
+
+    step("Open the private demo outcome receipt")
+    page.goto(f"{base_url}/demo/{demo_slug}/outcome?token=visitor-receipt-token-123456")
+
+    step("Verify the captured inquiry and provider confirmation")
+    expect(page.get_by_text("The handoff is complete")).to_be_visible()
+    expect(page.get_by_text("Maria Garcia")).to_be_visible()
+    expect(page.get_by_text("AC repair")).to_be_visible()
+    expect(page.get_by_text("Google Sheets", exact=True)).to_be_visible()
+    expect(page.get_by_text("Email confirmation sent")).to_be_visible()
+    expect(page.get_by_text("Gmail confirmed the email was sent.")).to_be_visible()
+
+
+def test_public_demo_outcome_page_is_clear_when_provider_save_fails(
+    page: Page, base_url: str, step
+):
+    """A failed provider mutation is not presented as a completed capture."""
+    demo_slug = "copper-ridge-service-request"
+    page.route(
+        re.compile(rf".*/api/v1/public/demo/{demo_slug}/outcome\?token=.*"),
+        lambda route: _fulfill_json(
+            route,
+            {
+                "demo_slug": demo_slug,
+                "agent_name": "Jordan",
+                "organization_name": "Copper Ridge Heating & Air",
+                "status": "needs_attention",
+                "actions": [
+                    {
+                        "id": "00000000-0000-0000-0000-000000000502",
+                        "action_type": "lead_capture",
+                        "provider": "google_sheets",
+                        "status": "failed",
+                        "error_code": "invalid_configuration",
+                        "captured_fields": {
+                            "caller_name": "Maria Garcia",
+                            "caller_email": "maria@example.com",
+                            "service_needed": "AC repair",
+                        },
+                        "provider_result": {
+                            "message": "The Google Sheets destination is not configured for this demo.",
+                        },
+                        "created_at": "2026-08-30T10:00:00Z",
+                        "expires_at": "2026-09-06T10:00:00Z",
+                    }
+                ],
+                "expires_at": "2026-09-06T10:00:00Z",
+            },
+        ),
+    )
+
+    step("Open the failed private demo outcome receipt")
+    page.goto(f"{base_url}/demo/{demo_slug}/outcome?token=visitor-receipt-token-123456")
+
+    step("Verify the receipt distinguishes captured details from a failed save")
+    expect(page.get_by_text("Review what Jordan captured.")).to_be_visible()
+    expect(page.get_by_text("Service inquiry details captured")).to_be_visible()
+    expect(page.get_by_text("Not completed")).to_be_visible()
+    expect(
+        page.get_by_text(
+            "The Google Sheets destination is not configured for this demo."
+        )
+    ).to_be_visible()
+    expect(page.get_by_text("Service inquiry captured", exact=True)).to_have_count(0)
+
+
 def test_platform_admin_can_publish_and_mark_demo_agent(
     page: Page, base_url: str, step
 ):
@@ -213,6 +356,7 @@ def test_platform_admin_can_publish_and_mark_demo_agent(
         "is_demo": False,
         "demo_slug": None,
         "public_description": None,
+        "demo_public_result_url": None,
         "demo_calls_remaining": -1,
         "demo_max_call_duration_seconds": -1,
         "persona": "Receptionist",
@@ -269,6 +413,9 @@ def test_platform_admin_can_publish_and_mark_demo_agent(
     page.locator("#is-demo").click()
     page.get_by_label("Demo slug *").fill("acme-demo")
     page.get_by_label("Public description").fill("A customer-facing demo description")
+    page.get_by_label("Public result URL (optional)").fill(
+        "https://docs.google.com/spreadsheets/d/demo-sheet/edit?gid=0#gid=0"
+    )
     page.get_by_label("Demo calls remaining").fill("3")
     page.get_by_label("Maximum call duration (minutes)").fill("10")
 
@@ -285,6 +432,10 @@ def test_platform_admin_can_publish_and_mark_demo_agent(
     assert update_payloads[0]["demo_slug"] == "acme-demo"
     assert (
         update_payloads[0]["public_description"] == "A customer-facing demo description"
+    )
+    assert (
+        update_payloads[0]["demo_public_result_url"]
+        == "https://docs.google.com/spreadsheets/d/demo-sheet/edit?gid=0#gid=0"
     )
     assert update_payloads[0]["demo_calls_remaining"] == 3
     assert update_payloads[0]["demo_max_call_duration_seconds"] == 600

@@ -32,6 +32,10 @@ The repository now contains a reusable evaluation core in `evals/`:
 - `evals/calendar.py` is the first adapter. It runs the real shared Google
   Calendar appointment service against a stateful fake Google HTTP API, so it
   never needs OAuth credentials or writes to a real calendar.
+- `evals/lead_capture.py` exercises the real Google Sheets lead-row service
+  against a stateful fake Sheets HTTP API, including new rows, same-session
+  deduplication, missing follow-up channels, and provider outages. HubSpot's
+  separate contact-and-note adapter is covered by its native tool contract.
 - `evals/resend.py` exercises the native Resend route catalog and send contract
   against a fake provider, including privacy, configuration, partial delivery,
   timeout, validation, and retry behavior.
@@ -56,6 +60,7 @@ Run one deterministic tool suite while developing:
 
 ```bash
 python scripts/run-agent-evals.py --suite calendar
+python scripts/run-agent-evals.py --suite lead_capture
 python scripts/run-agent-evals.py --suite resend
 ```
 
