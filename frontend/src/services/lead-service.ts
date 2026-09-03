@@ -24,6 +24,8 @@ export interface InterestLeadData {
   source?: "request-demo" | "outcome-form" | "demo-call" | "manual";
   /** Demo agent slug when captured post-demo. */
   demoSlug?: string;
+  /** Cloudflare Turnstile token (sent when the widget is enabled). */
+  captchaToken?: string;
 }
 
 /** Standard service result envelope. */
@@ -54,6 +56,7 @@ async function submitInterestLead(
       message: data.message || undefined,
       source: data.source ?? "request-demo",
       demo_slug: data.demoSlug || undefined,
+      captcha_token: data.captchaToken || undefined,
     });
     return { success: true };
   } catch (error) {

@@ -28,6 +28,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, Phone } from "lucide-react";
 import { SITE_NAME } from "@/lib/site-config";
 import { leadService } from "@/services/lead-service";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 
 const requestDemoSchema = z.object({
   name: z.string().trim().min(1, "Please tell us your name.").max(120),
@@ -57,6 +58,7 @@ const VERTICALS = [
 export default function RequestDemoPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const form = useForm<RequestDemoValues>({
     resolver: zodResolver(requestDemoSchema),
@@ -80,6 +82,7 @@ export default function RequestDemoPage() {
       vertical: values.vertical || undefined,
       message: values.message || undefined,
       source: "request-demo",
+      captchaToken: captchaToken || undefined,
     });
     if (result.success) {
       const { trackEvent } = await import("@/lib/analytics/posthog");
@@ -284,6 +287,10 @@ export default function RequestDemoPage() {
                         ? "Sending…"
                         : "Request my demo"}
                     </Button>
+                    <TurnstileWidget
+                      onVerify={setCaptchaToken}
+                      onExpire={() => setCaptchaToken(null)}
+                    />
                   </form>
                 </Form>
               )}
