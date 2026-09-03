@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useSearchParams, useRouter } from "next/navigation";
 import { OAuthRedirectButton } from "@/components/auth/oauth-redirect-button";
 import { ExistingAccountHint } from "@/components/auth/existing-account-hint";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { authService } from "@/services/auth-service";
 import {
   signUpSchema,
@@ -32,6 +33,7 @@ export function SignUpForm() {
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSignUpComplete, setIsSignUpComplete] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const { signUp } = useAuth();
   const searchParams = useSearchParams();
@@ -145,6 +147,7 @@ export function SignUpForm() {
         firstName: data.firstName,
         lastName: data.lastName,
         invitationToken: invitationToken || undefined,
+        captchaToken: captchaToken || undefined,
       });
 
       if (error) {
@@ -408,6 +411,10 @@ export function SignUpForm() {
             "Create Account"
           )}
         </Button>
+        <TurnstileWidget
+          onVerify={setCaptchaToken}
+          onExpire={() => setCaptchaToken(null)}
+        />
       </form>
 
       <div className="relative my-6">

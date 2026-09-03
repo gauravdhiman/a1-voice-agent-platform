@@ -72,6 +72,7 @@ export interface SignUpData {
   firstName: string;
   lastName: string;
   invitationToken?: string;
+  captchaToken?: string;
 }
 
 export type SignInMethod = "email" | "google" | "linkedin";

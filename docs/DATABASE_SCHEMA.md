@@ -389,6 +389,35 @@ row id and organization to prevent cross-tenant writes.
 
 ---
 
+### auth_audit_events
+
+Append-only authentication audit trail. Backend auth routes record
+security-relevant events; rows are never updated or deleted by
+application code. Investigation fields only — no tokens, passwords, or
+request bodies.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Event row identifier |
+| user_id | UUID | NULLABLE | Account id when known |
+| email | VARCHAR(320) | NULLABLE | Account email when known (indexed) |
+| event | VARCHAR(60) | NOT NULL, CHECK nine audited event names | Event category |
+| ip | VARCHAR(64) | NULLABLE | Caller IP |
+| user_agent | VARCHAR(500) | NULLABLE | Caller user agent (bounded) |
+| metadata | JSONB | NOT NULL, DEFAULT `{}` | Small extras (provider, reason codes) |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Event timestamp |
+
+**RLS**: Enabled with no public or authenticated-user policies; the
+service role is the only writer. Reads require the `platform_admin`
+role at the `GET /api/v1/auth/audit` boundary.
+
+**Indexes**: `(email, created_at)` for account investigation and
+`(event, created_at)` for abuse review.
+
+**Migrations**: `20260905000001_add_auth_audit_events.py`.
+
+---
+
 ### voice_templates
 
 Global, platform-admin-managed reusable starting points for agent setup. The
@@ -1962,6 +1991,7 @@ erDiagram
 80. `20260903000001` - Add service-role-only `interest_leads` as the private source of truth for the controlled-SaaS funnel (`request-demo` / `outcome-form` / `demo-call` / `manual` sources; `new` → `contacted` → `invited` → `converted`/`dropped` follow-up states). No FKs, no public RLS policy; admin reads gated by the `platform_admin` role.
 81. `20260904000001` - Add service-role-only `callback_escalations` for owner-visible soft escalation (`new` → `acknowledged` → `resolved`; `normal`/`urgent`). Production calls record one row per accepted `request_human_callback` tool result via the voice runtime hook; demos are skipped. Reads require org membership; writes match row id + organization.
 82. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
+83. `20260906000001` - Add append-only, service-role-only `auth_audit_events` (`signup`, `signup_denied`, `signin`, `signin_denied`, `signout`, `invitation_processed`, `password_reset_requested`, `oauth_signin`, `oauth_denied`). Written by backend auth routes only; reads are platform-admin only. No tokens, passwords, or request bodies are stored.
 
 ---
 

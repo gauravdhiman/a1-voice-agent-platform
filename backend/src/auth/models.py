@@ -45,6 +45,11 @@ class SignUpRequest(BaseModel):
     invitation_token: Optional[str] = Field(
         None, description="Invitation token for organization membership"
     )
+    captcha_token: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description="Cloudflare Turnstile token (required when enforced)",
+    )
 
     @field_validator("password")
     @classmethod

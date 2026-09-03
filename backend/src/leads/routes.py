@@ -15,6 +15,7 @@ from src.auth.models import UserProfile
 from src.leads.models import InterestLead, InterestLeadAck, InterestLeadCreate
 from src.leads.service import lead_service
 from src.security.rate_limiter import limiter
+from src.security.turnstile import is_turnstile_configured, verify_turnstile_token
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -58,6 +59,19 @@ async def submit_interest_lead(
     current_span.set_attribute("lead.source", body.source)
     if body.demo_slug:
         current_span.set_attribute("lead.demo_slug", body.demo_slug)
+
+    if is_turnstile_configured():
+        client_ip = request.client.host if request.client else None
+        verified = await verify_turnstile_token(body.captcha_token, client_ip)
+        if not verified:
+            current_span.set_attribute("error.type", "invalid_captcha")
+            current_span.set_status(
+                trace.Status(trace.StatusCode.ERROR, "invalid_captcha")
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Captcha verification failed. Please try again.",
+            )
 
     _lead, error = await lead_service.submit_lead(body)
     if error:

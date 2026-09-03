@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabase";
+import { apiClient } from "@/lib/api/client";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -53,25 +53,17 @@ export function ForgotPasswordDialog({
     setSuccess(false);
 
     try {
-      // Use direct Supabase call with clean redirect URL
-      // Supabase will handle the token and type parameters internally
-      // and redirect to our clean URL: /auth/reset-password
-      const redirectUrl = `${window.location.origin}/auth/reset-password`;
+      // Backend-owned reset flow: rate-limited, audited, and safe against
+      // account enumeration (the response is identical either way).
+      const response = await apiClient.post<{ message: string }>(
+        "/api/v1/auth/password-reset",
+        { email: data.email },
+      );
 
-      // Send the password reset email using Supabase directly
-      const { error: supabaseError } =
-        await supabase.auth.resetPasswordForEmail(data.email, {
-          redirectTo: redirectUrl,
-        });
-
-      if (supabaseError) {
-        console.error("Supabase forgot password error:", supabaseError);
-        throw new Error(
-          supabaseError.message || "Failed to send password reset email",
-        );
+      // Success - reset requested (message is safe by backend contract)
+      if (!response.data?.message) {
+        throw new Error("Failed to send password reset email");
       }
-
-      // Success - email sent
       setSuccess(true);
       setEmailSent(data.email);
       reset();
