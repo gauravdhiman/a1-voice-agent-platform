@@ -188,7 +188,10 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     (`extra="forbid"` on the server, so no stray keys). Publish allowed once a
     valid config is authored; backend 400 (invalid config) shown inline. A nav
     entry (`SlidersHorizontal`, `requiredPermission: "platform:admin"`) was added
-    under the `platform_admin` section.
+    under the `platform_admin` section. Every catalog row also exposes **Copy**;
+    it opens the same author drawer as a new draft with the source description
+    and configuration prefilled, while generating a collision-safe name so the
+    upsert-by-name create endpoint cannot overwrite the source preset.
   - **(B) Agent preset picker** — reusable `PresetPicker` single-select used by
     both the create widget and the agent detail page. Lists **published** presets
     only from `usePresets()` plus a generic **"Default"** option →
