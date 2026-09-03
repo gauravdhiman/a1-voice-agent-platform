@@ -41,6 +41,19 @@ they land (with the PR number that closed them).
   packs (tool docstring carries the contract today; skills reference it
   at pilot setup) → owner: **first pilot setup**.
 
+## From Epic E (open)
+
+- [ ] Cloudflare Turnstile keys (site + secret) provisioned into
+  staging/prod; code enforces automatically once set → owner: **founder
+  (5-minute ops task)**.
+- [ ] Supabase redirect allowlist includes `/auth/reset-password`
+  (recovery links point there) → owner: **founder (dashboard check)**.
+- [ ] OTel dashboards/alerts (deny-spike, webhook-lag, COGS-breach):
+  collector exists, no Grafana in repo — needs a home decision →
+  owner: **founder + next observability pass**.
+- [x] Carrier forwarding guides → closed by `09-forwarding-guides.md`
+  (Epic E PR).
+
 ## Backlog (explicitly not launch)
 
 Per-call metering engine · real PSTN warm transfer · annual plans ·

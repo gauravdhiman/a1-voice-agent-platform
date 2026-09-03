@@ -38,7 +38,13 @@ class LeadService(BaseOrganizationService):
         try:
             response = (
                 self.supabase.table("interest_leads")
-                .insert(payload.model_dump(mode="json", exclude_none=True))
+                .insert(
+                    payload.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                        exclude={"captcha_token"},
+                    )
+                )
                 .execute()
             )
         except Exception:
