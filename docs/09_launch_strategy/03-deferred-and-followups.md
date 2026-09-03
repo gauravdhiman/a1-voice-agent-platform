@@ -54,6 +54,17 @@ they land (with the PR number that closed them).
 - [x] Carrier forwarding guides → closed by `09-forwarding-guides.md`
   (Epic E PR).
 
+## From UX polish (open)
+
+- [ ] Restaurant demo agent + `/restaurants` return (route removed: it
+  demoed the wrong agent). Needs tuned instructions, tested booking
+  flow, and evals — not a copy job → owner: **after 2 live verticals
+  prove out**.
+- [ ] Mirror the `# Closing` rating line into production demo agents'
+  instructions → owner: **founder (config edit)**.
+- [ ] Vertical strategy stays 2-polished-over-5-thin until pilot data
+  says otherwise → owner: **product decision, revisit post-pilots**.
+
 ## Backlog (explicitly not launch)
 
 Per-call metering engine · real PSTN warm transfer · annual plans ·

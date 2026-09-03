@@ -381,7 +381,6 @@ export default function LandingPage() {
                     "Take reservations, party bookings, and special requests without tying up your staff.",
                   icon: UtensilsCrossed,
                   gradient: "from-rose-500 to-pink-500",
-                  href: "/restaurants",
                 },
                 {
                   title: "Salons & spas",

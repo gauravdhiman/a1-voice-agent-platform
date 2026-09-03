@@ -19,6 +19,7 @@ import posthog from "posthog-js";
 export interface AnalyticsEvents {
   demo_played: { demo_slug: string };
   demo_completed: { demo_slug: string };
+  demo_feedback: { demo_slug: string; rating: number };
   interest_submitted: { source: string; vertical?: string };
   invite_accepted: Record<string, never>;
   pilot_activated: Record<string, never>;
