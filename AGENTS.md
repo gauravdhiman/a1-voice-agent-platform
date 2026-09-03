@@ -447,6 +447,10 @@ Python:
 - Public classes, methods, and exported/non-obvious functions need concise
   docstrings describing purpose, typed inputs, outputs, errors, and invariants.
   Include examples only when they clarify a non-obvious contract.
+- Never use `from __future__ import annotations` in FastAPI route modules:
+  the rate-limit/tracing wrappers resolve stringified body models in foreign
+  globals, silently demoting them to query params and breaking
+  `/openapi.json`. Covered by `backend/tests/test_openapi_schema.py`.
 - Use OpenTelemetry spans at meaningful service boundaries and include stable
   non-sensitive identifiers.
 
