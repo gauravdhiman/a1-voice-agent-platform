@@ -10,7 +10,6 @@ describe("sitemap", () => {
       `${SITE_URL}/request-demo`,
       `${SITE_URL}/dental`,
       `${SITE_URL}/hvac`,
-      `${SITE_URL}/restaurants`,
     ]);
   });
 });

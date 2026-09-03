@@ -13,7 +13,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/request-demo", changeFrequency: "monthly", priority: 0.9 },
     { path: "/dental", changeFrequency: "monthly", priority: 0.8 },
     { path: "/hvac", changeFrequency: "monthly", priority: 0.8 },
-    { path: "/restaurants", changeFrequency: "monthly", priority: 0.8 },
   ];
   return pages.map((page) => ({
     url: `${SITE_URL}${page.path}`,

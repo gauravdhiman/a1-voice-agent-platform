@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Home, Loader2, Phone } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { SITE_NAME } from "@/lib/site-config";
 import { authService } from "@/services/auth-service";
 import { exchangeOAuthSessionHandoff } from "@/services/oauth-session-service";
 
@@ -147,11 +150,62 @@ export default function OAuthSessionPage() {
   }, [router, searchParams]);
 
   if (error) {
+    const inviteOnly = /invite-only|request a demo/i.test(error);
     return (
-      <div className="mx-auto flex min-h-[50vh] w-full max-w-md items-center justify-center p-6">
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+        <header className="w-full border-b border-border/40">
+          <div className="container flex h-16 items-center max-w-3xl mx-auto px-4">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-blue-600 to-cyan-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <Phone className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold tracking-tight">
+                {SITE_NAME}
+              </span>
+            </Link>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md space-y-6 text-center">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+            {inviteOnly ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  We onboard every business personally — request a demo and
+                  we will invite you, usually within one business day.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <Button
+                    asChild
+                    className="bg-blue-600 hover:bg-blue-700 h-12"
+                  >
+                    <Link href="/request-demo">Request a demo</Link>
+                  </Button>
+                  <Button asChild variant="ghost">
+                    <Link href="/">
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back to home
+                    </Link>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <Button asChild className="h-12">
+                  <Link href="/auth/signin">Try signing in again</Link>
+                </Button>
+                <Button asChild variant="ghost">
+                  <Link href="/">
+                    <Home className="mr-2 h-4 w-4" />
+                    Back to home
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        </main>
       </div>
     );
   }
