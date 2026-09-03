@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import WebSocket
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.frames.frames import ErrorFrame, LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -24,6 +24,7 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
+from src.call_failure import CallFailureState, classify_pipeline_failure
 from src.call_tracking import end_call_tracking, start_call_tracking
 from src.recording import RecordingAudioTap, RecordingCoordinator
 from src.recording_policy import should_record_agent_call
@@ -164,7 +165,13 @@ async def run_bot(
         Pipeline(processors),
         params=PipelineParams(allow_interruptions=True, enable_metrics=True),
     )
+    failure_state = CallFailureState()
     duration_task: Optional[asyncio.Task[None]] = None
+
+    @task.event_handler("on_pipeline_error")
+    def on_pipeline_error(_task: PipelineTask, frame: ErrorFrame) -> None:
+        """Capture the first Pipecat pipeline error before teardown begins."""
+        failure_state.capture(classify_pipeline_failure(frame))
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(_transport, _client) -> None:
@@ -192,6 +199,11 @@ async def run_bot(
 
     try:
         await PipelineRunner(handle_sigint=False).run(task)
+    except Exception as exc:
+        # Some provider failures surface as runner exceptions instead of an
+        # ErrorFrame. Keep the call-log signal consistent for both paths.
+        failure_state.capture(classify_pipeline_failure(exc))
+        raise
     finally:
         if duration_task is not None:
             duration_task.cancel()
@@ -202,5 +214,11 @@ async def run_bot(
                 await recording_coordinator.persist()
             except Exception:  # noqa: BLE001 - cleanup must continue
                 logger.exception("Failed to persist recording artifact")
-        await end_call_tracking(call_log_id)
+        failure = failure_state.failure
+        await end_call_tracking(
+            call_log_id,
+            status="failed" if failure else "completed",
+            failure_code=failure.code if failure else None,
+            failure_message=failure.message if failure else None,
+        )
         await _close_mcp_clients(bundle.tools.mcp_clients)

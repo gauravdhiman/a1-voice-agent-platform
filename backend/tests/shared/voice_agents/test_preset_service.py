@@ -7,14 +7,18 @@ derives ``preset_type`` from ``config.engine_mode`` on every write and re-
 validates the ``SpeechConfig`` via ``parse_speech_config``.
 """
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from shared.voice_agents.preset_models import (Preset, PresetCreate,
-                                               PresetType, PresetUpdate)
+from shared.voice_agents.model_capabilities import ModelCapabilityCheck
+from shared.voice_agents.preset_models import (
+    Preset,
+    PresetCreate,
+    PresetType,
+    PresetUpdate,
+)
 from shared.voice_agents.preset_service import PresetService
 
 
@@ -226,6 +230,68 @@ class TestPresetService:
         result, error = await preset_service.publish_preset(uuid4(), True)
         assert result is None
         assert error is not None
+
+    async def test_publish_rejects_model_that_requires_reasoning(
+        self, preset_service, mock_supabase_client
+    ):
+        """A live OpenRouter preset cannot publish with mandatory reasoning."""
+        row = _row(PresetType.PIPELINE)
+        row["config"]["llm"] = {
+            "provider": "openrouter",
+            "model": "z-ai/glm-5.3-flash",
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        rejected = ModelCapabilityCheck.failure(
+            "model_reasoning_required",
+            "Choose a model that allows reasoning to be disabled.",
+        )
+
+        with patch(
+            "shared.voice_agents.preset_service.model_capability_service.validate_speech_config",
+            new=AsyncMock(return_value=rejected),
+        ):
+            result, error = await preset_service.publish_preset(uuid4(), True)
+
+        assert result is None
+        assert error == "Choose a model that allows reasoning to be disabled."
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
+    async def test_upsert_published_config_runs_capability_validation(
+        self, preset_service, mock_supabase_client
+    ):
+        """The create/upsert path cannot bypass the live-config gate."""
+        data = PresetCreate(
+            name="OpenRouter pipeline",
+            config={
+                "engine_mode": "pipeline",
+                "stt": {"provider": "deepgram"},
+                "llm": {
+                    "provider": "openrouter",
+                    "model": "z-ai/glm-5.3-flash",
+                },
+                "tts": {"provider": "cartesia"},
+            },
+            is_published=True,
+        )
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+        rejected = ModelCapabilityCheck.failure(
+            "model_reasoning_required",
+            "Choose a compatible model before publishing.",
+        )
+
+        with patch(
+            "shared.voice_agents.preset_service.model_capability_service.validate_speech_config",
+            new=AsyncMock(return_value=rejected),
+        ):
+            result, error = await preset_service.upsert_preset(data)
+
+        assert result is None
+        assert error == "Choose a compatible model before publishing."
+        mock_supabase_client.table.return_value.insert.assert_not_called()
 
     async def test_get_preset_usage(self, preset_service, mock_supabase_client):
         """Usage lists agents referencing the preset via the voice_agents join."""

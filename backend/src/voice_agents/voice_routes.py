@@ -350,6 +350,15 @@ async def handle_twilio_status_callback(request: Request):
 
         update_data = CallLogUpdate(
             status=internal_status,
+            failure_code=(
+                "telephony_call_failed" if internal_status == "failed" else None
+            ),
+            failure_message=(
+                "The telephone provider reported that the call failed before it "
+                "completed."
+                if internal_status == "failed"
+                else None
+            ),
             duration=duration_seconds,
             ended_at=(
                 datetime.now(timezone.utc)

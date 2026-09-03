@@ -19,6 +19,15 @@ settles the complete charge through the atomic billing RPC. An admitted call is
 allowed to finish even if the final settlement creates a temporary negative
 balance; the backend then blocks new calls until credits are restored.
 
+When Pipecat reports a provider or pipeline failure, the worker keeps the first
+safe failure classification on the related `call_logs` row and finalizes its
+status as `failed`. The authenticated Calls UI shows the classification and a
+short remediation hint. Provider exceptions themselves stay in the runtime
+logging/telemetry boundary. The backend migration
+`20260902000001_add_call_failure_details` adds the nullable fields used for this
+signal; a late Twilio status callback cannot overwrite a recorded failure with
+`completed`.
+
 ## Architecture
 
 ```mermaid

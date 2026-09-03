@@ -34,15 +34,20 @@ from uuid import UUID
 
 from opentelemetry import trace
 from pydantic import ValidationError
-from supabase import Client
 
 from shared.config import supabase_config
-from shared.voice_agents.preset_models import (RESERVED_DEFAULT_NAME, Preset,
-                                               PresetCatalogItem,
-                                               PresetCatalogResponse,
-                                               PresetCreate, PresetType,
-                                               PresetUpdate)
+from shared.voice_agents.model_capabilities import model_capability_service
+from shared.voice_agents.preset_models import (
+    RESERVED_DEFAULT_NAME,
+    Preset,
+    PresetCatalogItem,
+    PresetCatalogResponse,
+    PresetCreate,
+    PresetType,
+    PresetUpdate,
+)
 from shared.voice_agents.speech_config import parse_speech_config
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -81,6 +86,28 @@ class PresetService:
         except ValidationError as e:
             return None, f"Invalid speech config: {e}"
         return PresetType(cfg.engine_mode.value), None
+
+    @staticmethod
+    async def _validate_model_capabilities(config_dict: dict) -> Optional[str]:
+        """Reject a live config whose provider capabilities are incompatible.
+
+        Capability validation is fail-closed for providers that have a
+        resolver. The resolver returns safe, admin-facing messages; unexpected
+        resolver failures are also converted to a generic error so a broken
+        catalog cannot publish a preset that has not been verified.
+        """
+        try:
+            config = parse_speech_config(config_dict)
+            check = await model_capability_service.validate_speech_config(config)
+        except Exception:  # noqa: BLE001 - publishing must fail closed
+            logger.exception("Voice preset model capability validation failed")
+            return (
+                "The selected model could not be validated right now. "
+                "Try again before publishing the preset."
+            )
+        if not check.valid:
+            return check.message or "The selected model failed capability validation."
+        return None
 
     # ------------------------------------------------------------------
     # CRUD
@@ -129,6 +156,12 @@ class PresetService:
                 .eq("name", data.name)
                 .execute()
             )
+            existing_row = existing.data[0] if existing.data else {}
+            if data.is_published or bool(existing_row.get("is_published")):
+                capability_error = await self._validate_model_capabilities(config_dict)
+                if capability_error:
+                    return None, capability_error
+
             data_dict = data.model_dump(exclude_none=True, mode="json")
             data_dict["config"] = config_dict
             data_dict["preset_type"] = preset_type.value
@@ -185,7 +218,7 @@ class PresetService:
             # update path refuses it so name/is_published/is_default stay fixed.
             existing = (
                 self.supabase.table("pipeline_presets")
-                .select("id,is_default")
+                .select("id,is_default,is_published,config")
                 .eq("id", str(preset_id))
                 .limit(1)
                 .execute()
@@ -196,6 +229,23 @@ class PresetService:
                 return None, (
                     "The system default preset is managed via its own config editor"
                 )
+
+            existing_row = existing.data[0]
+            target_config = data_dict.get("config", existing_row.get("config"))
+            target_is_published = data_dict.get(
+                "is_published", existing_row.get("is_published", False)
+            )
+            config_changed_on_published = "config" in data_dict and bool(
+                existing_row.get("is_published")
+            )
+            if target_is_published or config_changed_on_published:
+                if not isinstance(target_config, dict):
+                    return None, "Preset has no valid speech configuration"
+                capability_error = await self._validate_model_capabilities(
+                    target_config
+                )
+                if capability_error:
+                    return None, capability_error
 
             response = (
                 self.supabase.table("pipeline_presets")
@@ -266,6 +316,9 @@ class PresetService:
         preset_type, err = self._derive_preset_type(config)
         if err:
             return None, err
+        capability_error = await self._validate_model_capabilities(config)
+        if capability_error:
+            return None, capability_error
         try:
             response = (
                 self.supabase.table("pipeline_presets")
@@ -371,7 +424,7 @@ class PresetService:
             # lists published presets only).
             existing = (
                 self.supabase.table("pipeline_presets")
-                .select("id,is_default")
+                .select("id,is_default,config")
                 .eq("id", str(preset_id))
                 .limit(1)
                 .execute()
@@ -380,6 +433,14 @@ class PresetService:
                 return None, "Preset not found"
             if existing.data[0].get("is_default"):
                 return None, "The system default preset is not publishable"
+
+            if published:
+                config = existing.data[0].get("config")
+                if not isinstance(config, dict):
+                    return None, "Preset has no valid speech configuration"
+                capability_error = await self._validate_model_capabilities(config)
+                if capability_error:
+                    return None, capability_error
 
             response = (
                 self.supabase.table("pipeline_presets")

@@ -142,6 +142,30 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
+function CallFailureSummary({ call }: { call: CallLog }) {
+  if (!call.failure_code && !call.failure_message) return null;
+
+  const code = call.failure_code
+    ?.replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+
+  return (
+    <div
+      className="mt-1 flex max-w-sm items-start gap-1.5 text-xs text-destructive"
+      data-testid={`call-failure-${call.id}`}
+      role="note"
+    >
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="min-w-0">
+        <p className="font-medium">{code ? `Issue: ${code}` : "Call issue"}</p>
+        {call.failure_message && (
+          <p className="break-words text-destructive/80">{call.failure_message}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Renders the shared responsive call list used by the organization Calls page
  * and the agent-specific Call History tab.
@@ -879,7 +903,10 @@ function CallLogTableRow({
             : "—"}
         </td>
       )}
-      <td className="px-6 py-3">{statusBadge(call.status)}</td>
+      <td className="px-6 py-3">
+        {statusBadge(call.status)}
+        <CallFailureSummary call={call} />
+      </td>
       <td className="px-6 py-3 text-muted-foreground">
         {formatDuration(call.duration)}
       </td>
@@ -940,8 +967,9 @@ function CallLogMobileCard({
             {call.caller_number ?? "Unknown"}
           </span>
         </div>
-        {statusBadge(call.status)}
+        <div className="text-right">{statusBadge(call.status)}</div>
       </div>
+      <CallFailureSummary call={call} />
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span>{formatDateTime(call.created_at)}</span>
         <span>·</span>

@@ -38,6 +38,8 @@ class CallLogService:
                 "caller_number": data.caller_number,
                 "called_number": data.called_number,
                 "status": data.status,
+                "failure_code": data.failure_code,
+                "failure_message": data.failure_message,
                 "duration": data.duration,
                 "started_at": data.started_at.isoformat() if data.started_at else None,
                 "ended_at": data.ended_at.isoformat() if data.ended_at else None,
@@ -58,14 +60,94 @@ class CallLogService:
             payload = {k: v for k, v in data.model_dump().items() if v is not None}
             if "ended_at" in payload and isinstance(payload["ended_at"], datetime):
                 payload["ended_at"] = payload["ended_at"].isoformat()
+
             payload["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-            result = (
-                self.supabase.table("call_logs")
-                .update(payload)
-                .eq("call_sid", call_sid)
-                .execute()
-            )
+            # The Twilio status callback can arrive after voice-ws has already
+            # classified a runtime failure. Apply completion updates only while
+            # the failure marker is still null so the provider callback cannot
+            # race with, or overwrite, the root-cause marker.
+            if payload.get("status") in {"completed", "answered"}:
+                result = (
+                    self.supabase.table("call_logs")
+                    .update(payload)
+                    .eq("call_sid", call_sid)
+                    .is_("failure_code", "null")
+                    .execute()
+                )
+                if not result.data:
+                    existing = (
+                        self.supabase.table("call_logs")
+                        .select("id,failure_code")
+                        .eq("call_sid", call_sid)
+                        .limit(1)
+                        .execute()
+                    )
+                    if not existing.data:
+                        return None, "Call log not found"
+
+                    if existing.data[0].get("failure_code"):
+                        # Keep timing/provider metadata from the late callback,
+                        # but never replace the failure status or its marker.
+                        preserved_payload = {
+                            key: value
+                            for key, value in payload.items()
+                            if key not in {"status", "failure_code", "failure_message"}
+                        }
+                        result = (
+                            self.supabase.table("call_logs")
+                            .update(preserved_payload)
+                            .eq("call_sid", call_sid)
+                            .execute()
+                        )
+                    else:
+                        # A response without rows is unusual, but retry the
+                        # conditional mutation once for clients configured not
+                        # to return updated rows by default.
+                        result = (
+                            self.supabase.table("call_logs")
+                            .update(payload)
+                            .eq("call_sid", call_sid)
+                            .is_("failure_code", "null")
+                            .execute()
+                        )
+                        if not result.data:
+                            # A runtime failure may have won the race between
+                            # the read above and this retry. Preserve it while
+                            # still accepting the provider's timing metadata.
+                            latest = (
+                                self.supabase.table("call_logs")
+                                .select("id,failure_code")
+                                .eq("call_sid", call_sid)
+                                .limit(1)
+                                .execute()
+                            )
+                            if not latest.data:
+                                return None, "Call log not found"
+                            if latest.data[0].get("failure_code"):
+                                preserved_payload = {
+                                    key: value
+                                    for key, value in payload.items()
+                                    if key
+                                    not in {
+                                        "status",
+                                        "failure_code",
+                                        "failure_message",
+                                    }
+                                }
+                                result = (
+                                    self.supabase.table("call_logs")
+                                    .update(preserved_payload)
+                                    .eq("call_sid", call_sid)
+                                    .execute()
+                                )
+            else:
+                result = (
+                    self.supabase.table("call_logs")
+                    .update(payload)
+                    .eq("call_sid", call_sid)
+                    .execute()
+                )
             if not result.data:
                 return None, "Call log not found"
             return CallLog(**result.data[0]), None

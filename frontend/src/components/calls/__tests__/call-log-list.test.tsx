@@ -39,6 +39,19 @@ const CALLS: CallLogsResponse = {
   total_pages: 1,
 };
 
+const FAILED_CALLS: CallLogsResponse = {
+  ...CALLS,
+  items: [
+    {
+      ...CALLS.items[0],
+      status: "failed",
+      failure_code: "model_reasoning_required",
+      failure_message:
+        "The selected language model rejected the configured reasoning settings.",
+    },
+  ],
+};
+
 describe("CallLogList", () => {
   it("renders shared call fields and can hide the agent column", async () => {
     const { CallLogList } = await import("../call-log-list");
@@ -66,6 +79,32 @@ describe("CallLogList", () => {
       screen.getAllByRole("button", {
         name: /Listen to recording for call call-1/i,
       }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows the safe runtime failure classification in the call log", async () => {
+    const { CallLogList } = await import("../call-log-list");
+
+    render(
+      <CallLogList
+        data={FAILED_CALLS}
+        isLoading={false}
+        isFetching={false}
+        error={null}
+        onRefresh={vi.fn()}
+        onPageChange={vi.fn()}
+        showAgentColumn={false}
+        canViewRecordings={false}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("Issue: Model Reasoning Required").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        "The selected language model rejected the configured reasoning settings.",
+      ).length,
     ).toBeGreaterThan(0);
   });
 });

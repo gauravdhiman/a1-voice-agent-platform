@@ -700,6 +700,8 @@ Tracks voice sessions for organization reporting and concurrent-call limits.
 | organization_id       | UUID         | NOT NULL, FK → organizations.id          | Owning organization |
 | agent_id              | UUID         | NULLABLE, FK → voice_agents.id           | Agent used by the call |
 | status                | VARCHAR(50)  | NOT NULL, DEFAULT `initiated`            | Session status |
+| failure_code          | VARCHAR(100) | NULLABLE                                 | Stable, non-sensitive runtime failure classification (for example `model_reasoning_required`) |
+| failure_message       | VARCHAR(1000) | NULLABLE                                | Safe admin-facing explanation of the failure; raw provider diagnostics are not stored |
 | duration              | INTEGER      | NOT NULL, DEFAULT `0`                    | Duration in seconds |
 | credits_consumed      | INTEGER      | NOT NULL, DEFAULT `0`                    | Credits billed at teardown |
 | credit_transaction_id | UUID         | NULLABLE, FK → credit_transactions.id    | Ledger row explaining the call charge |
@@ -710,7 +712,16 @@ Tracks voice sessions for organization reporting and concurrent-call limits.
 | created_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
 | updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
 
-**Indexes**: organization, agent, created_at, status, credit_transaction_id.
+**Indexes**: organization, agent, created_at, status, credit_transaction_id,
+`ix_call_logs_failure_code`.
+
+Runtime failures are finalized as `status=failed` by voice-ws when Pipecat
+reports a pipeline error or the runner raises. Twilio status callbacks preserve
+an existing failure classification instead of replacing it with a later
+`completed` event. The failure fields are intentionally generic and safe for
+the authenticated call-log UI; detailed provider exceptions stay in the
+runtime logging/telemetry boundary. Added by migration
+`20260902000001_add_call_failure_details`.
 
 ### call_artifacts
 
@@ -1390,6 +1401,8 @@ erDiagram
         uuid organization_id
         uuid agent_id
         varchar status
+        varchar failure_code
+        varchar failure_message
         integer duration
         integer credits_consumed
         uuid credit_transaction_id
