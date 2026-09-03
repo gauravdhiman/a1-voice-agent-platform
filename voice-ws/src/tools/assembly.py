@@ -23,6 +23,7 @@ from src.tools.skill_tools import (
 )
 
 from shared.voice_agents.demo_outcome_service import record_demo_tool_outcome
+from shared.voice_agents.callback_service import record_callback_tool_outcome
 from shared.voice_agents.key_resolver import resolve_org_provider_credential
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.tool_models import ToolSource
@@ -216,6 +217,12 @@ def create_legacy_tool_handler(
                     "error": {"code": "tool_exception"},
                 },
             )
+            await record_callback_tool_outcome(
+                context=runtime_context,
+                function_name=tool_name,
+                arguments=arguments,
+                result={"status": "failed"},
+            )
             await params.result_callback(
                 json.dumps(
                     {"error": f"{tool_name} failed: {exc}"},
@@ -225,6 +232,12 @@ def create_legacy_tool_handler(
             return
         logger.info("Legacy tool %s completed", tool_name)
         await record_demo_tool_outcome(
+            context=runtime_context,
+            function_name=tool_name,
+            arguments=arguments,
+            result=result,
+        )
+        await record_callback_tool_outcome(
             context=runtime_context,
             function_name=tool_name,
             arguments=arguments,

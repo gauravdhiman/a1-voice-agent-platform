@@ -30,6 +30,17 @@ they land (with the PR number that closed them).
 - [ ] Multilingual (ES) landing + demo copy → owner: **backlog**
   (English-only until a pilot demands it).
 
+## From Epic D (open)
+
+- [ ] SMS owner alerts (Twilio sender transport does not exist yet;
+  callback email works). Add SMS channel to the notification path and a
+  per-trigger channel config → owner: **Epic D part 2 or Epic E**.
+- [ ] Cheap LLM call-outcome summaries (owner value proof without
+  Twilio transcription) → owner: **Epic D part 2**.
+- [ ] Callback seed prompt snippet for the dental/HVAC/restaurant skill
+  packs (tool docstring carries the contract today; skills reference it
+  at pilot setup) → owner: **first pilot setup**.
+
 ## Backlog (explicitly not launch)
 
 Per-call metering engine · real PSTN warm transfer · annual plans ·

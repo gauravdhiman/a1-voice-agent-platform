@@ -153,6 +153,26 @@ Implementation lives in `src/leads/` (see its README); storage is the
 service-role-only `interest_leads` table
 (`docs/DATABASE_SCHEMA.md#interest_leads`).
 
+### Callback escalations (soft escalation owner workflow)
+
+When a caller needs a person, the agent's `request_human_callback` tool
+alerts the owner by email and the voice runtime records one
+`callback_escalations` row per accepted result (production calls only;
+demos are skipped). Owners work the `new → acknowledged → resolved`
+queue; org admins may also log callbacks manually.
+
+| Endpoint | Method | Description |
+| -------- | ------ | ----------- |
+| `/api/v1/organizations/{org_id}/escalations` | GET | List newest-first (organization members) |
+| `/api/v1/organizations/{org_id}/escalations` | POST | Manually log one callback (org admins) |
+| `/api/v1/organizations/{org_id}/escalations/{id}` | PATCH | Advance follow-up status (org admins) |
+
+Tool implementation lives in
+`shared/voice_agents/tools/implementations/callback_request.py`;
+persistence lives in `shared/voice_agents/callback_service.py`;
+storage is documented under `docs/DATABASE_SCHEMA.md#callback_escalations`.
+Deterministic coverage: `evals/callback.py` (`--suite callback`).
+
 ### Example Response
 
 ```bash
