@@ -38,6 +38,11 @@ from src.auth.models import (
     UserProfile,
 )
 from src.auth.service import auth_service
+from src.auth.signup_gate import (
+    SIGNUP_DISABLED_CODE,
+    SIGNUP_DISABLED_MESSAGE,
+    is_signup_allowed,
+)
 from src.notifications.email_verification_service import email_verification_service
 from src.notifications.platform_settings_models import (
     ResendVerificationRequest,
@@ -47,6 +52,8 @@ from src.notifications.platform_settings_models import (
 from src.notifications.signup_notifier import signup_notifier
 from src.organization.service import organization_service
 from src.security.rate_limiter import limiter
+
+from shared.config import settings as app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +96,19 @@ async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
     current_span = trace.get_current_span()
     current_span.set_attribute("user.email", body.email)
 
+    allowed, denial = await is_signup_allowed(
+        body.email,
+        invitation_token=body.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if not allowed:
+        current_span.set_attribute("error.type", denial or "signup_disabled")
+        current_span.set_status(trace.Status(trace.StatusCode.ERROR, denial or ""))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"{SIGNUP_DISABLED_CODE}: {SIGNUP_DISABLED_MESSAGE}",
+        )
+
     auth_response, error = await auth_service.sign_up(body)
 
     if error:
@@ -106,6 +126,35 @@ async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return auth_response
+
+
+class SignupStatusResponse(BaseModel):
+    """Public signup availability for the controlled-SaaS gate."""
+
+    public_signup_enabled: bool = Field(
+        ..., description="True when open public signup is enabled"
+    )
+
+
+@auth_router.get(
+    "/signup-status",
+    response_model=SignupStatusResponse,
+    responses={
+        429: {"description": "Too many requests"},
+    },
+)
+@limiter.limit("30/minute")
+async def signup_status(request: Request) -> SignupStatusResponse:
+    """Report whether open public signup is enabled (no auth required).
+
+    The frontend signup page uses this to redirect visitors to the
+    interest form while the controlled-SaaS gate is closed. The backend
+    gate in ``sign_up`` and the OAuth callbacks remains authoritative.
+    """
+    del request
+    return SignupStatusResponse(
+        public_signup_enabled=bool(app_settings.public_signup_enabled)
+    )
 
 
 @auth_router.get(
@@ -304,6 +353,24 @@ async def linkedin_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
+    allowed, _denial = await is_signup_allowed(
+        identity.email,
+        invitation_token=identity.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if not allowed:
+        current_span.set_attribute("oauth.gated", True)
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, SIGNUP_DISABLED_CODE)
+        )
+        return RedirectResponse(
+            oauth_error_redirect(
+                "Public signup is currently invite-only. "
+                "Please request a demo and we will invite you."
+            ),
+            status_code=status.HTTP_302_FOUND,
+        )
+
     auth_response, session_error = await oauth_session_service.complete_oauth_sign_in(
         identity
     )
@@ -411,6 +478,24 @@ async def google_callback(
         )
         return RedirectResponse(
             oauth_error_redirect("Google authentication could not be completed."),
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    allowed, _denial = await is_signup_allowed(
+        identity.email,
+        invitation_token=identity.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if not allowed:
+        current_span.set_attribute("oauth.gated", True)
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, SIGNUP_DISABLED_CODE)
+        )
+        return RedirectResponse(
+            oauth_error_redirect(
+                "Public signup is currently invite-only. "
+                "Please request a demo and we will invite you."
+            ),
             status_code=status.HTTP_302_FOUND,
         )
 

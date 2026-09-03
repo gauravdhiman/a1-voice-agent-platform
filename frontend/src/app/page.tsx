@@ -115,9 +115,9 @@ export default function LandingPage() {
                 Sign In
               </Button>
             </Link>
-            <Link href="/auth/signup">
+            <Link href="/request-demo">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                Get Started Free
+                Request a Demo
               </Button>
             </Link>
           </div>
@@ -161,12 +161,12 @@ export default function LandingPage() {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Link href="/auth/signup">
+                  <Link href="/request-demo">
                     <Button
                       size="lg"
                       className="bg-blue-600 hover:bg-blue-700 px-8 h-12 text-base"
                     >
-                      Start Free
+                      Request a Demo
                       <ArrowRight className="ml-2 w-4 h-4" />
                     </Button>
                   </Link>
@@ -729,7 +729,7 @@ export default function LandingPage() {
                     href={
                       plan.cta === "Talk to Us"
                         ? `mailto:${SITE_SALES_EMAIL}`
-                        : "/auth/signup"
+                        : "/request-demo"
                     }
                     className="mt-8"
                   >
@@ -759,12 +759,12 @@ export default function LandingPage() {
               and no coding required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/auth/signup">
+              <Link href="/request-demo">
                 <Button
                   size="lg"
                   className="px-8 h-12 text-base bg-white text-blue-600 hover:bg-blue-50"
                 >
-                  Start Free
+                  Request a Demo
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>

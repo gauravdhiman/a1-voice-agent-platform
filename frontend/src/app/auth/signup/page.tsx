@@ -1,13 +1,29 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { SignUpForm } from "@/components/auth/signup-form";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import Link from "next/link";
 import { Rocket, Zap, CalendarCheck, CreditCard } from "lucide-react";
 import { SITE_NAME } from "@/lib/site-config";
+import { leadService } from "@/services/lead-service";
 
 export default function SignUpPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Controlled-SaaS gate: invited visitors carry ?token= and stay;
+    // everyone else is sent to the interest form while open signup
+    // is disabled. The backend gate remains authoritative.
+    // (window.location avoids a Suspense boundary for search params.)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("token")) return;
+    leadService.isPublicSignupEnabled().then((open) => {
+      if (!open) router.replace("/request-demo");
+    });
+  }, [router]);
+
   return (
     <ProtectedRoute reverse>
       <div className="min-h-screen w-full flex">
