@@ -351,6 +351,44 @@ for duplicate review.
 
 ---
 
+### callback_escalations
+
+Owner-visible callback requests from soft escalation. Production voice
+calls (never demos) record one row per accepted `request_human_callback`
+tool result through the voice runtime hook
+(`record_callback_tool_outcome`, next to the demo-outcome hook); the
+owner alert email is sent by the tool itself at call time. The dashboard
+Callbacks page drives the `new → acknowledged → resolved` follow-up.
+Org admins may also log rows manually for callbacks arriving on other
+channels.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Escalation row identifier |
+| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
+| agent_id | UUID | NULLABLE, FK → voice_agents.id (SET NULL) | Agent on the call, when known |
+| session_id | VARCHAR(100) | NULLABLE | Voice session identifier, when known |
+| caller_phone | VARCHAR(32) | NOT NULL | Callback number (E.164-ish, validated by the tool) |
+| caller_name | VARCHAR(100) | NULLABLE | Caller name when known |
+| reason | VARCHAR(500) | NOT NULL | One factual sentence: what the callback is about |
+| urgency | VARCHAR(20) | NOT NULL, DEFAULT `'normal'`, CHECK `normal` or `urgent` | Callback urgency |
+| status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `acknowledged`, or `resolved` | Follow-up state |
+| notified | BOOLEAN | NOT NULL, DEFAULT FALSE | Owner alert email went out at call time |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Request timestamp |
+| acknowledged_at | TIMESTAMPTZ | NULLABLE | First acknowledgement timestamp (set by operator tooling) |
+
+**RLS**: Enabled with no public or authenticated-user policies; the
+service role is the only database reader/writer. Reads require org
+membership; writes and status changes require `org_admin` (platform
+admins bypass) at the API boundary, and status updates match on both
+row id and organization to prevent cross-tenant writes.
+
+**Indexes**: `(organization_id, status, created_at)` for the owner queue.
+
+**Migrations**: `20260904000001_add_callback_escalations.py`.
+
+---
+
 ### voice_templates
 
 Global, platform-admin-managed reusable starting points for agent setup. The
@@ -1779,6 +1817,8 @@ erDiagram
     organizations ||--o{ demo_outcome_receipts : "owns"
     %% interest_leads is standalone (no FKs; private funnel table, no relations)
     interest_leads
+    organizations ||--o{ callback_escalations : "owns"
+    voice_agents ||--o{ callback_escalations : "handles (SET NULL on delete)"
     credit_transactions ||--o| call_logs : "explains call charge"
     organizations ||--o{ platform_credit_grants : "receives platform grants"
     credit_transactions ||--o| platform_credit_grants : "audited by"
@@ -1920,7 +1960,8 @@ erDiagram
 78. `20260901000002` - Extend the service-role-only demo outcome receipt action allowlist with independent `email_delivery` actions for attached Gmail and Resend tools. The receipt stores only a safe provider/status summary and does not make provider tools call one another.
 79. `20260902000001` - Add generic, UI-safe runtime failure classification columns to `call_logs` (surfaced as `ix_call_logs_failure_code`); Twilio status callbacks preserve an existing failure classification instead of overwriting it with a later `completed` event.
 80. `20260903000001` - Add service-role-only `interest_leads` as the private source of truth for the controlled-SaaS funnel (`request-demo` / `outcome-form` / `demo-call` / `manual` sources; `new` → `contacted` → `invited` → `converted`/`dropped` follow-up states). No FKs, no public RLS policy; admin reads gated by the `platform_admin` role.
-81. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
+81. `20260904000001` - Add service-role-only `callback_escalations` for owner-visible soft escalation (`new` → `acknowledged` → `resolved`; `normal`/`urgent`). Production calls record one row per accepted `request_human_callback` tool result via the voice runtime hook; demos are skipped. Reads require org membership; writes match row id + organization.
+82. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
 
 ---
 
