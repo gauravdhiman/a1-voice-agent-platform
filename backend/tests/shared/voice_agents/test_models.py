@@ -172,6 +172,7 @@ class TestPublicAgentConfiguration:
         assert agent.is_demo is False
         assert agent.demo_slug is None
         assert agent.public_description is None
+        assert agent.demo_public_result_url is None
         assert agent.demo_calls_remaining == -1
         assert agent.demo_max_call_duration_seconds == -1
 
@@ -233,6 +234,43 @@ class TestPublicAgentConfiguration:
 
         assert agent.public_description == "A helpful public description."
         assert update.public_description == "Updated copy."
+
+    def test_demo_public_result_url_is_trimmed_and_supported_on_update(self):
+        """The optional receipt destination is normalized on create and update."""
+        agent = VoiceAgentBase(
+            name="Demo",
+            demo_public_result_url=" https://example.com/demo-sheet#results ",
+        )
+        update = VoiceAgentUpdate(
+            demo_public_result_url=" https://example.com/updated-results "
+        )
+
+        assert agent.demo_public_result_url == "https://example.com/demo-sheet#results"
+        assert update.demo_public_result_url == "https://example.com/updated-results"
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://example.com/results",
+            "javascript:alert(1)",
+            "https:///missing-host",
+            "https://user:password@example.com/results",
+        ],
+    )
+    def test_demo_public_result_url_rejects_unsafe_values(self, url):
+        """Receipt destinations must be HTTPS URLs without embedded credentials."""
+        with pytest.raises(ValidationError, match="Demo public result URL"):
+            VoiceAgentBase(name="Demo", demo_public_result_url=url)
+
+    def test_blank_demo_public_result_url_can_clear_existing_value(self):
+        """An empty admin field clears a previously configured destination."""
+        agent = VoiceAgentBase(name="Demo", demo_public_result_url="")
+        update = VoiceAgentUpdate(demo_public_result_url="")
+        whitespace_update = VoiceAgentUpdate(demo_public_result_url="   ")
+
+        assert agent.demo_public_result_url is None
+        assert update.demo_public_result_url is None
+        assert whitespace_update.demo_public_result_url is None
 
     def test_blank_public_demo_fields_are_normalized_to_none(self):
         """Blank optional demo metadata can clear an existing value."""

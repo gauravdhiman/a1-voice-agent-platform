@@ -1,43 +1,87 @@
 """Tests for deterministic local worktree seed records."""
 
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 from backend.src.worktree_seed import (
+    CALENDAR_DEMO_DISABLED_FUNCTIONS,
+    DEMO_ORGANIZATION_ID,
+    HVAC_AGENT_ID,
+    LEAD_CAPTURE_TOOL_NAME,
+    LEGACY_HVAC_ORGANIZATION_ID,
     ORG_ADMIN_EMAIL,
     PLATFORM_ADMIN_EMAIL,
     REGULAR_USER_EMAIL,
+    STAGING_AGENT_ID,
     WORKTREE_TEST_PASSWORD,
     build_seed_records,
 )
 
 
 def test_seed_records_are_stable_across_worktrees() -> None:
-    """Every isolated database receives the same staging-derived fixture."""
+    """Every isolated database receives the same local demo fixture."""
     first = build_seed_records("calendar-contract")
     second = build_seed_records("prompt-contract")
 
     assert first == second
     assert first["agent"]["organization_id"] == first["organization"]["id"]
-    assert first["organization"]["name"] == "Pleasant Pediatric"
-    assert first["organization"]["slug"] == "pleasant-pediatric"
+    assert {agent["organization_id"] for agent in first["agents"]} == {
+        DEMO_ORGANIZATION_ID
+    }
+    assert first["organization"]["name"] == "24x7 AI Demo Studio"
+    assert first["organization"]["slug"] == "247ai-demo-studio"
     assert first["agent"]["id"] == "59252f36-255e-4e71-9250-c4ce3ac27eaa"
 
 
-def test_seed_records_include_business_context_for_manual_calls() -> None:
-    """The generated agent mirrors the current staging appointment receptionist."""
+def test_seed_records_keep_business_context_on_each_demo_agent() -> None:
+    """The shared demo tenant is neutral while prompts contain business context."""
     records = build_seed_records("calendar-contract")
 
     organization = records["organization"]
     agent = records["agent"]
 
     assert organization["timezone"] == "America/Phoenix"
-    assert organization["industry"] == "dental"
-    assert organization["location"] == "Peoria, AZ"
+    assert organization["industry"] is None
+    assert organization["location"] is None
     assert organization["business_details"] is None
     assert agent["name"] == "Alex"
     assert "schedule dental appointments" in agent["mission"]
-    assert "Always confirm appointment details" in agent["custom_instructions"]
+    assert (
+        "Read the date, time, service type, name, and email back"
+        in agent["custom_instructions"]
+    )
     assert "Pleasant Pediatric" in agent["instructions_markdown"]
+    assert "helpful AI assistant" in agent["instructions_markdown"]
+    assert "I'm Alex, a helpful AI assistant" in agent["custom_instructions"]
+    assert "helpful AI assistant" in agent["persona"]
+    assert "1234 Sunbeam Way" in agent["instructions_markdown"]
+    assert (
+        "Office hours: Monday-Friday, 8:00 AM-5:00 PM" in agent["instructions_markdown"]
+    )
+    assert "$95" in agent["instructions_markdown"]
+    assert "$85" in agent["instructions_markdown"]
+    assert "# Public-demo disclosure" in agent["custom_instructions"]
+    assert "# Business context" in agent["custom_instructions"]
+    assert "# Services and illustrative demo pricing" in agent["custom_instructions"]
+    assert "# Appointment workflow" in agent["custom_instructions"]
+    assert "# Email follow-up" in agent["custom_instructions"]
+    alex_instructions = " ".join(agent["custom_instructions"].split())
+    assert "spell the patient or guardian name one letter at a time" in (
+        alex_instructions.lower()
+    )
+    assert "spell the email one character at a time" in alex_instructions.lower()
+    assert "invoke that tool automatically" in alex_instructions
+    assert "email confirmation was not sent" in alex_instructions
+    assert "sent or accepted" in alex_instructions
+    assert "do not repeat the notice" in alex_instructions
+    assert "AI voice assistant" not in agent["instructions_markdown"]
+    assert "{{org.name}}" not in agent["instructions_markdown"]
     assert agent["is_active"] is True
     assert agent["call_recording_enabled"] is True
+    assert agent["is_demo"] is True
+    assert agent["demo_slug"] == "pleasant-pediatric-appointments"
+    assert agent["demo_calls_remaining"] == -1
+    assert agent["demo_max_call_duration_seconds"] == 900
 
 
 def test_seed_accounts_use_shared_manual_login_credentials() -> None:
@@ -64,7 +108,126 @@ def test_seed_accounts_use_shared_manual_login_credentials() -> None:
 
 
 def test_seed_attaches_native_calendar_appointment_tool_without_auth_state() -> None:
-    """The staging-derived agent starts with a local OAuth-ready calendar link."""
+    """The appointment demo starts with a local OAuth-ready calendar link."""
     records = build_seed_records("calendar-contract")
 
     assert records["agent_tools"] == ["Google_calendar_appointment"]
+    assert records["agent_tools_by_agent"][HVAC_AGENT_ID] == [LEAD_CAPTURE_TOOL_NAME]
+    assert records["agent_tools_to_disable_by_agent"][HVAC_AGENT_ID] == [
+        "HubSpot_lead_capture",
+    ]
+    assert records["agent_tools_to_disable_by_agent"][STAGING_AGENT_ID] == [
+        "HubSpot_lead_capture",
+    ]
+    assert (
+        records["agent_tool_configs"][records["agent"]["id"]][
+            "Google_calendar_appointment"
+        ]["require_email"]
+        is True
+    )
+    assert (
+        "send_confirmation_email"
+        not in records["agent_tool_configs"][records["agent"]["id"]][
+            "Google_calendar_appointment"
+        ]
+    )
+    assert (
+        "send_confirmation_email"
+        not in records["agent_tool_configs"][HVAC_AGENT_ID][LEAD_CAPTURE_TOOL_NAME]
+    )
+
+
+def test_seed_contains_two_public_demo_workflows() -> None:
+    """The isolated fixture exposes appointment and service-lead demos."""
+    records = build_seed_records("calendar-contract")
+
+    assert len(records["agents"]) == 2
+    assert len(records["organizations"]) == 1
+    assert {agent["organization_id"] for agent in records["agents"]} == {
+        records["organization"]["id"]
+    }
+    assert {agent["demo_slug"] for agent in records["agents"]} == {
+        "pleasant-pediatric-appointments",
+        "copper-ridge-service-request",
+    }
+    assert all(agent["demo_calls_remaining"] == -1 for agent in records["agents"])
+    assert all(
+        agent["demo_max_call_duration_seconds"] == 900 for agent in records["agents"]
+    )
+    alex = next(agent for agent in records["agents"] if agent["name"] == "Alex")
+    jordan = next(agent for agent in records["agents"] if agent["name"] == "Jordan")
+    assert alex["organization_id"] == jordan["organization_id"] == DEMO_ORGANIZATION_ID
+    assert (
+        "never disclose, search for, reschedule, cancel, or modify"
+        in alex["custom_instructions"].lower()
+    )
+    assert "4550 N Copper Ridge Way" in jordan["instructions_markdown"]
+    assert "out-of-hours callback" in jordan["instructions_markdown"]
+    assert "helpful AI assistant" in jordan["instructions_markdown"]
+    jordan_instructions = " ".join(jordan["custom_instructions"].split())
+    assert "I'm Jordan, a helpful AI assistant" in jordan_instructions
+    assert "helpful AI assistant" in jordan["persona"]
+    assert "$89" in jordan["instructions_markdown"]
+    assert "$129" in jordan["instructions_markdown"]
+    assert "# Public-demo disclosure" in jordan["custom_instructions"]
+    assert "# Business context" in jordan["custom_instructions"]
+    assert "# Services and illustrative demo pricing" in jordan["custom_instructions"]
+    assert "# Service-inquiry workflow" in jordan["custom_instructions"]
+    assert "# Email follow-up" in jordan["custom_instructions"]
+    assert "spell the caller's name one letter at a time" in jordan_instructions.lower()
+    assert "if an email is provided" in jordan_instructions.lower()
+    assert "invoke that tool automatically" in jordan_instructions
+    assert "email confirmation was not sent" in jordan_instructions
+    assert "do not repeat the notice" in jordan_instructions
+    assert "AI voice assistant" not in jordan["instructions_markdown"]
+    assert records["retired_organization_ids"] == [LEGACY_HVAC_ORGANIZATION_ID]
+
+
+def test_seed_limits_public_calendar_demo_to_new_booking_functions() -> None:
+    """An unauthenticated demo cannot inspect or mutate existing events."""
+    records = build_seed_records("calendar-contract")
+
+    assert (
+        records["agent_tool_function_exclusions"][STAGING_AGENT_ID][
+            "Google_calendar_appointment"
+        ]
+        == CALENDAR_DEMO_DISABLED_FUNCTIONS
+    )
+
+
+def test_seed_syncs_function_exclusions_for_an_existing_tool_link() -> None:
+    """Reseeding restores the safe public function boundary after a restart."""
+    platform_tools = MagicMock()
+    platform_tools.select.return_value = platform_tools
+    platform_tools.eq.return_value = platform_tools
+    platform_tools.limit.return_value = platform_tools
+    platform_tools.execute.return_value = SimpleNamespace(data=[{"id": "tool-1"}])
+
+    agent_tools = MagicMock()
+    agent_tools.select.return_value = agent_tools
+    agent_tools.eq.return_value = agent_tools
+    agent_tools.limit.return_value = agent_tools
+    agent_tools.execute.return_value = SimpleNamespace(
+        data=[{"id": "agent-tool-1", "config": {"timezone": "America/Phoenix"}}]
+    )
+    agent_tools.update.return_value = agent_tools
+
+    client = MagicMock()
+    client.table.side_effect = [platform_tools, agent_tools, agent_tools]
+
+    from backend.src.worktree_seed import _ensure_agent_tools
+
+    _ensure_agent_tools(
+        client,
+        STAGING_AGENT_ID,
+        ["Google_calendar_appointment"],
+        {"Google_calendar_appointment": {"timezone": "America/Phoenix"}},
+        {"Google_calendar_appointment": CALENDAR_DEMO_DISABLED_FUNCTIONS},
+    )
+
+    agent_tools.update.assert_called_once_with(
+        {
+            "is_enabled": True,
+            "unselected_functions": CALENDAR_DEMO_DISABLED_FUNCTIONS,
+        }
+    )

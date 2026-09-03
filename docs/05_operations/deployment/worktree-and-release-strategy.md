@@ -59,9 +59,9 @@ The launcher does the following:
 - obtain the local Supabase URL and keys without committing them;
 - run the worktree's Alembic migrations against only its local database;
 - seed deterministic test data: three standard email/password users, the
-  staging-derived organization and agent, the native Google Calendar
-  appointment-tool link, plan/entitlement state, credits, and required
-  platform catalog data;
+  neutral demo organization with both public demo agents, their native
+  provider-tool links, plan/entitlement state, credits, and required platform
+  catalog data;
 - start frontend, backend, and voice-ws against the generated local
   environment; and
 - remove only the resources belonging to that worktree. `down` preserves
@@ -99,7 +99,7 @@ Run these commands from the worktree root:
 ./scripts/worktree-stack.sh config --port-offset 60
 
 # Start local Supabase, apply Alembic, synchronize platform data, seed the
-# standard accounts and staging-shaped agent fixture, and start
+# standard accounts and local demo fixture, and start
 # frontend/backend/voice-ws on the worktree-specific ports.
 ./scripts/worktree-stack.sh up --port-offset 60
 ./scripts/worktree-stack.sh status --port-offset 60
@@ -127,15 +127,21 @@ different private environment file should be used. The generated `app.env` is
 refreshed on each `config` or `up`, so adding or rotating the key after the
 first setup is picked up automatically.
 
-The default seed mirrors the current staging fixture: `Pleasant Pediatric` in
-`Peoria, AZ` (`America/Phoenix`) with the active agent `Alex`, the current
-dental-receptionist instructions, and call recording enabled so the agent
-detail page exposes Call History. It creates the same fixture IDs in every
-isolated database, attaches the native `Google_calendar_appointment` tool, and
-leaves its OAuth state empty so each worktree can authorize it independently.
-The staging agent's unrelated remote MCP links and encrypted OAuth state are
-not copied. The agent and organization rows are updated on repeat runs, while
-credit balances are left unchanged after their first insert.
+The default seed creates a neutral `24x7 AI Demo Studio` organization in
+`America/Phoenix` with two active demos: `Alex` for Pleasant Pediatric dental
+appointments and `Jordan` for Copper Ridge Heating & Air service inquiries.
+Business context lives in each agent's instructions; the organization has no
+industry, location, or free-form business details. Both demos have unlimited
+calls (`-1`) and a 15-minute per-call cap, with call recording enabled so the
+agent detail page exposes Call History. The seed attaches the native Google
+Calendar appointment tool to Alex and the focused Google Sheets lead-capture
+tool to Jordan, while leaving OAuth state empty so each worktree can authorize
+providers independently. Any old HVAC prototype organization is marked
+inactive during reseeding rather than deleted. Future code-owned demo fixtures
+must reuse this same organization rather than creating a new tenant; keep
+business identity, hours, and workflow guardrails in each agent's instructions.
+The public Calendar fixture exposes availability lookup and new booking only;
+existing-event search, update, and cancellation functions remain disabled.
 
 For isolated manual testing, the launcher also enables the runtime recording
 gate and forces `RECORDING_STORAGE_BACKEND=local`. Opted-in calls are written
@@ -146,8 +152,8 @@ enabled.
 
 | Role | Email | Password | Organization |
 | --- | --- | --- | --- |
-| Regular user | `regular-user@247ai.local` | `Password123!` | Pleasant Pediatric |
-| Org admin | `org-admin@247ai.local` | `Password123!` | Pleasant Pediatric |
+| Regular user | `regular-user@247ai.local` | `Password123!` | 24x7 AI Demo Studio |
+| Org admin | `org-admin@247ai.local` | `Password123!` | 24x7 AI Demo Studio |
 | Platform admin | `platform-admin@247ai.local` | `Password123!` | Org-agnostic |
 
 These are intentionally fixed local-only credentials so every worktree has the

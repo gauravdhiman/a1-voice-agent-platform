@@ -160,7 +160,6 @@ class Settings(BaseSettings):
         default="noreply@example.com", description="Default sender email address"
     )
     resend_from_name: str = Field(default="24x7 AI", description="Default sender name")
-
     # Phone-number rental billing
     phone_number_billing_check_interval_hours: float = Field(
         default=24,

@@ -1,6 +1,11 @@
 """Contract tests for the native Google Calendar Appointment adapter."""
 
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+
 from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
+from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.tools.implementations.google_calendar_appointment import (
     GoogleCalendarAppointmentTool,
 )
@@ -69,3 +74,45 @@ class TestGoogleCalendarAppointmentTool:
         assert "shorten" in description
         assert "email" in description
         assert "do not call check_availability" in description
+
+    def test_calendar_config_does_not_include_email_policy(self) -> None:
+        """Calendar only owns its own provider configuration."""
+        assert (
+            "send_confirmation_email"
+            not in GoogleCalendarAppointmentTool.Config.model_fields
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_returns_only_calendar_result_after_success(
+        self, monkeypatch
+    ) -> None:
+        """The Calendar actor does not invoke or configure an email actor."""
+        tool = GoogleCalendarAppointmentTool(
+            sensitive_config={"access_token": "calendar-token"},
+        )
+        calendar_service = Mock()
+        calendar_service.create_appointment = AsyncMock(
+            return_value={
+                "status": "created",
+                "message": "Appointment booked.",
+                "appointment": {
+                    "id": "event-1",
+                    "start_time": "2026-09-01T14:00:00-07:00",
+                    "end_time": "2026-09-01T14:30:00-07:00",
+                },
+            }
+        )
+        monkeypatch.setattr(tool, "_service", lambda _context: calendar_service)
+
+        result = await tool.create_appointment(
+            context=ToolContext(session_id="session-1"),
+            caller_name="Maria Garcia",
+            purpose="Cleaning",
+            start_time="2026-09-01T14:00:00-07:00",
+            duration_minutes=30,
+            user_confirmed=True,
+            caller_email="maria@example.com",
+        )
+
+        assert result["status"] == "created"
+        assert "confirmation_email" not in result

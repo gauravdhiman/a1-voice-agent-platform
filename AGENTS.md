@@ -412,6 +412,17 @@ docs/04_development_guides/agent-evaluations.md.
 - Keep generic platform prompt guidance generic. Put tool-specific behavior in
   the tool contract and agent-specific behavior in the configured agent
   instructions.
+- Treat the agent instructions as the workflow brain/orchestrator: native tools
+  and MCP adapters are independent actors. They must not invoke another
+  registered tool or own a cross-tool business side effect (for example, Sheets,
+  Calendar, or CRM tools must not send email). If deterministic multi-tool
+  guarantees are required, add an explicit workflow/orchestration boundary
+  rather than hiding the dependency inside a provider tool.
+- Code-owned public demo fixtures must share one neutral demo organization.
+  Keep its business context empty and put each demo business's identity, hours,
+  workflow, scope, and guardrails in that agent's instructions; operational
+  settings such as timezone may remain organization-level when required by the
+  runtime.
 - Never log access tokens, full request bodies containing PII, or provider
   secrets. Redact structured logs and traces at the boundary.
 

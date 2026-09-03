@@ -7,6 +7,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Database Overview](#database-overview)
 - [Core Tables](#core-tables)
 - [Voice Agent Tables](#voice-agent-tables)
+- [Demo Outcome Tables](#demo-outcome-tables)
 - [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
 - [Plan Versioning & Entitlements Tables](#plan-versioning--entitlements-tables)
@@ -232,6 +233,7 @@ Stores voice agent configurations for each organization.
 | is_demo | BOOLEAN | NOT NULL, DEFAULT FALSE | When true, this agent is a demo agent that bypasses credit and concurrency checks and is available on a dedicated public page at `/demo/{demo_slug}`. Platform-admin only; defaults to false — migration 20260820000001 |
 | demo_slug | VARCHAR(100) | NULLABLE, UNIQUE (partial `WHERE demo_slug IS NOT NULL`) | Unique slug for the demo public page (e.g. `acme-dental-demo`); required when `is_demo` is true, must be lowercase alphanumeric plus hyphens. Only demo agents use this column — migration 20260820000001 |
 | public_description | TEXT | NULLABLE | Customer-facing description shown on the public demo page (`/demo/{demo_slug}`). Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); this is marketing copy explaining what the agent does and its scope. UI gated under `is_demo` (platform-admin only) with fallback `public_description → mission → persona` on the page — migration 20260820000002 |
+| demo_public_result_url | VARCHAR(2048) | NULLABLE | Optional HTTPS destination configured by a platform admin for the demo receipt's external-result CTA. Returned only for successful actions in the signed outcome response; never included in public landing-page metadata — migration 20260901000001 |
 | demo_calls_remaining | INTEGER | NOT NULL, DEFAULT -1, CHECK >= -1 | Remaining demo call reservations. `0` disables new demo calls; positive values decrement atomically at token issuance; `-1` means unlimited — migration 20260827000001 |
 | demo_max_call_duration_seconds | INTEGER | NOT NULL, DEFAULT -1, CHECK = -1 OR > 0 | Maximum duration captured for each new demo reservation. `-1` means unlimited; active calls keep the duration captured at reservation — migration 20260827000001 |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
@@ -273,6 +275,43 @@ has no public RLS policy; direct access is restricted to the service role.
 
 **Migration**: `20260827000001_add_demo_call_limits.py` (merge migration from
 `20260820000002` and `20260821000001`).
+
+## Demo Outcome Tables
+
+### demo_outcome_receipts
+
+Short-lived, visitor-facing receipts for allowlisted actions completed during
+a public demo call. The table is not a CRM mirror and is not used as an
+intermediate queue: demo tools continue to write directly to their configured
+provider, then the voice runtime records a minimal presentation-safe summary
+after a tool result.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Receipt row identifier |
+| session_id | VARCHAR(100) | NOT NULL | Voice session identifier; never returned by the public endpoint |
+| agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that performed the action |
+| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
+| demo_slug | VARCHAR(100) | NOT NULL | Demo URL slug bound into the signed receipt |
+| action_type | VARCHAR(40) | NOT NULL, CHECK `lead_capture`, `appointment_booking`, or `email_delivery` | Publicly allowlisted action category |
+| provider | VARCHAR(40) | NOT NULL | Provider label, currently `hubspot`, `google_sheets`, `google_calendar`, `gmail`, or `resend` |
+| status | VARCHAR(20) | NOT NULL, CHECK `succeeded`, `failed`, or `pending` | Visitor-safe action state |
+| error_code | VARCHAR(80) | NULLABLE | Stable safe error code when the action needs attention |
+| captured_fields | JSONB | NOT NULL, DEFAULT `{}` | Allowlisted user-supplied fields, with sensitive values redacted or summarized |
+| provider_result | JSONB | NOT NULL, DEFAULT `{}` | Provider-safe identifiers/status/message; never raw responses |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Receipt creation timestamp |
+| expires_at | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW() + 7 days` | Storage retention boundary |
+
+**RLS**: Enabled with no public or authenticated-user policies; the service
+role is the only database reader/writer. Public access requires a signed,
+session-bound token validated by the backend. The endpoint also filters
+expired rows and returns `Cache-Control: private, no-store`.
+
+**Indexes**: `(session_id, created_at)` for receipt lookup and `(expires_at)`
+for retention cleanup.
+
+**Migrations**: `20260830000001_add_demo_outcome_receipts.py` and
+`20260901000002_add_demo_email_outcome_action.py`.
 
 ---
 
@@ -1639,6 +1678,8 @@ erDiagram
     agent_embed_configs ||--o{ embed_call_logs : "tracks"
     organizations ||--o{ call_logs : "owns"
     voice_agents ||--o{ call_logs : "handles"
+    voice_agents ||--o{ demo_outcome_receipts : "produces"
+    organizations ||--o{ demo_outcome_receipts : "owns"
     credit_transactions ||--o| call_logs : "explains call charge"
     organizations ||--o{ platform_credit_grants : "receives platform grants"
     credit_transactions ||--o| platform_credit_grants : "audited by"
@@ -1775,6 +1816,9 @@ erDiagram
 73. `20260822000001` - Merge the demo-agent and call-log permission migration branches so every supported environment has one Alembic head for `upgrade head`. This revision changes no tables or data.
 74. `20260827000001` - Add bounded public demo call budgets and one-time call reservations. This migration is joined to the staging merge history by `20260828000001`.
 75. `20260828000001` - Merge the previously validated staging head with the remote demo-call-limit migration head. This revision changes no tables or data and preserves one connected release-order head.
+76. `20260830000001` - Add service-role-only `demo_outcome_receipts` for short-lived, signed visitor receipts containing allowlisted provider outcomes from public demo calls.
+77. `20260901000001` - Add the optional platform-admin-configured `voice_agents.demo_public_result_url` destination. The URL is returned only for successful actions in signed demo outcome receipts so the receipt can offer an external-result CTA without exposing it on the public landing page.
+78. `20260901000002` - Extend the service-role-only demo outcome receipt action allowlist with independent `email_delivery` actions for attached Gmail and Resend tools. The receipt stores only a safe provider/status summary and does not make provider tools call one another.
 
 ---
 

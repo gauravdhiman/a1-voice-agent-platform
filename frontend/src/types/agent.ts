@@ -40,6 +40,8 @@ export interface VoiceAgent {
   demo_slug?: string | null;
   /** Customer-facing description shown on the public demo page (marketing copy). */
   public_description?: string | null;
+  /** Optional HTTPS destination shown after a successful demo handoff. */
+  demo_public_result_url?: string | null;
   /** Remaining demo call reservations; -1 means unlimited. */
   demo_calls_remaining?: number;
   /** Maximum demo call duration in seconds; -1 means unlimited. */
@@ -77,6 +79,8 @@ export interface VoiceAgentCreate {
   is_demo?: boolean;
   demo_slug?: string | null;
   public_description?: string | null;
+  /** Platform-admin only: optional HTTPS destination shown after success. */
+  demo_public_result_url?: string | null;
   /** Platform-admin only: remaining demo call reservations; -1 means unlimited. */
   demo_calls_remaining?: number;
   /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */
@@ -104,6 +108,8 @@ export interface VoiceAgentUpdate {
   demo_slug?: string | null;
   /** Customer-facing description for the public demo page. */
   public_description?: string | null;
+  /** Platform-admin only: optional HTTPS destination shown after success. */
+  demo_public_result_url?: string | null;
   /** Platform-admin only: remaining demo call reservations; -1 means unlimited. */
   demo_calls_remaining?: number;
   /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */

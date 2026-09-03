@@ -134,6 +134,7 @@ async def create_agent(
         "is_demo",
         "demo_slug",
         "public_description",
+        "demo_public_result_url",
         "demo_calls_remaining",
         "demo_max_call_duration_seconds",
     }
@@ -143,7 +144,7 @@ async def create_agent(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     "Only platform administrators can create demo agents, set "
-                    "demo slugs, demo descriptions, or demo call limits"
+                    "demo slugs, demo descriptions, result URLs, or demo call limits"
                 ),
             )
 
@@ -494,6 +495,7 @@ async def update_agent(
         "is_demo",
         "demo_slug",
         "public_description",
+        "demo_public_result_url",
         "demo_calls_remaining",
         "demo_max_call_duration_seconds",
     } & agent_data.model_fields_set:
@@ -502,7 +504,7 @@ async def update_agent(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     "Only platform administrators can change demo status, demo "
-                    "slugs, descriptions, or demo call limits"
+                    "slugs, descriptions, result URLs, or demo call limits"
                 ),
             )
 

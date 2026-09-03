@@ -190,6 +190,9 @@ class VoiceAgentService:
                         "public_description": getattr(
                             agent_data, "public_description", None
                         ),
+                        "demo_public_result_url": getattr(
+                            agent_data, "demo_public_result_url", None
+                        ),
                         "demo_calls_remaining": agent_data.demo_calls_remaining,
                         "demo_max_call_duration_seconds": (
                             agent_data.demo_max_call_duration_seconds

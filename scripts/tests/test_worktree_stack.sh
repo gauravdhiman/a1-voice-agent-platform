@@ -102,7 +102,7 @@ assert_file_contains "$app_env" 'VOICE_RECORDING_ENABLED=true'
 assert_file_contains "$app_env" 'RECORDING_STORAGE_BACKEND=local'
 assert_file_contains "$app_env" 'RECORDING_STORAGE_LOCAL_ROOT=.local-data/call-recordings'
 assert_file_contains "$app_env" 'GEMINI_API_KEY=your-gemini-api-key'
-assert_file_contains "$state_dir/metadata.env" 'TEST_ORGANIZATION_NAME=Pleasant Pediatric'
+assert_file_contains "$state_dir/metadata.env" 'TEST_ORGANIZATION_NAME=24x7 AI Demo Studio'
 assert_file_contains "$state_dir/metadata.env" 'TEST_AGENT_ID=59252f36-255e-4e71-9250-c4ce3ac27eaa'
 
 first_key="$(grep '^ENCRYPTION_KEY=' "$app_env" | cut -d= -f2-)"

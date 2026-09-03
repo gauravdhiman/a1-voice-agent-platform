@@ -1,23 +1,29 @@
 """Tests for security middleware: headers."""
 
-import pytest
 from unittest.mock import patch
-from starlette.testclient import TestClient
-from starlette.applications import Starlette
-from starlette.routing import Route
-from starlette.responses import JSONResponse
 
+import pytest
 from src.security.headers import SecurityHeadersMiddleware
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 
 def homepage(request):
     return JSONResponse({"hello": "world"})
 
 
+def private_page(request):
+    response = JSONResponse({"private": True})
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
 @pytest.fixture
 def test_app():
     """Create a minimal Starlette app with security headers middleware."""
-    app = Starlette(routes=[Route("/", homepage)])
+    app = Starlette(routes=[Route("/", homepage), Route("/private", private_page)])
     app.add_middleware(SecurityHeadersMiddleware)
     return app
 
@@ -52,7 +58,15 @@ class TestSecurityHeaders:
         with patch("src.security.headers.settings") as s:
             s.environment = "production"
             response = client.get("/")
-        assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        assert (
+            response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        )
+
+    def test_route_can_set_stricter_referrer_policy(self, client):
+        with patch("src.security.headers.settings") as s:
+            s.environment = "production"
+            response = client.get("/private")
+        assert response.headers.get("Referrer-Policy") == "no-referrer"
 
     def test_permissions_policy(self, client):
         with patch("src.security.headers.settings") as s:

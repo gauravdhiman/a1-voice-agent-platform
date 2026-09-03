@@ -202,6 +202,39 @@ class TestPlatformToolRegistry:
         for expected in expected_functions:
             assert expected in function_names, f"Missing function: {expected}"
 
+    @pytest.mark.asyncio
+    async def test_sync_publishes_in_tree_tools_for_org_users(self):
+        """Code-backed tools, including Gmail, are not accidentally drafts."""
+        from shared.voice_agents.tools.base.platform_tool_registry import (
+            PlatformToolRegistry,
+        )
+
+        registry = PlatformToolRegistry()
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+
+        captured = {}
+
+        class FakeToolService:
+            async def upsert_platform_tool(self, tool_data):
+                captured[tool_data.name] = tool_data
+                return None, None
+
+        await registry.sync_with_db(FakeToolService())
+
+        assert captured["Gmail"].is_published is True
+        assert captured["Gmail"].tool_functions_schema["functions"]
+        assert any(
+            item["name"] == "Get Latest Emails"
+            for item in captured["Gmail"].tool_functions_schema["functions"]
+        )
+        assert captured["Resend_email"].is_published is True
+        assert {
+            item["name"]
+            for item in captured["Resend_email"].tool_functions_schema["functions"]
+        } == {"List Resend Email Routes", "Send Resend Email"}
+
     def test_tool_instantiation(self, registry):
         """Test instantiating tool with config."""
         # Register tools first

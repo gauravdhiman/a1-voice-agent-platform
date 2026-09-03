@@ -42,6 +42,15 @@ describe("buildProviderCredentialsInput", () => {
       ),
     ).toEqual({ cartesia: null });
   });
+
+  it("sets a touched Resend key for organization email tools", () => {
+    expect(
+      buildProviderCredentialsInput(
+        { ...emptyDraft, resend: " re_org_key " },
+        { resend: true },
+      ),
+    ).toEqual({ resend: "re_org_key" });
+  });
 });
 
 describe("countPendingProviderCredentialChanges", () => {

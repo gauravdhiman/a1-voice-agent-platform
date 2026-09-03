@@ -22,6 +22,7 @@ from src.tools.skill_tools import (
     create_load_skill_reference_function,
 )
 
+from shared.voice_agents.demo_outcome_service import record_demo_tool_outcome
 from shared.voice_agents.key_resolver import resolve_org_provider_credential
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.tool_models import ToolSource
@@ -192,7 +193,8 @@ def create_legacy_tool_handler(
             if name != "context"
         }
         # Tool arguments may contain PII, message bodies, or credentials. Keep
-        # the key names for diagnostics without logging the values.
+        # key names for diagnostics without logging values; the visitor-facing
+        # receipt applies its own allowlist.
         logger.info(
             "Invoking legacy tool %s with arg_names=%s",
             tool_name,
@@ -204,11 +206,30 @@ def create_legacy_tool_handler(
             )
         except Exception as exc:  # noqa: BLE001 - always return a model-visible error
             logger.exception("Legacy tool %s failed: %s", tool_name, exc)
+            await record_demo_tool_outcome(
+                context=runtime_context,
+                function_name=tool_name,
+                arguments=arguments,
+                result={
+                    "status": "failed",
+                    "message": f"{tool_name} could not complete.",
+                    "error": {"code": "tool_exception"},
+                },
+            )
             await params.result_callback(
-                json.dumps({"error": f"{tool_name} failed: {exc}"}, default=str)
+                json.dumps(
+                    {"error": f"{tool_name} failed: {exc}"},
+                    default=str,
+                )
             )
             return
         logger.info("Legacy tool %s completed", tool_name)
+        await record_demo_tool_outcome(
+            context=runtime_context,
+            function_name=tool_name,
+            arguments=arguments,
+            result=result,
+        )
         await params.result_callback(json.dumps(result, default=str))
 
     return handler
