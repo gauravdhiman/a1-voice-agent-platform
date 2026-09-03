@@ -171,6 +171,11 @@ export function SignUpForm() {
         reset();
         setIsSignUpComplete(true);
 
+        if (invitationToken) {
+          const { trackEvent } = await import("@/lib/analytics/posthog");
+          trackEvent("invite_accepted", {});
+        }
+
         if (emailVerificationRequired) {
           if (invitationToken) {
             setSuccess(

@@ -13,6 +13,7 @@ import { ThemeProvider } from "@/contexts/theme-context";
 import { OrganizationProvider } from "@/contexts/organization-context";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AnalyticsProvider } from "@/components/analytics/posthog-provider";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -35,11 +36,13 @@ export function Providers({ children }: ProvidersProps) {
         <AuthProvider>
           <OrganizationProvider>
             <TooltipProvider>
-              {children}
-              {process.env.NODE_ENV === "development" && (
-                <ReactQueryDevtools initialIsOpen={false} />
-              )}
-              <Toaster />
+              <AnalyticsProvider>
+                {children}
+                {process.env.NODE_ENV === "development" && (
+                  <ReactQueryDevtools initialIsOpen={false} />
+                )}
+                <Toaster />
+              </AnalyticsProvider>
             </TooltipProvider>
           </OrganizationProvider>
         </AuthProvider>

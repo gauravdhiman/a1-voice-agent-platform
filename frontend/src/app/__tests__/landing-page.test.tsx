@@ -7,8 +7,10 @@
  *   - Hero headline sells the business outcome ("Never miss a call...").
  *   - An industries section ("Built for businesses that live on the phone")
  *     replaces the fabricated customer logos and testimonials.
- *   - Pricing is outcome-focused ("Start free") with no hardcoded dollar
- *     figures (removed $0 / $99 / Custom that could drift from Stripe).
+ *   - Pricing is pilot-anchored ("Request a Demo", plans from $79/mo) with
+ *     no full price table (removed $0 / $99 / Custom that could drift from
+ *     Stripe). Controlled-SaaS launch: concierge pilots first, self-serve
+ *     catalog later.
  *   - Removed fabricated social proof (Acme Corp, TechStart, fake names).
  */
 import React from "react";
@@ -60,12 +62,12 @@ describe("Landing page (public marketing messaging)", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps pricing outcome-focused with no hardcoded dollar figures", () => {
+  it("keeps pricing pilot-anchored with no full price table", () => {
     render(<LandingPage />);
-    expect(screen.getAllByText(/start free/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/cancel anytime/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/\$99/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/\$0/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/request a demo/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\$79/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/\$99/)).toBeNull();
+    expect(screen.queryByText(/\$0/)).toBeNull();
   });
 
   it("keeps the 'Talk to Sales' CTA legible on the gradient by default", () => {
