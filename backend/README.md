@@ -135,6 +135,24 @@ in [Public Organization and Demo Agent Pages](../docs/02_features/voice_agents/p
 The implementation lives in `src/organization/public_routes.py` and
 `src/voice_agents/demo_public_routes.py`.
 
+### Controlled-SaaS entry (gated signup + interest funnel)
+
+While `PUBLIC_SIGNUP_ENABLED=false` (default), email signup and OAuth
+sign-in only succeed for invitation holders and allowlisted platform
+admins (`PLATFORM_ADMIN_ALLOWLIST`); see `src/auth/signup_gate.py`.
+Everyone else is directed to the interest form.
+
+| Endpoint | Method | Description |
+| -------- | ------ | ----------- |
+| `/api/v1/auth/signup-status` | GET | Public flag for the signup-page redirect (backend gate is authoritative) |
+| `/api/v1/public/leads` | POST | Submit visitor interest (fixed ack envelope, 5/min) |
+| `/api/v1/leads` | GET | List interest leads, newest-first (platform admins only) |
+| `/api/v1/leads/{id}` | PATCH | Advance follow-up status (platform admins only) |
+
+Implementation lives in `src/leads/` (see its README); storage is the
+service-role-only `interest_leads` table
+(`docs/DATABASE_SCHEMA.md#interest_leads`).
+
 ### Example Response
 
 ```bash
