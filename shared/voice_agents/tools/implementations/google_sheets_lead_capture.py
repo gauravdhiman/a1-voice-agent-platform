@@ -104,9 +104,15 @@ class GoogleSheetsLeadCaptureTool(BaseTool):
         )
 
     def check_configuration(self) -> list[str]:
-        """Flag a missing spreadsheet destination before any call runs."""
-        spreadsheet_id = (self.config.spreadsheet_id or "").strip()
-        if not _SPREADSHEET_ID_PATTERN.fullmatch(spreadsheet_id):
+        """Flag a missing spreadsheet destination before any call runs.
+
+        Mirrors the runtime exactly: the service accepts a full Sheets URL
+        or a bare id, so the check extracts first and validates second.
+        Checking the raw value would red-card valid URL pastes.
+        """
+        raw = (self.config.spreadsheet_id or "").strip()
+        extracted = GoogleSheetsLeadService.extract_spreadsheet_id(raw)
+        if not _SPREADSHEET_ID_PATTERN.fullmatch(extracted):
             return ["spreadsheet destination is not set"]
         return []
 

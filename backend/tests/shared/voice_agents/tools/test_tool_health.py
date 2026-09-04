@@ -26,6 +26,21 @@ class TestCheckToolConfiguration:
             == []
         )
 
+    def test_sheets_full_url_is_accepted_like_the_runtime(self) -> None:
+        """The field invites full URLs and the service extracts them."""
+        assert (
+            check_tool_configuration(
+                "Google_Sheets_lead_capture",
+                {
+                    "spreadsheet_id": (
+                        "https://docs.google.com/spreadsheets/d/"
+                        "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+                    )
+                },
+            )
+            == []
+        )
+
     def test_resend_reports_every_gap(self) -> None:
         """Sender and routes are each required for a working attachment."""
         assert check_tool_configuration(
@@ -67,3 +82,18 @@ class TestCheckToolConfiguration:
     def test_tools_without_requirements_default_clean(self) -> None:
         """Gmail needs only credentials, which auth status already covers."""
         assert check_tool_configuration("Gmail", {}) == []
+
+    def test_full_native_tool_audit_matrix(self) -> None:
+        """Every native tool has a deliberate health verdict for empty config.
+
+        This is the systematic audit: adding a tool with required
+        attachment fields must add an override (and a row here), or the
+        card silently stays green like Jordan's Sheets card did.
+        """
+        assert check_tool_configuration("CalCom", {}) == [
+            "default event type is not set"
+        ]
+        assert check_tool_configuration("Google_calendar", {}) == []
+        assert check_tool_configuration("Google_calendar_appointment", {}) == []
+        assert check_tool_configuration("Google_Sheets", {}) == []
+        assert check_tool_configuration("HubSpot_lead_capture", {}) == []
