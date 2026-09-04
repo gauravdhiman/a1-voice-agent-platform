@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DemoFeedback } from "@/components/demo/demo-feedback";
+import { OutcomeInterest } from "@/components/demo/outcome-interest";
 import {
   demoPublicService,
   type DemoOutcome,
@@ -451,6 +452,10 @@ export default function DemoOutcomePage() {
 
         <div className="mt-6 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
           <DemoFeedback demoSlug={slug} />
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
+          <OutcomeInterest demoSlug={slug} />
         </div>
       </div>
     </main>
