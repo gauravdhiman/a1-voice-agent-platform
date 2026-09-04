@@ -419,12 +419,26 @@ export default function DemoOutcomePage() {
           </div>
         </div>
 
-        {outcome.actions.length ? (
-          <div className="mt-5 space-y-5">
-            {outcome.actions.map((action) => (
-              <OutcomeActionCard key={action.id} action={action} />
-            ))}
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
+            <DemoFeedback demoSlug={slug} />
           </div>
+          <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
+            <OutcomeInterest demoSlug={slug} />
+          </div>
+        </div>
+
+        {outcome.actions.length ? (
+          <details className="mt-5 rounded-2xl border border-slate-200/90 bg-white/95 shadow-sm">
+            <summary className="cursor-pointer p-5 text-sm font-medium text-slate-700">
+              Call details — what the agent saved and where
+            </summary>
+            <div className="space-y-5 px-5 pb-5">
+              {outcome.actions.map((action) => (
+                <OutcomeActionCard key={action.id} action={action} />
+              ))}
+            </div>
+          </details>
         ) : (
           <Card className="mt-5 border-slate-200/90 bg-white/95 text-slate-950 shadow-xl shadow-slate-900/5">
             <CardContent className="flex flex-col items-center px-6 py-12 text-center">
@@ -448,14 +462,6 @@ export default function DemoOutcomePage() {
         <div className="mt-8 flex flex-col gap-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" /> Receipt expires after 24 hours</span>
           <span>Provider-backed result · No login required</span>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
-          <DemoFeedback demoSlug={slug} />
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
-          <OutcomeInterest demoSlug={slug} />
         </div>
       </div>
     </main>
