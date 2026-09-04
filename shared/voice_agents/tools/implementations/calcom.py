@@ -48,6 +48,18 @@ class CalComTool(BaseTool):
             config_schema=self.Config.model_json_schema(),
         )
 
+    def check_configuration(self) -> list[str]:
+        """Flag a missing default event type before any call runs.
+
+        The model may pass an explicit event type per call, but in
+        practice bookings rely on the attachment default — and ``0`` is
+        never a valid Cal.com event type, so an unset default means
+        every booking attempt fails. Credentials stay on the auth side.
+        """
+        if not self.config.event_type_id:
+            return ["default event type is not set"]
+        return []
+
     def _get_headers(self, api_version: str = "2024-08-13") -> dict[str, str]:
         """
         Get headers for Cal.com API requests.
