@@ -22,4 +22,4 @@ capture, although the funnel design promised a form fallback.
 |---|---|
 | New component tests | 4/4 across demo components dir |
 | tsc / ESLint on touched files | clean |
-| E2E (new outcome-interest test) | (record after run) |
+| E2E full stack | 70 pass, 1 fail — same pre-existing skills `.prose` failure (proven on clean baseline); new outcome-interest test green |
