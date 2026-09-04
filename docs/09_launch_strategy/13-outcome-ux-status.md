@@ -27,6 +27,6 @@ and the interest form lacked a free-text field.
 
 | Layer | Result |
 |---|---|
-| New tests (interest page 3) + neighbors | green (run record below) |
+| New tests (interest page 3) + neighbors | green |
 | tsc / ESLint on touched files | clean |
-| E2E full stack | (record after run) |
+| E2E full stack | 71 pass, 1 fail — same pre-existing skills `.prose` failure (proven on clean baseline); outcome tests updated to open the Call-details disclosure first |
