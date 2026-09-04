@@ -97,3 +97,10 @@ class TestCheckToolConfiguration:
         assert check_tool_configuration("Google_calendar_appointment", {}) == []
         assert check_tool_configuration("Google_Sheets", {}) == []
         assert check_tool_configuration("HubSpot_lead_capture", {}) == []
+
+    def test_callback_reports_every_gap(self) -> None:
+        """Owner callback needs a sender and at least one owner route."""
+        assert check_tool_configuration(
+            "Callback_request",
+            {"from_email": None, "from_name": None, "routes": []},
+        ) == ["sender email is not set", "no owner routes are configured"]
