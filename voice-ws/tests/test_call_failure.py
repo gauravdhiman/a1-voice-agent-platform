@@ -14,6 +14,18 @@ from src.call_failure import CallFailureState, classify_pipeline_failure
         ("provider returned HTTP 401 Unauthorized", "provider_authentication_error"),
         ("provider returned HTTP 429 rate limit exceeded", "provider_rate_limited"),
         ("provider request timed out", "provider_unavailable"),
+        (
+            "Fish Audio server error during synthesis",
+            "tts_empty_audio",
+        ),
+        (
+            "Unknown error occurred: TTS returned empty audio",
+            "tts_empty_audio",
+        ),
+        (
+            "Unknown error occurred: 401 Unauthorized from Fish Audio",
+            "provider_authentication_error",
+        ),
     ],
 )
 def test_classify_pipeline_failure_returns_stable_codes(error, code):

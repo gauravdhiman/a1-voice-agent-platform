@@ -32,9 +32,15 @@ they land (with the PR number that closed them).
 
 ## From Epic D (open)
 
-- [ ] SMS owner alerts (Twilio sender transport does not exist yet;
-  callback email works). Add SMS channel to the notification path and a
-  per-trigger channel config → owner: **Epic D part 2 or Epic E**.
+- [x] SMS owner alerts → closed by night batch: `shared/notifications/sms.py`
+  (keyless-safe Twilio HTTPS transport, no SDK), callback tool
+  `sms_recipients`/`sms_from_number` config + `twilio_account_sid`/
+  `twilio_auth_token` sensitive config, `notified_channels` result,
+  contract tests + `callback.sms_only_request_notifies_owner` eval.
+  Config fields render automatically in the tool drawer (generic schema
+  form); Twilio creds flow through the existing encrypted
+  `sensitive_config` update path. Remaining: founder Twilio creds +
+  a drawer credential input for the Twilio SID/token (API path works).
 - [ ] Cheap LLM call-outcome summaries (owner value proof without
   Twilio transcription) → owner: **Epic D part 2**.
 - [ ] Callback seed prompt snippet for the dental/HVAC/restaurant skill
@@ -63,6 +69,14 @@ they land (with the PR number that closed them).
   on a transient TTS blip. Lives in/around the pinned Pipecat Fish
   service; do not hack around it — evaluate on the pinned runtime
   deliberately → owner: **voice reliability pass, before any paid SLA**.
+  Night-batch progress (2026-09-04): verified against pinned Pipecat
+  1.8.1 source — a `finish/reason=error` frame reaches us as "Fish Audio
+  server error during synthesis"; `classify_pipeline_failure` now returns
+  distinct `tts_empty_audio` with retry/credits guidance instead of the
+  generic code (tested, incl. rule ordering vs auth errors). Known
+  upstream limit: Pipecat silently drops Fish audio chunks ≤1024 bytes,
+  so zero-audio can also pass with silence and no error at all — the
+  retry/fallback design still needs a live repro on the pinned runtime.
 - [ ] TTS provider A/B: Cartesia is already integrated as a pipeline TTS
   option; run Fish vs Cartesia on empty-audio rate + latency before
   committing pilots to one voice → owner: **same pass as above**.

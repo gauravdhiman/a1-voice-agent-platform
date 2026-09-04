@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from unittest.mock import patch
 
 from shared.notifications.email_providers import EmailSendResult
+from shared.notifications.sms import SmsSendResult
 from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.tools.implementations import callback_request as tool_module
 from shared.voice_agents.tools.implementations.callback_request import (
@@ -50,29 +51,37 @@ class CallbackEvalAdapter:
         routes: Iterable[dict[str, Any]] | None = None,
         outcomes: Iterable[object] = (),
         provider_configured: bool = True,
+        sms_recipients: Iterable[str] | None = None,
+        sms_outcomes: Iterable[object] = (),
+        twilio_configured: bool = True,
     ) -> None:
         self.provider = _FakeCallbackProvider(outcomes=list(outcomes))
+        self.sms_provider = _FakeCallbackProvider(outcomes=list(sms_outcomes))
         self.provider_configured = provider_configured
-        self.tool = CallbackRequestTool(
-            config={
-                "from_email": "noreply@example.com",
-                "from_name": "Example Business",
-                "routes": (
-                    list(routes)
-                    if routes is not None
-                    else [
-                        {
-                            "route_id": "owner",
-                            "label": "Owner",
-                            "recipients": ["owner@example.com"],
-                        }
-                    ]
-                ),
-            },
-            sensitive_config={
-                "api_key": "eval-key" if provider_configured else None,
-            },
-        )
+        config: dict[str, Any] = {
+            "from_email": "noreply@example.com",
+            "from_name": "Example Business",
+            "routes": (
+                list(routes)
+                if routes is not None
+                else [
+                    {
+                        "route_id": "owner",
+                        "label": "Owner",
+                        "recipients": ["owner@example.com"],
+                    }
+                ]
+            ),
+        }
+        sensitive: dict[str, Any] = {
+            "api_key": "eval-key" if provider_configured else None,
+        }
+        if sms_recipients is not None:
+            config["sms_from_number"] = "+14805550100"
+            config["sms_recipients"] = list(sms_recipients)
+            sensitive["twilio_account_sid"] = "AC123" if twilio_configured else None
+            sensitive["twilio_auth_token"] = "eval-token" if twilio_configured else None
+        self.tool = CallbackRequestTool(config=config, sensitive_config=sensitive)
 
     @property
     def provider_write_count(self) -> int:
@@ -82,14 +91,26 @@ class CallbackEvalAdapter:
     async def invoke(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Invoke the callback function with a trusted session context."""
         function = getattr(self.tool, tool_name)
-        with patch.object(
-            tool_module, "build_resend_email_provider", return_value=self.provider
+        with (
+            patch.object(
+                tool_module, "build_resend_email_provider", return_value=self.provider
+            ),
+            patch.object(
+                tool_module,
+                "build_twilio_sms_provider",
+                return_value=self.sms_provider,
+            ),
         ):
             result = await function(
                 context=ToolContext(session_id="eval-session"),
                 **arguments,
             )
         return result
+
+
+def _sms_accepted(message_id: str) -> SmsSendResult:
+    """Build a successful fake SMS provider response."""
+    return SmsSendResult(provider="twilio", provider_message_id=message_id)
 
 
 def _accepted(message_id: str) -> EmailSendResult:
@@ -255,6 +276,29 @@ def build_callback_scenarios() -> list[EvalScenario]:
                 ),
             ),
         ),
+        EvalScenario(
+            scenario_id="callback.sms_only_request_notifies_owner",
+            description="An SMS-only attachment alerts the owner with no email.",
+            tags=("escalation", "mutation", "sms"),
+            steps=(
+                EvalStep(
+                    step_id="request",
+                    tool_name="request_human_callback",
+                    arguments={
+                        "callback_phone": "+14805550100",
+                        "reason": "Water heater is leaking.",
+                    },
+                    expected_status="notified",
+                    expected_code="callback_notified",
+                    expected_fields={
+                        "notified": True,
+                        "notified_channels": ["sms"],
+                        "sms_accepted": 1,
+                        "accepted_routes": 0,
+                    },
+                ),
+            ),
+        ),
     ]
 
 
@@ -271,6 +315,13 @@ def _scenario_adapter(scenario: EvalScenario) -> CallbackEvalAdapter:
         )
     if scenario_id == "callback.provider_outage_is_retryable":
         return CallbackEvalAdapter(outcomes=[_ProviderOutage("outage")])
+    if scenario_id == "callback.sms_only_request_notifies_owner":
+        return CallbackEvalAdapter(
+            routes=[],
+            provider_configured=False,
+            sms_recipients=["+14805550200"],
+            sms_outcomes=[_sms_accepted("SM1")],
+        )
     return CallbackEvalAdapter(outcomes=[_accepted("email-1")])
 
 

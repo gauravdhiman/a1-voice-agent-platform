@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from shared.notifications.email_providers import EmailSendResult
+from shared.notifications.sms import SmsSendResult, TwilioSmsError
 from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.tools.implementations import callback_request as tool_module
 from shared.voice_agents.tools.implementations.callback_request import (
@@ -181,3 +182,143 @@ class TestRequestHumanCallback:
         metadata = _tool().metadata
         assert metadata.name == "Callback_request"
         assert "callback" in metadata.description.lower()
+
+
+def _sms_tool(**overrides: Any) -> CallbackRequestTool:
+    """Build the tool with an SMS channel and Twilio credentials."""
+    config: dict[str, Any] = {
+        "sms_from_number": "+14805550100",
+        "sms_recipients": ["+14805550200"],
+    }
+    config.update(overrides.get("config", {}))
+    sensitive = {
+        "twilio_account_sid": "AC123",
+        "twilio_auth_token": "token",
+    }
+    sensitive.update(overrides.get("sensitive_config", {}))
+    return CallbackRequestTool(config=config, sensitive_config=sensitive)
+
+
+def _sms_accepted() -> SmsSendResult:
+    """Build a successful fake SMS provider response."""
+    return SmsSendResult(provider="twilio", provider_message_id="SM1")
+
+
+class TestRequestHumanCallbackSms:
+    @pytest.mark.asyncio
+    async def test_sms_only_request_notifies_owner(self) -> None:
+        """An SMS-only attachment alerts the owner without any email."""
+        sms = _FakeProvider(results=[_sms_accepted()])
+        with (
+            patch.object(tool_module, "build_twilio_sms_provider", return_value=sms),
+            patch.object(tool_module, "build_resend_email_provider") as email_build,
+        ):
+            result = await _sms_tool().request_human_callback(
+                ToolContext(session_id="call-123"),
+                callback_phone="+14805550100",
+                reason="Billing question.",
+            )
+        assert result["status"] == "notified"
+        assert result["notified_channels"] == ["sms"]
+        assert result["sms_accepted"] == 1
+        assert result["accepted_routes"] == 0
+        assert email_build.call_count == 0
+        assert sms.messages[0].recipient_phone == "+14805550200"
+
+    @pytest.mark.asyncio
+    async def test_email_and_sms_channels_combine(self) -> None:
+        """Both channels fire and both acceptances are reported."""
+        email = _FakeProvider(results=[_accepted()])
+        sms = _FakeProvider(results=[_sms_accepted()])
+        tool = _sms_tool(
+            config={
+                "from_email": "noreply@example.com",
+                "routes": [
+                    {
+                        "route_id": "owner",
+                        "label": "Owner",
+                        "recipients": ["owner@example.com"],
+                    }
+                ],
+            },
+            sensitive_config={"api_key": "test-key"},
+        )
+        with (
+            patch.object(tool_module, "build_twilio_sms_provider", return_value=sms),
+            patch.object(
+                tool_module, "build_resend_email_provider", return_value=email
+            ),
+        ):
+            result = await tool.request_human_callback(
+                ToolContext(session_id="call-123"),
+                callback_phone="+14805550100",
+                reason="Billing question.",
+            )
+        assert result["status"] == "notified"
+        assert result["notified_channels"] == ["email", "sms"]
+        assert result["accepted_routes"] == 1
+        assert result["sms_accepted"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sms_failure_with_email_success_still_notifies(self) -> None:
+        """A dead SMS leg does not sink a delivered email alert."""
+        email = _FakeProvider(results=[_accepted()])
+        sms = _FakeProvider(
+            results=[TwilioSmsError("unsubscribed", code=21610, retryable=False)]
+        )
+        tool = _sms_tool(
+            config={
+                "from_email": "noreply@example.com",
+                "routes": [
+                    {
+                        "route_id": "owner",
+                        "label": "Owner",
+                        "recipients": ["owner@example.com"],
+                    }
+                ],
+            },
+            sensitive_config={"api_key": "test-key"},
+        )
+        with (
+            patch.object(tool_module, "build_twilio_sms_provider", return_value=sms),
+            patch.object(
+                tool_module, "build_resend_email_provider", return_value=email
+            ),
+        ):
+            result = await tool.request_human_callback(
+                ToolContext(session_id="call-123"),
+                callback_phone="+14805550100",
+                reason="Billing question.",
+            )
+        assert result["status"] == "notified"
+        assert result["notified_channels"] == ["email"]
+        assert result["sms_accepted"] == 0
+
+    @pytest.mark.asyncio
+    async def test_sms_missing_credentials_is_unavailable(self) -> None:
+        """SMS recipients without Twilio credentials degrade loudly."""
+        sms = _FakeProvider(results=[_sms_accepted()])
+        tool = _sms_tool(sensitive_config={"twilio_account_sid": None})
+        with patch.object(tool_module, "build_twilio_sms_provider", return_value=sms):
+            result = await tool.request_human_callback(
+                ToolContext(session_id="call-123"),
+                callback_phone="+14805550100",
+                reason="Billing question.",
+            )
+        assert result["status"] == "unavailable"
+        assert result["code"] == "sms_provider_not_configured"
+        assert sms.messages == []
+
+    def test_invalid_sms_recipient_rejected_at_save(self) -> None:
+        """Undialable SMS recipients fail config validation, not at runtime."""
+        with pytest.raises(Exception):
+            _sms_tool(config={"sms_recipients": ["not-a-number"]})
+
+    def test_check_configuration_flags_sms_gaps(self) -> None:
+        """Partial SMS setup is flagged; email-only stays green."""
+        assert (
+            "SMS sender number is not set"
+            in _sms_tool(config={"sms_from_number": None}).check_configuration()
+        )
+        assert _tool().check_configuration() == []
+        assert _sms_tool().check_configuration() == []

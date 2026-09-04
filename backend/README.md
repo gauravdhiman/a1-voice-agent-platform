@@ -156,7 +156,8 @@ service-role-only `interest_leads` table
 ### Callback escalations (soft escalation owner workflow)
 
 When a caller needs a person, the agent's `request_human_callback` tool
-alerts the owner by email and the voice runtime records one
+alerts the owner by email and SMS (per-attachment channels; either channel
+alone is enough to notify) and the voice runtime records one
 `callback_escalations` row per accepted result (production calls only;
 demos are skipped). Owners work the `new → acknowledged → resolved`
 queue; org admins may also log callbacks manually.

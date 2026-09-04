@@ -12,7 +12,7 @@ async def test_callback_suite_covers_notify_and_failure_paths() -> None:
 
     assert suite.passed is True
     assert suite.score == 1.0
-    assert len(suite.results) == 7
-    assert {"escalation", "safety", "mutation"}.issubset(
+    assert len(suite.results) == 8
+    assert {"escalation", "safety", "mutation", "sms"}.issubset(
         {tag for scenario in build_callback_scenarios() for tag in scenario.tags}
     )

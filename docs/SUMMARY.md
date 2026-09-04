@@ -36,6 +36,12 @@ Understanding how the system works.
 
 ### Platform operations and launch
 
+- **[Controlled-SaaS launch strategy (09_launch_strategy/)](09_launch_strategy/launch-strategy-report.md)** - Market analysis, competitor pricing, and the gated self-serve recommendation
+- **[Launch execution plan](09_launch_strategy/00-execution-plan.md)** - Phased epics A–E, branching rule, and the integration branch
+- **[Launch decisions](09_launch_strategy/01-decisions-addendum.md)** - Number positioning, pipeline, lead capture, pricing, and delegated picks
+- **[Deferred & follow-up tracker](09_launch_strategy/03-deferred-and-followups.md)** - Everything postponed, with owners (review every epic)
+- **[Pilot billing runbook](09_launch_strategy/05-pilot-billing-runbook.md)** - Manual Stripe path for the first pilots
+- **[Call-forwarding concierge guide](09_launch_strategy/09-forwarding-guides.md)** - Carrier procedure + test-call proof for Stage-1 setups
 - **[Master-data seeding runbook](05_operations/master_data_seeding_runbook.md)** - Copy-paste review, plan, apply, reset, and troubleshooting commands
 - **[Master-data catalog and seeding](03_implementation/master_data_seeding.md)** - Domain inventory, seed ledger, operator workflow, and provider boundaries
 - **[Master-data launch strategy](05_operations/master_data_launch_strategy.md)** - Initial industries, competitive pricing signals, unit economics, and review-gated paid-plan hypothesis

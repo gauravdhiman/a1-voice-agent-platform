@@ -118,6 +118,25 @@ def classify_pipeline_failure(error: object) -> CallFailure:
             ),
         )
 
+    if any(
+        marker in text
+        for marker in (
+            "fish audio server error",
+            "fish audio",
+            "empty audio",
+            "no audio received",
+            "zero-length audio",
+        )
+    ):
+        return CallFailure(
+            code="tts_empty_audio",
+            message=(
+                "The voice provider returned no audio for a spoken reply. "
+                "Try the call again; if it repeats, verify the Fish Audio "
+                "key, credits, and provider status."
+            ),
+        )
+
     return CallFailure(
         code="voice_pipeline_error",
         message=(
