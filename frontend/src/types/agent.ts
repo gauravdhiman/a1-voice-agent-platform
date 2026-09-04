@@ -288,6 +288,8 @@ export interface AgentTool {
   auth_status: AuthStatus;
   token_expires_at: number | null;
   connection_status: ConnectionStatus;
+  /** Missing configuration pieces (empty when the attachment is complete). */
+  configuration_issues?: string[];
   /** Timestamp of the most recent automatic token refresh, if any. */
   last_refreshed_at: string | null;
   /** Actual/expected OAuth refresh behavior for this connection. */

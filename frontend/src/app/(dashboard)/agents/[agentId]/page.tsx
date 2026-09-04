@@ -1730,6 +1730,10 @@ export default function AgentDetailPage() {
                             tool,
                             Boolean(agentTool),
                           );
+                        // Backend is authoritative for configuration health
+                        // (it validates against the code-owned tool models);
+                        // the Resend client check stays as a belt-and-braces
+                        // fallback for rows predating the backend signal.
                         const resendConfigurationRequired =
                           tool.name === RESEND_EMAIL_TOOL_NAME &&
                           Boolean(agentTool) &&
@@ -1737,6 +1741,9 @@ export default function AgentDetailPage() {
                             agentTool?.config,
                             organization?.provider_credentials_status?.resend,
                           );
+                        const backendConfigurationRequired =
+                          agentTool?.connection_status ===
+                          ConnectionStatus.CONFIGURATION_REQUIRED;
 
                         return (
                           <ToolCard
@@ -1747,9 +1754,13 @@ export default function AgentDetailPage() {
                               AuthStatus.NOT_AUTHENTICATED
                             }
                             connectionStatus={
-                              resendConfigurationRequired
+                              resendConfigurationRequired ||
+                              backendConfigurationRequired
                                 ? ConnectionStatus.CONFIGURATION_REQUIRED
                                 : agentTool?.connection_status
+                            }
+                            configurationIssues={
+                              agentTool?.configuration_issues
                             }
                             tokenExpiresAt={agentTool?.token_expires_at ?? null}
                             isConfigured={!!agentTool}
