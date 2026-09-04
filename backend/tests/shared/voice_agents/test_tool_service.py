@@ -1696,8 +1696,6 @@ class TestAgentToolConfigurationStatus:
         assert (
             tools[0].connection_status == ConnectionStatus.CONNECTED_NO_AUTH
         )
-
-
 class TestOrganizationToolVisibility:
     """Organization overrides are sparse and default to visible."""
 
