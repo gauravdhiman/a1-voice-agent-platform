@@ -475,6 +475,36 @@ def _find_auth_user(client: Any, email: str) -> Any | None:
     return None
 
 
+def _password_still_valid(client: Any, email: str) -> bool:
+    """Check the fixture password without disturbing existing sessions.
+
+    Signs in with the known fixture password and immediately drops only
+    the probe session locally. ``global`` scope would revoke every live
+    session for the account (the exact outage this helper prevents), so
+    ``local`` scope is mandatory here.
+
+    Args:
+        client: Supabase client used for the probe.
+        email: Fixture account email address.
+
+    Returns:
+        True when the known password still signs in.
+    """
+    try:
+        response = client.auth.sign_in_with_password(
+            {"email": email, "password": WORKTREE_TEST_PASSWORD}
+        )
+    except Exception:
+        return False
+    if getattr(getattr(response, "session", None), "access_token", None) is None:
+        return False
+    try:
+        client.auth.sign_out({"scope": "local"})
+    except Exception:
+        pass
+    return True
+
+
 def _ensure_auth_user(client: Any, email: str, worktree_id: str) -> str:
     """Create or refresh one deterministic local email/password test user.
 
@@ -514,14 +544,23 @@ def _ensure_auth_user(client: Any, email: str, worktree_id: str) -> str:
     if existing is None:
         raise RuntimeError("Supabase reported an existing user but could not find it")
     existing_id = _user_id(existing)
+    # Metadata-only refresh first: it never revokes sessions or refresh
+    # tokens, so rerunning the launcher keeps everyone signed in.
     client.auth.admin.update_user_by_id(
         existing_id,
         {
-            "password": WORKTREE_TEST_PASSWORD,
             "email_confirm": True,
             "user_metadata": metadata,
         },
     )
+    # Repair the credential only when it actually stopped working.
+    # Resetting the password unconditionally (the old behavior) revokes
+    # every live session, logging operators out on each launcher rerun.
+    if not _password_still_valid(client, email):
+        client.auth.admin.update_user_by_id(
+            existing_id,
+            {"password": WORKTREE_TEST_PASSWORD},
+        )
     return existing_id
 
 
