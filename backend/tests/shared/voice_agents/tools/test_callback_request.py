@@ -314,6 +314,11 @@ class TestRequestHumanCallbackSms:
         with pytest.raises(Exception):
             _sms_tool(config={"sms_recipients": ["not-a-number"]})
 
+    def test_comma_separated_sms_recipients_coerce_to_list(self) -> None:
+        """The generic drawer text input saves comma-separated numbers."""
+        tool = _sms_tool(config={"sms_recipients": "+14805550200, +14805550300"})
+        assert tool.config.sms_recipients == ["+14805550200", "+14805550300"]
+
     def test_check_configuration_flags_sms_gaps(self) -> None:
         """Partial SMS setup is flagged; email-only stays green."""
         assert (

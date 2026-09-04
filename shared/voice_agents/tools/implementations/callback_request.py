@@ -99,8 +99,9 @@ class CallbackRequestToolConfig(BaseConfig):
         default_factory=list,
         max_length=10,
         description=(
-            "Owner mobile numbers alerted by SMS on callback requests. "
-            "Empty disables the SMS channel."
+            "Owner mobile numbers alerted by SMS on callback requests, as a "
+            "list or comma-separated E.164 text (for example "
+            "+14805550200, +14805550300). Empty disables the SMS channel."
         ),
     )
 
@@ -119,11 +120,21 @@ class CallbackRequestToolConfig(BaseConfig):
             )
         return normalized
 
-    @field_validator("sms_recipients")
+    @field_validator("sms_recipients", mode="before")
     @classmethod
-    def validate_sms_recipients(cls, values: list[str]) -> list[str]:
-        """Normalize SMS recipients and reject undialable entries at save."""
-        normalized = [str(value).strip() for value in values if str(value).strip()]
+    def validate_sms_recipients(cls, values: Any) -> list[str]:
+        """Normalize SMS recipients and reject undialable entries at save.
+
+        Accepts a list or comma-separated text so the generic dashboard
+        text input can save this field without a structured editor.
+        """
+        if isinstance(values, str):
+            items = [item.strip() for item in values.split(",")]
+        elif isinstance(values, (list, tuple)):
+            items = [str(value).strip() for value in values]
+        else:
+            raise ValueError("sms_recipients must be a list or comma-separated text")
+        normalized = [item for item in items if item]
         for value in normalized:
             if not is_valid_sms_phone(value):
                 raise ValueError(
