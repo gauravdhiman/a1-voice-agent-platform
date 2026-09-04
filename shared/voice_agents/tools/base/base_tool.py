@@ -57,3 +57,17 @@ class BaseTool(ABC):
     @abstractmethod
     def metadata(self) -> ToolMetadata:
         pass
+
+    def check_configuration(self) -> list[str]:
+        """List human-readable gaps that stop this tool from working.
+
+        Only attachment configuration is inspected here (never secrets or
+        live provider state). Each entry names one missing piece in plain
+        words, e.g. ``"spreadsheet destination is not set"``. An empty
+        list means the stored configuration is complete; authentication
+        is reported separately through token status.
+
+        Returns:
+            Human-readable issue strings, empty when complete.
+        """
+        return []

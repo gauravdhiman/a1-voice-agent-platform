@@ -14,7 +14,10 @@ from shared.voice_agents.tools.base.base_tool import (
     ToolMetadata,
 )
 from shared.voice_agents.tools.base.tool_context import ToolContext
-from shared.voice_agents.tools.google_sheets_lead_service import GoogleSheetsLeadService
+from shared.voice_agents.tools.google_sheets_lead_service import (
+    _SPREADSHEET_ID_PATTERN,
+    GoogleSheetsLeadService,
+)
 
 
 class GoogleSheetsLeadCaptureTool(BaseTool):
@@ -99,6 +102,13 @@ class GoogleSheetsLeadCaptureTool(BaseTool):
             auth_config=self.AuthConfig().model_dump(),
             config_schema=self.Config.model_json_schema(),
         )
+
+    def check_configuration(self) -> list[str]:
+        """Flag a missing spreadsheet destination before any call runs."""
+        spreadsheet_id = (self.config.spreadsheet_id or "").strip()
+        if not _SPREADSHEET_ID_PATTERN.fullmatch(spreadsheet_id):
+            return ["spreadsheet destination is not set"]
+        return []
 
     def _service(self) -> GoogleSheetsLeadService:
         """Build the provider service from the agent's saved connection."""
