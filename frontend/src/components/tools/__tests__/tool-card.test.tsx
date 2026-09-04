@@ -43,6 +43,31 @@ describe("ToolCard premium gating", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists what is missing when the backend reports issues", () => {
+    const { container } = renderToolCard({
+      connectionStatus: ConnectionStatus.CONFIGURATION_REQUIRED,
+      isConfigured: true,
+      configurationIssues: ["spreadsheet destination is not set"],
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-configuration-issues"]'),
+    ).not.toBeNull();
+    expect(screen.getByText("spreadsheet destination is not set")).not.toBeNull();
+  });
+
+  it("shows no issue list for a complete attachment", () => {
+    const { container } = renderToolCard({
+      connectionStatus: ConnectionStatus.CONNECTED_AUTH_VALID,
+      isConfigured: true,
+      configurationIssues: [],
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-configuration-issues"]'),
+    ).toBeNull();
+  });
+
   it("renders a Premium badge for premium tools", () => {
     renderToolCard({ tool: { ...baseTool, is_premium: true } });
 
