@@ -16,15 +16,27 @@ class TestCheckToolConfiguration:
             },
         ) == ["spreadsheet destination is not set"]
 
-    def test_sheets_complete_config_is_clean(self) -> None:
-        """A pasted spreadsheet ID clears the card."""
+    def test_sheets_full_url_is_accepted_like_the_runtime(self) -> None:
+        """The field invites full URLs and the service extracts them."""
         assert (
             check_tool_configuration(
                 "Google_Sheets_lead_capture",
-                {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"},
+                {
+                    "spreadsheet_id": (
+                        "https://docs.google.com/spreadsheets/d/"
+                        "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+                    )
+                },
             )
             == []
         )
+
+    def test_callback_reports_every_gap(self) -> None:
+        """Owner callback needs a sender and at least one owner route."""
+        assert check_tool_configuration(
+            "Callback_request",
+            {"from_email": None, "from_name": None, "routes": []},
+        ) == ["sender email is not set", "no owner routes are configured"]
 
     def test_resend_reports_every_gap(self) -> None:
         """Sender and routes are each required for a working attachment."""
@@ -68,9 +80,17 @@ class TestCheckToolConfiguration:
         """Gmail needs only credentials, which auth status already covers."""
         assert check_tool_configuration("Gmail", {}) == []
 
-    def test_callback_reports_every_gap(self) -> None:
-        """Owner callback needs a sender and at least one owner route."""
-        assert check_tool_configuration(
-            "Callback_request",
-            {"from_email": None, "from_name": None, "routes": []},
-        ) == ["sender email is not set", "no owner routes are configured"]
+    def test_full_native_tool_audit_matrix(self) -> None:
+        """Every native tool has a deliberate health verdict for empty config.
+
+        This is the systematic audit: adding a tool with required
+        attachment fields must add an override (and a row here), or the
+        card silently stays green like Jordan's Sheets card did.
+        """
+        assert check_tool_configuration("CalCom", {}) == [
+            "default event type is not set"
+        ]
+        assert check_tool_configuration("Google_calendar", {}) == []
+        assert check_tool_configuration("Google_calendar_appointment", {}) == []
+        assert check_tool_configuration("Google_Sheets", {}) == []
+        assert check_tool_configuration("HubSpot_lead_capture", {}) == []
