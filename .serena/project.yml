@@ -104,7 +104,7 @@ ignored_memory_patterns: []
 #   additional_workspace_folders:
 #     - ../sibling-package
 #     - ../shared-lib
-ls_additional_workspace_folders: []
+additional_workspace_folders: []
 
 # list of language servers to start when using the LSP backend; choose from:
 #   ada                    al                     angular                ansible                bash
@@ -138,7 +138,7 @@ ls_additional_workspace_folders: []
 # When using multiple language servers, the first language server that supports a given file will be used for that file.
 # The first language server is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
-language_servers:
+languages:
 - typescript
 - python
 
