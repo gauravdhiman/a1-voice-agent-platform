@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2 } from "lucide-react";
 import { leadService } from "@/services/lead-service";
@@ -23,6 +24,7 @@ const interestSchema = z.object({
   name: z.string().trim().min(1, "Please tell us your name.").max(120),
   email: z.string().trim().email("Please enter a valid email address."),
   businessName: z.string().trim().max(160).optional(),
+  message: z.string().trim().max(2000).optional(),
 });
 
 type InterestValues = z.infer<typeof interestSchema>;
@@ -53,7 +55,7 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
 
   const form = useForm<InterestValues>({
     resolver: zodResolver(interestSchema),
-    defaultValues: { name: "", email: "", businessName: "" },
+    defaultValues: { name: "", email: "", businessName: "", message: "" },
   });
 
   async function onSubmit(values: InterestValues) {
@@ -62,6 +64,7 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
       name: values.name,
       email: values.email,
       businessName: values.businessName || undefined,
+      message: values.message || undefined,
       source: "outcome-form",
       demoSlug,
       vertical: SLUG_VERTICALS[demoSlug],
@@ -153,6 +156,26 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
                     type="email"
                     placeholder="you@business.com"
                     autoComplete="email"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="message"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Your business &amp; what you need{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="e.g. 3-chair dental practice, miss after-hours calls, use Dentrix…"
+                    rows={3}
                     {...field}
                   />
                 </FormControl>

@@ -28,6 +28,42 @@ export interface InterestLeadData {
   captchaToken?: string;
 }
 
+/** Follow-up status of an interest lead. */
+export type InterestLeadStatus =
+  | "new"
+  | "contacted"
+  | "invited"
+  | "converted"
+  | "dropped";
+
+/** One stored interest lead (platform-admin view). */
+export interface InterestLead {
+  /** Row identifier. */
+  id: string;
+  /** Contact name. */
+  name: string;
+  /** Business name. */
+  business_name: string | null;
+  /** Contact email. */
+  email: string;
+  /** Callback number. */
+  phone: string | null;
+  /** Business vertical. */
+  vertical: string | null;
+  /** What the business needs. */
+  message: string | null;
+  /** Capture channel. */
+  source: string;
+  /** Demo slug when captured post-demo. */
+  demo_slug: string | null;
+  /** Follow-up status. */
+  status: InterestLeadStatus;
+  /** Submission timestamp. */
+  created_at: string;
+  /** First outreach timestamp. */
+  contacted_at: string | null;
+}
+
 /** Standard service result envelope. */
 export interface LeadServiceResult {
   success: boolean;
@@ -94,7 +130,60 @@ async function isPublicSignupEnabled(): Promise<boolean> {
   }
 }
 
+/**
+ * Lists interest leads newest-first (platform admins).
+ *
+ * @param status - Optional follow-up status filter.
+ * @returns Envelope with the lead list.
+ */
+async function listInterestLeads(
+  status?: InterestLeadStatus,
+): Promise<LeadServiceResult & { data?: InterestLead[] }> {
+  try {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    const response = await apiClient.get<InterestLead[]>(
+      `/api/v1/leads${query}`,
+    );
+    return { success: true, data: response.data ?? [] };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Could not load interest.",
+    };
+  }
+}
+
+/**
+ * Advances one lead's follow-up status (platform admins).
+ *
+ * @param leadId - Lead row identifier.
+ * @param status - Target follow-up status.
+ * @returns Envelope with the updated row.
+ */
+async function updateInterestLeadStatus(
+  leadId: string,
+  status: InterestLeadStatus,
+): Promise<LeadServiceResult & { data?: InterestLead }> {
+  try {
+    const response = await apiClient.patch<InterestLead>(
+      `/api/v1/leads/${encodeURIComponent(leadId)}`,
+      { status },
+    );
+    if (!response.data) return { success: false, error: "No lead returned." };
+    return { success: true, data: response.data };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Could not update the lead.",
+    };
+  }
+}
+
 export const leadService = {
   submitInterestLead,
   isPublicSignupEnabled,
+  listInterestLeads,
+  updateInterestLeadStatus,
 };
