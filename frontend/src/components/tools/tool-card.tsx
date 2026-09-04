@@ -70,6 +70,12 @@ export interface ToolCardProps {
    * can be attached because no platform fallback is available.
    */
   requiresApiKey?: boolean;
+  /**
+   * Missing configuration pieces reported by the backend for an attached
+   * tool. Rendered under the description when the card shows the
+   * configuration-required state, so admins see *what* to fix.
+   */
+  configurationIssues?: string[];
 }
 
 export function ToolCard({
@@ -85,6 +91,7 @@ export function ToolCard({
   className,
   isUnpublished = false,
   requiresApiKey = false,
+  configurationIssues = [],
 }: ToolCardProps) {
   const currentTime = useLiveTime();
   const isToolConfigured =
@@ -285,6 +292,23 @@ export function ToolCard({
                 API key required before connecting
               </p>
             )}
+            {connectionStatus === ConnectionStatus.CONFIGURATION_REQUIRED &&
+              configurationIssues.length > 0 && (
+                <ul
+                  className="mt-1 space-y-0.5"
+                  data-testid="tool-configuration-issues"
+                >
+                  {configurationIssues.map((issue) => (
+                    <li
+                      key={issue}
+                      className="text-[10px] text-red-700 dark:text-red-300 flex items-center gap-1"
+                    >
+                      <XCircle className="h-3 w-3 shrink-0" />
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+              )}
           </div>
         </div>
 

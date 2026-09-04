@@ -1615,3 +1615,84 @@ class TestUpsertPreservesLegacyPremiumFlag:
         assert result.is_premium is True
         update_call = mock_supabase_client.table.return_value.update.call_args
         assert update_call.args[0]["is_premium"] is True
+
+
+class TestAgentToolConfigurationStatus:
+    """Attachments missing required config must red-card, not stay green."""
+
+    def _agent_tool_row(self, tool_name: str, config: dict) -> dict:
+        agent_id, tool_id, agent_tool_id = uuid4(), uuid4(), uuid4()
+        return {
+            "id": str(agent_tool_id),
+            "agent_id": str(agent_id),
+            "tool_id": str(tool_id),
+            "config": config,
+            "unselected_functions": [],
+            "sensitive_config": None,
+            "is_enabled": True,
+            "tool": {
+                "id": str(tool_id),
+                "name": tool_name,
+                "description": "Test tool",
+                "config_schema": None,
+                "auth_type": "oauth2",
+                "requires_auth": False,
+                "auth_config": {},
+                "tool_functions_schema": {},
+                "is_active": True,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }
+
+    async def test_incomplete_sheets_attachment_is_configuration_required(
+        self, tool_service, mock_supabase_client
+    ):
+        """Jordan's exact failure surfaces before any call runs."""
+        from shared.voice_agents.tool_models import ConnectionStatus
+
+        row = self._agent_tool_row(
+            "Google_Sheets_lead_capture", {"spreadsheet_id": ""}
+        )
+        mock_response = MagicMock()
+        mock_response.data = [row]
+        mock_supabase_client.table.return_value.execute.return_value = (
+            mock_response
+        )
+
+        tools, error = await tool_service.get_agent_tools(uuid4())
+
+        assert error is None
+        assert len(tools) == 1
+        assert (
+            tools[0].connection_status == ConnectionStatus.CONFIGURATION_REQUIRED
+        )
+        assert tools[0].configuration_issues == [
+            "spreadsheet destination is not set"
+        ]
+
+    async def test_complete_attachment_keeps_derived_status(
+        self, tool_service, mock_supabase_client
+    ):
+        """Complete config plus no auth need stays connected without auth."""
+        from shared.voice_agents.tool_models import ConnectionStatus
+
+        row = self._agent_tool_row(
+            "Google_Sheets_lead_capture",
+            {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"},
+        )
+        mock_response = MagicMock()
+        mock_response.data = [row]
+        mock_supabase_client.table.return_value.execute.return_value = (
+            mock_response
+        )
+
+        tools, error = await tool_service.get_agent_tools(uuid4())
+
+        assert error is None
+        assert tools[0].configuration_issues == []
+        assert (
+            tools[0].connection_status == ConnectionStatus.CONNECTED_NO_AUTH
+        )

@@ -116,6 +116,15 @@ class CallbackRequestTool(BaseTool):
             config_schema=self.Config.model_json_schema(),
         )
 
+    def check_configuration(self) -> list[str]:
+        """Flag missing sender identity or routes before any call runs."""
+        issues: list[str] = []
+        if not (self.config.from_email or "").strip():
+            issues.append("sender email is not set")
+        if not self.config.routes:
+            issues.append("no owner routes are configured")
+        return issues
+
     async def request_human_callback(
         self,
         context: ToolContext,

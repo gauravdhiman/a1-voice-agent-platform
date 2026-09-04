@@ -340,6 +340,13 @@ class AgentToolResponse(BaseModel):
         default=ConnectionStatus.NOT_CONNECTED,
         description="Connection status of the tool",
     )
+    configuration_issues: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Missing configuration pieces blocking this attachment "
+            "(empty when complete)"
+        ),
+    )
     last_refreshed_at: Optional[datetime] = Field(
         None,
         description="Timestamp when OAuth tokens were last auto-refreshed",

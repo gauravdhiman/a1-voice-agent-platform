@@ -198,6 +198,15 @@ class ResendEmailTool(BaseTool):
         """Return configured routes indexed for constant-time lookup."""
         return {route.route_id: route for route in self.config.routes}
 
+    def check_configuration(self) -> list[str]:
+        """Flag missing sender identity or routes before any call runs."""
+        issues: list[str] = []
+        if not (self.config.from_email or "").strip():
+            issues.append("sender email is not set")
+        if not self.config.routes:
+            issues.append("no email routes are configured")
+        return issues
+
     @staticmethod
     def _error(
         *,

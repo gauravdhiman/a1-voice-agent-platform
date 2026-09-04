@@ -12,6 +12,7 @@ from opentelemetry import trace
 
 from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
+from shared.voice_agents.tool_health import check_tool_configuration
 from shared.voice_agents.tools.base.oauth_support import (
     extract_oauth_client_secret,
     get_oauth_refresh_metadata,
@@ -1316,6 +1317,12 @@ class ToolService:
             connection_status_val = get_connection_status(
                 requires_auth, auth_status_val
             )
+            configuration_issues = check_tool_configuration(
+                platform_tool.name if platform_tool else None,
+                result_data.get("config"),
+            )
+            if configuration_issues:
+                connection_status_val = ConnectionStatus.CONFIGURATION_REQUIRED
             oauth_metadata = _oauth_response_metadata(
                 auth_type,
                 platform_tool.auth_config if platform_tool else {},
@@ -1331,6 +1338,7 @@ class ToolService:
                 "is_enabled": result_data.get("is_enabled", True),
                 "auth_status": auth_status_val,
                 "connection_status": connection_status_val,
+                "configuration_issues": configuration_issues,
                 "token_expires_at": _token_expiry(result_data.get("sensitive_config")),
                 "last_refreshed_at": result_data.get("last_refreshed_at"),
                 **oauth_metadata,
@@ -1378,6 +1386,12 @@ class ToolService:
                 connection_status_val = get_connection_status(
                     requires_auth, auth_status_val
                 )
+                configuration_issues = check_tool_configuration(
+                    tool_data.get("name") if tool_data else None,
+                    item.get("config"),
+                )
+                if configuration_issues:
+                    connection_status_val = ConnectionStatus.CONFIGURATION_REQUIRED
                 oauth_metadata = _oauth_response_metadata(
                     auth_type,
                     tool_data.get("auth_config") if tool_data else {},
@@ -1393,7 +1407,8 @@ class ToolService:
                     "is_enabled": item.get("is_enabled", True),
                     "auth_status": auth_status_val,
                     "connection_status": connection_status_val,
-                    "token_expires_at": token_expires_at,
+                    "configuration_issues": configuration_issues,
+                    "token_expires_at": _token_expiry(item.get("sensitive_config")),
                     "last_refreshed_at": item.get("last_refreshed_at"),
                     **oauth_metadata,
                     "created_at": item["created_at"],
