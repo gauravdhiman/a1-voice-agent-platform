@@ -16,6 +16,15 @@ class TestCheckToolConfiguration:
             },
         ) == ["spreadsheet destination is not set"]
 
+    def test_sheets_complete_config_is_clean(self) -> None:
+        """A pasted spreadsheet ID clears the card."""
+        assert (
+            check_tool_configuration(
+                "Google_Sheets_lead_capture",
+                {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"},
+            )
+            == []
+        )
     def test_sheets_full_url_is_accepted_like_the_runtime(self) -> None:
         """The field invites full URLs and the service extracts them."""
         assert (
