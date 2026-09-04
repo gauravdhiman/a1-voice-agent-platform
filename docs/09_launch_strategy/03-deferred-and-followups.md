@@ -54,6 +54,19 @@ they land (with the PR number that closed them).
 - [x] Carrier forwarding guides → closed by `09-forwarding-guides.md`
   (Epic E PR).
 
+## From live-call incident 2026-09-04 (Fish TTS empty audio → dropped call)
+
+- [ ] TTS-empty-audio resilience: a single Fish synthesis returning zero
+  bytes currently raises a Pipecat error frame that kills the whole call
+  (`voice_pipeline_error`, ~30s in — observed live). Wanted: one retry,
+  then a spoken fallback line, then graceful close — never a hard drop
+  on a transient TTS blip. Lives in/around the pinned Pipecat Fish
+  service; do not hack around it — evaluate on the pinned runtime
+  deliberately → owner: **voice reliability pass, before any paid SLA**.
+- [ ] TTS provider A/B: Cartesia is already integrated as a pipeline TTS
+  option; run Fish vs Cartesia on empty-audio rate + latency before
+  committing pilots to one voice → owner: **same pass as above**.
+
 ## From UX polish (open)
 
 - [ ] Restaurant demo agent + `/restaurants` return (route removed: it
