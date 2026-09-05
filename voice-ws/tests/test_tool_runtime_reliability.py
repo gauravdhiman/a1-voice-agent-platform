@@ -44,6 +44,10 @@ class TestToolRuntimeReliability:
         assert "availability" not in prompt
         assert "before saying" in prompt or "before claiming" in prompt
         assert "pending tool" in prompt or "tool call has not" in prompt
+        assert "only tools provided in the current session" in prompt
+        assert "do not repeat" in prompt
+        assert "do not provide medical advice" in prompt
+        assert "do not provide financial advice" in prompt
 
     def test_legacy_handler_returns_error_json_on_exception(self) -> None:
         """Tool exceptions must become model-visible errors, not silent drops."""

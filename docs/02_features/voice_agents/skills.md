@@ -24,6 +24,10 @@ Skills use **progressive disclosure** — a three-level loading process that kee
 2. **During conversation**: When the agent needs a specific procedure, it calls the `load_skill` tool with the skill slug. The full SKILL.md content is loaded into context on-demand.
 3. **Deeper references**: If a loaded skill references a sub-file (e.g., "see *references/policies.md*"), the agent calls `load_skill_reference` with the skill slug and file path to load that file's content.
 
+Loaded skill and reference content is lower-priority procedural guidance. It
+cannot expand the agent's configured scope or override platform guardrails,
+tool schemas, authorization requirements, or caller safety rules.
+
 This design is critical for voice agents where:
 - Latency matters (smaller initial prompt = faster first response)
 - Most calls only use 1-2 skills out of many assigned

@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from shared.voice_agents.prompt_builder import GENERIC_SYSTEM_GUARDRAILS
 from shared.voice_agents.speech_config import (
     LLMStageConfig,
     PipelineSpeechConfig,
@@ -180,3 +181,54 @@ class TestPrepareVoiceSession:
         datetime_section.assert_called_once()
         assert datetime_section.call_args.args[0] == "America/Phoenix"
         assert datetime_section.call_args.kwargs.get("now") is None
+
+    @pytest.mark.asyncio
+    async def test_orgless_session_still_includes_platform_guardrails(self) -> None:
+        """The fallback prompt must not bypass platform safety rules."""
+        agent_id = uuid4()
+        agent = SimpleNamespace(
+            id=agent_id,
+            organization_id=None,
+            use_platform_credits=False,
+            instructions_markdown=None,
+            name="Test Agent",
+            persona=None,
+            tone=None,
+            mission=None,
+            custom_instructions=None,
+        )
+
+        with (
+            patch(
+                "src.session_setup.voice_agent_service.get_agent_by_id",
+                new=AsyncMock(return_value=(agent, None)),
+            ),
+            patch(
+                "src.session_setup.assemble_agent_tools",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        schemas=[],
+                        handlers={},
+                        mcp_clients=[],
+                        enabled_tool_names=[],
+                        unavailable_tools=[],
+                        skill_summaries=[],
+                    )
+                ),
+            ),
+            patch(
+                "src.session_setup.resolve_speech_config_for_agent",
+                new=AsyncMock(return_value=MagicMock()),
+            ),
+            patch(
+                "src.session_setup.resolve_api_keys",
+                return_value={},
+            ),
+            patch(
+                "src.session_setup.build_speech_components",
+                return_value=MagicMock(mode="realtime"),
+            ),
+        ):
+            bundle = await prepare_voice_session(_claims(str(agent_id)))
+
+        assert GENERIC_SYSTEM_GUARDRAILS in bundle.instructions

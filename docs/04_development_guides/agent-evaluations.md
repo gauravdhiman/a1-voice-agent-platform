@@ -86,9 +86,17 @@ The trace format is an object containing `scenario_id` and ordered `events`.
 Events use `type` values `user`, `assistant`, `tool_call`, and `tool_result`.
 Scenarios may additionally specify `expected_tool_sequence` and
 `forbidden_tools`. A trace may include the actual `tool_schemas` map used for
-the run; when present, required fields and primitive argument types are checked
-against it. A provider/model integration should emit this format after each run
-so the same checks can be used in CI, offline replay, and incident analysis.
+the run; when present, every called tool must be present in that map, and
+required fields and primitive argument types are checked against its schema.
+`max_tool_calls` can cap calls for refusal and out-of-scope scenarios.
+
+For curated adversarial traces, `assistant_expectations` supports deterministic
+`required_phrases`, `forbidden_phrases`, and
+`forbid_duplicate_assistant_messages` assertions. These exact phrase checks
+make known safety regressions replayable without a model; they do not replace
+model-backed evaluation of paraphrases or general language quality. A
+provider/model integration should emit this format after each run so the same
+checks can be used in CI, offline replay, and incident analysis.
 
 ## What the Calendar suite covers
 

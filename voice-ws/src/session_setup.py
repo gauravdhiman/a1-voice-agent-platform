@@ -17,6 +17,7 @@ from shared.organization.timezone import resolve_organization_timezone
 from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from shared.voice_agents.key_resolver import resolve_api_keys
 from shared.voice_agents.prompt_builder import (
+    GENERIC_SYSTEM_GUARDRAILS,
     PromptBuilder,
     build_current_datetime_section,
 )
@@ -105,7 +106,15 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             current_datetime=current_datetime,
         )
         if org is not None
-        else f"{current_datetime}\n\n{DEFAULT_VOICE_SYSTEM_PROMPT}"
+        else "\n\n".join(
+            section
+            for section in (
+                current_datetime,
+                DEFAULT_VOICE_SYSTEM_PROMPT,
+                GENERIC_SYSTEM_GUARDRAILS,
+            )
+            if section
+        )
     )
     logger.info(
         "Prepared voice session agent=%s timezone=%s functions=%s unavailable=%s",
