@@ -23,6 +23,7 @@ from shared.billing.voice_session_entitlement import (
     reserve_demo_call_if_needed,
 )
 from shared.config.settings import settings
+from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
@@ -383,18 +384,9 @@ async def get_agent_system_prompt(
             detail=f"Could not fetch organization data: {org_error}",
         )
 
-    # Generate the system prompt using PromptBuilder
-    # Use a default rules template (similar to worker)
-    default_rules = """# OUTPUT RULES & GUARDRAILS
-- Keep responses concise and conversational for voice
-- Be helpful, accurate, and professional
-- Ask clarifying questions if needed
-- Use tools when appropriate to complete tasks
-- Never share sensitive information
-"""
-
+    # Use the same voice defaults as the runtime so the preview does not drift.
     system_prompt = PromptBuilder.build(
-        org=org, agent=agent, default_rules=default_rules
+        org=org, agent=agent, default_rules=DEFAULT_VOICE_SYSTEM_PROMPT
     )
 
     return system_prompt

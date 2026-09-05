@@ -19,6 +19,7 @@ class TestAgentRoutes:
     async def test_get_agent_system_prompt_success(self):
         """Test successful retrieval of generated system prompt."""
         from shared.organization.models import Organization
+        from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
         from shared.voice_agents.models import VoiceAgent
         from src.voice_agents.routes import get_agent_system_prompt
 
@@ -85,6 +86,7 @@ class TestAgentRoutes:
                 assert "Help customers" in result
                 assert "tech support" in result
                 assert "polite and helpful" in result
+                assert DEFAULT_VOICE_SYSTEM_PROMPT in result
 
     @pytest.mark.asyncio
     async def test_get_agent_system_prompt_agent_not_found(self):

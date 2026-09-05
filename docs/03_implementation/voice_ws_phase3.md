@@ -23,12 +23,19 @@ flowchart LR
 
 The model context has three deliberately separate sources:
 
-- `PromptBuilder` combines platform guardrails, organization context, agent
-  instructions, assigned skill summaries, and the runtime date/time anchor. It
-  does not receive attached tool names and must remain valid for any agent.
-- `DEFAULT_VOICE_SYSTEM_PROMPT` contains generic tool-use, error-handling, and
-  anti-hallucination behavior. Organization and agent instructions may add
-  business-specific or tool-specific guidance when configured by the user.
+- `PromptBuilder` combines organization context, agent instructions, assigned
+  skill summaries, and the runtime date/time anchor. It does not receive
+  attached tool names and must remain valid for any agent. It appends
+  `GENERIC_SYSTEM_GUARDRAILS` last, making the platform boundary the final and
+  highest-priority prompt section for every organization-backed agent.
+- `GENERIC_SYSTEM_GUARDRAILS` defines the platform-wide scope, lawful-use,
+  truthfulness, tool-integrity, privacy, high-stakes-domain, prompt-injection,
+  and non-repetition rules. Agent and organization instructions may add
+  business-specific or tool-specific guidance only within that boundary.
+- `DEFAULT_VOICE_SYSTEM_PROMPT` contains voice-output, conversation, and
+  tool-use defaults. The organization-less runtime fallback explicitly includes
+  both this block and `GENERIC_SYSTEM_GUARDRAILS`, so it cannot bypass the
+  platform safety boundary.
 - Native function schemas are generated from native method docstrings, while
   MCP function schemas use the descriptions returned by `tools/list`. These
   schemas are passed through the model's tool-definition channel rather than
