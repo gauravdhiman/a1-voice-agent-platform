@@ -43,6 +43,14 @@ they land (with the PR number that closed them).
 
 ## From Epic E (open)
 
+- [x] Public demo token issuance is limited to five attempts per source IP per
+  hour across demo slugs; calls remain free with the existing 15-minute
+  duration cap. This is an abuse-control layer, not a complete spend cap —
+  monitor provider cost and retain an operational kill switch.
+- [x] Closed-signup invitation claims are email-bound and atomic; failed
+  invitation processing cannot fall back to a personal organization. The
+  production admin allowlist remains deployment configuration, not source
+  code.
 - [ ] Cloudflare Turnstile keys (site + secret) provisioned into
   staging/prod; code enforces automatically once set → owner: **founder
   (5-minute ops task)**.
@@ -69,6 +77,9 @@ they land (with the PR number that closed them).
 
 ## From UX polish (open)
 
+- [x] Callback queue is visible in the signed-in workspace navigation, and
+  public marketing copy no longer promises SMS, on-call transfer, or automated
+  recall workflows that are not part of the launch surface.
 - [ ] Restaurant demo agent + `/restaurants` return (route removed: it
   demoed the wrong agent). Needs tuned instructions, tested booking
   flow, and evals — not a copy job → owner: **after 2 live verticals

@@ -15,8 +15,9 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
+from src.security.rate_limiter import limiter
 from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
 from shared.billing.voice_session_entitlement import (
@@ -36,6 +37,10 @@ from shared.voice_agents.service import voice_agent_service
 
 logger = logging.getLogger(__name__)
 _PRIMARY_DEMO_ACTION_TYPES = {"lead_capture", "appointment_booking"}
+# Public demos remain free to use, but token issuance is bounded per source so
+# one visitor cannot turn an unlimited demo into an unattended spend loop.
+DEMO_CALL_TOKEN_RATE_LIMIT = "5/hour"
+DEMO_CALL_TOKEN_RATE_LIMIT_SCOPE = "public-demo-call-token"
 
 demo_public_router = APIRouter(
     prefix="/api/v1/public/demo", tags=["Public Demo Agents"]
@@ -220,12 +225,19 @@ async def get_demo_outcome_public(
 @demo_public_router.post(
     "/{demo_slug}/call-token", response_model=DemoCallTokenResponse
 )
-async def generate_demo_call_token(demo_slug: str) -> DemoCallTokenResponse:
+@limiter.shared_limit(
+    DEMO_CALL_TOKEN_RATE_LIMIT,
+    scope=DEMO_CALL_TOKEN_RATE_LIMIT_SCOPE,
+)
+async def generate_demo_call_token(
+    demo_slug: str, request: Request
+) -> DemoCallTokenResponse:
     """Generate a Pipecat voice session token for a demo-agent visitor call.
 
     Demo agents bypass the normal credit/concurrency gate, while their
     configured demo call budget is reserved atomically before a token is issued.
-    Non-demo slugs are treated as not found.
+    Token issuance is limited to five attempts per source IP per hour across
+    all public demo slugs. Non-demo slugs are treated as not found.
     """
     normalized = demo_slug.strip().lower()
     agent, error = await voice_agent_service.get_demo_agent_by_slug(normalized)

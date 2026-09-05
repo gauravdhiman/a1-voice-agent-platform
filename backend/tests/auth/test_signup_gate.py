@@ -32,13 +32,16 @@ def _invitation_client(rows=None, explode=False):
     if explode:
         execute.side_effect = RuntimeError("db down")
     client = MagicMock()
-    client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute = execute
+    client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute = (
+        execute
+    )
     return client
 
 
 def _pending_row():
     return {
         "id": "11111111-1111-1111-1111-111111111111",
+        "email": "x@y.com",
         "status": "pending",
         "expires_at": "2099-01-01T00:00:00Z",
     }
@@ -60,14 +63,17 @@ class TestIsAllowlisted:
 class TestInvitationTokenUsable:
     @pytest.mark.asyncio
     async def test_pending_token_is_usable(self):
-        assert await invitation_token_usable("tok", _invitation_client([_pending_row()])) is True
+        assert (
+            await invitation_token_usable("tok", _invitation_client([_pending_row()]))
+            is True
+        )
 
     @pytest.mark.asyncio
     async def test_missing_token_is_not_usable(self):
         assert await invitation_token_usable("tok", _invitation_client([])) is False
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("status", ["accepted", "expired", "revoked"])
+    @pytest.mark.parametrize("status", ["accepted", "expired", "cancelled", "revoked"])
     async def test_closed_status_is_not_usable(self, status):
         row = _pending_row()
         row["status"] = status
@@ -81,7 +87,21 @@ class TestInvitationTokenUsable:
 
     @pytest.mark.asyncio
     async def test_lookup_failure_is_not_usable(self):
-        assert await invitation_token_usable("tok", _invitation_client(explode=True)) is False
+        assert (
+            await invitation_token_usable("tok", _invitation_client(explode=True))
+            is False
+        )
+
+    @pytest.mark.asyncio
+    async def test_invitation_email_mismatch_is_not_usable(self):
+        assert (
+            await invitation_token_usable(
+                "tok",
+                _invitation_client([_pending_row()]),
+                email="other@example.com",
+            )
+            is False
+        )
 
 
 class TestIsSignupAllowed:

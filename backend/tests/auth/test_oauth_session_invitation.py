@@ -80,10 +80,11 @@ class TestOAuthSessionInvitationOrdering:
         invitation.organization_id = INVITED_ORG_ID
         invitation.organization_name = "Acme Plumbing"
 
-        async def track_invite(token: str, user_id: UUID):
+        async def track_invite(token: str, user_id: UUID, expected_email: str):
             call_order.append("invite")
             assert token == "invite-token-abc"
             assert user_id == USER_ID
+            assert expected_email == "invited@example.com"
             return invitation, None
 
         async def track_provision(user_id: UUID, email: str, **kwargs):
@@ -108,17 +109,19 @@ class TestOAuthSessionInvitationOrdering:
         assert auth_response is not None
         assert auth_response.joined_organization_id == INVITED_ORG_ID
         assert auth_response.joined_organization_name == "Acme Plumbing"
-        invite_mock.assert_awaited_once_with("invite-token-abc", USER_ID)
-        provision_mock.assert_awaited_once()
-        assert call_order == ["invite", "provision"]
+        invite_mock.assert_awaited_once_with(
+            "invite-token-abc", USER_ID, "invited@example.com"
+        )
+        provision_mock.assert_not_awaited()
+        assert call_order == ["invite"]
 
     @pytest.mark.asyncio
-    async def test_invitation_failure_does_not_block_session(
+    async def test_invitation_failure_blocks_session_and_org_provisioning(
         self,
         identity_with_invite: OAuthVerifiedIdentity,
         mock_supabase: MagicMock,
     ) -> None:
-        """Best-effort invite processing: auth still succeeds if invite fails."""
+        """A failed invite must not fall back to a personal organization."""
         service = OAuthSessionService(auth_client_factory=lambda: mock_supabase)
 
         with patch(
@@ -135,9 +138,14 @@ class TestOAuthSessionInvitationOrdering:
                 identity_with_invite
             )
 
-        assert error is None
-        assert auth_response is not None
-        provision_mock.assert_awaited_once()
+        assert auth_response is None
+        assert error is not None
+        assert error.status_code == 400
+        assert error.detail == {
+            "code": "invitation_error",
+            "message": "Invitation expired",
+        }
+        provision_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_skips_invitation_processing_without_token(

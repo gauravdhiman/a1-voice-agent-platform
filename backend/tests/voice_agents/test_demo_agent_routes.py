@@ -5,10 +5,29 @@ from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 TEST_AGENT_ID = UUID("00000000-0000-0000-0000-000000000101")
 TEST_ORG_ID = UUID("00000000-0000-0000-0000-000000000020")
 TEST_USER_ID = UUID("00000000-0000-0000-0000-000000000040")
+
+
+def _make_request(client_host: str = "198.51.100.1") -> Request:
+    """Build the minimal request object required by SlowAPI in direct tests."""
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/v1/public/demo/my-demo/call-token",
+            "raw_path": b"/api/v1/public/demo/my-demo/call-token",
+            "query_string": b"",
+            "headers": [],
+            "client": (client_host, 50000),
+            "server": ("testserver", 80),
+        }
+    )
 
 
 def _make_profile(is_platform_admin: bool = False, org_id: str | None = None):
@@ -422,6 +441,64 @@ class TestUpdateAgentDemoGuard:
 class TestDemoPublicRoutes:
     """GET /public/demo/{slug} and POST /public/demo/{slug}/call-token."""
 
+    def test_demo_token_rate_limit_is_shared_across_public_demo_slugs(self):
+        """A source gets five token attempts per hour across the public demos."""
+        from fastapi import FastAPI
+        from slowapi.errors import RateLimitExceeded
+        from slowapi.middleware import SlowAPIMiddleware
+
+        from src.security.rate_limiter import limiter, rate_limit_handler
+        from src.voice_agents.demo_public_routes import demo_public_router
+        from shared.billing.voice_session_entitlement import DemoCallReservation
+
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+        app.add_middleware(SlowAPIMiddleware)
+        app.include_router(demo_public_router)
+
+        demo_agent = _make_agent(is_demo=True, demo_slug="my-demo")
+        demo_agent.name = "Demo Agent"
+        limiter.reset()
+        try:
+            with patch(
+                "src.voice_agents.demo_public_routes.voice_agent_service.get_demo_agent_by_slug",
+                new=AsyncMock(return_value=(demo_agent, None)),
+            ), patch(
+                "src.voice_agents.demo_public_routes.reserve_demo_call_if_needed",
+                new=AsyncMock(
+                    return_value=DemoCallReservation("reservation-1", "sess-1", 2, 600)
+                ),
+            ), patch(
+                "src.voice_agents.demo_public_routes.assert_voice_session_allowed",
+                new=AsyncMock(),
+            ), patch(
+                "src.voice_agents.demo_public_routes.public_page_service.generate_call_token",
+                return_value=("tok", "wss://x/ws", "sess-1"),
+            ), patch(
+                "src.voice_agents.demo_public_routes.create_demo_outcome_token",
+                return_value="receipt-token",
+            ):
+                from fastapi.testclient import TestClient
+
+                client = TestClient(app)
+                responses = [
+                    client.post(f"/api/v1/public/demo/{slug}/call-token")
+                    for slug in (
+                        "my-demo",
+                        "other-demo",
+                        "third-demo",
+                        "fourth-demo",
+                        "fifth-demo",
+                        "sixth-demo",
+                    )
+                ]
+
+            assert [response.status_code for response in responses[:5]] == [200] * 5
+            assert responses[5].status_code == 429
+        finally:
+            limiter.reset()
+
     @pytest.mark.asyncio
     async def test_get_demo_agent_not_found(self):
         from src.voice_agents.demo_public_routes import get_demo_agent_public
@@ -465,7 +542,9 @@ class TestDemoPublicRoutes:
             "src.voice_agents.demo_public_routes.create_demo_outcome_token",
             return_value="receipt-token",
         ):
-            result = await generate_demo_call_token(demo_slug="my-demo")
+            result = await generate_demo_call_token(
+                demo_slug="my-demo", request=_make_request()
+            )
             assert result.token == "tok"
             assert result.sessionId == "sess-1"
             assert result.receiptToken == "receipt-token"
@@ -493,7 +572,9 @@ class TestDemoPublicRoutes:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await generate_demo_call_token(demo_slug="my-demo")
+                await generate_demo_call_token(
+                    demo_slug="my-demo", request=_make_request("198.51.100.2")
+                )
 
         assert exc_info.value.status_code == 429
         assert exc_info.value.detail["code"] == "DEMO_TRIAL_EXHAUSTED"
@@ -522,7 +603,9 @@ class TestDemoPublicRoutes:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await generate_demo_call_token(demo_slug="my-demo")
+                await generate_demo_call_token(
+                    demo_slug="my-demo", request=_make_request("198.51.100.3")
+                )
         assert exc_info.value.status_code == 402
 
     @pytest.mark.asyncio

@@ -105,13 +105,21 @@ class OAuthSessionService:
             invitation, invite_error = await organization_service.process_invitation(
                 identity.invitation_token,
                 UUID(str(user.id)),
+                identity.email,
             )
             if invite_error:
-                logger.warning(
+                logger.error(
                     "Invitation processing failed during %s OAuth sign-in for %s: %s",
                     identity.provider,
                     user.id,
                     invite_error,
+                )
+                current_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, "invitation_error")
+                )
+                return None, HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "invitation_error", "message": invite_error},
                 )
             elif invitation:
                 joined_organization_id = invitation.organization_id
@@ -121,23 +129,24 @@ class OAuthSessionService:
                     "organization.id", str(invitation.organization_id)
                 )
 
-        org_name = (
-            f"{identity.first_name}'s Organization" if identity.first_name else None
-        )
-        org_id, org_error = await ensure_default_organization_for_user(
-            UUID(str(user.id)),
-            identity.email,
-            organization_name=org_name,
-        )
-        if org_error:
-            logger.warning(
-                "Organization not provisioned for %s OAuth user %s: %s",
-                identity.provider,
-                user.id,
-                org_error,
+        if not joined_organization_id:
+            org_name = (
+                f"{identity.first_name}'s Organization" if identity.first_name else None
             )
-        elif org_id:
-            current_span.set_attribute("organization.id", str(org_id))
+            org_id, org_error = await ensure_default_organization_for_user(
+                UUID(str(user.id)),
+                identity.email,
+                organization_name=org_name,
+            )
+            if org_error:
+                logger.warning(
+                    "Organization not provisioned for %s OAuth user %s: %s",
+                    identity.provider,
+                    user.id,
+                    org_error,
+                )
+            elif org_id:
+                current_span.set_attribute("organization.id", str(org_id))
 
         from src.notifications.signup_notifier import signup_notifier
 

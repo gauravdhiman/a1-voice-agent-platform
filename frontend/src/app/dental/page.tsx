@@ -8,7 +8,7 @@ import { SITE_URL } from "@/lib/site-config";
 export const metadata: Metadata = {
   title: "AI Receptionist for Dental Practices",
   description:
-    "Never miss another patient call. 24x7 AI answers after hours, books cleanings and exams to your calendar, and follows up — live in 48 hours.",
+    "Never miss another patient call. 24x7 AI answers after hours, books cleanings and exams to your calendar, and captures callback requests — live in 48 hours.",
   alternates: { canonical: `${SITE_URL}/dental` },
 };
 
@@ -31,7 +31,7 @@ const content: IndustryPageContent = {
     {
       title: "Cleanings and exams, booked to your calendar",
       description:
-        "Checks real availability, confirms the slot, and writes the event to Google Calendar with a confirmation text.",
+        "Checks real availability, confirms the slot with the caller, and writes the event to Google Calendar.",
     },
     {
       title: "Questions answered instantly",
@@ -57,7 +57,7 @@ const content: IndustryPageContent = {
     {
       question: "What happens when a caller needs a real person?",
       answer:
-        "The agent offers to have your team call back, captures the number and reason, and alerts you instantly with the full context. Nothing falls into voicemail.",
+        "The agent offers to have your team call back, captures the number and reason, and sends your team the full context. Nothing falls into voicemail.",
     },
     {
       question: "How long does setup take?",

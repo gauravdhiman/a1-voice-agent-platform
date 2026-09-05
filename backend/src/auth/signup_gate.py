@@ -40,8 +40,9 @@ SIGNUP_DISABLED_MESSAGE = (
     "with a concierge setup. Please request a demo and we will invite you."
 )
 
-#: Invitation rows in these states can never admit a signup.
-_CLOSED_INVITATION_STATUSES = frozenset({"accepted", "expired", "revoked"})
+#: Invitation rows in these states can never admit a signup. ``revoked`` is
+#: retained for compatibility with historical rows from an older schema.
+_CLOSED_INVITATION_STATUSES = frozenset({"accepted", "expired", "cancelled", "revoked"})
 
 
 def is_allowlisted(email: str) -> bool:
@@ -56,7 +57,9 @@ def is_allowlisted(email: str) -> bool:
     return email.strip().lower() in set(settings.platform_admin_allowlist)
 
 
-async def invitation_token_usable(token: str, supabase: Any) -> bool:
+async def invitation_token_usable(
+    token: str, supabase: Any, email: Optional[str] = None
+) -> bool:
     """Check an invitation token without side effects.
 
     Unlike ``organization_service.process_invitation`` (which assigns roles
@@ -66,6 +69,8 @@ async def invitation_token_usable(token: str, supabase: Any) -> bool:
     Args:
         token: Invitation token from the signup request.
         supabase: Service-role Supabase client used for the lookup.
+        email: Authenticated/signup email that must match the invitation when
+            supplied. Closed signup always supplies this value.
 
     Returns:
         True when the token can admit exactly one signup.
@@ -73,7 +78,7 @@ async def invitation_token_usable(token: str, supabase: Any) -> bool:
     try:
         response = (
             supabase.table("invitations")
-            .select("id,status,expires_at")
+            .select("id,email,status,expires_at")
             .eq("token", token)
             .limit(1)
             .execute()
@@ -86,7 +91,14 @@ async def invitation_token_usable(token: str, supabase: Any) -> bool:
     if not rows:
         return False
     row = rows[0]
+    if (
+        email is not None
+        and str(row.get("email", "")).strip().lower() != email.strip().lower()
+    ):
+        return False
     if str(row.get("status", "")).lower() in _CLOSED_INVITATION_STATUSES:
+        return False
+    if str(row.get("status", "")).lower() != "pending":
         return False
     expires_at = row.get("expires_at")
     if expires_at:
@@ -123,6 +135,6 @@ async def is_signup_allowed(
     if is_allowlisted(email):
         return True, None
     if invitation_token and supabase is not None:
-        if await invitation_token_usable(invitation_token, supabase):
+        if await invitation_token_usable(invitation_token, supabase, email):
             return True, None
     return False, SIGNUP_DISABLED_CODE

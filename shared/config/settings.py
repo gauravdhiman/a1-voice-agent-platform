@@ -6,10 +6,10 @@ Uses Pydantic Settings for type-safe configuration handling.
 import json
 import os
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, NoDecode
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -157,8 +157,8 @@ class Settings(BaseSettings):
         default=False,
         description="Allow open public signup without invitation or allowlist",
     )
-    platform_admin_allowlist: list[str] = Field(
-        default=[],
+    platform_admin_allowlist: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
         description="Comma-separated emails always allowed through the signup gate",
     )
 

@@ -19,6 +19,7 @@ Contract:
   - organization_service.process_invitation is NEVER called when the
     caller and body user_id disagree (rejects before reaching the service).
 """
+
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
@@ -51,9 +52,7 @@ class TestProcessInvitationAuth:
         profile.email = "caller@example.com"
         profile.first_name = "Caller"
         profile.last_name = "User"
-        request = ProcessInvitationRequest(
-            token=TEST_TOKEN, user_id=CALLER_USER_ID
-        )
+        request = ProcessInvitationRequest(token=TEST_TOKEN, user_id=CALLER_USER_ID)
 
         with patch("src.auth.routes.organization_service") as mock_org_svc, patch(
             "src.auth.routes.signup_notifier.notify_new_user",
@@ -61,7 +60,9 @@ class TestProcessInvitationAuth:
         ):
             # Service returns a successful response (invitation object, no error).
             mock_invitation = Mock()
-            mock_invitation.organization_id = UUID("22222222-2222-2222-2222-222222222222")
+            mock_invitation.organization_id = UUID(
+                "22222222-2222-2222-2222-222222222222"
+            )
             mock_invitation.organization_name = "Acme"
             mock_invitation.id = UUID("33333333-3333-3333-3333-333333333333")
             mock_org_svc.process_invitation = AsyncMock(
@@ -75,7 +76,7 @@ class TestProcessInvitationAuth:
 
             assert result is not None
             mock_org_svc.process_invitation.assert_called_once_with(
-                TEST_TOKEN, CALLER_USER_ID
+                TEST_TOKEN, CALLER_USER_ID, "caller@example.com"
             )
 
     @pytest.mark.asyncio
@@ -85,9 +86,7 @@ class TestProcessInvitationAuth:
         from src.auth.routes import ProcessInvitationRequest
 
         profile = _make_user_profile()
-        request = ProcessInvitationRequest(
-            token=TEST_TOKEN, user_id=ATTACKER_USER_ID
-        )
+        request = ProcessInvitationRequest(token=TEST_TOKEN, user_id=ATTACKER_USER_ID)
 
         with patch("src.auth.routes.organization_service") as mock_org_svc:
             mock_org_svc.process_invitation = AsyncMock()

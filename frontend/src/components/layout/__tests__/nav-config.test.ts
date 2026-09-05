@@ -142,6 +142,7 @@ describe("nav-config", () => {
     expect(names).toContain("Phone Numbers");
     expect(names).toContain("Skills");
     expect(names).toContain("Calls");
+    expect(names).toContain("Callbacks");
   });
 
   it("org_admin section contains Members, Billing, Organization", () => {

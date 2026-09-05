@@ -400,8 +400,7 @@ async def list_audit_events(
             detail="Could not load audit events.",
         )
     return [
-        AuthAuditEventResponse(**row)
-        for row in (getattr(response, "data", None) or [])
+        AuthAuditEventResponse(**row) for row in (getattr(response, "data", None) or [])
     ]
 
 
@@ -521,7 +520,11 @@ async def linkedin_callback(
             trace.Status(trace.StatusCode.ERROR, "LinkedIn Supabase session failed")
         )
         detail = session_error.detail
-        message = detail if isinstance(detail, str) else "LinkedIn authentication could not be completed."
+        message = (
+            detail
+            if isinstance(detail, str)
+            else "LinkedIn authentication could not be completed."
+        )
         return RedirectResponse(
             oauth_error_redirect(message),
             status_code=status.HTTP_302_FOUND,
@@ -663,7 +666,11 @@ async def google_callback(
             trace.Status(trace.StatusCode.ERROR, "Google Supabase session failed")
         )
         detail = session_error.detail
-        message = detail if isinstance(detail, str) else "Google authentication could not be completed."
+        message = (
+            detail
+            if isinstance(detail, str)
+            else "Google authentication could not be completed."
+        )
         return RedirectResponse(
             oauth_error_redirect(message),
             status_code=status.HTTP_302_FOUND,
@@ -693,7 +700,10 @@ async def google_callback(
     "/session/handoff",
     response_model=SessionHandoffResponse,
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid or expired handoff token"},
+        400: {
+            "model": ErrorResponse,
+            "description": "Invalid or expired handoff token",
+        },
         429: {"description": "Too many requests"},
     },
 )
@@ -1006,7 +1016,7 @@ async def process_invitation(
     try:
         # Process the invitation using the organization service
         invitation, error = await organization_service.process_invitation(
-            request.token, request.user_id
+            request.token, request.user_id, user_profile.email
         )
 
         if error:

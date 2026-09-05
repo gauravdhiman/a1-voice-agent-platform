@@ -35,3 +35,21 @@ def test_settings_honors_env_file_override(monkeypatch, tmp_path: Path) -> None:
     assert settings.app_name == "staging-settings-test"
     assert settings.environment == "staging"
     assert settings.supabase_url == "https://gdzwiwukcwbqohfwxxrx.supabase.co"
+
+
+def test_settings_parses_comma_separated_admin_allowlist_from_environment(
+    monkeypatch,
+) -> None:
+    """The documented comma-separated allowlist must not trigger JSON parsing."""
+    monkeypatch.delenv("ENV_FILE", raising=False)
+    monkeypatch.setenv(
+        "PLATFORM_ADMIN_ALLOWLIST",
+        "admin@example.com, Founder@Example.com",
+    )
+
+    settings = Settings(_env_file=None)
+
+    assert settings.platform_admin_allowlist == [
+        "admin@example.com",
+        "founder@example.com",
+    ]
