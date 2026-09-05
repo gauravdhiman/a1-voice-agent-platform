@@ -360,7 +360,7 @@ System-wide tools available for integration with voice agents.
 | tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
 | is_active             | BOOLEAN       | NOT NULL, DEFAULT TRUE            | Tool active status                                                          |
 | is_premium            | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Premium tools require the plan's `premium_tools` feature to attach. Visible in the catalog with a badge; attach gated at the API (403) — migration 20260807000006 |
-| is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = visible in every org's tool catalog. Backfilled TRUE for existing rows — migration 20260726000001 |
+| is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = available to every organization subject to its visibility override. Backfilled TRUE for existing rows — migration 20260726000001 |
 | auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
 | requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
 | auth_config           | JSONB         | NULLABLE                          | Non-secret auth metadata (OAuth URLs, scopes, provider, refresh capability) — migration 20260111000001 |
@@ -381,13 +381,42 @@ System-wide tools available for integration with voice agents.
 - `ix_platform_tools_organization_id` on `organization_id` — migration 20260725000001
 - `ix_platform_tools_is_published` on `is_published` — migration 20260726000001 (org-user catalog listing filters on it)
 
-**RLS**: Not enabled (system-wide tools). Catalog visibility is enforced at the service layer (`get_platform_tools` filters `is_published=true AND is_active=true` for org users; `include_drafts=True` for platform admins). RLS hardening is a follow-up TODO.
+**RLS**: Not enabled (system-wide tools). Catalog visibility is enforced at the service layer (`get_platform_tools` filters `is_published=true AND is_active=true`; `get_organization_tools` applies organization overrides). RLS hardening is a follow-up TODO.
 
 **Visibility / publish lifecycle** (RFC §6.6):
 - `is_published=false` → **draft**: visible only to platform admins (authoring/management view).
-- `is_published=true` + `is_active=true` → **published**: a normal tool card in every org's agent tool panel; org admins attach it and supply their own API key (the `{{KEY}}` template is substituted with `agent_tools.sensitive_config["api_key"]` at runtime — no platform test-key fallback).
+- `is_published=true` + `is_active=true` → **published**: visible in every organization's **Organization Tools** catalog by default; an organization admin can hide it from new agent connections. Org admins attach visible tools and supply their own API key (the `{{KEY}}` template is substituted with `agent_tools.sensitive_config["api_key"]` at runtime — no platform test-key fallback).
 - `organization_id` is **dormant** (org-scoped custom tier retired); MCP rows are forced to NULL on create.
 - Server-level secret headers (`mcp_server_secret_headers`) are encrypted at rest via Fernet (`shared/common/security.py`); the decrypted values never leave voice-ws dispatch path.
+
+### organization_tool_visibility
+
+Sparse organization-level overrides for the global `platform_tools` catalog.
+There is no row when a published tool is using the default visible state, so a
+newly published tool appears in every organization without a backfill. A row
+with `is_visible=false` removes the tool from that organization's new-agent
+catalog and is enforced by the attach API. Restoring visibility updates the
+same override. Existing `agent_tools` rows are intentionally preserved and
+remain available to the runtime; the agent page marks them as hidden.
+
+| Column          | Type        | Constraints                                      | Description |
+| --------------- | ----------- | ------------------------------------------------ | ----------- |
+| id              | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()            | Visibility override identifier |
+| organization_id | UUID        | NOT NULL, FK → organizations.id (CASCADE)        | Organization receiving the override |
+| tool_id         | UUID        | NOT NULL, FK → platform_tools.id (CASCADE)       | Published platform tool being overridden |
+| is_visible      | BOOLEAN     | NOT NULL, DEFAULT TRUE                            | Effective catalog visibility for the organization |
+| created_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                          | Creation timestamp |
+| updated_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                          | Last update timestamp |
+
+**Unique constraint**: `(organization_id, tool_id)` named
+`uq_organization_tool_visibility`.
+
+**Indexes**: `ix_organization_tool_visibility_organization_id` and
+`ix_organization_tool_visibility_tool_id`.
+
+**RLS**: Enabled; accessed through the backend service role.
+
+**Migration**: `20260905000001_add_organization_tool_visibility.py`.
 
 **OAuth metadata and client credentials**:
 
@@ -485,6 +514,13 @@ Junction table mapping voice agents to platform tools with configuration.
 **RLS**: Enabled
 **Unique Constraint**: `(agent_id, tool_id)` named `uq_agent_tool`
 **Real-time**: Enabled
+
+**Visibility behavior**: an existing attachment is not deleted or disabled
+when its platform tool is unpublished or hidden by its organization. The
+service continues to load it for the agent runtime and the agent UI shows the
+corresponding `Unpublished` or `Hidden` status. The attach API rejects only a
+new connection to a tool that is no longer published or is hidden for the
+organization.
 
 **Delete guardrails (RFC §6.6)**: the `tool_id → platform_tools.id (CASCADE)` FK
 means a `platform_tools` delete silently strips the tool from every using agent on
@@ -1341,7 +1377,17 @@ erDiagram
         jsonb tool_functions_schema
         boolean is_active
         boolean is_premium
+        boolean is_published
         text oauth_client_secret_encrypted
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    organization_tool_visibility {
+        uuid id
+        uuid organization_id
+        uuid tool_id
+        boolean is_visible
         timestamptz created_at
         timestamptz updated_at
     }
@@ -1688,6 +1734,8 @@ erDiagram
     voice_agents ||--o{ agent_tools : "has many"
     voice_agents ||--o| agent_embed_configs : "has one"
     platform_tools ||--o{ agent_tools : "used by"
+    organizations ||--o{ organization_tool_visibility : "controls"
+    platform_tools ||--o{ organization_tool_visibility : "overridden by"
     agent_embed_configs ||--o{ embed_call_logs : "tracks"
     organizations ||--o{ call_logs : "owns"
     voice_agents ||--o{ call_logs : "handles"
@@ -1832,6 +1880,7 @@ erDiagram
 76. `20260830000001` - Add service-role-only `demo_outcome_receipts` for short-lived, signed visitor receipts containing allowlisted provider outcomes from public demo calls.
 77. `20260901000001` - Add the optional platform-admin-configured `voice_agents.demo_public_result_url` destination. The URL is returned only for successful actions in signed demo outcome receipts so the receipt can offer an external-result CTA without exposing it on the public landing page.
 78. `20260901000002` - Extend the service-role-only demo outcome receipt action allowlist with independent `email_delivery` actions for attached Gmail and Resend tools. The receipt stores only a safe provider/status summary and does not make provider tools call one another.
+79. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
 
 ---
 

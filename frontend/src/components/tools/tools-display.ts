@@ -23,10 +23,19 @@ import type { PlatformTool, AgentTool } from "@/types/agent";
 export function buildAgentToolsDisplay(
   platformTools: PlatformTool[],
   agentTools: AgentTool[],
-): { allTools: PlatformTool[]; unpublishedConnectedIds: Set<string> } {
+): {
+  allTools: PlatformTool[];
+  unpublishedConnectedIds: Set<string>;
+  hiddenConnectedIds: Set<string>;
+} {
   const unpublishedConnectedIds = new Set(
     agentTools
       .filter((at) => at.tool?.is_published === false)
+      .map((at) => at.tool_id),
+  );
+  const hiddenConnectedIds = new Set(
+    agentTools
+      .filter((at) => at.tool?.is_visible === false)
       .map((at) => at.tool_id),
   );
 
@@ -35,7 +44,7 @@ export function buildAgentToolsDisplay(
     .filter(
       (at) =>
         at.tool !== undefined &&
-        at.tool.is_published === false &&
+        (at.tool.is_published === false || at.tool.is_visible === false) &&
         !catalogIds.has(at.tool_id),
     )
     .map((at) => at.tool) as PlatformTool[];
@@ -43,5 +52,6 @@ export function buildAgentToolsDisplay(
   return {
     allTools: [...platformTools, ...extras],
     unpublishedConnectedIds,
+    hiddenConnectedIds,
   };
 }

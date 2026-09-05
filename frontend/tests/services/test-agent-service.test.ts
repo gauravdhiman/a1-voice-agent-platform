@@ -93,6 +93,64 @@ describe('AgentService', () => {
       expect(Array.isArray(result)).toBe(true)
     })
 
+    it('getOrganizationTools requests the organization catalog', async () => {
+      let capturedPath = ''
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/organizations/:orgId/tools`, ({ request, params }) => {
+          capturedPath = `${params.orgId}${new URL(request.url).search}`
+          return HttpResponse.json({
+            success: true,
+            data: [createMockPlatformTool({ id: 'tool-1', is_visible: false })],
+          })
+        }),
+      )
+
+      const result = await agentService.getOrganizationTools('org-1')
+
+      expect(capturedPath).toBe('org-1?only_active=true')
+      expect(result[0]).toMatchObject({ id: 'tool-1', is_visible: false })
+    })
+
+    it('getOrganizationTools can request hidden rows for the admin manager', async () => {
+      let capturedQuery = ''
+      server.use(
+        http.get(`${API_BASE_URL}/api/v1/organizations/:orgId/tools`, ({ request }) => {
+          capturedQuery = new URL(request.url).search
+          return HttpResponse.json({ success: true, data: [] })
+        }),
+      )
+
+      await agentService.getOrganizationTools('org-1', true, true)
+
+      expect(capturedQuery).toContain('only_active=true')
+      expect(capturedQuery).toContain('include_hidden=true')
+    })
+
+    it('setOrganizationToolVisibility sends the visibility override', async () => {
+      let receivedBody: unknown
+      server.use(
+        http.put(`${API_BASE_URL}/api/v1/organizations/:orgId/tools/:toolId/visibility`, async ({ request, params }) => {
+          receivedBody = await request.json()
+          return HttpResponse.json({
+            success: true,
+            data: createMockPlatformTool({
+              id: String(params.toolId),
+              is_visible: false,
+            }),
+          })
+        }),
+      )
+
+      const result = await agentService.setOrganizationToolVisibility(
+        'org-1',
+        'tool-1',
+        false,
+      )
+
+      expect(receivedBody).toEqual({ is_visible: false })
+      expect(result).toMatchObject({ id: 'tool-1', is_visible: false })
+    })
+
     it('getAgentTools returns tools for agent', async () => {
       const result = await agentService.getAgentTools('agent-1')
       expect(result).toHaveLength(1)

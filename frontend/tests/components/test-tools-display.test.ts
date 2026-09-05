@@ -1,6 +1,6 @@
 /**
  * Tests for buildAgentToolsDisplay — the Tools-tab merge that surfaces
- * connected-but-unpublished tools inline in the grid (RFC §6.6).
+ * connected-but-unpublished or organization-hidden tools inline in the grid.
  *
  * The worker loads an agent's tools without filtering on `is_published`, so an
  * unpublished tool the agent already has keeps working at runtime. The
@@ -62,12 +62,42 @@ describe("buildAgentToolsDisplay", () => {
       agentTool("a", { id: "a", is_published: true }),
       agentTool("u", { id: "u", name: "ghost", is_published: false }),
     ];
-    const { allTools, unpublishedConnectedIds } = buildAgentToolsDisplay(catalog, agentTools);
+    const { allTools, unpublishedConnectedIds, hiddenConnectedIds } =
+      buildAgentToolsDisplay(catalog, agentTools);
     // The unpublished tool "u" is appended after the catalog.
     expect(allTools.map((t) => t.id)).toEqual(["a", "u"]);
     expect(allTools[1].name).toBe("ghost");
     expect(unpublishedConnectedIds.has("u")).toBe(true);
     expect(unpublishedConnectedIds.has("a")).toBe(false);
+    expect(hiddenConnectedIds.size).toBe(0);
+  });
+
+  it("surfaces a connected-but-hidden tool with a hidden status", () => {
+    const catalog = [tool({ id: "a", is_published: true })];
+    const agentTools = [
+      agentTool("h", {
+        id: "h",
+        is_published: true,
+        is_visible: false,
+      }),
+    ];
+
+    const { allTools, hiddenConnectedIds, unpublishedConnectedIds } =
+      buildAgentToolsDisplay(catalog, agentTools);
+
+    expect(allTools.map((t) => t.id)).toEqual(["a", "h"]);
+    expect(hiddenConnectedIds.has("h")).toBe(true);
+    expect(unpublishedConnectedIds.has("h")).toBe(false);
+  });
+
+  it("does not add an organization-hidden tool that is not mapped to the agent", () => {
+    const catalog = [tool({ id: "a", is_published: true })];
+    const { allTools, hiddenConnectedIds } = buildAgentToolsDisplay(catalog, [
+      agentTool("a", { id: "a", is_published: true }),
+    ]);
+
+    expect(allTools.map((t) => t.id)).toEqual(["a"]);
+    expect(hiddenConnectedIds.size).toBe(0);
   });
 
   it("does NOT add an unpublished tool that is not mapped to the agent", () => {

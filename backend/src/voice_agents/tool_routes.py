@@ -63,6 +63,9 @@ from shared.voice_agents.tools.mcp.security import (
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 tool_router = APIRouter(prefix="/api/v1/tools", tags=["Tools"])
+organization_tool_router = APIRouter(
+    prefix="/api/v1/organizations", tags=["Organization Tools"]
+)
 DEFAULT_OAUTH_TOKEN_LIFETIME_SECONDS = 3600
 
 
@@ -146,6 +149,18 @@ class PlatformToolPremiumUpdate(BaseModel):
     is_premium: bool = Field(
         ...,
         description=("True to gate the tool behind the premium_tools plan feature"),
+    )
+
+
+class OrganizationToolVisibilityUpdate(BaseModel):
+    """Request body for an organization's platform-tool visibility override."""
+
+    is_visible: bool = Field(
+        ...,
+        description=(
+            "Whether the published platform tool should be available for new "
+            "agent connections in this organization"
+        ),
     )
 
 
@@ -759,6 +774,89 @@ async def get_platform_tools(
     return tools
 
 
+@organization_tool_router.get(
+    "/{org_id}/tools",
+    response_model=List[PlatformTool],
+)
+@tracer.start_as_current_span("tool.routes.get_organization_tools")
+async def get_organization_tools(
+    org_id: UUID,
+    only_active: bool = True,
+    include_hidden: bool = False,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Get published platform tools with organization visibility applied."""
+    current_user_id, user_profile = user_data
+
+    if include_hidden:
+        assert_has_permission(
+            user_profile,
+            "organization",
+            "update",
+            org_id,
+            error_message="Insufficient permissions to manage organization tools",
+        )
+    else:
+        # Agent readers need the organization-filtered catalog to configure
+        # tools; organization admins additionally get the management view.
+        assert_has_permission(
+            user_profile,
+            "agent",
+            "read",
+            org_id,
+            error_message="Insufficient permissions to view organization tools",
+        )
+
+    tools, error = await tool_service.get_organization_tools(
+        org_id,
+        only_active=only_active,
+        include_hidden=include_hidden,
+    )
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    return tools
+
+
+@organization_tool_router.put(
+    "/{org_id}/tools/{tool_id}/visibility",
+    response_model=PlatformTool,
+)
+@tracer.start_as_current_span("tool.routes.set_organization_tool_visibility")
+async def set_organization_tool_visibility(
+    org_id: UUID,
+    tool_id: UUID,
+    visibility_data: OrganizationToolVisibilityUpdate,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Hide or restore a published platform tool for an organization."""
+    current_user_id, user_profile = user_data
+
+    assert_has_permission(
+        user_profile,
+        "organization",
+        "update",
+        org_id,
+        error_message="Insufficient permissions to update organization tools",
+    )
+
+    tool, error = await tool_service.set_organization_tool_visibility(
+        org_id,
+        tool_id,
+        visibility_data.is_visible,
+    )
+    if error == "Platform tool not found":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+    if error == "Only published platform tools can be hidden":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+        )
+    return tool
+
+
 # Agent Tools
 @tool_router.post("/agent", response_model=AgentToolResponse)
 @tracer.start_as_current_span("tool.routes.configure_agent_tool")
@@ -794,13 +892,36 @@ async def configure_agent_tool(
     # Premium tools are catalog-visible but gated at attach time: the org's
     # plan must entitle the 'premium_tools' feature (check_feature → 403).
     platform_tool, tool_error = await tool_service.get_platform_tool_by_id(
-        agent_tool_data.tool_id
+        agent_tool_data.tool_id,
+        organization_id=agent.organization_id,
     )
     if tool_error and tool_error != "Platform tool not found":
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=tool_error,
         )
+    if platform_tool is not None and (
+        not platform_tool.is_published or not platform_tool.is_visible
+    ):
+        existing_tools, existing_error = await tool_service.get_agent_tools(agent.id)
+        if existing_error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=existing_error,
+            )
+        is_existing_attachment = any(
+            configured_tool.tool_id == agent_tool_data.tool_id
+            for configured_tool in existing_tools
+        )
+        if not is_existing_attachment:
+            detail = (
+                "This tool is hidden from your organization and cannot be "
+                "connected to a new agent."
+                if platform_tool.is_published
+                else "This tool is no longer published and cannot be connected "
+                "to a new agent."
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
     if platform_tool is not None and platform_tool.is_premium:
         if not await entitlement_service.check_feature(
             agent.organization_id, "premium_tools"
@@ -870,7 +991,9 @@ async def get_agent_tools(
         error_message="Insufficient permissions to view tools for this agent",
     )
 
-    tools, error = await tool_service.get_agent_tools(agent_id)
+    tools, error = await tool_service.get_agent_tools(
+        agent_id, organization_id=agent.organization_id
+    )
     if error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error

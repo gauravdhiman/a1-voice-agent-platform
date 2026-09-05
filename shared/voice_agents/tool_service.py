@@ -500,9 +500,104 @@ class ToolService:
             logger.error(f"Error getting platform tools: {e}")
             return [], str(e)
 
+    @tracer.start_as_current_span("tool.get_organization_tool_visibility_map")
+    async def _get_organization_tool_visibility_map(
+        self, organization_id: UUID
+    ) -> tuple[dict[str, bool], Optional[str]]:
+        """Load organization-specific visibility overrides for platform tools."""
+        try:
+            response = (
+                self.supabase.table("organization_tool_visibility")
+                .select("tool_id, is_visible")
+                .eq("organization_id", str(organization_id))
+                .execute()
+            )
+            return {
+                str(item["tool_id"]): bool(item.get("is_visible", True))
+                for item in response.data
+            }, None
+        except Exception as e:
+            logger.error(
+                "Error getting tool visibility for organization %s: %s",
+                organization_id,
+                e,
+            )
+            return {}, str(e)
+
+    @tracer.start_as_current_span("tool.get_organization_tools")
+    async def get_organization_tools(
+        self,
+        organization_id: UUID,
+        only_active: bool = True,
+        include_hidden: bool = False,
+    ) -> tuple[List[PlatformTool], Optional[str]]:
+        """Get published platform tools with organization visibility applied.
+
+        A missing override means the tool is visible. This keeps publication
+        additive for every organization without creating rows for each new
+        platform tool. Hidden rows are returned only for the organization-admin
+        management view; the agent connection catalog excludes them.
+        """
+        tools, error = await self.get_platform_tools(
+            only_active=only_active,
+            include_drafts=False,
+        )
+        if error:
+            return [], error
+
+        visibility, error = await self._get_organization_tool_visibility_map(
+            organization_id
+        )
+        if error:
+            return [], error
+
+        for tool in tools:
+            tool.is_visible = visibility.get(str(tool.id), True)
+        if not include_hidden:
+            tools = [tool for tool in tools if tool.is_visible]
+        return tools, None
+
+    @tracer.start_as_current_span("tool.set_organization_tool_visibility")
+    async def set_organization_tool_visibility(
+        self, organization_id: UUID, tool_id: UUID, is_visible: bool
+    ) -> tuple[Optional[PlatformTool], Optional[str]]:
+        """Set an organization's visibility override for a published tool."""
+        platform_tool, error = await self.get_platform_tool_by_id(tool_id)
+        if error:
+            return None, error
+        if platform_tool is None:
+            return None, "Platform tool not found"
+        if not platform_tool.is_published:
+            return None, "Only published platform tools can be hidden"
+
+        try:
+            visibility_table = self.supabase.table("organization_tool_visibility")
+            payload = {
+                "organization_id": str(organization_id),
+                "tool_id": str(tool_id),
+                "is_visible": is_visible,
+            }
+            response = visibility_table.upsert(
+                payload, on_conflict="organization_id,tool_id"
+            ).execute()
+
+            if not response.data:
+                return None, "Failed to update organization tool visibility"
+
+            platform_tool.is_visible = is_visible
+            return platform_tool, None
+        except Exception as e:
+            logger.error(
+                "Error setting tool %s visibility for organization %s: %s",
+                tool_id,
+                organization_id,
+                e,
+            )
+            return None, str(e)
+
     @tracer.start_as_current_span("tool.get_platform_tool_by_id")
     async def get_platform_tool_by_id(
-        self, tool_id: UUID
+        self, tool_id: UUID, organization_id: Optional[UUID] = None
     ) -> tuple[Optional[PlatformTool], Optional[str]]:
         """Fetch a single platform tool row by id.
 
@@ -511,6 +606,8 @@ class ToolService:
 
         Args:
             tool_id: ``platform_tools.id``.
+            organization_id: Optional organization used to apply the effective
+                visibility override for attach-time checks.
 
         Returns:
             Tuple of (platform tool, error). ``(None, "not found")`` when the
@@ -526,10 +623,17 @@ class ToolService:
             )
             if not response.data:
                 return None, "Platform tool not found"
-            return (
-                self._platform_tool_for_response(PlatformTool(**response.data[0])),
-                None,
+            platform_tool = self._platform_tool_for_response(
+                PlatformTool(**response.data[0])
             )
+            if organization_id is not None:
+                visibility, error = await self._get_organization_tool_visibility_map(
+                    organization_id
+                )
+                if error:
+                    return None, error
+                platform_tool.is_visible = visibility.get(str(tool_id), True)
+            return platform_tool, None
         except Exception as e:
             logger.error(f"Error getting platform tool {tool_id}: {e}")
             return None, str(e)
@@ -1355,7 +1459,7 @@ class ToolService:
 
     @tracer.start_as_current_span("tool.get_agent_tools")
     async def get_agent_tools(
-        self, agent_id: UUID
+        self, agent_id: UUID, organization_id: Optional[UUID] = None
     ) -> tuple[List[AgentToolResponse], Optional[str]]:
         """Get all tools configured for an agent, including platform tool details (excludes sensitive config)."""  # noqa: E501
         try:
@@ -1366,6 +1470,14 @@ class ToolService:
                 .eq("agent_id", str(agent_id))
                 .execute()
             )
+
+            visibility = {}
+            if organization_id is not None:
+                visibility, error = await self._get_organization_tool_visibility_map(
+                    organization_id
+                )
+                if error:
+                    return [], error
 
             agent_tools = []
             for item in response.data:
@@ -1417,9 +1529,14 @@ class ToolService:
 
                 agent_tool = AgentToolResponse(**response_dict)
                 if tool_data:
-                    agent_tool.tool = self._platform_tool_for_response(
+                    platform_tool = self._platform_tool_for_response(
                         PlatformTool(**tool_data)
                     )
+                    if organization_id is not None:
+                        platform_tool.is_visible = visibility.get(
+                            str(platform_tool.id), True
+                        )
+                    agent_tool.tool = platform_tool
                 agent_tools.append(agent_tool)
 
             return agent_tools, None

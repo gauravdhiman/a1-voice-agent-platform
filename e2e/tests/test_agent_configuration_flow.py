@@ -13,7 +13,7 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
 
     Test Specification:
         1. Mock organization API for dashboard hydration
-        2. Mock platform tools API to return Gmail tool
+        2. Mock organization-visible tools API to return Gmail tool
         3. Mock agent detail API with initial state
         4. Mock agent tools API with stateful responses (before/after connection)
         5. Mock tool connection API (POST /tools/agent)
@@ -52,8 +52,12 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
     Dependencies:
         - User must be authenticated (sign-in helper)
         - Agent must exist
-        - Tool must be available in platform tools
+        - Tool must be available in the organization-visible catalog
     """
+
+    # The isolated Next.js dev stack can exceed Playwright's default 30-second
+    # navigation timeout while compiling the first dashboard route.
+    page.set_default_navigation_timeout(60_000)
 
     test_user_id = "00000000-0000-0000-0000-000000000000"
     test_org_id = "00000000-0000-0000-0000-000000000001"
@@ -72,8 +76,8 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
         body=f'[{{"id": "{test_org_id}", "name": "Mock Org", "slug": "mock-org"}}]'
     ))
 
-    # Mock Platform Tools (required for tool selection)
-    page.route(re.compile(r".*/api/v1/tools/platform.*"), lambda route: route.fulfill(
+    # Mock organization-visible tools (required for tool selection)
+    page.route(re.compile(f".*/api/v1/organizations/{test_org_id}/tools.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body=f'[{{"id": "gmail-tool-id", "name": "Gmail", "description": "Send and read emails", "is_active": true, "requires_auth": true, "auth_type": "oauth2", "tool_functions_schema": {{"functions": [{{"name": "send_email", "description": "Send an email", "parameters": {{"type": "object", "properties": {{}}}}}}]}}}}]'
@@ -112,13 +116,21 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
     def handle_post_connect(route):
         state["is_connected"] = True
         route.fulfill(status=201, content_type="application/json", body='{"success": true}')
-    page.route(re.compile(r".*/api/v1/tools/agent"), handle_post_connect, times=1)
+    page.route(re.compile(r".*/api/v1/tools/agent$"), handle_post_connect, times=1)
 
     # Mock PUT Toggle
     # Frontend uses PUT /api/v1/tools/agent/{agentToolId} (agent-service.ts), not /agent-tools
-    page.route(re.compile(r".*/api/v1/tools/agent/.*"), lambda route: route.fulfill(
-        status=200, content_type="application/json", body='{"success": true}'
-    ))
+    def handle_agent_tool_mutation(route):
+        if route.request.method == "GET":
+            handle_get_agent_tools(route)
+            return
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"success": true}',
+        )
+
+    page.route(re.compile(r".*/api/v1/tools/agent/.*"), handle_agent_tool_mutation)
 
     # --- JOURNEY START ---
 
@@ -127,6 +139,19 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
 
     step(f"Navigate to Agent Tools tab for agent {test_agent_id}")
     page.goto(f"{base_url}/agents/{test_agent_id}?tab=tools")
+
+    step("Verify the empty Connected filter offers the full catalog")
+    expect(page.get_by_text("No tools are connected to this agent yet")).to_be_visible()
+    expect(page.get_by_role("button", name="See all tools", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Connected", exact=True)).to_have_class(
+        re.compile(r"bg-primary")
+    )
+
+    step("Switch to All tools from the empty-state CTA")
+    page.get_by_role("button", name="See all tools", exact=True).click()
+    expect(page.get_by_role("button", name="All", exact=True)).to_have_class(
+        re.compile(r"bg-primary")
+    )
 
     step("Verify 'Gmail' tool card is visible")
     expect(page.get_by_role("heading", name="Gmail")).to_be_visible()
@@ -588,4 +613,3 @@ Family-owned plumbing business serving Phoenix metro area. Hours: Mon-Fri 8am-6p
     expect(page.locator(".prose").get_by_text("Family-owned plumbing business")).to_be_visible()
 
     step("Verification Complete: Organization context properly included in system prompt")
-

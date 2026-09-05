@@ -21,6 +21,8 @@ export const agentQueryKeys = {
   systemPrompt: (id: string) =>
     [...agentQueryKeys.all, id, "system-prompt"] as const,
   platformTools: () => ["tools", "platform"] as const,
+  organizationTools: (orgId: string) =>
+    ["tools", "organization", orgId] as const,
   platformToolUsage: (toolId: string) =>
     ["tools", "platform", toolId, "usage"] as const,
   agentTools: (agentId: string) => ["tools", "agent", agentId] as const,
@@ -88,6 +90,27 @@ export function usePlatformTools(
     queryFn: () => agentService.getPlatformTools(onlyActive, requestOptions),
     staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
     enabled: opts?.enabled ?? true,
+  });
+}
+
+/** Get published tools with the active organization's visibility applied. */
+export function useOrganizationTools(
+  organizationId: string,
+  opts?: { enabled?: boolean; includeHidden?: boolean },
+) {
+  return useQuery({
+    queryKey: [
+      ...agentQueryKeys.organizationTools(organizationId),
+      { hidden: opts?.includeHidden ?? false },
+    ],
+    queryFn: () =>
+      agentService.getOrganizationTools(
+        organizationId,
+        true,
+        opts?.includeHidden ?? false,
+      ),
+    staleTime: 30 * 1000,
+    enabled: Boolean(organizationId) && (opts?.enabled ?? true),
   });
 }
 
@@ -648,6 +671,42 @@ export function useUpdatePlatformTool() {
     },
     onError: () => {
       toast.error("Failed to update MCP server");
+    },
+  });
+}
+
+/** Toggle a published tool in an organization's catalog. */
+export function useSetOrganizationToolVisibility() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      organizationId,
+      toolId,
+      isVisible,
+    }: {
+      organizationId: string;
+      toolId: string;
+      isVisible: boolean;
+    }) =>
+      agentService.setOrganizationToolVisibility(
+        organizationId,
+        toolId,
+        isVisible,
+      ),
+    onSuccess: (_, variables) => {
+      toast.success(
+        variables.isVisible
+          ? "Tool restored for this organization"
+          : "Tool hidden from this organization",
+      );
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.organizationTools(variables.organizationId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["tools", "agent"] });
+    },
+    onError: () => {
+      toast.error("Failed to update organization tool visibility");
     },
   });
 }

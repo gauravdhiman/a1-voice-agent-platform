@@ -122,6 +122,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       const orgHref = orgId ? `/organization?org_id=${orgId}` : "/organization";
       breadcrumbs.push({ name: "Organization", href: orgHref });
       breadcrumbs.push({ name: "Members", href: null });
+    } else if (pathname.startsWith("/organization/tools")) {
+      const orgHref = orgId ? `/organization?org_id=${orgId}` : "/organization";
+      breadcrumbs.push({ name: "Organization", href: orgHref });
+      breadcrumbs.push({ name: "Organization Tools", href: null });
     } else if (pathname === "/agents") {
       breadcrumbs.push({ name: "Agents", href: null });
     } else if (

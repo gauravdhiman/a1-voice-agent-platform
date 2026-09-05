@@ -5,7 +5,7 @@ Tests for shared Tool Service.
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -1695,4 +1695,98 @@ class TestAgentToolConfigurationStatus:
         assert tools[0].configuration_issues == []
         assert (
             tools[0].connection_status == ConnectionStatus.CONNECTED_NO_AUTH
+        )
+
+
+class TestOrganizationToolVisibility:
+    """Organization overrides are sparse and default to visible."""
+
+    async def test_get_organization_tools_applies_hidden_override(
+        self, tool_service, mock_supabase_client
+    ):
+        organization_id = uuid4()
+        tool_id = uuid4()
+        catalog_response = MagicMock()
+        catalog_response.data = [_platform_tool_row(id=str(tool_id))]
+        visibility_response = MagicMock()
+        visibility_response.data = [{"tool_id": str(tool_id), "is_visible": False}]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            catalog_response,
+            visibility_response,
+        ]
+
+        tools, error = await tool_service.get_organization_tools(
+            organization_id, include_hidden=True
+        )
+
+        assert error is None
+        assert tools[0].id == tool_id
+        assert tools[0].is_visible is False
+
+    async def test_get_organization_tools_defaults_missing_override_to_visible(
+        self, tool_service, mock_supabase_client
+    ):
+        organization_id = uuid4()
+        catalog_response = MagicMock()
+        catalog_response.data = [_platform_tool_row()]
+        visibility_response = MagicMock()
+        visibility_response.data = []
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            catalog_response,
+            visibility_response,
+        ]
+
+        tools, error = await tool_service.get_organization_tools(organization_id)
+
+        assert error is None
+        assert tools[0].is_visible is True
+
+    async def test_get_organization_tools_excludes_hidden_from_agent_catalog(
+        self, tool_service, mock_supabase_client
+    ):
+        organization_id = uuid4()
+        tool_id = uuid4()
+        catalog_response = MagicMock()
+        catalog_response.data = [_platform_tool_row(id=str(tool_id))]
+        visibility_response = MagicMock()
+        visibility_response.data = [{"tool_id": str(tool_id), "is_visible": False}]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            catalog_response,
+            visibility_response,
+        ]
+
+        tools, error = await tool_service.get_organization_tools(organization_id)
+
+        assert error is None
+        assert tools == []
+
+    async def test_set_organization_tool_visibility_upserts_override(
+        self, tool_service, mock_supabase_client
+    ):
+        organization_id = UUID("00000000-0000-0000-0000-000000000020")
+        tool_id = uuid4()
+        catalog_response = MagicMock()
+        catalog_response.data = [_platform_tool_row(id=str(tool_id))]
+        upsert_response = MagicMock()
+        upsert_response.data = [{"id": str(uuid4())}]
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            catalog_response,
+            upsert_response,
+        ]
+
+        tool, error = await tool_service.set_organization_tool_visibility(
+            organization_id, tool_id, False
+        )
+
+        assert error is None
+        assert tool is not None
+        assert tool.is_visible is False
+        visibility_table = mock_supabase_client.table.return_value
+        visibility_table.upsert.assert_called_once_with(
+            {
+                "organization_id": str(organization_id),
+                "tool_id": str(tool_id),
+                "is_visible": False,
+            },
+            on_conflict="organization_id,tool_id",
         )

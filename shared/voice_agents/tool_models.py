@@ -200,6 +200,14 @@ class PlatformTool(PlatformToolBase):
     """Model for a platform tool with all attributes."""
 
     id: UUID = Field(..., description="Tool ID")
+    is_visible: bool = Field(
+        default=True,
+        description=(
+            "Whether this published tool is visible in the current "
+            "organization's catalog. Existing agent connections remain "
+            "available when this is false."
+        ),
+    )
     tool_functions_schema: Optional[Dict[str, Any]] = Field(
         None, description="Function schemas for LLM debugging and inspection"
     )

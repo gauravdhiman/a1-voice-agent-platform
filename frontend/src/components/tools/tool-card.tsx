@@ -66,6 +66,11 @@ export interface ToolCardProps {
    */
   isUnpublished?: boolean;
   /**
+   * True when this organization hid the tool after it was connected to the
+   * agent. The existing connection remains available at runtime.
+   */
+  isHiddenForOrganization?: boolean;
+  /**
    * True when an unconnected MCP tool needs an organization API key before it
    * can be attached because no platform fallback is available.
    */
@@ -90,6 +95,7 @@ export function ToolCard({
   premiumBlocked = false,
   className,
   isUnpublished = false,
+  isHiddenForOrganization = false,
   requiresApiKey = false,
   configurationIssues = [],
 }: ToolCardProps) {
@@ -259,6 +265,15 @@ export function ToolCard({
                   Unpublished
                 </Badge>
               )}
+              {isHiddenForOrganization && (
+                <Badge
+                  variant="outline"
+                  className="h-4 text-[9px] px-1 gap-0.5 shrink-0 border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:bg-amber-950/40"
+                >
+                  <EyeOff className="h-2.5 w-2.5" />
+                  Hidden
+                </Badge>
+              )}
             </div>
             <ExpandableDescription
               description={tool.description}
@@ -284,6 +299,12 @@ export function ToolCard({
               <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-1">
                 <EyeOff className="h-3 w-3 shrink-0" />
                 No longer in the catalog — still mapped to this agent.
+              </p>
+            )}
+            {isHiddenForOrganization && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-1">
+                <EyeOff className="h-3 w-3 shrink-0" />
+                Hidden from Organization Tools — still connected to this agent.
               </p>
             )}
             {requiresApiKey && !isToolConfigured && (

@@ -35,6 +35,7 @@ from src.security.validation_errors import sanitize_validation_errors
 from src.voice_agents import (
     agent_router,
     demo_public_router,
+    organization_tool_router,
     embed_router,
     platform_skill_router,
     preset_router,
@@ -173,6 +174,7 @@ def create_app() -> FastAPI:
     # Include voice agent and tool routes
     app.include_router(agent_router)
     app.include_router(tool_router)
+    app.include_router(organization_tool_router)
     app.include_router(voice_router)
 
     # Include skill routes (org-level + platform admin)
