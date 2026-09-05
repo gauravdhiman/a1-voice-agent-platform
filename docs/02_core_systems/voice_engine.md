@@ -150,6 +150,23 @@ regardless of realtime vs pipeline preset. JSON-schema sanitization in
 `shared/voice_agents/tools/mcp/schema_sanitize.py` helps strict Gemini realtime
 validation; pipeline LLMs are generally more lenient.
 
+## Organization tool visibility
+
+Platform admins publish tools into the global catalog. The organization-level
+**Organization Tools** catalog applies a sparse visibility override: published
+tools are visible by default, and organization admins can hide a tool from new
+agent connections. The backend enforces this on both catalog reads and attach
+requests; the frontend is not the security boundary.
+
+Hiding or unpublishing a tool does not silently detach it from existing agents.
+`voice-ws` continues to resolve attached tools through `agent_tools`, while the
+agent UI keeps the connection visible with a `Hidden` or `Unpublished` status.
+This preserves runtime continuity and gives an admin an explicit path to
+remove or reconfigure the existing connection. On an agent's Tools tab, the
+Connected filter is selected by default. Agents with connections see those
+cards first; agents without connections see a **See all tools** action that
+switches to the full catalog.
+
 ## Latency
 
 Pipecat pipeline mode streams at every stage (STT partials → LLM token

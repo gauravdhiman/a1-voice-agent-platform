@@ -161,6 +161,14 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       section: "org_admin",
       exact: true,
     },
+    {
+      name: "Organization Tools",
+      href: "/organization/tools",
+      tourId: "organization-tools",
+      icon: Wrench,
+      requiredPermission: "organization:update",
+      section: "org_admin",
+    },
   ],
   platform_admin: [
     {

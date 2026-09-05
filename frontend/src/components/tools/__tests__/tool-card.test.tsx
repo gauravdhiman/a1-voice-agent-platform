@@ -31,6 +31,21 @@ function renderToolCard(props: Record<string, unknown> = {}) {
 }
 
 describe("ToolCard premium gating", () => {
+  it("shows when an existing connection is hidden from the organization", () => {
+    renderToolCard({
+      connectionStatus: ConnectionStatus.CONNECTED_NO_AUTH,
+      isConfigured: true,
+      isHiddenForOrganization: true,
+    });
+
+    expect(screen.getByText("Hidden")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Hidden from Organization Tools — still connected to this agent.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows a red configuration-required state for an attached incomplete tool", () => {
     renderToolCard({
       connectionStatus: ConnectionStatus.CONFIGURATION_REQUIRED,

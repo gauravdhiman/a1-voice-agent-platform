@@ -498,6 +498,7 @@ class TestPremiumToolGate:
             description="Test",
             is_active=True,
             is_premium=is_premium,
+            is_published=True,
             created_at="2024-01-01T00:00:00",
             updated_at="2024-01-01T00:00:00",
         )
@@ -616,6 +617,7 @@ class TestMcpAttachCredentialGate:
             mcp_server_url="https://mcp.example.com/mcp",
             auth_type="api_key",
             requires_auth=requires_auth,
+            is_published=True,
             created_at="2024-01-01T00:00:00",
             updated_at="2024-01-01T00:00:00",
         )

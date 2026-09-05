@@ -179,6 +179,8 @@ export interface PlatformTool {
    * server as a draft, test it, then publish it to the global catalog.
    */
   is_published?: boolean;
+  /** Effective organization-level visibility for this catalog response. */
+  is_visible?: boolean;
   created_at: string;
   updated_at: string;
   auth_type: string | null;

@@ -99,6 +99,37 @@ class AgentService {
   }
 
   /**
+   * List published tools available to an organization.
+   * Organization visibility overrides are applied by the backend; missing
+   * overrides mean the tool is visible by default.
+   */
+  async getOrganizationTools(
+    organizationId: string,
+    onlyActive = true,
+    includeHidden = false,
+  ): Promise<PlatformTool[]> {
+    const params = new URLSearchParams({ only_active: String(onlyActive) });
+    if (includeHidden) params.set("include_hidden", "true");
+    const response = await apiClient.get<PlatformTool[]>(
+      `/api/v1/organizations/${organizationId}/tools?${params.toString()}`,
+    );
+    return response.data;
+  }
+
+  /** Update whether a published platform tool is visible to an organization. */
+  async setOrganizationToolVisibility(
+    organizationId: string,
+    toolId: string,
+    isVisible: boolean,
+  ): Promise<PlatformTool> {
+    const response = await apiClient.put<PlatformTool>(
+      `/api/v1/organizations/${organizationId}/tools/${toolId}/visibility`,
+      { is_visible: isVisible },
+    );
+    return response.data;
+  }
+
+  /**
    * Publish or unpublish a platform tool (platform-admin only, RFC §6.6).
    * Publishing flips `is_published` to true, surfacing the server in every
    * org's tool catalog; unpublishing hides it from new attaches (existing

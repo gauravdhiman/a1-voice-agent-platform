@@ -8,7 +8,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { useCallLogs } from "@/hooks/use-call-logs";
 import {
   useAgent,
-  usePlatformTools,
+  useOrganizationTools,
   useAgentTools,
   useUpdateAgent,
   useToggleFunction,
@@ -55,6 +55,8 @@ import {
   ToolConfigDrawer,
   ToolApiKeySetupDialog,
   ToolFilterType,
+  DEFAULT_TOOL_FILTER_TYPE,
+  shouldShowSeeAllToolsPrompt,
 } from "@/components/tools";
 import { buildAgentToolsDisplay } from "@/components/tools/tools-display";
 import {
@@ -111,6 +113,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const AGENT_REALTIME_TABLES = ["agent_tools", "voice_agents"];
+const EMPTY_AGENT_TOOLS: AgentTool[] = [];
 
 /**
  * Determines whether an MCP tool must collect an organization API key before
@@ -182,7 +185,9 @@ export default function AgentDetailPage() {
   );
   const [toolSearchQuery, setToolSearchQuery] = React.useState("");
   const [toolFilterType, setToolFilterType] =
-    React.useState<ToolFilterType>("all");
+    React.useState<ToolFilterType>(DEFAULT_TOOL_FILTER_TYPE);
+  const [toolFilterReady, setToolFilterReady] = React.useState(false);
+  const initializedToolFilterAgentId = React.useRef<string | null>(null);
 
   // Agent form state
   const [agentForm, setAgentForm] = React.useState<{
@@ -224,9 +229,15 @@ export default function AgentDetailPage() {
     error: agentError,
   } = useAgent(agentId);
   const { data: platformTools = [], isLoading: toolsLoading } =
-    usePlatformTools(true, { enabled: activeTab === "tools" });
-  const { data: agentTools = [], refetch: refetchAgentTools } =
-    useAgentTools(agentId, activeTab === "tools");
+    useOrganizationTools(agent?.organization_id ?? "", {
+      enabled: activeTab === "tools" && Boolean(agent?.organization_id),
+    });
+  const {
+    data: agentToolsData,
+    isLoading: agentToolsLoading,
+    refetch: refetchAgentTools,
+  } = useAgentTools(agentId, activeTab === "tools");
+  const agentTools = agentToolsData ?? EMPTY_AGENT_TOOLS;
 
   const canViewRecordings =
     isPlatformAdmin ||
@@ -423,10 +434,35 @@ export default function AgentDetailPage() {
 
   // Sync local agent tools state with query data
   React.useEffect(() => {
-    if (agentTools.length > 0) {
-      setLocalAgentTools(agentTools);
-    }
+    setLocalAgentTools(agentTools);
   }, [agentTools]);
+
+  // Start on the most useful filter once the agent's connections are known.
+  // Keep the user's choice after initialization, including when the last tool
+  // is disconnected during the same visit.
+  React.useEffect(() => {
+    if (initializedToolFilterAgentId.current === agentId) return;
+
+    initializedToolFilterAgentId.current = null;
+    setToolFilterReady(false);
+    setToolFilterType(DEFAULT_TOOL_FILTER_TYPE);
+  }, [agentId]);
+
+  React.useEffect(() => {
+    if (
+      !agent?.id ||
+      agent.id !== agentId ||
+      activeTab !== "tools" ||
+      agentToolsLoading ||
+      initializedToolFilterAgentId.current === agentId
+    ) {
+      return;
+    }
+
+    setToolFilterType(DEFAULT_TOOL_FILTER_TYPE);
+    initializedToolFilterAgentId.current = agentId;
+    setToolFilterReady(true);
+  }, [activeTab, agent?.id, agentId, agentToolsLoading]);
 
   // Open drawer when a pending tool has been connected
   React.useEffect(() => {
@@ -755,18 +791,20 @@ export default function AgentDetailPage() {
     refetchAgentTools();
   }, [refetchAgentTools]);
 
-  // Connected tools whose platform tool is unpublished (RFC §6.6). The worker
+  // Connected tools whose platform tool is unpublished (RFC §6.6) or hidden
+  // from this organization. The worker
   // loads an agent's tools by joining `agent_tools` -> `platform_tools` without
   // filtering on `is_published`, so the agent keeps these at runtime even after
-  // the platform admin unpublishes them. The catalog (`usePlatformTools`) only
-  // returns published rows, so without this merge the card would vanish from the
-  // Tools tab even though the agent still uses it. Here we surface those tools
-  // inline in the grid, flagged `isUnpublished` so the card renders an amber
-  // "Unpublished" pill + note. Unpublished AND not mapped -> not in
+  // the platform admin unpublishes them or the organization hides them. The
+  // organization catalog only returns visible published rows, so without this
+  // merge the card would vanish from the Tools tab even though the agent still
+  // uses it. Here we surface those tools inline in the grid, flagged so the
+  // card renders a clear status pill + note. Unpublished/hidden AND not mapped
+  // -> not in
   // `localAgentTools` -> never rendered (unchanged behavior). Logic lives in
   // `buildAgentToolsDisplay` so it's unit-tested in isolation (the full page is
   // too heavy to mount for a pure merge).
-  const { allTools, unpublishedConnectedIds } = React.useMemo(
+  const { allTools, unpublishedConnectedIds, hiddenConnectedIds } = React.useMemo(
     () => buildAgentToolsDisplay(platformTools, localAgentTools),
     [platformTools, localAgentTools],
   );
@@ -774,8 +812,8 @@ export default function AgentDetailPage() {
   const getFilteredTools = useCallback(() => {
     let filtered = allTools;
 
-    if (toolSearchQuery) {
-      const query = toolSearchQuery.toLowerCase();
+    const query = toolSearchQuery.trim().toLowerCase();
+    if (query) {
       filtered = filtered.filter(
         (tool) =>
           tool.name.toLowerCase().includes(query) ||
@@ -798,6 +836,11 @@ export default function AgentDetailPage() {
   }, [allTools, toolSearchQuery, toolFilterType, localAgentTools]);
 
   const filteredTools = getFilteredTools();
+  const showSeeAllToolsPrompt = shouldShowSeeAllToolsPrompt({
+    filterType: toolFilterType,
+    connectedToolCount: localAgentTools.length,
+    searchQuery: toolSearchQuery,
+  });
 
   if (agentError) {
     return (
@@ -1670,12 +1713,12 @@ export default function AgentDetailPage() {
                   <span>Tool Configuration</span>
                 </CardTitle>
                 <CardDescription>
-                  Configure platform tools for {agent.name}
+                  Configure tools available to your organization for {agent.name}
                 </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="p-5 pt-0">
-              {toolsLoading ? (
+              {toolsLoading || agentToolsLoading || !toolFilterReady ? (
                 <div className="flex flex-col items-center justify-center py-12 space-y-4">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   <p className="text-sm text-muted-foreground">
@@ -1716,8 +1759,20 @@ export default function AgentDetailPage() {
                     <div className="text-center py-12 bg-muted/20 rounded-lg">
                       <Wrench className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
                       <p className="text-muted-foreground">
-                        No tools match your search
+                        {showSeeAllToolsPrompt
+                          ? "No tools are connected to this agent yet"
+                          : "No tools match your search"}
                       </p>
+                      {showSeeAllToolsPrompt && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-4"
+                          onClick={() => setToolFilterType("all")}
+                        >
+                          See all tools
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1769,6 +1824,7 @@ export default function AgentDetailPage() {
                             disabled={!canEdit}
                             requiresApiKey={requiresApiKey}
                             isUnpublished={unpublishedConnectedIds.has(tool.id)}
+                            isHiddenForOrganization={hiddenConnectedIds.has(tool.id)}
                             premiumBlocked={premiumToolsBlocked}
                           />
                         );

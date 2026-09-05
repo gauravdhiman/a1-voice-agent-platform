@@ -5,6 +5,24 @@ import { Search, Filter } from "lucide-react";
 
 export type ToolFilterType = "all" | "connected" | "not_connected";
 
+export const DEFAULT_TOOL_FILTER_TYPE: ToolFilterType = "connected";
+
+export function shouldShowSeeAllToolsPrompt({
+  filterType,
+  connectedToolCount,
+  searchQuery,
+}: {
+  filterType: ToolFilterType;
+  connectedToolCount: number;
+  searchQuery: string;
+}): boolean {
+  return (
+    filterType === "connected" &&
+    connectedToolCount === 0 &&
+    searchQuery.trim().length === 0
+  );
+}
+
 export interface ToolFiltersProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;

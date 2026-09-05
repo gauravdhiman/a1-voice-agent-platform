@@ -1,7 +1,11 @@
 export { ToolCard } from "./tool-card";
 export type { ToolCardProps } from "./tool-card";
 
-export { ToolFilters } from "./tool-filters";
+export {
+  ToolFilters,
+  DEFAULT_TOOL_FILTER_TYPE,
+  shouldShowSeeAllToolsPrompt,
+} from "./tool-filters";
 export type { ToolFiltersProps, ToolFilterType } from "./tool-filters";
 
 export { ToolConfigDrawer } from "./tool-config-drawer";
