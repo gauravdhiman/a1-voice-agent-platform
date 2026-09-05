@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { VoiceAgent } from "@/types/agent";
+import { getAgentDetailHref } from "@/components/agents/agent-detail-tabs";
 import {
   Bot,
   Phone,
@@ -75,12 +76,12 @@ export function AgentCard({
     // Don't bubble to the card body click — the Edit button has its
     // own destination and we don't want to navigate twice.
     e.stopPropagation();
-    router.push(`/agents/${agent.id}?tab=persona`);
+    router.push(getAgentDetailHref(agent.id));
   };
 
   const handleConfigureTools = (e: React.MouseEvent) => {
     e.stopPropagation();
-    router.push(`/agents/${agent.id}?tab=tools`);
+    router.push(getAgentDetailHref(agent.id, "tools"));
   };
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -95,12 +96,12 @@ export function AgentCard({
   // inside <button> is invalid HTML and the browser silently moves
   // the inner ones out, breaking layout.
   const handleCardClick = () => {
-    router.push(`/agents/${agent.id}?tab=persona`);
+    router.push(getAgentDetailHref(agent.id));
   };
   const handleCardKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      router.push(`/agents/${agent.id}?tab=persona`);
+      router.push(getAgentDetailHref(agent.id));
     }
   };
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AGENT_DETAIL_TABS,
+  getAgentDetailHref,
   getAgentDetailTabs,
   normalizeAgentDetailTab,
   shouldShowAgentRecordingsTab,
@@ -36,6 +37,14 @@ describe("agent detail tabs", () => {
 
   it("keeps old properties links pointed at the Persona tab", () => {
     expect(normalizeAgentDetailTab("properties")).toBe("persona");
+  });
+
+  it("uses nested routes for feature-heavy detail tabs", () => {
+    expect(getAgentDetailHref("agent-1")).toBe("/agents/agent-1");
+    expect(getAgentDetailHref("agent-1", "persona")).toBe("/agents/agent-1");
+    expect(getAgentDetailHref("agent-1", "tools")).toBe(
+      "/agents/agent-1/tools",
+    );
   });
 
   it("falls back to Persona for missing or unknown tab values", () => {

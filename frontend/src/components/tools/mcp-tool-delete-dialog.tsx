@@ -9,6 +9,7 @@ import {
   useDeletePlatformTool,
 } from "@/hooks/use-agent-queries";
 import type { PlatformTool, PlatformToolUsageAgent } from "@/types/agent";
+import { getAgentDetailHref } from "@/components/agents/agent-detail-tabs";
 
 /**
  * McpToolDeleteDialog — type-to-confirm delete wrapper for an MCP platform
@@ -18,7 +19,7 @@ import type { PlatformTool, PlatformToolUsageAgent } from "@/types/agent";
  * list of agents currently using the tool (via `usePlatformToolUsage`):
  *  - In use: `warnings` carries the irreversible-action summary lines, and
  *    `extraContent` renders the affected agents as links to each agent's Tools
- *    tab (`/agents/{agentId}?tab=tools`) so the platform admin can navigate
+ *    tab (`/agents/{agentId}/tools`) so the platform admin can navigate
  *    directly to review an agent before force-deleting. Agent names are links,
  *    not plain text, to make that review path one click away.
  *  - Not in use: no warnings and no extra content — the type-to-confirm gate
@@ -46,8 +47,8 @@ export interface McpToolDeleteDialogProps {
 /**
  * Render the affected-agents list as navigable links to each agent's Tools tab.
  *
- * The agent page reads `?tab=tools` on mount (`agents/[agentId]/page.tsx`), so a
- * link to `/agents/{agentId}?tab=tools` lands the admin directly on the Tools
+ * The agent tools route (`agents/[agentId]/tools/page.tsx`) lands the admin
+ * directly on the Tools
  * tab where they can review the attachment before force-deleting. Links open in
  * a NEW tab (`target="_blank"`) so the delete dialog stays open underneath —
  * the admin reviews the agent, closes the tab, and returns to confirm or cancel
@@ -65,7 +66,7 @@ function AffectedAgentsList({ agents }: { agents: PlatformToolUsageAgent[] }) {
           <li key={a.agent_id} className="flex items-center gap-1.5">
             <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
             <Link
-              href={`/agents/${a.agent_id}?tab=tools`}
+              href={getAgentDetailHref(a.agent_id, "tools")}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline underline-offset-2 hover:text-primary/80 break-all"
@@ -118,7 +119,9 @@ export function McpToolDeleteDialog({
       itemName={tool?.name ?? ""}
       itemType="MCP Server"
       warnings={warnings}
-      extraContent={count > 0 ? <AffectedAgentsList agents={agents} /> : undefined}
+      extraContent={
+        count > 0 ? <AffectedAgentsList agents={agents} /> : undefined
+      }
       onDelete={handleDelete}
     />
   );
