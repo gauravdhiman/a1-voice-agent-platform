@@ -2,7 +2,15 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { initAnalytics, trackPageview } from "@/lib/analytics/posthog";
+
+type AnalyticsModule = typeof import("@/lib/analytics/posthog");
+
+let analyticsModulePromise: Promise<AnalyticsModule> | null = null;
+
+function loadAnalytics(): Promise<AnalyticsModule> {
+  analyticsModulePromise ??= import("@/lib/analytics/posthog");
+  return analyticsModulePromise;
+}
 
 interface AnalyticsProviderProps {
   children: React.ReactNode;
@@ -16,14 +24,17 @@ interface AnalyticsProviderProps {
  */
 export function AnalyticsProvider({ children }: AnalyticsProviderProps) {
   const pathname = usePathname();
+  const analyticsEnabled = Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
 
   useEffect(() => {
-    initAnalytics();
-  }, []);
+    if (!analyticsEnabled) return;
+    void loadAnalytics().then(({ initAnalytics }) => initAnalytics());
+  }, [analyticsEnabled]);
 
   useEffect(() => {
-    if (pathname) trackPageview(pathname);
-  }, [pathname]);
+    if (!analyticsEnabled || !pathname) return;
+    void loadAnalytics().then(({ trackPageview }) => trackPageview(pathname));
+  }, [analyticsEnabled, pathname]);
 
   return <>{children}</>;
 }

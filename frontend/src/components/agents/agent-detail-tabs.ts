@@ -20,6 +20,21 @@ const STANDARD_AGENT_DETAIL_TABS = AGENT_DETAIL_TABS.filter(
 export type AgentDetailTab = (typeof AGENT_DETAIL_TABS)[number];
 
 /**
+ * Builds the canonical URL for an agent detail tab.
+ *
+ * Persona remains the base route for backwards compatibility with existing
+ * links. The other tabs use nested routes so Next.js can compile their
+ * feature-heavy client code independently instead of loading every tab into
+ * one development route.
+ */
+export function getAgentDetailHref(
+  agentId: string,
+  tab: AgentDetailTab = "persona",
+): string {
+  return tab === "persona" ? `/agents/${agentId}` : `/agents/${agentId}/${tab}`;
+}
+
+/**
  * Returns the tabs available for an agent based on its recording setting.
  *
  * @param callRecordingEnabled - Whether this agent has call recording enabled.

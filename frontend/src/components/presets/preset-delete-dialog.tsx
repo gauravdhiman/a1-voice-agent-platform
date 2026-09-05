@@ -4,11 +4,9 @@ import React from "react";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
-import {
-  usePresetUsage,
-  useDeletePreset,
-} from "@/hooks/use-preset-queries";
+import { usePresetUsage, useDeletePreset } from "@/hooks/use-preset-queries";
 import type { Preset, PresetUsageAgent } from "@/types/preset";
+import { getAgentDetailHref } from "@/components/agents/agent-detail-tabs";
 
 /**
  * PresetDeleteDialog — type-to-confirm delete wrapper for a voice-engine preset.
@@ -17,7 +15,7 @@ import type { Preset, PresetUsageAgent } from "@/types/preset";
  * list of agents currently using the preset (via `usePresetUsage`):
  *  - In use: `warnings` carries the irreversible-action summary lines, and
  *    `extraContent` renders the affected agents as links to each agent's
- *    Settings tab (`/agents/{agentId}?tab=settings`) — where the voice profile
+ *    Settings tab (`/agents/{agentId}/settings`) — where the voice profile
  *    picker lives — so the platform admin can navigate directly to review an
  *    agent before force-deleting. Agent names are links, not plain text, to
  *    make that review path one click away.
@@ -60,7 +58,7 @@ function AffectedAgentsList({ agents }: { agents: PresetUsageAgent[] }) {
           <li key={a.id} className="flex items-center gap-1.5">
             <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
             <Link
-              href={`/agents/${a.id}?tab=settings`}
+              href={getAgentDetailHref(a.id, "settings")}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline underline-offset-2 hover:text-primary/80 break-all"
@@ -116,7 +114,9 @@ export function PresetDeleteDialog({
       itemName={preset?.name ?? ""}
       itemType="Voice Preset"
       warnings={warnings}
-      extraContent={count > 0 ? <AffectedAgentsList agents={agents} /> : undefined}
+      extraContent={
+        count > 0 ? <AffectedAgentsList agents={agents} /> : undefined
+      }
       onDelete={handleDelete}
     />
   );

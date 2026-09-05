@@ -7,7 +7,6 @@
 
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { OrganizationProvider } from "@/contexts/organization-context";
@@ -38,9 +37,6 @@ export function Providers({ children }: ProvidersProps) {
             <TooltipProvider>
               <AnalyticsProvider>
                 {children}
-                {process.env.NODE_ENV === "development" && (
-                  <ReactQueryDevtools initialIsOpen={false} />
-                )}
                 <Toaster />
               </AnalyticsProvider>
             </TooltipProvider>

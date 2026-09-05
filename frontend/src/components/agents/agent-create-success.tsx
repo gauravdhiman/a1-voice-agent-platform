@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CheckCircle2, Plug, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getAgentDetailHref } from "@/components/agents/agent-detail-tabs";
 
 export interface AgentCreateSuccessProps {
   /** Newly created agent id */
@@ -21,9 +22,9 @@ export function AgentCreateSuccess({
   agentId,
   agentName,
 }: AgentCreateSuccessProps) {
-  const skillsHref = `/agents/${agentId}?tab=skills`;
-  const toolsHref = `/agents/${agentId}?tab=tools`;
-  const agentHref = `/agents/${agentId}`;
+  const skillsHref = getAgentDetailHref(agentId, "skills");
+  const toolsHref = getAgentDetailHref(agentId, "tools");
+  const agentHref = getAgentDetailHref(agentId);
 
   return (
     <div className="space-y-6 text-center" data-testid="agent-create-success">
@@ -32,9 +33,7 @@ export function AgentCreateSuccess({
       </div>
 
       <div className="space-y-2">
-        <h3 className="text-xl font-semibold">
-          {agentName} is ready
-        </h3>
+        <h3 className="text-xl font-semibold">{agentName} is ready</h3>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
           Your agent was created successfully. Next, add knowledge and connect
           business tools so it can answer questions and take action on calls.

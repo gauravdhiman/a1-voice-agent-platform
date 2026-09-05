@@ -97,11 +97,7 @@ const FIXTURE_AGENT_OTHER_ORG = {
 
 function makeWrapper(queryClient: QueryClient) {
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      children,
-    );
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
 describe("/agents page (N1 permission-aware UI)", () => {
@@ -111,10 +107,12 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // (org-1). The per-agent canActOnAgent check needs a real
     // user.hasRole to compute per-agent flags. Tests that exercise
     // a different role shape override `mockHasRole` directly.
-    mockHasRole.mockReset().mockImplementation(
-      (role: string, orgId?: string) =>
-        role === "org_admin" && orgId === "org-1",
-    );
+    mockHasRole
+      .mockReset()
+      .mockImplementation(
+        (role: string, orgId?: string) =>
+          role === "org_admin" && orgId === "org-1",
+      );
     mockUseAuth.mockReturnValue({ user: { hasRole: mockHasRole } });
     mockUseOrganization.mockReturnValue({
       organizations: [{ id: "org-1", name: "Acme" }],
@@ -438,9 +436,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
 
     render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
 
-    expect(
-      screen.getByRole("button", { name: /^edit$/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^tools$/i }),
     ).toBeInTheDocument();
@@ -540,10 +536,12 @@ describe("/agents page (N1 permission-aware UI)", () => {
     // admin viewing an org-2 agent must NOT see Edit or Tools for
     // that card. List view renders Edit + Tools as labeled buttons,
     // so we can count them by accessible name.
-    mockHasRole.mockReset().mockImplementation(
-      (role: string, orgId?: string) =>
-        role === "org_admin" && orgId === "org-1",
-    );
+    mockHasRole
+      .mockReset()
+      .mockImplementation(
+        (role: string, orgId?: string) =>
+          role === "org_admin" && orgId === "org-1",
+      );
     mockUseMyAgents.mockReturnValue({
       data: [FIXTURE_AGENT, FIXTURE_AGENT_OTHER_ORG],
       isLoading: false,
@@ -600,7 +598,7 @@ describe("/agents page (N1 permission-aware UI)", () => {
     const cardButton = screen.getByRole("button", { name: /fixture agent/i });
     fireEvent.click(cardButton);
 
-    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=persona");
+    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1");
   });
 
   it("does not render an agent from another organization for an org user", () => {
@@ -653,6 +651,6 @@ describe("/agents page (N1 permission-aware UI)", () => {
     const editButton = screen.getByRole("button", { name: /^edit$/i });
     fireEvent.click(editButton);
 
-    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1?tab=persona");
+    expect(mockPush).toHaveBeenCalledWith("/agents/agent-1");
   });
 });
