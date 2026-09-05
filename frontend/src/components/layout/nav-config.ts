@@ -135,6 +135,14 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       requiredPermission: "call_log:read",
       section: "workspace",
     },
+    {
+      name: "Callbacks",
+      href: "/callbacks",
+      tourId: "callbacks",
+      icon: Bell,
+      requiredPermission: null,
+      section: "workspace",
+    },
   ],
   org_admin: [
     {

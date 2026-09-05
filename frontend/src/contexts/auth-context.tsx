@@ -54,13 +54,14 @@ const authFailureCounter = meter?.createCounter("auth_failures", {
 /**
  * Processes an organization invitation after a user authenticates.
  *
- * Invitation processing is intentionally best effort. Authentication has
- * already succeeded at this point, so a temporary invitation API failure
- * should not prevent the user from reaching the application.
+ * Invitation processing is part of the authentication contract. A user who
+ * followed an invitation must not be silently routed into a personal
+ * organization when claiming the invitation fails.
  *
  * @param invitationToken Invitation token supplied by the sign-up URL.
  * @param userId Supabase user ID that should receive the invitation.
- * @returns Promise that resolves after processing or logging the failure.
+ * @returns Promise that resolves after processing the invitation.
+ * @throws Error when the invitation cannot be claimed.
  */
 async function processInvitationForUser(
   invitationToken: string | undefined,
@@ -74,34 +75,26 @@ async function processInvitationForUser(
     const result = await authService.processInvitation(invitationToken, userId);
 
     if (!result.success) {
-      console.warn("Failed to process invitation:", result.error);
-      // Backend OAuth may have already accepted the invite; treat that as
-      // success for the soft welcome toast only.
-      const alreadyAccepted =
-        typeof result.error === "string" &&
-        result.error.toLowerCase().includes("already accepted");
-      if (alreadyAccepted) {
-        markInviteWelcomePending();
-      }
-    } else {
-      console.log("Invitation processed successfully:", result.data);
-      const data =
-        result.data && typeof result.data === "object"
-          ? (result.data as {
-              organization_name?: unknown;
-              organization_id?: unknown;
-            })
-          : null;
-      const organizationName =
-        typeof data?.organization_name === "string"
-          ? data.organization_name
-          : null;
-      const organizationId =
-        typeof data?.organization_id === "string" ? data.organization_id : null;
-      markInviteWelcomePending({ organizationName, organizationId });
+      throw new Error(result.error || "Failed to process invitation.");
     }
+
+    const data =
+      result.data && typeof result.data === "object"
+        ? (result.data as {
+            organization_name?: unknown;
+            organization_id?: unknown;
+          })
+        : null;
+    const organizationName =
+      typeof data?.organization_name === "string"
+        ? data.organization_name
+        : null;
+    const organizationId =
+      typeof data?.organization_id === "string" ? data.organization_id : null;
+    markInviteWelcomePending({ organizationName, organizationId });
   } catch (error) {
-    console.warn("Error processing invitation:", error);
+    console.warn("Invitation processing failed.");
+    throw error;
   }
 }
 

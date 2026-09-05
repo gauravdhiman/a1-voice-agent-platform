@@ -182,7 +182,7 @@ export function SignUpForm() {
         if (emailVerificationRequired) {
           if (invitationToken) {
             setSuccess(
-              "Account created! Please check your email for verification. You will be added to the organization after email confirmation.",
+              "Account created! Please check your email for verification. After you verify, sign in to access the invited organization.",
             );
           } else {
             setSuccess(

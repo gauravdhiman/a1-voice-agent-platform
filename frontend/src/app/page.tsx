@@ -252,7 +252,7 @@ export default function LandingPage() {
                         </div>
                         <div className="mt-1.5 flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          Confirmation text sent to Maria
+                          Confirmation recorded in the demo outcome
                         </div>
                       </div>
                     </div>
@@ -352,8 +352,8 @@ export default function LandingPage() {
               </h2>
               <p className="max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
                 If your business takes calls, {SITE_NAME} can answer them for
-                you - booking appointments, answering questions, and following
-                up with customers automatically.
+                you - booking appointments, answering questions, and capturing
+                follow-up requests for your team.
               </p>
             </div>
 
@@ -492,14 +492,14 @@ export default function LandingPage() {
                 {
                   title: "Follow up & win customers back",
                   description:
-                    "Automatic reminders and recall calls that bring customers back to your door.",
+                    "Capture callback requests and send your team the context they need to follow up.",
                   icon: BellRing,
                   gradient: "from-pink-500 to-rose-500",
                 },
                 {
                   title: "Never leaves a caller hanging",
                   description:
-                    "When a call needs a person, your agent offers a callback and alerts your team instantly - with the full context.",
+                    "When a call needs a person, your agent offers a callback and sends your team the full context.",
                   icon: UserCheck,
                   gradient: "from-indigo-500 to-blue-500",
                 },

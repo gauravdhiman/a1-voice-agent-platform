@@ -16,7 +16,7 @@ const content: IndustryPageContent = {
   slug: "hvac",
   headline: "Every service call answered, every job captured",
   subhead:
-    "24x7 AI picks up when your techs are on roofs and your office is closed — triages the issue, books the job, and flags true emergencies to your on-call line.",
+    "24x7 AI picks up when your techs are on roofs and your office is closed — triages the issue, books the job, and flags true emergencies to your team.",
   pains: [
     "Emergency calls at 9pm go to voicemail while the customer calls your competitor.",
     "Your dispatcher spends the day re-typing requests instead of routing techs.",
@@ -36,7 +36,7 @@ const content: IndustryPageContent = {
     {
       title: "Jobs booked to your calendar",
       description:
-        "Offers real windows, confirms the visit, and sends the customer a confirmation text.",
+        "Offers real windows, confirms the visit with the caller, and records the booking in your calendar.",
     },
     {
       title: "Callbacks, never dead ends",
@@ -52,12 +52,12 @@ const content: IndustryPageContent = {
     {
       question: "Can it tell an emergency from a routine call?",
       answer:
-        "Yes — you define the triage rules during setup (no-heat, gas smell, water leaks), and the agent follows them on every call, escalating emergencies to your on-call number.",
+        "Yes — you define the triage rules during setup (no-heat, gas smell, water leaks), and the agent follows them on every call, flagging emergencies for your team.",
     },
     {
       question: "What happens when a caller needs a real person?",
       answer:
-        "The agent offers to have your team call back, captures the number and reason, and alerts you instantly with the full context. Nothing falls into voicemail.",
+        "The agent offers to have your team call back, captures the number and reason, and sends your team the full context. Nothing falls into voicemail.",
     },
     {
       question: "How long does setup take?",

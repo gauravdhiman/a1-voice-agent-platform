@@ -228,44 +228,62 @@ class AuthService:
             joined_organization_id = None
             joined_organization_name = None
             if request.invitation_token:
-                invitation, invite_error = await organization_service.process_invitation(
-                    request.invitation_token,
-                    UUID(str(user.id)),
+                invitation, invite_error = (
+                    await organization_service.process_invitation(
+                        request.invitation_token,
+                        UUID(str(user.id)),
+                        user.email or request.email,
+                    )
                 )
                 if invite_error:
-                    logging.warning(
+                    logging.error(
                         "Invitation processing failed during signup for %s: %s",
                         user.id,
                         invite_error,
+                    )
+                    current_span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, "invitation_error")
+                    )
+                    return None, HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={
+                            "code": "invitation_error",
+                            "message": invite_error,
+                        },
                     )
                 elif invitation:
                     joined_organization_id = invitation.organization_id
                     joined_organization_name = invitation.organization_name
 
-            org_name = (
-                f"{request.first_name}'s Organization" if request.first_name else None
-            )
-            try:
-                org_id, org_error = await ensure_default_organization_for_user(
-                    UUID(str(user.id)),
-                    user.email or request.email,
-                    organization_name=org_name,
+            if not joined_organization_id:
+                org_name = (
+                    f"{request.first_name}'s Organization"
+                    if request.first_name
+                    else None
                 )
-                if org_error:
-                    logging.warning(
-                        "Could not provision organization: %s", org_error
+                try:
+                    org_id, org_error = await ensure_default_organization_for_user(
+                        UUID(str(user.id)),
+                        user.email or request.email,
+                        organization_name=org_name,
                     )
-                elif org_id:
-                    logging.info(
-                        "Provisioned organization %s for user %s",
-                        org_id,
-                        user.id,
+                    if org_error:
+                        logging.warning(
+                            "Could not provision organization: %s", org_error
+                        )
+                    elif org_id:
+                        logging.info(
+                            "Provisioned organization %s for user %s",
+                            org_id,
+                            user.id,
+                        )
+                        current_span.set_attribute("role.assigned", True)
+                        current_span.set_attribute("organization.id", str(org_id))
+                except Exception as e:
+                    logging.error("Error provisioning organization", exc_info=True)
+                    current_span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, str(e))
                     )
-                    current_span.set_attribute("role.assigned", True)
-                    current_span.set_attribute("organization.id", str(org_id))
-            except Exception as e:
-                logging.error(f"Error provisioning organization: {e}")
-                current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
 
             signup_method = "invitation" if request.invitation_token else "email"
             await signup_notifier.notify_new_user(

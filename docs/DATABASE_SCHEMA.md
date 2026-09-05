@@ -206,6 +206,13 @@ Stores organization membership invitations sent to users.
 - `idx_invitations_status`
 - `idx_invitations_expires_at`
 
+Invitation claiming is performed by the service-role-only
+`claim_invitation(text, uuid, text)` PostgreSQL function. The function locks
+the invitation row, matches the normalized invited email, requires a pending
+and unexpired invitation, inserts an idempotent `user_roles` membership, and
+marks the invitation accepted in one transaction. Repeated claims by the same
+user are safe; a failed claim does not fall back to a personal organization.
+
 ---
 
 ## Voice Agent Tables

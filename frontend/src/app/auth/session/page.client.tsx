@@ -116,8 +116,12 @@ export default function OAuthSessionPage() {
               invitationToken,
               user.id,
             );
+            if (!inviteResult.success) {
+              throw new Error(
+                inviteResult.error || "Failed to process invitation.",
+              );
+            }
             if (
-              inviteResult.success &&
               inviteResult.data &&
               typeof inviteResult.data === "object"
             ) {

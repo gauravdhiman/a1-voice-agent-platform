@@ -50,52 +50,44 @@ function OAuthCallbackContent() {
       const invitationToken = searchParams?.get("token");
       if (invitationToken && user) {
         try {
-          console.log(
-            "Processing invitation for user:",
-            user.id,
-            "with token:",
-            invitationToken,
-          );
           const result = await authService.processInvitation(
             invitationToken,
             user.id,
           );
           if (!result.success) {
-            console.warn("Failed to process invitation:", result.error);
-            setInvitationError(result.error || "Failed to process invitation");
-            // Don't throw error here - user can still sign up, invitation will be processed later
-          } else {
-            console.log("Invitation processed successfully:", result.data);
-            const { markInviteWelcomePending } = await import(
-              "@/lib/invite-welcome"
-            );
-            const data =
-              result.data && typeof result.data === "object"
-                ? (result.data as {
-                    organization_name?: unknown;
-                    organization_id?: unknown;
-                  })
-                : null;
-            markInviteWelcomePending({
-              organizationName:
-                typeof data?.organization_name === "string"
-                  ? data.organization_name
-                  : null,
-              organizationId:
-                typeof data?.organization_id === "string"
-                  ? data.organization_id
-                  : null,
-            });
-            setInvitationProcessed(true);
+            throw new Error(result.error || "Failed to process invitation.");
           }
+
+          const { markInviteWelcomePending } = await import(
+            "@/lib/invite-welcome"
+          );
+          const data =
+            result.data && typeof result.data === "object"
+              ? (result.data as {
+                  organization_name?: unknown;
+                  organization_id?: unknown;
+                })
+              : null;
+          markInviteWelcomePending({
+            organizationName:
+              typeof data?.organization_name === "string"
+                ? data.organization_name
+                : null,
+            organizationId:
+              typeof data?.organization_id === "string"
+                ? data.organization_id
+                : null,
+          });
+          setInvitationProcessed(true);
         } catch (inviteError) {
-          console.warn("Error processing invitation:", inviteError);
           const errorMessage =
             inviteError instanceof Error
               ? inviteError.message
               : "Failed to process invitation";
           setInvitationError(errorMessage);
-          // Don't throw error - user can still sign up
+          setError(errorMessage);
+          setIsProcessing(false);
+          return;
         }
       }
 
