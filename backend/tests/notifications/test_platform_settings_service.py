@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
-
 from src.notifications.platform_settings_models import (
     PLATFORM_SETTINGS_SINGLETON_ID,
     PlatformNotificationSettingsUpdate,
@@ -21,9 +20,7 @@ ADMIN_ID = UUID("11111111-1111-1111-1111-111111111111")
 
 @pytest.fixture
 def settings_service(mock_supabase_client):
-    with patch(
-        "src.notifications.platform_settings_service.supabase_config"
-    ) as cfg:
+    with patch("src.notifications.platform_settings_service.supabase_config") as cfg:
         cfg.client = mock_supabase_client
         cfg.is_configured.return_value = True
         yield PlatformNotificationSettingsService()
@@ -114,6 +111,66 @@ class TestPlatformNotificationSettingsService:
         assert await settings_service.is_email_verification_required() is False
         assert verification_sender_configured("verify@example.com", None) is False
 
+    @pytest.mark.asyncio
+    async def test_update_settings_clears_explicitly_null_fields(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row(
+                verification_from_email=None,
+                verification_from_name=None,
+                telegram_chat_id=None,
+                telegram_bot_token_encrypted=None,
+            )
+        )
+
+        payload = PlatformNotificationSettingsUpdate(
+            verification_from_email=None,
+            verification_from_name=None,
+            telegram_chat_id=None,
+            telegram_bot_token=None,
+        )
+
+        result = await settings_service.update_settings(payload, ADMIN_ID)
+
+        update_data = table_mock.update.call_args.args[0]
+        assert update_data["verification_from_email"] is None
+        assert update_data["verification_from_name"] is None
+        assert update_data["telegram_chat_id"] is None
+        assert update_data["telegram_bot_token_encrypted"] is None
+        assert result.email_verification_active is False
+
+    @pytest.mark.asyncio
+    async def test_update_settings_leaves_omitted_optional_fields_unchanged(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
+        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=_settings_row()
+        )
+
+        payload = PlatformNotificationSettingsUpdate(
+            telegram_notifications_enabled=False,
+        )
+
+        await settings_service.update_settings(payload, ADMIN_ID)
+
+        update_data = table_mock.update.call_args.args[0]
+        assert "verification_from_email" not in update_data
+        assert "verification_from_name" not in update_data
+        assert "telegram_chat_id" not in update_data
+        assert "telegram_bot_token_encrypted" not in update_data
+        assert update_data["telegram_notifications_enabled"] is False
+
 
 class TestExtractTelegramBotId:
     def test_extracts_numeric_prefix(self) -> None:
@@ -128,7 +185,9 @@ class TestExtractTelegramBotId:
     ):
         table_mock = MagicMock()
         mock_supabase_client.table.return_value = table_mock
-        table_mock.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        table_mock.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
         table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
             data=_settings_row(telegram_bot_token_encrypted="new-encrypted")
         )
