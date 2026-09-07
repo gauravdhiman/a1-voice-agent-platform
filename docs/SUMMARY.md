@@ -125,6 +125,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 
 1. **[Observability Overview](02_features/observability/overview.md)** - OpenTelemetry implementation overview
 2. **[OpenTelemetry Implementation](02_core_systems/opentelemetry_implementation.md)** - OTEL implementation
+3. **[Production Observability, Monitoring, Traceability & Alerting Plan](05_operations/observability-monitoring-plan.md)** - Production assessment, tool selection, implementation roadmap, dashboards, alerts, runbooks, and verification
 
 ### Tools System
 
