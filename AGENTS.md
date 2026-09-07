@@ -550,6 +550,8 @@ PR and merge contract:
 - Give every PR a concise body with summary, impact, validation, and known
   limitations; verify it with `gh pr view --json title,body,baseRefName,headRefName`.
 - Keep merge defaults at `PR_TITLE` + `PR_BODY` for squash and regular merges.
+- Integrate shared branches through a reviewed pull request; do not create or
+  push local merge commits between `main`, release, or other shared branches.
 - For stacked PRs, document the dependency; after it merges, retarget to
   `main` and verify the diff before merging.
 

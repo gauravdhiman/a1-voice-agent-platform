@@ -1,7 +1,8 @@
-"""Tests for deterministic local worktree seed records."""
+"""Tests for deterministic local and release demo fixture records."""
 
+import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from backend.src.worktree_seed import (
     CALENDAR_DEMO_DISABLED_FUNCTIONS,
@@ -14,7 +15,9 @@ from backend.src.worktree_seed import (
     REGULAR_USER_EMAIL,
     STAGING_AGENT_ID,
     WORKTREE_TEST_PASSWORD,
+    build_public_demo_records,
     build_seed_records,
+    sync_public_demo_fixtures,
 )
 
 
@@ -181,6 +184,55 @@ def test_seed_contains_two_public_demo_workflows() -> None:
     assert "do not repeat the notice" in jordan_instructions
     assert "AI voice assistant" not in jordan["instructions_markdown"]
     assert records["retired_organization_ids"] == [LEGACY_HVAC_ORGANIZATION_ID]
+
+
+def test_release_demo_records_exclude_local_and_operator_state() -> None:
+    """Deployment sync cannot grant credits or overwrite runtime assignments."""
+    records = build_public_demo_records()
+
+    assert "accounts" not in records
+    assert (
+        not {
+            "credit_balance",
+            "admin_credit_balance",
+            "purchased_credit_balance",
+        }
+        & records["organization"].keys()
+    )
+    for agent in records["agents"]:
+        assert not {"phone_number", "preset_id", "is_published_on_public_page"} & (
+            agent.keys()
+        )
+    assert {agent["demo_slug"] for agent in records["agents"]} == {
+        "pleasant-pediatric-appointments",
+        "copper-ridge-service-request",
+    }
+
+
+def test_public_demo_sync_only_writes_code_owned_fixture_records() -> None:
+    """Release synchronization does not invoke local Auth-account setup."""
+    client = MagicMock()
+    supabase_module = SimpleNamespace(create_client=MagicMock(return_value=client))
+
+    with (
+        patch.dict(sys.modules, {"supabase": supabase_module}),
+        patch("backend.src.worktree_seed._upsert_organization") as upsert_org,
+        patch("backend.src.worktree_seed._retire_organizations") as retire_orgs,
+        patch("backend.src.worktree_seed._upsert_agent") as upsert_agent,
+        patch("backend.src.worktree_seed._ensure_agent_tools", return_value=[]),
+        patch("backend.src.worktree_seed._disable_agent_tools"),
+    ):
+        result = sync_public_demo_fixtures("https://demo.supabase.co", "service-key")
+
+    records = build_public_demo_records()
+    upsert_org.assert_called_once_with(client, records["organization"])
+    retire_orgs.assert_called_once_with(client, [LEGACY_HVAC_ORGANIZATION_ID])
+    assert upsert_agent.call_count == 2
+    assert result["demo_slugs"] == [
+        "pleasant-pediatric-appointments",
+        "copper-ridge-service-request",
+    ]
+    assert result["organization_id"] == DEMO_ORGANIZATION_ID
 
 
 def test_seed_limits_public_calendar_demo_to_new_booking_functions() -> None:
