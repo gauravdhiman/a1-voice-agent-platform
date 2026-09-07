@@ -8,7 +8,7 @@
 # Run it after merging to main and before manual production promotion.
 #
 # Usage:
-#   ./scripts/validate-staging.sh              # migrate + sync tools + restart local staging stack
+#   ./scripts/validate-staging.sh              # migrate + sync release data + restart local staging stack
 #   ./scripts/validate-staging.sh --no-start   # migrate + verify only (no Docker)
 #   ./scripts/validate-staging.sh --migrate-only
 #   ./scripts/validate-staging.sh --help
@@ -93,15 +93,19 @@ if [[ "$DO_VERIFY" == "true" ]]; then
   echo ""
 fi
 
-# 4. Materialize the code-owned native tool catalog from this release.
+# 4. Materialize the code-owned native tools and public demo fixture from this
+#    release. The demo sync is explicit and idempotent; it does not create
+#    local test accounts or grant staging credits.
 if [[ "$DO_START" == "true" ]]; then
-  echo "==> [4/5] Synchronizing native tools in staging..."
+  echo "==> [4/5] Synchronizing native tools and public demos in staging..."
   COMPOSE_PROJECT_NAME=247ai-staging \
     ENV_FILE="$ENV_FILE" \
-    "${ROOT}/scripts/deploy/sync-native-tools.sh"
+    "${ROOT}/scripts/deploy/sync-release-fixtures.sh" \
+    --env-file "$ENV_FILE" \
+    --project-name 247ai-staging
   echo ""
 else
-  echo "==> [4/5] Skipped native tool synchronization (--migrate-only)."
+  echo "==> [4/5] Skipped release-data synchronization (--migrate-only)."
 fi
 
 # 5. Start local stack against staging (--env staging)

@@ -44,6 +44,30 @@ run_deployment_migrations() {
   ENV_FILE="$ENV_FILE" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"
 }
 
+run_release_fixture_sync() {
+  local deployment_environment compose_project
+  deployment_environment="$(
+    python3 "${ROOT}/scripts/deploy/read-env-cloud.py" "$ENV_FILE" ENVIRONMENT \
+      2>/dev/null || true
+  )"
+  deployment_environment="$(printf '%s' "$deployment_environment" | tr '[:upper:]' '[:lower:]')"
+  case "$deployment_environment" in
+    production) compose_project="247ai-production" ;;
+    staging) compose_project="247ai-staging" ;;
+    development) compose_project="247ai-development" ;;
+    *)
+      echo "ENVIRONMENT in $ENV_FILE must be development, staging, or production" >&2
+      exit 1
+      ;;
+  esac
+
+  echo "==> Synchronizing native tools and public demos before GCP deployment..."
+  ENV_FILE="$ENV_FILE" COMPOSE_PROJECT_NAME="$compose_project" \
+    "${ROOT}/scripts/deploy/sync-release-fixtures.sh" \
+    --env-file "$ENV_FILE" \
+    --project-name "$compose_project"
+}
+
 validate_backend_environment() {
   echo "==> Validating backend deployment environment..."
   python3 scripts/deploy/gcp-env-from-cloud.py backend \
@@ -55,6 +79,7 @@ validate_backend_environment() {
 if [[ "$COMPONENT" == "all" || "$COMPONENT" == "backend" ]]; then
   validate_backend_environment
   run_deployment_migrations
+  run_release_fixture_sync
 fi
 
 gcloud config set project "$PROJECT_ID" >/dev/null

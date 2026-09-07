@@ -33,5 +33,7 @@
 
 ## Founder ops (no code)
 
-Mirror the `# Closing` rating line into the production demo agents'
-instructions (seed change covers local/dev fixtures only).
+The release bootstrap now mirrors the code-owned `# Closing` rating line into
+the staging and production demo agents. Founder setup is still required for
+the provider connections and destination resources described in the public
+demo runbook.

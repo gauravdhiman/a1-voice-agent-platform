@@ -87,17 +87,18 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | 2 | Cloud Run domain mappings (`api` + `www` + apex) | `./scripts/deploy.sh domains` |
 | 3 | Cloudflare DNS (`api`, `www`, apex, and `voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
-| 5 | Production DB migrations + phone-number data verification | Required migration job in the protected `Promote to production` workflow; manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` |
+| 5 | Production DB migrations + phone-number verification + public demo bootstrap | Migrations and verification run in the protected `Promote to production` workflow; the GCP backend deployment then syncs the native tools and both public demos. Manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` and an approved GCP/backend deployment. |
 | 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
 ## Scripts and artifacts
 
 | Path | Purpose |
 |------|---------|
-| **`scripts/validate-staging.sh`** | Local staging validator (migrate + `start.sh --env staging` + health checks) |
+| **`scripts/validate-staging.sh`** | Local staging validator (migrate + release fixture sync + `start.sh --env staging` + health checks) |
 | **`scripts/deploy.sh`** | Single entry point for production |
 | `.env.prod.example` | Production env template |
 | `.env.staging.example` | Staging env template (local app + cloud DB) |
 | `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend to Cloud Run |
+| `scripts/deploy/sync-release-fixtures.sh` | Explicit bootstrap for native tools and the two public demo agents |
 | `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
 | `scripts/deploy/gcp-map-domains.sh` | Cloud Run domain mappings |
 | `scripts/deploy/run-alembic-cloud.sh` | Alembic against Supabase |
@@ -121,7 +122,10 @@ The protected production promotion job performs this sequence automatically:
 
 1. Run `./scripts/deploy.sh migrate` against the production database.
 2. Run `python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod`.
-3. Deploy Cloud Run only when both commands succeed.
+3. Deploy Cloud Run only when both commands succeed. The backend/GCP deploy
+   also runs the explicit release bootstrap, which materializes the native
+   tool catalog and both public demo agents before the new backend image is
+   published.
 
 Local staging validation performs the same compatibility, migration, and verifier
 sequence using `.env.staging` before starting the local stack (see

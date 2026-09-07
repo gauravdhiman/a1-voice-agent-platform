@@ -84,8 +84,9 @@ they land (with the PR number that closed them).
   demoed the wrong agent). Needs tuned instructions, tested booking
   flow, and evals — not a copy job → owner: **after 2 live verticals
   prove out**.
-- [ ] Mirror the `# Closing` rating line into production demo agents'
-  instructions → owner: **founder (config edit)**.
+- [x] Materialize the `# Closing` rating line in every environment's code-owned
+  demo agents → closed by the release fixture bootstrap. Provider connections
+  remain founder setup.
 - [ ] Vertical strategy stays 2-polished-over-5-thin until pilot data
   says otherwise → owner: **product decision, revisit post-pilots**.
 

@@ -295,9 +295,10 @@ The schema details and migration history are maintained in
 - `20260901000002_add_demo_email_outcome_action.py` (independent email actions
   in visitor outcome receipts)
 
-The isolated worktree stack seeds both showcase agents and their native tool
-configurations. The seeded demos use unlimited calls and a 15-minute cap. A
-deployed environment must configure Google OAuth credentials for the
+The isolated worktree stack and the explicit release bootstrap materialize both
+showcase agents and their native tool configurations. The seeded demos use
+unlimited calls and a 15-minute cap. A deployed environment must configure
+Google OAuth credentials for the
 appointment and lead demos, connect the relevant Google account to each agent,
 and set the lead agent's spreadsheet id plus its `Lead submissions` sheet
 ranges. The lead demo uses the focused Sheets action rather than the

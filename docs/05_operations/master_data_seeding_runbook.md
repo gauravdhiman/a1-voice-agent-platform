@@ -194,8 +194,8 @@ runbook as an explicitly approved bootstrap or release task instead.
 
 ### Shared staging shortcut
 
-The canonical shared-staging validator runs the narrower native-tool sync after
-the migration and before starting the local application:
+The canonical shared-staging validator runs the release bootstrap after the
+migration and before starting the local application:
 
 ```bash
 ./scripts/validate-staging.sh
@@ -203,9 +203,11 @@ the migration and before starting the local application:
 
 It materializes every native implementation currently present in the checked-
 out release under `platform_tools`, including new tools such as
-`Resend_email`. `--migrate-only` intentionally skips this Docker-backed seed;
-run `scripts/deploy/sync-native-tools.sh --env-file .env.staging` separately
-when a migration-only validation also needs to refresh the catalog.
+`Resend_email`, and creates or refreshes the two code-owned public demo agents.
+`--migrate-only` intentionally skips this Docker-backed bootstrap; run
+`scripts/deploy/sync-release-fixtures.sh --env-file .env.staging
+--project-name 247ai-staging` separately when a migration-only validation also
+needs to refresh release data.
 
 ## Production deployment pattern
 

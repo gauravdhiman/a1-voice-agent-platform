@@ -184,6 +184,9 @@ Staging rows are not a production source of truth.
   the apply command as a separately approved one-off release task.
 
 The shared-staging validator invokes the dedicated
-`scripts/deploy/sync-native-tools.sh` bootstrap after migrations. This keeps
+`scripts/deploy/sync-release-fixtures.sh` bootstrap after migrations. This keeps
 the regular application startup path read-only while ensuring the release
-candidate's native tools are materialized before staging smoke tests.
+candidate's native tools and public demo agents are materialized before
+staging smoke tests. The public demo portion uses an explicit field allowlist:
+it never copies local test accounts, credit balances, phone assignments, voice
+presets, or provider credentials.

@@ -157,9 +157,9 @@ python -m src.master_data.cli apply --plan /tmp/platform-tools-plan.json
 
 Review the generated plan before applying it. The normal local worktree
 launcher performs the same operation for its isolated database. The shared
-staging validator runs the narrower native-tool synchronization automatically
-after migration, while production remains a separately approved
-release/bootstrap operation.
+staging validator runs the release bootstrap automatically after migration,
+which synchronizes native tools and the public demo fixture, while production
+remains a separately approved release/bootstrap operation.
 
 No migration is required: routes use the existing `agent_tools.config` JSONB
 field. Do not copy route configuration or provider credentials between
