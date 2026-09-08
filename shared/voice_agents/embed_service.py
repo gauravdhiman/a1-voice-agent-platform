@@ -15,6 +15,7 @@ import jwt
 
 from shared.billing.voice_session_entitlement import DemoCallReservation
 from shared.config.settings import settings
+from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 from shared.voice_agents.voice_session_service import voice_session_service
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class EmbedService:
         domain: Optional[str],
         ip_address: Optional[str],
         demo_reservation: Optional[DemoCallReservation] = None,
+        source_url: Optional[str] = None,
     ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
         """Generate tokens for an embed-based browser voice call.
 
@@ -62,19 +64,28 @@ class EmbedService:
             domain: Domain that initiated the request (for validation/audit).
             ip_address: Visitor IP address (for tracking).
             demo_reservation: Optional one-time reservation for a demo call.
+            source_url: URL of the page that initiated the call, when available.
 
         Returns:
             Tuple of ``(embed_token, voice_token, ws_url, session_id)`` or
             ``(None, None, None, None)`` if generation failed.
         """
         try:
+            source_domain = normalize_domain(domain)
+            normalized_source_url = normalize_source_url(
+                source_url,
+                fallback=domain,
+            )
             visitor_id = f"embed_{embed_config_id}"
             voice_token, session_id = voice_session_service.create_session_token(
                 agent_id=agent_id,
                 user_id=visitor_id,
                 purpose="embed",
+                source_type="web_embed",
                 expires_in=self.embed_token_expiry,
                 session_id=(demo_reservation.session_id if demo_reservation else None),
+                source_url=normalized_source_url,
+                source_domain=source_domain,
                 demo_reservation_id=(
                     demo_reservation.reservation_id if demo_reservation else None
                 ),
@@ -89,7 +100,9 @@ class EmbedService:
                 "sub": embed_config_id,
                 "agent_id": agent_id,
                 "session_id": session_id,
-                "domain": domain,
+                "domain": source_domain,
+                "source_url": normalized_source_url,
+                "source_domain": source_domain,
                 "ip_address": ip_address,
                 "iat": datetime.now(timezone.utc),
                 "exp": datetime.now(timezone.utc) + self.embed_token_expiry,
@@ -137,8 +150,13 @@ class EmbedService:
             return False
 
         normalized_request = self._normalize_domain(request_domain)
+        if not normalized_request:
+            logger.warning("Embed request has an invalid domain: %s", request_domain)
+            return False
         for allowed in allowed_domains:
             normalized_allowed = self._normalize_domain(allowed)
+            if not normalized_allowed:
+                continue
             if normalized_request == normalized_allowed:
                 return True
             if normalized_request.endswith(f".{normalized_allowed}"):
@@ -151,15 +169,7 @@ class EmbedService:
 
     def _normalize_domain(self, domain: str) -> str:
         """Normalize a domain string for comparison."""
-        domain = domain.lower()
-        if "://" in domain:
-            domain = domain.split("://", 1)[1]
-        if domain.startswith("www."):
-            domain = domain[4:]
-        domain = domain.split("/", 1)[0]
-        if ":" in domain:
-            domain = domain.rsplit(":", 1)[0]
-        return domain
+        return normalize_domain(domain) or ""
 
     def check_rate_limit(
         self,

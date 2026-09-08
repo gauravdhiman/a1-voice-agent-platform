@@ -7,6 +7,7 @@ import pytest
 from src.call_tracking import (
     _bill_completed_call,
     end_call_tracking,
+    mark_call_answered,
     start_call_tracking,
 )
 
@@ -25,6 +26,9 @@ class _Query:
         return self
 
     def eq(self, *_args, **_kwargs):
+        return self
+
+    def in_(self, *_args, **_kwargs):
         return self
 
     def limit(self, *_args, **_kwargs):
@@ -138,6 +142,49 @@ async def test_start_call_tracking_reuses_existing_twilio_call_log():
 
     assert call_log_id == "existing-call-log"
     assert client.inserts == []
+
+
+@pytest.mark.asyncio
+async def test_start_call_tracking_persists_web_source_metadata():
+    """Browser session claims are copied into the unified call-log row."""
+    client = _Client()
+
+    from src import call_tracking
+
+    original_client = call_tracking.supabase_config._client
+    call_tracking.supabase_config._client = client
+    try:
+        await start_call_tracking(
+            session_id="web-session-1",
+            organization_id=client.organization_id,
+            agent_id=uuid4(),
+            source_type="web_embed",
+            source_url="https://www.example.com/support?private=1",
+            source_domain="www.example.com",
+        )
+    finally:
+        call_tracking.supabase_config._client = original_client
+
+    assert client.inserts[0]["source_type"] == "web_embed"
+    assert client.inserts[0]["source_url"] == "https://example.com/support"
+    assert client.inserts[0]["source_domain"] == "example.com"
+
+
+@pytest.mark.asyncio
+async def test_mark_call_answered_does_not_overwrite_finalization_contract():
+    """The runtime exposes an explicit answered state before finalization."""
+    client = _Client()
+
+    from src import call_tracking
+
+    original_client = call_tracking.supabase_config._client
+    call_tracking.supabase_config._client = client
+    try:
+        await mark_call_answered("existing-call-log")
+    finally:
+        call_tracking.supabase_config._client = original_client
+
+    assert client.updates[-1][1]["status"] == "answered"
 
 
 @pytest.mark.asyncio

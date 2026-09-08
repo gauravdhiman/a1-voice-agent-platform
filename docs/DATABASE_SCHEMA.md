@@ -593,7 +593,7 @@ Stores embed button configuration for voice agents, enabling them to be embedded
 | button_size          | VARCHAR(20)    | NOT NULL, DEFAULT 'medium'      | Size: small, medium, large                       |
 | button_position      | VARCHAR(20)    | NOT NULL, DEFAULT 'bottom-right'| Position on page (e.g., bottom-right, top-left)  |
 | button_style         | VARCHAR(20)    | NOT NULL, DEFAULT 'filled'      | Style: filled or outline                         |
-| allowed_domains      | ARRAY(TEXT)    | NULLABLE                        | Domains allowed to use embed (empty = all)       |
+| allowed_domains      | ARRAY(TEXT)    | NULLABLE                        | Canonical domains allowed to use embed (empty = all); subdomains are accepted |
 | custom_css           | TEXT           | NULLABLE                        | Custom CSS for button styling                    |
 | is_active            | BOOLEAN        | NOT NULL, DEFAULT TRUE          | Embed active status                              |
 | daily_call_limit     | INTEGER        | NOT NULL, DEFAULT 100           | Maximum calls per day                            |
@@ -602,6 +602,13 @@ Stores embed button configuration for voice agents, enabling them to be embedded
 
 **Foreign Keys**: `agent_id` → `voice_agents.id` (CASCADE)
 **RLS**: Enabled
+
+The public token endpoint validates the browser's top-level `Origin` (falling
+back to `Referer` where a browser omits `Origin`) against `allowed_domains`.
+The embed script requests the token from the host page before creating the
+platform iframe, so a configured domain cannot be bypassed by calling the
+iframe URL directly. The top-level page URL is sanitized and copied into the
+corresponding `call_logs` source metadata.
 **Unique Constraint**: `(agent_id)` - one config per agent
 
 ---
@@ -735,6 +742,9 @@ Tracks voice sessions for organization reporting and concurrent-call limits.
 | call_sid              | VARCHAR(100) | NOT NULL, UNIQUE                         | Provider/session identifier |
 | organization_id       | UUID         | NOT NULL, FK → organizations.id          | Owning organization |
 | agent_id              | UUID         | NULLABLE, FK → voice_agents.id           | Agent used by the call |
+| source_type           | VARCHAR(30)  | NULLABLE                                 | Stable source category: `phone`, `web_test`, `web_embed`, `web_demo`, or `web_public` |
+| source_url            | VARCHAR(2048) | NULLABLE                                | Sanitized HTTP(S) page URL for browser-originated calls; query and fragment removed |
+| source_domain         | VARCHAR(255) | NULLABLE                                 | Canonical hostname for the browser source |
 | status                | VARCHAR(50)  | NOT NULL, DEFAULT `initiated`            | Session status |
 | failure_code          | VARCHAR(100) | NULLABLE                                 | Stable, non-sensitive runtime failure classification (for example `model_reasoning_required`) |
 | failure_message       | VARCHAR(1000) | NULLABLE                                | Safe admin-facing explanation of the failure; raw provider diagnostics are not stored |
@@ -749,7 +759,8 @@ Tracks voice sessions for organization reporting and concurrent-call limits.
 | updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
 
 **Indexes**: organization, agent, created_at, status, credit_transaction_id,
-`ix_call_logs_failure_code`.
+`ix_call_logs_failure_code`, `ix_call_logs_source_type`,
+`ix_call_logs_source_domain`.
 
 Runtime failures are finalized as `status=failed` by voice-ws when Pipecat
 reports a pipeline error or the runner raises. Twilio status callbacks preserve
@@ -1881,6 +1892,7 @@ erDiagram
 77. `20260901000001` - Add the optional platform-admin-configured `voice_agents.demo_public_result_url` destination. The URL is returned only for successful actions in signed demo outcome receipts so the receipt can offer an external-result CTA without exposing it on the public landing page.
 78. `20260901000002` - Extend the service-role-only demo outcome receipt action allowlist with independent `email_delivery` actions for attached Gmail and Resend tools. The receipt stores only a safe provider/status summary and does not make provider tools call one another.
 79. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
+80. `20260906000001` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
 
 ---
 
@@ -2195,4 +2207,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-09-06

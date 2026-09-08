@@ -282,6 +282,7 @@ async def handle_twilio_incoming(request: Request):
                     agent_id=agent.id,
                     caller_number=from_number,
                     called_number=to_number,
+                    source_type="phone",
                     status="initiated",
                     started_at=datetime.now(timezone.utc),
                 )

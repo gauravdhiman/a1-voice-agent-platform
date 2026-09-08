@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
 from src.voice_agents.public_voice_messages import get_public_voice_session_error
 
@@ -22,11 +22,23 @@ from shared.billing.voice_session_entitlement import (
 )
 from shared.voice_agents.embed_service import embed_service
 from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.source_metadata import normalize_domain
 
 logger = logging.getLogger(__name__)
 
 # Create router without auth dependency
 embed_router = APIRouter(prefix="/api/v1/embed", tags=["Embed"])
+
+
+def _set_embed_cors_headers(response: Response, request: Request) -> None:
+    """Allow the requesting page to read a successful public embed response."""
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "content-type"
+    response.headers["Vary"] = "Origin"
 
 
 class PublicEmbedTokenResponse(BaseModel):
@@ -139,12 +151,19 @@ async def get_agent_info(
 async def generate_public_embed_token(
     agent_id: UUID,
     request: Request,
+    response: Response,
+    source_url: Optional[str] = Query(
+        None,
+        max_length=2048,
+        description="Page URL that initiated the embedded call",
+    ),
 ):
     """Generate a Pipecat voice session token for embed calls.
 
     This endpoint is called from the embeddable call button on external websites.
     It validates domain restrictions and rate limits before generating a token.
     """
+    _set_embed_cors_headers(response, request)
     # Get the agent
     agent, error = await voice_agent_service.get_agent_by_id(agent_id)
     if error:
@@ -180,7 +199,9 @@ async def generate_public_embed_token(
                 detail="Embed is not active",
             )
 
-        # Validate domain if restrictions are set
+        # Validate the browser request origin if restrictions are set. The
+        # embeddable script makes this request from the host page, so Origin is
+        # the authoritative value used for allowlisting.
         allowed_domains = embed_config.get("allowed_domains")
         if allowed_domains:
             origin = request.headers.get("origin", "")
@@ -250,15 +271,17 @@ async def generate_public_embed_token(
         ) from exc
 
     # Generate embed token
-    domain = request.headers.get("origin", "")
+    domain = request.headers.get("origin", "") or request.headers.get("referer", "")
+    source_domain = normalize_domain(domain)
     ip_address = request.client.host if request.client else None
 
     embed_token, voice_token, ws_url, session_id = embed_service.generate_embed_token(
         agent_id=str(agent_id),
         embed_config_id=str(embed_config["id"]),
-        domain=domain,
+        domain=source_domain or domain,
         ip_address=ip_address,
         demo_reservation=reservation,
+        source_url=source_url,
     )
 
     if not embed_token or not voice_token or not ws_url or not session_id:
@@ -273,7 +296,7 @@ async def generate_public_embed_token(
         voice_agent_service.supabase.table("embed_call_logs").insert(
             {
                 "embed_config_id": str(embed_config["id"]),
-                "domain": domain,
+                "domain": source_domain,
                 "ip_address": ip_address,
                 "user_agent": user_agent,
                 "status": "started",
@@ -292,3 +315,11 @@ async def generate_public_embed_token(
             reservation.max_call_duration_seconds if reservation else None
         ),
     )
+
+
+@embed_router.options("/agent/{agent_id}/token")
+async def handle_embed_token_options(request: Request, response: Response) -> Response:
+    """Handle browser preflight requests for the public embed token endpoint."""
+    response.status_code = status.HTTP_204_NO_CONTENT
+    _set_embed_cors_headers(response, request)
+    return response

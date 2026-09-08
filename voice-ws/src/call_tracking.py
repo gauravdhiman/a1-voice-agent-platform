@@ -12,6 +12,7 @@ from shared.billing.voice_call_metering import (
     calculate_voice_call_credits,
 )
 from shared.config import supabase_config
+from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,9 @@ async def start_call_tracking(
     call_sid: Optional[str] = None,
     organization_id: UUID,
     agent_id: UUID,
+    source_type: Optional[str] = None,
+    source_url: Optional[str] = None,
+    source_domain: Optional[str] = None,
 ) -> Optional[str]:
     """Insert an active call log row for a voice session.
 
@@ -32,6 +36,9 @@ async def start_call_tracking(
             second active row for the same call.
         organization_id: Owning organization UUID.
         agent_id: Voice agent UUID.
+        source_type: Stable call-log source type from the signed session token.
+        source_url: Sanitized web page URL from the signed session token.
+        source_domain: Sanitized web source hostname from the signed session token.
 
     Returns:
         Call log row id string, or None if tracking could not be persisted.
@@ -39,6 +46,18 @@ async def start_call_tracking(
     client = supabase_config.client
     if client is None:
         return None
+
+    normalized_source_url = normalize_source_url(source_url)
+    normalized_source_domain = normalize_domain(source_domain or normalized_source_url)
+    source_fields = {
+        key: value
+        for key, value in {
+            "source_type": source_type,
+            "source_url": normalized_source_url,
+            "source_domain": normalized_source_domain,
+        }.items()
+        if value is not None
+    }
 
     if call_sid:
         try:
@@ -50,7 +69,12 @@ async def start_call_tracking(
                 .execute()
             )
             if existing.data:
-                return str(existing.data[0]["id"])
+                existing_id = str(existing.data[0]["id"])
+                if source_fields:
+                    client.table("call_logs").update(source_fields).eq(
+                        "id", existing_id
+                    ).execute()
+                return existing_id
         except Exception:
             logger.exception(
                 "Failed to find existing call log for provider call_sid=%s",
@@ -68,6 +92,7 @@ async def start_call_tracking(
         "created_at": now,
         "updated_at": now,
     }
+    row.update(source_fields)
     try:
         result = client.table("call_logs").insert(row).execute()
         if result.data:
@@ -79,6 +104,25 @@ async def start_call_tracking(
             organization_id,
         )
     return None
+
+
+async def mark_call_answered(call_log_id: Optional[str]) -> None:
+    """Mark a connected voice session as answered without overwriting a final state."""
+    if not call_log_id:
+        return
+    client = supabase_config.client
+    if client is None:
+        return
+
+    try:
+        client.table("call_logs").update(
+            {
+                "status": "answered",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", call_log_id).in_("status", ["initiated", "ringing"]).execute()
+    except Exception:
+        logger.exception("Failed to mark call log id=%s as answered", call_log_id)
 
 
 async def end_call_tracking(

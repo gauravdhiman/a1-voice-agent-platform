@@ -22,6 +22,9 @@ const CALLS: CallLogsResponse = {
       agent_id: "agent-1",
       caller_number: "+15555550100",
       called_number: "+15555550101",
+      source_type: "web_embed",
+      source_url: "https://example.com/support",
+      source_domain: "example.com",
       status: "completed",
       duration: 125,
       credits_consumed: 12,
@@ -72,6 +75,8 @@ describe("CallLogList", () => {
     expect(screen.getAllByText("+15555550100").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2m 5s").length).toBeGreaterThan(0);
     expect(screen.getAllByText("12").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Web embed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("example.com/support").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("columnheader", { name: "Agent" }),
     ).not.toBeInTheDocument();

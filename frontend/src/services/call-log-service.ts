@@ -1,5 +1,13 @@
 import { apiClient } from "@/lib/api/client";
 
+/** Stable source categories recorded for each voice call. */
+export type CallSourceType =
+  | "phone"
+  | "web_test"
+  | "web_embed"
+  | "web_demo"
+  | "web_public";
+
 export interface CallLog {
   id: string;
   call_sid: string;
@@ -7,6 +15,9 @@ export interface CallLog {
   agent_id: string | null;
   caller_number: string | null;
   called_number: string | null;
+  source_type: CallSourceType | null;
+  source_url: string | null;
+  source_domain: string | null;
   status: string;
   failure_code?: string | null;
   failure_message?: string | null;
@@ -40,6 +51,7 @@ export interface CallAnalytics {
 export interface CallLogListParams {
   agent_id?: string;
   status?: string;
+  source_type?: CallSourceType;
   date_from?: string;
   date_to?: string;
   recording_only?: boolean;
@@ -57,6 +69,7 @@ class CallLogService {
     const query = new URLSearchParams();
     if (params.agent_id) query.set("agent_id", params.agent_id);
     if (params.status) query.set("status", params.status);
+    if (params.source_type) query.set("source_type", params.source_type);
     if (params.date_from) query.set("date_from", params.date_from);
     if (params.date_to) query.set("date_to", params.date_to);
     if (params.recording_only) query.set("recording_only", "true");

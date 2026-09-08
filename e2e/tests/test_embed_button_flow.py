@@ -183,6 +183,7 @@ def test_embed_button_configuration_flow(page: Page, base_url: str, step):
     step("Verify embed code contains all required data attributes")
     embed_code = page.locator("pre").first.text_content()
     assert "data-agent-id" in embed_code
+    assert "data-api-url" in embed_code
     assert "data-button-text" in embed_code
     assert "data-button-color" in embed_code
     assert "data-button-text-color" in embed_code
