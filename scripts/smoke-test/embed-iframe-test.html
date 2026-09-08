@@ -107,6 +107,7 @@
     <script
       src="http://localhost:3000/embed/call-button.js"
       data-agent-id="7ee02362-6ed2-4728-ba54-2a5ff56f92fe"
+      data-api-url="http://localhost:8000"
       data-button-text="Call Us"
       data-button-color="#3ba6f7"
       data-button-text-color="#ffffff"
@@ -199,6 +200,7 @@
         const script = document.createElement("script");
         script.src = `${PLATFORM_ORIGIN}/embed/call-button.js`;
         script.setAttribute("data-agent-id", agentId);
+        script.setAttribute("data-api-url", "http://localhost:8000");
         script.setAttribute("data-button-text", "Test embed call");
         script.setAttribute("data-button-color", "#3b82f6");
         script.setAttribute("data-button-text-color", "#ffffff");

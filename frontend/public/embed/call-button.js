@@ -8,6 +8,7 @@
  * <script 
  *   src="https://your-platform.com/embed/call-button.js"
  *   data-agent-id="your-agent-id"
+ *   data-api-url="https://api.your-platform.com"
  *   data-button-text="Call Us"
  *   data-button-color="#3b82f6"
  *   data-button-text-color="#ffffff"
@@ -24,19 +25,29 @@
   // Configuration
   const CONFIG = {
     baseUrl: '',
-    apiUrl: '/api/v1',
     popupWidth: 400,
     popupHeight: 600,
   };
 
-  // Detect base URL from script src
-  function detectBaseUrl() {
+  function findEmbedScript() {
     const scripts = document.getElementsByTagName('script');
     for (let i = 0; i < scripts.length; i++) {
-      const src = scripts[i].src;
-      if (src && src.includes('/embed/call-button.js')) {
-        return src.replace('/embed/call-button.js', '');
+      if (scripts[i].src && scripts[i].src.includes('/embed/call-button.js')) {
+        return scripts[i];
       }
+    }
+    return null;
+  }
+
+  function trimTrailingSlashes(value) {
+    return String(value || '').replace(/\/+$/, '');
+  }
+
+  // Detect base URL from script src
+  function detectBaseUrl() {
+    const script = findEmbedScript();
+    if (script && script.src) {
+      return script.src.replace('/embed/call-button.js', '');
     }
     // Fallback to current origin
     return window.location.origin;
@@ -46,15 +57,7 @@
 
   // Parse configuration from data attributes
   function getConfig() {
-    const scripts = document.getElementsByTagName('script');
-    let currentScript = null;
-    
-    for (let i = 0; i < scripts.length; i++) {
-      if (scripts[i].src && scripts[i].src.includes('/embed/call-button.js')) {
-        currentScript = scripts[i];
-        break;
-      }
-    }
+    const currentScript = findEmbedScript();
 
     if (!currentScript) {
       console.error('[AI Call Button] Script not found');
@@ -65,6 +68,9 @@
     
     return {
       agentId: dataset.agentId,
+      // The API may be served from a different origin than the static script,
+      // especially in local and split frontend/backend deployments.
+      apiUrl: trimTrailingSlashes(dataset.apiUrl || CONFIG.baseUrl),
       buttonText: dataset.buttonText || 'Call Us',
       buttonColor: dataset.buttonColor || '#3b82f6',
       buttonTextColor: dataset.buttonTextColor || '#ffffff',
@@ -241,18 +247,102 @@
       ${isOutline ? `border: 2px solid ${config.buttonColor};` : 'border: none;'}
     `;
 
-    button.addEventListener('click', () => openPopup(config));
+    button.addEventListener('click', () => {
+      if (!button.disabled) {
+        void openPopup(config, button);
+      }
+    });
 
     wrapper.appendChild(button);
     document.body.appendChild(wrapper);
   }
 
-  // Create and open popup
-  function openPopup(config) {
+  function platformOrigin() {
+    return new URL(CONFIG.baseUrl, window.location.href).origin;
+  }
+
+  function sourcePageUrl() {
+    try {
+      const url = new URL(window.location.href);
+      url.username = '';
+      url.password = '';
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return window.location.origin + window.location.pathname;
+    }
+  }
+
+  async function requestEmbedToken(config) {
+    const sourceUrl = encodeURIComponent(sourcePageUrl());
+    const apiUrl = trimTrailingSlashes(config.apiUrl || CONFIG.baseUrl);
+    const response = await fetch(
+      `${apiUrl}/api/v1/embed/agent/${encodeURIComponent(config.agentId)}/token?source_url=${sourceUrl}`,
+      {
+        method: 'POST',
+        credentials: 'omit',
+      }
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = body && body.detail;
+      const message =
+        detail && typeof detail === 'object' && detail.message
+          ? detail.message
+          : typeof detail === 'string'
+            ? detail
+            : 'This call button is not authorized on the current website.';
+      throw new Error(message);
+    }
+    return body;
+  }
+
+  function showEmbedError(message) {
+    const error = document.createElement('div');
+    error.setAttribute('role', 'alert');
+    error.textContent = message;
+    error.style.cssText = [
+      'position: fixed',
+      'left: 20px',
+      'bottom: 20px',
+      'z-index: 1000000',
+      'max-width: 320px',
+      'padding: 12px 16px',
+      'border-radius: 8px',
+      'background: #7f1d1d',
+      'color: #ffffff',
+      'font: 14px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+      'box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2)',
+    ].join(';');
+    document.body.appendChild(error);
+    setTimeout(() => error.remove(), 5000);
+  }
+
+  // Create and open popup after the host-page request has been authorized.
+  async function openPopup(config, button) {
+    const originalButtonText = button.querySelector('span');
+    const originalLabel = originalButtonText ? originalButtonText.textContent : null;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    if (originalButtonText) originalButtonText.textContent = 'Starting…';
+
+    let credentials;
+    try {
+      credentials = await requestEmbedToken(config);
+    } catch (error) {
+      console.error('[AI Call Button] Could not start call:', error);
+      showEmbedError(error instanceof Error ? error.message : 'Could not start the call.');
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      if (originalButtonText) originalButtonText.textContent = originalLabel || config.buttonText;
+      return;
+    }
+
     // Remove existing popup if any
     const existingOverlay = document.querySelector('.ai-call-popup-overlay');
     if (existingOverlay) {
-      existingOverlay.remove();
+      closePopup();
     }
 
     // Create overlay
@@ -265,13 +355,46 @@
     
     // Create iframe
     const iframe = document.createElement('iframe');
-    iframe.src = `${CONFIG.baseUrl}/embed/call?agentId=${config.agentId}`;
+    iframe.src = `${CONFIG.baseUrl}/embed/call?agentId=${encodeURIComponent(config.agentId)}`;
     iframe.allow = 'microphone; camera';
-    
+    const sendCredentials = () => {
+      iframe.contentWindow?.postMessage(
+        {
+          type: 'AI_CALL_INIT',
+          token: credentials.token,
+          wsUrl: credentials.wsUrl,
+          sessionId: credentials.sessionId,
+          demoCallsRemaining: credentials.demo_calls_remaining,
+          demoMaxCallDurationSeconds: credentials.demo_max_call_duration_seconds,
+        },
+        platformOrigin()
+      );
+    };
+    iframe.addEventListener('load', sendCredentials, { once: true });
+
+    // Listen before inserting the iframe so the ready handshake cannot race
+    // hydration inside the embedded page.
+    const handleMessage = (event) => {
+      if (
+        event.source !== iframe.contentWindow ||
+        event.origin !== platformOrigin() ||
+        !event.data
+      ) {
+        return;
+      }
+      if (event.data.type === 'AI_CALL_READY') {
+        sendCredentials();
+      } else if (event.data.type === 'AI_CALL_CLOSE') {
+        closePopup();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    overlay._messageHandler = handleMessage;
+
     popup.appendChild(iframe);
     overlay.appendChild(popup);
     document.body.appendChild(overlay);
-    
+
     // Show popup
     setTimeout(() => {
       overlay.classList.add('active');
@@ -283,16 +406,9 @@
     // Close on Escape key (only when not in active call)
     document.addEventListener('keydown', handleEscape);
 
-    // Listen for close message from iframe (sent when user clicks hang-up)
-    const handleMessage = (event) => {
-      if (event.data && event.data.type === 'AI_CALL_CLOSE') {
-        closePopup();
-      }
-    };
-    window.addEventListener('message', handleMessage);
-
-    // Store handler reference for cleanup
-    overlay._messageHandler = handleMessage;
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    if (originalButtonText) originalButtonText.textContent = originalLabel || config.buttonText;
   }
 
   // Close popup

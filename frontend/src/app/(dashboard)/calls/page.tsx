@@ -6,7 +6,10 @@ import { useOrganization } from "@/contexts/organization-context";
 import { useMyAgents } from "@/hooks/use-agent-queries";
 import { useCallLogs } from "@/hooks/use-call-logs";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
-import type { CallLogListParams } from "@/services/call-log-service";
+import type {
+  CallLogListParams,
+  CallSourceType,
+} from "@/services/call-log-service";
 import { CallLogList } from "@/components/calls/call-log-list";
 import {
   Card,
@@ -35,6 +38,15 @@ const STATUS_OPTIONS = [
   { value: "no-answer", label: "No Answer" },
 ];
 
+const SOURCE_OPTIONS: Array<{ value: CallSourceType | ""; label: string }> = [
+  { value: "", label: "All Sources" },
+  { value: "phone", label: "Phone" },
+  { value: "web_embed", label: "Web embed" },
+  { value: "web_demo", label: "Demo page" },
+  { value: "web_public", label: "Public page" },
+  { value: "web_test", label: "Dashboard test call" },
+];
+
 export default function CallsPage() {
   const { currentOrganization, setCurrentOrganization } = useOrganization();
   const searchParams = useSearchParams();
@@ -51,6 +63,7 @@ export default function CallsPage() {
 
   const [agentFilter, setAgentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<CallSourceType | "">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -59,12 +72,13 @@ export default function CallsPage() {
     () => ({
       agent_id: agentFilter || undefined,
       status: statusFilter || undefined,
+      source_type: sourceFilter || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
       page,
       page_size: 25,
     }),
-    [agentFilter, statusFilter, dateFrom, dateTo, page],
+    [agentFilter, statusFilter, sourceFilter, dateFrom, dateTo, page],
   );
 
   useEffect(() => {
@@ -134,7 +148,7 @@ export default function CallsPage() {
         <div>
           <h1 className="text-2xl font-bold">Call Log</h1>
           <p className="text-sm text-muted-foreground">
-            History of all incoming calls for {organizationName}
+            Phone and web call history for {organizationName}
           </p>
         </div>
       </div>
@@ -167,7 +181,7 @@ export default function CallsPage() {
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {/* Agent filter */}
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">
@@ -204,6 +218,27 @@ export default function CallsPage() {
                 className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Source filter */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-muted-foreground">
+                Source
+              </label>
+              <select
+                value={sourceFilter}
+                onChange={(e) => {
+                  setSourceFilter(e.target.value as CallSourceType | "");
+                  handleFilterChange();
+                }}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {SOURCE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

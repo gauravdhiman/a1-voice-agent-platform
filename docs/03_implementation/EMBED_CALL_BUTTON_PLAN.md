@@ -1,9 +1,11 @@
 # Embed Call Button Feature - Implementation Plan
 
-> **Transport update (2026-08):** Embed calls use **Pipecat WebSocket** (`voice-ws`) and
-> `voice_ws_session` JWTs — not LiveKit rooms. Diagrams below that mention LiveKit
-> rooms are historical; see `shared/voice_agents/embed_service.py` and
-> `frontend/src/components/embed/` for the current flow.
+> **Current transport (2026-09):** Embed calls use the Pipecat WebSocket runtime
+> (`voice-ws`) and short-lived `voice_ws_session` JWTs. The host page requests
+> authorization, the platform validates the request `Origin` against the optional
+> allowlist, and the authorized iframe receives credentials through a same-origin
+> `postMessage` handshake. See `shared/voice_agents/embed_service.py`,
+> `frontend/public/embed/call-button.js`, and `frontend/src/app/embed/call/page.tsx`.
 
 **Status:** Completed  
 **Created:** 2026-02-17  
@@ -54,6 +56,7 @@ Allow users to generate embeddable call button code for their websites. Visitors
 - [x] Self-contained vanilla JS (no framework dependencies)
 - [x] Creates floating call button
 - [x] Handles click-to-call flow
+- [x] Carries the static backend API endpoint separately from the script host
 - [x] Opens modal/popup with call interface
 - [x] Minimal bundle size (<10KB gzipped)
 
@@ -61,8 +64,8 @@ Allow users to generate embeddable call button code for their websites. Visitors
 **Location:** `frontend/src/app/embed/call/page.tsx`
 
 - [x] Simplified call UI (no dashboard navigation)
-- [x] Direct LiveKit connection
-- [x] Auto-connect on page load
+- [x] Receives signed credentials from the host-page handshake
+- [x] Connects to the Pipecat WebSocket runtime
 - [x] Mute/unmute controls
 - [x] Waveform visualization
 - [x] Hang-up to close
@@ -81,7 +84,8 @@ Allow users to generate embeddable call button code for their websites. Visitors
 
 - [x] `POST /api/v1/embed/agent/{agent_id}/token` - Generate token
 - [x] `GET /api/v1/embed/agent/{agent_id}/info` - Get agent info
-- [x] Validates origin domain (optional)
+- [x] Validates the request origin against the optional domain allowlist
+- [x] Records the initiating page URL after removing query and fragment data
 - [x] Rate limiting per agent/config
 
 #### 3. Token Validation Service
@@ -90,7 +94,7 @@ Allow users to generate embeddable call button code for their websites. Visitors
 - [x] Generate embed tokens
 - [x] Validate embed tokens
 - [x] Check domain allowlist
-- [x] Track usage metrics
+- [x] Carry source type, source URL, and source domain into the voice-session JWT
 
 ### Database Schema
 
@@ -116,6 +120,11 @@ CREATE TABLE agent_embed_configs (
 );
 ```
 
+The resulting voice session creates or updates a `call_logs` row with
+`source_type = 'web_embed'`, the sanitized `source_url`, and the canonical
+`source_domain`. The same call-log contract is used by phone, dashboard-test,
+public-page, and demo-page calls.
+
 ---
 
 ## User Flow
@@ -137,7 +146,8 @@ CREATE TABLE agent_embed_configs (
 - [x] Embed tokens expire after 1 hour
 - [x] Rate limiting: configurable daily call limit per embed config
 - [x] Domain validation (optional allowlist)
-- [x] No sensitive data in embed URL
+- [x] No voice token in the iframe URL; credentials cross the boundary only after authorization
+- [x] Query and fragment data removed before a page URL is persisted
 - [x] RLS policies on database tables
 - [x] Service role key used for backend operations (bypasses RLS)
 
@@ -192,7 +202,8 @@ CREATE TABLE agent_embed_configs (
    **Resolution:** Configurable via `daily_call_limit` per embed config
    
 4. ~~Should embed calls be billed differently than regular calls?~~
-   **Resolution:** TBD - tracked via `embed_call_logs` table
+   **Resolution:** They use the normal voice-session entitlement and credit
+   ledger path; `embed_call_logs` remains the request/rate-limit audit table.
 
 ---
 
@@ -207,8 +218,8 @@ CREATE TABLE agent_embed_configs (
 
 ## Dependencies
 
-- Existing: LiveKit WebRTC infrastructure
-- Existing: Agent testing modal (can reuse components)
+- Existing: Pipecat WebSocket voice-ws infrastructure
+- Existing: Agent test-call connection helpers
 - New: None (vanilla JS for embed script)
 
 ---
@@ -225,7 +236,7 @@ CREATE TABLE agent_embed_configs (
 ## Related Documentation
 
 - [Agent Direct Test Feature](./AGENT_DIRECT_TEST_FEATURE.md)
-- [LiveKit Integration](../02_features/voice_agents/overview.md)
+- [Pipecat voice runtime](../01_architecture/ADR_VOICE_WS_PIPECAT.md)
 - [API Guidelines](../04_development_guides/api_guidelines.md)
 
 ---
@@ -254,24 +265,25 @@ flowchart TB
         subgraph Backend["Backend (FastAPI)"]
             EmbedAPI["Embed API Routes"]
             TokenService["Embed Token Service"]
-            LiveKitSvc["LiveKit Service"]
         end
 
         subgraph Database["Database"]
             EmbedTable[("agent_embed_configs")]
+            CallLogTable[("call_logs")]
         end
     end
 
-    subgraph LiveKit["voice-ws (Pipecat)"]
-        Room["LiveKit Room"]
-        Worker["AI Worker"]
-        Agent["Voice Agent"]
+    subgraph VoiceRuntime["voice-ws (Pipecat)"]
+        WebSocket["Pipecat WebSocket /ws"]
+        Agent["Voice Agent Pipeline"]
     end
 
     %% External Website Flow
     Website -->|"Loads"| EmbedScript
     EmbedScript -->|"Creates"| CallButton
-    CallButton -->|"Click: Open popup"| CallPage
+    CallButton -->|"Click: request authorization"| EmbedAPI
+    EmbedScript -->|"Open after success"| CallPage
+    EmbedScript -->|"postMessage credentials"| CallPage
     
     %% Configuration Flow
     ConfigUI -->|"Generates"| EmbedScript
@@ -280,12 +292,11 @@ flowchart TB
     EmbedAPI -->|"Stores"| EmbedTable
     
     %% Call Flow
-    CallPage -->|"1. Request token"| EmbedAPI
-    EmbedAPI -->|"2. Generate"| TokenService
-    TokenService -->|"3. Create room"| LiveKitSvc
-    LiveKitSvc -->|"4. Connect"| Room
-    Room -->|"5. Join room"| Worker
-    voice-ws -->|"6. Start"| Agent
+    EmbedAPI -->|"Validate Origin and limits"| TokenService
+    TokenService -->|"Sign voice_ws_session JWT"| EmbedScript
+    CallPage -->|"Connect with JWT"| WebSocket
+    WebSocket -->|"Resolve agent and start"| Agent
+    Agent -->|"Create/finalize source-aware log"| CallLogTable
 ```
 
 ### Embed Button Sequence Diagram
@@ -299,59 +310,53 @@ sequenceDiagram
     participant EmbedScript as Embed Script
     participant CallPage as Call Interface
     participant API as Backend API
-    participant LiveKit as voice-ws (Pipecat)
-    participant voice-ws as AI Worker
+    participant VoiceWs as voice-ws (Pipecat)
+    participant Database as Call Logs
 
-    Note over Visitor,Worker: Phase 1: Page Load & Button Display
+    Note over Visitor,Database: Phase 1: Page Load & Button Display
     
     Visitor->>Website: Visit website with embed
     Website->>EmbedScript: Load embed/call-button.js
     EmbedScript->>EmbedScript: Inject floating button styles
     EmbedScript->>Website: Display floating call button
     
-    Note over Visitor,Worker: Phase 2: Button Click & Token Generation
+    Note over Visitor,Database: Phase 2: Host Authorization & Token Generation
     
     Visitor->>EmbedScript: Click call button
-    EmbedScript->>CallPage: Open popup/modal
-    CallPage->>API: POST /agents/{id}/embed-token<br/>{agent_id, domain}
-    API->>API: Validate domain (if restricted)
+    EmbedScript->>API: POST /api/v1/embed/agent/{id}/token<br/>source_url = host page
+    API->>API: Validate Origin against optional allowlist
     API->>API: Check rate limits
-    API->>API: Generate short-lived token<br/>(expires: 1 hour)
-    API-->>CallPage: Return {token, room_name, ws_url}
+    API->>API: Generate short-lived voice_ws_session JWT
+    API-->>EmbedScript: Return {token, wsUrl, sessionId}
+    EmbedScript->>CallPage: Open iframe and postMessage credentials
     
-    Note over Visitor,Worker: Phase 3: LiveKit Connection
+    Note over Visitor,Database: Phase 3: Pipecat WebSocket Connection
     
-    CallPage->>LiveKit: Connect to room<br/>using embed token
-    LiveKit->>API: Validate token
-    API-->>LiveKit: Token valid
-    LiveKit-->>CallPage: Connected to room
+    CallPage->>VoiceWs: Connect /ws using signed JWT
+    VoiceWs->>VoiceWs: Verify session and resolve agent
+    VoiceWs->>Database: Create initiated source-aware call log
+    VoiceWs-->>CallPage: Connected
     
-    Note over Visitor,Worker: Phase 4: Agent Joins & Call Starts
+    Note over Visitor,Database: Phase 4: Agent Starts
     
-    LiveKit->>Worker: New participant joined<br/>(embed room)
-    Worker->>API: Get agent config & tools
-    API-->>Worker: Agent configuration
-    Worker->>Worker: Initialize AI agent<br/>with persona & tools
-    Worker->>LiveKit: Join room
-    Worker->>Visitor: "Hello! How can I help you?"
+    VoiceWs->>VoiceWs: Load agent config, tools, and provider pipeline
+    VoiceWs->>Database: Mark call answered
+    VoiceWs->>Visitor: "Hello! How can I help you?"
     
-    Note over Visitor,Worker: Phase 5: Active Call
+    Note over Visitor,Database: Phase 5: Active Call
     
     loop Voice Conversation
-        Visitor->>LiveKit: Audio stream (microphone)
-        LiveKit->>Worker: Forward audio
-        Worker->>Worker: STT -> LLM -> TTS
-        Worker->>LiveKit: Audio response
-        LiveKit->>Visitor: Play agent voice
+        Visitor->>VoiceWs: Audio over WebSocket
+        VoiceWs->>VoiceWs: STT -> LLM -> TTS or realtime model
+        VoiceWs->>Visitor: Audio over WebSocket
     end
     
-    Note over Visitor,Worker: Phase 6: Call End
+    Note over Visitor,Database: Phase 6: Call End
     
     Visitor->>CallPage: Close/Hang up
-    CallPage->>LiveKit: Disconnect
-    LiveKit->>Worker: Participant left
-    Worker->>Worker: End session & cleanup
-    Worker->>API: Log call duration & metrics
+    CallPage->>VoiceWs: Disconnect
+    VoiceWs->>VoiceWs: End session & cleanup
+    VoiceWs->>Database: Finalize status, ended_at, duration, and credits
 ```
 
 ### Token Lifecycle Flow
@@ -366,12 +371,12 @@ flowchart TD
     
     C --> E[Token Contains:]
     E --> E1[Agent ID]
-    E --> E2[Room Name]
+    E --> E2[Session ID]
     E --> E3[Expiry: 1 hour]
-    E --> E4[Origin Domain]
+    E --> E4[Source Type, URL, Domain]
     
     C --> F[Return Token to Browser]
-    F --> G[Connect to LiveKit]
+    F --> G[Connect to voice-ws /ws]
     
     G --> H{Token Valid?}
     H -->|Expired| I[Reject Connection]
@@ -410,6 +415,8 @@ The agent owner (platform user) configures and generates the embed code.
 
 **Step 3: Domain Restrictions (Optional)**
 - User can specify allowed domains (e.g., `example.com`)
+- The dashboard converts each hostname into a removable pill when the user
+  presses Space, comma, or Enter
 - If set, embed only works on those domains
 - If empty, works on any domain (less secure)
 
@@ -417,7 +424,8 @@ The agent owner (platform user) configures and generates the embed code.
 - System generates unique embed code snippet:
   ```html
   <script src="https://platform.com/embed/call-button.js" 
-          data-agent-id="123" 
+          data-agent-id="123"
+          data-api-url="https://api.platform.com"
           data-config="{button_config_json}">
   </script>
   ```
@@ -436,7 +444,7 @@ The embed script loads and displays the call button on the external website.
 - Script is ~5KB vanilla JavaScript (no dependencies)
 
 **Step 2: Button Injection**
-- Script reads `data-agent-id` and `data-config` attributes
+- Script reads `data-agent-id`, the static `data-api-url`, and button attributes
 - Creates floating button element with custom styles
 - Positions button (bottom-right corner by default)
 - Applies user's color scheme and branding
@@ -454,67 +462,71 @@ The embed script loads and displays the call button on the external website.
 Visitor clicks button, triggering the call flow.
 
 **Step 1: Popup Opens**
-- Click event opens a popup/modal
-- Loads our call interface: `platform.com/embed/call?agent_id=123`
-- Passes current domain for validation
+- The script requests authorization from the host page before creating the iframe
+- The token request includes the current page URL for call-source traceability
+- The backend validates the browser `Origin` against the configured allowlist
 
 **Step 2: Token Request**
-- Call interface requests embed token from backend
+- The script requests an embed token from the backend
 - API validates:
   - Domain is in allowlist (if configured)
   - Rate limits not exceeded
   - Agent is active
-  
+  - Voice-session entitlement is available
+
 **Step 3: Token Generation**
 - Backend generates JWT token with:
   - `agent_id`: Which agent to connect
-  - `room_name`: Unique room identifier
+  - `session_id`: Unique voice session identifier
   - `exp`: Expiration time (1 hour from now)
-  - `origin`: Domain that initiated the call
+  - `source_type`: `web_embed`
+  - `source_url` and `source_domain`: Sanitized page metadata
 - Token is short-lived to minimize security risk
 
 **Step 4: Return Token**
-- Backend returns: `{token, room_name, ws_url}`
-- Token grants access to specific LiveKit room only
-- No API keys or credentials exposed to browser
+- Backend returns: `{token, wsUrl, sessionId}`
+- The script opens the platform iframe and transfers these credentials with
+  `postMessage` after checking the iframe origin
+- The iframe URL contains only the agent id; no voice token is placed in the URL
 
 ---
 
-### Phase 4: WebRTC Connection
+### Phase 4: Pipecat WebSocket Connection
 
 **What happens:**
-Browser establishes real-time audio connection with LiveKit.
+Browser establishes a real-time audio connection with `voice-ws`.
 
-**Step 1: Connect to LiveKit**
-- Call interface uses token to connect to LiveKit
-- Establishes WebRTC peer connection
+**Step 1: Connect to voice-ws**
+- Call interface uses the signed session token to connect to `/ws`
+- Pipecat establishes the browser audio transport
 - Requests microphone permission from visitor
 
-**Step 2: Room Join**
-- Visitor joins LiveKit room with unique name
-- Room is created if it doesn't exist
+**Step 2: Session Admission**
+- voice-ws verifies the short-lived JWT
+- It resolves the agent, organization, tools, and provider configuration
+- It creates or reuses the organization-scoped call-log row
 - Connection state: "Connecting..."
 
-**Step 3: voice-ws Notification**
-- LiveKit notifies our AI voice-ws of new participant
-- voice-ws checks room name pattern (embed rooms have prefix)
-- voice-ws prepares to join as agent
+**Step 3: Call Start**
+- The transport connection changes the log from `initiated` to `answered`
+- `started_at`, `source_type`, `source_url`, and `source_domain` are already
+  present before the greeting begins
 
 ---
 
-### Phase 5: Agent Joins & Call Starts
+### Phase 5: Agent Starts & Call Begins
 
 **What happens:**
-AI agent joins the room and begins the conversation.
+The AI agent pipeline starts and begins the conversation.
 
 **Step 1: Agent Initialization**
 - voice-ws fetches agent configuration from database
 - Loads persona, voice settings, tools
 - Initializes LLM connection (OpenAI, Google, etc.)
 
-**Step 2: Join Room**
-- voice-ws joins LiveKit room as participant
-- Publishes audio track
+**Step 2: Start Pipeline**
+- voice-ws starts the Pipecat transport and voice pipeline
+- Publishes agent audio over the WebSocket
 - Connection state: "Connected"
 
 **Step 3: Welcome Message**
@@ -531,12 +543,12 @@ Real-time voice conversation between visitor and AI agent.
 
 **Audio Flow:**
 1. Visitor speaks → Microphone captures audio
-2. Audio sent to LiveKit → Forwarded to Worker
-3. voice-ws performs Speech-to-Text (STT)
+2. Audio sent to voice-ws over the Pipecat WebSocket transport
+3. voice-ws performs Speech-to-Text (STT) when using the modular pipeline
 4. Text sent to LLM for processing
 5. LLM generates response
 6. voice-ws performs Text-to-Speech (TTS)
-7. Audio sent back to visitor
+7. Audio sent back to visitor over the WebSocket
 
 **Parallel Processing:**
 - Audio visualizers show for both user and agent
@@ -553,18 +565,19 @@ Call terminates and resources are cleaned up.
 
 **Step 1: Hang Up**
 - Visitor clicks "End Call" or closes popup
-- Browser disconnects from LiveKit
+- Browser disconnects from the Pipecat WebSocket
 - Microphone access released
 
 **Step 2: Agent Cleanup**
 - voice-ws detects participant left
 - Ends LLM session
-- Logs call metrics (duration, outcome)
-- Room automatically destroyed (empty)
+- Finalizes `ended_at`, duration, status, failure details, and credit linkage
+- Persists recording artifact metadata when recording is enabled
 
 **Step 3: Post-Call**
-- Optional: Show feedback form
-- Optional: Display call summary
+- The dashboard displays start/end times, duration, status, source, credits,
+  failure details, and recording availability
+- Future transcript/summary processing can attach `call_artifacts` rows
 - Embed button returns to ready state
 
 ---
@@ -588,7 +601,7 @@ RISK: No domain validation
 **What tokens provide:**
 
 1. **Authorization**: Only valid tokens can connect
-2. **Scoping**: Token only works for specific agent/room
+2. **Scoping**: Token only works for the specific agent and voice session
 3. **Expiration**: Token becomes invalid after 1 hour
 4. **Audit Trail**: Track which domain initiated call
 5. **Rate Limiting**: Count tokens per domain/agent
@@ -605,7 +618,7 @@ Visitor clicks → Script requests token (one-time use)
                               ↓
 Backend validates → Generates time-limited JWT
                               ↓
-Browser uses token → Connects to LiveKit (valid for 1 hour)
+Browser uses token → Connects to voice-ws `/ws` (valid for 1 hour)
                               ↓
 Token expires → Connection remains, but no new connections
 ```
@@ -619,12 +632,12 @@ Token expires → Connection remains, but no new connections
 - Button styles - Embedded in script
 
 ### API Calls (Require Validation)
-- `POST /embed-token` - Validates domain, returns JWT
-- `GET /agent-config` - Returns public agent info
+- `POST /api/v1/embed/agent/{id}/token` - Validates origin, returns JWT
+- `GET /api/v1/embed/agent/{id}/info` - Returns public agent info
 
-### WebRTC Connection (Requires Token)
-- LiveKit WebSocket - Uses JWT for authentication
-- Token embedded in WebSocket URL
+### Voice Connection (Requires Token)
+- `voice-ws /ws` - Verifies the JWT and runs the voice session
+- Source metadata travels inside the signed JWT and is persisted in `call_logs`
 
 ---
 

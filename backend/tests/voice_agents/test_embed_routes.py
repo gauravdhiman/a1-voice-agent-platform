@@ -170,7 +170,7 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_success(self):
         """Test successful generation of public embed token."""
-        from fastapi import Request
+        from fastapi import Request, Response
         from src.voice_agents.embed_routes import generate_public_embed_token
 
         from shared.voice_agents.models import VoiceAgent
@@ -232,18 +232,30 @@ class TestEmbedRoutes:
                     new=AsyncMock(),
                     create=True,
                 ):
+                    response = Response()
                     result = await generate_public_embed_token(
-                        agent_id=test_agent_id, request=mock_request
+                        agent_id=test_agent_id,
+                        request=mock_request,
+                        response=response,
+                        source_url="https://example.com/support?customer=private",
                     )
 
                 assert result.token == "voice.jwt.token"
                 assert result.wsUrl == "ws://localhost:7860/ws"
                 assert result.sessionId == "sess-embed-123"
+                mock_embed.generate_embed_token.assert_called_once()
+                assert (
+                    mock_embed.generate_embed_token.call_args.kwargs["source_url"]
+                    == "https://example.com/support?customer=private"
+                )
+                assert response.headers["Access-Control-Allow-Origin"] == (
+                    "https://example.com"
+                )
 
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_reserves_demo_budget(self):
         """Public embed calls reserve demo budget and return the new count."""
-        from fastapi import Request
+        from fastapi import Request, Response
         from src.voice_agents.embed_routes import generate_public_embed_token
 
         from shared.billing.voice_session_entitlement import DemoCallReservation
@@ -305,7 +317,9 @@ class TestEmbedRoutes:
                     new=AsyncMock(),
                 ):
                     result = await generate_public_embed_token(
-                        agent_id=test_agent_id, request=mock_request
+                        agent_id=test_agent_id,
+                        request=mock_request,
+                        response=Response(),
                     )
 
         reserve.assert_awaited_once_with(agent)
@@ -315,7 +329,7 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_returns_safe_unavailable_error(self):
         """Public callers receive contact-business guidance, not billing details."""
-        from fastapi import HTTPException, Request
+        from fastapi import HTTPException, Request, Response
         from src.voice_agents.embed_routes import generate_public_embed_token
 
         from shared.voice_agents.models import VoiceAgent
@@ -366,7 +380,9 @@ class TestEmbedRoutes:
                 ):
                     with pytest.raises(HTTPException) as exc_info:
                         await generate_public_embed_token(
-                            agent_id=test_agent_id, request=mock_request
+                            agent_id=test_agent_id,
+                            request=mock_request,
+                            response=Response(),
                         )
 
         assert exc_info.value.status_code == 503
@@ -379,7 +395,7 @@ class TestEmbedRoutes:
     @pytest.mark.asyncio
     async def test_generate_public_embed_token_rate_limited(self):
         """Test embed token generation when rate limited."""
-        from fastapi import HTTPException, Request
+        from fastapi import HTTPException, Request, Response
         from src.voice_agents.embed_routes import generate_public_embed_token
 
         from shared.voice_agents.models import VoiceAgent
@@ -426,8 +442,44 @@ class TestEmbedRoutes:
 
                 with pytest.raises(HTTPException) as exc_info:
                     await generate_public_embed_token(
-                        agent_id=test_agent_id, request=mock_request
+                        agent_id=test_agent_id,
+                        request=mock_request,
+                        response=Response(),
                     )
 
                 assert exc_info.value.status_code == 429
                 assert "limit exceeded" in exc_info.value.detail.lower()
+
+    def test_embed_config_normalizes_and_validates_allowed_domains(self):
+        """Embed configuration stores canonical domains and rejects malformed values."""
+        from pydantic import ValidationError
+        from src.voice_agents.routes import EmbedConfigCreate
+
+        config = EmbedConfigCreate(
+            allowed_domains=[
+                "https://www.Example.com/path",
+                "example.com",
+                "https://www.example.com",
+            ]
+        )
+        assert config.allowed_domains == ["example.com"]
+
+        with pytest.raises(ValidationError):
+            EmbedConfigCreate(allowed_domains=["not a valid domain"])
+
+
+@pytest.mark.asyncio
+async def test_embed_token_options_returns_valid_preflight_response():
+    """The public embed preflight response has a concrete success status."""
+    from fastapi import Request, Response
+    from src.voice_agents.embed_routes import handle_embed_token_options
+
+    request = Mock(spec=Request)
+    request.headers = {"origin": "http://localhost:3250"}
+    response = Response()
+
+    result = await handle_embed_token_options(request=request, response=response)
+
+    assert result is response
+    assert response.status_code == 204
+    assert response.headers["Access-Control-Allow-Origin"] == "http://localhost:3250"

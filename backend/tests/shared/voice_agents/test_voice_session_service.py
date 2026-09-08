@@ -98,6 +98,27 @@ class TestVoiceSessionService:
 
         assert claims is not None
         assert claims.call_sid == call_sid
+        assert claims.source_type == "phone"
+
+    def test_web_source_metadata_round_trips(
+        self, session_service: VoiceSessionService
+    ) -> None:
+        """Signed browser claims preserve the sanitized source metadata."""
+        token, _ = session_service.create_session_token(
+            agent_id=str(uuid4()),
+            user_id="web_visitor",
+            purpose="embed",
+            source_type="web_embed",
+            source_url="https://customer.example/support",
+            source_domain="customer.example",
+        )
+
+        claims = session_service.verify_session_token(token)
+
+        assert claims is not None
+        assert claims.source_type == "web_embed"
+        assert claims.source_url == "https://customer.example/support"
+        assert claims.source_domain == "customer.example"
 
     def test_demo_claims_round_trip(self, session_service: VoiceSessionService) -> None:
         reservation_id = str(uuid4())

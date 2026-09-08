@@ -34,6 +34,7 @@ async def list_call_logs(
     org_id: UUID,
     agent_id: Optional[UUID] = Query(None, description="Filter by agent"),
     call_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
+    source_type: Optional[str] = Query(None, description="Filter by call source"),
     date_from: Optional[datetime] = Query(None, description="Filter start date (ISO 8601)"),
     date_to: Optional[datetime] = Query(None, description="Filter end date (ISO 8601)"),
     recording_only: bool = Query(
@@ -51,6 +52,7 @@ async def list_call_logs(
         organization_id=org_id,
         agent_id=agent_id,
         status=call_status,
+        source_type=source_type,
         date_from=date_from,
         date_to=date_to,
         recording_only=recording_only,

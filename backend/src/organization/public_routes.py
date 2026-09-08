@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from src.organization.service import organization_service
 from src.voice_agents.public_voice_messages import get_public_voice_session_error
@@ -229,6 +229,11 @@ async def generate_public_call_token(
     slug: str,
     agent_id: UUID,
     x_public_access_token: Optional[str] = Header(default=None),
+    source_url: Optional[str] = Query(
+        None,
+        max_length=2048,
+        description="Page URL that initiated the public-page call",
+    ),
 ) -> PublicCallTokenResponse:
     """Generate a Pipecat voice session token for a public-page visitor call."""
     org = await _load_public_org(slug)
@@ -272,7 +277,10 @@ async def generate_public_call_token(
         ) from exc
 
     voice_token, ws_url, session_id = public_page_service.generate_call_token(
-        agent_id=str(agent_id), demo_reservation=reservation
+        agent_id=str(agent_id),
+        demo_reservation=reservation,
+        source_type="web_public",
+        source_url=source_url,
     )
     if not voice_token or not ws_url or not session_id:
         raise HTTPException(

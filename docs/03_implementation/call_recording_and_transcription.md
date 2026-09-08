@@ -15,6 +15,17 @@ both gates allow it and consent/disclosure have been configured for the
 jurisdiction in which the organization operates. Transcription and summaries
 remain a later processing phase.
 
+## Call-log traceability
+
+Every voice session is represented by an organization-scoped `call_logs` row.
+The row records `started_at`, `ended_at`, duration, status, failure details,
+credit usage, and recording availability. Phone calls use `source_type =
+'phone'` and retain the called number; browser calls use a stable web source
+type plus the initiating page's canonical hostname and sanitized HTTP(S) URL.
+The URL has query parameters and fragments removed before persistence. Embed
+calls additionally validate the host-page origin against the optional
+`agent_embed_configs.allowed_domains` allowlist before a voice token is issued.
+
 ## Storage decision
 
 Use a private object store for audio bytes and Postgres for searchable metadata

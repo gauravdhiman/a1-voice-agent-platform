@@ -113,6 +113,20 @@ describe("CallsPage date filters", () => {
     );
   });
 
+  it("filters calls by source", async () => {
+    const { default: CallsPage } = await import("../page");
+
+    render(<CallsPage />);
+
+    fireEvent.change(screen.getAllByRole("combobox")[2], {
+      target: { value: "web_embed" },
+    });
+
+    expect(mockUseCallLogs.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({ source_type: "web_embed", page: 1 }),
+    );
+  });
+
   it("shows recording retention, privacy, and consent guidance to admins", async () => {
     const { default: CallsPage } = await import("../page");
 

@@ -7,6 +7,7 @@ import type {
   PublicOrgAgentsResponse,
   PublicOrgSummary,
 } from "@/types/public-org-page";
+import { getCurrentPageSourceUrl } from "@/lib/source-url";
 import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -70,8 +71,12 @@ class PublicOrgPageService {
     agentId: string,
     accessToken?: string | null,
   ): Promise<PublicCallTokenResponse> {
+    const pageSourceUrl = getCurrentPageSourceUrl();
+    const sourceUrl = pageSourceUrl
+      ? `?source_url=${encodeURIComponent(pageSourceUrl)}`
+      : "";
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/public/orgs/${slug}/agents/${agentId}/token`,
+      `${API_BASE_URL}/api/v1/public/orgs/${slug}/agents/${agentId}/token${sourceUrl}`,
       {
         method: "POST",
         headers: accessHeaders(accessToken),

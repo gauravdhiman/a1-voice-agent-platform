@@ -2,6 +2,8 @@
  * Client for unauthenticated public demo-agent page APIs.
  */
 
+import { getCurrentPageSourceUrl } from "@/lib/source-url";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface DemoAgentPublic {
@@ -130,8 +132,12 @@ class DemoPublicService {
    * @throws {Error} When the backend cannot admit or initialize the call.
    */
   async getCallToken(slug: string): Promise<DemoCallTokenResponse> {
+    const pageSourceUrl = getCurrentPageSourceUrl();
+    const sourceUrl = pageSourceUrl
+      ? `?source_url=${encodeURIComponent(pageSourceUrl)}`
+      : "";
     const res = await fetch(
-      `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}/call-token`,
+      `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}/call-token${sourceUrl}`,
       { method: "POST", headers: { "Content-Type": "application/json" } }
     );
     if (!res.ok) {
