@@ -1243,8 +1243,11 @@ Component tests verify user interactions, rendering logic, and integration with 
 | `test_tool_disconnect_dialog_confirm` | `ToolDisconnectDialog` | Disconnects on confirm | MEDIUM |
 | `test_tool_filters_renders` | `ToolFilters` | Shows filter options | MEDIUM |
 | `test_tool_filters_filters_list` | `ToolFilters` | Filters tools by status | MEDIUM |
+| `test_agent_detail_tools_tab_stable_while_loading` | `AgentDetailToolsTab` | Does not update-loop while agent tools are loading | HIGH |
+| `test_agent_detail_tools_tab_defaults_to_connected` | `AgentDetailToolsTab` | Opens on Connected and offers See all tools when empty | HIGH |
+| `test_agent_detail_tools_tab_shows_connected_tools` | `AgentDetailToolsTab` | Shows connected tools in the initial view | HIGH |
 
-**Estimated Tests:** ~11 tests
+**Estimated Tests:** ~14 tests
 
 ---
 
