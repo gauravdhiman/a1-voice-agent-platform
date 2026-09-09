@@ -260,6 +260,23 @@ if (toolFilterType === "connected") {
 }
 ```
 
+### Default View and Empty State
+
+When the agent's Tools tab opens, the **Connected** filter is selected by
+default. This keeps the first view focused on the tools that are already
+configured for that agent instead of making the user scan the full platform
+catalog.
+
+If the agent has no connected tools and no search text is entered, the tab
+shows:
+
+1. `No tools are connected to this agent yet.`
+2. A **See all tools** button that switches the filter to **All**.
+
+The full catalog is therefore still one click away. If the user is searching
+or has selected another filter, the normal `No tools match your current
+filters.` message is shown instead.
+
 ## User Experience
 
 ### Connect Flow
