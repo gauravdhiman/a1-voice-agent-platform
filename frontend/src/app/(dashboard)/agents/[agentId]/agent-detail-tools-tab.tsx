@@ -25,9 +25,12 @@ import {
 } from "@/components/tools/resend-email-config";
 import { ToolCard } from "@/components/tools/tool-card";
 import {
+  DEFAULT_TOOL_FILTER_TYPE,
+  shouldShowSeeAllToolsPrompt,
   ToolFilters,
   type ToolFilterType,
 } from "@/components/tools/tool-filters";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -63,6 +66,7 @@ const ToolDisconnectDialog = dynamic(
 );
 
 const AGENT_REALTIME_TABLES = ["agent_tools", "voice_agents"];
+const EMPTY_AGENT_TOOLS: AgentTool[] = [];
 
 /** Whether a new MCP connection must collect an organization API key first. */
 function requiresOrganizationApiKeyBeforeConnect(
@@ -89,13 +93,15 @@ export function AgentDetailToolsTab({
   organization,
   canEdit,
 }: AgentDetailToolsTabProps) {
-  const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>([]);
+  const [localAgentTools, setLocalAgentTools] = React.useState<AgentTool[]>(
+    EMPTY_AGENT_TOOLS,
+  );
   const [selectedTool, setSelectedTool] = React.useState<PlatformTool | null>(
     null,
   );
   const [toolSearchQuery, setToolSearchQuery] = React.useState("");
   const [toolFilterType, setToolFilterType] =
-    React.useState<ToolFilterType>("all");
+    React.useState<ToolFilterType>(DEFAULT_TOOL_FILTER_TYPE);
   const [pendingToolToOpen, setPendingToolToOpen] =
     React.useState<PlatformTool | null>(null);
   const [pendingApiKeyTool, setPendingApiKeyTool] =
@@ -115,10 +121,11 @@ export function AgentDetailToolsTab({
 
   const { data: platformTools = [], isLoading: toolsLoading } =
     usePlatformTools(true, { enabled: true });
-  const { data: agentTools = [], refetch: refetchAgentTools } = useAgentTools(
+  const { data: agentToolsData, refetch: refetchAgentTools } = useAgentTools(
     agent.id,
     true,
   );
+  const agentTools = agentToolsData ?? EMPTY_AGENT_TOOLS;
 
   React.useEffect(() => {
     setLocalAgentTools(agentTools);
@@ -356,6 +363,16 @@ export function AgentDetailToolsTab({
     [localAgentTools, platformTools],
   );
 
+  const connectedToolIds = React.useMemo(
+    () => new Set(localAgentTools.map((agentTool) => agentTool.tool_id)),
+    [localAgentTools],
+  );
+
+  const connectedToolCount = React.useMemo(
+    () => allTools.filter((tool) => connectedToolIds.has(tool.id)).length,
+    [allTools, connectedToolIds],
+  );
+
   const filteredTools = React.useMemo(() => {
     let filtered = allTools;
     const query = toolSearchQuery.trim().toLowerCase();
@@ -369,18 +386,19 @@ export function AgentDetailToolsTab({
     }
 
     if (toolFilterType === "connected") {
-      filtered = filtered.filter((tool) =>
-        localAgentTools.some((agentTool) => agentTool.tool_id === tool.id),
-      );
+      filtered = filtered.filter((tool) => connectedToolIds.has(tool.id));
     } else if (toolFilterType === "not_connected") {
-      filtered = filtered.filter(
-        (tool) =>
-          !localAgentTools.some((agentTool) => agentTool.tool_id === tool.id),
-      );
+      filtered = filtered.filter((tool) => !connectedToolIds.has(tool.id));
     }
 
     return filtered;
-  }, [allTools, localAgentTools, toolFilterType, toolSearchQuery]);
+  }, [allTools, connectedToolIds, toolFilterType, toolSearchQuery]);
+
+  const showSeeAllToolsPrompt = shouldShowSeeAllToolsPrompt({
+    filterType: toolFilterType,
+    connectedToolCount,
+    searchQuery: toolSearchQuery,
+  });
 
   return (
     <>
@@ -437,8 +455,20 @@ export function AgentDetailToolsTab({
                 <div className="text-center py-12 bg-muted/20 rounded-lg">
                   <Wrench className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
                   <p className="text-muted-foreground">
-                    No tools match your search
+                    {showSeeAllToolsPrompt
+                      ? "No tools are connected to this agent yet."
+                      : "No tools match your current filters."}
                   </p>
+                  {showSeeAllToolsPrompt && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() => setToolFilterType("all")}
+                    >
+                      See all tools
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
