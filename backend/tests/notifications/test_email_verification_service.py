@@ -196,6 +196,10 @@ class TestEmailVerificationService:
         with patch(
             "src.auth.service.auth_service._find_auth_user_by_email",
             new=AsyncMock(return_value=user),
+        ), patch(
+            "src.notifications.platform_settings_service."
+            "platform_notification_settings_service.is_email_verification_required",
+            new=AsyncMock(return_value=True),
         ), patch.object(
             verification_service,
             "create_and_send_verification",

@@ -246,7 +246,6 @@ describe("useUserPermissions — capability flags (org_admin permissions map)", 
       wrapper: makeWrapper(makeQueryClient()),
     });
     await vi.waitFor(() => expect(result.current.canInviteMembers).toBe(true));
-    expect(result.current.canUpdateMembers).toBeUndefined(); // no such field
     expect(result.current.canRemoveMembers).toBe(true);
     // canManageMembers is the OR of invite/update/remove.
     expect(result.current.canManageMembers).toBe(true);
@@ -346,8 +345,7 @@ describe("useUserPermissions — fail-closed behaviour", () => {
     // branch was removed in this rewrite. This test pins the new
     // behaviour: even in dev mode, a user with no permissions
     // should see no write CTAs.
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
 
     try {
       mockGetCurrentUser({}); // empty permissions
@@ -362,7 +360,7 @@ describe("useUserPermissions — fail-closed behaviour", () => {
       expect(result.current.canManageBilling).toBe(false);
       expect(result.current.canManageMembers).toBe(false);
     } finally {
-      process.env.NODE_ENV = originalEnv;
+      vi.unstubAllEnvs();
     }
   });
 });

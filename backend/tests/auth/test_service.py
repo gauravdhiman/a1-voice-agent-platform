@@ -24,6 +24,10 @@ def auth_service(mock_supabase_client, mock_supabase_auth):
     with patch('src.auth.service.supabase_config') as mock_config, patch(
         'src.auth.service.create_isolated_supabase_client',
         return_value=mock_supabase_client,
+    ), patch(
+        'src.notifications.platform_settings_service.'
+        'platform_notification_settings_service.is_email_verification_required',
+        new=AsyncMock(return_value=False),
     ):
         mock_config.client = mock_supabase_client
         mock_config.is_configured.return_value = True
@@ -146,10 +150,10 @@ class TestAuthServiceSignUp:
         """Handles Supabase error when no user returned."""
         mock_response = MagicMock()
         mock_response.user = None
-        mock_supabase_auth.sign_up.return_value = mock_response
-        
+        mock_supabase_auth.admin.create_user.return_value = mock_response
+
         result, error = await auth_service.sign_up(sign_up_request)
-        
+
         assert result is None
         assert error is not None
         assert error.status_code == status.HTTP_400_BAD_REQUEST
@@ -163,14 +167,16 @@ class TestAuthServiceSignUp:
         mock_supabase_auth
     ):
         """Returns 409 Conflict for duplicate email."""
-        mock_supabase_auth.sign_up.side_effect = AuthApiError("User already registered", 422, "user_already_exists")
-        
+        mock_supabase_auth.admin.create_user.side_effect = AuthApiError(
+            "User already registered", 422, "user_already_exists"
+        )
+
         result, error = await auth_service.sign_up(sign_up_request)
-        
+
         assert result is None
         assert error is not None
         assert error.status_code == status.HTTP_409_CONFLICT
-        assert "already registered" in error.detail.lower()
+        assert "already exists" in error.detail["message"].lower()
 
 
 class TestAuthServiceSignIn:
@@ -487,6 +493,7 @@ class TestAuthServiceGetUserByEmail:
         mock_response = MagicMock()
         mock_response.users = [mock_user]
         mock_supabase_auth.admin.list_users.return_value = mock_response
+        mock_supabase_auth.admin.get_user_by_id.return_value = MagicMock(user=mock_user)
         
         with patch('src.auth.service.user_role_service') as mock_user_role_service:
             mock_user_role_service.get_all_user_roles_with_permissions = AsyncMock(return_value=([], None))
@@ -539,6 +546,7 @@ class TestAuthServiceGetUserByEmail:
         mock_response = MagicMock()
         mock_response.users = [mock_user]
         mock_supabase_auth.admin.list_users.return_value = mock_response
+        mock_supabase_auth.admin.get_user_by_id.return_value = MagicMock(user=mock_user)
         
         with patch('src.auth.service.user_role_service') as mock_user_role_service:
             mock_user_role_service.get_all_user_roles_with_permissions = AsyncMock(return_value=([], None))
