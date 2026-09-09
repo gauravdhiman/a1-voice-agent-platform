@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from gotrue.errors import AuthApiError
+try:
+    from supabase_auth.errors import AuthApiError
+except ImportError:  # pragma: no cover - compatibility with older supabase-py
+    from gotrue.errors import AuthApiError
 
 from src.auth.linkedin_oauth import LinkedInVerifiedIdentity
 from src.auth.linkedin_supabase_session import LinkedInSupabaseSessionService

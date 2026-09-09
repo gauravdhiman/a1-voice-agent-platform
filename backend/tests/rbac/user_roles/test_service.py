@@ -21,6 +21,7 @@ def user_role_service(mock_supabase_client):
     """UserRoleService with mocked Supabase."""
     with patch("src.rbac.user_roles.service.supabase_config") as mock_config:
         mock_config.client = mock_supabase_client
+        mock_config.service_client = mock_supabase_client
         mock_config.is_configured.return_value = True
 
         service = UserRoleService()

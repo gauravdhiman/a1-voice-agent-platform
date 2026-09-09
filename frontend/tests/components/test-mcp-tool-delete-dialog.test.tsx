@@ -118,8 +118,8 @@ describe("McpToolDeleteDialog", () => {
     });
     const alexLink = screen.getByRole("link", { name: /Alex/i });
     const samLink = screen.getByRole("link", { name: /Sam/i });
-    expect(alexLink).toHaveAttribute("href", "/agents/agent-1?tab=tools");
-    expect(samLink).toHaveAttribute("href", "/agents/agent-2?tab=tools");
+    expect(alexLink).toHaveAttribute("href", "/agents/agent-1/tools");
+    expect(samLink).toHaveAttribute("href", "/agents/agent-2/tools");
     // Links open in a NEW tab so the admin can review the agent without losing the
     // delete dialog (and so same-route links from the agent's own page still work
     // — a same-tab link to the current route is a no-op navigation).
@@ -146,7 +146,7 @@ describe("McpToolDeleteDialog", () => {
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /agent-9/i })).toHaveAttribute(
         "href",
-        "/agents/agent-9?tab=tools",
+        "/agents/agent-9/tools",
       );
     });
   });

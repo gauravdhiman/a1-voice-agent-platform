@@ -158,7 +158,7 @@ describe("AuthProvider Google ID-token sign-in", () => {
     });
   });
 
-  it("does not block sign-in when invitation processing returns an error", async () => {
+  it("surfaces invitation processing errors when invitation processing returns an error", async () => {
     const user = userEvent.setup();
     vi.mocked(authService.processInvitation).mockResolvedValueOnce({
       success: false,
@@ -175,10 +175,11 @@ describe("AuthProvider Google ID-token sign-in", () => {
       await screen.findByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(await screen.findByText("success")).toBeInTheDocument();
+    expect(await screen.findByText("Invitation expired")).toBeInTheDocument();
+    expect(screen.queryByText("success")).not.toBeInTheDocument();
   });
 
-  it("does not block sign-in when invitation processing throws", async () => {
+  it("surfaces invitation processing errors when invitation processing throws", async () => {
     const user = userEvent.setup();
     vi.mocked(authService.processInvitation).mockRejectedValueOnce(
       new Error("Invitation service unavailable"),
@@ -194,7 +195,10 @@ describe("AuthProvider Google ID-token sign-in", () => {
       await screen.findByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(await screen.findByText("success")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Invitation service unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("success")).not.toBeInTheDocument();
   });
 
   it("normalizes missing Google first and last names", async () => {
