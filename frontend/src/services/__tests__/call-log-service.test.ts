@@ -47,4 +47,20 @@ describe("callLogService recording access", () => {
       "/api/v1/calls/organization/org-1?agent_id=agent-1&recording_only=true&page=1&page_size=25",
     );
   });
+
+  it("requests calls for a selected source", async () => {
+    getMock.mockResolvedValue({
+      data: { items: [], total: 0, page: 1, page_size: 25, total_pages: 1 },
+    });
+
+    await callLogService.listCallLogs("org-1", {
+      source_type: "web_embed",
+      page: 1,
+      page_size: 25,
+    });
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/calls/organization/org-1?source_type=web_embed&page=1&page_size=25",
+    );
+  });
 });

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
@@ -230,7 +230,13 @@ async def get_demo_outcome_public(
     scope=DEMO_CALL_TOKEN_RATE_LIMIT_SCOPE,
 )
 async def generate_demo_call_token(
-    demo_slug: str, request: Request
+    demo_slug: str,
+    request: Request,
+    source_url: Optional[str] = Query(
+        None,
+        max_length=2048,
+        description="Page URL that initiated the demo call",
+    ),
 ) -> DemoCallTokenResponse:
     """Generate a Pipecat voice session token for a demo-agent visitor call.
 
@@ -271,7 +277,10 @@ async def generate_demo_call_token(
         ) from exc
 
     token, ws_url, session_id = public_page_service.generate_call_token(
-        agent_id=str(agent.id), demo_reservation=reservation
+        agent_id=str(agent.id),
+        demo_reservation=reservation,
+        source_type="web_demo",
+        source_url=source_url,
     )
     if not token or not ws_url or not session_id:
         logger.error(

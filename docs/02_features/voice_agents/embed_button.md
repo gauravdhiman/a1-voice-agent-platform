@@ -8,7 +8,8 @@ The Embed Call Button feature allows users to add a customizable voice call butt
 
 - **Customizable Appearance**: Button text, colors, size, position, and style
 - **One-Click Embed**: Copy-paste ready embed code
-- **Secure Access**: Time-limited tokens with domain validation
+- **Secure Access**: Time-limited tokens with optional host-domain validation
+- **Call Traceability**: Captures the host page URL and source domain in call logs
 - **Rate Limiting**: Configurable daily call limits
 - **Real-Time Calls**: WebSocket-based voice conversations (Pipecat + `@pipecat-ai/client-js`)
 
@@ -34,7 +35,7 @@ Configure the following settings:
 
 ### 3. Set Security Options
 
-- **Allowed Domains**: Restrict which domains can use the embed (optional)
+- **Allowed Domains**: Restrict which domains can use the embed (optional). Leave empty for an open embed; enter one or more hostnames to restrict it. In the dashboard, press Space, comma, or Enter after each hostname to create a removable pill.
 - **Daily Call Limit**: Maximum calls per day from this embed (default: 100)
 - **Enable/Disable**: Toggle the embed on/off
 
@@ -49,6 +50,7 @@ After saving, copy the generated embed code and paste it into your website's HTM
 <script
   src="https://your-platform.com/embed/call-button.js"
   data-agent-id="your-agent-id"
+  data-api-url="https://api.your-platform.com"
   data-button-text="Call Us"
   data-button-color="#3b82f6"
   data-button-text-color="#ffffff"
@@ -58,6 +60,14 @@ After saving, copy the generated embed code and paste it into your website's HTM
   data-button-style="filled"
 ></script>
 ```
+
+The generated `data-api-url` is a static API endpoint, not a configuration
+lookup. It is included because the frontend that serves the public embed script
+and the backend that issues voice tokens may use different origins. In a
+same-origin deployment, it can point to the platform origin. Public embed
+endpoints support cross-origin browser requests, while the token endpoint still
+checks the request origin against the configured allowed domains before issuing
+a voice token; other API routes keep the normal application CORS policy.
 
 ## User Flow
 
@@ -74,10 +84,11 @@ sequenceDiagram
     Script->>Website: Display floating button
     
     Visitor->>Script: Click button
-    Script->>Script: Open modal with iframe
-    Script->>Platform: Request embed token
-    Platform->>Platform: Validate domain and rate limits
+    Script->>Platform: Request token from host page with source URL
+    Platform->>Platform: Validate host origin, domain and rate limits
     Platform-->>Script: Return voice_ws_session JWT and wsUrl
+    Script->>Script: Open modal with iframe
+    Script->>Iframe: Pass credentials over verified postMessage
     Script->>VoiceWs: WebSocket connect with token
     VoiceWs-->>Visitor: Start voice call
 ```
@@ -93,9 +104,15 @@ sequenceDiagram
 ### Domain Validation
 
 When allowed domains are configured:
-- Requests from unauthorized domains are rejected
-- Both `Origin` and `Referer` headers are checked
-- Subdomains of allowed domains are permitted
+- The embed script requests its token from the top-level host page, not from the platform iframe.
+- The browser `Origin` is used for authorization; `Referer` is the fallback when a browser omits `Origin`.
+- Requests from unauthorized domains are rejected before a voice token is issued.
+- Subdomains of allowed domains are permitted.
+- The iframe URL alone cannot bypass the configured allowlist.
+
+The host page URL is sent with the token request for traceability. The server
+stores only an HTTP(S) URL with query parameters and fragments removed, along
+with its canonical hostname, in the unified call log.
 
 ### Rate Limiting
 
@@ -110,7 +127,7 @@ When allowed domains are configured:
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/v1/embed/agent/{id}/info` | GET | Get public agent info |
-| `/api/v1/embed/agent/{id}/token` | POST | Generate embed token |
+| `/api/v1/embed/agent/{id}/token?source_url=...` | POST | Validate the host page and generate an embed token |
 
 ### Authenticated Endpoints
 
@@ -134,7 +151,7 @@ interface EmbedConfigCreate {
   buttonPosition: 'bottom-right' | 'bottom-left' | 'bottom-center' | 
                   'top-right' | 'top-left' | 'top-center' | 'center';
   buttonStyle?: 'filled' | 'outline';
-  allowedDomains?: string[];    // Optional domain restrictions
+  allowedDomains?: string[];    // Optional canonical domain restrictions; empty = all
   customCss?: string;           // Optional custom CSS
   isActive: boolean;            // Enable/disable
   dailyCallLimit: number;       // Max calls per day
@@ -158,6 +175,7 @@ When you update your embed configuration:
 - Verify the script URL is accessible
 - Check browser console for errors
 - Ensure `data-agent-id` is correct
+- Ensure `data-api-url` points to the backend API, not only the frontend host
 
 ### Call Not Connecting
 
@@ -168,8 +186,10 @@ When you update your embed configuration:
 ### Domain Validation Failing
 
 - Add your domain to the allowed domains list
-- Include both `example.com` and `www.example.com` if needed
-- Subdomains are automatically allowed when parent domain is listed
+- Use a hostname or HTTP(S) origin, for example `example.com`
+- `www.example.com` is canonicalized to `example.com`
+- Subdomains are automatically allowed when the parent domain is listed
+- Ensure the call button script is installed on the allowed host page; opening the platform iframe URL directly is not an allowed-origin request
 
 ## Related Documentation
 

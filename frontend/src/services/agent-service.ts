@@ -1,5 +1,6 @@
 // services/agent-service.ts
 import { apiClient } from "@/lib/api/client";
+import { getCurrentPageSourceUrl } from "@/lib/source-url";
 import type {
   VoiceAgent,
   VoiceAgentCreate,
@@ -353,12 +354,16 @@ class AgentService {
     wsUrl: string;
     sessionId: string;
   }> {
+    const pageSourceUrl = getCurrentPageSourceUrl();
+    const sourceUrl = pageSourceUrl
+      ? `?source_url=${encodeURIComponent(pageSourceUrl)}`
+      : "";
     const response = await apiClient.post<{
       transport?: "pipecat";
       token: string;
       wsUrl: string;
       sessionId: string;
-    }>(`${this.agentBaseUrl}/${agentId}/test-token`);
+    }>(`${this.agentBaseUrl}/${agentId}/test-token${sourceUrl}`);
     const data = response.data;
     return {
       transport: data.transport ?? "pipecat",

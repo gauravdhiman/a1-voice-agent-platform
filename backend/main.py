@@ -10,7 +10,6 @@ from datetime import datetime
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from slowapi.errors import RateLimitExceeded
@@ -29,6 +28,7 @@ from src.phone_numbers.routes import router as phone_number_router
 from src.rbac.routes import rbac_router
 from src.security import (
     CanonicalHostMiddleware,
+    EmbedAwareCORSMiddleware,
     SecurityHeadersMiddleware,
     limiter,
     rate_limit_handler,
@@ -130,7 +130,7 @@ def create_app() -> FastAPI:
 
     # Configure CORS
     app.add_middleware(
-        CORSMiddleware,
+        EmbedAwareCORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=settings.cors_credentials,
         allow_methods=settings.cors_methods,

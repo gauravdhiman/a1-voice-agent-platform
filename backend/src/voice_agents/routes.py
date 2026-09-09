@@ -6,9 +6,9 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from opentelemetry import trace
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from src.auth.dependencies import assert_has_permission, require_permission
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
@@ -27,6 +27,7 @@ from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
+from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import voice_session_service
 
@@ -274,6 +275,11 @@ async def get_agent(
 @tracer.start_as_current_span("voice_agent.routes.get_test_token")
 async def get_test_token(
     agent_id: UUID,
+    source_url: Optional[str] = Query(
+        None,
+        max_length=2048,
+        description="Dashboard page URL that initiated the test call",
+    ),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ):
     """Bootstrap a browser test call via Pipecat WebSocket."""
@@ -319,6 +325,7 @@ async def get_test_token(
             user_id=str(current_user_id),
             purpose="test_call",
             session_id=(reservation.session_id if reservation else None),
+            source_url=normalize_source_url(source_url),
             demo_reservation_id=(reservation.reservation_id if reservation else None),
             demo_max_call_duration_seconds=(
                 reservation.max_call_duration_seconds if reservation else None
@@ -530,6 +537,25 @@ class EmbedConfigCreate(BaseModel):
     custom_css: Optional[str] = None
     is_active: bool = True
     daily_call_limit: int = 100
+
+    @field_validator("allowed_domains")
+    @classmethod
+    def normalize_allowed_domains(
+        cls, value: Optional[List[str]]
+    ) -> Optional[List[str]]:
+        """Normalize configured domains and reject unusable allowlist entries."""
+        if value is None:
+            return None
+        normalized: list[str] = []
+        for domain in value:
+            normalized_domain = normalize_domain(domain)
+            if not normalized_domain:
+                raise ValueError(
+                    "Allowed domains must be valid hostnames or HTTP(S) origins"
+                )
+            if normalized_domain not in normalized:
+                normalized.append(normalized_domain)
+        return normalized
 
 
 class EmbedConfigResponse(BaseModel):

@@ -83,6 +83,13 @@ class TestEmbedService:
         assert embed_service._normalize_domain("example.com/") == "example.com"
         assert embed_service._normalize_domain("app.example.com") == "app.example.com"
 
+    def test_invalid_domains_are_rejected(self):
+        """Malformed browser origins must not satisfy an allowlist."""
+        from shared.voice_agents.embed_service import embed_service
+
+        assert embed_service.validate_domain(["example.com"], "not a domain") is False
+        assert embed_service.validate_domain(["https://[bad"], "example.com") is False
+
     def test_check_rate_limit_within_limit(self):
         """Test rate limit check when within limit."""
         from shared.voice_agents.embed_service import embed_service
@@ -137,6 +144,7 @@ class TestEmbedService:
                     embed_config_id="test-config-id",
                     domain="https://example.com",
                     ip_address="127.0.0.1",
+                    source_url="https://www.example.com/support?customer=private",
                 )
             )
 
@@ -144,6 +152,10 @@ class TestEmbedService:
             assert voice_token == "voice.jwt.token"
             assert ws_url.endswith("/ws")
             assert session_id == "sess-embed-123"
+            call_kwargs = mock_sessions.create_session_token.call_args.kwargs
+            assert call_kwargs["source_type"] == "web_embed"
+            assert call_kwargs["source_url"] == "https://example.com/support"
+            assert call_kwargs["source_domain"] == "example.com"
             mock_sessions.create_session_token.assert_called_once()
 
     def test_validate_embed_token(self):

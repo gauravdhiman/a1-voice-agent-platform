@@ -34,6 +34,8 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
+  Globe2,
   Headphones,
   Loader2,
   Phone,
@@ -126,7 +128,7 @@ function StatusIcon({ status }: { status: string }) {
 }
 
 function formatDuration(seconds: number | null): string {
-  if (!seconds) return "—";
+  if (seconds == null) return "—";
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
@@ -140,6 +142,109 @@ function formatDateTime(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function safeSourceUrl(value: string | null): URL | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    // New call-log URLs are already canonicalized by the backend. Keep this
+    // defensive cleanup for older rows and any future API consumers.
+    parsed.username = "";
+    parsed.password = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function CallTimingSummary({ call }: { call: CallLog }) {
+  const startedAt = call.started_at ?? call.created_at;
+  return (
+    <div className="space-y-0.5 text-xs leading-5">
+      <div>
+        <span className="text-muted-foreground">Started </span>
+        <span className="text-foreground">{formatDateTime(startedAt)}</span>
+      </div>
+      <div>
+        <span className="text-muted-foreground">Ended </span>
+        <span className="text-foreground">
+          {call.ended_at ? formatDateTime(call.ended_at) : "In progress"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CallSourceSummary({ call }: { call: CallLog }) {
+  const sourceUrl = safeSourceUrl(call.source_url);
+  // Older phone rows predate source_type but still have called_number.
+  const isPhone = call.source_type === "phone" ||
+    (!call.source_type && Boolean(call.called_number));
+  const isWeb = call.source_type?.startsWith("web") ||
+    Boolean(call.source_url || call.source_domain);
+  const sourceLabel =
+    isPhone
+      ? "Phone"
+      : call.source_type === "web_embed"
+        ? "Web embed"
+        : call.source_type === "web_demo"
+          ? "Demo page"
+          : call.source_type === "web_public"
+            ? "Public page"
+            : call.source_type === "web_test"
+              ? "Dashboard test"
+              : call.source_url || call.source_domain
+                ? "Web call"
+                : "Unknown";
+
+  if (isPhone || !sourceUrl) {
+    return (
+      <div className="flex min-w-0 items-start gap-1.5">
+        {isWeb ? (
+          <Globe2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <div className="min-w-0">
+          <div className="font-medium text-foreground">{sourceLabel}</div>
+          <div className="max-w-[13rem] truncate text-xs text-muted-foreground">
+            {isPhone
+              ? call.called_number ?? "Phone number unavailable"
+              : call.source_domain ?? "Page unavailable"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const displayUrl = `${sourceUrl.host}${
+    sourceUrl.pathname === "/" ? "" : sourceUrl.pathname
+  }`;
+  return (
+    <div className="flex min-w-0 items-start gap-1.5">
+      <Globe2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <div className="font-medium text-foreground">{sourceLabel}</div>
+        <a
+          href={sourceUrl.toString()}
+          target="_blank"
+          rel="noreferrer"
+          title={sourceUrl.toString()}
+          className="inline-flex max-w-[13rem] items-center gap-1 truncate text-xs text-primary hover:underline"
+        >
+          <span className="truncate">{displayUrl}</span>
+          <ExternalLink className="h-3 w-3 shrink-0" />
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function CallFailureSummary({ call }: { call: CallLog }) {
@@ -466,7 +571,7 @@ export function CallLogList({
                         </th>
                       )}
                       <th className="px-6 py-3 text-left font-medium text-muted-foreground">
-                        Date &amp; Time
+                        Started / Ended
                       </th>
                       <th className="px-6 py-3 text-left font-medium text-muted-foreground">
                         Caller
@@ -476,6 +581,9 @@ export function CallLogList({
                           Agent
                         </th>
                       )}
+                      <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                        Source
+                      </th>
                       <th className="px-6 py-3 text-left font-medium text-muted-foreground">
                         Status
                       </th>
@@ -888,7 +996,7 @@ function CallLogTableRow({
         </td>
       )}
       <td className="whitespace-nowrap px-6 py-3 text-foreground">
-        {formatDateTime(call.created_at)}
+        <CallTimingSummary call={call} />
       </td>
       <td className="px-6 py-3">
         <div className="flex items-center gap-2">
@@ -903,6 +1011,9 @@ function CallLogTableRow({
             : "—"}
         </td>
       )}
+      <td className="max-w-[16rem] px-6 py-3">
+        <CallSourceSummary call={call} />
+      </td>
       <td className="px-6 py-3">
         {statusBadge(call.status)}
         <CallFailureSummary call={call} />
@@ -970,8 +1081,13 @@ function CallLogMobileCard({
         <div className="text-right">{statusBadge(call.status)}</div>
       </div>
       <CallFailureSummary call={call} />
+      <CallSourceSummary call={call} />
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span>{formatDateTime(call.created_at)}</span>
+        <span>Started {formatDateTime(call.started_at ?? call.created_at)}</span>
+        <span>·</span>
+        <span>
+          {call.ended_at ? `Ended ${formatDateTime(call.ended_at)}` : "In progress"}
+        </span>
         <span>·</span>
         <span>{formatDuration(call.duration)}</span>
         <span>·</span>

@@ -25,7 +25,11 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
 )
 from src.call_failure import CallFailureState, classify_pipeline_failure
-from src.call_tracking import end_call_tracking, start_call_tracking
+from src.call_tracking import (
+    end_call_tracking,
+    mark_call_answered,
+    start_call_tracking,
+)
 from src.recording import RecordingAudioTap, RecordingCoordinator
 from src.recording_policy import should_record_agent_call
 from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
@@ -114,6 +118,9 @@ async def run_bot(
             call_sid=claims.call_sid,
             organization_id=bundle.agent.organization_id,
             agent_id=bundle.agent.id,
+            source_type=claims.source_type,
+            source_url=claims.source_url,
+            source_domain=claims.source_domain,
         )
 
     recording_enabled = should_record_agent_call(
@@ -177,6 +184,7 @@ async def run_bot(
     async def on_client_connected(_transport, _client) -> None:
         """Queue a first user instruction so the agent greets on connect."""
         nonlocal duration_task
+        await mark_call_answered(call_log_id)
         context.add_message({"role": "user", "content": _GREETING_INSTRUCTION})
         await task.queue_frames([LLMRunFrame()])
         if (

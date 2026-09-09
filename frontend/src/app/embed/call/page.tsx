@@ -10,9 +10,26 @@ import {
   connectPipecatVoiceCall,
   disconnectPipecatVoiceCall,
 } from "@/lib/pipecat-voice-client";
+import { getCurrentPageSourceUrl } from "@/lib/source-url";
 import { getPublicVoiceCallErrorMessage } from "@/lib/voice-call-messages";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface EmbedCallCredentials {
+  token: string;
+  wsUrl: string;
+  sessionId: string;
+}
+
+function getEmbeddingPageOrigin(): string | null {
+  if (!document.referrer) return null;
+
+  try {
+    return new URL(document.referrer).origin;
+  } catch {
+    return null;
+  }
+}
 
 function EmbedCallContent() {
   const searchParams = useSearchParams();
@@ -27,6 +44,7 @@ function EmbedCallContent() {
 
   const pipecatRef = useRef<PipecatClient | null>(null);
   const connectionAttemptRef = useRef(0);
+  const credentialsReceivedRef = useRef(false);
 
   const disconnect = useCallback(() => {
     connectionAttemptRef.current += 1;
@@ -35,7 +53,7 @@ function EmbedCallContent() {
     void disconnectPipecatVoiceCall(client);
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (credentials: EmbedCallCredentials) => {
     if (!agentId) {
       throw new Error("No agent ID provided");
     }
@@ -44,45 +62,33 @@ function EmbedCallContent() {
     const isCurrentAttempt = () => connectionAttemptRef.current === attempt;
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/embed/agent/${agentId}/token`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(getPublicVoiceCallErrorMessage(errData));
-      }
-      if (!isCurrentAttempt()) return;
-
-      const { token, wsUrl, sessionId } = await response.json();
-
-      if (!token || !wsUrl || !sessionId) {
+      if (!credentials.token || !credentials.wsUrl || !credentials.sessionId) {
         throw new Error("Invalid token response");
       }
       if (!isCurrentAttempt()) return;
 
-      const client = await connectPipecatVoiceCall(token, wsUrl, {
-        onError: (voiceError) => {
-          if (!isCurrentAttempt()) return;
-          setError(getPublicVoiceCallErrorMessage(voiceError));
+      const client = await connectPipecatVoiceCall(
+        credentials.token,
+        credentials.wsUrl,
+        {
+          onError: (voiceError) => {
+            if (!isCurrentAttempt()) return;
+            setError(getPublicVoiceCallErrorMessage(voiceError));
+          },
+          onClientCreated: (createdClient) => {
+            if (isCurrentAttempt()) {
+              pipecatRef.current = createdClient;
+            } else {
+              void disconnectPipecatVoiceCall(createdClient);
+            }
+          },
+          onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
+            if (!isCurrentAttempt()) return;
+            setIsAgentSpeaking(isAgentSpeaking);
+            setIsUserSpeaking(isUserSpeaking);
+          },
         },
-        onClientCreated: (createdClient) => {
-          if (isCurrentAttempt()) {
-            pipecatRef.current = createdClient;
-          } else {
-            void disconnectPipecatVoiceCall(createdClient);
-          }
-        },
-        onSpeakingChange: ({ isAgentSpeaking, isUserSpeaking }) => {
-          if (!isCurrentAttempt()) return;
-          setIsAgentSpeaking(isAgentSpeaking);
-          setIsUserSpeaking(isUserSpeaking);
-        },
-      });
+      );
 
       if (!isCurrentAttempt()) return;
       pipecatRef.current = client;
@@ -123,12 +129,76 @@ function EmbedCallContent() {
       return;
     }
 
-    connect().catch((err) => {
+    credentialsReceivedRef.current = false;
+    const isEmbedded = window.parent !== window;
+    const expectedParentOrigin = isEmbedded
+      ? getEmbeddingPageOrigin()
+      : null;
+    let isActive = true;
+
+    const handleConnectionError = (err: unknown) => {
+      if (!isActive) return;
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnecting(false);
-    });
+    };
 
-    return () => disconnect();
+    const handleInitMessage = (event: MessageEvent<unknown>) => {
+      if (!isEmbedded || event.source !== window.parent) return;
+      // The message comes from the host page, not from this platform iframe.
+      // Referrer may be empty when the host applies a strict no-referrer policy;
+      // the event.source check still ensures only the immediate parent can send it.
+      if (expectedParentOrigin && event.origin !== expectedParentOrigin) return;
+      if (!event.data || typeof event.data !== "object") return;
+      const data = event.data as Partial<EmbedCallCredentials> & {
+        type?: unknown;
+      };
+      if (data.type !== "AI_CALL_INIT") return;
+      if (credentialsReceivedRef.current) return;
+      if (
+        typeof data.token !== "string" ||
+        typeof data.wsUrl !== "string" ||
+        typeof data.sessionId !== "string"
+      ) {
+        handleConnectionError(new Error("Invalid embed call credentials"));
+        return;
+      }
+      credentialsReceivedRef.current = true;
+      connect({
+        token: data.token,
+        wsUrl: data.wsUrl,
+        sessionId: data.sessionId,
+      }).catch(handleConnectionError);
+    };
+
+    const connectStandalone = async () => {
+      const pageSourceUrl = getCurrentPageSourceUrl();
+      const sourceUrl = pageSourceUrl
+        ? `?source_url=${encodeURIComponent(pageSourceUrl)}`
+        : "";
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/embed/agent/${agentId}/token${sourceUrl}`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(getPublicVoiceCallErrorMessage(errData));
+      }
+      const credentials = (await response.json()) as EmbedCallCredentials;
+      await connect(credentials);
+    };
+
+    if (isEmbedded) {
+      window.addEventListener("message", handleInitMessage);
+      window.parent.postMessage({ type: "AI_CALL_READY" }, "*");
+    } else {
+      connectStandalone().catch(handleConnectionError);
+    }
+
+    return () => {
+      isActive = false;
+      window.removeEventListener("message", handleInitMessage);
+      disconnect();
+    };
   }, [agentId, connect, disconnect]);
 
   if (!agentId) {

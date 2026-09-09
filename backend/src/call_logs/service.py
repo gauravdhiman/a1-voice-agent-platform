@@ -37,6 +37,9 @@ class CallLogService:
                 "agent_id": str(data.agent_id) if data.agent_id else None,
                 "caller_number": data.caller_number,
                 "called_number": data.called_number,
+                "source_type": data.source_type,
+                "source_url": data.source_url,
+                "source_domain": data.source_domain,
                 "status": data.status,
                 "failure_code": data.failure_code,
                 "failure_message": data.failure_message,
@@ -160,6 +163,7 @@ class CallLogService:
         organization_id: UUID,
         agent_id: Optional[UUID] = None,
         status: Optional[str] = None,
+        source_type: Optional[str] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
         recording_only: bool = False,
@@ -222,6 +226,8 @@ class CallLogService:
                 query = query.in_("id", list(recording_call_ids))
             if status:
                 query = query.eq("status", status)
+            if source_type:
+                query = query.eq("source_type", source_type)
             if date_from:
                 query = query.gte("created_at", date_from.isoformat())
             if date_to:

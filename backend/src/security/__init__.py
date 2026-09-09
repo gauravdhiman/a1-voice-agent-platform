@@ -2,6 +2,7 @@
 
 from src.security.rate_limiter import limiter, rate_limit_handler
 from src.security.canonical_host import CanonicalHostMiddleware
+from src.security.embed_cors import EmbedAwareCORSMiddleware
 from src.security.headers import SecurityHeadersMiddleware
 
 __all__ = [
@@ -9,4 +10,5 @@ __all__ = [
     "rate_limit_handler",
     "SecurityHeadersMiddleware",
     "CanonicalHostMiddleware",
+    "EmbedAwareCORSMiddleware",
 ]

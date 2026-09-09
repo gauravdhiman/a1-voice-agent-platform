@@ -16,6 +16,9 @@ class CallLog(BaseModel):
     agent_id: Optional[UUID]
     caller_number: Optional[str]
     called_number: Optional[str]
+    source_type: Optional[str] = Field(None, max_length=30)
+    source_url: Optional[str] = Field(None, max_length=2048)
+    source_domain: Optional[str] = Field(None, max_length=255)
     status: str
     failure_code: Optional[str] = Field(None, max_length=100)
     failure_message: Optional[str] = Field(None, max_length=1000)
@@ -37,6 +40,9 @@ class CallLogCreate(BaseModel):
     agent_id: Optional[UUID] = None
     caller_number: Optional[str] = None
     called_number: Optional[str] = None
+    source_type: Optional[str] = Field(None, max_length=30)
+    source_url: Optional[str] = Field(None, max_length=2048)
+    source_domain: Optional[str] = Field(None, max_length=255)
     status: str = "initiated"
     failure_code: Optional[str] = Field(None, max_length=100)
     failure_message: Optional[str] = Field(None, max_length=1000)

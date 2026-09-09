@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TagInput } from "@/components/ui/tag-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -25,10 +26,9 @@ import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Copy, Code, ExternalLink, Info, Settings, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
+import { Copy, Code, Info, Settings, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { agentService, type EmbedConfig, type EmbedConfigCreate } from "@/services/agent-service";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -127,10 +127,14 @@ export function EmbedButtonConfig({ agentId }: EmbedButtonConfigProps) {
 
   const generateEmbedCode = (configData: EmbedConfigCreate | EmbedConfig) => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    // The API can be deployed separately from the static frontend/embed host.
+    // Keep this endpoint in the generated snippet so page loads stay request-free.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || baseUrl;
     return `<!-- AI Voice Agent Call Button -->
 <script
   src="${baseUrl}/embed/call-button.js"
   data-agent-id="${agentId}"
+  data-api-url="${apiUrl}"
   data-button-text="${configData.buttonText}"
   data-button-color="${configData.buttonColor}"
   data-button-text-color="${configData.buttonTextColor}"
@@ -416,22 +420,32 @@ export function EmbedButtonConfig({ agentId }: EmbedButtonConfigProps) {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Restrict where the button can be used</p>
-                      <p>Enter one domain per line</p>
+                      <p>Press Space, comma, or Enter after each domain</p>
+                      <p>Calls are checked against the host page</p>
                       <p>Leave empty to allow all domains</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <Textarea
+                <TagInput
                   id="allowedDomains"
-                  placeholder="example.com&#10;www.example.com"
-                  value={formData.allowedDomains?.join("\n") || ""}
-                  onChange={(e) =>
+                  placeholder="example.com"
+                  value={formData.allowedDomains ?? []}
+                  delimiters={[",", " "]}
+                  onChange={(allowedDomains) =>
                     setFormData({
                       ...formData,
-                      allowedDomains: e.target.value.split("\n").filter(Boolean),
+                      allowedDomains,
                     })
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Type a domain, then press Space, comma, or Enter to add it.
+                  Click the × on a pill to remove it.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  The call button validates the host page before opening the
+                  call and records that page as the call source.
+                </p>
               </div>
 
               <div className="space-y-2">
