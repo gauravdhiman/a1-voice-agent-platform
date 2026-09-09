@@ -421,7 +421,7 @@ role at the `GET /api/v1/auth/audit` boundary.
 **Indexes**: `(email, created_at)` for account investigation and
 `(event, created_at)` for abuse review.
 
-**Migrations**: `20260905000001_add_auth_audit_events.py`.
+**Migrations**: `20260906000001_add_auth_audit_events.py`.
 
 ---
 
@@ -2012,7 +2012,7 @@ erDiagram
 83. `20260906000001` - Add append-only, service-role-only `auth_audit_events` (`signup`, `signup_denied`, `signin`, `signin_denied`, `signout`, `invitation_processed`, `password_reset_requested`, `oauth_signin`, `oauth_denied`). Written by backend auth routes only; reads are platform-admin only. No tokens, passwords, or request bodies are stored.
 84. `20260906000002` - Add the service-role-only `claim_invitation(text, uuid, text)` RPC. It atomically email-binds and claims pending invitations, inserts an idempotent regular-user membership, accepts the invitation, and supports safe repeated claims without personal-organization fallback.
 85. `20260906000003` - Merge the main-line organization-tool-visibility head with the controlled-SaaS auth/invitation head. This revision changes no tables or data and restores one connected release-order head for `alembic upgrade head`.
-86. `20260906000001` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
+86. `20260906000004` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
 
 ---
 
@@ -2327,4 +2327,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-09-06
+**Last Updated**: 2026-09-08

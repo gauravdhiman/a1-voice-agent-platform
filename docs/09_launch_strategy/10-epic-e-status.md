@@ -7,7 +7,7 @@ dashboards, and paid-catalog publish remain tracked follow-ups.
 
 ## What shipped
 
-- `auth_audit_events` (migration `20260905000001`, append-only,
+- `auth_audit_events` (migration `20260906000001`, append-only,
   service-role): `signup/signup_denied/signin/signin_denied/oauth_signin/
   oauth_denied/password_reset_requested` (+ unused constants for signout/
   invitation flows). Best-effort writer that never raises; platform-admin
