@@ -3,12 +3,12 @@ Organization Service Tests
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-
-from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
+from src.organization.models import OrganizationCreate, OrganizationUpdate
 
 
 @pytest.fixture
@@ -60,6 +60,95 @@ def sample_organization_create():
 
 class TestOrganizationService:
     """Test cases for organization service."""
+
+    @pytest.mark.asyncio
+    async def test_existing_user_invitation_assigns_requested_org_admin_role(
+        self, organization_service, mock_supabase_client
+    ):
+        """A direct-addition invitation uses the requested organization role."""
+        from src.organization.invitation_models import InvitationCreate, InvitationRole
+
+        organization_id = uuid4()
+        invited_by = uuid4()
+        user_id = uuid4()
+        role_id = uuid4()
+        existing_user = SimpleNamespace(
+            id=user_id, first_name="Alex", last_name="Customer"
+        )
+        selected_role = SimpleNamespace(id=role_id)
+        assigned_role = SimpleNamespace(id=uuid4())
+        query = MagicMock()
+        query.update.return_value = query
+        query.eq.return_value = query
+        query.execute.return_value = SimpleNamespace(data=[])
+        mock_supabase_client.table.return_value = query
+
+        with (
+            patch("src.auth.service.auth_service") as auth_service,
+            patch("src.organization.service.role_service") as role_service,
+            patch("src.organization.service.user_role_service") as user_role_service,
+            patch("src.organization.service.notification_service") as notifier,
+            patch.object(
+                organization_service,
+                "get_organization_by_id",
+                new=AsyncMock(return_value=(SimpleNamespace(name="Acme"), None)),
+            ),
+        ):
+            auth_service.get_user_by_email = AsyncMock(
+                return_value=(existing_user, None)
+            )
+            role_service.get_role_by_name = AsyncMock(
+                return_value=(selected_role, None)
+            )
+            user_role_service.get_user_roles = AsyncMock(return_value=([], None))
+            user_role_service.assign_role_to_user = AsyncMock(
+                return_value=(assigned_role, None)
+            )
+            notifier.send_notification = AsyncMock()
+
+            invitation, error = await organization_service.create_invitation(
+                InvitationCreate(
+                    email="customer@example.com",
+                    organization_id=organization_id,
+                    invited_by=invited_by,
+                    role=InvitationRole.ORG_ADMIN,
+                )
+            )
+
+        assert error is None
+        assert invitation is not None
+        assert invitation.role_id == role_id
+        user_role_service.assign_role_to_user.assert_awaited_once()
+        assigned = user_role_service.assign_role_to_user.call_args.args[0]
+        assert assigned.role_id == role_id
+        notification = notifier.send_notification.call_args.args[0]
+        assert notification.template_variables["role_name"] == (
+            "Organization administrator"
+        )
+
+    @pytest.mark.asyncio
+    async def test_invitation_returns_error_when_requested_role_is_missing(
+        self, organization_service
+    ):
+        """Invitation creation fails before membership changes if the role is unavailable."""
+        from src.organization.invitation_models import InvitationCreate, InvitationRole
+
+        with patch("src.organization.service.role_service") as role_service:
+            role_service.get_role_by_name = AsyncMock(
+                return_value=(None, "role missing")
+            )
+
+            invitation, error = await organization_service.create_invitation(
+                InvitationCreate(
+                    email="customer@example.com",
+                    organization_id=uuid4(),
+                    invited_by=uuid4(),
+                    role=InvitationRole.ORG_ADMIN,
+                )
+            )
+
+        assert invitation is None
+        assert error == "Role not found"
 
     @pytest.mark.asyncio
     async def test_process_invitation_claims_rpc_with_normalized_email(
@@ -551,7 +640,6 @@ class TestOrganizationService:
     def test_organization_update_no_onboarding_completed_field(self):
         """OrganizationUpdate must not allow setting onboarding_completed."""
         from shared.organization.models import OrganizationUpdate
-        import pydantic
 
         # onboarding_completed should not be a field on OrganizationUpdate
         assert "onboarding_completed" not in OrganizationUpdate.model_fields

@@ -233,6 +233,14 @@ platform_credit_grants            -- Actor/reason audit record for each platform
   requires an amount and reason and refreshes the balance and ledger after the
   atomic grant completes.
 
+During controlled onboarding, the platform-admin **Create Organization** flow
+loads every currently published plan version and requires the administrator to
+choose the organization's initial plan. The selected free or paid plan is
+recorded as an active subscription with `activation_source=platform_admin`;
+this is an operator-approved assignment and does not create a Stripe
+subscription. Public self-service paid signup continues through Stripe
+Checkout and webhook confirmation.
+
 The Call Log report orders records by `created_at` and supports agent, status,
 and date filters. The `To` date picker cannot select a date before
 `From`; changing `From` clears an already-invalid `To` value. Because the call

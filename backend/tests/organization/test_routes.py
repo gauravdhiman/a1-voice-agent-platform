@@ -118,6 +118,79 @@ class TestInviteMemberPermissionTypo:
 
             assert result is not None
             mock_svc.create_invitation.assert_called_once()
+            assert mock_svc.create_invitation.call_args.args[0].role.value == (
+                "regular_user"
+            )
+
+    @pytest.mark.asyncio
+    async def test_member_create_permission_cannot_invite_org_admin(self):
+        """Elevated invitations require an administrator, not only member:create."""
+        from src.organization.routes import invite_member
+
+        profile = _make_profile(has_member_create=True)
+        mock_request = _make_json_request({"email": TEST_EMAIL, "role": "org_admin"})
+
+        with patch("src.organization.routes.organization_service") as mock_svc:
+            mock_svc.create_invitation = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await invite_member(
+                    org_id=TEST_ORG_ID,
+                    request=mock_request,
+                    user_data=(TEST_USER_ID, profile),
+                )
+
+            assert exc_info.value.status_code == 403
+            mock_svc.create_invitation.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_can_invite_org_admin_role(self):
+        """Platform administrators can select the elevated invitation role."""
+        from src.organization.routes import invite_member
+
+        profile = _make_profile(is_platform_admin=True)
+        mock_request = _make_json_request({"email": TEST_EMAIL, "role": "org_admin"})
+
+        with (
+            patch("src.organization.routes.organization_service") as mock_svc,
+            patch("src.organization.service.organization_service") as mock_svc_module,
+        ):
+            mock_svc.create_invitation = AsyncMock(
+                return_value=(_make_invitation(), None)
+            )
+            mock_svc_module.create_invitation = mock_svc.create_invitation
+
+            result = await invite_member(
+                org_id=TEST_ORG_ID,
+                request=mock_request,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result is not None
+        invite_data = mock_svc.create_invitation.call_args.args[0]
+        assert invite_data.role.value == "org_admin"
+
+    @pytest.mark.asyncio
+    async def test_invalid_invitation_role_is_rejected(self):
+        """Invitation role input is limited to the supported organization roles."""
+        from src.organization.routes import invite_member
+
+        profile = _make_profile(is_platform_admin=True)
+        mock_request = _make_json_request(
+            {"email": TEST_EMAIL, "role": "billing_owner"}
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await invite_member(
+                org_id=TEST_ORG_ID,
+                request=mock_request,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail["message"] == (
+            "Role must be regular_user or org_admin"
+        )
 
     @pytest.mark.asyncio
     async def test_user_with_no_permission_forbidden(self):
@@ -262,6 +335,102 @@ class TestCreateOrganizationPlatformRole:
             )
         assert exc_info.value.status_code == 403
         assert "platform admin" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_creation_activates_default_free_plan(self):
+        from src.organization.models import OrganizationCreate
+        from src.organization.routes import create_organization
+
+        profile = _make_profile(is_platform_admin=True)
+        organization = Mock(id=TEST_ORG_ID)
+
+        with (
+            patch("src.organization.routes.organization_service") as mock_org,
+            patch(
+                "src.organization.routes.versioned_subscription_service"
+            ) as mock_billing,
+        ):
+            mock_org.create_organization = AsyncMock(return_value=(organization, None))
+            mock_billing.activate_default_free_plan = AsyncMock()
+
+            result = await create_organization(
+                org_data=OrganizationCreate(name="Test Org", slug="test-org"),
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result is organization
+        mock_billing.activate_default_free_plan.assert_awaited_once_with(TEST_ORG_ID)
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_creation_assigns_selected_plan(self):
+        from src.organization.models import PlatformOrganizationCreate
+        from src.organization.routes import create_organization
+
+        profile = _make_profile(is_platform_admin=True)
+        organization = Mock(id=TEST_ORG_ID)
+        selected_plan_id = UUID("00000000-0000-0000-0000-000000000055")
+
+        with (
+            patch("src.organization.routes.organization_service") as mock_org,
+            patch(
+                "src.organization.routes.versioned_subscription_service"
+            ) as mock_billing,
+        ):
+            mock_org.create_organization = AsyncMock(return_value=(organization, None))
+            mock_billing.assign_plan_for_platform_admin = AsyncMock()
+            mock_billing.activate_default_free_plan = AsyncMock()
+
+            result = await create_organization(
+                org_data=PlatformOrganizationCreate(
+                    name="Test Org",
+                    slug="test-org",
+                    plan_version_id=selected_plan_id,
+                ),
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        assert result is organization
+        mock_billing.assign_plan_for_platform_admin.assert_awaited_once_with(
+            TEST_ORG_ID, selected_plan_id
+        )
+        mock_billing.activate_default_free_plan.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_creation_rolls_back_when_plan_assignment_fails(self):
+        """Organization creation is rolled back if plan provisioning fails."""
+        from src.organization.models import PlatformOrganizationCreate
+        from src.organization.routes import create_organization
+
+        profile = _make_profile(is_platform_admin=True)
+        organization = Mock(id=TEST_ORG_ID)
+        selected_plan_id = UUID("00000000-0000-0000-0000-000000000056")
+
+        with (
+            patch("src.organization.routes.organization_service") as mock_org,
+            patch(
+                "src.organization.routes.versioned_subscription_service"
+            ) as mock_billing,
+        ):
+            mock_org.create_organization = AsyncMock(return_value=(organization, None))
+            mock_org.delete_organization = AsyncMock(
+                return_value=(False, "cleanup failed")
+            )
+            mock_billing.assign_plan_for_platform_admin = AsyncMock(
+                side_effect=ValueError("selected plan unavailable")
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await create_organization(
+                    org_data=PlatformOrganizationCreate(
+                        name="Test Org",
+                        slug="test-org",
+                        plan_version_id=selected_plan_id,
+                    ),
+                    user_data=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 500
+        mock_org.delete_organization.assert_awaited_once_with(TEST_ORG_ID)
 
 
 class TestUpdateOrganizationOrgAdminOnly:

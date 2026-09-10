@@ -187,6 +187,9 @@ function MembersPageContent({
         open={inviteDialogOpen}
         onOpenChange={setInviteDialogOpen}
         onSuccess={() => refetch()}
+        canInviteOrgAdmins={
+          userPermissions.isPlatformAdmin || userPermissions.isOrgAdmin
+        }
       />
     </div>
   );

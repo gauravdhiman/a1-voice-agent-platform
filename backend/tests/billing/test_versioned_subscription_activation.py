@@ -96,6 +96,169 @@ class TestVersionedSubscriptionService:
     """Unit tests for the versioned activation service."""
 
     @pytest.mark.asyncio
+    async def test_activate_default_free_plan_selects_current_free_version(self):
+        """Platform provisioning resolves and activates the published free plan."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        plan_versions = _query([{"id": str(FREE_VERSION_ID)}])
+        service.supabase.table.return_value = plan_versions
+        service.activate_free_plan = AsyncMock(return_value="activated")
+
+        result = await service.activate_default_free_plan(ORG_ID)
+
+        assert result == "activated"
+        service.activate_free_plan.assert_awaited_once_with(ORG_ID, FREE_VERSION_ID)
+
+    @pytest.mark.asyncio
+    async def test_activate_default_free_plan_rejects_missing_catalog_plan(self):
+        """Platform provisioning fails safely when no published free plan exists."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.table.return_value = _query([])
+
+        with pytest.raises(ValueError, match="No published free plan"):
+            await service.activate_default_free_plan(ORG_ID)
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_can_assign_a_published_paid_plan(self):
+        """Controlled provisioning records an explicitly selected paid plan."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(return_value=None)
+
+        subscription_row = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "subscription_plan_id": None,
+            "plan_version_id": str(PAID_VERSION_ID),
+            "stripe_subscription_id": None,
+            "stripe_customer_id": None,
+            "status": "active",
+            "current_period_start": "2026-09-09T00:00:00+00:00",
+            "current_period_end": "2026-10-09T00:00:00+00:00",
+            "metadata": {"activation_source": "platform_admin"},
+        }
+        query = _query([subscription_row])
+        service.supabase.table.return_value = query
+
+        result = await service.assign_plan_for_platform_admin(ORG_ID, PAID_VERSION_ID)
+
+        assert result.created is True
+        assert result.subscription.plan_version_id == PAID_VERSION_ID
+        payload = query.insert.call_args.args[0]
+        assert payload["metadata"]["activation_source"] == "platform_admin"
+        assert payload["metadata"]["billing_mode"] == BillingMode.PAID.value
+        service.credit_grant_service.grant_for_subscription.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_assignment_rejects_different_active_plan(self):
+        """An active subscription cannot be silently replaced by provisioning."""
+        service = VersionedSubscriptionService()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(
+            return_value={
+                "id": str(SUBSCRIPTION_ID),
+                "plan_version_id": str(FREE_VERSION_ID),
+                "status": "active",
+            }
+        )
+
+        with pytest.raises(ValueError, match="already has an active subscription"):
+            await service.assign_plan_for_platform_admin(ORG_ID, PAID_VERSION_ID)
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_assignment_retries_existing_admin_grant(self):
+        """Retrying the same admin assignment repairs a missing credit grant."""
+        service = VersionedSubscriptionService()
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(
+            return_value={
+                "id": str(SUBSCRIPTION_ID),
+                "organization_id": str(ORG_ID),
+                "plan_version_id": str(PAID_VERSION_ID),
+                "status": "active",
+                "current_period_start": "2026-09-01T00:00:00+00:00",
+                "current_period_end": "2026-10-01T00:00:00+00:00",
+                "metadata": {"activation_source": "platform_admin"},
+            }
+        )
+
+        result = await service.assign_plan_for_platform_admin(ORG_ID, PAID_VERSION_ID)
+
+        assert result.created is False
+        service.credit_grant_service.grant_for_subscription.assert_awaited_once()
+        grant = service.credit_grant_service.grant_for_subscription.await_args
+        assert grant.kwargs["grant_reason"] == "activation"
+        assert grant.kwargs["grant_key"].startswith("platform-admin-assignment:")
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_assignment_rejects_unexpected_existing_status(self):
+        """Provisioning does not overwrite subscriptions in an unknown state."""
+        service = VersionedSubscriptionService()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(
+            return_value={
+                "id": str(SUBSCRIPTION_ID),
+                "plan_version_id": str(PAID_VERSION_ID),
+                "status": "past_due",
+            }
+        )
+
+        with pytest.raises(ValueError, match="already has an active subscription"):
+            await service.assign_plan_for_platform_admin(ORG_ID, PAID_VERSION_ID)
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_assignment_updates_cancelled_subscription(self):
+        """A cancelled subscription can be reactivated with the selected plan."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(
+            return_value={
+                "id": str(SUBSCRIPTION_ID),
+                "organization_id": str(ORG_ID),
+                "plan_version_id": str(FREE_VERSION_ID),
+                "status": "cancelled",
+            }
+        )
+        updated_row = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "plan_version_id": str(PAID_VERSION_ID),
+            "status": "active",
+            "current_period_start": "2026-09-09T00:00:00+00:00",
+            "current_period_end": "2026-10-09T00:00:00+00:00",
+            "metadata": {"activation_source": "platform_admin"},
+        }
+        query = _query([updated_row])
+        service.supabase.table.return_value = query
+
+        result = await service.assign_plan_for_platform_admin(ORG_ID, PAID_VERSION_ID)
+
+        assert result.created is False
+        query.update.assert_called_once()
+        service.credit_grant_service.grant_for_subscription.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_platform_admin_assignment_rejects_empty_subscription_write(self):
+        """Provisioning reports a safe error when the subscription write returns no row."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(return_value=None)
+        service.supabase.table.return_value = _query([])
+
+        with pytest.raises(ValueError, match="Failed to assign organization plan"):
+            await service.assign_plan_for_platform_admin(ORG_ID, PAID_VERSION_ID)
+
+        service.credit_grant_service.grant_for_subscription.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_lists_only_current_published_versions_with_entitlements(self):
         """Customer plan listing excludes drafts and includes catalog metadata."""
         service = VersionedSubscriptionService()
@@ -122,7 +285,7 @@ class TestVersionedSubscriptionService:
                         "display_name": "Included credits",
                         "description": "Credits granted each billing period.",
                     },
-                }
+                },
             ]
         )
         service.supabase.table.side_effect = lambda name: {
