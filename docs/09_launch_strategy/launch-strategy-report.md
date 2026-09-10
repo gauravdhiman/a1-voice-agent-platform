@@ -35,7 +35,7 @@ flowchart LR
 **What "controlled" means in practice:**
 
 - Anyone can **try demos** (no login, time-boxed, lead-captured).
-- Signup exists but **paid activation requires your approval** (manual Stripe link or admin plan assign).
+- Signup exists but **paid activation requires your approval** (manual Stripe link or admin plan assign). During concierge provisioning, the platform admin chooses the initial published plan while creating the organization.
 - You do **10–15 concierge setups yourself** to learn failure modes before automating them.
 
 ---
@@ -67,7 +67,7 @@ Verified from `backend/src`, `shared/`, `voice-ws/src`, `frontend/src`, Alembic 
 
 - Email+password with strong policy (8–128, upper+lower+digit+special) + `check-email` + 409 guidance.
 - Backend-brokered Google + LinkedIn OAuth (secret never leaves backend), signed `state` JWT, verified-email requirement, one-time handoff JWT.
-- Invitation-before-provisioning (no dummy-org fallback) + founder onboarding (`OrgDetails → PlanSelection → completeOnboarding` idempotent).
+- Invitation-before-provisioning (no dummy-org fallback) + founder onboarding (`OrgDetails → PlanSelection → completeOnboarding` idempotent). During controlled launch, platform admins choose any currently published plan when creating an organization and can invite the customer directly as `org_admin` or `regular_user`.
 - Separate short-lived `voice_ws_session` JWT (15m, `agent_id` + `purpose`) shared via `JWT_SECRET_KEY` — correct boundary between app auth and call auth.
 - Rate limits: signup 5/min, signin 10/min, resend 3/min + custom email-verification tokens (32B, 24h, Resend template).
 

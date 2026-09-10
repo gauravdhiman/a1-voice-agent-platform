@@ -451,6 +451,14 @@ on the dashboard with the **invited org selected** and a soft welcome toast.
 `onboarding_completed = false`. There is no "dummy org" concept — self-signup
 provisions a normal organization with a name-based slug.
 
+During controlled launch, a platform administrator creates the organization and
+chooses any currently published plan before inviting the customer. Invitations
+can be created as either `regular_user` or `org_admin`; only a platform
+administrator or an administrator of the target organization can choose the
+`org_admin` role. The selected plan is active immediately. Paid plans assigned
+this way are explicit operator-approved assignments and do not create a Stripe
+subscription; public self-service paid onboarding continues through Stripe.
+
 Founder onboarding has two stages, without a visible timeline: organization
 details followed by plan activation. The organization details stage collects
 name, slug, timezone, website, industry, and address, then persists them before

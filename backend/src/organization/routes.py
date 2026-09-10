@@ -2,12 +2,11 @@
 Organization API routes for the multi-tenant SaaS platform.
 """
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from opentelemetry import trace
-
-from shared.common.errors import ErrorCode
 from src.auth.dependencies import (
     assert_has_permission,
     assert_has_role,
@@ -16,16 +15,29 @@ from src.auth.dependencies import (
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.billing.service import billing_service
-from src.organization.invitation_models import Invitation, InvitationCreate
+from src.billing.versioned_subscription_service import versioned_subscription_service
+from src.organization.invitation_models import (
+    Invitation,
+    InvitationCreate,
+    InvitationRole,
+)
 from src.organization.member_models import OrganizationMember
-from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
+from src.organization.models import (
+    Organization,
+    OrganizationCreate,
+    OrganizationUpdate,
+    PlatformOrganizationCreate,
+)
 from src.organization.service import organization_service
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
 
+from shared.common.errors import ErrorCode
+
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)
+logger = logging.getLogger(__name__)
 
 # Create organization router
 organization_router = APIRouter(prefix="/api/v1/organizations", tags=["Organizations"])
@@ -36,7 +48,7 @@ organization_router = APIRouter(prefix="/api/v1/organizations", tags=["Organizat
 )
 @tracer.start_as_current_span("organization.routes.create_organization")
 async def create_organization(
-    org_data: OrganizationCreate,
+    org_data: PlatformOrganizationCreate,
     user_data: tuple[UUID, "UserProfile"] = Depends(get_authenticated_user),
 ):
     """Create a new organization (requires platform_admin role)."""
@@ -56,6 +68,39 @@ async def create_organization(
     if error:
         current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+    selected_plan_version_id = getattr(org_data, "plan_version_id", None)
+    try:
+        if selected_plan_version_id:
+            await versioned_subscription_service.assign_plan_for_platform_admin(
+                organization.id, selected_plan_version_id
+            )
+        else:
+            # Preserve the existing API behavior for older platform-admin
+            # clients that do not send a plan yet.
+            await versioned_subscription_service.activate_default_free_plan(
+                organization.id
+            )
+    except Exception as plan_error:
+        logger.error(
+            "Failed to assign a plan for newly created organization %s: %s",
+            organization.id,
+            plan_error,
+            exc_info=True,
+        )
+        deleted, delete_error = await organization_service.delete_organization(
+            organization.id
+        )
+        if not deleted:
+            logger.error(
+                "Failed to clean up organization %s after plan activation failure: %s",
+                organization.id,
+                delete_error,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to provision the organization with its selected plan",
+        ) from plan_error
 
     current_span.set_attribute("organization.id", str(organization.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
@@ -217,7 +262,8 @@ async def invite_member(
                 },
             )
 
-    # Parse request body manually to get email
+    # Parse request body manually to preserve the existing route contract while
+    # accepting an explicit organization-scoped invitation role.
     body = await request.json()
     email = body.get("email")
     if not email:
@@ -229,9 +275,37 @@ async def invite_member(
             },
         )
 
+    try:
+        invitation_role = InvitationRole(
+            body.get("role", InvitationRole.REGULAR_USER.value)
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": ErrorCode.VALIDATION_ERROR.value,
+                "message": "Role must be regular_user or org_admin",
+            },
+        ) from exc
+
+    if invitation_role == InvitationRole.ORG_ADMIN and not (
+        user_profile.has_role("platform_admin")
+        or user_profile.has_role("org_admin", str(org_id))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": ErrorCode.INSUFFICIENT_PERMISSIONS.value,
+                "message": "Only organization administrators can invite organization administrators",
+            },
+        )
+
     # Create InvitationCreate with the current user as invited_by
     invite_data = InvitationCreate(
-        email=email, organization_id=org_id, invited_by=current_user_id
+        email=email,
+        organization_id=org_id,
+        invited_by=current_user_id,
+        role=invitation_role,
     )
 
     # Import here to avoid circular imports

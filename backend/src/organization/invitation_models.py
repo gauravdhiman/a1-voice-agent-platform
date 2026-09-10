@@ -19,6 +19,13 @@ class InvitationStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class InvitationRole(str, Enum):
+    """Organization-scoped roles that may be granted by an invitation."""
+
+    REGULAR_USER = "regular_user"
+    ORG_ADMIN = "org_admin"
+
+
 class InvitationBase(BaseModel):
     """Base model for Organization Invitation."""
 
@@ -30,8 +37,9 @@ class InvitationBase(BaseModel):
 class InvitationCreate(InvitationBase):
     """Model for creating a new invitation."""
 
-    role_id: Optional[UUID] = Field(
-        None, description="Role to assign to the user (optional)"
+    role: InvitationRole = Field(
+        InvitationRole.REGULAR_USER,
+        description="Organization-scoped role to assign to the invited user",
     )
 
 
@@ -53,6 +61,9 @@ class Invitation(InvitationBase):
     expires_at: datetime = Field(..., description="Invitation expiration time")
     created_at: datetime = Field(..., description="Creation timestamp")
     accepted_at: Optional[datetime] = Field(None, description="Acceptance timestamp")
+    role_id: Optional[UUID] = Field(
+        None, description="Resolved organization role assigned by the invitation"
+    )
     organization_name: Optional[str] = Field(
         None,
         description="Display name of the invited organization (populated on accept)",

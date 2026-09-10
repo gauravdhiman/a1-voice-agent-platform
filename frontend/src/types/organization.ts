@@ -38,6 +38,8 @@ export interface OrganizationEnhanced extends Organization {
 }
 
 // Invitation type for organization membership invitations
+export type InvitationRole = "regular_user" | "org_admin";
+
 export interface Invitation {
   id: string;
   email: string;
@@ -48,6 +50,7 @@ export interface Invitation {
   expires_at: string;
   created_at: string;
   accepted_at?: string;
+  role_id?: string | null;
   /** Populated when an invitation is accepted successfully. */
   organization_name?: string | null;
 }
@@ -59,6 +62,11 @@ export interface OrganizationCreate {
   slug: string;
   website?: string;
   is_active?: boolean;
+}
+
+/** Organization creation payload used by platform-admin provisioning. */
+export interface PlatformOrganizationCreate extends OrganizationCreate {
+  plan_version_id: string;
 }
 
 // For organization updates (partial Organization)

@@ -189,11 +189,13 @@ Stores organization membership invitations sent to users.
 | expires_at      | TIMESTAMPTZ  | NOT NULL                        | Invitation expiration time                    |
 | created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                            |
 | accepted_at     | TIMESTAMPTZ  | NULLABLE                        | Acceptance timestamp                          |
+| role_id         | UUID         | NULLABLE, FK → roles.id         | Organization role granted when claimed       |
 
 **Foreign Keys**:
 
 - `organization_id` → `organizations.id` (CASCADE)
 - `invited_by` → `auth.users.id` (CASCADE)
+- `role_id` → `roles.id` (RESTRICT); only `regular_user` and `org_admin` are valid invitation roles
 
 **RLS**: Enabled
 **Check Constraint**: `status IN ('pending', 'accepted', 'expired', 'cancelled')`
@@ -205,13 +207,16 @@ Stores organization membership invitations sent to users.
 - `idx_invitations_organization_id`
 - `idx_invitations_status`
 - `idx_invitations_expires_at`
+- `idx_invitations_role_id`
 
 Invitation claiming is performed by the service-role-only
 `claim_invitation(text, uuid, text)` PostgreSQL function. The function locks
 the invitation row, matches the normalized invited email, requires a pending
-and unexpired invitation, inserts an idempotent `user_roles` membership, and
-marks the invitation accepted in one transaction. Repeated claims by the same
-user are safe; a failed claim does not fall back to a personal organization.
+and unexpired invitation, inserts an idempotent `user_roles` membership using
+the stored organization-scoped role (defaulting legacy rows to
+`regular_user`), and marks the invitation accepted in one transaction.
+Repeated claims by the same user are safe; a failed claim does not fall back
+to a personal organization.
 
 ---
 
@@ -1646,6 +1651,7 @@ erDiagram
         varchar email
         uuid organization_id
         uuid invited_by
+        uuid role_id
         varchar token
         varchar status
         timestamptz expires_at
@@ -2013,6 +2019,7 @@ erDiagram
 84. `20260906000002` - Add the service-role-only `claim_invitation(text, uuid, text)` RPC. It atomically email-binds and claims pending invitations, inserts an idempotent regular-user membership, accepts the invitation, and supports safe repeated claims without personal-organization fallback.
 85. `20260906000003` - Merge the main-line organization-tool-visibility head with the controlled-SaaS auth/invitation head. This revision changes no tables or data and restores one connected release-order head for `alembic upgrade head`.
 86. `20260906000004` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
+87. `20260909000001` - Persist the organization-scoped role selected for an invitation and apply it atomically when the invitation is claimed. New invitations support `regular_user` (default) or `org_admin`; legacy invitations remain regular-user invitations.
 
 ---
 
