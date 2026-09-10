@@ -13,22 +13,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Loader2, Mail } from "lucide-react";
 import { organizationService } from "@/services/organization-service";
+import type { InvitationRole } from "@/types/organization";
 
 interface InviteMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  canInviteOrgAdmins?: boolean;
 }
 
 export function InviteMemberDialog({
   open,
   onOpenChange,
   onSuccess,
+  canInviteOrgAdmins = false,
 }: InviteMemberDialogProps) {
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<InvitationRole>("regular_user");
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const orgId = searchParams.get("org_id");
@@ -44,7 +55,7 @@ export function InviteMemberDialog({
     setLoading(true);
 
     try {
-      const invitation = await organizationService.inviteMember(orgId, email);
+      const invitation = await organizationService.inviteMember(orgId, email, role);
 
       if (invitation) {
         // Show different messages based on invitation type
@@ -57,6 +68,7 @@ export function InviteMemberDialog({
         }
 
         setEmail("");
+        setRole("regular_user");
         onOpenChange(false);
         onSuccess?.();
       }
@@ -138,6 +150,31 @@ export function InviteMemberDialog({
               />
               <p className="text-sm text-muted-foreground">
                 We&apos;ll send an invitation email with a link to sign up.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="role">Role</Label>
+              <Select
+                value={role}
+                onValueChange={(value) => setRole(value as InvitationRole)}
+                disabled={loading}
+              >
+                <SelectTrigger id="role">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="regular_user">Regular user</SelectItem>
+                  {canInviteOrgAdmins && (
+                    <SelectItem value="org_admin">
+                      Organization administrator
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                {canInviteOrgAdmins
+                  ? "Organization administrators can manage members, agents, and billing for this organization."
+                  : "Regular users can work in the organization without administrative access."}
               </p>
             </div>
           </div>

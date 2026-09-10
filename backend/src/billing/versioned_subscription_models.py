@@ -96,6 +96,13 @@ class FreePlanActivationResponse(BaseModel):
     created: bool
 
 
+class PlanAssignmentResponse(BaseModel):
+    """Response returned after a platform administrator assigns a plan."""
+
+    subscription: VersionedSubscriptionRecord
+    created: bool
+
+
 class VersionedSubscriptionCheckoutResponse(BaseModel):
     """Stripe Checkout redirect details for a paid plan version."""
 

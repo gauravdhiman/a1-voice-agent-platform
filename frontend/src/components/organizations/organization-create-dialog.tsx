@@ -3,7 +3,7 @@
  */
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -27,8 +27,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { PlanCard, toPlanCardData } from "@/components/billing/plan-card";
+import { billingService } from "@/services/billing-service";
 import { organizationService } from "@/services/organization-service";
 import { Loader2, Building2 } from "lucide-react";
+import type { CustomerPlanVersion } from "@/types/billing";
 
 const organizationSchema = z.object({
   name: z
@@ -72,6 +76,10 @@ export function OrganizationCreateDialog({
 }: OrganizationCreateDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [plans, setPlans] = useState<CustomerPlanVersion[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
   const form = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
@@ -82,6 +90,50 @@ export function OrganizationCreateDialog({
       is_active: true,
     },
   });
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    setPlansLoading(true);
+    setPlansError(null);
+    setSelectedPlanId(null);
+
+    void billingService
+      .getAvailablePlanVersions()
+      .then((availablePlans) => {
+        if (!cancelled) setPlans(availablePlans);
+      })
+      .catch((requestError) => {
+        if (cancelled) return;
+        setPlansError(
+          requestError instanceof Error
+            ? requestError.message
+            : "We could not load the available plans.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setPlansLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const sortedPlans = useMemo(
+    () =>
+      [...plans].sort((left, right) => {
+        if (left.tier_rank !== right.tier_rank) {
+          return left.tier_rank - right.tier_rank;
+        }
+        if (left.product_slug !== right.product_slug) {
+          return left.product_slug.localeCompare(right.product_slug);
+        }
+        return left.billing_interval.localeCompare(right.billing_interval);
+      }),
+    [plans],
+  );
 
   // Auto-generate slug from name
   const watchName = form.watch("name");
@@ -102,16 +154,23 @@ export function OrganizationCreateDialog({
       setLoading(true);
       setError(null);
 
+      if (!selectedPlanId) {
+        setError("Choose an initial plan before creating the organization.");
+        return;
+      }
+
       const newOrganization = await organizationService.createOrganization({
         name: data.name,
         description: data.description || "",
         slug: data.slug,
         website: data.website || "",
         is_active: data.is_active,
+        plan_version_id: selectedPlanId,
       });
 
       onSuccess(newOrganization);
       form.reset();
+      setSelectedPlanId(null);
     } catch (err: unknown) {
       const error = err as Error;
       console.error("Error creating organization:", err);
@@ -127,20 +186,22 @@ export function OrganizationCreateDialog({
       if (!newOpen) {
         form.reset();
         setError(null);
+        setSelectedPlanId(null);
       }
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
             Create Organization
           </DialogTitle>
           <DialogDescription>
-            Create a new organization to manage your team and projects.
+            Create the organization and choose its initial plan. Paid plans are
+            assigned by the platform administrator during the controlled launch.
           </DialogDescription>
         </DialogHeader>
 
@@ -260,6 +321,69 @@ export function OrganizationCreateDialog({
               )}
             />
 
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <h3 className="text-sm font-semibold">Initial plan *</h3>
+                <p className="text-sm text-muted-foreground">
+                  Choose from every currently published plan. The selected plan
+                  is active as soon as the organization is created.
+                </p>
+              </div>
+
+              {plansLoading ? (
+                <div className="flex items-center justify-center rounded-lg border py-8 text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading available plans...
+                </div>
+              ) : plansError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {plansError}
+                </div>
+              ) : sortedPlans.length === 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  No plans are available. Publish a plan before creating an
+                  organization.
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {sortedPlans.map((plan) => {
+                    const selected = selectedPlanId === plan.id;
+                    return (
+                      <PlanCard
+                        key={plan.id}
+                        plan={toPlanCardData(plan)}
+                        badge={
+                          plan.billing_mode === "free" ? (
+                            <Badge variant="secondary">Free</Badge>
+                          ) : (
+                            <Badge variant="outline">Admin assigned</Badge>
+                          )
+                        }
+                        className={
+                          selected
+                            ? "border-primary ring-2 ring-primary"
+                            : undefined
+                        }
+                        testId={`organization-plan-card-${plan.id}`}
+                        footer={
+                          <Button
+                            type="button"
+                            variant={selected ? "default" : "outline"}
+                            className="w-full"
+                            onClick={() => setSelectedPlanId(plan.id)}
+                            disabled={loading}
+                            data-testid={`organization-plan-select-${plan.id}`}
+                          >
+                            {selected ? "Selected" : "Select this plan"}
+                          </Button>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button
                 type="button"
@@ -270,14 +394,20 @@ export function OrganizationCreateDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading} className="flex-1">
+              <Button
+                type="submit"
+                disabled={
+                  loading || plansLoading || sortedPlans.length === 0 || !selectedPlanId
+                }
+                className="flex-1"
+              >
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Creating...
+                    Creating and assigning...
                   </>
                 ) : (
-                  "Create Organization"
+                  "Create & assign plan"
                 )}
               </Button>
             </div>

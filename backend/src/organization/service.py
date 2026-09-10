@@ -6,7 +6,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from opentelemetry import metrics, trace
 from src.notifications.models import SendNotificationRequest
@@ -14,6 +14,7 @@ from src.notifications.service import notification_service
 from src.organization.invitation_models import (
     Invitation,
     InvitationCreate,
+    InvitationRole,
     InvitationStatus,
 )
 from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
@@ -658,6 +659,12 @@ class OrganizationService(BaseOrganizationService):
         current_span.set_attribute("organization.id", str(invite_data.organization_id))
 
         try:
+            role_name = invite_data.role.value
+            member_role, role_error = await role_service.get_role_by_name(role_name)
+            if role_error or not member_role:
+                logger.error("Could not find '%s' role: %s", role_name, role_error)
+                return None, "Role not found"
+
             # Check if user already exists with this email
             from src.auth.service import auth_service
 
@@ -727,14 +734,6 @@ class OrganizationService(BaseOrganizationService):
                     f"User {invite_data.email} is not a member - adding to organization"
                 )
 
-                # Get the regular_user role
-                member_role, role_error = await role_service.get_role_by_name(
-                    "regular_user"
-                )
-                if role_error or not member_role:
-                    logger.error(f"Could not find 'regular_user' role: {role_error}")
-                    return None, "Role not found"
-
                 # Add user to organization
                 user_role_data = UserRoleCreate(
                     user_id=existing_user.id,
@@ -753,7 +752,7 @@ class OrganizationService(BaseOrganizationService):
                 token = secrets.token_urlsafe(32)
                 expires_at = datetime.now(timezone.utc) + timedelta(days=7)
                 invitation_dict = {
-                    "id": secrets.token_urlsafe(16),  # Temporary ID
+                    "id": str(uuid4()),  # Virtual invitation ID for existing users
                     "email": invite_data.email,
                     "organization_id": str(invite_data.organization_id),
                     "invited_by": str(invite_data.invited_by),
@@ -762,6 +761,7 @@ class OrganizationService(BaseOrganizationService):
                     "expires_at": expires_at.isoformat(),
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "accepted_at": datetime.now(timezone.utc).isoformat(),
+                    "role_id": member_role.id,
                 }
 
                 invitation = Invitation(
@@ -774,6 +774,7 @@ class OrganizationService(BaseOrganizationService):
                     expires_at=invitation_dict["expires_at"],
                     created_at=invitation_dict["created_at"],
                     accepted_at=invitation_dict["accepted_at"],
+                    role_id=invitation_dict["role_id"],
                 )
 
                 current_span.set_attribute("user.id", str(existing_user.id))
@@ -803,7 +804,11 @@ class OrganizationService(BaseOrganizationService):
                             "organization_name": (
                                 org.name if org else "the organization"
                             ),
-                            "role_name": "Member",
+                            "role_name": (
+                                "Organization administrator"
+                                if invite_data.role == InvitationRole.ORG_ADMIN
+                                else "Member"
+                            ),
                             "invitation_url": f"{self._get_frontend_url()}/auth/signin",
                             "expiry_days": "7",
                             "app_name": settings.app_name,
@@ -872,6 +877,7 @@ class OrganizationService(BaseOrganizationService):
                             "token": token,
                             "status": InvitationStatus.PENDING.value,
                             "expires_at": expires_at.isoformat(),
+                            "role_id": str(member_role.id),
                         }
                     )
                     .execute()
@@ -901,6 +907,7 @@ class OrganizationService(BaseOrganizationService):
                     expires_at=invitation_dict["expires_at"],
                     created_at=invitation_dict["created_at"],
                     accepted_at=invitation_dict.get("accepted_at"),
+                    role_id=invitation_dict.get("role_id"),
                 )
 
                 current_span.set_attribute("invitation.id", str(invitation.id))
@@ -928,7 +935,11 @@ class OrganizationService(BaseOrganizationService):
                             "organization_name": (
                                 org.name if org else "the organization"
                             ),
-                            "role_name": "Member",
+                            "role_name": (
+                                "Organization administrator"
+                                if invite_data.role == InvitationRole.ORG_ADMIN
+                                else "Member"
+                            ),
                             "invitation_url": f"{self._get_frontend_url()}/auth/signup?token={token}",
                             "expiry_days": "7",
                             "app_name": settings.app_name,
@@ -1018,7 +1029,7 @@ class OrganizationService(BaseOrganizationService):
         except httpx.TimeoutException:
             error_msg = "Validation request timed out"
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
-            logger.warning(f"Google API key validation timed out")
+            logger.warning("Google API key validation timed out")
             return False, "Validation timed out - please try again"
         except Exception as e:
             error_msg = f"Validation error: {str(e)}"
@@ -1076,6 +1087,7 @@ class OrganizationService(BaseOrganizationService):
                     "invitation_already_accepted": "Invitation already accepted",
                     "invitation_not_pending": "Invitation is no longer available",
                     "invitation_expired": "Invitation has expired",
+                    "invitation_role_invalid": "Invitation role is not allowed",
                     "role_not_found": "Role not found",
                 }
                 message = error_messages.get(

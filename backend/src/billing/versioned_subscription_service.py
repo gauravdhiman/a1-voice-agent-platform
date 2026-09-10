@@ -15,6 +15,7 @@ from .stripe_service import stripe_service
 from .versioned_subscription_models import (
     CustomerPlanVersion,
     FreePlanActivationResponse,
+    PlanAssignmentResponse,
     PlanChangeConfirmationResponse,
     PlanChangeConfirmRequest,
     PlanChangeEffectiveMode,
@@ -90,6 +91,135 @@ class VersionedSubscriptionService:
                 plan.billing_interval,
                 -plan.version_number,
             ),
+        )
+
+    async def activate_default_free_plan(
+        self, organization_id: UUID
+    ) -> FreePlanActivationResponse:
+        """Activate the current published free plan for an organization.
+
+        Platform-admin customer provisioning uses this helper so an organization
+        created on behalf of a lead receives an explicit active subscription and
+        its recurring free-plan credits before the customer is invited. Public
+        self-service onboarding continues to choose a plan explicitly.
+
+        Args:
+            organization_id: Organization that should receive the free plan.
+
+        Returns:
+            The created or repaired free-plan activation response.
+
+        Raises:
+            ValueError: If no current published free plan exists.
+        """
+        result = (
+            self.supabase.table("plan_versions")
+            .select("id, plan_products!inner(slug)")
+            .eq("plan_products.slug", "free")
+            .eq("status", PlanVersionStatus.PUBLISHED.value)
+            .eq("is_current_for_signup", True)
+            .order("version_number", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            raise ValueError("No published free plan is available")
+
+        return await self.activate_free_plan(
+            organization_id, UUID(str(result.data[0]["id"]))
+        )
+
+    async def assign_plan_for_platform_admin(
+        self, organization_id: UUID, plan_version_id: UUID
+    ) -> PlanAssignmentResponse:
+        """Assign any current published plan during controlled provisioning.
+
+        Platform-admin provisioning is an explicit, operator-approved billing
+        action. It may assign a free or paid catalog version without creating a
+        Stripe subscription; public self-service paid activation continues to
+        use the checkout and webhook path.
+        """
+        version = await self._get_signup_plan_version(plan_version_id)
+        existing = await self._get_existing_subscription(organization_id)
+
+        if existing and existing.get("status") in {"active", "trial"}:
+            if str(existing.get("plan_version_id")) != str(plan_version_id):
+                raise ValueError("Organization already has an active subscription")
+
+            metadata = existing.get("metadata") or {}
+            if metadata.get("activation_source") == "platform_admin":
+                period_start = self._coerce_datetime(
+                    existing.get("current_period_start"),
+                    datetime.now(timezone.utc),
+                )
+                period_end = self._coerce_optional_datetime(
+                    existing.get("current_period_end")
+                )
+                await self.credit_grant_service.grant_for_subscription(
+                    existing,
+                    grant_reason="activation",
+                    period_start=period_start,
+                    period_end=period_end,
+                    grant_key=self._platform_admin_grant_key(
+                        existing, plan_version_id, period_start
+                    ),
+                )
+            return PlanAssignmentResponse(
+                subscription=self._to_subscription_record(existing), created=False
+            )
+
+        if existing and existing.get("status") not in {"cancelled", "expired"}:
+            raise ValueError("Organization already has an active subscription")
+
+        now = datetime.now(timezone.utc)
+        period_end = self._period_end(now, version.get("billing_interval", "monthly"))
+        subscription_payload = {
+            "organization_id": str(organization_id),
+            "subscription_plan_id": version.get("legacy_subscription_plan_id"),
+            "plan_version_id": str(plan_version_id),
+            "stripe_subscription_id": None,
+            "stripe_customer_id": None,
+            "status": SubscriptionStatus.ACTIVE.value,
+            "current_period_start": now.isoformat(),
+            "current_period_end": period_end.isoformat(),
+            "cancel_at_period_end": False,
+            "cancelled_at": None,
+            "metadata": {
+                "activation_source": "platform_admin",
+                "billing_mode": version.get("billing_mode", BillingMode.FREE.value),
+                "credit_grant_policy": version.get(
+                    "credit_grant_policy", CreditGrantPolicy.RECURRING.value
+                ),
+                "billing_interval": version.get("billing_interval", "monthly"),
+            },
+        }
+
+        query = self.supabase.table("organization_subscriptions")
+        if existing:
+            result = (
+                query.update(subscription_payload)
+                .eq("organization_id", str(organization_id))
+                .execute()
+            )
+        else:
+            result = query.insert(subscription_payload).execute()
+
+        if not result.data:
+            raise ValueError("Failed to assign organization plan")
+
+        subscription_row = result.data[0]
+        await self.credit_grant_service.grant_for_subscription(
+            subscription_row,
+            grant_reason="activation",
+            period_start=now,
+            period_end=period_end,
+            grant_key=self._platform_admin_grant_key(
+                subscription_row, plan_version_id, now
+            ),
+        )
+        return PlanAssignmentResponse(
+            subscription=self._to_subscription_record(subscription_row),
+            created=existing is None,
         )
 
     async def preview_plan_change(
@@ -768,6 +898,16 @@ class VersionedSubscriptionService:
             if isinstance(value, int) and not isinstance(value, bool):
                 return value
         return None
+
+    @staticmethod
+    def _platform_admin_grant_key(
+        subscription: dict[str, Any], plan_version_id: UUID, period_start: datetime
+    ) -> str:
+        """Build a stable credit-grant key for a manual plan assignment."""
+        return (
+            f"platform-admin-assignment:{subscription['id']}:{plan_version_id}:"
+            f"{period_start.isoformat()}"
+        )
 
     @staticmethod
     def _to_subscription_record(row: dict[str, Any]):
