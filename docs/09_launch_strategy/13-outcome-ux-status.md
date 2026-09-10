@@ -17,7 +17,11 @@ and the interest form lacked a free-text field.
   both sides): attributed lead table (contact, business, source, demo
   slug, message preview) + status filter + one-click advance down the
   new → contacted → invited → converted chain. Ratings stay in the
-  PostHog funnel by design (no PII duplication); the page says so.
+  PostHog funnel by design (no PII duplication); the page says so. Demo
+  and request-form submissions belong here; they are intentionally separate
+  from the callback queue, which is reserved for callers asking an agent for
+  a person. Platform admins see a link to this queue from Callbacks to make
+  the distinction explicit.
 - **Real bug fixed along the way:** the page depended on the `user`
   object identity in its fetch effect, which refetches in a loop
   whenever context identity churns. Now depends on the stable

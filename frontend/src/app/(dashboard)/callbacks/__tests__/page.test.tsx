@@ -2,9 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listMock, mutateMock } = vi.hoisted(() => ({
+const { listMock, mutateMock, permissions } = vi.hoisted(() => ({
   listMock: vi.fn(),
   mutateMock: vi.fn(),
+  permissions: { isOrgAdmin: true, isPlatformAdmin: false },
 }));
 
 vi.mock("@/contexts/organization-context", () => ({
@@ -12,7 +13,7 @@ vi.mock("@/contexts/organization-context", () => ({
 }));
 
 vi.mock("@/hooks/use-user-permissions", () => ({
-  useUserPermissions: () => ({ isOrgAdmin: true, isPlatformAdmin: false }),
+  useUserPermissions: () => permissions,
 }));
 
 vi.mock("@/hooks/use-escalations", () => ({
@@ -47,6 +48,8 @@ function row(overrides: Partial<CallbackEscalation> = {}): CallbackEscalation {
 describe("CallbacksPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    permissions.isOrgAdmin = true;
+    permissions.isPlatformAdmin = false;
     listMock.mockReturnValue({
       data: [row()],
       isLoading: false,
@@ -95,5 +98,22 @@ describe("CallbacksPage", () => {
     render(<CallbacksPage />);
 
     expect(screen.getByText(/no callback requests yet/i)).not.toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Platform Interest" }),
+    ).toBeNull();
+  });
+
+  it("directs platform admins to the interest queue for demo submissions", () => {
+    permissions.isOrgAdmin = false;
+    permissions.isPlatformAdmin = true;
+    render(<CallbacksPage />);
+
+    const interestLink = screen.getByRole("link", {
+      name: "Platform Interest",
+    });
+    expect(interestLink.getAttribute("href")).toBe("/platform/interest");
+    expect(
+      screen.getByText(/demo and request-form submissions are tracked/i),
+    ).not.toBeNull();
   });
 });
