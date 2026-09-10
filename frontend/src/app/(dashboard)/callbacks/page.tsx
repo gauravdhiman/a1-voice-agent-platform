@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useOrganization } from "@/contexts/organization-context";
 import {
   useEscalations,
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, PhoneCall } from "lucide-react";
+import { Info, Loader2, PhoneCall } from "lucide-react";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { cn } from "@/lib/utils";
 
@@ -93,6 +94,23 @@ export default function CallbacksPage() {
             </SelectContent>
         </Select>
       </div>
+
+      {isPlatformAdmin && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Demo and request-form submissions are tracked in{" "}
+            <Link
+              href="/platform/interest"
+              className="font-medium underline underline-offset-4"
+            >
+              Platform Interest
+            </Link>
+            . This page only shows callback requests recorded when a caller
+            asks an agent for a person.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {isError && (
         <Alert variant="destructive">
