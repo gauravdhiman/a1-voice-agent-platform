@@ -31,6 +31,14 @@ export interface StepPlanSelectionProps {
 
 type BillingIntervalTab = "monthly" | "annual";
 
+/**
+ * Metered cost of one voice minute, in credits. Must match the backend
+ * metering (`voice_call_minute` system pricing, currently 10 credits/min).
+ */
+export const CREDITS_PER_VOICE_MINUTE = 10;
+/** Typical SMB call length used only for the "≈ calls" illustration. */
+export const AVG_CALL_MINUTES = 3.5;
+
 function formatPrice(plan: CustomerPlanVersion): string {
   if (plan.billing_mode === "free" || plan.price_amount_cents === 0) {
     return "Free";
@@ -45,10 +53,18 @@ function formatEntitlement(
   key: string,
   rawValue: Record<string, unknown>,
 ): string {
+  const value = rawValue.value;
+  // Credit bundles sell better as minutes: "4000 credits" means nothing to
+  // an owner, "400 call minutes (≈115 calls)" does. The engine still
+  // settles in credits; this is presentation only.
+  if (typeof value === "number" && key.startsWith("included_credits")) {
+    const minutes = Math.floor(value / CREDITS_PER_VOICE_MINUTE);
+    const calls = Math.max(1, Math.round(minutes / AVG_CALL_MINUTES));
+    return `${minutes.toLocaleString()} call minutes included (≈${calls} calls)`;
+  }
   const label = key
     .replace(/_/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
-  const value = rawValue.value;
   if (typeof value === "boolean") return value ? label : "";
   if (typeof value === "number") return `${value.toLocaleString()} ${label}`;
   return label;

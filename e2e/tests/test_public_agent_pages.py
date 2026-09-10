@@ -280,6 +280,8 @@ def test_public_demo_outcome_page_shows_provider_backed_receipt(
 
     step("Verify the captured inquiry and provider confirmation")
     expect(page.get_by_text("The handoff is complete")).to_be_visible()
+    step("Open call details to inspect the provider-backed receipt")
+    page.get_by_text("Call details").click()
     expect(page.get_by_text("Maria Garcia")).to_be_visible()
     expect(page.get_by_text("AC repair")).to_be_visible()
     expect(page.get_by_text("Google Sheets", exact=True)).to_be_visible()
@@ -330,6 +332,8 @@ def test_public_demo_outcome_page_is_clear_when_provider_save_fails(
 
     step("Verify the receipt distinguishes captured details from a failed save")
     expect(page.get_by_text("Review what Jordan captured.")).to_be_visible()
+    step("Open call details to inspect the provider failure")
+    page.get_by_text("Call details").click()
     expect(page.get_by_text("Service inquiry details captured")).to_be_visible()
     expect(page.get_by_text("Not completed")).to_be_visible()
     expect(

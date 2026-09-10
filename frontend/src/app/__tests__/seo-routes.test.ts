@@ -4,12 +4,27 @@ import robots from "../robots";
 import sitemap from "../sitemap";
 
 describe("public SEO routes", () => {
-  it("publishes only the canonical marketing origin in the sitemap", () => {
+  it("publishes the canonical marketing origin plus funnel and vertical pages", () => {
     expect(sitemap()).toEqual([
       {
         url: "https://www.247ai.live",
         changeFrequency: "weekly",
         priority: 1,
+      },
+      {
+        url: "https://www.247ai.live/request-demo",
+        changeFrequency: "monthly",
+        priority: 0.9,
+      },
+      {
+        url: "https://www.247ai.live/dental",
+        changeFrequency: "monthly",
+        priority: 0.8,
+      },
+      {
+        url: "https://www.247ai.live/hvac",
+        changeFrequency: "monthly",
+        priority: 0.8,
       },
     ]);
   });

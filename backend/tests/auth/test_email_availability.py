@@ -16,6 +16,10 @@ def auth_service(mock_supabase_client, mock_supabase_auth) -> AuthService:
     with patch("src.auth.service.supabase_config") as mock_config, patch(
         "src.auth.service.create_isolated_supabase_client",
         return_value=mock_supabase_client,
+    ), patch(
+        "src.notifications.platform_settings_service."
+        "platform_notification_settings_service.is_email_verification_required",
+        new=AsyncMock(return_value=False),
     ):
         mock_config.client = mock_supabase_client
         mock_config.is_configured.return_value = True
@@ -85,7 +89,7 @@ class TestSignUpExistingUserConflict:
         except ImportError:  # pragma: no cover
             from gotrue.errors import AuthApiError
 
-        mock_supabase_auth.sign_up.side_effect = AuthApiError(
+        mock_supabase_auth.admin.create_user.side_effect = AuthApiError(
             "User already registered", 422, "user_already_exists"
         )
 

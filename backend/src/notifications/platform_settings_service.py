@@ -75,18 +75,23 @@ class PlatformNotificationSettingsService:
             "updated_by": str(updated_by),
         }
 
-        if payload.verification_from_email is not None:
+        # Optional fields use explicit null as a clear operation.  Check which
+        # fields the caller supplied so omitted values remain unchanged while
+        # the admin UI can clear previously saved values.
+        fields_set = payload.model_fields_set
+
+        if "verification_from_email" in fields_set:
             update_data["verification_from_email"] = payload.verification_from_email
-        if payload.verification_from_name is not None:
+        if "verification_from_name" in fields_set:
             update_data["verification_from_name"] = payload.verification_from_name
-        if payload.telegram_chat_id is not None:
+        if "telegram_chat_id" in fields_set:
             update_data["telegram_chat_id"] = payload.telegram_chat_id
-        if payload.telegram_notifications_enabled is not None:
+        if "telegram_notifications_enabled" in fields_set:
             update_data["telegram_notifications_enabled"] = (
                 payload.telegram_notifications_enabled
             )
-        if payload.telegram_bot_token is not None:
-            token = payload.telegram_bot_token.strip()
+        if "telegram_bot_token" in fields_set:
+            token = (payload.telegram_bot_token or "").strip()
             if token:
                 update_data["telegram_bot_token_encrypted"] = encrypt_data(
                     {

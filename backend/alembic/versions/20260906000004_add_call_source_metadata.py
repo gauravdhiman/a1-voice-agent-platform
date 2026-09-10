@@ -1,8 +1,8 @@
 """Add source metadata to call logs.
 
-Revision ID: 20260906000001
-Revises: 20260905000001
-Create Date: 2026-09-06 00:00:00.000000
+Revision ID: 20260906000004
+Revises: 20260906000003
+Create Date: 2026-09-06 00:00:00
 """
 
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "20260906000001"
-down_revision: Union[str, None] = "20260905000001"
+revision: str = "20260906000004"
+down_revision: Union[str, None] = "20260906000003"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

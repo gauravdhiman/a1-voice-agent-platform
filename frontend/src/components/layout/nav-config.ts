@@ -47,6 +47,7 @@ import {
   Bell,
   Package,
   FileText,
+  Inbox,
 } from "lucide-react";
 import {
   PERMISSION_ACTIONS,
@@ -134,6 +135,14 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       requiredPermission: "call_log:read",
       section: "workspace",
     },
+    {
+      name: "Callbacks",
+      href: "/callbacks",
+      tourId: "callbacks",
+      icon: Bell,
+      requiredPermission: null,
+      section: "workspace",
+    },
   ],
   org_admin: [
     {
@@ -208,6 +217,14 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       href: "/platform/tools",
       tourId: "platform-tools",
       icon: Wrench,
+      requiredPermission: "platform:admin",
+      section: "platform_admin",
+    },
+    {
+      name: "Interest",
+      href: "/platform/interest",
+      tourId: "platform-interest",
+      icon: Inbox,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },

@@ -421,8 +421,11 @@ class TestCreateAgentDeclarativePermission:
 
         with patch("src.auth.dependencies.get_authenticated_user") as mock_auth, patch(
             "src.voice_agents.routes.voice_agent_service"
-        ) as mock_svc:
+        ) as mock_svc, patch(
+            "src.voice_agents.routes.entitlement_service"
+        ) as mock_entitlements:
             mock_auth.return_value = (CREATE_AGENT_TEST_USER, profile)
+            mock_entitlements.assert_limit = AsyncMock(return_value=None)
             created = VoiceAgent(
                 id=UUID("00000000-0000-0000-0000-0000000000d4"),
                 organization_id=CREATE_AGENT_TEST_ORG,
@@ -458,8 +461,11 @@ class TestCreateAgentDeclarativePermission:
 
         with patch("src.auth.dependencies.get_authenticated_user") as mock_auth, patch(
             "src.voice_agents.routes.voice_agent_service"
-        ) as mock_svc:
+        ) as mock_svc, patch(
+            "src.voice_agents.routes.entitlement_service"
+        ) as mock_entitlements:
             mock_auth.return_value = (CREATE_AGENT_TEST_USER, profile)
+            mock_entitlements.assert_limit = AsyncMock(return_value=None)
             created = Mock()
             created.id = UUID("00000000-0000-0000-0000-0000000000d4")
             created.organization_id = CREATE_AGENT_TEST_ORG
@@ -646,7 +652,10 @@ class TestAgentPresetAssignment:
 
         with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
             "src.voice_agents.routes.voice_agent_service"
-        ) as mock_svc:
+        ) as mock_svc, patch(
+            "src.voice_agents.routes.entitlement_service"
+        ) as mock_entitlements:
+            mock_entitlements.assert_limit = AsyncMock(return_value=None)
             mock_preset.get_preset_by_id = AsyncMock(
                 return_value=(_published_preset_mock(), None)
             )
@@ -766,7 +775,10 @@ class TestAgentPresetAssignment:
 
         with patch("src.voice_agents.routes.preset_service") as mock_preset, patch(
             "src.voice_agents.routes.voice_agent_service"
-        ) as mock_svc:
+        ) as mock_svc, patch(
+            "src.voice_agents.routes.entitlement_service"
+        ) as mock_entitlements:
+            mock_entitlements.assert_limit = AsyncMock(return_value=None)
             mock_preset.get_preset_by_id = AsyncMock(return_value=(None, None))
             created = VoiceAgent(
                 id=PRESET_ASSIGN_AGENT,

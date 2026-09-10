@@ -85,6 +85,7 @@ class AuthService {
         first_name: data.firstName,
         last_name: data.lastName,
         invitation_token: data.invitationToken,
+        captcha_token: data.captchaToken,
       });
 
       const payload = response.data;

@@ -38,6 +38,22 @@ from src.auth.models import (
     UserProfile,
 )
 from src.auth.service import auth_service
+from src.auth.audit import (
+    OAUTH_DENIED,
+    OAUTH_SIGNIN,
+    PASSWORD_RESET_REQUESTED,
+    SIGNIN,
+    SIGNIN_DENIED,
+    SIGNUP,
+    SIGNUP_DENIED,
+    log_auth_event,
+)
+from src.auth.dependencies import assert_platform_role
+from src.auth.signup_gate import (
+    SIGNUP_DISABLED_CODE,
+    SIGNUP_DISABLED_MESSAGE,
+    is_signup_allowed,
+)
 from src.notifications.email_verification_service import email_verification_service
 from src.notifications.platform_settings_models import (
     ResendVerificationRequest,
@@ -47,6 +63,9 @@ from src.notifications.platform_settings_models import (
 from src.notifications.signup_notifier import signup_notifier
 from src.organization.service import organization_service
 from src.security.rate_limiter import limiter
+from src.security.turnstile import is_turnstile_configured, verify_turnstile_token
+
+from shared.config import settings as app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +108,38 @@ async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
     current_span = trace.get_current_span()
     current_span.set_attribute("user.email", body.email)
 
+    if is_turnstile_configured():
+        client_ip = request.client.host if request.client else None
+        if not await verify_turnstile_token(body.captcha_token, client_ip):
+            current_span.set_attribute("error.type", "invalid_captcha")
+            current_span.set_status(
+                trace.Status(trace.StatusCode.ERROR, "invalid_captcha")
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Captcha verification failed. Please try again.",
+            )
+
+    allowed, denial = await is_signup_allowed(
+        body.email,
+        invitation_token=body.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if not allowed:
+        current_span.set_attribute("error.type", denial or "signup_disabled")
+        current_span.set_status(trace.Status(trace.StatusCode.ERROR, denial or ""))
+        await log_auth_event(
+            SIGNUP_DENIED,
+            email=body.email,
+            request=request,
+            metadata={"reason": denial or "signup_disabled"},
+            supabase=organization_service.supabase,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"{SIGNUP_DISABLED_CODE}: {SIGNUP_DISABLED_MESSAGE}",
+        )
+
     auth_response, error = await auth_service.sign_up(body)
 
     if error:
@@ -106,6 +157,35 @@ async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return auth_response
+
+
+class SignupStatusResponse(BaseModel):
+    """Public signup availability for the controlled-SaaS gate."""
+
+    public_signup_enabled: bool = Field(
+        ..., description="True when open public signup is enabled"
+    )
+
+
+@auth_router.get(
+    "/signup-status",
+    response_model=SignupStatusResponse,
+    responses={
+        429: {"description": "Too many requests"},
+    },
+)
+@limiter.limit("30/minute")
+async def signup_status(request: Request) -> SignupStatusResponse:
+    """Report whether open public signup is enabled (no auth required).
+
+    The frontend signup page uses this to redirect visitors to the
+    interest form while the controlled-SaaS gate is closed. The backend
+    gate in ``sign_up`` and the OAuth callbacks remains authoritative.
+    """
+    del request
+    return SignupStatusResponse(
+        public_signup_enabled=bool(app_settings.public_signup_enabled)
+    )
 
 
 @auth_router.get(
@@ -171,10 +251,24 @@ async def sign_in(request: Request, body: SignInRequest) -> AuthResponse:
         else:
             current_span.set_attribute("error.type", "invalid_credentials")
         current_span.set_status(trace.Status(trace.StatusCode.ERROR, detail))
+        await log_auth_event(
+            SIGNIN_DENIED,
+            email=body.email,
+            request=request,
+            metadata={"status_code": error.status_code},
+            supabase=organization_service.supabase,
+        )
         raise error
 
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
+    await log_auth_event(
+        SIGNIN,
+        email=body.email,
+        user_id=auth_response.user.id,
+        request=request,
+        supabase=organization_service.supabase,
+    )
     return auth_response
 
 
@@ -218,6 +312,96 @@ async def resend_verification_email(
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": message})
+
+
+class PasswordResetResponse(BaseModel):
+    """Fixed-shape response for password reset requests (no oracle)."""
+
+    message: str = Field(..., description="Safe confirmation message")
+
+
+@auth_router.post(
+    "/password-reset",
+    response_model=PasswordResetResponse,
+    responses={
+        429: {"description": "Too many requests"},
+    },
+)
+@limiter.limit("3/minute")
+@tracer.start_as_current_span("auth.routes.password_reset")
+async def request_password_reset(
+    request: Request, body: ResendVerificationRequest
+) -> PasswordResetResponse:
+    """Send a reset email through the backend-owned flow (no auth required).
+
+    Always returns the same message whether or not the account exists.
+    Replaces the previous frontend-only reset path with a rate-limited,
+    audited server flow using the platform Resend template.
+    """
+    from src.auth.password_reset import SAFE_RESET_MESSAGE, password_reset_service
+
+    sent, _error = await password_reset_service.request_reset(body.email)
+    await log_auth_event(
+        PASSWORD_RESET_REQUESTED,
+        email=body.email,
+        request=request,
+        metadata={"dispatched": sent},
+        supabase=organization_service.supabase,
+    )
+    return PasswordResetResponse(message=SAFE_RESET_MESSAGE)
+
+
+class AuthAuditEventResponse(BaseModel):
+    """One audit trail row (platform-admin view)."""
+
+    id: UUID
+    user_id: Optional[UUID] = None
+    email: Optional[str] = None
+    event: str
+    ip: Optional[str] = None
+    user_agent: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
+@auth_router.get(
+    "/audit",
+    response_model=list[AuthAuditEventResponse],
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Platform admin only"},
+    },
+)
+@tracer.start_as_current_span("auth.routes.list_audit_events")
+async def list_audit_events(
+    request: Request,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+    event: Optional[str] = Query(default=None, max_length=60),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[AuthAuditEventResponse]:
+    """List recent auth audit events, newest first (platform admins only)."""
+    del request
+    _user_id, user_profile = user_data
+    assert_platform_role(user_profile, "platform_admin")
+    query = (
+        organization_service.supabase.table("auth_audit_events")
+        .select("id,user_id,email,event,ip,user_agent,metadata,created_at")
+        .order("created_at", desc=True)
+        .limit(max(1, min(limit, 500)))
+    )
+    if event:
+        query = query.eq("event", event)
+    try:
+        response = query.execute()
+    except Exception:
+        logger.error("Auth audit listing failed", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not load audit events.",
+        )
+    return [
+        AuthAuditEventResponse(**row) for row in (getattr(response, "data", None) or [])
+    ]
 
 
 @auth_router.get(
@@ -266,7 +450,6 @@ async def linkedin_callback(
     error_description: Optional[str] = Query(default=None),
 ) -> RedirectResponse:
     """Complete LinkedIn OAuth and redirect to the frontend with session tokens."""
-    del request
     current_span = trace.get_current_span()
     current_span.set_attribute("oauth.provider", "linkedin")
 
@@ -304,6 +487,31 @@ async def linkedin_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
+    allowed, _denial = await is_signup_allowed(
+        identity.email,
+        invitation_token=identity.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if not allowed:
+        current_span.set_attribute("oauth.gated", True)
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, SIGNUP_DISABLED_CODE)
+        )
+        await log_auth_event(
+            OAUTH_DENIED,
+            email=identity.email,
+            request=request,
+            metadata={"provider": "linkedin", "reason": SIGNUP_DISABLED_CODE},
+            supabase=organization_service.supabase,
+        )
+        return RedirectResponse(
+            oauth_error_redirect(
+                "Public signup is currently invite-only. "
+                "Please request a demo and we will invite you."
+            ),
+            status_code=status.HTTP_302_FOUND,
+        )
+
     auth_response, session_error = await oauth_session_service.complete_oauth_sign_in(
         identity
     )
@@ -312,7 +520,11 @@ async def linkedin_callback(
             trace.Status(trace.StatusCode.ERROR, "LinkedIn Supabase session failed")
         )
         detail = session_error.detail
-        message = detail if isinstance(detail, str) else "LinkedIn authentication could not be completed."
+        message = (
+            detail
+            if isinstance(detail, str)
+            else "LinkedIn authentication could not be completed."
+        )
         return RedirectResponse(
             oauth_error_redirect(message),
             status_code=status.HTTP_302_FOUND,
@@ -321,6 +533,14 @@ async def linkedin_callback(
     current_span.set_attribute("oauth.session_issued", True)
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
+    await log_auth_event(
+        OAUTH_SIGNIN,
+        email=identity.email,
+        user_id=auth_response.user.id,
+        request=request,
+        metadata={"provider": "linkedin"},
+        supabase=organization_service.supabase,
+    )
     return RedirectResponse(
         oauth_session_redirect(
             auth_response,
@@ -376,7 +596,6 @@ async def google_callback(
     error_description: Optional[str] = Query(default=None),
 ) -> RedirectResponse:
     """Complete Google OAuth and redirect to the frontend with session tokens."""
-    del request
     current_span = trace.get_current_span()
     current_span.set_attribute("oauth.provider", "google")
 
@@ -414,6 +633,31 @@ async def google_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
+    allowed, _denial = await is_signup_allowed(
+        identity.email,
+        invitation_token=identity.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if not allowed:
+        current_span.set_attribute("oauth.gated", True)
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, SIGNUP_DISABLED_CODE)
+        )
+        await log_auth_event(
+            OAUTH_DENIED,
+            email=identity.email,
+            request=request,
+            metadata={"provider": "google", "reason": SIGNUP_DISABLED_CODE},
+            supabase=organization_service.supabase,
+        )
+        return RedirectResponse(
+            oauth_error_redirect(
+                "Public signup is currently invite-only. "
+                "Please request a demo and we will invite you."
+            ),
+            status_code=status.HTTP_302_FOUND,
+        )
+
     auth_response, session_error = await oauth_session_service.complete_oauth_sign_in(
         identity
     )
@@ -422,7 +666,11 @@ async def google_callback(
             trace.Status(trace.StatusCode.ERROR, "Google Supabase session failed")
         )
         detail = session_error.detail
-        message = detail if isinstance(detail, str) else "Google authentication could not be completed."
+        message = (
+            detail
+            if isinstance(detail, str)
+            else "Google authentication could not be completed."
+        )
         return RedirectResponse(
             oauth_error_redirect(message),
             status_code=status.HTTP_302_FOUND,
@@ -431,6 +679,14 @@ async def google_callback(
     current_span.set_attribute("oauth.session_issued", True)
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
+    await log_auth_event(
+        OAUTH_SIGNIN,
+        email=identity.email,
+        user_id=auth_response.user.id,
+        request=request,
+        metadata={"provider": "google"},
+        supabase=organization_service.supabase,
+    )
     return RedirectResponse(
         oauth_session_redirect(
             auth_response,
@@ -444,7 +700,10 @@ async def google_callback(
     "/session/handoff",
     response_model=SessionHandoffResponse,
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid or expired handoff token"},
+        400: {
+            "model": ErrorResponse,
+            "description": "Invalid or expired handoff token",
+        },
         429: {"description": "Too many requests"},
     },
 )
@@ -757,7 +1016,7 @@ async def process_invitation(
     try:
         # Process the invitation using the organization service
         invitation, error = await organization_service.process_invitation(
-            request.token, request.user_id
+            request.token, request.user_id, user_profile.email
         )
 
         if error:

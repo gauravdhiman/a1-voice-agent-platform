@@ -19,6 +19,8 @@ from src.billing.admin_plan_routes import router as admin_plan_router
 from src.billing.routes import router as billing_router
 from src.call_artifacts import call_artifacts_router
 from src.call_logs import call_logs_router
+from src.escalations.routes import escalations_router
+from src.leads.routes import admin_leads_router, public_leads_router
 from src.notifications.routes import router as notification_router
 from src.organization.public_routes import public_org_router
 from src.organization.routes import organization_router
@@ -187,6 +189,8 @@ def create_app() -> FastAPI:
     app.include_router(embed_router)
     app.include_router(public_org_router)
     app.include_router(demo_public_router)
+    app.include_router(public_leads_router)
+    app.include_router(admin_leads_router)
 
     # Include voice templates routes
     app.include_router(voice_templates_router)
@@ -194,6 +198,9 @@ def create_app() -> FastAPI:
 
     # Include call logs routes
     app.include_router(call_logs_router)
+
+    # Include callback escalation routes (org-scoped owner workflow)
+    app.include_router(escalations_router)
 
     # Include authenticated recording and artifact routes
     app.include_router(call_artifacts_router)

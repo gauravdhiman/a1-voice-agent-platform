@@ -74,6 +74,8 @@ describe("authService.signUp", () => {
       success: true,
       emailVerificationRequired: false,
       user: expect.objectContaining({ id: "user-1", email: "new@example.com" }),
+      joinedOrganizationId: null,
+      joinedOrganizationName: null,
     });
   });
 
@@ -111,6 +113,8 @@ describe("authService.signUp", () => {
       success: true,
       emailVerificationRequired: true,
       user: expect.objectContaining({ id: "user-1" }),
+      joinedOrganizationId: null,
+      joinedOrganizationName: null,
     });
   });
 });

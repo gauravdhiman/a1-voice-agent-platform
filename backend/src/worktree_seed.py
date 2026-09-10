@@ -15,6 +15,7 @@ be configured independently by the tester.
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from typing import Any
 
 # These are deliberately local-only test credentials. The worktree launcher
@@ -115,6 +116,13 @@ PLEASANT_PEDIATRIC_ADDITIONAL_INSTRUCTIONS = f"""
   accepted. If no email tool is attached or it reports a failure, say that the
   booking succeeded but the email confirmation was not sent. Never claim an email
   was sent without a successful email-tool result.
+
+# Closing
+- After the booking is confirmed, mention that a summary of what was saved
+  appears on screen with a quick 1-to-5 rating, and invite the caller to tap
+  it. Do not ask for written feedback on the call.
+- End warmly once the caller has nothing more, without repeating the demo
+  notice.
 """.strip()
 
 PLEASANT_PEDIATRIC_INSTRUCTIONS_MARKDOWN = f"""
@@ -207,6 +215,13 @@ COPPER_RIDGE_ADDITIONAL_INSTRUCTIONS = f"""
   accepted. If no email tool is attached or it reports a failure, say that the
   inquiry was captured but the email confirmation was not sent. Never claim an
   email was sent without a successful email-tool result.
+
+# Closing
+- After the inquiry is captured, mention that a summary of what was saved
+  appears on screen with a quick 1-to-5 rating, and invite the caller to tap
+  it. Do not ask for written feedback on the call.
+- End warmly once the caller has nothing more, without repeating the demo
+  notice.
 """.strip()
 
 COPPER_RIDGE_INSTRUCTIONS_MARKDOWN = f"""
@@ -227,6 +242,41 @@ CALENDAR_DEMO_DISABLED_FUNCTIONS = [
     "update_appointment",
     "cancel_appointment",
 ]
+
+# Release bootstrapping deliberately uses an allowlist instead of copying the
+# entire local fixture record. This keeps local test credits, Auth accounts,
+# phone assignments, selected voice presets, public-org publishing settings,
+# and provider credentials out of staging and production writes.
+PUBLIC_DEMO_ORGANIZATION_FIELDS = (
+    "id",
+    "name",
+    "description",
+    "slug",
+    "is_active",
+    "industry",
+    "location",
+    "timezone",
+    "business_details",
+    "onboarding_completed",
+)
+PUBLIC_DEMO_AGENT_FIELDS = (
+    "id",
+    "organization_id",
+    "name",
+    "is_active",
+    "persona",
+    "tone",
+    "mission",
+    "custom_instructions",
+    "instructions_markdown",
+    "use_platform_credits",
+    "call_recording_enabled",
+    "is_demo",
+    "demo_slug",
+    "public_description",
+    "demo_calls_remaining",
+    "demo_max_call_duration_seconds",
+)
 
 
 def build_seed_records(worktree_id: str) -> dict[str, Any]:
@@ -402,6 +452,55 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
     }
 
 
+def build_public_demo_records() -> dict[str, Any]:
+    """Build the deployment-safe records for the two public demo agents.
+
+    The local worktree seed owns both demo content and local-only test
+    accounts. Release environments need only the code-owned demo tenant,
+    agents, and native tool links. An explicit field allowlist prevents future
+    local fixture additions—especially credits, phone numbers, provider
+    credentials, or operator-selected presets—from being copied into a
+    customer-facing database.
+
+    Returns:
+        A mapping containing only the public demo organization, agents, tool
+        links, safe tool configuration, and the legacy organization ID to
+        retire. It contains no Auth accounts or credit balances.
+    """
+    local_records = build_seed_records("release-bootstrap")
+
+    def select_fields(
+        record: dict[str, Any], fields: tuple[str, ...]
+    ) -> dict[str, Any]:
+        return {field: deepcopy(record[field]) for field in fields if field in record}
+
+    organization = select_fields(
+        local_records["organization"], PUBLIC_DEMO_ORGANIZATION_FIELDS
+    )
+    agents = [
+        select_fields(agent, PUBLIC_DEMO_AGENT_FIELDS)
+        for agent in local_records["agents"]
+    ]
+    return {
+        "organization": organization,
+        "agent": deepcopy(
+            next(agent for agent in agents if agent["id"] == STAGING_AGENT_ID)
+        ),
+        "organizations": [organization],
+        "agents": agents,
+        "agent_tools": [APPOINTMENT_TOOL_NAME],
+        "agent_tools_by_agent": deepcopy(local_records["agent_tools_by_agent"]),
+        "agent_tool_configs": deepcopy(local_records["agent_tool_configs"]),
+        "agent_tool_function_exclusions": deepcopy(
+            local_records["agent_tool_function_exclusions"]
+        ),
+        "agent_tools_to_disable_by_agent": deepcopy(
+            local_records["agent_tools_to_disable_by_agent"]
+        ),
+        "retired_organization_ids": list(local_records["retired_organization_ids"]),
+    }
+
+
 def _required_environment(name: str) -> str:
     """Read a required bootstrap environment variable with a clear error.
 
@@ -565,10 +664,12 @@ def _ensure_auth_user(client: Any, email: str, worktree_id: str) -> str:
 
 
 def _upsert_organization(client: Any, record: dict[str, Any]) -> None:
-    """Insert or refresh the local demo organization.
+    """Insert or refresh a code-owned demo organization.
 
-    Credit balances are only written on first insert. This makes rerunning the
-    launcher safe for a manual smoke test that has already consumed credits.
+    Credit balances are only written on first insert when the record contains
+    them. The release-safe public demo record omits balances entirely, so a
+    newly created staging or production organization receives database
+    defaults and an existing organization's billing state is untouched.
     """
     existing = (
         client.table("organizations")
@@ -610,7 +711,12 @@ def _retire_organizations(client: Any, organization_ids: list[str]) -> None:
 
 
 def _upsert_agent(client: Any, record: dict[str, Any]) -> None:
-    """Insert or refresh one local demo agent."""
+    """Insert or refresh one code-owned demo agent.
+
+    Only fields present in ``record`` are updated. Release records use an
+    allowlist so operational assignments such as a phone number or selected
+    voice preset survive a repeat deployment.
+    """
     existing = (
         client.table("voice_agents")
         .select("id")
@@ -731,8 +837,8 @@ def _ensure_agent_tools(
         config = (tool_configs or {}).get(tool_name)
         excluded_functions = (function_exclusions or {}).get(tool_name)
         if existing_rows:
-            # Do not clear sensitive_config: a tester may have completed local
-            # OAuth and then restarted the stack.
+            # Do not clear sensitive_config: an operator may have completed
+            # OAuth and then rerun the release bootstrap.
             updates: dict[str, Any] = {"is_enabled": True}
             if config and not existing_rows[0].get("config"):
                 updates["config"] = config
@@ -786,6 +892,65 @@ def _disable_agent_tools(
         ).eq("tool_id", str(tools[0]["id"])).execute()
         disabled.append(tool_name)
     return disabled
+
+
+def sync_public_demo_fixtures(
+    supabase_url: str,
+    service_key: str,
+) -> dict[str, Any]:
+    """Create or refresh the public demo tenant and both demo agents.
+
+    This is an explicit deployment/bootstrap operation. It intentionally does
+    not create Auth users, grant credits, or replace provider credentials. The
+    required native platform tools must already have been synchronized by the
+    release bootstrap that calls this function.
+
+    Args:
+        supabase_url: Supabase API URL for the target environment.
+        service_key: Supabase service-role key. It is never printed.
+
+    Returns:
+        Safe identifiers, demo slugs, and attached tool names.
+
+    Raises:
+        RuntimeError: If a required native platform tool is missing or a
+            database write fails.
+    """
+    from supabase import create_client
+
+    client = create_client(supabase_url, service_key)
+    records = build_public_demo_records()
+    organization = records["organization"]
+
+    for organization_record in records["organizations"]:
+        _upsert_organization(client, organization_record)
+    _retire_organizations(client, records["retired_organization_ids"])
+    for agent_record in records["agents"]:
+        _upsert_agent(client, agent_record)
+
+    attached_tools_by_agent: dict[str, list[str]] = {}
+    for agent_record in records["agents"]:
+        agent_id = agent_record["id"]
+        attached_tools_by_agent[agent_id] = _ensure_agent_tools(
+            client,
+            agent_id,
+            records["agent_tools_by_agent"].get(agent_id, []),
+            records["agent_tool_configs"].get(agent_id, {}),
+            records["agent_tool_function_exclusions"].get(agent_id, {}),
+        )
+        _disable_agent_tools(
+            client,
+            agent_id,
+            records["agent_tools_to_disable_by_agent"].get(agent_id, []),
+        )
+
+    return {
+        "organization_id": organization["id"],
+        "agent_ids": [agent["id"] for agent in records["agents"]],
+        "demo_slugs": [agent["demo_slug"] for agent in records["agents"]],
+        "agent_tools_by_agent": attached_tools_by_agent,
+        "retired_organization_ids": records["retired_organization_ids"],
+    }
 
 
 def seed_local_stack(

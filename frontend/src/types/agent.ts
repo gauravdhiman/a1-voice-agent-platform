@@ -115,6 +115,8 @@ export interface VoiceAgentUpdate {
   /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */
   demo_max_call_duration_seconds?: number;
   instructions_markdown?: string | null;
+  /** Voice-engine preset id; `null` = system default. */
+  preset_id?: string | null;
 }
 
 export interface PlatformToolFunction {

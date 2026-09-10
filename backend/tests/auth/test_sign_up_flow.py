@@ -45,11 +45,11 @@ def auth_service(mock_supabase_client, mock_supabase_auth) -> AuthService:
         yield service
 
 
-def _build_admin_create_user_response() -> MagicMock:
+def _build_admin_create_user_response(email: str = "newuser@example.com") -> MagicMock:
     now = datetime.now(timezone.utc)
     user_mock = MagicMock()
     user_mock.id = str(USER_ID)
-    user_mock.email = "newuser@example.com"
+    user_mock.email = email
     user_mock.user_metadata = {"first_name": "New", "last_name": "User"}
     user_mock.email_confirmed_at = None
     user_mock.created_at = now
@@ -61,18 +61,23 @@ def _build_admin_create_user_response() -> MagicMock:
 
 
 def _signup_patches(*, verification_required: bool = True):
-    return patch(
-        "src.notifications.platform_settings_service.platform_notification_settings_service.is_email_verification_required",
-        new=AsyncMock(return_value=verification_required),
-    ), patch(
-        "src.notifications.email_verification_service.email_verification_service.create_and_send_verification",
-        new=AsyncMock(return_value=(True, None)),
-    ), patch(
-        "src.notifications.signup_notifier.signup_notifier.notify_new_user",
-        new=AsyncMock(),
-    ), patch(
-        "src.auth.service.ensure_default_organization_for_user",
-        new=AsyncMock(return_value=(ORG_ID, None)),
+    return (
+        patch(
+            "src.notifications.platform_settings_service.platform_notification_settings_service.is_email_verification_required",
+            new=AsyncMock(return_value=verification_required),
+        ),
+        patch(
+            "src.notifications.email_verification_service.email_verification_service.create_and_send_verification",
+            new=AsyncMock(return_value=(True, None)),
+        ),
+        patch(
+            "src.notifications.signup_notifier.signup_notifier.notify_new_user",
+            new=AsyncMock(),
+        ),
+        patch(
+            "src.auth.service.ensure_default_organization_for_user",
+            new=AsyncMock(return_value=(ORG_ID, None)),
+        ),
     )
 
 
@@ -93,7 +98,9 @@ class TestAuthServiceSignUpFlow:
         settings_patch, verify_patch, notify_patch, provision_patch = _signup_patches(
             verification_required=True
         )
-        with settings_patch, verify_patch as verify_mock, notify_patch as notify_mock, provision_patch:
+        with (
+            settings_patch
+        ), verify_patch as verify_mock, notify_patch as notify_mock, provision_patch:
             result, error = await auth_service.sign_up(sign_up_request)
 
         assert error is None
@@ -178,7 +185,7 @@ class TestAuthServiceSignUpFlow:
             invitation_token="invite-token-123",
         )
         mock_supabase_auth.admin.create_user.return_value = (
-            _build_admin_create_user_response()
+            _build_admin_create_user_response("invited@example.com")
         )
 
         invitation = MagicMock()
@@ -199,11 +206,50 @@ class TestAuthServiceSignUpFlow:
         assert result is not None
         assert result.joined_organization_id == ORG_ID
         assert result.joined_organization_name == "Acme Plumbing"
-        invite_mock.assert_awaited_once_with("invite-token-123", USER_ID)
-        provision_mock.assert_awaited_once()
+        invite_mock.assert_awaited_once_with(
+            "invite-token-123", USER_ID, "invited@example.com"
+        )
+        provision_mock.assert_not_awaited()
         notify_mock.assert_awaited_once()
         assert notify_mock.await_args.kwargs["method"] == "invitation"
         assert notify_mock.await_args.kwargs["organization_name"] == "Acme Plumbing"
+
+    @pytest.mark.asyncio
+    async def test_invitation_failure_does_not_create_default_org(
+        self,
+        auth_service: AuthService,
+        mock_supabase_auth: MagicMock,
+    ) -> None:
+        request = SignUpRequest(
+            email="invited@example.com",
+            password="Password123!",
+            password_confirm="Password123!",
+            first_name="Inv",
+            last_name="ited",
+            invitation_token="invite-token-123",
+        )
+        mock_supabase_auth.admin.create_user.return_value = (
+            _build_admin_create_user_response("invited@example.com")
+        )
+
+        settings_patch, verify_patch, notify_patch, _ = _signup_patches()
+        with settings_patch, verify_patch, notify_patch, patch(
+            "src.auth.service.organization_service.process_invitation",
+            new=AsyncMock(return_value=(None, "Invitation expired")),
+        ), patch(
+            "src.auth.service.ensure_default_organization_for_user",
+            new=AsyncMock(return_value=(None, None)),
+        ) as provision_mock:
+            result, error = await auth_service.sign_up(request)
+
+        assert result is None
+        assert error is not None
+        assert error.status_code == status.HTTP_400_BAD_REQUEST
+        assert error.detail == {
+            "code": "invitation_error",
+            "message": "Invitation expired",
+        }
+        provision_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_sign_up_existing_user_returns_conflict(

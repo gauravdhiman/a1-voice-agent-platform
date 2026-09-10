@@ -1,5 +1,5 @@
 import { cleanup } from '@testing-library/react'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { server } from './mocks/server'
 

@@ -189,11 +189,13 @@ Stores organization membership invitations sent to users.
 | expires_at      | TIMESTAMPTZ  | NOT NULL                        | Invitation expiration time                    |
 | created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                            |
 | accepted_at     | TIMESTAMPTZ  | NULLABLE                        | Acceptance timestamp                          |
+| role_id         | UUID         | NULLABLE, FK → roles.id         | Organization role granted when claimed       |
 
 **Foreign Keys**:
 
 - `organization_id` → `organizations.id` (CASCADE)
 - `invited_by` → `auth.users.id` (CASCADE)
+- `role_id` → `roles.id` (RESTRICT); only `regular_user` and `org_admin` are valid invitation roles
 
 **RLS**: Enabled
 **Check Constraint**: `status IN ('pending', 'accepted', 'expired', 'cancelled')`
@@ -205,6 +207,16 @@ Stores organization membership invitations sent to users.
 - `idx_invitations_organization_id`
 - `idx_invitations_status`
 - `idx_invitations_expires_at`
+- `idx_invitations_role_id`
+
+Invitation claiming is performed by the service-role-only
+`claim_invitation(text, uuid, text)` PostgreSQL function. The function locks
+the invitation row, matches the normalized invited email, requires a pending
+and unexpired invitation, inserts an idempotent `user_roles` membership using
+the stored organization-scoped role (defaulting legacy rows to
+`regular_user`), and marks the invitation accepted in one transaction.
+Repeated claims by the same user are safe; a failed claim does not fall back
+to a personal organization.
 
 ---
 
@@ -312,6 +324,109 @@ for retention cleanup.
 
 **Migrations**: `20260830000001_add_demo_outcome_receipts.py` and
 `20260901000002_add_demo_email_outcome_action.py`.
+
+---
+
+### interest_leads
+
+Private interest-lead capture for the controlled-SaaS funnel
+(`POST /api/v1/public/leads`, `/request-demo` page, outcome-form fallback).
+The source of truth for follow-up; demo-safe subsets are forwarded to public
+proof destinations (shared Sheet/Calendar) by the demo workflow, never the
+reverse. Distinct from `demo_outcome_receipts` (short-lived visitor receipts):
+leads persist until converted/dropped and are never shown to visitors.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Lead row identifier |
+| name | VARCHAR(120) | NOT NULL | Contact name |
+| business_name | VARCHAR(160) | NULLABLE | Business name |
+| email | VARCHAR(320) | NOT NULL | Contact email (indexed, never probed publicly) |
+| phone | VARCHAR(32) | NULLABLE | Callback number |
+| vertical | VARCHAR(40) | NULLABLE | Business vertical (`dental`, `hvac`, `restaurant`) |
+| message | TEXT | NULLABLE | What the business needs |
+| source | VARCHAR(40) | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `demo-call`, or `manual` | Capture channel |
+| demo_slug | VARCHAR(100) | NULLABLE | Demo agent slug when captured post-demo |
+| status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `contacted`, `invited`, `converted`, or `dropped` | Follow-up state |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Submission timestamp |
+| contacted_at | TIMESTAMPTZ | NULLABLE | First outreach timestamp (set by operator tooling) |
+
+**RLS**: Enabled with no public or authenticated-user policies; the service
+role is the only database reader/writer. Reads and status changes require
+the `platform_admin` role at the API boundary. Public submission returns a
+fixed ack envelope so submitters cannot probe which emails already exist.
+
+**Indexes**: `(status, created_at)` for the follow-up queue and `(email)`
+for duplicate review.
+
+**Migrations**: `20260903000001_add_interest_leads.py`.
+
+---
+
+### callback_escalations
+
+Owner-visible callback requests from soft escalation. Production voice
+calls (never demos) record one row per accepted `request_human_callback`
+tool result through the voice runtime hook
+(`record_callback_tool_outcome`, next to the demo-outcome hook); the
+owner alert email is sent by the tool itself at call time. The dashboard
+Callbacks page drives the `new → acknowledged → resolved` follow-up.
+Org admins may also log rows manually for callbacks arriving on other
+channels.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Escalation row identifier |
+| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
+| agent_id | UUID | NULLABLE, FK → voice_agents.id (SET NULL) | Agent on the call, when known |
+| session_id | VARCHAR(100) | NULLABLE | Voice session identifier, when known |
+| caller_phone | VARCHAR(32) | NOT NULL | Callback number (E.164-ish, validated by the tool) |
+| caller_name | VARCHAR(100) | NULLABLE | Caller name when known |
+| reason | VARCHAR(500) | NOT NULL | One factual sentence: what the callback is about |
+| urgency | VARCHAR(20) | NOT NULL, DEFAULT `'normal'`, CHECK `normal` or `urgent` | Callback urgency |
+| status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `acknowledged`, or `resolved` | Follow-up state |
+| notified | BOOLEAN | NOT NULL, DEFAULT FALSE | Owner alert email went out at call time |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Request timestamp |
+| acknowledged_at | TIMESTAMPTZ | NULLABLE | First acknowledgement timestamp (set by operator tooling) |
+
+**RLS**: Enabled with no public or authenticated-user policies; the
+service role is the only database reader/writer. Reads require org
+membership; writes and status changes require `org_admin` (platform
+admins bypass) at the API boundary, and status updates match on both
+row id and organization to prevent cross-tenant writes.
+
+**Indexes**: `(organization_id, status, created_at)` for the owner queue.
+
+**Migrations**: `20260904000001_add_callback_escalations.py`.
+
+---
+
+### auth_audit_events
+
+Append-only authentication audit trail. Backend auth routes record
+security-relevant events; rows are never updated or deleted by
+application code. Investigation fields only — no tokens, passwords, or
+request bodies.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Event row identifier |
+| user_id | UUID | NULLABLE | Account id when known |
+| email | VARCHAR(320) | NULLABLE | Account email when known (indexed) |
+| event | VARCHAR(60) | NOT NULL, CHECK nine audited event names | Event category |
+| ip | VARCHAR(64) | NULLABLE | Caller IP |
+| user_agent | VARCHAR(500) | NULLABLE | Caller user agent (bounded) |
+| metadata | JSONB | NOT NULL, DEFAULT `{}` | Small extras (provider, reason codes) |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Event timestamp |
+
+**RLS**: Enabled with no public or authenticated-user policies; the
+service role is the only writer. Reads require the `platform_admin`
+role at the `GET /api/v1/auth/audit` boundary.
+
+**Indexes**: `(email, created_at)` for account investigation and
+`(event, created_at)` for abuse review.
+
+**Migrations**: `20260906000001_add_auth_audit_events.py`.
 
 ---
 
@@ -1536,6 +1651,7 @@ erDiagram
         varchar email
         uuid organization_id
         uuid invited_by
+        uuid role_id
         varchar token
         varchar status
         timestamptz expires_at
@@ -1752,6 +1868,10 @@ erDiagram
     voice_agents ||--o{ call_logs : "handles"
     voice_agents ||--o{ demo_outcome_receipts : "produces"
     organizations ||--o{ demo_outcome_receipts : "owns"
+    %% interest_leads is standalone (no FKs; private funnel table, no relations)
+    interest_leads
+    organizations ||--o{ callback_escalations : "owns"
+    voice_agents ||--o{ callback_escalations : "handles (SET NULL on delete)"
     credit_transactions ||--o| call_logs : "explains call charge"
     organizations ||--o{ platform_credit_grants : "receives platform grants"
     credit_transactions ||--o| platform_credit_grants : "audited by"
@@ -1891,8 +2011,15 @@ erDiagram
 76. `20260830000001` - Add service-role-only `demo_outcome_receipts` for short-lived, signed visitor receipts containing allowlisted provider outcomes from public demo calls.
 77. `20260901000001` - Add the optional platform-admin-configured `voice_agents.demo_public_result_url` destination. The URL is returned only for successful actions in signed demo outcome receipts so the receipt can offer an external-result CTA without exposing it on the public landing page.
 78. `20260901000002` - Extend the service-role-only demo outcome receipt action allowlist with independent `email_delivery` actions for attached Gmail and Resend tools. The receipt stores only a safe provider/status summary and does not make provider tools call one another.
-79. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
-80. `20260906000001` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
+79. `20260902000001` - Add generic, UI-safe runtime failure classification columns to `call_logs` (surfaced as `ix_call_logs_failure_code`); Twilio status callbacks preserve an existing failure classification instead of overwriting it with a later `completed` event.
+80. `20260903000001` - Add service-role-only `interest_leads` as the private source of truth for the controlled-SaaS funnel (`request-demo` / `outcome-form` / `demo-call` / `manual` sources; `new` → `contacted` → `invited` → `converted`/`dropped` follow-up states). No FKs, no public RLS policy; admin reads gated by the `platform_admin` role.
+81. `20260904000001` - Add service-role-only `callback_escalations` for owner-visible soft escalation (`new` → `acknowledged` → `resolved`; `normal`/`urgent`). Production calls record one row per accepted `request_human_callback` tool result via the voice runtime hook; demos are skipped. Reads require org membership; writes match row id + organization.
+82. `20260905000001` - Add sparse organization-level visibility overrides for published platform tools. Published tools remain visible by default; organization admins can hide them from new agent connections while existing `agent_tools` attachments remain operational and are surfaced with a hidden status.
+83. `20260906000001` - Add append-only, service-role-only `auth_audit_events` (`signup`, `signup_denied`, `signin`, `signin_denied`, `signout`, `invitation_processed`, `password_reset_requested`, `oauth_signin`, `oauth_denied`). Written by backend auth routes only; reads are platform-admin only. No tokens, passwords, or request bodies are stored.
+84. `20260906000002` - Add the service-role-only `claim_invitation(text, uuid, text)` RPC. It atomically email-binds and claims pending invitations, inserts an idempotent regular-user membership, accepts the invitation, and supports safe repeated claims without personal-organization fallback.
+85. `20260906000003` - Merge the main-line organization-tool-visibility head with the controlled-SaaS auth/invitation head. This revision changes no tables or data and restores one connected release-order head for `alembic upgrade head`.
+86. `20260906000004` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
+87. `20260909000001` - Persist the organization-scoped role selected for an invitation and apply it atomically when the invitation is claimed. New invitations support `regular_user` (default) or `org_admin`; legacy invitations remain regular-user invitations.
 
 ---
 
@@ -2207,4 +2334,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-09-06
+**Last Updated**: 2026-09-08

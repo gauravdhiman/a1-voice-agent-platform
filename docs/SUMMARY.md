@@ -57,7 +57,7 @@ Comprehensive documentation organized by feature.
 5. **[voice-ws README](../voice-ws/README.md)** - Pipecat WebSocket voice voice-ws (browser + Twilio Media Streams)
 6. **[Shared Module README](../shared/README.md)** - Shared code for backend and voice-ws
 7. **[Outbound phone calls](03_implementation/outbound_phone_calls.md)** - Planned outbound PSTN design (reuses Media Streams)
-8. **[Call transfer to a human](03_implementation/call_transfer_to_human.md)** - AI routes calls to human agents; silent-monitor + single-call recording design
+8. **[Call transfer to a human](03_implementation/call_transfer_to_human.md)** - Deferred native human-transfer design, interim callback workflow, phone-first Twilio flow, evaluation plan, and open decisions
 9. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 10. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 11. **[Voice Templates Management (Admin)](02_features/voice_agents/voice_templates_admin.md)** - Platform-admin CRUD for Markdown-backed templates used by agent creation and editing

@@ -5,8 +5,10 @@ import { apiClient } from "@/lib/api/client";
 import type {
   Organization,
   OrganizationCreate,
+  PlatformOrganizationCreate,
   OrganizationUpdate,
   Invitation,
+  InvitationRole,
 } from "@/types/organization";
 import type { Member } from "@/types/user";
 
@@ -40,7 +42,9 @@ class OrganizationService {
   }
 
   // Create organization (platform admin only)
-  async createOrganization(orgData: OrganizationCreate): Promise<Organization> {
+  async createOrganization(
+    orgData: PlatformOrganizationCreate,
+  ): Promise<Organization> {
     const response = await apiClient.post<Organization>(this.baseUrl, orgData);
     return response.data;
   }
@@ -87,11 +91,16 @@ class OrganizationService {
   }
 
   // Invite a member to the organization
-  async inviteMember(orgId: string, email: string): Promise<Invitation> {
+  async inviteMember(
+    orgId: string,
+    email: string,
+    role: InvitationRole = "regular_user",
+  ): Promise<Invitation> {
     const response = await apiClient.post<Invitation>(
       `${this.baseUrl}/${orgId}/invite`,
       {
         email,
+        role,
         organization_id: orgId,
       },
     );

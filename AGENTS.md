@@ -371,6 +371,10 @@ Testing boundaries:
 - Frontend uses Vitest, not Jest. Vitest 4 requires Node 20+; run it on the
   host rather than the Node 20 dev container if the container has incompatible
   dependencies.
+- New frontend tests must avoid jest-dom matchers (`toBeInTheDocument`,
+  `toHaveAttribute`, etc.): global `tsc` lacks jest-dom types repo-wide, so
+  new files using them add type errors; prefer `toBeNull`/`toBeTruthy` and
+  Testing Library queries instead.
 - Pre-commit hooks enforce the configured Python and frontend quality checks
   (including Black, isort, Flake8, ESLint, and Prettier) when installed; run
   `pre-commit run --all-files` before handoff.
@@ -443,6 +447,10 @@ Python:
 - Public classes, methods, and exported/non-obvious functions need concise
   docstrings describing purpose, typed inputs, outputs, errors, and invariants.
   Include examples only when they clarify a non-obvious contract.
+- Never use `from __future__ import annotations` in FastAPI route modules:
+  the rate-limit/tracing wrappers resolve stringified body models in foreign
+  globals, silently demoting them to query params and breaking
+  `/openapi.json`. Covered by `backend/tests/test_openapi_schema.py`.
 - Use OpenTelemetry spans at meaningful service boundaries and include stable
   non-sensitive identifiers.
 
@@ -542,6 +550,8 @@ PR and merge contract:
 - Give every PR a concise body with summary, impact, validation, and known
   limitations; verify it with `gh pr view --json title,body,baseRefName,headRefName`.
 - Keep merge defaults at `PR_TITLE` + `PR_BODY` for squash and regular merges.
+- Integrate shared branches through a reviewed pull request; do not create or
+  push local merge commits between `main`, release, or other shared branches.
 - For stacked PRs, document the dependency; after it merges, retarget to
   `main` and verify the diff before merging.
 

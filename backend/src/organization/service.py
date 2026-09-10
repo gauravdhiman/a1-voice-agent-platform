@@ -6,7 +6,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from opentelemetry import metrics, trace
 from src.notifications.models import SendNotificationRequest
@@ -14,6 +14,7 @@ from src.notifications.service import notification_service
 from src.organization.invitation_models import (
     Invitation,
     InvitationCreate,
+    InvitationRole,
     InvitationStatus,
 )
 from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
@@ -658,6 +659,12 @@ class OrganizationService(BaseOrganizationService):
         current_span.set_attribute("organization.id", str(invite_data.organization_id))
 
         try:
+            role_name = invite_data.role.value
+            member_role, role_error = await role_service.get_role_by_name(role_name)
+            if role_error or not member_role:
+                logger.error("Could not find '%s' role: %s", role_name, role_error)
+                return None, "Role not found"
+
             # Check if user already exists with this email
             from src.auth.service import auth_service
 
@@ -727,14 +734,6 @@ class OrganizationService(BaseOrganizationService):
                     f"User {invite_data.email} is not a member - adding to organization"
                 )
 
-                # Get the regular_user role
-                member_role, role_error = await role_service.get_role_by_name(
-                    "regular_user"
-                )
-                if role_error or not member_role:
-                    logger.error(f"Could not find 'regular_user' role: {role_error}")
-                    return None, "Role not found"
-
                 # Add user to organization
                 user_role_data = UserRoleCreate(
                     user_id=existing_user.id,
@@ -753,7 +752,7 @@ class OrganizationService(BaseOrganizationService):
                 token = secrets.token_urlsafe(32)
                 expires_at = datetime.now(timezone.utc) + timedelta(days=7)
                 invitation_dict = {
-                    "id": secrets.token_urlsafe(16),  # Temporary ID
+                    "id": str(uuid4()),  # Virtual invitation ID for existing users
                     "email": invite_data.email,
                     "organization_id": str(invite_data.organization_id),
                     "invited_by": str(invite_data.invited_by),
@@ -762,6 +761,7 @@ class OrganizationService(BaseOrganizationService):
                     "expires_at": expires_at.isoformat(),
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "accepted_at": datetime.now(timezone.utc).isoformat(),
+                    "role_id": member_role.id,
                 }
 
                 invitation = Invitation(
@@ -774,6 +774,7 @@ class OrganizationService(BaseOrganizationService):
                     expires_at=invitation_dict["expires_at"],
                     created_at=invitation_dict["created_at"],
                     accepted_at=invitation_dict["accepted_at"],
+                    role_id=invitation_dict["role_id"],
                 )
 
                 current_span.set_attribute("user.id", str(existing_user.id))
@@ -803,7 +804,11 @@ class OrganizationService(BaseOrganizationService):
                             "organization_name": (
                                 org.name if org else "the organization"
                             ),
-                            "role_name": "Member",
+                            "role_name": (
+                                "Organization administrator"
+                                if invite_data.role == InvitationRole.ORG_ADMIN
+                                else "Member"
+                            ),
                             "invitation_url": f"{self._get_frontend_url()}/auth/signin",
                             "expiry_days": "7",
                             "app_name": settings.app_name,
@@ -872,6 +877,7 @@ class OrganizationService(BaseOrganizationService):
                             "token": token,
                             "status": InvitationStatus.PENDING.value,
                             "expires_at": expires_at.isoformat(),
+                            "role_id": str(member_role.id),
                         }
                     )
                     .execute()
@@ -901,6 +907,7 @@ class OrganizationService(BaseOrganizationService):
                     expires_at=invitation_dict["expires_at"],
                     created_at=invitation_dict["created_at"],
                     accepted_at=invitation_dict.get("accepted_at"),
+                    role_id=invitation_dict.get("role_id"),
                 )
 
                 current_span.set_attribute("invitation.id", str(invitation.id))
@@ -928,7 +935,11 @@ class OrganizationService(BaseOrganizationService):
                             "organization_name": (
                                 org.name if org else "the organization"
                             ),
-                            "role_name": "Member",
+                            "role_name": (
+                                "Organization administrator"
+                                if invite_data.role == InvitationRole.ORG_ADMIN
+                                else "Member"
+                            ),
                             "invitation_url": f"{self._get_frontend_url()}/auth/signup?token={token}",
                             "expiry_days": "7",
                             "app_name": settings.app_name,
@@ -1018,7 +1029,7 @@ class OrganizationService(BaseOrganizationService):
         except httpx.TimeoutException:
             error_msg = "Validation request timed out"
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
-            logger.warning(f"Google API key validation timed out")
+            logger.warning("Google API key validation timed out")
             return False, "Validation timed out - please try again"
         except Exception as e:
             error_msg = f"Validation error: {str(e)}"
@@ -1034,140 +1045,89 @@ class OrganizationService(BaseOrganizationService):
 
     @tracer.start_as_current_span("organization.process_invitation")
     async def process_invitation(
-        self, token: str, user_id: UUID
+        self, token: str, user_id: UUID, expected_email: str
     ) -> tuple[Optional[Invitation], Optional[str]]:
-        """Process an invitation after user signup."""
+        """Atomically claim an email-bound invitation for a user.
+
+        The database function locks the invitation row, validates its pending
+        state and expiry, inserts an idempotent membership, and marks the
+        invitation accepted in one transaction. Repeating the request for the
+        same user is safe; a different email or user cannot reuse the token.
+        """
         organization_operations_counter.add(1, {"operation": "process_invitation"})
 
-        # Set attribute on current span
         current_span = trace.get_current_span()
         current_span.set_attribute("invitation.token", token[:8] + "...")
         current_span.set_attribute("user.id", str(user_id))
 
         try:
-            from datetime import datetime
-
-            # Get the invitation by token
-            response = (
-                self.supabase.table("invitations")
-                .select("*")
-                .eq("token", token)
-                .execute()
-            )
-
-            if not response.data:
-                logger.warning(f"Invitation not found with token: {token[:8]}...")
-                current_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, "Invitation not found")
-                )
-                organization_errors_counter.add(
-                    1, {"operation": "process_invitation", "error": "not_found"}
-                )
-                return None, "Invitation not found"
-
-            invitation_dict = response.data[0]
-
-            # Check if invitation is already accepted
-            if invitation_dict["status"] == InvitationStatus.ACCEPTED.value:
-                logger.warning(f"Invitation already accepted: {token[:8]}...")
-                current_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, "Invitation already accepted")
-                )
-                return None, "Invitation already accepted"
-
-            # Check if invitation is expired
-            expires_at = datetime.fromisoformat(
-                invitation_dict["expires_at"].replace("Z", "+00:00")
-            )
-            if datetime.now(timezone.utc) > expires_at:
-                # Update status to expired
-                self.supabase.table("invitations").update(
-                    {"status": InvitationStatus.EXPIRED.value}
-                ).eq("id", invitation_dict["id"]).execute()
-
-                logger.warning(f"Invitation expired: {token[:8]}...")
-                current_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, "Invitation expired")
-                )
-                return None, "Invitation has expired"
-
-            # Get the organization
-            org, org_error = await self.get_organization_by_id(
-                UUID(invitation_dict["organization_id"])
-            )
-            if org_error or not org:
-                logger.error(
-                    f"Organization not found for invitation: {invitation_dict['organization_id']}"
-                )
-                current_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, "Organization not found")
-                )
-                return None, "Organization not found"
-
-            # Get the default regular_user role
-            member_role, role_error = await role_service.get_role_by_name(
-                "regular_user"
-            )
-            if role_error or not member_role:
-                logger.error(f"Could not find 'regular_user' role: {role_error}")
-                current_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, "Role not found")
-                )
-                return None, "Role not found"
-
-            # Add user to organization
-            user_role_data = UserRoleCreate(
-                user_id=user_id, role_id=member_role.id, organization_id=org.id
-            )
-
-            user_role, role_assign_error = await user_role_service.assign_role_to_user(
-                user_role_data
-            )
-            if role_assign_error or not user_role:
-                logger.error(f"Failed to assign role to user: {role_assign_error}")
-                current_span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, "Failed to assign role")
-                )
-                return None, "Failed to assign role to user"
-
-            # Update invitation status to accepted
-            self.supabase.table("invitations").update(
+            response = self.supabase.rpc(
+                "claim_invitation",
                 {
-                    "status": InvitationStatus.ACCEPTED.value,
-                    "accepted_at": datetime.now(timezone.utc).isoformat(),
+                    "p_token": token,
+                    "p_user_id": str(user_id),
+                    "p_email": expected_email.strip().lower(),
+                },
+            ).execute()
+            payload = getattr(response, "data", None)
+            if isinstance(payload, list):
+                payload = payload[0] if payload else {}
+            if not isinstance(payload, dict) or not payload.get("success"):
+                error_code = (
+                    payload.get("error")
+                    if isinstance(payload, dict)
+                    else "invitation_claim_failed"
+                )
+                error_messages = {
+                    "invalid_request": "Invalid invitation request",
+                    "invitation_not_found": "Invitation not found",
+                    "invitation_email_mismatch": (
+                        "This invitation belongs to a different email address"
+                    ),
+                    "invitation_already_accepted": "Invitation already accepted",
+                    "invitation_not_pending": "Invitation is no longer available",
+                    "invitation_expired": "Invitation has expired",
+                    "invitation_role_invalid": "Invitation role is not allowed",
+                    "role_not_found": "Role not found",
                 }
-            ).eq("id", invitation_dict["id"]).execute()
+                message = error_messages.get(
+                    str(error_code), "Unable to process invitation"
+                )
+                current_span.set_status(trace.Status(trace.StatusCode.ERROR, message))
+                return None, message
 
-            # Create Invitation object to return
-            invitation = Invitation(
-                id=invitation_dict["id"],
-                email=invitation_dict["email"],
-                organization_id=invitation_dict["organization_id"],
-                invited_by=invitation_dict["invited_by"],
-                token=invitation_dict["token"],
-                status=InvitationStatus.ACCEPTED,
-                expires_at=invitation_dict["expires_at"],
-                created_at=invitation_dict["created_at"],
-                accepted_at=datetime.now(timezone.utc),
-                organization_name=org.name,
+            invitation_payload = payload.get("invitation")
+            if not isinstance(invitation_payload, dict):
+                current_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, "Invitation payload missing")
+                )
+                return None, "Unable to process invitation"
+
+            invitation = Invitation(**invitation_payload)
+            current_span.set_attribute(
+                "organization.id", str(invitation.organization_id)
             )
-
-            current_span.set_attribute("organization.id", str(org.id))
-            current_span.set_attribute("organization.name", org.name)
+            current_span.set_attribute(
+                "organization.name", invitation.organization_name or ""
+            )
             current_span.set_status(trace.Status(trace.StatusCode.OK))
 
             logger.info(
-                f"User {user_id} successfully joined organization {org.id} via invitation"
+                "User %s successfully joined organization %s via invitation",
+                user_id,
+                invitation.organization_id,
             )
             return invitation, None
 
-        except Exception as e:
-            logger.error(f"Exception while processing invitation: {e}", exc_info=True)
-            current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+        except Exception:
+            logger.error("Exception while processing invitation", exc_info=True)
+            current_span.set_status(
+                trace.Status(trace.StatusCode.ERROR, "invitation_claim_failed")
+            )
             organization_errors_counter.add(
                 1, {"operation": "process_invitation", "error": "exception"}
             )
-            return None, str(e)
+            return None, "Unable to process invitation"
 
 
 # Global organization service instance

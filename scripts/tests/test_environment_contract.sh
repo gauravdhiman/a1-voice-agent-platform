@@ -69,7 +69,7 @@ assert_contains "$ROOT/start.sh" 'run_startup_migrations'
 assert_contains "$ROOT/start.sh" 'alembic upgrade head'
 assert_contains "$ROOT/start.sh" 'compose "$COMPOSE_FILE_DEV" up -d --build'
 assert_contains "$ROOT/start.sh" 'compose "$COMPOSE_FILE_PROD" up -d --build'
-assert_contains "$ROOT/scripts/validate-staging.sh" 'sync-native-tools.sh'
+assert_contains "$ROOT/scripts/validate-staging.sh" 'sync-release-fixtures.sh'
 assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'preview --domain platform_tools'
 assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'apply --plan'
 [[ -x "$ROOT/scripts/deploy/sync-native-tools.sh" ]] || {
@@ -77,10 +77,17 @@ assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'apply --plan'
   exit 1
 }
 assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'docker compose'
+assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" 'sync_demo_fixtures.py'
+assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" 'preview --domain platform_tools'
+assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" 'apply --plan'
+[[ -x "$ROOT/scripts/deploy/sync-release-fixtures.sh" ]] || {
+  echo "Release fixture synchronization script is not executable" >&2
+  exit 1
+}
 assert_contains "$ROOT/docker-compose.dev.yml" '${ENV_FILE:-.env.local}'
 assert_contains "$ROOT/docker-compose.yml" '${ENV_FILE:-.env.prod}'
 assert_contains "$ROOT/scripts/deploy.sh" '${ROOT}/.env.prod'
-assert_contains "$ROOT/scripts/validate-staging.sh" 'sync-native-tools.sh'
+assert_contains "$ROOT/scripts/validate-staging.sh" 'sync-release-fixtures.sh'
 assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'preview --domain platform_tools'
 assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'apply --plan'
 [[ -x "$ROOT/scripts/deploy/sync-native-tools.sh" ]] || {
@@ -92,6 +99,7 @@ assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'gcloud auth configure-dock
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'RELEASE_TAG="${RELEASE_TAG:-latest}"'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${RELEASE_TAG}"'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'run-alembic-cloud.sh'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'sync-release-fixtures.sh'
 assert_not_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--allow-unauthenticated'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'SSH_KEY="${HOME}/${SSH_KEY#\~/}"'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'run-alembic-cloud.sh'
@@ -101,6 +109,9 @@ assert_contains "$ROOT/scripts/deploy/run-alembic.sh" 'check_alembic_compatibili
 assert_contains "$ROOT/scripts/deploy/run-alembic.sh" "pg_notify('pgrst', 'reload schema')"
 assert_before "$ROOT/scripts/deploy/gcp-deploy.sh" \
   '  run_deployment_migrations' \
+  '  docker build --platform linux/amd64 -t "$BACKEND_IMAGE" -f backend/Dockerfile .'
+assert_before "$ROOT/scripts/deploy/gcp-deploy.sh" \
+  '  run_release_fixture_sync' \
   '  docker build --platform linux/amd64 -t "$BACKEND_IMAGE" -f backend/Dockerfile .'
 assert_before "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" \
   'ENV_FILE="$ENV_FILE" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"' \

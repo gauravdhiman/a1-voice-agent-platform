@@ -6,10 +6,10 @@ Uses Pydantic Settings for type-safe configuration handling.
 import json
 import os
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, NoDecode
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -147,6 +147,26 @@ class Settings(BaseSettings):
     )
     stripe_webhook_secret: Optional[str] = Field(
         default=None, description="Stripe webhook endpoint secret"
+    )
+
+    # Controlled-SaaS signup gate (Epic A: gated entry + interest funnel).
+    # When False, email signup and OAuth sign-in only succeed for invitation
+    # holders and allowlisted platform admins; everyone else is directed to
+    # the interest form. Flip to True to reopen open SaaS self-serve.
+    public_signup_enabled: bool = Field(
+        default=False,
+        description="Allow open public signup without invitation or allowlist",
+    )
+    platform_admin_allowlist: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Comma-separated emails always allowed through the signup gate",
+    )
+
+    # Bot protection (Cloudflare Turnstile). Empty secret disables
+    # verification (local/dev); production must set both this and the
+    # frontend NEXT_PUBLIC_TURNSTILE_SITE_KEY.
+    turnstile_secret_key: Optional[str] = Field(
+        default=None, description="Cloudflare Turnstile secret key"
     )
 
     # Resend Settings
@@ -364,6 +384,15 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 # If not valid JSON, split by comma and strip whitespace
                 return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    @validator("platform_admin_allowlist", pre=True)
+    def parse_admin_allowlist(cls, v):
+        """Parse the allowlist from a comma-separated string; normalize case."""
+        if isinstance(v, str):
+            return [email.strip().lower() for email in v.split(",") if email.strip()]
+        if isinstance(v, list):
+            return [str(email).strip().lower() for email in v if str(email).strip()]
         return v
 
     class Config:

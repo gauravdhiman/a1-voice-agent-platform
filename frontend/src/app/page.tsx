@@ -115,9 +115,9 @@ export default function LandingPage() {
                 Sign In
               </Button>
             </Link>
-            <Link href="/auth/signup">
+            <Link href="/request-demo">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                Get Started Free
+                Request a Demo
               </Button>
             </Link>
           </div>
@@ -142,7 +142,7 @@ export default function LandingPage() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                   </span>
-                  No coding required - go live in minutes
+                  No coding required - we set it up with you, live in 48 hours
                 </div>
 
                 <div className="space-y-4">
@@ -161,12 +161,12 @@ export default function LandingPage() {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Link href="/auth/signup">
+                  <Link href="/request-demo">
                     <Button
                       size="lg"
                       className="bg-blue-600 hover:bg-blue-700 px-8 h-12 text-base"
                     >
-                      Start Free
+                      Request a Demo
                       <ArrowRight className="ml-2 w-4 h-4" />
                     </Button>
                   </Link>
@@ -184,15 +184,15 @@ export default function LandingPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span>Set up in minutes</span>
+                    <span>Answers nights, weekends &amp; busy hours</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span>No credit card required</span>
+                    <span>Books straight to your calendar</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span>Cancel anytime</span>
+                    <span>You approve every word it says</span>
                   </div>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function LandingPage() {
                         </div>
                         <div className="mt-1.5 flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          Confirmation text sent to Maria
+                          Confirmation recorded in the demo outcome
                         </div>
                       </div>
                     </div>
@@ -352,8 +352,8 @@ export default function LandingPage() {
               </h2>
               <p className="max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
                 If your business takes calls, {SITE_NAME} can answer them for
-                you - booking appointments, answering questions, and following
-                up with customers automatically.
+                you - booking appointments, answering questions, and capturing
+                follow-up requests for your team.
               </p>
             </div>
 
@@ -365,6 +365,7 @@ export default function LandingPage() {
                     "Book cleanings, exams, and new-patient intake - even after hours.",
                   icon: Stethoscope,
                   gradient: "from-blue-500 to-cyan-500",
+                  href: "/dental",
                 },
                 {
                   title: "HVAC & home services",
@@ -372,6 +373,7 @@ export default function LandingPage() {
                     "Schedule service calls and triage urgent issues before they escalate.",
                   icon: Wrench,
                   gradient: "from-orange-500 to-amber-500",
+                  href: "/hvac",
                 },
                 {
                   title: "Restaurants",
@@ -401,22 +403,42 @@ export default function LandingPage() {
                   icon: Building2,
                   gradient: "from-indigo-500 to-blue-500",
                 },
-              ].map((industry, index) => (
-                <div
-                  key={index}
-                  className="group relative p-6 rounded-2xl border border-border/60 bg-background/50 backdrop-blur-sm transition-all hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/5"
-                >
-                  <div
-                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${industry.gradient} flex items-center justify-center mb-4 shadow-lg`}
+              ].map((industry, index) => {
+                const card = (
+                  <>
+                    <div
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br ${industry.gradient} flex items-center justify-center mb-4 shadow-lg`}
+                    >
+                      <industry.icon className="w-6 h-6 text-white" />
+                    </div>
+                    <h3 className="text-lg font-bold mb-2">{industry.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {industry.description}
+                    </p>
+                    {"href" in industry && industry.href && (
+                      <span className="mt-3 inline-flex items-center text-sm font-medium text-blue-600">
+                        Learn more
+                        <ArrowRight className="ml-1 w-4 h-4" />
+                      </span>
+                    )}
+                  </>
+                );
+                const className =
+                  "group relative p-6 rounded-2xl border border-border/60 bg-background/50 backdrop-blur-sm transition-all hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/5 block";
+                return "href" in industry && industry.href ? (
+                  <Link
+                    key={index}
+                    href={industry.href as string}
+                    className={className}
                   >
-                    <industry.icon className="w-6 h-6 text-white" />
+                    {card}
+                  </Link>
+                ) : (
+                  <div key={index} className={className}>
+                    {card}
                   </div>
-                  <h3 className="text-lg font-bold mb-2">{industry.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {industry.description}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -470,14 +492,14 @@ export default function LandingPage() {
                 {
                   title: "Follow up & win customers back",
                   description:
-                    "Automatic reminders and recall calls that bring customers back to your door.",
+                    "Capture callback requests and send your team the context they need to follow up.",
                   icon: BellRing,
                   gradient: "from-pink-500 to-rose-500",
                 },
                 {
-                  title: "Escalate to a human anytime",
+                  title: "Never leaves a caller hanging",
                   description:
-                    "When a call truly needs a person, your agent hands it off to your team seamlessly.",
+                    "When a call needs a person, your agent offers a callback and sends your team the full context.",
                   icon: UserCheck,
                   gradient: "from-indigo-500 to-blue-500",
                 },
@@ -596,10 +618,12 @@ export default function LandingPage() {
                 How It Works
               </div>
               <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
-                Live in minutes - no tech skills needed
+                Live in 48 hours - we do the setup with you
               </h2>
               <p className="max-w-[600px] text-muted-foreground md:text-lg">
-                If you can use email, you can launch your AI front desk.
+                No tech skills needed on your side. Request a demo, we
+                configure everything around your business, and you approve it
+                before it answers a single call.
               </p>
             </div>
 
@@ -607,23 +631,23 @@ export default function LandingPage() {
               {[
                 {
                   step: "1",
-                  title: "Tell us about your business",
+                  title: "Request a demo",
                   description:
-                    "Answer a few plain-English questions about what you offer and what your agent should handle.",
+                    "Tell us about your business in 30 seconds - what you offer and what your agent should handle.",
                   icon: Settings,
                 },
                 {
                   step: "2",
-                  title: "Connect your tools",
+                  title: "We configure it with you",
                   description:
-                    "Link your calendar, email, and spreadsheet with one click. We handle the technical side.",
+                    "We set up your number, link your calendar, and run test calls until it sounds exactly like your front desk.",
                   icon: Plug,
                 },
                 {
                   step: "3",
-                  title: "Go live",
+                  title: "Go live in 48 hours",
                   description:
-                    "Point a phone number to your agent - or add a call button to your website. Your front desk is open.",
+                    "Approve the setup and your agent starts answering - nights, weekends, and every busy hour after.",
                   icon: PhoneCall,
                 },
               ].map((item, index) => (
@@ -655,8 +679,9 @@ export default function LandingPage() {
                 Simple pricing that grows with you
               </h2>
               <p className="max-w-[600px] text-muted-foreground md:text-lg">
-                Start free and get your first agent live in minutes. Pay only as
-                you use it - no long-term contracts, cancel anytime.
+                Start with a concierge pilot - configured for your business,
+                live in 48 hours. Simple monthly plans from $79 as you grow,
+                no long-term contracts.
               </p>
             </div>
 
@@ -665,13 +690,13 @@ export default function LandingPage() {
                 {
                   name: "Free to start",
                   description:
-                    "Get your first agent live and see what it can do for your business.",
+                    "Hear a live demo and see what an AI front desk can do for your business.",
                   features: [
                     "1 voice agent",
-                    "Set up in minutes",
-                    "No credit card required",
+                    "Concierge setup included",
+                    "No credit card to try the demo",
                   ],
-                  cta: "Start Free",
+                  cta: "Request a Demo",
                   popular: false,
                 },
                 {
@@ -684,7 +709,7 @@ export default function LandingPage() {
                     "Call analytics & history",
                     "Priority support",
                   ],
-                  cta: "Start Free Trial",
+                  cta: "Request a Demo",
                   popular: true,
                 },
                 {
@@ -729,7 +754,7 @@ export default function LandingPage() {
                     href={
                       plan.cta === "Talk to Us"
                         ? `mailto:${SITE_SALES_EMAIL}`
-                        : "/auth/signup"
+                        : "/request-demo"
                     }
                     className="mt-8"
                   >
@@ -755,16 +780,16 @@ export default function LandingPage() {
               Ready to never miss another call?
             </h2>
             <p className="text-blue-100 md:text-lg mb-8 max-w-[600px] mx-auto">
-              Set up your AI front desk today. Free to start, live in minutes,
-              and no coding required.
+              Hear a live demo, then go live in 48 hours with our setup help -
+              no coding required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/auth/signup">
+              <Link href="/request-demo">
                 <Button
                   size="lg"
                   className="px-8 h-12 text-base bg-white text-blue-600 hover:bg-blue-50"
                 >
-                  Start Free
+                  Request a Demo
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>

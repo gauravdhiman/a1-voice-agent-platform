@@ -27,7 +27,7 @@ Staging uses the **local application + cloud database** model:
 cp .env.staging.example .env.staging   # set SUPABASE_SERVICE_KEY, DATABASE_URL, etc.
 
 # after every merge to main (or any release candidate):
-./scripts/validate-staging.sh  # also synchronizes code-owned native tools
+./scripts/validate-staging.sh  # also synchronizes code-owned tools + public demos
 # equivalent manual steps:
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ./scripts/deploy.sh migrate --env-file .env.staging
@@ -68,9 +68,11 @@ Alembic merge revision on the integration branch before merging or releasing.
 2. Runs the read-only Alembic compatibility check.
 3. Runs `./scripts/deploy.sh migrate --env-file .env.staging`; the lower-level
    GCP/OCI deployers repeat this idempotent gate before publishing a service.
-4. Verifies the phone-number data migration.
-5. Optionally deploys configured staging Cloud Run services (if staging GCP vars are set).
-6. Optionally deploys staging voice-ws (if `STAGING_OCI_SSH_HOST`/`STAGING_OCI_SSH_KEY` are set).
+4. The GCP deployment's migration-gated bootstrap synchronizes code-owned
+   native tools and the two public demo agents before publishing images.
+5. Verifies the phone-number data migration.
+6. Optionally deploys configured staging Cloud Run services (if staging GCP vars are set).
+7. Optionally deploys staging voice-ws (if `STAGING_OCI_SSH_HOST`/`STAGING_OCI_SSH_KEY` are set).
 
 It retains a non-canceling concurrency group so concurrent manual runs cannot
 race staging migrations. Cloud Run images are tagged with the commit SHA.
@@ -115,8 +117,10 @@ unless the repository enforces immutable tags. It then:
 2. Runs the same migration compatibility check and migration verification
    against production. The lower-level GCP/OCI deployers repeat the
    idempotent migration gate before publishing each service.
-3. Deploys the checked-out ref to the production Cloud Run services.
-4. Deploys the checked-out ref to the production voice-ws VM when configured.
+3. The GCP deployment's migration-gated bootstrap synchronizes code-owned
+   native tools and the two public demo agents before publishing images.
+4. Deploys the checked-out ref to the production Cloud Run services.
+5. Deploys the checked-out ref to the production voice-ws VM when configured.
 
 Production promotion also has a non-canceling concurrency group, preventing
 two manual approvals from racing production migrations or service updates.
