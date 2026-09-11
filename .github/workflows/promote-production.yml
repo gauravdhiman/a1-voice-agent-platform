@@ -150,6 +150,10 @@ jobs:
           printf '%s\n' "$OCI_SSH_KEY_SECRET" > ~/.ssh/oci_voice_ws
           chmod 600 ~/.ssh/oci_voice_ws
 
+      - name: Install OCI deployment migration dependencies
+        if: steps.check-oci-ssh.outputs.configured == 'true'
+        run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
+
       - name: Deploy voice-ws to production OCI VM
         if: steps.check-oci-ssh.outputs.configured == 'true'
         env:
