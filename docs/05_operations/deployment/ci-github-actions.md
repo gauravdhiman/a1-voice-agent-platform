@@ -159,7 +159,8 @@ data-safety behavior.
 Each GitHub Actions job runs on a fresh runner. The GCP promotion job therefore
 installs the small migration requirements bundle before invoking the deploy
 script's repeated compatibility gate; the migration job's Python environment is
-not shared with the deployment job.
+not shared with the deployment job. The OCI voice-ws job installs the same
+bundle before its own compatibility gate for the same reason.
 
 ## Local versus CI
 
