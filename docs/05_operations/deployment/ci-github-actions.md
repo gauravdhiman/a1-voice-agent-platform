@@ -156,6 +156,11 @@ schema-cache reload. The compatibility check is read-only and is not a
 replacement for backups, rollback planning, or reviewing a migration's
 data-safety behavior.
 
+Each GitHub Actions job runs on a fresh runner. The GCP promotion job therefore
+installs the small migration requirements bundle before invoking the deploy
+script's repeated compatibility gate; the migration job's Python environment is
+not shared with the deployment job.
+
 ## Local versus CI
 
 | Concern           | Local worktree                              | Local staging (shared DB)                             | Production promotion            |
