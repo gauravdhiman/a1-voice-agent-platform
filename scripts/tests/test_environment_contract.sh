@@ -181,6 +181,7 @@ assert_contains "$production_workflow" 'environment: production'
 assert_contains "$production_workflow" 'ENV_PROD: ${{ secrets.ENV_PROD }}'
 assert_contains "$production_workflow" 'check_alembic_compatibility.py --env-file .env.prod'
 assert_contains "$production_workflow" './scripts/deploy.sh migrate --env-file .env.prod'
+assert_contains "$production_workflow" 'name: Install GCP deployment migration dependencies'
 assert_contains "$workflow" 'echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"'
 assert_contains "$production_workflow" 'echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"'
 
