@@ -6,14 +6,14 @@ the old behavior.
 
 ## Test layers
 
-| Layer | Tools | Purpose |
-| --- | --- | --- |
-| Unit/component | pytest, Vitest, React Testing Library, MSW | Fast deterministic logic and UI coverage |
-| API/integration | pytest with mocked or dedicated dependencies | Route, service, authz, persistence, and provider boundaries |
-| Agent/tool evaluation | evals/, pytest, trace replay | Tool contract, ordering, arguments, side effects, and recovery |
-| Browser E2E | Python Playwright and isolated Docker stack | Critical user journeys across frontend/backend |
-| Browser smoke | Browser automation skill | Focused user-perspective validation when UI risk warrants it |
-| Live voice | Staging browser/PSTN calls | Transport, realtime provider, latency, recording, and entitlement behavior |
+| Layer                 | Tools                                        | Purpose                                                                    |
+| --------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
+| Unit/component        | pytest, Vitest, React Testing Library, MSW   | Fast deterministic logic and UI coverage                                   |
+| API/integration       | pytest with mocked or dedicated dependencies | Route, service, authz, persistence, and provider boundaries                |
+| Agent/tool evaluation | evals/, pytest, trace replay                 | Tool contract, ordering, arguments, side effects, and recovery             |
+| Browser E2E           | Python Playwright and isolated Docker stack  | Critical user journeys across frontend/backend                             |
+| Browser smoke         | Browser automation skill                     | Focused user-perspective validation when UI risk warrants it               |
+| Live voice            | Staging browser/PSTN calls                   | Transport, realtime provider, latency, recording, and entitlement behavior |
 
 No layer proves the others. Deterministic tests cannot prove Gemini Live
 responsiveness; a successful manual call cannot replace a regression test.
@@ -41,12 +41,12 @@ responsiveness; a successful manual call cannot replace a regression test.
 The public-agent surface must be covered across the same boundaries used in
 production:
 
-| Layer | Required coverage |
-| --- | --- |
-| Shared model/service | Defaults, slug validation, published filtering, uniqueness, and enable/disable transitions |
-| Backend routes | Public organization access/list/token endpoints, demo metadata/token endpoints, platform-admin-only writes, and safe errors |
-| Frontend services | Public metadata, access-token, call-token, and error contracts |
-| Browser E2E | Open/protected organization pages, public demo page, visualizer defaults/selection, and dashboard controls |
+| Layer                | Required coverage                                                                                                           |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Shared model/service | Defaults, slug validation, published filtering, uniqueness, and enable/disable transitions                                  |
+| Backend routes       | Public organization access/list/token endpoints, demo metadata/token endpoints, platform-admin-only writes, and safe errors |
+| Frontend services    | Public metadata, access-token, call-token, and error contracts                                                              |
+| Browser E2E          | Open/protected organization pages, public demo page, visualizer defaults/selection, and dashboard controls                  |
 
 The durable browser scenarios are in
 [`e2e/tests/test_public_agent_pages.py`](../../e2e/tests/test_public_agent_pages.py)
@@ -62,7 +62,7 @@ branch cannot be tested, record the reason and follow-up.
 
 From the repository root:
 
-~~~bash
+```bash
 pytest -q
 pytest backend/tests/path/to/test_file.py -q
 pytest -m 'not slow' -q
@@ -70,18 +70,18 @@ pytest -m 'not slow' -q
 pytest backend/tests/evals -q
 python scripts/run-agent-evals.py
 python scripts/run-agent-evals.py --json-out /tmp/agent-evals.json
-~~~
+```
 
 For frontend tests and checks:
 
-~~~bash
+```bash
 cd frontend
 npm ci
 npm run lint
 npx tsc --noEmit
 npm run test:run -- src/path/to/test.test.tsx
 npm run test:coverage
-~~~
+```
 
 The frontend test runner is Vitest 4, not Jest. Vitest requires Node 20+ and
 should run on the host when the development container has incompatible
@@ -92,10 +92,10 @@ new source errors behind a blanket ignore.
 
 Run the full disposable lifecycle:
 
-~~~bash
+```bash
 ./scripts/run-e2e.sh
 ./scripts/run-e2e.sh --video-on
-~~~
+```
 
 The runner builds docker-compose.e2e.yml, applies the test schema and
 migrations, runs Python Playwright tests against ports 3001/8001, stores the
@@ -127,3 +127,13 @@ docs/05_operations/deployment/runbook.md. Health endpoints alone are
 insufficient: inspect backend and voice-ws logs, verify call audio and call
 finalization, and block on authentication, entitlement, concurrency, or
 WebSocket failures.
+
+## Observability regression gates
+
+The [operator guide](../05_operations/observability.md#validation-commands) lists
+the signal privacy/concurrency suite, 90% feature coverage gate, pinned Pipecat
+observer tests, Prometheus alert firing/recovery tests and real OTLP smoke check.
+Run backend and voice suites separately because both own a `src` package.
+The `Observability contracts` workflow enforces separate 90% statement and branch floors
+and alert-rule cases on pull requests and main. Other affected suites still need
+local validation; this gate does not claim 90% coverage of the entire platform.

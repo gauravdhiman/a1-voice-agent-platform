@@ -56,9 +56,12 @@ they land (with the PR number that closed them).
   (5-minute ops task)**.
 - [ ] Supabase redirect allowlist includes `/auth/reset-password`
   (recovery links point there) → owner: **founder (dashboard check)**.
-- [ ] OTel dashboards/alerts (deny-spike, webhook-lag, COGS-breach):
-  collector exists, no Grafana in repo — needs a home decision →
-  owner: **founder + next observability pass**.
+- [x] OTel dashboards/alerts (service readiness, API/voice/tool failures,
+  persistence and AI latency): implementation, local dashboards, cloud
+  collector profile and deterministic alert tests are checked in. Production
+  still needs one Grafana Cloud stack, one Langfuse project and an owned
+  contact point provisioned from the operator guide → owner: **founder (release
+  configuration task)**.
 - [x] Carrier forwarding guides → closed by `09-forwarding-guides.md`
   (Epic E PR).
 

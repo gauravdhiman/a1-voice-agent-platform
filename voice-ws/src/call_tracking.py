@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,11 +13,13 @@ from shared.billing.voice_call_metering import (
     calculate_voice_call_credits,
 )
 from shared.config import supabase_config
+from shared.observability.signals import failure, observed
 from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 
 logger = logging.getLogger(__name__)
 
 
+@observed("call.start")
 async def start_call_tracking(
     *,
     session_id: str,
@@ -45,6 +48,7 @@ async def start_call_tracking(
     """
     client = supabase_config.client
     if client is None:
+        failure("CALL_STORAGE_UNAVAILABLE")
         return None
 
     normalized_source_url = normalize_source_url(source_url)
@@ -61,8 +65,8 @@ async def start_call_tracking(
 
     if call_sid:
         try:
-            existing = (
-                client.table("call_logs")
+            existing = await asyncio.to_thread(
+                lambda: client.table("call_logs")
                 .select("id")
                 .eq("call_sid", call_sid)
                 .limit(1)
@@ -71,9 +75,12 @@ async def start_call_tracking(
             if existing.data:
                 existing_id = str(existing.data[0]["id"])
                 if source_fields:
-                    client.table("call_logs").update(source_fields).eq(
-                        "id", existing_id
-                    ).execute()
+                    await asyncio.to_thread(
+                        lambda: client.table("call_logs")
+                        .update(source_fields)
+                        .eq("id", existing_id)
+                        .execute()
+                    )
                 return existing_id
         except Exception:
             logger.exception(
@@ -94,10 +101,13 @@ async def start_call_tracking(
     }
     row.update(source_fields)
     try:
-        result = client.table("call_logs").insert(row).execute()
+        result = await asyncio.to_thread(
+            lambda: client.table("call_logs").insert(row).execute()
+        )
         if result.data:
             return str(result.data[0]["id"])
     except Exception:
+        failure("CALL_START_FAILED")
         logger.exception(
             "Failed to create call log for session_id=%s org=%s",
             session_id,
@@ -106,25 +116,35 @@ async def start_call_tracking(
     return None
 
 
+@observed("call.answer")
 async def mark_call_answered(call_log_id: Optional[str]) -> None:
     """Mark a connected voice session as answered without overwriting a final state."""
     if not call_log_id:
         return
     client = supabase_config.client
     if client is None:
+        failure("CALL_STORAGE_UNAVAILABLE")
         return
 
     try:
-        client.table("call_logs").update(
-            {
-                "status": "answered",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", call_log_id).in_("status", ["initiated", "ringing"]).execute()
+        await asyncio.to_thread(
+            lambda: client.table("call_logs")
+            .update(
+                {
+                    "status": "answered",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            .eq("id", call_log_id)
+            .in_("status", ["initiated", "ringing"])
+            .execute()
+        )
     except Exception:
+        failure("CALL_ANSWER_FAILED")
         logger.exception("Failed to mark call log id=%s as answered", call_log_id)
 
 
+@observed("call.finalize")
 async def end_call_tracking(
     call_log_id: Optional[str],
     *,
@@ -142,19 +162,21 @@ async def end_call_tracking(
         return
     client = supabase_config.client
     if client is None:
+        failure("CALL_STORAGE_UNAVAILABLE")
         return
 
     now_dt = datetime.now(timezone.utc)
     now = now_dt.isoformat()
     try:
-        lookup = (
-            client.table("call_logs")
+        lookup = await asyncio.to_thread(
+            lambda: client.table("call_logs")
             .select("organization_id, agent_id, started_at")
             .eq("id", call_log_id)
             .limit(1)
             .execute()
         )
         if not lookup.data:
+            failure("CALL_LOG_MISSING")
             logger.warning(
                 "Call log id=%s disappeared before finalization", call_log_id
             )
@@ -182,7 +204,12 @@ async def end_call_tracking(
             final_update["failure_code"] = failure_code[:100]
             final_update["failure_message"] = (failure_message or "")[:1000]
 
-        client.table("call_logs").update(final_update).eq("id", call_log_id).execute()
+        await asyncio.to_thread(
+            lambda: client.table("call_logs")
+            .update(final_update)
+            .eq("id", call_log_id)
+            .execute()
+        )
 
         await _bill_completed_call(
             client,
@@ -192,9 +219,11 @@ async def end_call_tracking(
             agent_id=row.get("agent_id"),
         )
     except Exception:
+        failure("CALL_FINALIZE_FAILED")
         logger.exception("Failed to finalize call log id=%s", call_log_id)
 
 
+@observed("billing.settle")
 async def _bill_completed_call(
     client: object,
     *,
@@ -216,8 +245,8 @@ async def _bill_completed_call(
         # Demo-agent fast-path: no debit, just mark zero consumption.
         if agent_id:
             try:
-                demo_result = (
-                    client.table("voice_agents")
+                demo_result = await asyncio.to_thread(
+                    lambda: client.table("voice_agents")
                     .select("is_demo")
                     .eq("id", str(agent_id))
                     .limit(1)
@@ -229,19 +258,23 @@ async def _bill_completed_call(
                         agent_id,
                         call_log_id,
                     )
-                    client.table("call_logs").update({"credits_consumed": 0}).eq(
-                        "id", call_log_id
-                    ).execute()
+                    await asyncio.to_thread(
+                        lambda: client.table("call_logs")
+                        .update({"credits_consumed": 0})
+                        .eq("id", call_log_id)
+                        .execute()
+                    )
                     return
             except Exception:
                 logger.debug(
-                    "Demo-agent check failed for agent_id=%s — proceeding to normal billing",
+                    "Demo-agent check failed for agent_id=%s "
+                    "— proceeding to normal billing",
                     agent_id,
                     exc_info=True,
                 )
 
-        event_result = (
-            client.table("credit_events")
+        event_result = await asyncio.to_thread(
+            lambda: client.table("credit_events")
             .select("id, credit_cost")
             .eq("name", DEFAULT_VOICE_CALL_EVENT)
             .eq("is_active", True)
@@ -249,6 +282,7 @@ async def _bill_completed_call(
             .execute()
         )
         if not event_result.data:
+            failure("BILLING_EVENT_MISSING")
             logger.error("Missing active credit event %s", DEFAULT_VOICE_CALL_EVENT)
             return
 
@@ -257,23 +291,29 @@ async def _bill_completed_call(
             duration_seconds, int(event.get("credit_cost") or 0)
         )
         if credits_needed == 0:
-            client.table("call_logs").update({"credits_consumed": 0}).eq(
-                "id", call_log_id
-            ).execute()
+            await asyncio.to_thread(
+                lambda: client.table("call_logs")
+                .update({"credits_consumed": 0})
+                .eq("id", call_log_id)
+                .execute()
+            )
             return
 
-        debit_result = client.rpc(
-            "consume_voice_call_credits",
-            {
-                "p_organization_id": str(organization_id),
-                "p_credit_event_id": str(event["id"]),
-                "p_credits_needed": credits_needed,
-                "p_call_log_id": call_log_id,
-                "p_duration_seconds": duration_seconds,
-            },
-        ).execute()
+        debit_result = await asyncio.to_thread(
+            lambda: client.rpc(
+                "consume_voice_call_credits",
+                {
+                    "p_organization_id": str(organization_id),
+                    "p_credit_event_id": str(event["id"]),
+                    "p_credits_needed": credits_needed,
+                    "p_call_log_id": call_log_id,
+                    "p_duration_seconds": duration_seconds,
+                },
+            ).execute()
+        )
         debit = debit_result.data or {}
         if not debit.get("success"):
+            failure("BILLING_DEBIT_FAILED")
             logger.warning(
                 "Call %s completed without credit headroom (needed=%s)",
                 call_log_id,
@@ -290,14 +330,21 @@ async def _bill_completed_call(
 
         transaction_id = debit.get("transaction_id")
         if not transaction_id:
+            failure("BILLING_LEDGER_MISSING")
             logger.error("Credit debit for call %s had no ledger row", call_log_id)
             return
 
-        client.table("call_logs").update(
-            {
-                "credits_consumed": credits_needed,
-                "credit_transaction_id": transaction_id,
-            }
-        ).eq("id", call_log_id).execute()
+        await asyncio.to_thread(
+            lambda: client.table("call_logs")
+            .update(
+                {
+                    "credits_consumed": credits_needed,
+                    "credit_transaction_id": transaction_id,
+                }
+            )
+            .eq("id", call_log_id)
+            .execute()
+        )
     except Exception:
+        failure("BILLING_SETTLEMENT_FAILED")
         logger.exception("Failed to bill completed call id=%s", call_log_id)

@@ -2,26 +2,26 @@
 
 Production infrastructure for **247ai.live**:
 
-| Component | Platform | URL |
-|-----------|----------|-----|
-| Frontend (`frontend-247ai`) | GCP Cloud Run | https://www.247ai.live |
-| Apex web alias | Cloudflare edge redirect → canonical Cloud Run frontend | https://247ai.live |
-| Backend (`backend-247ai`) | GCP Cloud Run | https://api.247ai.live |
-| voice-ws (Pipecat WebSocket) | Oracle Free Tier ARM VM + Caddy | wss://voice.247ai.live |
-| Database + Auth | Supabase | Production: `.env.prod` (`zymiyfilulmtrmyyhvzw`); staging: `.env.staging` (`gdzwiwukcwbqohfwxxrx`) |
+| Component                    | Platform                                                | URL                                                                                                |
+| ---------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Frontend (`frontend-247ai`)  | GCP Cloud Run                                           | https://www.247ai.live                                                                             |
+| Apex web alias               | Cloudflare edge redirect → canonical Cloud Run frontend | https://247ai.live                                                                                 |
+| Backend (`backend-247ai`)    | GCP Cloud Run                                           | https://api.247ai.live                                                                             |
+| voice-ws (Pipecat WebSocket) | Oracle Free Tier ARM VM + Caddy                         | wss://voice.247ai.live                                                                             |
+| Database + Auth              | Supabase                                                | Production: `.env.prod` (`zymiyfilulmtrmyyhvzw`); staging: `.env.staging` (`gdzwiwukcwbqohfwxxrx`) |
 
 **Deploy command:** `./scripts/deploy.sh` — see [Quick reference](quick-reference.md).
 
 ## Documentation map
 
-| Document | When to read it |
-|----------|-----------------|
-| **[Quick reference](quick-reference.md)** | Day-to-day deploy commands, prerequisites, smoke checks |
-| **[Runbook](runbook.md)** | Full architecture, first-time setup, DNS, webhooks, security |
-| **[Environment variables](environment-variables.md)** | Every env var by service; `.env.prod` is the manual-deploy file and `ENV_PROD` is its CI equivalent |
-| **[Local Docker](local-docker.md)** | docker-compose and manual image builds for development |
-| **[CI / GitHub Actions](ci-github-actions.md)** | Local staging validation, manual production promotion, and required secrets |
-| **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, local staging (shared cloud DB), and production promotion model |
+| Document                                                                        | When to read it                                                                                     |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **[Quick reference](quick-reference.md)**                                       | Day-to-day deploy commands, prerequisites, smoke checks                                             |
+| **[Runbook](runbook.md)**                                                       | Full architecture, first-time setup, DNS, webhooks, security                                        |
+| **[Environment variables](environment-variables.md)**                           | Every env var by service; `.env.prod` is the manual-deploy file and `ENV_PROD` is its CI equivalent |
+| **[Local Docker](local-docker.md)**                                             | docker-compose and manual image builds for development                                              |
+| **[CI / GitHub Actions](ci-github-actions.md)**                                 | Local staging validation, manual production promotion, and required secrets                         |
+| **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, local staging (shared cloud DB), and production promotion model             |
 
 ## Repo artifacts
 
@@ -37,6 +37,19 @@ Production infrastructure for **247ai.live**:
 | `.github/workflows/deploy-cloud.yml` | Manual staging recovery only (no longer auto on `main`) |
 | `.github/workflows/promote-production.yml` | Manual protected production promotion |
 
+Observability is a separate production service boundary. The application
+exports to one authenticated OTLP endpoint; the minimal cloud profile runs
+only Caddy and the OpenTelemetry Collector, while Grafana Cloud and Langfuse
+Cloud provide hosted storage and exploration. Staging and regular local
+examples keep telemetry disabled; the isolated worktree launcher enables its
+private local stack when a developer needs to inspect a call.
+
+| `docker-compose.observability.cloud.yml` | Minimal production collector + HTTPS ingress |
+| `deploy/observability/collector.cloud.yml` | Grafana Cloud metrics/logs/traces plus content-free Langfuse trace fan-out |
+| `deploy/observability/Caddyfile.cloud` | Authenticated OTLP paths and TLS ingress |
+| `deploy/observability/alerts.cloud.yml` | Grafana Cloud-compatible application alert rules |
+| `deploy/observability/grafana/dashboards/platform-cloud-import.json` | Grafana Cloud dashboard import with datasource selectors |
+
 ## Credentials
 
 - **Application secrets:** `.env.prod` for emergency/local deployment, or the protected GitHub `production` environment secret `ENV_PROD` for CI (never commit the file).
@@ -49,3 +62,11 @@ Production infrastructure for **247ai.live**:
 - [Environment configuration notes](../environment_configuration.md) — local dev and general config
 - [Stripe management](../stripe_management.md)
 - [deploy/README.md](../../../deploy/README.md) — script and artifact index
+
+## Observability release gate
+
+Follow [Operating observability](../observability.md#production-deployment) to
+provision the single production Grafana Cloud and Langfuse Cloud projects,
+configure authenticated collector ingress, set unique service/release
+attributes, and create owned Grafana Cloud alert routes. Verify traces, logs,
+metrics, dashboard queries and alert receipt alongside browser/PSTN release checks.

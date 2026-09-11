@@ -328,6 +328,9 @@ derive_identity() {
   OTEL_GRPC_PORT=$((4317 + PORT_OFFSET))
   OTEL_HTTP_PORT=$((4318 + PORT_OFFSET))
   OTEL_HEALTH_PORT=$((13133 + PORT_OFFSET))
+  GRAFANA_PORT=$((3300 + PORT_OFFSET))
+  PROMETHEUS_PORT=$((9090 + PORT_OFFSET))
+  ALERTMANAGER_PORT=$((9093 + PORT_OFFSET))
 
   SUPABASE_SHADOW_PORT=$((54320 + PORT_OFFSET))
   SUPABASE_API_PORT=$((54321 + PORT_OFFSET))
@@ -467,6 +470,26 @@ prepare_app_env() {
   set_env_value "$APP_ENV" "HOST_OTEL_GRPC_PORT" "$OTEL_GRPC_PORT"
   set_env_value "$APP_ENV" "HOST_OTEL_HTTP_PORT" "$OTEL_HTTP_PORT"
   set_env_value "$APP_ENV" "HOST_OTEL_HEALTH_PORT" "$OTEL_HEALTH_PORT"
+  set_env_value "$APP_ENV" "HOST_GRAFANA_PORT" "$GRAFANA_PORT"
+  set_env_value "$APP_ENV" "HOST_PROMETHEUS_PORT" "$PROMETHEUS_PORT"
+  set_env_value "$APP_ENV" "HOST_ALERTMANAGER_PORT" "$ALERTMANAGER_PORT"
+  # Worktrees are the opt-in local telemetry test environment. The canonical
+  # .env.local/.env.staging examples keep application telemetry disabled.
+  set_env_value "$APP_ENV" "OTEL_ENABLED" "true"
+  set_env_value "$APP_ENV" "OTEL_SERVICE_VERSION" "development"
+  set_env_value "$APP_ENV" "OTEL_TRACES_SAMPLER_ARG" "1.0"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" "http://otel-collector:4318/v1/traces"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL" "http/protobuf"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_TRACES_HEADERS" ""
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT" "http://otel-collector:4318/v1/metrics"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL" "http/protobuf"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_METRICS_HEADERS" ""
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" "http://otel-collector:4318/v1/logs"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" "http/protobuf"
+  set_env_value "$APP_ENV" "OTEL_EXPORTER_OTLP_LOGS_HEADERS" ""
+  if is_placeholder_env_value "$(read_env_value "$APP_ENV" "GRAFANA_ADMIN_PASSWORD")"; then
+    set_env_value "$APP_ENV" "GRAFANA_ADMIN_PASSWORD" "$(openssl rand -hex 24)"
+  fi
   set_env_value "$APP_ENV" "APP_BASE_URL" "http://localhost:${APP_FRONTEND_PORT}"
   set_env_value "$APP_ENV" "API_BASE_URL" "http://localhost:${APP_BACKEND_PORT}"
   set_env_value "$APP_ENV" "NEXT_PUBLIC_API_URL" "http://localhost:${APP_BACKEND_PORT}"
@@ -474,6 +497,7 @@ prepare_app_env() {
   set_env_value "$APP_ENV" "GOOGLE_OAUTH_TOOL_REDIRECT_URI" "http://localhost:${APP_BACKEND_PORT}/api/v1/tools/callback"
   set_env_value "$APP_ENV" "MCP_OAUTH_REDIRECT_URI" "http://localhost:${APP_BACKEND_PORT}/api/v1/tools/callback"
   set_env_value "$APP_ENV" "CORS_ORIGINS" "[\"http://localhost:${APP_FRONTEND_PORT}\",\"http://127.0.0.1:${APP_FRONTEND_PORT}\",\"http://frontend:3000\",\"http://frontend-dev:3000\"]"
+  set_env_value "$APP_ENV" "NEXT_PUBLIC_OTEL_ENABLED" "false"
   set_env_value "$APP_ENV" "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" "http://localhost:${OTEL_HTTP_PORT}/v1/traces"
   set_env_value "$APP_ENV" "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT" "http://localhost:${OTEL_HTTP_PORT}/v1/metrics"
   set_env_value "$APP_ENV" "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" "http://localhost:${OTEL_HTTP_PORT}/v1/logs"
@@ -554,7 +578,8 @@ compose() {
     --project-directory "$ROOT" \
     --env-file "$APP_ENV" \
     --project-name "$APP_COMPOSE_PROJECT" \
-    -f "$ROOT/docker-compose.dev.yml" "$@"
+    -f "$ROOT/docker-compose.dev.yml" \
+    -f "$ROOT/docker-compose.observability.yml" "$@"
 }
 
 ensure_port_is_free() {
@@ -569,7 +594,8 @@ check_ports() {
   if ! compose ps --status running -q backend-dev 2>/dev/null | grep -q .; then
     for port in \
       "$APP_FRONTEND_PORT" "$APP_BACKEND_PORT" "$APP_VOICE_WS_PORT" \
-      "$OTEL_GRPC_PORT" "$OTEL_HTTP_PORT" "$OTEL_HEALTH_PORT"; do
+      "$OTEL_GRPC_PORT" "$OTEL_HTTP_PORT" "$OTEL_HEALTH_PORT" \
+      "$GRAFANA_PORT" "$PROMETHEUS_PORT" "$ALERTMANAGER_PORT"; do
       ensure_port_is_free "$port"
     done
   fi
@@ -654,6 +680,9 @@ show_config() {
   echo "Voice WebSocket host port: $APP_VOICE_WS_PORT"
   echo "App Compose project: $APP_COMPOSE_PROJECT"
   echo "App env: $APP_ENV"
+  echo "Grafana: http://localhost:${GRAFANA_PORT} (admin password in app env)"
+  echo "Prometheus: http://localhost:${PROMETHEUS_PORT}"
+  echo "Alertmanager: http://localhost:${ALERTMANAGER_PORT}"
   local gemini_key
   gemini_key="$(read_env_value "$APP_ENV" "GEMINI_API_KEY")"
   if is_placeholder_env_value "$gemini_key"; then

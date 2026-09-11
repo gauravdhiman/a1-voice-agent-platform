@@ -40,19 +40,21 @@ def _create_mcp_handler(client: McpClient, tool_name: str) -> Callable[..., Any]
     async def handler(params: FunctionCallParams) -> None:
         """Forward validated model arguments and return the MCP result."""
         arguments = dict(params.arguments)
-        logger.info("Invoking MCP tool %s with args=%s", tool_name, arguments)
+        logger.info("Invoking MCP tool %s", tool_name)
         try:
             result = await client.call_tool(tool_name, arguments)
         except Exception as exc:  # noqa: BLE001 - always return a model-visible error
-            logger.exception("MCP tool %s failed: %s", tool_name, exc)
-            await params.result_callback(f"MCP tool error: {tool_name} failed: {exc}")
+            logger.error("MCP tool %s failed (%s)", tool_name, type(exc).__name__)
+            await params.result_callback(
+                f"MCP tool error: {tool_name} failed. "
+                "Check the integration configuration before retrying."
+            )
             return
         text = _mcp_result_text(result)
         logger.info(
-            "MCP tool %s completed error=%s result=%s",
+            "MCP tool %s completed error=%s",
             tool_name,
             getattr(result, "is_error", False),
-            text[:500] if isinstance(text, str) else text,
         )
         await params.result_callback(text)
 

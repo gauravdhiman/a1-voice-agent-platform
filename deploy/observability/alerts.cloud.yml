@@ -1,0 +1,74 @@
+# Grafana Cloud alert rules for the minimal production profile.
+#
+# These rules use application metrics and the collector's self-scraped health
+# metrics exported over OTLP. Local disk and blackbox rules remain in alerts.yml
+# for the full local or future self-hosted stack and are not portable here.
+groups:
+  - name: platform-cloud
+    rules:
+      - alert: ServiceNotReady
+        expr: sum by (service_name) (rate(platform_readiness_checks_total{outcome="error"}[5m])) > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "A platform service readiness check is failing"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#servicenotready"
+      - alert: APIErrorBudgetBurn
+        expr: |
+          (sum(rate(platform_http_requests_total{http_response_status_code=~"5.."}[5m])) / clamp_min(sum(rate(platform_http_requests_total[5m])), 0.001) > 0.0144)
+          and
+          (sum(rate(platform_http_requests_total{http_response_status_code=~"5.."}[1h])) / clamp_min(sum(rate(platform_http_requests_total[1h])), 0.001) > 0.0144)
+          and sum(increase(platform_http_requests_total[5m])) >= 20
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "API is consuming its 99.9% availability budget too quickly"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#apierrorbudgetburn"
+      - alert: VoiceFailures
+        expr: sum(increase(platform_voice_calls_total{outcome="error"}[10m])) >= 3
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "At least three voice calls failed in ten minutes"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#voicefailures"
+      - alert: ToolFailures
+        expr: sum(increase(platform_operation_count_total{operation="tool.execute",outcome="error"}[10m])) >= 3
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Repeated tool execution failures"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#toolfailures"
+      - alert: PersistenceFailure
+        expr: sum by (operation) (increase(platform_operation_count_total{operation=~"recording.persist|billing.settle|call.finalize",outcome="error"}[10m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "A call artifact, billing settlement or finalization failed"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#persistencefailure"
+      - alert: SlowAIResponse
+        expr: histogram_quantile(0.95, sum by (le, stage) (rate(platform_ai_ttfb_seconds_bucket[10m]))) > 3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "AI stage time to first byte p95 exceeds three seconds"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#slowairesponse"
+      - alert: CollectorExportFailure
+        expr: sum by (exporter) (increase({__name__=~"otelcol_exporter_send_failed_(spans|log_records|metric_points)(_total)?"}[5m])) > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "The telemetry collector cannot export one or more signals"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorexportfailure"
+      - alert: CollectorQueuePressure
+        expr: max by (exporter) (otelcol_exporter_queue_size / clamp_min(otelcol_exporter_queue_capacity, 1)) > 0.7
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Collector persistent queue is above 70%"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorqueuepressure"
+      - alert: CollectorRefusedTelemetry
+        expr: sum(increase({__name__=~"otelcol_receiver_refused_(spans|log_records|metric_points)(_total)?"}[5m])) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Collector is refusing telemetry under load"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorrefusedtelemetry"

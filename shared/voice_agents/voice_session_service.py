@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 import jwt
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from shared.config.settings import settings
 from shared.voice_agents.source_metadata import (
@@ -44,6 +45,7 @@ class VoiceSessionClaims:
     source_domain: Optional[str] = None
     demo_reservation_id: Optional[str] = None
     demo_max_call_duration_seconds: Optional[int] = None
+    traceparent: Optional[str] = None
     token_type: str = VOICE_SESSION_TOKEN_TYPE
 
 
@@ -169,6 +171,10 @@ class VoiceSessionService:
             payload["demo_reservation_id"] = demo_reservation_id
         if demo_max_call_duration_seconds is not None:
             payload["demo_max_call_duration_seconds"] = demo_max_call_duration_seconds
+        carrier = {}
+        TraceContextTextMapPropagator().inject(carrier)
+        if "traceparent" in carrier:
+            payload["traceparent"] = carrier["traceparent"]
         token = jwt.encode(payload, self.jwt_secret, algorithm="HS256")
         logger.info(
             "Created voice_ws session token session_id=%s agent_id=%s purpose=%s",
@@ -267,6 +273,12 @@ class VoiceSessionService:
             source_domain=source_domain,
             demo_reservation_id=demo_reservation_id,
             demo_max_call_duration_seconds=demo_max_call_duration_seconds,
+            traceparent=(
+                payload.get("traceparent")
+                if isinstance(payload.get("traceparent"), str)
+                and len(payload["traceparent"]) == 55
+                else None
+            ),
             token_type=VOICE_SESSION_TOKEN_TYPE,
         )
 

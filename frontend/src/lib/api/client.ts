@@ -1,3 +1,4 @@
+import { createTraceparent, readRequestId } from "@/lib/api/correlation";
 import { ApiResponse } from "@/types";
 import { supabase } from "@/lib/supabase";
 import {
@@ -10,12 +11,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export class ApiRequestError extends Error {
   status: number;
   data?: unknown;
+  requestId?: string;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    data?: unknown,
+    requestId?: string,
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.data = data;
+    this.requestId = requestId;
   }
 }
 
@@ -64,12 +72,14 @@ class ApiClient {
     // Get authentication headers
     const authHeaders = await this.getAuthHeaders();
 
+    const traceparent = createTraceparent();
     const config: RequestInit = {
       ...options,
       headers: {
         ...this.headers,
         ...authHeaders,
         ...options.headers,
+        ...(traceparent ? { traceparent } : {}),
       },
     };
 
@@ -91,6 +101,7 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        const requestId = readRequestId(response.headers);
         // Handle 401 - attempt token refresh and retry once
         if (response.status === 401 && retryCount === 0) {
           try {
@@ -114,16 +125,29 @@ class ApiClient {
 
         // Handle specific error cases
         if (response.status === 401) {
-          throw new Error("Authentication required. Please sign in.");
+          throw new ApiRequestError(
+            "Authentication required. Please sign in.",
+            response.status,
+            data,
+            requestId,
+          );
         }
         if (response.status === 403) {
-          throw new Error(
+          throw new ApiRequestError(
             "Access denied. You do not have permission to perform this action.",
+            response.status,
+            data,
+            requestId,
           );
         }
         const errorMessage = getSafeApiErrorMessage(data);
 
-        throw new ApiRequestError(errorMessage, response.status, data);
+        throw new ApiRequestError(
+          errorMessage,
+          response.status,
+          data,
+          readRequestId(response.headers),
+        );
       }
 
       // Handle both wrapped and direct responses
@@ -133,6 +157,7 @@ class ApiClient {
         console.error(
           "API request error:",
           redactSensitiveLogMessage(error.message),
+          error.requestId ? { requestId: error.requestId } : undefined,
         );
       } else if (error instanceof Error) {
         console.error("API request error:", error.message);
@@ -157,11 +182,13 @@ class ApiClient {
   async getBlob(endpoint: string, retryCount = 0): Promise<Blob> {
     const url = `${this.baseURL}${endpoint}`;
     const authHeaders = await this.getAuthHeaders();
+    const traceparent = createTraceparent();
     const response = await fetch(url, {
       method: "GET",
       headers: {
         ...authHeaders,
         Accept: "audio/wav, audio/*",
+        ...(traceparent ? { traceparent } : {}),
       },
     });
 
@@ -176,12 +203,21 @@ class ApiClient {
     }
 
     if (!response.ok) {
+      const requestId = readRequestId(response.headers);
       if (response.status === 401) {
-        throw new Error("Authentication required. Please sign in.");
+        throw new ApiRequestError(
+          "Authentication required. Please sign in.",
+          response.status,
+          undefined,
+          requestId,
+        );
       }
       if (response.status === 403) {
-        throw new Error(
+        throw new ApiRequestError(
           "Access denied. You do not have permission to perform this action.",
+          response.status,
+          undefined,
+          requestId,
         );
       }
       let detail: unknown;
@@ -194,6 +230,7 @@ class ApiClient {
         getSafeApiErrorMessage(detail),
         response.status,
         detail,
+        readRequestId(response.headers),
       );
     }
 

@@ -17,8 +17,7 @@ graph TB
         BE[Tool Service]
         BE[Agent Service]
         BE[Auth Middleware]
-        BE[RBAC System]
-        BE[OpenTelemetry]
+        RBAC[RBAC System]
     end
 
     subgraph VoiceWS["voice-ws (Pipecat WebSocket)"]
@@ -37,19 +36,22 @@ graph TB
     end
 
     subgraph Infra["Infrastructure"]
-        OTEL[OpenTelemetry Collector]
-        DOCKER[Docker Compose]
+        OTEL[Authenticated OTLP Collector]
+        GRAFANA[Grafana Cloud]
+        LANGFUSE[Langfuse Cloud]
         STRIPE[Stripe]
         TWILIO[Twilio Media Streams]
     end
 
     FE -->|HTTP|BE
     BE -->|Supabase Client|DB
-    WK -->|gRPC|OTEL
+    BE -->|OTLP|OTEL
+    WK -->|OTLP|OTEL
     BE -->|Webhooks|STRIPE
     WK -->|WebSocket|TWILIO
     FE -->|WebSocket|WK
-    OTEL --> DOCKER
+    OTEL --> GRAFANA
+    OTEL -->|traces only, content-free| LANGFUSE
 ```
 
 ## Core Components
@@ -64,7 +66,7 @@ graph TB
 - React 18+ with TypeScript
 - Tailwind CSS for styling
 - Shadcn/ui components
-- OpenTelemetry instrumentation
+- W3C traceparent correlation (browser exporters disabled)
 
 **Directory Structure**:
 
@@ -92,8 +94,8 @@ frontend/src/
 │   ├── use-rbac.ts
 │   └── ...
 ├── lib/                    # Utilities and API client
-│   ├── api/                # API client wrapper
-│   └── opentelemetry.ts    # OTEL instrumentation
+│   ├── api/                # API client wrapper and correlation helpers
+│   └── pipecat-voice-client.ts # Browser voice session client
 ├── services/               # Business logic services
 │   ├── auth-service.ts
 │   ├── billing-service.ts
@@ -364,42 +366,25 @@ graph LR
 
 ### 7. OpenTelemetry Observability
 
-**Architecture**:
+The backend and `voice-ws` emit content-free metrics, logs and correlated
+traces through a shared OpenTelemetry SDK. A single authenticated collector
+boundary forwards all signals to Grafana Cloud and forwards traces to Langfuse
+Cloud for AI call navigation:
 
 ```mermaid
-graph TB
-    subgraph OTEL[OpenTelemetry Stack]
-        FE[Frontend SDK]
-        BE[Backend SDK]
-        WK[voice-ws SDK]
-    end
-
-    subgraph Collector[OTEL Collector]
-        GRPC[gRPC Receiver - Port 4317]
-        HTTP[HTTP Receiver - Port 4318]
-    end
-
-    subgraph Exporters[External Services]
-        NR[New Relic OTLP]
-    end
-
-    FE -->|HTTP/logs|HTTP
-    BE -->|gRPC/traces|gRPC
-    BE -->|HTTP/metrics|HTTP
-    WK -->|gRPC/traces|gRPC
-    WK -->|HTTP/logs|HTTP
-
-    GRPC --> NR
-    HTTP --> NR
+graph LR
+    BE[Backend] --> C[HTTPS OTLP collector]
+    WS[voice-ws] --> C
+    FE[Browser API client<br/>W3C traceparent only] --> BE
+    C --> G[Grafana Cloud<br/>dashboards + alerts]
+    C --> L[Langfuse Cloud<br/>metadata-only traces]
 ```
 
-**Configuration**:
-
-- **File**: `otel-collector-config.yml`
-- **Collector**: OpenTelemetry Collector Contrib
-- **Receivers**: `otlp` (gRPC), `http` (HTTP)
-- **Processors**: `batch` - batches telemetry data
-- **Exporters**: `otlp/newrelic` - exports to New Relic
+The launch profile runs only Caddy and the pinned collector. Local development
+may use the full pinned Prometheus/Loki/Tempo/Grafana/Alertmanager stack via the
+isolated worktree launcher; staging and regular local examples are disabled by
+default. Prompts, completions, transcripts, audio, tool arguments/results and
+credentials never enter telemetry. See [Operating observability](../05_operations/observability.md).
 
 ## Data Flow
 
@@ -411,24 +396,24 @@ graph TB
 6. **Agent Execution**: Pipecat session handles audio and LLM
 7. **Tool Calling**: Agent calls tool → `voice-ws` executes platform tool or MCP
 8. **Outbound (planned)**: See [Outbound phone calls](../03_implementation/outbound_phone_calls.md)
-8. **Response**: Tool returns data → Agent speaks response to user
-9. **Billing**: Backend tracks usage → Stripe handles payments
+9. **Response**: Tool returns data → Agent speaks response to user
+10. **Billing**: Backend tracks usage → Stripe handles payments
 
 ## Technology Stack
 
-| Component        | Technology            | Version  | Purpose           |
-| ---------------- | --------------------- | -------- | ----------------- |
-| Frontend         | Next.js               | 15       | UI framework      |
-| Backend          | FastAPI               | Latest   | API framework     |
-| Backend Runtime  | Python                | 3.11+    | Server runtime    |
-| Database         | Supabase (PostgreSQL) | -        | Data storage      |
-| ORM              | Supabase Client       | -        | Database client   |
-| Authentication   | Supabase Auth         | -        | User auth         |
-| Voice runtime    | Pipecat (`voice-ws`)  | —        | WebSocket voice   |
-| LLM              | Google Gemini         | -        | AI model          |
-| Observability    | OpenTelemetry         | Latest   | Tracing & metrics |
-| Metrics Exporter | New Relic OTLP        | -        | External metrics  |
-| Containerization | Docker Compose        | -        | Local dev         |
+| Component        | Technology                                     | Version | Purpose                                 |
+| ---------------- | ---------------------------------------------- | ------- | --------------------------------------- |
+| Frontend         | Next.js                                        | 15      | UI framework                            |
+| Backend          | FastAPI                                        | Latest  | API framework                           |
+| Backend Runtime  | Python                                         | 3.11+   | Server runtime                          |
+| Database         | Supabase (PostgreSQL)                          | -       | Data storage                            |
+| ORM              | Supabase Client                                | -       | Database client                         |
+| Authentication   | Supabase Auth                                  | -       | User auth                               |
+| Voice runtime    | Pipecat (`voice-ws`)                           | —       | WebSocket voice                         |
+| LLM              | Google Gemini                                  | -       | AI model                                |
+| Observability    | OpenTelemetry + Grafana Cloud + Langfuse Cloud | pinned  | Metrics, logs, traces and AI navigation |
+| Metrics Exporter | Authenticated OTLP collector                   | -       | Hosted signal export                    |
+| Containerization | Docker Compose                                 | -       | Local dev                               |
 
 ## Key Design Decisions
 

@@ -1,3 +1,7 @@
+# DEPRECATED legacy collector configuration. The supported local profile uses
+# deploy/observability/collector.yml; production uses collector.cloud.yml.
+# This file is retained only for historical recovery and is not referenced by
+# the supported Compose launchers.
 receivers:
   otlp:
     protocols:

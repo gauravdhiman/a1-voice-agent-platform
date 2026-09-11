@@ -58,9 +58,12 @@ describe('ApiClient', () => {
         'http://localhost:8000/test',
         expect.objectContaining({
           method: 'GET',
-          headers: {
+          headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          },
+            traceparent: expect.stringMatching(
+              /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/
+            ),
+          }),
         })
       )
     })
@@ -80,9 +83,9 @@ describe('ApiClient', () => {
         'http://localhost:8000/test',
         expect.objectContaining({
           method: 'POST',
-          headers: {
+          headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          },
+          }),
           body: JSON.stringify({ name: 'test' }),
         })
       )
@@ -103,9 +106,9 @@ describe('ApiClient', () => {
         'http://localhost:8000/test',
         expect.objectContaining({
           method: 'PUT',
-          headers: {
+          headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          },
+          }),
           body: JSON.stringify({ name: 'updated' }),
         })
       )
@@ -126,9 +129,9 @@ describe('ApiClient', () => {
         'http://localhost:8000/test',
         expect.objectContaining({
           method: 'DELETE',
-          headers: {
+          headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          },
+          }),
         })
       )
     })
@@ -257,6 +260,29 @@ describe('ApiClient', () => {
       )
     })
 
+    it('preserves the server request ID on authorization failures', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValue({
+        data: { session: null },
+      })
+      const requestId = '01234567-89ab-4def-8123-456789abcdef'
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 401,
+          headers: new Headers({
+            'content-type': 'application/json',
+            'x-request-id': requestId,
+          }),
+          json: () => Promise.resolve({}),
+        } as Response)
+      )
+
+      await expect(apiClient.get('/test')).rejects.toMatchObject({
+        status: 401,
+        requestId,
+      })
+    })
+
     it('throws error with message from response', async () => {
       global.fetch = vi.fn(() =>
         Promise.resolve({
@@ -375,6 +401,33 @@ describe('ApiClient', () => {
       const result = await apiClient.get('/test')
 
       expect(result).toEqual({ data: 'plain text', success: true })
+    })
+
+    it('correlates recording downloads and preserves a safe request ID', async () => {
+      const responseHeaders = new Headers({
+        'x-request-id': '01234567-89ab-4def-8123-456789abcdef',
+      })
+      const blob = new Blob(['audio'])
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: responseHeaders,
+          blob: () => Promise.resolve(blob),
+        } as Response)
+      )
+
+      await expect(apiClient.getBlob('/recording')).resolves.toBe(blob)
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/recording',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            traceparent: expect.stringMatching(
+              /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/
+            ),
+          }),
+        })
+      )
     })
   })
 })

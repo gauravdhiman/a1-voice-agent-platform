@@ -5,12 +5,11 @@ deploys use GCP Cloud Run + OCI — see [deployment/README.md](README.md).
 
 ## Services (docker-compose)
 
-| Service | Dockerfile | Build context | Port |
-|---------|------------|---------------|------|
-| `backend` | `backend/Dockerfile` | repo root | 8000 |
-| `frontend` | `frontend/Dockerfile` | `./frontend` | 3000 |
-| `voice-ws` | `voice-ws/Dockerfile` | repo root | 7860 |
-| `otel-collector` | `otel-collector/Dockerfile` | repo root | 4317, 4318, 13133 |
+| Service        | Dockerfile                | Build context | Port |
+| -------------- | ------------------------- | ------------- | ---- |
+| `backend-dev`  | `backend/Dockerfile.dev`  | repo root     | 8000 |
+| `frontend-dev` | `frontend/Dockerfile.dev` | `./frontend`  | 3000 |
+| `voice-ws-dev` | `voice-ws/Dockerfile.dev` | repo root     | 7860 |
 
 > The legacy LiveKit `worker/` service is not used when `VOICE_TRANSPORT=pipecat`.
 
@@ -21,7 +20,7 @@ deploys use GCP Cloud Run + OCI — see [deployment/README.md](README.md).
 # For staging instead, use: ./start.sh start dev --env staging
 
 ./start.sh start dev                   # app services; uses an already-running local Supabase
-./start.sh start dev --env staging     # all services, cloud staging Supabase
+./start.sh start dev --env staging     # app services, cloud staging Supabase
 ./start.sh logs dev
 ./start.sh stop dev
 ```
@@ -42,6 +41,11 @@ worktree, use the worktree launcher instead:
 ./scripts/worktree-stack.sh status
 ./scripts/worktree-stack.sh down       # preserves local database volumes
 ```
+
+The isolated launcher overlays `docker-compose.observability.yml`, which adds
+the pinned collector, Prometheus, Loki, Tempo, Grafana, Alertmanager and
+blackbox probe. The canonical local and staging application profiles keep
+telemetry disabled and do not start an observability service.
 
 The launcher creates a worktree-specific Supabase CLI project, applies the
 worktree's Alembic migrations, synchronizes master data, and seeds the same
@@ -102,33 +106,41 @@ docker run -p 7860:7860 --env-file .env.local voice-ws-dev
 
 ## Health checks
 
-| Service | Endpoint | Expected |
-|---------|----------|----------|
-| Backend | `GET /health` | `{"status":"healthy"}` |
-| Backend | `GET /health/ready`, `/health/live` | 200 OK |
-| Frontend | `GET /api/health` | healthy JSON |
-| voice-ws | `GET /health` | healthy JSON |
+| Service  | Endpoint                            | Expected               |
+| -------- | ----------------------------------- | ---------------------- |
+| Backend  | `GET /health`                       | `{"status":"ready"}` when Supabase is available |
+| Backend  | `GET /health/ready`, `/health/live` | 200 OK                 |
+| Frontend | `GET /api/health`                   | healthy JSON           |
+| voice-ws | `GET /health`                       | healthy JSON           |
 
 ## Dockerfile notes
 
 ### Backend
+
 - Context: repo root (needs `shared/`)
 - Non-root user: `fastapi`
 - Starts: `uvicorn main:app --host 0.0.0.0 --port 8000`
 
 ### Frontend
+
 - Multi-stage: `deps` → `builder` → `runner`
 - Next.js `output: "standalone"`
 - `NEXT_PUBLIC_*` must be `--build-arg` at build time
 
 ### voice-ws
+
 - Context: repo root (needs `shared/`)
 - WebSocket server on port 7860
 - Routes: `/ws`, `/twilio`, `/health`
 
 ### OTel Collector (optional)
+
 - Ports: 4317 (gRPC), 4318 (HTTP), 13133 (health)
-- Disabled in production cloud deploy (`OTEL_ENABLED=false`)
+- The regular local and staging examples keep `OTEL_ENABLED=false`.
+- `scripts/worktree-stack.sh` opts an isolated worktree into its private
+  collector so developers can inspect traces without a hosted account.
+- Production enables application exporters only after the authenticated cloud
+  collector profile is provisioned; see [Operating observability](../observability.md#production-deployment).
 
 ## Production builds
 

@@ -166,8 +166,10 @@ flowchart TD
     VWS <--> ExtTools
 
     %% Flow: Observability
-    BE & VWS & Browser --> OTEL
-    OTEL --> NR[New Relic]
+    BE & VWS --> OTEL
+    Browser -. content-free traceparent .-> BE
+    OTEL --> GC[Grafana Cloud]
+    OTEL -. traces only, content-free .-> LF[Langfuse Cloud]
 
     %% Styling
     style BE fill:#f9f,stroke:#333,stroke-width:2px
@@ -207,8 +209,9 @@ flowchart TD
 
 - **Containerization**: Docker & Docker Compose
 - **Scalability**: Horizontal scaling ready
-- **Observability**: OpenTelemetry with Collector architecture
-- **Monitoring**: New Relic integration
+- **Observability**: OpenTelemetry with an authenticated Collector boundary
+- **Monitoring**: Grafana Cloud dashboards, logs, traces and alerts; optional
+  Langfuse Cloud metadata-only AI trace navigation
 
 ## 📁 Project Structure
 
@@ -385,7 +388,8 @@ ai-voice-agent-platform/
 - Manual instrumentation for precise control
 - Collector architecture for centralized processing
 - CORS-enabled for browser telemetry
-- New Relic integration for visualization
+- Grafana Cloud dashboards and alerting through the minimal cloud collector
+- Optional Langfuse Cloud metadata-only AI trace navigation
 
 ## 🔄 Development Priorities
 
@@ -680,8 +684,12 @@ npx tsc --noEmit         # Type check
   - [ ] Configure DNS records
   - [ ] Set up SSL/TLS certificates
   - [ ] Configure load balancer (if multiple instances)
-  - [ ] Set up monitoring (Prometheus, Datadog, etc.)
-  - [ ] Set up alerting (Sentry, PagerDuty, etc.)
+  - [ ] Provision the production observability profile from
+    [Operating observability](docs/05_operations/observability.md): one
+    authenticated collector host, one Grafana Cloud stack and one Langfuse
+    project
+  - [ ] Import the cloud dashboard, create owned alert contact points, and
+    verify one firing and recovery notification
 
 - [ ] **Security**
   - [ ] Verify Supabase RLS policies meet production requirements

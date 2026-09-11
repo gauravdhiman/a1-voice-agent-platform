@@ -1,0 +1,14 @@
+# Local-only default: inspect grouped alerts in Alertmanager/Grafana.
+# Production MUST supply an operator-owned receiver file through ALERTMANAGER_CONFIG_FILE.
+route:
+  receiver: local-dashboard
+  group_by: [alertname, service_name]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: local-dashboard
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [alertname, service_name]

@@ -1,6 +1,6 @@
 # Production Observability, Monitoring, Traceability & Alerting Plan
 
-**Status:** Proposed production hardening plan
+**Status:** Historical assessment; implementation and rollout contract are in [Operating observability](observability.md). This plan includes later-stage proposals (AI quality UI and transactional event ledger) that are not claims about implemented behavior.
 **Review date:** 2026-09-06
 **Scope:** Backend, frontend, voice-ws, shared services/tools, call lifecycle, billing, recordings, deployment, and operator workflows
 
@@ -65,18 +65,18 @@ workflow instead of becoming the only place an incident can be understood.
 For any incident, on-call should be able to answer these questions in minutes,
 without reproducing the call first:
 
-| Question | Required evidence | Target query key |
-| --- | --- | --- |
-| Is the platform available? | Liveness, readiness, request success, dependency health, container restarts | `service`, `environment`, `region` |
-| Who is affected? | Organization, agent, channel, provider, route, release, region; safely redacted | `organization_id`, `agent_id`, `channel`, `provider`, `release` |
-| What happened to one call? | Conversation root span, call-log state transitions, turn/tool/provider events, recording/artifact state, billing result | `call_id`, `session_id`, `trace_id` |
-| Where is latency spent? | Stage durations and percentiles for WebSocket connect, STT, LLM, TTS, tools, persistence, billing | `trace_id`, `span_id`, `operation` |
-| Why did it fail? | Stable failure code, exception type, provider status, retry classification, safe error details | `failure_code`, `error.type`, `provider` |
-| Is the issue systemic or tenant-specific? | Error/latency/capacity slices by service, route, provider, organization, agent, and release | bounded low-cardinality labels |
-| Did a deployment cause it? | Release/build metadata, change markers, pre/post deployment SLO comparison | `service.version`, `deployment.id` |
-| Is money or quota correct? | Usage estimate, completed-call decision, idempotent billing result, ledger transaction ID, reconciliation metric | `call_id`, `credit_transaction_id` |
-| Are artifacts safe and available? | Recording/transcript status, storage latency, retention deadline, encryption/upload failure | `call_id`, `artifact_type`, `storage_provider` |
-| Can we prove the control worked? | Alert fired, runbook followed, recovery time, audit event, post-incident evidence | incident ID / trace ID |
+| Question                                  | Required evidence                                                                                                       | Target query key                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Is the platform available?                | Liveness, readiness, request success, dependency health, container restarts                                             | `service`, `environment`, `region`                              |
+| Who is affected?                          | Organization, agent, channel, provider, route, release, region; safely redacted                                         | `organization_id`, `agent_id`, `channel`, `provider`, `release` |
+| What happened to one call?                | Conversation root span, call-log state transitions, turn/tool/provider events, recording/artifact state, billing result | `call_id`, `session_id`, `trace_id`                             |
+| Where is latency spent?                   | Stage durations and percentiles for WebSocket connect, STT, LLM, TTS, tools, persistence, billing                       | `trace_id`, `span_id`, `operation`                              |
+| Why did it fail?                          | Stable failure code, exception type, provider status, retry classification, safe error details                          | `failure_code`, `error.type`, `provider`                        |
+| Is the issue systemic or tenant-specific? | Error/latency/capacity slices by service, route, provider, organization, agent, and release                             | bounded low-cardinality labels                                  |
+| Did a deployment cause it?                | Release/build metadata, change markers, pre/post deployment SLO comparison                                              | `service.version`, `deployment.id`                              |
+| Is money or quota correct?                | Usage estimate, completed-call decision, idempotent billing result, ledger transaction ID, reconciliation metric        | `call_id`, `credit_transaction_id`                              |
+| Are artifacts safe and available?         | Recording/transcript status, storage latency, retention deadline, encryption/upload failure                             | `call_id`, `artifact_type`, `storage_provider`                  |
+| Can we prove the control worked?          | Alert fired, runbook followed, recovery time, audit event, post-incident evidence                                       | incident ID / trace ID                                          |
 
 ## 3. Review method and evidence boundary
 
@@ -131,21 +131,21 @@ provider calls, tools, persistence, and frontend-visible status. The existing
 
 ### Evidence map
 
-| Area | Current evidence | Operational consequence |
-| --- | --- | --- |
-| Shared OTel | `shared/config/opentelemetry.py`, `shared/config/settings.py` | Configuration exists, but endpoint/protocol/header fields are not consistently used; lifecycle, resource metadata, error recording, and exporter health are incomplete. |
-| Backend startup | `backend/main.py` | Instrumentation is initialized at import and app creation, creating duplicate/noisy behavior; synthetic `/test-otel` is public and blocks the event loop. |
-| Backend health | `backend/main.py` `/health`, `/health/ready`, `/health/live` | Readiness is effectively unconditional; `/health` can return HTTP 200 and `status: healthy` while a dependency check reports an error. |
-| Voice transport | `voice-ws/src/main.py`, `voice-ws/src/bot.py` | WebSocket and Twilio paths work as runtime boundaries, but there is no durable root trace with transport, call, session, or release context. |
-| Session setup | `voice-ws/src/session_setup.py` | Prepared-agent logs help local debugging but do not carry stable correlation IDs or a privacy policy. |
-| Pipeline | `voice-ws/src/bot.py` | Call tracking, recording, and bounded failure state exist; conversation/turn/STT/LLM/TTS/tool/persistence spans and metrics are missing. |
-| Call tracking | `voice-ws/src/call_tracking.py` | Sync Supabase calls run in async code; failure and billing paths are best-effort and lack telemetry needed to distinguish persistence, billing, and provider failures. |
-| Recording | `voice-ws/src/recording.py` | Artifact persistence is best-effort with broad failure logging but no duration, bytes, queue/backlog, retry, or storage error metrics. |
-| Tools/MCP | `voice-ws/src/tools/assembly.py`, `voice-ws/src/tools/mcp_pipecat.py` and related handlers | Native/MCP tool failures are model-visible, but execution duration/status/provider metadata are not consistently traced; some paths log raw arguments/results or return raw exception text. |
-| Durable model | `backend/src/call_logs/models.py` and call-artifact migrations | Call outcome and artifact metadata exist; there is no append-only call/turn/tool/provider/billing event ledger. |
-| Frontend | `frontend/src/lib/opentelemetry.ts`, `opentelemetry-helpers.ts`, `api/client.ts`, `instrumentation.ts` | Browser telemetry is mostly helper/synthetic instrumentation; API calls do not consistently create spans or propagate `traceparent`/request IDs. Production disables it. |
-| Deployment | `.env.prod.example`, `scripts/deploy/gcp-env-from-cloud.py`, `scripts/deploy/gcp-deploy.sh`, `deploy/oci/docker-compose.voice-ws.yml` | Production telemetry is disabled or only partially configured; there is no checked-in collector/dashboard/alert deployment and no telemetry smoke gate. |
-| Docs/tests | `docs/02_features/observability/overview.md`, `docs/02_core_systems/opentelemetry_implementation.md`, `backend/README.md`, OTel dependency tests | Documentation overstates current capability and is stale in places; tests verify dependency/config presence, not signal correctness or operator workflows. |
+| Area            | Current evidence                                                                                                                                 | Operational consequence                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared OTel     | `shared/config/opentelemetry.py`, `shared/config/settings.py`                                                                                    | Configuration exists, but endpoint/protocol/header fields are not consistently used; lifecycle, resource metadata, error recording, and exporter health are incomplete.                     |
+| Backend startup | `backend/main.py`                                                                                                                                | Instrumentation is initialized at import and app creation, creating duplicate/noisy behavior; synthetic `/test-otel` is public and blocks the event loop.                                   |
+| Backend health  | `backend/main.py` `/health`, `/health/ready`, `/health/live`                                                                                     | Readiness is effectively unconditional; `/health` can return HTTP 200 and `status: healthy` while a dependency check reports an error.                                                      |
+| Voice transport | `voice-ws/src/main.py`, `voice-ws/src/bot.py`                                                                                                    | WebSocket and Twilio paths work as runtime boundaries, but there is no durable root trace with transport, call, session, or release context.                                                |
+| Session setup   | `voice-ws/src/session_setup.py`                                                                                                                  | Prepared-agent logs help local debugging but do not carry stable correlation IDs or a privacy policy.                                                                                       |
+| Pipeline        | `voice-ws/src/bot.py`                                                                                                                            | Call tracking, recording, and bounded failure state exist; conversation/turn/STT/LLM/TTS/tool/persistence spans and metrics are missing.                                                    |
+| Call tracking   | `voice-ws/src/call_tracking.py`                                                                                                                  | Sync Supabase calls run in async code; failure and billing paths are best-effort and lack telemetry needed to distinguish persistence, billing, and provider failures.                      |
+| Recording       | `voice-ws/src/recording.py`                                                                                                                      | Artifact persistence is best-effort with broad failure logging but no duration, bytes, queue/backlog, retry, or storage error metrics.                                                      |
+| Tools/MCP       | `voice-ws/src/tools/assembly.py`, `voice-ws/src/tools/mcp_pipecat.py` and related handlers                                                       | Native/MCP tool failures are model-visible, but execution duration/status/provider metadata are not consistently traced; some paths log raw arguments/results or return raw exception text. |
+| Durable model   | `backend/src/call_logs/models.py` and call-artifact migrations                                                                                   | Call outcome and artifact metadata exist; there is no append-only call/turn/tool/provider/billing event ledger.                                                                             |
+| Frontend        | `frontend/src/lib/opentelemetry.ts`, `opentelemetry-helpers.ts`, `api/client.ts`, `instrumentation.ts`                                           | Browser telemetry is mostly helper/synthetic instrumentation; API calls do not consistently create spans or propagate `traceparent`/request IDs. Production disables it.                    |
+| Deployment      | `.env.prod.example`, `scripts/deploy/gcp-env-from-cloud.py`, `scripts/deploy/gcp-deploy.sh`, `deploy/oci/docker-compose.voice-ws.yml`            | Production telemetry is disabled or only partially configured; there is no checked-in collector/dashboard/alert deployment and no telemetry smoke gate.                                     |
+| Docs/tests      | `docs/02_features/observability/overview.md`, `docs/02_core_systems/opentelemetry_implementation.md`, `backend/README.md`, OTel dependency tests | Documentation overstates current capability and is stale in places; tests verify dependency/config presence, not signal correctness or operator workflows.                                  |
 
 ## 5. Production maturity scorecard
 
@@ -153,22 +153,22 @@ Scores are capability scores, not a judgment of code quality. `0` means
 absent, `1` prototype/partial, `2` usable with manual work, and `3` production
 operable with ownership, tests, and runbooks.
 
-| Capability | Score | Assessment |
-| --- | ---: | --- |
-| Metrics coverage and naming | 1/3 | A few auth/org/RBAC metrics exist; voice, provider, tool, recording, billing, queue, and dependency metrics are not covered by a consistent contract. |
-| Structured logging | 1/3 | Standard logging is present, but fields, redaction, severity, request IDs, and correlation are inconsistent. |
-| Distributed tracing | 1/3 | OTel decorators/setup exist, but there is no end-to-end propagation or useful voice turn/tool trace. |
-| Browser-to-backend traceability | 0/3 | Plain `fetch` is the default; no standard request/trace propagation path is enforced. |
-| Voice-call traceability | 1/3 | Call IDs and call logs exist; a traceable conversation/turn/event chronology does not. |
-| Health and dependency monitoring | 0/3 | Liveness/readiness semantics are not trustworthy and do not cover all critical dependencies. |
-| SLOs and error budgets | 0/3 | No checked-in SLI/SLO definitions or burn-rate alert rules were found. |
-| Alerting and escalation | 0/3 | No production alert catalogue, routing policy, deduplication, inhibition, or tested notification path is checked in. |
-| Dashboards and operator UX | 0/3 | No versioned Grafana dashboards, drilldowns, or release overlays were found. |
-| AI quality/cost visibility | 0/3 | No first-class prompt/model/token/cost/quality view is wired to the runtime. |
-| Durable audit/event history | 1/3 | Call outcome, artifacts, and billing identifiers persist; the causal event ledger is absent. |
-| Privacy and retention controls | 1/3 | Recordings have retention metadata, but telemetry payload and log redaction are not enforced consistently. |
-| Telemetry pipeline resilience | 0/3 | No collector ownership, queue/backpressure policy, exporter health, or telemetry-loss alert exists. |
-| Verification and release gates | 0/3 | No telemetry contract tests, alert tests, dashboard checks, or post-deploy observability smoke gate. |
+| Capability                       | Score | Assessment                                                                                                                                            |
+| -------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Metrics coverage and naming      |   1/3 | A few auth/org/RBAC metrics exist; voice, provider, tool, recording, billing, queue, and dependency metrics are not covered by a consistent contract. |
+| Structured logging               |   1/3 | Standard logging is present, but fields, redaction, severity, request IDs, and correlation are inconsistent.                                          |
+| Distributed tracing              |   1/3 | OTel decorators/setup exist, but there is no end-to-end propagation or useful voice turn/tool trace.                                                  |
+| Browser-to-backend traceability  |   0/3 | Plain `fetch` is the default; no standard request/trace propagation path is enforced.                                                                 |
+| Voice-call traceability          |   1/3 | Call IDs and call logs exist; a traceable conversation/turn/event chronology does not.                                                                |
+| Health and dependency monitoring |   0/3 | Liveness/readiness semantics are not trustworthy and do not cover all critical dependencies.                                                          |
+| SLOs and error budgets           |   0/3 | No checked-in SLI/SLO definitions or burn-rate alert rules were found.                                                                                |
+| Alerting and escalation          |   0/3 | No production alert catalogue, routing policy, deduplication, inhibition, or tested notification path is checked in.                                  |
+| Dashboards and operator UX       |   0/3 | No versioned Grafana dashboards, drilldowns, or release overlays were found.                                                                          |
+| AI quality/cost visibility       |   0/3 | No first-class prompt/model/token/cost/quality view is wired to the runtime.                                                                          |
+| Durable audit/event history      |   1/3 | Call outcome, artifacts, and billing identifiers persist; the causal event ledger is absent.                                                          |
+| Privacy and retention controls   |   1/3 | Recordings have retention metadata, but telemetry payload and log redaction are not enforced consistently.                                            |
+| Telemetry pipeline resilience    |   0/3 | No collector ownership, queue/backpressure policy, exporter health, or telemetry-loss alert exists.                                                   |
+| Verification and release gates   |   0/3 | No telemetry contract tests, alert tests, dashboard checks, or post-deploy observability smoke gate.                                                  |
 
 **Production-readiness conclusion:** the platform can be debugged by reading
 individual logs and database rows, but it cannot yet provide dependable,
@@ -184,24 +184,24 @@ Priority meanings:
 - **P1:** required for reliable day-to-day operation and fast diagnosis.
 - **P2:** important hardening and optimization after the operational baseline.
 
-| ID | Priority | Finding | Risk | Required direction |
-| --- | --- | --- | --- | --- |
-| OBS-001 | P0 | Production examples and GCP deployment explicitly disable backend and frontend OTel. | No production telemetry exists even if code appears instrumented. | Enable through a controlled collector endpoint, deploy collector/export path, and add a post-deploy telemetry smoke test. |
-| OBS-002 | P0 | `/health/ready` always reports ready; `/health` can report healthy despite dependency errors. | Load balancers send traffic to an unready instance and alerts miss outages. | Separate live/ready/startup checks, return 503 on readiness failure, bound dependency checks, and expose dependency-specific status privately. |
-| OBS-003 | P0 | No SLO, alert, notification, or escalation contract is checked in. | Incidents are discovered by users and handled inconsistently. | Define SLIs/SLOs, multi-window burn-rate alerts, capacity alerts, routing, silences, and runbooks as versioned configuration. |
-| OBS-004 | P0 | No reliable trace context crosses backend session issuance, browser/Twilio, voice-ws, providers, tools, persistence, and billing. | One-call diagnosis requires manual joins and may be impossible. | Establish `request_id`, `session_id`, `call_id`, and W3C `trace_id`; propagate context in HTTP/WebSocket/Twilio-safe metadata and attach IDs to every durable event. |
-| OBS-005 | P0 | Tool/MCP paths can log raw arguments/results and return raw exception strings. | Credentials, PII, prompts, provider responses, or internal details may leak. | Centralize redaction, log only schemas/keys and bounded result summaries, classify error codes, and disable payload capture by default. |
-| OBS-006 | P0 | There is no durable event ledger for turns, tool calls, provider calls, failures, recording, or billing transitions. | Post-incident reconstruction and reconciliation are incomplete. | Add append-only `call_trace_events` with indexes, retention, idempotency, and redacted metadata. |
-| OBS-007 | P1 | Shared OTel setup does not consistently honor configured endpoint/protocol/headers, retains no provider handle, and swallows setup/export failures with prints. | Operators cannot prove where telemetry went or shut it down cleanly. | Build one idempotent lifecycle manager; honor settings; use logging; expose startup/exporter health; flush/shutdown on service termination. |
-| OBS-008 | P1 | OTel resource metadata is incomplete/hardcoded (`service.version`, nonstandard environment attribute), and frontend defaults point at localhost. | Signals cannot be compared by release/environment and browser export may fail or leak. | Use deployment-injected resource attributes and a controlled browser telemetry path; never ship localhost defaults to production. |
-| OBS-009 | P1 | Backend instrumentation is initialized twice and `/test-otel` is public, incorrectly named, and uses blocking `time.sleep`. | Duplicate spans/metrics, attack surface, and event-loop stalls. | Initialize once during app lifespan; remove or protect synthetic endpoints; use async test fixtures. |
-| OBS-010 | P1 | `emit_metric` dynamically creates counters and `emit_log` ignores level/attributes. | Cardinality, missing dimensions, and misleading signal severity. | Define metric instruments once; use bounded labels; preserve severity and structured attributes. |
-| OBS-011 | P1 | Voice pipeline lacks root/turn/stage metrics and has no provider latency/error/usage breakdown. | Audio quality and latency regressions cannot be localized. | Instrument transport, STT, LLM, TTS, interruptions, queue depth, TTFB, tool calls, and provider outcomes. Validate the pinned Pipecat version before using newer helper APIs. |
-| OBS-012 | P1 | Call tracking and billing use synchronous database calls in async runtime and broad best-effort catches without telemetry. | Latency, connection exhaustion, silent state divergence, and missed billing are hard to detect. | Move I/O to async or bounded worker paths; emit state/billing spans and reconciliation metrics; preserve idempotency. |
-| OBS-013 | P1 | Recording persistence has no upload/bytes/latency/retention/backlog signal. | Successful calls can lose artifacts silently or consume unbounded storage. | Instrument capture, encode, upload, artifact upsert, retry, retention, and storage capacity. |
-| OBS-014 | P1 | Frontend API calls and auth flows lack standard network spans and correlation; auth logs include user/expiry details. | UI failures cannot be joined to backend traces and sensitive identity metadata may be over-collected. | Instrument the shared API client, propagate context, redact auth fields, and add UX error/voice-connect metrics. |
-| OBS-015 | P2 | Provider-native GCP/OCI signals are fragmented and promotion has no telemetry gate. | A release can be “healthy” at HTTP level while voice, billing, or telemetry is broken. | Create common service dashboards and a release smoke test that asserts traces, logs, metrics, alerts, and call completion. |
-| OBS-016 | P2 | Existing observability docs claim more than the code implements and mention stale runtime/provider concepts. | Operators and engineers follow incorrect runbooks. | Rewrite docs from executable behavior, link this plan, and make telemetry contracts part of CI/release review. |
+| ID      | Priority | Finding                                                                                                                                                         | Risk                                                                                                  | Required direction                                                                                                                                                            |
+| ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OBS-001 | P0       | Production examples and GCP deployment explicitly disable backend and frontend OTel.                                                                            | No production telemetry exists even if code appears instrumented.                                     | Enable through a controlled collector endpoint, deploy collector/export path, and add a post-deploy telemetry smoke test.                                                     |
+| OBS-002 | P0       | `/health/ready` always reports ready; `/health` can report healthy despite dependency errors.                                                                   | Load balancers send traffic to an unready instance and alerts miss outages.                           | Separate live/ready/startup checks, return 503 on readiness failure, bound dependency checks, and expose dependency-specific status privately.                                |
+| OBS-003 | P0       | No SLO, alert, notification, or escalation contract is checked in.                                                                                              | Incidents are discovered by users and handled inconsistently.                                         | Define SLIs/SLOs, multi-window burn-rate alerts, capacity alerts, routing, silences, and runbooks as versioned configuration.                                                 |
+| OBS-004 | P0       | No reliable trace context crosses backend session issuance, browser/Twilio, voice-ws, providers, tools, persistence, and billing.                               | One-call diagnosis requires manual joins and may be impossible.                                       | Establish `request_id`, `session_id`, `call_id`, and W3C `trace_id`; propagate context in HTTP/WebSocket/Twilio-safe metadata and attach IDs to every durable event.          |
+| OBS-005 | P0       | Tool/MCP paths can log raw arguments/results and return raw exception strings.                                                                                  | Credentials, PII, prompts, provider responses, or internal details may leak.                          | Centralize redaction, log only schemas/keys and bounded result summaries, classify error codes, and disable payload capture by default.                                       |
+| OBS-006 | P0       | There is no durable event ledger for turns, tool calls, provider calls, failures, recording, or billing transitions.                                            | Post-incident reconstruction and reconciliation are incomplete.                                       | Add append-only `call_trace_events` with indexes, retention, idempotency, and redacted metadata.                                                                              |
+| OBS-007 | P1       | Shared OTel setup does not consistently honor configured endpoint/protocol/headers, retains no provider handle, and swallows setup/export failures with prints. | Operators cannot prove where telemetry went or shut it down cleanly.                                  | Build one idempotent lifecycle manager; honor settings; use logging; expose startup/exporter health; flush/shutdown on service termination.                                   |
+| OBS-008 | P1       | OTel resource metadata is incomplete/hardcoded (`service.version`, nonstandard environment attribute), and frontend defaults point at localhost.                | Signals cannot be compared by release/environment and browser export may fail or leak.                | Use deployment-injected resource attributes and a controlled browser telemetry path; never ship localhost defaults to production.                                             |
+| OBS-009 | P1       | Backend instrumentation is initialized twice and `/test-otel` is public, incorrectly named, and uses blocking `time.sleep`.                                     | Duplicate spans/metrics, attack surface, and event-loop stalls.                                       | Initialize once during app lifespan; remove or protect synthetic endpoints; use async test fixtures.                                                                          |
+| OBS-010 | P1       | `emit_metric` dynamically creates counters and `emit_log` ignores level/attributes.                                                                             | Cardinality, missing dimensions, and misleading signal severity.                                      | Define metric instruments once; use bounded labels; preserve severity and structured attributes.                                                                              |
+| OBS-011 | P1       | Voice pipeline lacks root/turn/stage metrics and has no provider latency/error/usage breakdown.                                                                 | Audio quality and latency regressions cannot be localized.                                            | Instrument transport, STT, LLM, TTS, interruptions, queue depth, TTFB, tool calls, and provider outcomes. Validate the pinned Pipecat version before using newer helper APIs. |
+| OBS-012 | P1       | Call tracking and billing use synchronous database calls in async runtime and broad best-effort catches without telemetry.                                      | Latency, connection exhaustion, silent state divergence, and missed billing are hard to detect.       | Move I/O to async or bounded worker paths; emit state/billing spans and reconciliation metrics; preserve idempotency.                                                         |
+| OBS-013 | P1       | Recording persistence has no upload/bytes/latency/retention/backlog signal.                                                                                     | Successful calls can lose artifacts silently or consume unbounded storage.                            | Instrument capture, encode, upload, artifact upsert, retry, retention, and storage capacity.                                                                                  |
+| OBS-014 | P1       | Frontend API calls and auth flows lack standard network spans and correlation; auth logs include user/expiry details.                                           | UI failures cannot be joined to backend traces and sensitive identity metadata may be over-collected. | Instrument the shared API client, propagate context, redact auth fields, and add UX error/voice-connect metrics.                                                              |
+| OBS-015 | P2       | Provider-native GCP/OCI signals are fragmented and promotion has no telemetry gate.                                                                             | A release can be “healthy” at HTTP level while voice, billing, or telemetry is broken.                | Create common service dashboards and a release smoke test that asserts traces, logs, metrics, alerts, and call completion.                                                    |
+| OBS-016 | P2       | Existing observability docs claim more than the code implements and mention stale runtime/provider concepts.                                                    | Operators and engineers follow incorrect runbooks.                                                    | Rewrite docs from executable behavior, link this plan, and make telemetry contracts part of CI/release review.                                                                |
 
 ## 7. Target operating model
 
@@ -276,15 +276,15 @@ flowchart TB
 
 ### Signal ownership
 
-| Signal | Source of truth | Owner | Retention principle |
-| --- | --- | --- | --- |
-| Metrics | OTel instruments exported to Prometheus-compatible storage | Service/platform owner | Long enough for SLO windows and release comparison; aggregate labels only |
-| Logs | Structured JSON logs through Alloy/Loki or provider sink | Service/platform owner | Shorter than audit events; redacted and sampled for repetitive success logs |
-| Traces | OTel spans in Tempo or managed trace store | Service/platform owner | Sample normal success; retain errors, slow calls, and incident traces longer |
-| AI traces | Langfuse/AI store | AI/product owner | Payload capture opt-in, tenant-aware, retention by data policy |
-| Call events | Supabase `call_trace_events` | Voice/platform owner | Durable, append-only, redacted, tenant-scoped, lifecycle retention policy |
-| Billing evidence | Existing billing transaction plus call events | Finance/platform owner | Must outlive short operational trace retention and support idempotent reconciliation |
-| Provider-native telemetry | GCP/OCI | Infrastructure owner | Required for platform/container/network capacity and provider incidents |
+| Signal                    | Source of truth                                            | Owner                  | Retention principle                                                                  |
+| ------------------------- | ---------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| Metrics                   | OTel instruments exported to Prometheus-compatible storage | Service/platform owner | Long enough for SLO windows and release comparison; aggregate labels only            |
+| Logs                      | Structured JSON logs through Alloy/Loki or provider sink   | Service/platform owner | Shorter than audit events; redacted and sampled for repetitive success logs          |
+| Traces                    | OTel spans in Tempo or managed trace store                 | Service/platform owner | Sample normal success; retain errors, slow calls, and incident traces longer         |
+| AI traces                 | Langfuse/AI store                                          | AI/product owner       | Payload capture opt-in, tenant-aware, retention by data policy                       |
+| Call events               | Supabase `call_trace_events`                               | Voice/platform owner   | Durable, append-only, redacted, tenant-scoped, lifecycle retention policy            |
+| Billing evidence          | Existing billing transaction plus call events              | Finance/platform owner | Must outlive short operational trace retention and support idempotent reconciliation |
+| Provider-native telemetry | GCP/OCI                                                    | Infrastructure owner   | Required for platform/container/network capacity and provider incidents              |
 
 No single backend is the source of truth for everything. In particular,
 sampling or exporter outages must not erase billing state transitions or the
@@ -329,15 +329,15 @@ Required OTel practices for this repository:
 
 ### 8.2 Grafana stack: recommended operations plane
 
-| Tool | Role | Strengths | Trade-offs | Decision |
-| --- | --- | --- | --- | --- |
-| Grafana OSS | Dashboards, Explore, alert views, links across signals | Mature operator workflow; trace-to-log and trace-to-metric navigation; broad datasource support | Dashboards/alerting need ownership and version control; AGPL license for Grafana OSS | Adopt |
-| Grafana Alloy | Collector/agent | Open-source OTel Collector distribution with unified telemetry pipelines and integrations | Another runtime to operate; must pin versions and secure endpoints | Adopt |
-| Prometheus | Metrics and recording rules | Simple, proven, PromQL, excellent alert-rule ecosystem | Long-term/high-cardinality storage needs remote-write/Mimir or managed service | Adopt for initial metrics |
-| Loki | Logs | Cost-efficient label-indexed logs; excellent Grafana integration | Labels must remain low-cardinality; full-text search and retention need sizing | Adopt if self-hosting |
-| Tempo | Traces | Open-source, OTel-native, object-storage-friendly, trace/log/metric links | Requires object storage and careful retention/sampling | Adopt if self-hosting |
-| Alertmanager | Alert routing | Deduplicates, groups, silences, and inhibits alerts | Does not replace notification ownership or incident process | Adopt |
-| Grafana Cloud | Hosted Grafana metrics/logs/traces/profiles | Fastest start and lowest infrastructure burden; free tier may be enough for early traffic | Hosted limits, retention, cost growth, data residency, vendor dependency | Recommended initial path after limit review |
+| Tool          | Role                                                   | Strengths                                                                                       | Trade-offs                                                                           | Decision                                    |
+| ------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Grafana OSS   | Dashboards, Explore, alert views, links across signals | Mature operator workflow; trace-to-log and trace-to-metric navigation; broad datasource support | Dashboards/alerting need ownership and version control; AGPL license for Grafana OSS | Adopt                                       |
+| Grafana Alloy | Collector/agent                                        | Open-source OTel Collector distribution with unified telemetry pipelines and integrations       | Another runtime to operate; must pin versions and secure endpoints                   | Adopt                                       |
+| Prometheus    | Metrics and recording rules                            | Simple, proven, PromQL, excellent alert-rule ecosystem                                          | Long-term/high-cardinality storage needs remote-write/Mimir or managed service       | Adopt for initial metrics                   |
+| Loki          | Logs                                                   | Cost-efficient label-indexed logs; excellent Grafana integration                                | Labels must remain low-cardinality; full-text search and retention need sizing       | Adopt if self-hosting                       |
+| Tempo         | Traces                                                 | Open-source, OTel-native, object-storage-friendly, trace/log/metric links                       | Requires object storage and careful retention/sampling                               | Adopt if self-hosting                       |
+| Alertmanager  | Alert routing                                          | Deduplicates, groups, silences, and inhibits alerts                                             | Does not replace notification ownership or incident process                          | Adopt                                       |
+| Grafana Cloud | Hosted Grafana metrics/logs/traces/profiles            | Fastest start and lowest infrastructure burden; free tier may be enough for early traffic       | Hosted limits, retention, cost growth, data residency, vendor dependency             | Recommended initial path after limit review |
 
 Grafana Cloud Free is a reasonable pilot because it removes the need to run
 storage immediately, but it must be capacity-tested with realistic voice
@@ -405,16 +405,16 @@ creating a second uncorrelated trace universe.
 Every externally initiated operation must have these fields, with clear
 lifetimes:
 
-| Identifier | Meaning | Created by | Durable? | Allowed in logs/metrics |
-| --- | --- | --- | --- | --- |
-| `request_id` | One HTTP request or WebSocket handshake | Edge/backend middleware | Optional | Yes, bounded string |
-| `trace_id` | W3C distributed trace | OTel context | No; store as reference when useful | Yes |
-| `span_id` | One timed operation | OTel SDK | No | Yes |
-| `session_id` | Backend-issued voice session authorization/session | Backend | Yes on call/session records | Yes |
-| `call_id` | Stable platform call identity, mapped to `call_logs.id` | Call tracking | Yes | Yes |
-| `call_sid` | External Twilio/provider call identity | Provider/webhook | Yes, redacted according to policy | Yes if safe |
-| `event_id` | Idempotent call event identity | Event writer | Yes | Yes |
-| `deployment_id` | Release/revision that handled the operation | Runtime | Yes in event/trace metadata | Yes |
+| Identifier      | Meaning                                                 | Created by              | Durable?                           | Allowed in logs/metrics |
+| --------------- | ------------------------------------------------------- | ----------------------- | ---------------------------------- | ----------------------- |
+| `request_id`    | One HTTP request or WebSocket handshake                 | Edge/backend middleware | Optional                           | Yes, bounded string     |
+| `trace_id`      | W3C distributed trace                                   | OTel context            | No; store as reference when useful | Yes                     |
+| `span_id`       | One timed operation                                     | OTel SDK                | No                                 | Yes                     |
+| `session_id`    | Backend-issued voice session authorization/session      | Backend                 | Yes on call/session records        | Yes                     |
+| `call_id`       | Stable platform call identity, mapped to `call_logs.id` | Call tracking           | Yes                                | Yes                     |
+| `call_sid`      | External Twilio/provider call identity                  | Provider/webhook        | Yes, redacted according to policy  | Yes if safe             |
+| `event_id`      | Idempotent call event identity                          | Event writer            | Yes                                | Yes                     |
+| `deployment_id` | Release/revision that handled the operation             | Runtime                 | Yes in event/trace metadata        | Yes                     |
 
 Rules:
 
@@ -515,7 +515,7 @@ Invariants:
 - call completion must record whether event persistence, artifact persistence,
   and billing succeeded or require reconciliation;
 - add indexes on `(organization_id, occurred_at)`, `(call_log_id,
-  occurred_at)`, `(trace_id)`, `(event_type, occurred_at)`, and a uniqueness
+occurred_at)`, `(trace_id)`, `(event_type, occurred_at)`, and a uniqueness
   constraint on the appropriate `(organization_id, idempotency_key)` scope;
 - define retention and tenant authorization in the same migration/docs change;
 - expose a paginated, permission-checked support query rather than raw table
@@ -600,19 +600,19 @@ disconnect or terminal call state. Add the following child spans/metrics,
 using Pipecat's built-in tracing hooks where supported by the pinned `1.8.1`
 dependency and wrapping boundaries where it is not:
 
-| Boundary | Span attributes | Metrics |
-| --- | --- | --- |
-| WebSocket/Twilio connect | channel, transport, close code, auth result, region | connect count, auth failures, abnormal closes, active sessions |
-| Call lifecycle | call ID, session ID, organization/agent, outcome, failure code | started/completed/failed, duration, concurrent calls |
-| Audio input/output | sample rate, frame counts, interruption state | input/output frames, queue depth, dropped frames, audio errors |
-| STT | provider, model, language, final/interim, timeout | request count, error rate, latency, TTFB |
-| LLM/Gemini Live | provider, model, operation, finish reason, usage if available | request/error/timeout, TTFB, total latency, tokens/usage |
-| TTS | provider, model/voice, output duration | request/error, TTFB, latency, synthesized duration |
-| Turn | turn number, outcome, interruption, end reason | turn duration, interrupted turns, empty responses |
-| Native/MCP tool | tool name, adapter, argument schema hash, status, retryable | call/error/timeout, duration, rate-limit count |
-| Recording | channel, sample rate, bytes, storage provider, artifact status | capture/upload/upsert latency, bytes, failures, retention backlog |
-| Billing | entitlement decision, idempotency result, credit transaction ID | attempts/success/skip/failure, reconciliation backlog, credits |
-| Shutdown/cleanup | MCP/session cleanup outcome | cleanup failures and duration |
+| Boundary                 | Span attributes                                                 | Metrics                                                           |
+| ------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------- |
+| WebSocket/Twilio connect | channel, transport, close code, auth result, region             | connect count, auth failures, abnormal closes, active sessions    |
+| Call lifecycle           | call ID, session ID, organization/agent, outcome, failure code  | started/completed/failed, duration, concurrent calls              |
+| Audio input/output       | sample rate, frame counts, interruption state                   | input/output frames, queue depth, dropped frames, audio errors    |
+| STT                      | provider, model, language, final/interim, timeout               | request count, error rate, latency, TTFB                          |
+| LLM/Gemini Live          | provider, model, operation, finish reason, usage if available   | request/error/timeout, TTFB, total latency, tokens/usage          |
+| TTS                      | provider, model/voice, output duration                          | request/error, TTFB, latency, synthesized duration                |
+| Turn                     | turn number, outcome, interruption, end reason                  | turn duration, interrupted turns, empty responses                 |
+| Native/MCP tool          | tool name, adapter, argument schema hash, status, retryable     | call/error/timeout, duration, rate-limit count                    |
+| Recording                | channel, sample rate, bytes, storage provider, artifact status  | capture/upload/upsert latency, bytes, failures, retention backlog |
+| Billing                  | entitlement decision, idempotency result, credit transaction ID | attempts/success/skip/failure, reconciliation backlog, credits    |
+| Shutdown/cleanup         | MCP/session cleanup outcome                                     | cleanup failures and duration                                     |
 
 Voice-specific rules:
 
@@ -749,18 +749,18 @@ Recommended bounded labels:
 Set numerical targets only after a baseline week; the following are proposed
 starting points and must be ratified by product/platform owners:
 
-| SLO | SLI | Initial target | Window |
-| --- | --- | ---: | --- |
-| Backend availability | Successful non-health API requests / eligible requests | 99.9% | 30 days |
-| Readiness correctness | Ready instances with all required dependencies healthy | 99.9% | 30 days |
-| Voice connection success | Authenticated calls that connect and start pipeline / attempts | 99.5% | 30 days |
-| Voice completion | Calls reaching a terminal persisted outcome / started calls | 99.5% | 30 days |
-| Voice latency | Successful turns within agreed end-to-end budget | Establish baseline; target p95 | 30 days |
-| Tool reliability | Successful non-user-error tool executions / executions | 99% per critical tool | 30 days |
-| Recording durability | Required recordings persisted and readable / eligible calls | 99.9% | 30 days |
-| Billing integrity | Completed billable calls with verified idempotent billing outcome | 100% | 30 days |
-| Traceability | Calls with root trace plus minimum durable event sequence | 99.9% | 30 days |
-| Telemetry delivery | Telemetry accepted by collector/backend / emitted telemetry | 99.9% | 30 days |
+| SLO                      | SLI                                                               |                 Initial target | Window  |
+| ------------------------ | ----------------------------------------------------------------- | -----------------------------: | ------- |
+| Backend availability     | Successful non-health API requests / eligible requests            |                          99.9% | 30 days |
+| Readiness correctness    | Ready instances with all required dependencies healthy            |                          99.9% | 30 days |
+| Voice connection success | Authenticated calls that connect and start pipeline / attempts    |                          99.5% | 30 days |
+| Voice completion         | Calls reaching a terminal persisted outcome / started calls       |                          99.5% | 30 days |
+| Voice latency            | Successful turns within agreed end-to-end budget                  | Establish baseline; target p95 | 30 days |
+| Tool reliability         | Successful non-user-error tool executions / executions            |          99% per critical tool | 30 days |
+| Recording durability     | Required recordings persisted and readable / eligible calls       |                          99.9% | 30 days |
+| Billing integrity        | Completed billable calls with verified idempotent billing outcome |                           100% | 30 days |
+| Traceability             | Calls with root trace plus minimum durable event sequence         |                          99.9% | 30 days |
+| Telemetry delivery       | Telemetry accepted by collector/backend / emitted telemetry       |                          99.9% | 30 days |
 
 Define exclusions explicitly: intentional user cancellation, invalid auth,
 known provider maintenance, test calls, and approved maintenance windows must
@@ -772,24 +772,24 @@ ratios.
 Every alert needs an owner, severity, runbook URL, query, for/duration,
 notification route, and a test fixture. Start with:
 
-| Alert | Severity | Trigger | First operator action |
-| --- | --- | --- | --- |
-| Backend availability burn | Critical | Fast and slow burn of API availability budget | Check Grafana service dashboard, recent release, dependency panels, and request traces. |
-| Readiness failure | Critical | Ready instances below threshold or dependency readiness failing | Check Supabase/provider reachability and deployment revision; stop routing only if confirmed. |
-| Voice connection failures | Critical | Connection/auth/start failure budget burn | Slice by channel, release, region, close code, and provider; inspect one failed trace. |
-| Abnormal WebSocket closes | High | 1006/401/403/4401/4403 rate exceeds baseline | Check token expiry, public endpoint/TLS, entitlement, and voice-ws logs. |
-| Voice turn latency | High | p95/p99 budget breach for sustained window | Drill from turn histogram to STT/LLM/TTS/tool spans and provider status. |
-| Provider errors/timeouts | High | Provider-specific error/timeout burn | Check provider status/rate limits and whether fallback/retry is safe. |
-| Concurrent calls saturation | High | Active sessions near configured max | Check voice-ws CPU/memory, queue depth, entitlement limits, and autoscaling. |
-| Recording failures | High | Eligible artifact persistence below target | Inspect capture format, storage, encryption, upload, and artifact upsert. |
-| Billing reconciliation backlog | Critical | Any unreviewed required reconciliation or age threshold | Freeze automatic assumptions; compare call events, call log, and transaction RPC. |
-| Call event write failures | High | Event writer failures or outbox age threshold | Inspect DB connectivity/constraints and ensure call outcome fallback is intact. |
-| Telemetry exporter failure | High | Collector/exporter errors or dropped critical signals | Check collector queues, credentials/TLS, endpoint limits, and storage quota. |
-| Error log surge | High | Stable error-code rate significantly above baseline | Group by release, route, provider, and exception type; open representative trace. |
-| Database saturation | Critical | Connections, latency, locks, storage, or errors over threshold | Check Supabase/Postgres health and isolate noisy operations. |
-| Container crash/restart | High | Restart loop or abnormal exit count | Check revision logs, OOM, dependency startup, and recent deployment. |
-| Collector unavailable | High | Collector health/ready failure or no accepted telemetry | Restore collection path; rely on provider-native backstop and durable events. |
-| Storage/retention risk | Medium | Recording/artifact storage or log/trace quota near limit | Review retention, growth, and cleanup; avoid deleting evidence before policy. |
+| Alert                          | Severity | Trigger                                                         | First operator action                                                                         |
+| ------------------------------ | -------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Backend availability burn      | Critical | Fast and slow burn of API availability budget                   | Check Grafana service dashboard, recent release, dependency panels, and request traces.       |
+| Readiness failure              | Critical | Ready instances below threshold or dependency readiness failing | Check Supabase/provider reachability and deployment revision; stop routing only if confirmed. |
+| Voice connection failures      | Critical | Connection/auth/start failure budget burn                       | Slice by channel, release, region, close code, and provider; inspect one failed trace.        |
+| Abnormal WebSocket closes      | High     | 1006/401/403/4401/4403 rate exceeds baseline                    | Check token expiry, public endpoint/TLS, entitlement, and voice-ws logs.                      |
+| Voice turn latency             | High     | p95/p99 budget breach for sustained window                      | Drill from turn histogram to STT/LLM/TTS/tool spans and provider status.                      |
+| Provider errors/timeouts       | High     | Provider-specific error/timeout burn                            | Check provider status/rate limits and whether fallback/retry is safe.                         |
+| Concurrent calls saturation    | High     | Active sessions near configured max                             | Check voice-ws CPU/memory, queue depth, entitlement limits, and autoscaling.                  |
+| Recording failures             | High     | Eligible artifact persistence below target                      | Inspect capture format, storage, encryption, upload, and artifact upsert.                     |
+| Billing reconciliation backlog | Critical | Any unreviewed required reconciliation or age threshold         | Freeze automatic assumptions; compare call events, call log, and transaction RPC.             |
+| Call event write failures      | High     | Event writer failures or outbox age threshold                   | Inspect DB connectivity/constraints and ensure call outcome fallback is intact.               |
+| Telemetry exporter failure     | High     | Collector/exporter errors or dropped critical signals           | Check collector queues, credentials/TLS, endpoint limits, and storage quota.                  |
+| Error log surge                | High     | Stable error-code rate significantly above baseline             | Group by release, route, provider, and exception type; open representative trace.             |
+| Database saturation            | Critical | Connections, latency, locks, storage, or errors over threshold  | Check Supabase/Postgres health and isolate noisy operations.                                  |
+| Container crash/restart        | High     | Restart loop or abnormal exit count                             | Check revision logs, OOM, dependency startup, and recent deployment.                          |
+| Collector unavailable          | High     | Collector health/ready failure or no accepted telemetry         | Restore collection path; rely on provider-native backstop and durable events.                 |
+| Storage/retention risk         | Medium   | Recording/artifact storage or log/trace quota near limit        | Review retention, growth, and cleanup; avoid deleting evidence before policy.                 |
 
 Use multi-window multi-burn-rate alerts for availability and latency SLOs. Use
 severity based on customer and financial impact, not merely log level. A
@@ -1016,7 +1016,7 @@ flowchart LR
   assumptions.
 
 **Exit:** readiness fails safely, no sensitive telemetry is observed in a
-  representative test, and an owner approves the telemetry data policy.
+representative test, and an owner approves the telemetry data policy.
 
 ### P1 — Correlation and telemetry foundation
 
@@ -1087,18 +1087,18 @@ at expected peak and documented for the supported deployment topologies.
 The implementation should be split into reviewable changes, with each change
 updating its tests and docs:
 
-| Change | Likely files/area | Deliverable |
-| --- | --- | --- |
-| Telemetry foundation | `shared/config/opentelemetry.py`, settings, shared telemetry package | Lifecycle, resource metadata, redaction, propagation, metrics API |
-| Backend instrumentation | `backend/main.py`, middleware, routes/services | Request/dependency/session spans, request ID, truthful health |
-| Voice instrumentation | `voice-ws/src/main.py`, `bot.py`, `call_tracking.py`, `recording.py` | Conversation/stage spans, metrics, event writes, cleanup telemetry |
-| Tool contract | `voice-ws/src/tools/`, shared registry/adapters | Common wrapper, safe errors, duration/status telemetry |
-| Event ledger | call-log models, Alembic, service, support route | Schema, migration, RLS/permissions, idempotency, retention |
-| Frontend | `frontend/src/lib/opentelemetry*.ts`, API client, instrumentation | Actual client/server instrumentation, propagation, UX metrics, redaction |
-| Collector | `otel-collector/`, deployment files, secrets/config templates | Pinned Alloy/Collector, pipelines, health, backpressure, exporter |
-| Operations as code | new Grafana/Prometheus/Alertmanager provisioning | Dashboards, rules, contact routes, recording rules, links |
-| Release gate | `.github/workflows/promote-production.yml`, deploy scripts | Post-deploy telemetry and call smoke checks |
-| Documentation | existing observability docs, `docs/05_operations/` | Source-of-truth plan, runbooks, data policy, architecture, recovery |
+| Change                  | Likely files/area                                                    | Deliverable                                                              |
+| ----------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Telemetry foundation    | `shared/config/opentelemetry.py`, settings, shared telemetry package | Lifecycle, resource metadata, redaction, propagation, metrics API        |
+| Backend instrumentation | `backend/main.py`, middleware, routes/services                       | Request/dependency/session spans, request ID, truthful health            |
+| Voice instrumentation   | `voice-ws/src/main.py`, `bot.py`, `call_tracking.py`, `recording.py` | Conversation/stage spans, metrics, event writes, cleanup telemetry       |
+| Tool contract           | `voice-ws/src/tools/`, shared registry/adapters                      | Common wrapper, safe errors, duration/status telemetry                   |
+| Event ledger            | call-log models, Alembic, service, support route                     | Schema, migration, RLS/permissions, idempotency, retention               |
+| Frontend                | `frontend/src/lib/opentelemetry*.ts`, API client, instrumentation    | Actual client/server instrumentation, propagation, UX metrics, redaction |
+| Collector               | `otel-collector/`, deployment files, secrets/config templates        | Pinned Alloy/Collector, pipelines, health, backpressure, exporter        |
+| Operations as code      | new Grafana/Prometheus/Alertmanager provisioning                     | Dashboards, rules, contact routes, recording rules, links                |
+| Release gate            | `.github/workflows/promote-production.yml`, deploy scripts           | Post-deploy telemetry and call smoke checks                              |
+| Documentation           | existing observability docs, `docs/05_operations/`                   | Source-of-truth plan, runbooks, data policy, architecture, recovery      |
 
 Keep each production deployment topology explicit. GCP and OCI may share the
 instrumentation contract but differ in collector placement, network routes,

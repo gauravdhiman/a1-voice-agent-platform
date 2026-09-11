@@ -1,5 +1,10 @@
 # Skills System
 
+> **Runtime note:** Skills are loaded and executed by the Pipecat `voice-ws`
+> runtime. Any legacy LiveKit wrapper snippets below are historical context;
+> the current registration boundary is documented in [`voice-ws` README](../../../voice-ws/README.md)
+> and the [system architecture](../../01_architecture/system_architecture.md).
+
 > **Library index:** see [`skills_library.md`](./skills_library.md) for the
 > current 15-skill library, industry coverage, content standards, and the
 > rationale for industry-specific (rather than universal) skills.

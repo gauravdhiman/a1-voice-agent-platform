@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
+import tempfile
 import unittest
+from pathlib import Path
 
-
-SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1] / "deploy" / "gcp-env-from-cloud.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "deploy" / "gcp-env-from-cloud.py"
 MODULE_SPEC = importlib.util.spec_from_file_location(
     "gcp_env_from_cloud",
     SCRIPT_PATH,
@@ -82,11 +80,34 @@ class GcpEnvironmentGenerationTests(unittest.TestCase):
             for key, value in source_env.items():
                 self.assertIn(f'{key}: "{value}"', rendered)
 
+    def test_generated_service_names_are_distinct(self) -> None:
+        """Backend and voice traces must be separable in cloud backends."""
+        source_env = {
+            "OTEL_SERVICE_NAME": "shared-name",
+            "OTEL_BACKEND_SERVICE_NAME": "247ai-backend-production",
+            "OTEL_VOICE_WS_SERVICE_NAME": "247ai-voice-ws-production",
+        }
+        backend_yaml = gcp_env.to_yaml(
+            {
+                **source_env,
+                "OTEL_SERVICE_NAME": source_env["OTEL_BACKEND_SERVICE_NAME"],
+            },
+            gcp_env.BACKEND_KEYS,
+        )
+        worker_yaml = gcp_env.to_yaml(
+            {
+                **source_env,
+                "OTEL_SERVICE_NAME": source_env["OTEL_VOICE_WS_SERVICE_NAME"],
+            },
+            gcp_env.WORKER_KEYS,
+        )
+        self.assertIn('OTEL_SERVICE_NAME: "247ai-backend-production"', backend_yaml)
+        self.assertIn('OTEL_SERVICE_NAME: "247ai-voice-ws-production"', worker_yaml)
+
     def test_generated_yaml_contains_bucket_scoped_r2_configuration(self) -> None:
         """Generated service YAML must carry non-empty R2 values unchanged."""
         source_env = {
-            key: f"value-for-{key.lower()}"
-            for key in RECORDING_ENVIRONMENT_KEYS
+            key: f"value-for-{key.lower()}" for key in RECORDING_ENVIRONMENT_KEYS
         }
 
         backend_yaml = gcp_env.to_yaml(source_env, gcp_env.BACKEND_KEYS)
@@ -111,8 +132,67 @@ class GcpEnvironmentGenerationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ENCRYPTION_KEY"):
             gcp_env.validate_encryption_configuration({})
 
+    def test_disabled_observability_is_allowed_for_staging(self) -> None:
+        """Staging and local deployments remain opt-out by default."""
+        gcp_env.validate_observability_configuration(
+            {"ENVIRONMENT": "staging", "OTEL_ENABLED": "false"}
+        )
+
+    def test_env_parser_removes_matching_secret_quotes(self) -> None:
+        """Deployment generation should follow normal dotenv quote semantics."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".env"
+            path.write_text(
+                "OTEL_EXPORTER_OTLP_TRACES_HEADERS='Authorization=Basic a=b=='\n"
+            )
+            self.assertEqual(
+                gcp_env.parse_env_file(path)["OTEL_EXPORTER_OTLP_TRACES_HEADERS"],
+                "Authorization=Basic a=b==",
+            )
+
+    def test_enabled_observability_requires_all_signal_configuration(self) -> None:
+        """A partial OTLP configuration must fail before an app is deployed."""
+        with self.assertRaisesRegex(ValueError, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
+            gcp_env.validate_observability_configuration(
+                {"ENVIRONMENT": "production", "OTEL_ENABLED": "true"}
+            )
+
+    def test_production_observability_requires_https_and_non_placeholder_values(
+        self,
+    ) -> None:
+        """Production telemetry cannot silently use plaintext or examples."""
+        values = {
+            "ENVIRONMENT": "production",
+            "OTEL_ENABLED": "true",
+        }
+        for signal in ("TRACES", "METRICS", "LOGS"):
+            values.update(
+                {
+                    f"OTEL_EXPORTER_OTLP_{signal}_ENDPOINT": (
+                        f"http://telemetry.example/v1/{signal.lower()}"
+                    ),
+                    f"OTEL_EXPORTER_OTLP_{signal}_PROTOCOL": "http/protobuf",
+                    f"OTEL_EXPORTER_OTLP_{signal}_HEADERS": "Authorization=Basic token",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            gcp_env.validate_observability_configuration(values)
+
+        values["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] = "grpc"
+        with self.assertRaisesRegex(ValueError, "http/protobuf"):
+            gcp_env.validate_observability_configuration(values)
+        values["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] = "http/protobuf"
+
+        for signal in ("TRACES", "METRICS", "LOGS"):
+            values[f"OTEL_EXPORTER_OTLP_{signal}_ENDPOINT"] = (
+                f"https://telemetry.example/v1/{signal.lower()}"
+            )
+        values["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = "replace-with-header"
+        with self.assertRaisesRegex(ValueError, "LOGS_HEADERS"):
+            gcp_env.validate_observability_configuration(values)
+
     def test_cors_origins_is_emitted_as_valid_json_string(self) -> None:
-        """Cloud Run must receive JSON, even when the source list is loosely formatted."""
+        """Cloud Run must receive JSON for loosely formatted source lists."""
         for source_value in (
             '["https://www.247ai.live"]',
             "[https://www.247ai.live]",

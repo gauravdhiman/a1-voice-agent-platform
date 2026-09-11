@@ -8,8 +8,10 @@ Exposes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 from uuid import UUID
 
@@ -28,6 +30,13 @@ from shared.billing.voice_session_entitlement import (
     consume_demo_call_reservation,
     is_demo_agent,
 )
+from shared.config import settings
+from shared.config.opentelemetry import (
+    instrument_fastapi,
+    setup_manual_opentelemetry,
+    shutdown_opentelemetry,
+)
+from shared.observability.health import Readiness
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import VoiceSessionService
 
@@ -42,28 +51,35 @@ logging.basicConfig(
 logger = logging.getLogger("voice-ws")
 tracer = trace.get_tracer(__name__)
 
-try:
-    from shared.config.opentelemetry import (
-        instrument_fastapi,
-        setup_manual_opentelemetry,
-    )
 
-    setup_manual_opentelemetry(app_name="voice-ws")
-except Exception as exc:  # pragma: no cover - optional in minimal dev images
-    logger.warning("OpenTelemetry setup skipped: %s", exc)
-    instrument_fastapi = None  # type: ignore[misc, assignment]
+@asynccontextmanager
+async def lifespan(app):
+    """Start telemetry once and flush outside the audio event loop on shutdown."""
+    setup_manual_opentelemetry("247ai-voice-ws")
+    try:
+        yield
+    finally:
+        await asyncio.to_thread(shutdown_opentelemetry)
+
 
 app = FastAPI(
-    title="24x7 AI Voice WebSocket Worker",
-    description="Pipecat + Gemini Realtime voice sessions (web + Twilio)",
-    version="0.2.0",
+    title="24x7 AI Voice WebSocket Worker", version="0.2.0", lifespan=lifespan
 )
+instrument_fastapi(app)
+readiness = Readiness(settings)
 
-if instrument_fastapi is not None:
-    try:
-        instrument_fastapi(app)
-    except Exception as exc:  # pragma: no cover
-        logger.warning("FastAPI OpenTelemetry instrumentation skipped: %s", exc)
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Return dependency readiness independently of process liveness."""
+    return await readiness.response()
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """Check the event loop without an external dependency."""
+    return JSONResponse({"status": "alive"})
+
 
 session_service = VoiceSessionService()
 

@@ -1,0 +1,60 @@
+# Minimal production profile: one collector and one TLS/auth ingress.
+# Grafana Cloud and Langfuse Cloud provide the storage, dashboards and alerting.
+services:
+  telemetry-volume-init:
+    image: busybox:1.37.0
+    user: "0:0"
+    command: ["chown", "10001:10001", "/var/lib/otelcol"]
+    volumes: [observability_queue:/var/lib/otelcol]
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: ["no-new-privileges:true"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.160.0
+    command: ["--config=/etc/otel-collector-config.yml"]
+    depends_on:
+      telemetry-volume-init:
+        condition: service_completed_successfully
+    environment:
+      GRAFANA_CLOUD_OTLP_ENDPOINT: ${GRAFANA_CLOUD_OTLP_ENDPOINT:?Set the Grafana Cloud OTLP endpoint}
+      GRAFANA_CLOUD_OTLP_AUTH: ${GRAFANA_CLOUD_OTLP_AUTH:?Set the Grafana Cloud Basic authorization value}
+      LANGFUSE_OTLP_ENDPOINT: ${LANGFUSE_OTLP_ENDPOINT:?Set the Langfuse OTLP endpoint}
+      LANGFUSE_OTLP_AUTH: ${LANGFUSE_OTLP_AUTH:?Set the Langfuse Basic authorization value}
+    volumes:
+      - ${COLLECTOR_CONFIG_FILE:-./deploy/observability/collector.cloud.yml}:/etc/otel-collector-config.yml:ro
+      - observability_queue:/var/lib/otelcol
+    ports:
+      - "127.0.0.1:${HOST_OTEL_HEALTH_PORT:-13133}:13133"
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [observability]
+
+  ingress:
+    image: caddy:2.11.4
+    environment:
+      OBSERVABILITY_DOMAIN: ${OBSERVABILITY_DOMAIN:?Set the telemetry DNS name}
+      OTLP_USERNAME: ${OTLP_USERNAME:?Set the OTLP service account name}
+      OTLP_PASSWORD_HASH: ${OTLP_PASSWORD_HASH:?Set the bcrypt hash for the OTLP service account}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/observability/Caddyfile.cloud:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+    mem_limit: 128m
+    networks: [observability]
+
+volumes:
+  observability_queue:
+  caddy_data:
+  caddy_config:
+
+networks:
+  observability:
+    driver: bridge

@@ -83,6 +83,7 @@ Comprehensive documentation organized by feature.
 6. **[Payment Flow](03_implementation/payment_flow.md)** - Complete payment workflow
 7. **[Stripe Integration](03_implementation/stripe_integration.md)** - Stripe integration details
 8. **[Billing Plan Management and Credit Purchase UX](03_implementation/billing_plan_management_ux.md)** - Plan changes, transition previews, cancellation, and credit purchases
+
 ### 05_operations/ - Operations
 
 #### Deployment (production — 247ai.live)
@@ -125,12 +126,13 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 
 1. **[Observability Overview](02_features/observability/overview.md)** - OpenTelemetry implementation overview
 2. **[OpenTelemetry Implementation](02_core_systems/opentelemetry_implementation.md)** - OTEL implementation
-3. **[Production Observability, Monitoring, Traceability & Alerting Plan](05_operations/observability-monitoring-plan.md)** - Production assessment, tool selection, implementation roadmap, dashboards, alerts, runbooks, and verification
+3. **[Operating observability](05_operations/observability.md)** - Local verification, production cloud profile, signal definitions, privacy and alert thresholds
+4. **[Production Observability, Monitoring, Traceability & Alerting Plan (historical)](05_operations/observability-monitoring-plan.md)** - Earlier assessment and roadmap retained for decision history
 
 ### Tools System
 
 1. **[Tool Connection States](02_features/voice_agents/tool_connection_states.md)** - Visual feedback for tool authentication status
-2. **[Tool System](03_implementation/tool_system.md)** - Tool architecture and Pipecat runtime integration
+2. **[Tool System](../voice-ws/README.md)** - Tool architecture and Pipecat runtime integration
 3. **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Dynamic tool loading design
 4. **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Tool implementation details including Gmail tool
 5. **[Resend Agent Email Tool](03_implementation/resend_email_agent_tool.md)** - Native route-based Resend tool, contract, configuration, and operational limits
@@ -144,7 +146,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 
 1. **[AGENTS.md](../AGENTS.md)** - AI agent coding guidelines
 2. **[Getting Started Dev](03_development/getting_started.md)** - Quick start for developers
-3. **[Development Setup](04_development_guides/development_setup.md)** - Local dev environment setup
+3. **[Development Setup](05_operations/deployment/worktree-and-release-strategy.md)** - Isolated local dev environment setup
 4. **[Test User Cleanup](04_development_guides/cleanup_test_user.md)** - Remove test/sandbox users and their resources
 5. **[Agent Evaluations](04_development_guides/agent-evaluations.md)** - Deterministic tool workflows and model trace checks
 
@@ -160,13 +162,13 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 ### Working on Voice Agents?
 
 1. Read **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system
-2. Study **[Tool System](03_implementation/tool_system.md)** - Tool architecture
+2. Study **[Tool System](../voice-ws/README.md)** - Tool architecture
 3. Review **[voice-ws README](../voice-ws/README.md)** - Pipecat voice worker
 4. Check **[Shared Module](../shared/README.md)** - Shared code architecture
 
 ### Building a New Tool?
 
-1. Read **[Tool System](03_implementation/tool_system.md)** - Understand tool architecture
+1. Read **[Tool System](../voice-ws/README.md)** - Understand tool architecture
 2. Study **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)** - Runtime loading design
 3. Study **[Tool Implementation Summary](03_implementation/tool_implementation_summary.md)** - Implementation details
 4. See existing tools in `shared/voice_agents/tools/implementations/`
@@ -247,7 +249,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 ### By Feature
 
 - **Voice Agents**: See **[Voice Agents Overview](02_features/voice_agents/overview.md)** and **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)**
-- **Tools**: See **[Tool System](03_implementation/tool_system.md)** and **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)**
+- **Tools**: See **[Tool System](../voice-ws/README.md)** and **[Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md)**
 - **Authentication**: See **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
 - **Multi-tenancy**: See **[System Architecture](01_architecture/system_architecture.md)**
 - **Billing**: See **[Billing Overview](02_features/billing/overview.md)**
@@ -336,7 +338,7 @@ When adding new features:
 
 1. Deep dive into **[Voice Agents Overview](02_features/voice_agents/overview.md)**
 2. Understand **[Authentication & RBAC Overview](02_features/authentication_rbac/overview.md)**
-3. Learn **[Tool System](03_implementation/tool_system.md)**
+3. Learn **[Tool System](../voice-ws/README.md)**
 4. Review **[Billing Overview](02_features/billing/overview.md)**
 
 ### Advanced (3+ months)

@@ -1,21 +1,4 @@
-version: "3.8"
-
 services:
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otel-collector-config.yml"]
-    volumes:
-      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
-    ports:
-      - "${HOST_OTEL_GRPC_PORT:-4317}:4317" # OTLP gRPC
-      - "${HOST_OTEL_HTTP_PORT:-4318}:4318" # OTLP HTTP
-      - "${HOST_OTEL_HEALTH_PORT:-13133}:13133" # Health check
-    environment:
-      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
-      - HOST_FRONTEND_PORT=${HOST_FRONTEND_PORT:-3000}
-    networks:
-      - saas-dev-network
-
   backend-dev:
     build:
       context: ./backend
@@ -70,21 +53,24 @@ services:
       # Twilio Configuration
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
-      # OpenTelemetry Configuration
-      - OTEL_ENABLED=true
-      - OTEL_SERVICE_NAME=saas-platform-backend-dev
-      # Traces
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-      - OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-      # Metrics
-      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-      - OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-      # Logs
-      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-      - OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
+      # OpenTelemetry is disabled by the regular local/staging examples. The
+      # isolated worktree launcher opts into its private collector explicitly.
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+      - OTEL_SERVICE_NAME=${OTEL_BACKEND_SERVICE_NAME:-247ai-backend}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-development}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://otel-collector:4317}
+      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:-grpc}
+      - OTEL_EXPORTER_OTLP_TRACES_INSECURE=${OTEL_EXPORTER_OTLP_TRACES_INSECURE:-true}
+      - OTEL_EXPORTER_OTLP_TRACES_HEADERS=${OTEL_EXPORTER_OTLP_TRACES_HEADERS:-}
+      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://otel-collector:4317}
+      - OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=${OTEL_EXPORTER_OTLP_METRICS_PROTOCOL:-grpc}
+      - OTEL_EXPORTER_OTLP_METRICS_INSECURE=${OTEL_EXPORTER_OTLP_METRICS_INSECURE:-true}
+      - OTEL_EXPORTER_OTLP_METRICS_HEADERS=${OTEL_EXPORTER_OTLP_METRICS_HEADERS:-}
+      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-http://otel-collector:4317}
+      - OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-grpc}
+      - OTEL_EXPORTER_OTLP_LOGS_INSECURE=${OTEL_EXPORTER_OTLP_LOGS_INSECURE:-true}
+      - OTEL_EXPORTER_OTLP_LOGS_HEADERS=${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -93,9 +79,6 @@ services:
       start_period: 40s
     networks:
       - saas-dev-network
-    depends_on:
-      - otel-collector
-
   frontend-dev:
     build:
       context: ./frontend
@@ -140,7 +123,6 @@ services:
       - NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=${NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-http://localhost:4318/v1/logs}
     depends_on:
       - backend-dev
-      - otel-collector
     networks:
       - saas-dev-network
 
@@ -191,6 +173,22 @@ services:
       - RECORDING_R2_PRESIGN_TTL_SECONDS=${RECORDING_R2_PRESIGN_TTL_SECONDS:-300}
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+      - OTEL_SERVICE_NAME=${OTEL_VOICE_WS_SERVICE_NAME:-247ai-voice-ws}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-development}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://otel-collector:4317}
+      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:-grpc}
+      - OTEL_EXPORTER_OTLP_TRACES_INSECURE=${OTEL_EXPORTER_OTLP_TRACES_INSECURE:-true}
+      - OTEL_EXPORTER_OTLP_TRACES_HEADERS=${OTEL_EXPORTER_OTLP_TRACES_HEADERS:-}
+      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://otel-collector:4317}
+      - OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=${OTEL_EXPORTER_OTLP_METRICS_PROTOCOL:-grpc}
+      - OTEL_EXPORTER_OTLP_METRICS_INSECURE=${OTEL_EXPORTER_OTLP_METRICS_INSECURE:-true}
+      - OTEL_EXPORTER_OTLP_METRICS_HEADERS=${OTEL_EXPORTER_OTLP_METRICS_HEADERS:-}
+      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-http://otel-collector:4317}
+      - OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-grpc}
+      - OTEL_EXPORTER_OTLP_LOGS_INSECURE=${OTEL_EXPORTER_OTLP_LOGS_INSECURE:-true}
+      - OTEL_EXPORTER_OTLP_LOGS_HEADERS=${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}
       - MCP_HOST=127.0.0.1
       - MCP_PORT=8733
       - MCP_ALLOW_LOCAL_URLS=${MCP_ALLOW_LOCAL_URLS:-false}

@@ -10,7 +10,6 @@ Before you begin, ensure you have the following installed:
 - **Python 3.11+**: For the FastAPI backend (if running non-containerized)
 - **Node.js 18+ & npm/yarn**: For the Next.js frontend (if running non-containerized)
 - **Supabase Account**: For database, authentication, and storage services
-- **New Relic Account (Optional)**: For OpenTelemetry observability
 
 ## Environment Configuration
 
@@ -75,114 +74,20 @@ For detailed instructions on setting up OAuth providers, see [OAuth Setup](../02
 
 ### OpenTelemetry Configuration
 
-The project uses OpenTelemetry for observability with New Relic as the backend. For detailed information about the OpenTelemetry implementation, see [OpenTelemetry Implementation](../02_core_systems/opentelemetry_implementation.md).
+The current contract is documented in the
+[observability operator guide](../05_operations/observability.md). The
+canonical local and staging templates keep `OTEL_ENABLED=false`; the isolated
+worktree launcher enables its private collector for telemetry testing. The
+production template is also disabled until the authenticated cloud collector,
+Grafana Cloud project and Langfuse project have been provisioned. Frontend
+telemetry remains disabled; browser requests carry only a content-free W3C
+trace context for correlation.
 
-#### New Relic License Key
+The detailed production and local workflow is in the operator guide.
 
-All environments require a New Relic license key:
-
-```
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=24x7 AI
-```
-
-#### Backend OpenTelemetry Configuration
-
-The backend uses gRPC to communicate with the OpenTelemetry Collector:
-
-```bash
-# OpenTelemetry Configuration
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=ai-voice-agent-platform-backend
-
-# Traces
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-
-# Metrics
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-
-# Logs
-OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-
-# OpenTelemetry Configuration - FastAPI Instrumentation
-# Exclude health check endpoints from tracing to reduce noise
-OTEL_PYTHON_FASTAPI_EXCLUDED_URLS=/health,/health/ready,/health/live
-```
-
-#### Frontend OpenTelemetry Configuration
-
-The frontend uses HTTP/protobuf to communicate with the OpenTelemetry Collector:
-
-```bash
-# OpenTelemetry Configuration (Optional for local development)
-NEXT_PUBLIC_OTEL_ENABLED=true
-NEXT_PUBLIC_OTEL_SERVICE_NAME=ai-voice-agent-platform-frontend
-
-# Frontend OpenTelemetry Configuration - Traces
-# Use HTTP/protobuf for frontend since it runs in browser
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-
-# Frontend OpenTelemetry Configuration - Metrics
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://127.0.0.1:4318/v1/metrics
-
-# Frontend OpenTelemetry Configuration - Logs
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs
-
-# Next.js OpenTelemetry Controls
-# Set to 1 to see more detailed Next.js internal spans (increases noise)
-# Set to 0 to reduce Next.js internal tracing (recommended for production)
-NEXT_OTEL_VERBOSE=0
-
-# Disable Next.js fetch instrumentation if using custom fetch tracing
-NEXT_OTEL_FETCH_DISABLED=1
-```
-
-#### Containerized Environment OpenTelemetry Configuration
-
-In containerized environments, both frontend and backend send telemetry to the OpenTelemetry Collector:
-
-```bash
-# New Relic Configuration for OpenTelemetry
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=24x7 AI
-
-# OpenTelemetry Configuration - Traces
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=ai-voice-agent-platform
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-
-# OpenTelemetry Configuration - Metrics
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-
-# OpenTelemetry Configuration - Logs
-OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-
-# OpenTelemetry Configuration - FastAPI Instrumentation
-OTEL_PYTHON_FASTAPI_EXCLUDED_URLS=/health,/health/ready,/health/live
-
-# Frontend OpenTelemetry Configuration
-NEXT_PUBLIC_OTEL_ENABLED=true
-NEXT_PUBLIC_OTEL_SERVICE_NAME=ai-voice-agent-platform-frontend
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
-NEXT_OTEL_VERBOSE=0
-NEXT_OTEL_FETCH_DISABLED=1
-```
+Do not add legacy provider credentials or send prompts, transcripts, audio, or
+tool payloads to an observability backend. The operator guide describes the
+metadata-only call trace and the production rollout.
 
 ## Local Development Setup
 
@@ -280,7 +185,9 @@ The project includes a `start.sh` script that simplifies starting, stopping, and
 
 ### Development Mode
 
-Starts the frontend, backend, voice-ws, Supabase Studio, and OpenTelemetry Collector with hot reloading for active development.
+Starts the frontend, backend, voice-ws and Supabase Studio with hot reloading.
+Application telemetry is disabled in the regular stack. Use the isolated
+worktree launcher when you need a private collector and Grafana for a trace.
 
 ```bash
 ./start.sh start dev
@@ -292,7 +199,8 @@ Starts the frontend, backend, voice-ws, Supabase Studio, and OpenTelemetry Colle
 - **Backend**: `http://localhost:8000`
 - **Backend API Docs**: `http://localhost:8000/docs`
 - **Supabase Studio**: `http://localhost:54323`
-- **OpenTelemetry Collector**: `http://localhost:4318` (HTTP/protobuf)
+- **OpenTelemetry Collector**: started only by `./scripts/worktree-stack.sh up`
+  on the ports printed by `./scripts/worktree-stack.sh config`
 
 ### Production Mode
 
@@ -435,14 +343,11 @@ After setup, verify your installation:
 curl http://localhost:8000/health
 ```
 
-Expected response:
+Expected response when Supabase is ready:
 
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2024-01-20T10:30:00.000Z",
-  "version": "1.0.0",
-  "environment": "development"
+  "status": "ready"
 }
 ```
 
@@ -545,12 +450,14 @@ If browser test calls or phone Media Streams fail:
 
 #### OpenTelemetry Not Sending Data
 
-If telemetry isn't showing up in New Relic:
+If telemetry isn't showing up in Grafana:
 
-- Verify NEW_RELIC_LICENSE_KEY is correct
-- Check OTEL_ENABLED is set to true
-- Verify collector is running: `docker ps | grep otel-collector`
-- Check collector logs: `./start.sh logs dev | grep otel-collector`
+- Verify the selected environment has `OTEL_ENABLED=true` and all three OTLP
+  endpoints and headers point at the authenticated collector
+- For local traces, verify the isolated stack is running with
+  `./scripts/worktree-stack.sh status` and inspect its collector logs.
+- For production, check the collector host and Grafana Cloud exporter health;
+  application containers never receive Grafana or Langfuse credentials.
 
 ## Next Steps
 

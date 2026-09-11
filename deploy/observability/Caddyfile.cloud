@@ -1,0 +1,26 @@
+# Minimal production ingress for the cloud-backed collector.
+# Grafana and Langfuse remain hosted; this endpoint accepts OTLP data and a
+# protected collector health check for an external uptime monitor.
+{$OBSERVABILITY_DOMAIN} {
+	@health path /health
+	handle @health {
+		basic_auth {
+			{$OTLP_USERNAME} {$OTLP_PASSWORD_HASH}
+		}
+		rewrite * /
+		reverse_proxy otel-collector:13133
+	}
+	@otlp path /v1/traces /v1/metrics /v1/logs
+	handle @otlp {
+		basic_auth {
+			{$OTLP_USERNAME} {$OTLP_PASSWORD_HASH}
+		}
+		request_body {
+			max_size 4MB
+		}
+		reverse_proxy otel-collector:4318
+	}
+	handle {
+		respond 404
+	}
+}

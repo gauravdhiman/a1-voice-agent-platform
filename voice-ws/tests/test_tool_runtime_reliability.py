@@ -58,7 +58,8 @@ class TestToolRuntimeReliability:
 
         assert params.result is not None
         assert "error" in params.result
-        assert "calendar offline" in params.result
+        assert "calendar offline" not in params.result
+        assert "Check the integration configuration" in params.result
 
     def test_resend_uses_org_credential_and_discards_legacy_agent_key(self) -> None:
         """The native Resend tool receives only the org-owned runtime secret."""

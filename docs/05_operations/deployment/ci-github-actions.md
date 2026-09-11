@@ -3,9 +3,9 @@
 The release path is split deliberately:
 
 - **Staging** is validated **locally**: local Docker (frontend, backend, voice-ws)
-  + cloud staging Supabase via `./start.sh start dev --env staging` and
-  `./scripts/validate-staging.sh`. There is no automatic Cloud Run staging
-  deployment on merge to `main`.
+  - cloud staging Supabase via `./start.sh start dev --env staging` and
+    `./scripts/validate-staging.sh`. There is no automatic Cloud Run staging
+    deployment on merge to `main`.
 - [`.github/workflows/deploy-cloud.yml`](../../../.github/workflows/deploy-cloud.yml)
   is retained for **manual recovery only** (`workflow_dispatch`). It can still
   migrate staging and optionally deploy to Cloud Run, but it no longer runs
@@ -62,6 +62,13 @@ Alembic merge revision on the integration branch before merging or releasing.
 
 ## Staging workflow (GitHub Actions — manual recovery only)
 
+The independent `Observability contracts` workflow runs on pull requests and
+main. It enforces at least 90% statement coverage and 90% branch coverage for the new
+telemetry modules and validates alert firing/recovery using pinned Prometheus.
+It does not deploy monitoring or send notifications. See the
+[observability guide](../observability.md#validation-commands) for full local
+suite and live ingestion checks.
+
 `deploy-cloud.yml` now runs **only** on manual dispatch. When dispatched it:
 
 1. Materializes the protected `staging` environment's `ENV_STAGING` secret.
@@ -82,24 +89,24 @@ race staging migrations. Cloud Run images are tagged with the commit SHA.
 Configure these under **Repository Settings → Environments → staging** if you
 use the manual Cloud Run path:
 
-| Secret | Required | Purpose |
-| --- | --- | --- |
-| `ENV_STAGING` | Yes (for GH dispatch) | Complete `.env.staging` contents |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Only for Cloud Run | Google Workload Identity Federation provider |
-| `GCP_SERVICE_ACCOUNT` | Only for Cloud Run | Service account allowed to deploy staging |
-| `STAGING_OCI_SSH_KEY` | Optional | SSH key for a dedicated staging voice-ws VM |
+| Secret                           | Required              | Purpose                                      |
+| -------------------------------- | --------------------- | -------------------------------------------- |
+| `ENV_STAGING`                    | Yes (for GH dispatch) | Complete `.env.staging` contents             |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Only for Cloud Run    | Google Workload Identity Federation provider |
+| `GCP_SERVICE_ACCOUNT`            | Only for Cloud Run    | Service account allowed to deploy staging    |
+| `STAGING_OCI_SSH_KEY`            | Optional              | SSH key for a dedicated staging voice-ws VM  |
 
 Configure these as **staging environment variables** only if deploying to
 Cloud Run:
 
-| Variable | Purpose |
-| --- | --- |
-| `STAGING_GCP_PROJECT_ID` | GCP project used by staging |
-| `STAGING_GCP_REGION` | Cloud Run/Artifact Registry region |
-| `STAGING_GCP_BACKEND_SERVICE` | Staging backend Cloud Run service |
-| `STAGING_GCP_FRONTEND_SERVICE` | Staging frontend Cloud Run service |
-| `STAGING_OCI_SSH_HOST` | Optional dedicated staging voice-ws host |
-| `STAGING_OCI_SSH_USER` | Optional staging SSH user; defaults to `ubuntu` |
+| Variable                       | Purpose                                         |
+| ------------------------------ | ----------------------------------------------- |
+| `STAGING_GCP_PROJECT_ID`       | GCP project used by staging                     |
+| `STAGING_GCP_REGION`           | Cloud Run/Artifact Registry region              |
+| `STAGING_GCP_BACKEND_SERVICE`  | Staging backend Cloud Run service               |
+| `STAGING_GCP_FRONTEND_SERVICE` | Staging frontend Cloud Run service              |
+| `STAGING_OCI_SSH_HOST`         | Optional dedicated staging voice-ws host        |
+| `STAGING_OCI_SSH_USER`         | Optional staging SSH user; defaults to `ubuntu` |
 
 The staging service names must not be the production service names. For the
 normal **local** staging flow, no GCP/OCI secrets are needed — only a local
@@ -128,12 +135,12 @@ two manual approvals from racing production migrations or service updates.
 Configure required reviewers on the GitHub `production` environment. Store
 these there:
 
-| Secret | Required | Purpose |
-| --- | --- | --- |
-| `ENV_PROD` | Yes | Complete `.env.prod` contents |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes | Google Workload Identity Federation provider |
-| `GCP_SERVICE_ACCOUNT` | Yes | Production deployment service account |
-| `OCI_SSH_KEY` | Optional | Production voice-ws VM private key |
+| Secret                           | Required | Purpose                                      |
+| -------------------------------- | -------- | -------------------------------------------- |
+| `ENV_PROD`                       | Yes      | Complete `.env.prod` contents                |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes      | Google Workload Identity Federation provider |
+| `GCP_SERVICE_ACCOUNT`            | Yes      | Production deployment service account        |
+| `OCI_SSH_KEY`                    | Optional | Production voice-ws VM private key           |
 
 Optional production environment variables can override the defaults used by the
 deployment scripts: `PRODUCTION_GCP_PROJECT_ID`, `PRODUCTION_GCP_REGION`,
@@ -151,14 +158,14 @@ data-safety behavior.
 
 ## Local versus CI
 
-| Concern | Local worktree | Local staging (shared DB) | Production promotion |
-| --- | --- | --- | --- |
-| Application state | Dedicated Docker Compose project | Local Docker Compose project (`--env staging`) | Production Cloud Run/OCI |
-| Database | Dedicated local Supabase project | Cloud staging Supabase (`gdzwiwukcwbqohfwxxrx`) | Cloud production Supabase |
-| Auth | Seeded email/password user | Staging accounts (cloud) | Production accounts |
-| Env source | Generated ignored `.worktree-state/app.env` | `.env.staging` (gitignored) | `ENV_PROD` (GH secret) |
-| Trigger | `scripts/worktree-stack.sh up` | `./scripts/validate-staging.sh` after merge to `main` | Manual workflow dispatch |
-| Approval | Developer | Release operator (local) | Protected environment reviewers |
+| Concern           | Local worktree                              | Local staging (shared DB)                             | Production promotion            |
+| ----------------- | ------------------------------------------- | ----------------------------------------------------- | ------------------------------- |
+| Application state | Dedicated Docker Compose project            | Local Docker Compose project (`--env staging`)        | Production Cloud Run/OCI        |
+| Database          | Dedicated local Supabase project            | Cloud staging Supabase (`gdzwiwukcwbqohfwxxrx`)       | Cloud production Supabase       |
+| Auth              | Seeded email/password user                  | Staging accounts (cloud)                              | Production accounts             |
+| Env source        | Generated ignored `.worktree-state/app.env` | `.env.staging` (gitignored)                           | `ENV_PROD` (GH secret)          |
+| Trigger           | `scripts/worktree-stack.sh up`              | `./scripts/validate-staging.sh` after merge to `main` | Manual workflow dispatch        |
+| Approval          | Developer                                   | Release operator (local)                              | Protected environment reviewers |
 
 For local worktree setup see
 [Worktree Isolation and Release Promotion Strategy](worktree-and-release-strategy.md).
