@@ -1,0 +1,139 @@
+rule_files:
+  - alerts.cloud.yml
+evaluation_interval: 1m
+tests:
+  - name: ServiceNotReady fires from application readiness metrics
+    interval: 1m
+    input_series:
+      - series: platform_readiness_checks_total{outcome="error",service_name="247ai-backend"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ServiceNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service_name: 247ai-backend
+            exp_annotations:
+              summary: A platform service readiness check is failing
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#servicenotready
+  - name: APIErrorBudgetBurn fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: platform_http_requests_total{http_response_status_code="500"}
+        values: 0+2x20
+      - series: platform_http_requests_total{http_response_status_code="200"}
+        values: 0+98x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: APIErrorBudgetBurn
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: API is consuming its 99.9% availability budget too quickly
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#apierrorbudgetburn
+  - name: VoiceFailures fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: platform_voice_calls_total{outcome="error"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: VoiceFailures
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: At least three voice calls failed in ten minutes
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#voicefailures
+  - name: ToolFailures fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: platform_operation_count_total{operation="tool.execute",outcome="error"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ToolFailures
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: Repeated tool execution failures
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#toolfailures
+  - name: PersistenceFailure fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: platform_operation_count_total{operation="billing.settle",outcome="error"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PersistenceFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              operation: billing.settle
+            exp_annotations:
+              summary: A call artifact, billing settlement or finalization failed
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#persistencefailure
+  - name: SlowAIResponse fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: platform_ai_ttfb_seconds_bucket{stage="llm",le="1"}
+        values: "0x20"
+      - series: platform_ai_ttfb_seconds_bucket{stage="llm",le="5"}
+        values: 0+5x20
+      - series: platform_ai_ttfb_seconds_bucket{stage="llm",le="+Inf"}
+        values: 0+10x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: SlowAIResponse
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              stage: llm
+            exp_annotations:
+              summary: AI stage time to first byte p95 exceeds three seconds
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#slowairesponse
+  - name: CollectorExportFailure fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: otelcol_exporter_send_failed_spans_total{exporter="otlphttp/grafana"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CollectorExportFailure
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              exporter: otlphttp/grafana
+            exp_annotations:
+              summary: The telemetry collector cannot export one or more signals
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorexportfailure
+  - name: CollectorQueuePressure fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: otelcol_exporter_queue_size{exporter="otlphttp/grafana"}
+        values: 800x20
+      - series: otelcol_exporter_queue_capacity{exporter="otlphttp/grafana"}
+        values: 1000x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CollectorQueuePressure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              exporter: otlphttp/grafana
+            exp_annotations:
+              summary: Collector persistent queue is above 70%
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorqueuepressure
+  - name: CollectorRefusedTelemetry fires on sustained fault
+    interval: 1m
+    input_series:
+      - series: otelcol_receiver_refused_spans_total
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CollectorRefusedTelemetry
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: Collector is refusing telemetry under load
+              runbook_url: https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorrefusedtelemetry

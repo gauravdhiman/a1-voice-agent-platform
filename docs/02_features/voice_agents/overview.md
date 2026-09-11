@@ -1,15 +1,26 @@
 # Voice Agents Feature
 
+> **Current runtime note:** The supported implementation uses the `voice-ws`
+> Pipecat WebSocket runtime (`/ws` for browser calls and `/twilio` for Twilio
+> Media Streams). The room/SIP and `worker/` examples that remain later in this
+> historical feature document are retained for context only; use the [current
+> system architecture](../../01_architecture/system_architecture.md) and the
+> [`voice-ws` README](../../../voice-ws/README.md) for implementation and
+> deployment guidance.
+
 ## Overview
 
-Voice agents are AI-powered assistants that handle real-time voice conversations using LiveKit and Large Language Models (LLMs). Agents can be configured with custom system prompts and integrated with external tools to perform actions like scheduling appointments, looking up customer information, or processing orders.
+Voice agents are AI-powered assistants that handle real-time voice conversations
+through Pipecat and Large Language Models (LLMs). Agents can be configured with
+custom system prompts and integrated with external tools to perform actions like
+scheduling appointments, looking up customer information, or processing orders.
 
 ## What Makes It Work
 
 ### Core Components
 
 1. **AI Model**: Google Gemini Realtime API for voice understanding and generation
-2. **Real-Time Communication**: LiveKit for low-latency audio streaming
+2. **Real-Time Communication**: Pipecat WebSocket transports for low-latency audio streaming
 3. **Tool System**: Dynamic tool loading for external integrations
 4. **Agent Configuration**: Per-agent system prompts and settings
 5. **Session Management**: Call handling and state tracking
@@ -725,7 +736,7 @@ POST   /api/v1/voice/twilio/incoming            Twilio webhook
 - [Tool System](tool_system.md) - Creating and managing tools
 - [Dynamic Tool Architecture](03_implementation/dynamic_tool_architecture.md) - Implementation details
 - [System Architecture](../../01_architecture/system_architecture.md) - Overall architecture
-- [voice-ws README](../../worker/README.md) - voice-ws service details
+- [voice-ws README](../../../voice-ws/README.md) - voice-ws service details
 - [Shared Module](../../shared/README.md) - Shared code architecture
 
 ## Next Steps

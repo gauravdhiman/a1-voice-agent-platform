@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: 24x7 AI
+    folder: 24x7 AI
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

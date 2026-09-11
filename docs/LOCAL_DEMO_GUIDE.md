@@ -138,7 +138,7 @@ The following features require third-party account credentials that are not need
 | **Phone Numbers (Twilio)** | Not functional | Purchase UI is disabled without a Twilio account upgrade |
 | **Billing (Stripe)** | Not functional | Payment flows are visible but won't process |
 | **Email Notifications (Resend)** | Not functional | Emails won't send without a Resend API key |
-| **Observability (New Relic)** | Not functional | Telemetry collection disabled without a New Relic license key |
+| **Observability (local)** | Optional | Regular local mode is disabled; the isolated worktree launcher provides a private collector and local dashboards |
 
 All of these are normal in a local demo environment. The UI and navigation work fully.
 

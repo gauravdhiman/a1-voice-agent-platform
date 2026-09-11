@@ -36,11 +36,11 @@ Ensure you have **Docker & Docker Compose** installed on your system.
    2. Navigate to "Settings" → "Database"
    3. Under "Connection Info", you'll see your database password (different from your Supabase project password)
 
-4. **Add your New Relic License Key (Optional)**:
-
-   ```
-   NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-   ```
+4. **Observability (optional for local development)**: leave
+   `OTEL_ENABLED=false` in `.env.local`. The isolated worktree launcher can
+   start the private local collector when you need to inspect a test call. The
+   production cloud setup is documented in the
+   [observability operator guide](../05_operations/observability.md).
 
 5. **Configure OAuth providers (Optional)**:
    To enable Google OAuth:
@@ -55,7 +55,9 @@ The project includes a `start.sh` script that simplifies starting, stopping, and
 
 ### Development Mode
 
-Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collector with hot reloading for active development.
+Starts the frontend, backend, voice-ws and Supabase Studio with hot reloading.
+Application telemetry is disabled in the regular stack; use the isolated
+worktree launcher when you need a private collector and Grafana for a trace.
 
 ```bash
    ./start.sh start dev
@@ -67,7 +69,9 @@ Starts the frontend, backend, worker, Supabase Studio, and OpenTelemetry Collect
 - **Backend**: `http://localhost:8000`
 - **Backend API Docs**: `http://localhost:8000/docs`
 - **Supabase Studio**: `http://localhost:54323`
-- **OpenTelemetry Collector**: `http://localhost:4318` (HTTP/protobuf), `http://localhost:4317` (gRPC)
+
+For trace inspection, use `./scripts/worktree-stack.sh up`; it adds the
+isolated collector and Grafana stack on the ports printed by `config`.
 
 ### Production Mode
 

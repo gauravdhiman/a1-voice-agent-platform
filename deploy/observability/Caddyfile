@@ -1,0 +1,20 @@
+# Production ingress. Collector and all query stores remain on the private network.
+{$OBSERVABILITY_DOMAIN} {
+    basic_auth {
+        {$OTLP_USERNAME} {$OTLP_PASSWORD_HASH}
+    }
+    @otlp path /v1/traces /v1/logs /v1/metrics
+    handle @otlp {
+        request_body {
+            max_size 4MB
+        }
+        reverse_proxy otel-collector:4318
+    }
+    handle {
+        respond 404
+    }
+}
+
+{$GRAFANA_DOMAIN} {
+    reverse_proxy grafana:3000
+}

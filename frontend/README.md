@@ -89,6 +89,7 @@ Built with [Shadcn/ui](https://ui.shadcn.com/) for consistent, accessible compon
 ### Available Components
 
 **UI Components**:
+
 - Button
 - Card
 - Input
@@ -99,6 +100,7 @@ Built with [Shadcn/ui](https://ui.shadcn.com/) for consistent, accessible compon
 - Dropdown Menu
 
 **Business Components**:
+
 - **AgentCard** - Unified agent card with Edit/Tools/Delete buttons
 - **AgentCreateWidget** - Multi-step agent creation wizard (Basic → Phone → Tools → Review)
 - **ToolCard** - Tool cards with connection status visual feedback
@@ -289,12 +291,12 @@ The frontend supports a **platform skills fork/refresh model** for managing reus
 
 ### Key Components
 
-| Component | Location |
-|-----------|----------|
-| Skills Management | `src/app/(dashboard)/organization/page.tsx` |
+| Component              | Location                                        |
+| ---------------------- | ----------------------------------------------- |
+| Skills Management      | `src/app/(dashboard)/organization/page.tsx`     |
 | Agent Skill Assignment | `src/app/(dashboard)/agents/[agentId]/page.tsx` |
-| Skill Service | `src/services/skill-service.ts` |
-| Skill Types | `src/types/skill.ts` |
+| Skill Service          | `src/services/skill-service.ts`                 |
+| Skill Types            | `src/types/skill.ts`                            |
 
 For the full architecture, see [Platform Skills Fork Model](../docs/03_implementation/platform_skills_fork_model.md).
 
@@ -323,3 +325,11 @@ For the full architecture, see [Platform Skills Fork Model](../docs/03_implement
 ---
 
 For more information, see the main [project README](../README.md).
+
+## Operational observability
+
+See the [observability operator guide](../docs/05_operations/observability.md) for
+local dashboards, call correlation, privacy, alert rules and production rollout.
+The isolated worktree launcher provisions the monitoring stack. Backend and voice
+SDK exports are bounded and asynchronous; browser API correlation needs no public
+collector credentials.

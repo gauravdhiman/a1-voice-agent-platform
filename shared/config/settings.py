@@ -208,12 +208,9 @@ class Settings(BaseSettings):
     )
 
     # OpenTelemetry Settings
-    new_relic_license_key: Optional[str] = Field(
-        default=None, description="New Relic license key"
-    )
     otel_enabled: bool = Field(default=False, description="Enable OpenTelemetry")
     otel_service_name: str = Field(
-        default="saas-platform-backend", description="OpenTelemetry service name"
+        default="247ai-backend", description="OpenTelemetry service name"
     )
 
     # OpenTelemetry Traces Settings

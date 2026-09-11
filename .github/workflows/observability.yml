@@ -1,0 +1,81 @@
+name: Observability contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-correlation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Verify browser correlation and API client contracts
+        run: >-
+          npm run test:coverage -- src/lib/api/__tests__/correlation.test.ts
+          tests/lib/test-api-client.test.ts
+          --coverage.include=src/lib/api/correlation.ts
+          --coverage.thresholds.statements=90 --coverage.thresholds.branches=90
+          --coverage.thresholds.functions=90 --coverage.thresholds.lines=90
+  telemetry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ENVIRONMENT: test
+      JWT_SECRET_KEY: isolated-observability-test-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend and voice test dependencies
+        run: |
+          python -m pip install -r backend/requirements-dev.txt
+          python -m pip install -r voice-ws/requirements.txt
+      - name: Enforce branch coverage for telemetry boundaries
+        run: >-
+          python -m pytest -c pytest.ini -o 'pythonpath=. voice-ws shared'
+          shared/tests/observability voice-ws/tests/test_telemetry.py
+          --cov=shared.observability --cov=shared.config.opentelemetry
+          --cov=src.telemetry --cov-branch --cov-fail-under=90
+          --cov-report=json:coverage.json
+      - name: Enforce statement and branch floors independently
+        run: |
+          python - <<'PY'
+          import json
+          with open("coverage.json") as report:
+              totals = json.load(report)["totals"]
+          assert totals["covered_lines"] / totals["num_statements"] >= 0.90
+          assert totals["covered_branches"] / totals["num_branches"] >= 0.90
+          PY
+      - name: Verify cloud profile contracts
+        run: >-
+          python -m pytest -q
+          scripts/tests/test_observability_cloud_profile.py
+          scripts/tests/test_gcp_env_from_cloud.py
+      - name: Verify alert firing and recovery
+        run: >-
+          docker run --rm --network none
+          -v "$PWD/deploy/observability:/rules:ro"
+          --entrypoint promtool prom/prometheus:v3.14.0
+          test rules /rules/alerts.test.yml
+      - name: Verify cloud alert rules
+        run: >-
+          docker run --rm --network none
+          -v "$PWD/deploy/observability:/rules:ro"
+          --entrypoint promtool prom/prometheus:v3.14.0
+          test rules /rules/alerts.cloud.test.yml

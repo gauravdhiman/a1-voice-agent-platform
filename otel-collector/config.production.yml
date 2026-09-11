@@ -1,3 +1,7 @@
+# DEPRECATED legacy New Relic configuration. The supported production profile
+# uses deploy/observability/collector.cloud.yml with Grafana Cloud and Langfuse.
+# This file is retained only for historical recovery and is not used by the
+# supported Compose launchers.
 receivers:
   otlp:
     protocols:

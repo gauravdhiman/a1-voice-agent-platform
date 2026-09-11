@@ -52,7 +52,8 @@ At its core, this platform allows users to:
 - **OpenTelemetry**: Comprehensive tracing, metrics, and logging
 - **Manual Instrumentation**: Precise control over telemetry
 - **Collector Architecture**: Centralized processing
-- **New Relic Integration**: Visualization and alerting
+- **Grafana Cloud**: Dashboards, logs, traces, metrics and alerting in production
+- **Langfuse Cloud**: Metadata-only AI trace navigation
 
 ### Developer Experience
 
@@ -133,7 +134,9 @@ At its core, this platform allows users to:
 
 - **Containers**: Docker + Docker Compose
 - **Orchestration**: Docker Compose (dev), Kubernetes (prod planned)
-- **Observability**: OpenTelemetry Collector
+- **Observability**: OpenTelemetry through an authenticated Collector, with
+  Grafana Cloud dashboards/alerts and optional Langfuse Cloud metadata-only AI
+  traces
 - **Database**: Supabase (managed PostgreSQL)
 - **Real-time voice**: `voice-ws` (Pipecat) + Twilio
 - **Payments**: Stripe

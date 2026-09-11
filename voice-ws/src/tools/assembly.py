@@ -22,8 +22,8 @@ from src.tools.skill_tools import (
     create_load_skill_reference_function,
 )
 
-from shared.voice_agents.demo_outcome_service import record_demo_tool_outcome
 from shared.voice_agents.callback_service import record_callback_tool_outcome
+from shared.voice_agents.demo_outcome_service import record_demo_tool_outcome
 from shared.voice_agents.key_resolver import resolve_org_provider_credential
 from shared.voice_agents.skill_service import skill_service
 from shared.voice_agents.tool_models import ToolSource
@@ -178,7 +178,7 @@ def create_legacy_tool_handler(
     """Create a Pipecat handler that safely calls a shared ``BaseTool`` method.
 
     ``context`` is deliberately removed from model arguments and injected as a
-    trusted per-session ``ToolContext``. Results are JSON encoded so Pipecat always returns a
+    trusted per-session ``ToolContext``. Results are JSON encoded so Pipecat returns a
     string to the LLM, even when a legacy tool returns a mapping or list.
     Exceptions are caught and returned as ``{"error": ...}`` so the model can
     recover instead of inventing a successful booking.
@@ -206,7 +206,7 @@ def create_legacy_tool_handler(
                 context=runtime_context or ToolContext(), **arguments
             )
         except Exception as exc:  # noqa: BLE001 - always return a model-visible error
-            logger.exception("Legacy tool %s failed: %s", tool_name, exc)
+            logger.error("Legacy tool %s failed (%s)", tool_name, type(exc).__name__)
             await record_demo_tool_outcome(
                 context=runtime_context,
                 function_name=tool_name,
@@ -225,7 +225,12 @@ def create_legacy_tool_handler(
             )
             await params.result_callback(
                 json.dumps(
-                    {"error": f"{tool_name} failed: {exc}"},
+                    {
+                        "error": (
+                            f"{tool_name} failed. "
+                            "Check the integration configuration before retrying."
+                        )
+                    },
                     default=str,
                 )
             )
@@ -392,7 +397,9 @@ async def assemble_agent_tools(
             _create_skill_handler(load_skill),
             FunctionSchema(
                 name="load_skill",
-                description="Load a skill's full procedures using its available skill slug.",
+                description=(
+                    "Load a skill's full procedures " "using its available skill slug."
+                ),
                 properties={"skill_slug": {"type": "string"}},
                 required=["skill_slug"],
             ),
@@ -428,15 +435,16 @@ def _create_skill_handler(
     async def handler(params: FunctionCallParams) -> None:
         """Call the skill loader and return its text to the model."""
         logger.info(
-            "Invoking skill tool %s with args=%s",
+            "Invoking skill tool %s",
             getattr(function, "__name__", "skill_tool"),
-            dict(params.arguments),
         )
         try:
             result = await function(**dict(params.arguments))
         except Exception as exc:  # noqa: BLE001 - keep the call alive
-            logger.exception("Skill tool failed: %s", exc)
-            await params.result_callback(f"Skill tool error: {exc}")
+            logger.error("Skill tool failed (%s)", type(exc).__name__)
+            await params.result_callback(
+                "Skill tool failed. Check the skill configuration before retrying."
+            )
             return
         await params.result_callback(result)
 

@@ -48,17 +48,17 @@ The AI Voice Agent Platform enables organizations to:
 
 ### Technology Stack
 
-| Component        | Technology                           |
-| ---------------- | ------------------------------------ |
-| Frontend         | Next.js 15, TypeScript, Tailwind CSS |
-| Backend          | FastAPI, Python 3.11+                |
-| Database         | Supabase (PostgreSQL)                |
-| Real-time Voice  | voice-ws (Pipecat WebSocket)         |
-| AI/LLM           | Google Gemini Realtime API           |
-| Payments         | Stripe                               |
-| Email            | Resend.com                           |
-| Observability    | OpenTelemetry + New Relic            |
-| Containerization | Docker & Docker Compose              |
+| Component        | Technology                                     |
+| ---------------- | ---------------------------------------------- |
+| Frontend         | Next.js 15, TypeScript, Tailwind CSS           |
+| Backend          | FastAPI, Python 3.11+                          |
+| Database         | Supabase (PostgreSQL)                          |
+| Real-time Voice  | voice-ws (Pipecat WebSocket)                   |
+| AI/LLM           | Google Gemini Realtime API                     |
+| Payments         | Stripe                                         |
+| Email            | Resend.com                                     |
+| Observability    | OpenTelemetry + Grafana Cloud + Langfuse Cloud |
+| Containerization | Docker & Docker Compose                        |
 
 ### Architecture Summary
 
@@ -182,7 +182,8 @@ Backend (FastAPI)
 
 ### 6. Observability ✅
 
-**What**: Comprehensive monitoring with OpenTelemetry and New Relic
+**What**: Content-free OpenTelemetry metrics, logs and traces with Grafana Cloud
+and optional Langfuse call navigation
 
 **Why It Matters**:
 
@@ -196,8 +197,8 @@ Backend (FastAPI)
 - API latency and errors
 - Voice agent call duration and success rate
 - Tool execution metrics
-- Credit consumption
-- System resource usage
+- Billing settlement outcomes
+- Collector export and queue health
 
 **See Also**: [Observability Feature](../02_features/observability/overview.md)
 
@@ -217,16 +218,16 @@ ai-voice-agent-platform/
 
 ### Key Directories
 
-| Directory                  | Purpose                            | Key Files                         |
-| -------------------------- | ---------------------------------- | --------------------------------- |
-| `frontend/src/app/`        | Next.js pages and routes           | page.tsx, layout.tsx              |
-| `frontend/src/components/` | React components                   | Button, Card, Input               |
-| `frontend/src/services/`   | API client and business logic      | auth-service.ts, agent-service.ts |
-| `backend/src/`             | API endpoints and business logic   | auth/, voice_agents/, billing/    |
-| `backend/src/shared/`      | Shared utilities                   | middleware/, exceptions/          |
-| `voice-ws/src/`            | Pipecat session setup and tools      | bot.py, session_setup.py          |
-| `shared/voice_agents/`     | Voice agent models and services    | service.py, tool_service.py       |
-| `shared/config/`           | Configuration management           | settings.py, supabase.py          |
+| Directory                  | Purpose                          | Key Files                         |
+| -------------------------- | -------------------------------- | --------------------------------- |
+| `frontend/src/app/`        | Next.js pages and routes         | page.tsx, layout.tsx              |
+| `frontend/src/components/` | React components                 | Button, Card, Input               |
+| `frontend/src/services/`   | API client and business logic    | auth-service.ts, agent-service.ts |
+| `backend/src/`             | API endpoints and business logic | auth/, voice_agents/, billing/    |
+| `backend/src/shared/`      | Shared utilities                 | middleware/, exceptions/          |
+| `voice-ws/src/`            | Pipecat session setup and tools  | bot.py, session_setup.py          |
+| `shared/voice_agents/`     | Voice agent models and services  | service.py, tool_service.py       |
+| `shared/config/`           | Configuration management         | settings.py, supabase.py          |
 
 ## Quick Start Options
 
@@ -254,7 +255,8 @@ cp .env.local.example .env.local
 - Starts Frontend (Next.js) on http://localhost:3000
 - Starts Backend (FastAPI) on http://localhost:8000
 - Starts voice-ws (Pipecat WebSocket) for voice agent calls
-- Starts OpenTelemetry Collector for monitoring
+- Use `scripts/worktree-stack.sh` when you need the isolated OpenTelemetry and
+  Grafana stack for monitoring
 - Connects all services to Supabase database
 
 **Access Points**:
@@ -262,7 +264,6 @@ cp .env.local.example .env.local
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
-- OpenTelemetry Collector: http://localhost:4318
 
 ### Option 2: Manual Setup (Recommended for Contributing)
 
@@ -453,7 +454,8 @@ Check operations documentation:
 - Create your first voice agent
 - Add a tool (Google Calendar)
 - Make a test call
-- Review traces in New Relic
+- Review local traces in Grafana during development; production traces use the
+  provisioned Grafana Cloud project
 - Modify system prompt and see changes
 
 ### Intermediate (1-2 Months)

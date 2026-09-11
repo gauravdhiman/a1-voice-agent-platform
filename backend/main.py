@@ -3,6 +3,7 @@ FastAPI application entry point for multi-tenant SaaS platform.
 Includes authentication, health endpoints and CORS configuration.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -37,28 +38,28 @@ from src.security.validation_errors import sanitize_validation_errors
 from src.voice_agents import (
     agent_router,
     demo_public_router,
-    organization_tool_router,
     embed_router,
+    organization_tool_router,
     platform_skill_router,
     preset_router,
     skill_router,
     tool_router,
     voice_router,
 )
-from src.voice_templates import (
-    platform_voice_templates_router,
-    voice_templates_router,
-)
+from src.voice_templates import platform_voice_templates_router, voice_templates_router
 
-from shared.config import settings, supabase_config
+from shared.config import settings
 
 # Import OpenTelemetry setup function first to ensure proper logging configuration
 from shared.config.opentelemetry import (
     emit_log,
     emit_metric,
+    instrument_fastapi,
     logging_level,
     setup_manual_opentelemetry,
+    shutdown_opentelemetry,
 )
+from shared.observability.health import Readiness
 
 # Configure logging to ensure it outputs to stdout with proper formatting
 # The OpenTelemetry logging handler is added in the setup_manual_opentelemetry function
@@ -68,17 +69,13 @@ logging.basicConfig(
 
 # Set up OpenTelemetry explicitly to ensure logger and meter providers are available
 # This needs to happen before configuring logging to ensure proper integration
-setup_manual_opentelemetry()
 
 
 # Get tracer for this module
 tracer = trace.get_tracer(__name__)
 
-# Test logging to verify OpenTelemetry is working
 logging.info("Backend application starting up")
 print("Backend application starting up")  # Print to stdout for visibility
-emit_log("Backend application started", "INFO", {"service": "saas-platform-backend"})
-emit_metric("backend.app.start", 1, {"service": "saas-platform-backend"})
 
 
 def create_app() -> FastAPI:
@@ -90,7 +87,7 @@ def create_app() -> FastAPI:
 
     Notes:
         - Uses lifespan context manager for startup/shutdown
-        - Includes all routers (auth, RBAC, organization, billing, notifications, voice agents)
+        - Includes auth, RBAC, organization, billing, notification and voice routers
         - Configures CORS for cross-origin requests
         - Instruments with OpenTelemetry for observability
     """
@@ -113,7 +110,7 @@ def create_app() -> FastAPI:
     async def request_validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        """Strip rejected request bodies from validation errors (may contain secrets)."""
+        """Strip potentially secret request bodies from validation errors."""
         return JSONResponse(
             status_code=422,
             content={"detail": sanitize_validation_errors(exc.errors())},
@@ -134,25 +131,11 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=settings.cors_credentials,
         allow_methods=settings.cors_methods,
-        allow_headers=settings.cors_headers,
+        allow_headers=list(set(settings.cors_headers + ["traceparent"])),
+        expose_headers=["x-request-id", "x-trace-id"],
     )
 
-    # Instrument the FastAPI app with OpenTelemetry
-    try:
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        from opentelemetry.instrumentation.requests import RequestsInstrumentor
-
-        # Define URLs to exclude from instrumentation (health check endpoints)
-        excluded_urls = "/health,/health/ready,/health/live"
-        FastAPIInstrumentor.instrument_app(app, excluded_urls=excluded_urls)
-        RequestsInstrumentor().instrument()
-        logging.info("FastAPI instrumentation completed")
-        print("FastAPI instrumentation completed")  # Print to stdout for visibility
-    except Exception as e:
-        logging.error(f"Failed to instrument FastAPI app: {e}")
-        print(
-            f"Failed to instrument FastAPI app: {e}"
-        )  # Print to stdout for visibility
+    instrument_fastapi(app)
 
     # Include authentication routes
     app.include_router(auth_router)
@@ -234,11 +217,19 @@ async def lifespan(app: FastAPI):
         - Stops token refresh service on shutdown
         - Ensures graceful shutdown of background tasks
     """
+    setup_manual_opentelemetry("247ai-backend")
+    # Emit startup telemetry after the SDK providers are installed. Emitting
+    # at module import would cache no-op instruments before the provider exists.
+    emit_log(
+        "Backend application started", "INFO", {"service": "247ai-backend"}
+    )
+    emit_metric("backend.app.start", 1, {"service": "247ai-backend"})
     # Startup — fail fast if required secrets are not configured
     if not settings.jwt_secret_key:
         raise RuntimeError(
             "JWT_SECRET_KEY is not set. "
-            "Set it to your Supabase JWT secret (Dashboard → Settings → API → JWT Secret)."
+            "Set it to your Supabase JWT secret "
+            "(Dashboard → Settings → API → JWT Secret)."
         )
 
     from src.billing.free_plan_renewal_scheduler import (
@@ -347,6 +338,7 @@ async def lifespan(app: FastAPI):
     logging.info("Shutting down token refresh service...")
     await stop_token_refresh_service()
     logging.info("Token refresh service stopped")
+    await asyncio.to_thread(shutdown_opentelemetry)
 
 
 # Create FastAPI app instance
@@ -371,47 +363,19 @@ async def root():
     )
 
 
+readiness = Readiness(settings)
+
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for monitoring and load balancers."""
-    # Log a message using OpenTelemetry
-    # logging.info("Health check endpoint accessed")
-    # emit_log("Health check endpoint accessed", "INFO", {"endpoint": "/health"})
-    # emit_metric("backend.health.check", 1, {"status": "healthy"})
-
-    checks = {"api": "ok"}
-
-    # Check Supabase connection if configured
-    if supabase_config.is_configured():
-        supabase_healthy = supabase_config.health_check()
-        checks["supabase"] = "ok" if supabase_healthy else "error"
-    else:
-        checks["supabase"] = "not_configured"
-
-    return JSONResponse(
-        {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "version": settings.app_version,
-            "environment": settings.environment,
-            "checks": checks,
-        }
-    )
+    """Dependency-aware health for load balancers; 503 when Supabase is unavailable."""
+    return await readiness.response()
 
 
 @app.get("/health/ready")
 async def readiness_check():
-    """Readiness check for Kubernetes deployments."""
-    # Log a message using OpenTelemetry
-    logging.info("Readiness check endpoint accessed")
-    emit_metric("backend.readiness.check", 1, {"status": "ready"})
-
-    return JSONResponse(
-        {
-            "status": "ready",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    )
+    """Bounded, cached readiness without sensitive dependency diagnostics."""
+    return await readiness.response()
 
 
 @app.get("/health/live")
@@ -424,41 +388,6 @@ async def liveness_check():
     return JSONResponse(
         {
             "status": "alive",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    )
-
-
-@app.get("/test-otel")
-@tracer.start_as_current_span("auth.sign_in")
-async def test_opentelemetry():
-    """Test endpoint to verify OpenTelemetry tracing is working."""
-    import time
-
-    current_span = trace.get_current_span()
-    # from opentelemetry import trace
-
-    # Get the current tracer
-    # tracer = trace.get_tracer(__name__)
-
-    # Create a span to test tracing
-    current_span.set_attribute("test.attribute", "test-value")
-    current_span.add_event("Test event in span")
-
-    # Simulate some work
-    time.sleep(0.1)
-
-    # Log a message
-    logging.info("OpenTelemetry test endpoint accessed")
-    emit_log("OpenTelemetry test endpoint accessed", "INFO", {"endpoint": "/test-otel"})
-    emit_metric("backend.test.otel", 1, {"endpoint": "/test-otel"})
-
-    # Add another event
-    current_span.add_event("Test event after work")
-
-    return JSONResponse(
-        {
-            "message": "OpenTelemetry test completed",
             "timestamp": datetime.utcnow().isoformat(),
         }
     )

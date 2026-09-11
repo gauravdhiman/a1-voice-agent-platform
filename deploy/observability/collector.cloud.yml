@@ -1,0 +1,81 @@
+# Minimal production collector. Grafana Cloud stores metrics, logs and traces;
+# Langfuse receives the same content-free traces for AI call navigation.
+# Values are supplied through the cloud Compose environment file.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus/self:
+    config:
+      scrape_configs:
+        - job_name: otel-collector
+          scrape_interval: 15s
+          static_configs:
+            - targets: [127.0.0.1:8888]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+    spike_limit_mib: 48
+  batch:
+    timeout: 2s
+    send_batch_size: 128
+    send_batch_max_size: 256
+
+exporters:
+  otlphttp/grafana:
+    endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:GRAFANA_CLOUD_OTLP_AUTH}
+    compression: gzip
+    timeout: 5s
+    sending_queue:
+      storage: file_storage
+      queue_size: 512
+    retry_on_failure:
+      max_elapsed_time: 120s
+  otlphttp/langfuse:
+    endpoint: ${env:LANGFUSE_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:LANGFUSE_OTLP_AUTH}
+      x-langfuse-ingestion-version: "4"
+    compression: gzip
+    timeout: 5s
+    sending_queue:
+      storage: file_storage
+      queue_size: 512
+    retry_on_failure:
+      max_elapsed_time: 120s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage:
+    directory: /var/lib/otelcol
+    create_directory: true
+
+service:
+  extensions: [health_check, file_storage]
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/grafana, otlphttp/langfuse]
+    metrics:
+      receivers: [otlp, prometheus/self]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/grafana]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/grafana]

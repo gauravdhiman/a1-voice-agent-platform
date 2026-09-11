@@ -1,14 +1,12 @@
 import base64
-from math import log
+import logging
 import re
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import Any, Optional
-from venv import logger
 
 import httpx
 from bs4 import BeautifulSoup
-from shared.voice_agents.tools.base.tool_context import ToolContext
 from pydantic import Field
 
 from shared.voice_agents.tools.base.auth_config import GoogleAuthConfig
@@ -18,6 +16,9 @@ from shared.voice_agents.tools.base.base_tool import (
     BaseTool,
     ToolMetadata,
 )
+from shared.voice_agents.tools.base.tool_context import ToolContext
+
+logger = logging.getLogger(__name__)
 
 
 def validate_email(email: str) -> bool:
@@ -272,7 +273,8 @@ class GmailTool(BaseTool):
             Search and retrieve emails matching Gmail search query syntax.
 
         Instructions:
-            Use Gmail's advanced search operators (from:, to:, subject:, etc.) for precision.
+            Use Gmail's advanced search operators (from:, to:, subject:, etc.)
+            for precision.
             Avoid overly broad queries that return hundreds of results.
 
         Args:
@@ -1161,7 +1163,7 @@ class GmailTool(BaseTool):
         return await self._get_message_details(context, message_id)
 
     def _get_message_body(self, msg_data: dict[str, Any]) -> str:
-        """Extract message body from message data, stripping HTML tags to return plain text."""
+        """Extract message body and strip HTML tags to return plain text."""
         body = ""
         content_type = ""
         try:
@@ -1205,5 +1207,7 @@ class GmailTool(BaseTool):
         if len(body) > 2000:
             body = body[:2000] + "..."
 
-        logger.info(f"Extracted message body: {body}")
+        # Message bodies may contain PII. Keep console and telemetry logs
+        # content-free; the body is returned only through the tool contract.
+        logger.info("Extracted message body bytes=%s", len(body.encode("utf-8")))
         return body

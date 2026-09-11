@@ -90,9 +90,9 @@ Historical documentation and legacy docs
 
 ### Observability
 
-- **OpenTelemetry**: Manual instrumentation for traces, metrics, and logs
-- **Collector Architecture**: Centralized OTLP collector with CORS support
-- **New Relic Integration**: Collector forwards to New Relic for visualization
+- **OpenTelemetry**: Content-free traces, metrics and logs from backend and voice-ws
+- **Collector Architecture**: One authenticated OTLP collector with bounded queues
+- **Grafana Cloud + Langfuse Cloud**: Hosted operations dashboards/alerts and metadata-only AI trace navigation
 
 ## Recent Changes
 

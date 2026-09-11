@@ -68,6 +68,8 @@ graph TB
         GG[Google Services]
         DB[Supabase Database]
         EM[Email Service]
+        GC[Grafana Cloud]
+        LF[Langfuse Cloud]
     end
 
     WEB --> FE
@@ -82,9 +84,11 @@ graph TB
     WK --> GG
     WK --> DB
 
-    FE --> OTEL
     BE --> OTEL
     WK --> OTEL
+    FE -. content-free traceparent .-> BE
+    OTEL --> GC
+    OTEL -. traces only, content-free .-> LF
 
     style WEB fill:#3b82f6
     style FE fill:#10b981
@@ -143,7 +147,7 @@ graph TB
 - **Real-time**: voice-ws (Pipecat) for voice/video
 - **Payments**: Stripe for billing and subscriptions
 - **Email**: Resend.com for transactional emails
-- **Observability**: OpenTelemetry with New Relic integration
+- **Observability**: OpenTelemetry with Grafana Cloud dashboards and Langfuse Cloud AI trace navigation
 - **Containers**: Docker & Docker Compose
 
 ## Key Innovations
@@ -324,7 +328,8 @@ Automatic greeting when agent enters room:
 - OpenTelemetry tracing
 - Metrics collection
 - Log aggregation
-- New Relic integration
+- Grafana Cloud dashboards and alerting
+- Langfuse Cloud metadata-only AI traces
 - Distributed tracing across services
 - Performance monitoring
 

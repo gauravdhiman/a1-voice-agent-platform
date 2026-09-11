@@ -1,0 +1,21 @@
+# Copy to a private, ignored path and configure a real receiver before deployment.
+route:
+  receiver: on-call
+  group_by: [alertname, service_name]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: on-call
+    webhook_configs:
+      - url: https://replace-with-your-alert-receiver.example/alerts
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /run/secrets/alert_webhook_token
+# Mount /run/secrets/alert_webhook_token read-only in the deployment override.
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [alertname, service_name]

@@ -4,11 +4,11 @@ This document explains how to configure environment variables for different deve
 
 ## Supabase projects
 
-| Environment | Project ref | Env file | Notes |
-|-------------|-------------|----------|-------|
-| **Local** | Local CLI (`127.0.0.1:54321`) | `.env.local` | Default dev; selected by `./start.sh start dev` |
-| **Staging** | `gdzwiwukcwbqohfwxxrx` | `.env.staging` | Cloud DB for pre-prod validation — [staging guide](./staging_environment.md) |
-| **Production** | `zymiyfilulmtrmyyhvzw` | `.env.prod` | 247ai.live — deploy/migrate only |
+| Environment    | Project ref                   | Env file       | Notes                                                                        |
+| -------------- | ----------------------------- | -------------- | ---------------------------------------------------------------------------- |
+| **Local**      | Local CLI (`127.0.0.1:54321`) | `.env.local`   | Default dev; selected by `./start.sh start dev`                              |
+| **Staging**    | `gdzwiwukcwbqohfwxxrx`        | `.env.staging` | Cloud DB for pre-prod validation — [staging guide](./staging_environment.md) |
+| **Production** | `zymiyfilulmtrmyyhvzw`        | `.env.prod`    | 247ai.live — deploy/migrate only                                             |
 
 > Do **not** use production Supabase for local feature testing. Use `.env.staging` instead.
 
@@ -95,15 +95,15 @@ target, not a fourth environment file. They consume the selected
 
 ### Environment selection commands
 
-| Task | Command | Selected file |
-|------|---------|---------------|
-| Local Docker development | `./start.sh start dev` | `.env.local` |
-| Cloud staging validation | `./start.sh start dev --env staging` | `.env.staging` |
-| Production-like local Compose | `./start.sh start prod` | `.env.prod` |
-| Safe selection check | `./start.sh config --env staging` | `.env.staging` |
-| Direct backend process | `ENV_FILE=.env.staging python backend/main.py` | `.env.staging` |
-| Alembic migration | `ENV_FILE=.env.staging REVISION=head ./scripts/deploy/run-alembic.sh` | `.env.staging` |
-| Production deployment | `./scripts/deploy.sh` | `.env.prod` |
+| Task                          | Command                                                               | Selected file  |
+| ----------------------------- | --------------------------------------------------------------------- | -------------- |
+| Local Docker development      | `./start.sh start dev`                                                | `.env.local`   |
+| Cloud staging validation      | `./start.sh start dev --env staging`                                  | `.env.staging` |
+| Production-like local Compose | `./start.sh start prod`                                               | `.env.prod`    |
+| Safe selection check          | `./start.sh config --env staging`                                     | `.env.staging` |
+| Direct backend process        | `ENV_FILE=.env.staging python backend/main.py`                        | `.env.staging` |
+| Alembic migration             | `ENV_FILE=.env.staging REVISION=head ./scripts/deploy/run-alembic.sh` | `.env.staging` |
+| Production deployment         | `./scripts/deploy.sh`                                                 | `.env.prod`    |
 
 `docker compose -f docker-compose.dev.yml` defaults to `.env.local`, while
 `docker compose -f docker-compose.yml` defaults to `.env.prod`. The `start.sh`
@@ -219,102 +219,25 @@ for redirect URIs and the handoff flow.
 
 ## OpenTelemetry Configuration
 
-The project uses OpenTelemetry for observability with New Relic as the backend. For detailed information about the OpenTelemetry implementation, see [OPENTELEMETRY_CONSOLIDATED.md](OPENTELEMETRY_CONSOLIDATED.md).
+OpenTelemetry is configured as a process-scoped, content-free export boundary.
+See the [observability operator guide](observability.md) for signal definitions,
+privacy rules, local verification, and the production rollout.
 
-### New Relic License Key
+- `.env.local.example` and `.env.staging.example` keep `OTEL_ENABLED=false`.
+- `scripts/worktree-stack.sh` opts an isolated worktree into its private local
+  collector when trace inspection is needed.
+- `.env.prod.example` remains disabled until the authenticated cloud collector,
+  Grafana Cloud project and Langfuse project are provisioned.
+- Production uses `http/protobuf` over HTTPS for traces, metrics and logs, with
+  a separate Basic auth header for each signal. The GCP environment generator
+  copies the values to backend and voice-ws and assigns distinct service names.
+- The frontend stays disabled. Its API client propagates a W3C `traceparent` and
+  exposes the server-generated request ID for support correlation; no browser
+  collector credential is shipped.
 
-All environments require a New Relic license key:
-
-```
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-```
-
-### Backend OpenTelemetry Configuration
-
-The backend uses gRPC to communicate with the OpenTelemetry Collector:
-
-```bash
-# OpenTelemetry Configuration
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=saas-platform-backend
-# Traces
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-# Metrics
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-# Logs
-OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-
-# OpenTelemetry Configuration - FastAPI Instrumentation
-# Exclude health check endpoints from tracing to reduce noise
-OTEL_PYTHON_FASTAPI_EXCLUDED_URLS=/health,/health/ready,/health/live
-```
-
-### Frontend OpenTelemetry Configuration
-
-The frontend uses HTTP/protobuf to communicate with the OpenTelemetry Collector:
-
-```bash
-# OpenTelemetry Configuration (Optional for local development)
-NEXT_PUBLIC_OTEL_ENABLED=true
-NEXT_PUBLIC_OTEL_SERVICE_NAME=saas-platform-frontend-dev
-
-# Frontend OpenTelemetry Configuration - Traces
-# Use HTTP/protobuf for frontend since it runs in browser
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-
-# Frontend OpenTelemetry Configuration - Metrics
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://127.0.0.1:4318/v1/metrics
-
-# Frontend OpenTelemetry Configuration - Logs
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs
-```
-
-### Containerized Environment OpenTelemetry Configuration
-
-In containerized environments, both frontend and backend send telemetry to the OpenTelemetry Collector:
-
-```bash
-# New Relic Configuration for OpenTelemetry
-NEW_RELIC_LICENSE_KEY=your-new-relic-license-key-here
-NEW_RELIC_APP_NAME=24x7 AI
-
-# OpenTelemetry Configuration - Traces
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=saas-platform
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-
-# OpenTelemetry Configuration - Metrics
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_METRICS_INSECURE=true
-
-# OpenTelemetry Configuration - Logs
-OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4317
-OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_LOGS_INSECURE=true
-
-# Frontend OpenTelemetry Configuration - Traces
-# Use HTTP/protobuf for frontend since it runs in browser
-NEXT_PUBLIC_OTEL_ENABLED=true
-NEXT_PUBLIC_OTEL_SERVICE_NAME=saas-platform-frontend
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-
-# Frontend OpenTelemetry Configuration - Metrics
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
-
-# Frontend OpenTelemetry Configuration - Logs
-NEXT_PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
-```
+Only bounded identifiers, operation outcomes, provider/model metadata, timing,
+token counts and tool status are exported. Prompts, completions, transcripts,
+audio, tool arguments/results and credentials are excluded.
 
 ## Direct service development (advanced)
 
@@ -345,4 +268,4 @@ Both [docker-compose.yml](../../docker-compose.yml) and [docker-compose.dev.yml]
 3. For OAuth providers, configure them in your Supabase dashboard
 4. For database migrations, get your Supabase database password and update the DATABASE_URL
 5. For detailed OAuth setup instructions, see [OAUTH_SETUP.md](OAUTH_SETUP.md)
-6. For OpenTelemetry setup, get your New Relic license key and update the NEW_RELIC_LICENSE_KEY
+6. For OpenTelemetry setup, follow the [observability operator guide](observability.md); local and staging remain disabled by default

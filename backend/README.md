@@ -51,6 +51,7 @@ The API will be available at [http://localhost:8000](http://localhost:8000)
 **Feature**: Sync tool authentication metadata from code to database
 
 **Implementation**:
+
 - Backend startup reads tool metadata from code via `tool_registry.sync_with_db()`
 - Syncs `required_auth`, `auth_type`, `auth_config` to `platform_tools` table
 - Frontend uses this metadata to:
@@ -116,15 +117,15 @@ backend/
 
 ### Phone Numbers
 
-| Endpoint                        | Method | Description                        |
-| ------------------------------- | ------ | ---------------------------------- |
-| `/api/v1/phone-numbers/available` | GET    | Search available phone numbers    |
-| `/api/v1/phone-numbers/purchase` | POST   | Purchase and configure a number   |
-| `/api/v1/phone-numbers/import` | POST | Connect a customer-owned number   |
-| `/api/v1/phone-numbers`          | GET    | List organization phone numbers   |
-| `/api/v1/phone-numbers/{id}/assign` | POST | Assign number to agent             |
-| `/api/v1/phone-numbers/{id}/assignment` | DELETE | Clear mapping without release |
-| `/api/v1/phone-numbers/{id}`     | DELETE | Release or disconnect a number    |
+| Endpoint                                | Method | Description                     |
+| --------------------------------------- | ------ | ------------------------------- |
+| `/api/v1/phone-numbers/available`       | GET    | Search available phone numbers  |
+| `/api/v1/phone-numbers/purchase`        | POST   | Purchase and configure a number |
+| `/api/v1/phone-numbers/import`          | POST   | Connect a customer-owned number |
+| `/api/v1/phone-numbers`                 | GET    | List organization phone numbers |
+| `/api/v1/phone-numbers/{id}/assign`     | POST   | Assign number to agent          |
+| `/api/v1/phone-numbers/{id}/assignment` | DELETE | Clear mapping without release   |
+| `/api/v1/phone-numbers/{id}`            | DELETE | Release or disconnect a number  |
 
 For detailed API documentation, see [Phone Numbers PRD](../docs/PRD-phone-numbers.md).
 
@@ -142,12 +143,12 @@ sign-in only succeed for invitation holders and allowlisted platform
 admins (`PLATFORM_ADMIN_ALLOWLIST`); see `src/auth/signup_gate.py`.
 Everyone else is directed to the interest form.
 
-| Endpoint | Method | Description |
-| -------- | ------ | ----------- |
-| `/api/v1/auth/signup-status` | GET | Public flag for the signup-page redirect (backend gate is authoritative) |
-| `/api/v1/public/leads` | POST | Submit visitor interest (fixed ack envelope, 5/min) |
-| `/api/v1/leads` | GET | List interest leads, newest-first (platform admins only) |
-| `/api/v1/leads/{id}` | PATCH | Advance follow-up status (platform admins only) |
+| Endpoint                     | Method | Description                                                              |
+| ---------------------------- | ------ | ------------------------------------------------------------------------ |
+| `/api/v1/auth/signup-status` | GET    | Public flag for the signup-page redirect (backend gate is authoritative) |
+| `/api/v1/public/leads`       | POST   | Submit visitor interest (fixed ack envelope, 5/min)                      |
+| `/api/v1/leads`              | GET    | List interest leads, newest-first (platform admins only)                 |
+| `/api/v1/leads/{id}`         | PATCH  | Advance follow-up status (platform admins only)                          |
 
 Implementation lives in `src/leads/` (see its README); storage is the
 service-role-only `interest_leads` table
@@ -161,11 +162,11 @@ alerts the owner by email and the voice runtime records one
 demos are skipped). Owners work the `new → acknowledged → resolved`
 queue; org admins may also log callbacks manually.
 
-| Endpoint | Method | Description |
-| -------- | ------ | ----------- |
-| `/api/v1/organizations/{org_id}/escalations` | GET | List newest-first (organization members) |
-| `/api/v1/organizations/{org_id}/escalations` | POST | Manually log one callback (org admins) |
-| `/api/v1/organizations/{org_id}/escalations/{id}` | PATCH | Advance follow-up status (org admins) |
+| Endpoint                                          | Method | Description                              |
+| ------------------------------------------------- | ------ | ---------------------------------------- |
+| `/api/v1/organizations/{org_id}/escalations`      | GET    | List newest-first (organization members) |
+| `/api/v1/organizations/{org_id}/escalations`      | POST   | Manually log one callback (org admins)   |
+| `/api/v1/organizations/{org_id}/escalations/{id}` | PATCH  | Advance follow-up status (org admins)    |
 
 Tool implementation lives in
 `shared/voice_agents/tools/implementations/callback_request.py`;
@@ -181,13 +182,7 @@ curl http://localhost:8000/health
 
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2024-01-20T10:30:00.000Z",
-  "version": "1.0.0",
-  "environment": "development",
-  "checks": {
-    "api": "ok"
-  }
+  "status": "ready"
 }
 ```
 
@@ -370,17 +365,23 @@ For more detailed information about using Alembic with this project, see [alembi
 
 ### Health Checks
 
-- **Basic Health**: `/health` - Overall system status
-- **Readiness**: `/health/ready` - Ready to receive traffic
-- **Liveness**: `/health/live` - Application is running
+- **Basic health**: `/health` - Dependency-aware readiness for load balancers; returns `503` when Supabase is unavailable.
+- **Readiness**: `/health/ready` - The same bounded, cached dependency check used by orchestrators.
+- **Liveness**: `/health/live` - Process check that does not call external dependencies.
+
+The readiness response intentionally contains only `{"status":"ready"}` or
+`{"status":"unavailable"}`. Dependency details stay in telemetry so health
+probes cannot disclose provider configuration.
 
 ### Production Considerations
 
 - Health checks included for load balancers
 - Non-root user in Docker for security
 - Multi-stage Docker builds for optimization
-- Structured logging (to be implemented)
-- Metrics collection (to be implemented)
+- Structured OpenTelemetry logs, metrics, traces, and correlation IDs are
+  enabled through the shared observability configuration.
+- Production exports telemetry through the cloud observability profile;
+  local isolated worktrees can run the self-hosted collector overlay.
 
 ## 🔄 Next Steps
 
@@ -389,7 +390,8 @@ For more detailed information about using Alembic with this project, see [alembi
 3. **Multi-tenancy**: Tenant context middleware
 4. **API Endpoints**: CRUD operations for core entities
 5. **Testing**: Comprehensive test suite
-6. **Monitoring**: Logging and metrics
+6. **Monitoring**: OpenTelemetry logging, metrics, traces, dashboards, and
+   alerting (see [docs/05_operations/observability.md](../docs/05_operations/observability.md))
 7. **Documentation**: OpenAPI schema optimization
 
 ## 📝 Skills System
@@ -403,13 +405,13 @@ The backend supports a **platform skills fork/refresh model** for managing reusa
 
 ### Key API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/v1/organizations/{id}/skills/fork` | Fork a platform skill into an org library |
-| `POST /api/v1/organizations/{id}/skills/{id}/refresh` | Refresh forked skill from latest platform version |
-| `GET /api/v1/organizations/{id}/skills/{id}/update-check` | Check if a forked skill has updates available |
-| `GET /api/v1/platform/skills` | List all platform skills (platform admin) |
-| `POST /api/v1/platform/skills` | Create/update a platform skill (platform admin) |
+| Endpoint                                                  | Description                                       |
+| --------------------------------------------------------- | ------------------------------------------------- |
+| `POST /api/v1/organizations/{id}/skills/fork`             | Fork a platform skill into an org library         |
+| `POST /api/v1/organizations/{id}/skills/{id}/refresh`     | Refresh forked skill from latest platform version |
+| `GET /api/v1/organizations/{id}/skills/{id}/update-check` | Check if a forked skill has updates available     |
+| `GET /api/v1/platform/skills`                             | List all platform skills (platform admin)         |
+| `POST /api/v1/platform/skills`                            | Create/update a platform skill (platform admin)   |
 
 For the full architecture, see [Platform Skills Fork Model](../docs/03_implementation/platform_skills_fork_model.md).
 
@@ -432,3 +434,11 @@ docker compose -f docker-compose.dev.yml logs -f backend-dev
 ---
 
 For more information, see the main [project README](../README.md).
+
+## Operational observability
+
+See the [observability operator guide](../docs/05_operations/observability.md) for
+local dashboards, call correlation, privacy, alert rules and production rollout.
+The isolated worktree launcher provisions the monitoring stack. Backend and voice
+SDK exports are bounded and asynchronous; browser API correlation needs no public
+collector credentials.

@@ -99,7 +99,7 @@ export function initOpenTelemetry() {
     // Create resource
     const resource = new Resource({
       [SemanticResourceAttributes.SERVICE_NAME]:
-        process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME || "saas-platform-frontend",
+        process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME || "247ai-frontend",
       [SemanticResourceAttributes.SERVICE_VERSION]: "1.0.0",
       [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]:
         process.env.NODE_ENV || "development",
@@ -280,7 +280,7 @@ export function initOpenTelemetry() {
         const counter = meter.createCounter("frontend.init.counter", {
           description: "Count of frontend initializations",
         });
-        counter.add(1, { service: "saas-platform-frontend" });
+        counter.add(1, { service: "247ai-frontend" });
         console.log("Test metric emitted");
       }
     }, 1000);

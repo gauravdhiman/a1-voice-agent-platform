@@ -11,6 +11,7 @@ __pycache__/
 !.env.prod.example
 !.env.staging.example
 !.env.local.example
+!.env.observability.example
 .env.*.local
 .env.bk*
 .env copy*

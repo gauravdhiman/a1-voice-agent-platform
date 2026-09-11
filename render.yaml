@@ -6,6 +6,8 @@
 # This file is kept for historical reference only.
 #
 # Original Render.com Blueprint — Voice AI Agents Platform
+# The remaining service definitions below are historical and must not be used
+# for a new deployment. They still describe the retired Render/New Relic path.
 # https://render.com/docs/blueprint-spec
 #
 # DEPLOYMENT ORDER:

@@ -1,0 +1,84 @@
+groups:
+  - name: platform
+    rules:
+      - alert: LogStorageDiskPressure
+        expr: loki_ingester_wal_disk_usage_percent > 0.85
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Log storage disk usage exceeds 85%; ingestion stops at 90%"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#logstoragediskpressure"
+      - alert: ServiceNotReady
+        expr: probe_success{job="readiness"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "A platform service is not ready"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#servicenotready"
+      - alert: TelemetryUnavailable
+        expr: up{job=~"platform|collector|monitoring"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "A monitoring component cannot be scraped"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#telemetryunavailable"
+      - alert: APIErrorBudgetBurn
+        expr: |
+          (sum(rate(platform_http_requests_total{http_response_status_code=~"5.."}[5m])) / clamp_min(sum(rate(platform_http_requests_total[5m])), 0.001) > 0.0144)
+          and
+          (sum(rate(platform_http_requests_total{http_response_status_code=~"5.."}[1h])) / clamp_min(sum(rate(platform_http_requests_total[1h])), 0.001) > 0.0144)
+          and sum(increase(platform_http_requests_total[5m])) >= 20
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "API is consuming its 99.9% availability budget too quickly"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#apierrorbudgetburn"
+      - alert: VoiceFailures
+        expr: sum(increase(platform_voice_calls_total{outcome="error"}[10m])) >= 3
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "At least three voice calls failed in ten minutes"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#voicefailures"
+      - alert: ToolFailures
+        expr: sum(increase(platform_operation_count_total{operation="tool.execute",outcome="error"}[10m])) >= 3
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Repeated tool execution failures"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#toolfailures"
+      - alert: PersistenceFailure
+        expr: sum by (operation) (increase(platform_operation_count_total{operation=~"recording.persist|billing.settle|call.finalize",outcome="error"}[10m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "A call artifact, billing settlement or finalization failed"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#persistencefailure"
+      - alert: CollectorExportFailure
+        expr: sum(increase({__name__=~"otelcol_exporter_send_failed_(spans|log_records)(_total)?"}[5m])) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Collector is failing to export telemetry"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorexportfailure"
+      - alert: SlowAIResponse
+        expr: histogram_quantile(0.95, sum by (le, stage) (rate(platform_ai_ttfb_seconds_bucket[10m]))) > 3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "AI stage time to first byte p95 exceeds three seconds"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#slowairesponse"
+
+      - alert: CollectorQueuePressure
+        expr: otelcol_exporter_queue_size / otelcol_exporter_queue_capacity > 0.7
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Collector persistent queue is above 70%"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorexportfailure"
+      - alert: CollectorRefusedTelemetry
+        expr: sum(increase({__name__=~"otelcol_receiver_refused_(spans|log_records|metric_points)(_total)?"}[5m])) > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Collector is refusing telemetry under load"
+          runbook_url: "https://github.com/gauravdhiman/a1-voice-agent-platform/blob/main/docs/05_operations/observability.md#collectorexportfailure"

@@ -9,6 +9,8 @@ from contextlib import suppress
 from typing import Optional
 
 from fastapi import WebSocket
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.frames.frames import ErrorFrame, LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -25,17 +27,22 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
 )
 from src.call_failure import CallFailureState, classify_pipeline_failure
-from src.call_tracking import (
-    end_call_tracking,
-    mark_call_answered,
-    start_call_tracking,
-)
+from src.call_tracking import end_call_tracking, mark_call_answered, start_call_tracking
 from src.recording import RecordingAudioTap, RecordingCoordinator
 from src.recording_policy import should_record_agent_call
 from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
 from src.session_setup import prepare_voice_session
+from src.telemetry import VoiceTelemetryObserver
 
 from shared.config import settings
+from shared.observability.signals import correlation, event
+from shared.observability.signals import failure as telemetry_failure
+from shared.observability.signals import operation
+from shared.observability.voice import (
+    annotate_speech_configuration,
+    observe_call,
+    observe_tool,
+)
 from shared.voice_agents.voice_session_service import VoiceSessionClaims
 
 logger = logging.getLogger(__name__)
@@ -69,6 +76,7 @@ async def _close_mcp_clients(clients: list[object]) -> None:
             logger.exception("Failed to close MCP client")
 
 
+@observe_call
 async def run_bot(
     websocket: WebSocket,
     claims: VoiceSessionClaims,
@@ -85,7 +93,9 @@ async def run_bot(
     cancels the pipeline when reached.
     """
     frame_serializer = serializer or BrowserWebSocketFrameSerializer()
-    bundle = await prepare_voice_session(claims)
+    with operation("voice.setup"):
+        bundle = await prepare_voice_session(claims)
+        annotate_speech_configuration(bundle.speech_config)
     transport = FastAPIWebsocketTransport(
         websocket=websocket,
         params=FastAPIWebsocketParams(
@@ -106,7 +116,7 @@ async def run_bot(
 
     llm = bundle.speech.llm
     for name, handler in bundle.tools.handlers.items():
-        llm.register_function(name, handler)
+        llm.register_function(name, observe_tool(name, handler))
 
     call_log_id = None
     recording_coordinator: Optional[RecordingCoordinator] = None
@@ -122,6 +132,16 @@ async def run_bot(
             source_url=claims.source_url,
             source_domain=claims.source_domain,
         )
+
+    correlation.set(
+        {
+            **correlation.get(),
+            "call_id": call_log_id or "",
+            "organization_id": str(bundle.agent.organization_id or ""),
+        }
+    )
+    trace.get_current_span().set_attributes(correlation.get())
+    event("call.tracking_started", outcome="success" if call_log_id else "error")
 
     recording_enabled = should_record_agent_call(
         bundle.agent,
@@ -149,6 +169,7 @@ async def run_bot(
                 "Recording setup failed for session %s; continuing without audio",
                 claims.session_id,
             )
+            event("recording.setup_failed", outcome="error")
             recording_coordinator = None
             caller_recording_tap = None
             agent_recording_tap = None
@@ -170,7 +191,10 @@ async def run_bot(
     processors.extend([output_processor, assistant_aggregator])
     task = PipelineTask(
         Pipeline(processors),
-        params=PipelineParams(allow_interruptions=True, enable_metrics=True),
+        params=PipelineParams(
+            allow_interruptions=True, enable_metrics=True, enable_usage_metrics=True
+        ),
+        observers=[VoiceTelemetryObserver()],
     )
     failure_state = CallFailureState()
     duration_task: Optional[asyncio.Task[None]] = None
@@ -179,12 +203,15 @@ async def run_bot(
     def on_pipeline_error(_task: PipelineTask, frame: ErrorFrame) -> None:
         """Capture the first Pipecat pipeline error before teardown begins."""
         failure_state.capture(classify_pipeline_failure(frame))
+        trace.get_current_span().set_status(Status(StatusCode.ERROR))
+        event("call.pipeline_failed", failure_code=failure_state.failure.code)
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(_transport, _client) -> None:
         """Queue a first user instruction so the agent greets on connect."""
         nonlocal duration_task
         await mark_call_answered(call_log_id)
+        event("call.answered")
         context.add_message({"role": "user", "content": _GREETING_INSTRUCTION})
         await task.queue_frames([LLMRunFrame()])
         if (
@@ -219,10 +246,13 @@ async def run_bot(
                 await duration_task
         if recording_coordinator:
             try:
-                await recording_coordinator.persist()
+                with operation("recording.persist"):
+                    await recording_coordinator.persist()
             except Exception:  # noqa: BLE001 - cleanup must continue
                 logger.exception("Failed to persist recording artifact")
         failure = failure_state.failure
+        if failure:
+            telemetry_failure(failure.code)
         await end_call_tracking(
             call_log_id,
             status="failed" if failure else "completed",

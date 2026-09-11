@@ -490,3 +490,11 @@ For questions about the shared module:
 - Check individual module files for docstrings
 - Review examples in tool implementations
 - Refer to service layer for usage patterns
+
+## Operational observability
+
+See the [observability operator guide](../docs/05_operations/observability.md) for
+local dashboards, call correlation, privacy, alert rules and production rollout.
+The isolated worktree launcher provisions the monitoring stack. Backend and voice
+SDK exports are bounded and asynchronous; browser API correlation needs no public
+collector credentials.

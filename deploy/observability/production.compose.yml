@@ -1,0 +1,33 @@
+# Historical self-hosted production overlay. The launch profile is
+# docker-compose.observability.cloud.yml (Grafana Cloud + Langfuse Cloud).
+# Keep this fallback only for an explicitly approved self-hosted deployment;
+# it is not part of the minimal production path.
+services:
+  ingress:
+    image: caddy:2.11.4
+    ports: ["80:80", "443:443"]
+    environment:
+      OBSERVABILITY_DOMAIN: ${OBSERVABILITY_DOMAIN:?Required telemetry DNS name}
+      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN:?Required Grafana DNS name}
+      OTLP_USERNAME: ${OTLP_USERNAME:?Required telemetry service account}
+      OTLP_PASSWORD_HASH: ${OTLP_PASSWORD_HASH:?Required bcrypt hash, never a plaintext password}
+    volumes:
+      - ./deploy/observability/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [saas-dev-network]
+    restart: unless-stopped
+    mem_limit: 128m
+  grafana:
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN:?Required Grafana DNS name}
+      GF_SECURITY_COOKIE_SECURE: "true"
+  prometheus:
+    volumes:
+      - ${OBSERVABILITY_PROBE_TARGETS:?Set private file with deployed readiness targets}:/etc/prometheus/targets.json:ro
+  alertmanager:
+    volumes:
+      - ${ALERTMANAGER_CONFIG_FILE:?Set private notification receiver configuration}:/etc/alertmanager/config.yml:ro
+volumes:
+  caddy_data:
+  caddy_config:

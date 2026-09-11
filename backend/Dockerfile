@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies (including gobject/glib for LiveKit)
+# Install system dependencies required by the Pipecat audio/runtime packages.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
