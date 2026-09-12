@@ -9,7 +9,15 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from opentelemetry import trace
 from pydantic import BaseModel, Field
 from src.auth.dependencies import assert_platform_role
@@ -17,6 +25,7 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.leads.models import InterestLead, InterestLeadAck, InterestLeadCreate
 from src.leads.service import lead_service
+from src.notifications.lead_notifier import interest_lead_notifier
 from src.security.rate_limiter import limiter
 from src.security.turnstile import is_turnstile_configured, verify_turnstile_token
 
@@ -50,7 +59,9 @@ class LeadStatusUpdate(BaseModel):
 @limiter.limit("5/minute")
 @tracer.start_as_current_span("leads.routes.submit_lead")
 async def submit_interest_lead(
-    request: Request, body: InterestLeadCreate
+    request: Request,
+    body: InterestLeadCreate,
+    background_tasks: BackgroundTasks = None,
 ) -> InterestLeadAck:
     """Record visitor interest (no auth required).
 
@@ -76,12 +87,26 @@ async def submit_interest_lead(
                 detail="Captcha verification failed. Please try again.",
             )
 
-    _lead, error = await lead_service.submit_lead(body)
+    lead, error = await lead_service.submit_lead(body)
     if error:
         current_span.set_status(trace.Status(trace.StatusCode.ERROR, error))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
         )
+    if lead is not None:
+        if background_tasks is not None:
+            background_tasks.add_task(interest_lead_notifier.notify_interest_lead, lead)
+        else:
+            # Direct invocation is used by unit tests and internal callers that
+            # do not have FastAPI's background-task container.
+            try:
+                await interest_lead_notifier.notify_interest_lead(lead)
+            except Exception:
+                logger.exception(
+                    "Interest notification failed after lead %s was persisted",
+                    lead.id,
+                )
+        current_span.set_attribute("lead.notification_scheduled", True)
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return InterestLeadAck(received=True)
 

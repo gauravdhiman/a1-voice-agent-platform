@@ -22,6 +22,7 @@ export function PlatformNotificationSettingsForm() {
   const [settings, setSettings] = useState<PlatformNotificationSettings | null>(
     null,
   );
+  const [platformAdminEmail, setPlatformAdminEmail] = useState("");
   const [verificationFromEmail, setVerificationFromEmail] = useState("");
   const [verificationFromName, setVerificationFromName] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
@@ -52,6 +53,7 @@ export function PlatformNotificationSettingsForm() {
       }
 
       setSettings(settingsResult.data);
+      setPlatformAdminEmail(settingsResult.data.platform_admin_email || "");
       setVerificationFromEmail(settingsResult.data.verification_from_email || "");
       setVerificationFromName(settingsResult.data.verification_from_name || "");
       setTelegramChatId(settingsResult.data.telegram_chat_id || "");
@@ -69,6 +71,7 @@ export function PlatformNotificationSettingsForm() {
     setSuccess(null);
 
     const payload = {
+      platform_admin_email: platformAdminEmail || null,
       verification_from_email: verificationFromEmail || null,
       verification_from_name: verificationFromName || null,
       telegram_chat_id: telegramChatId || null,
@@ -151,6 +154,13 @@ export function PlatformNotificationSettingsForm() {
           ) : (
             <Badge variant="secondary">Verification off (set sender)</Badge>
           )}
+          {resendConfigured === true && platformAdminEmail.trim() ? (
+            <Badge className="bg-green-600 hover:bg-green-600/90">
+              Lead alerts active
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Lead alerts off (set admin email)</Badge>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           Signup email verification is enabled automatically when both From email
@@ -175,6 +185,20 @@ export function PlatformNotificationSettingsForm() {
         </Alert>
 
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="platform_admin_email">Platform admin email</Label>
+            <Input
+              id="platform_admin_email"
+              type="email"
+              placeholder="admin@yourdomain.com"
+              value={platformAdminEmail}
+              onChange={(e) => setPlatformAdminEmail(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              New demo and interest submissions are sent here when the Resend
+              API key and sender are configured.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="verification_from_email">From email</Label>
             <Input
@@ -201,9 +225,9 @@ export function PlatformNotificationSettingsForm() {
         <div>
           <h2 className="text-lg font-semibold">Telegram admin alerts</h2>
           <p className="text-sm text-muted-foreground">
-            Receive Telegram notifications when new users sign up or join via
-            invitation. Create a bot with @BotFather and use your chat or group
-            ID.
+            Receive Telegram notifications for new users, invitation joins, and
+            demo or interest submissions. Create a bot with @BotFather and use
+            your chat or group ID.
           </p>
         </div>
 
@@ -211,7 +235,8 @@ export function PlatformNotificationSettingsForm() {
           <div>
             <Label htmlFor="telegram_enabled">Enable Telegram notifications</Label>
             <p className="text-sm text-muted-foreground">
-              Send alerts to the configured chat when users join the platform.
+              Send alerts to the configured chat when users join the platform or
+              submit a demo or interest request.
             </p>
           </div>
           <Switch

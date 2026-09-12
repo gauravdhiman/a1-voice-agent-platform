@@ -111,7 +111,9 @@ ENCRYPTION_KEY=your-fernet-key
 
 Platform admins can override the verification **from email/name** at
 `/platform/notifications` without redeploying. The Resend API key remains
-environment-only.
+environment-only. The same page has a **Platform admin email** field for lead
+alerts. A lead email is sent only when that recipient, a sender, and
+`RESEND_API_KEY` are configured.
 
 ### Signup email verification (Resend)
 
@@ -135,14 +137,37 @@ Email/password signup uses a custom verification flow (not Supabase built-in mai
 When enabled in platform settings, new signups and invitation joins send a Telegram
 message to the configured chat ID. OAuth signups (Google/LinkedIn) and email signups
 both trigger alerts. Existing users accepting an invitation trigger a separate
-"joined via invitation" alert.
+"joined via invitation" alert. Public demo and interest-form submissions also
+send a lead summary to this chat when the bot token, chat ID, and enabled switch
+are all configured.
+
+### Interest lead alerts
+
+Successful `POST /api/v1/public/leads` submissions are persisted in
+`interest_leads` first and then queued as a FastAPI background task. The public
+acknowledgement is not delayed by provider calls, and provider failures never
+remove a lead or turn a successful submission into an error. The task delivers
+independently to each configured channel:
+
+- **Email** uses the durable `lead.interest_submitted` event, the Resend
+  provider, and an idempotency key based on the lead id. Failed deliveries are
+  retried by the existing notification scheduler. Notification-log metadata
+  stores the lead id, source, and sender identifiers only; retries rehydrate
+  the private lead row.
+- **Telegram** uses the encrypted bot token and configured chat from the same
+  settings page.
+
+If no channel is completely configured, the lead remains visible in the
+platform **Interests** tab and no outbound request is attempted. The email
+template includes the contact details and a link to the Interests tab; neither
+channel receives the Turnstile token.
 
 **Settings API (platform admin):**
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
 | GET | `/api/v1/notifications/admin/settings` | Read settings (bot token masked) |
-| PUT | `/api/v1/notifications/admin/settings` | Update sender + Telegram config |
+| PUT | `/api/v1/notifications/admin/settings` | Update lead-alert recipient, sender, and Telegram config |
 
 ---
 
@@ -221,6 +246,8 @@ This will create the following notification events:
 - `organization.invitation` - Organization invitation
 - `billing.payment_failed` - Payment failed notification
 - `tools.oauth_reauthorization_required` - Tool connection needs attention
+- `lead.interest_submitted` - Platform-admin alert for a demo or interest form
+  submission
 
 Low-credit alerts are sent to organization admins at 20%, 10%, and 5% of the
 current plan version's included credits. The threshold marker advances only
@@ -402,7 +429,7 @@ Response:
 
 ## Built-in Email Templates
 
-The system includes 9 beautiful, pre-built email templates:
+The system includes 11 beautiful, pre-built email templates:
 
 ### 1. Welcome Email (`user.signup`)
 
@@ -509,6 +536,36 @@ Alert when a payment fails.
 - `payment_method` - Payment method used
 - `failure_reason` - Reason for failure
 - `update_payment_url` - Link to update payment method
+
+### 10. Tool OAuth Reauthorization Required (`tools.oauth_reauthorization_required`)
+
+Alert organization administrators when a connected tool needs attention.
+
+**Variables:**
+
+- `user_name` - Administrator's name
+- `tool_name` - Tool connection name
+- `agent_name` - Agent using the tool
+- `organization_name` - Organization that owns the agent
+- `status_text` - Expiration or renewal status
+- `expires_at` - Token expiry time, when available
+- `reason` - Safe explanation of why reconnection is needed
+- `action_url` - Link to the agent's Tools tab
+
+### 11. Interest Lead Submitted (`lead.interest_submitted`)
+
+Notify the configured platform administrator when a visitor submits a demo or
+interest form.
+
+**Variables:**
+
+- `lead_name`, `business_name`, `lead_email`, `lead_phone` - Contact details
+- `vertical` - Business category, when provided
+- `message` - Visitor's request, when provided
+- `source` - Submission source (`request-demo` or `outcome-form`)
+- `demo_slug` - Demo attribution, when provided
+- `submitted_at` - UTC submission timestamp
+- `interests_url` - Link to the platform Interests tab
 
 ## Template Design
 

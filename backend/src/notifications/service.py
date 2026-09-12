@@ -502,14 +502,14 @@ class NotificationService:
 
             # Prepare sender details
             from_email = (
-                template.from_email
-                if template and template.from_email
-                else self.from_email
+                request.from_email
+                or (template.from_email if template and template.from_email else None)
+                or self.from_email
             )
             from_name = (
-                template.from_name
-                if template and template.from_name
-                else self.from_name
+                request.from_name
+                or (template.from_name if template and template.from_name else None)
+                or self.from_name
             )
 
             provider = NotificationProvider(self.email_provider.name)
@@ -544,7 +544,11 @@ class NotificationService:
                     status=NotificationStatus.PENDING,
                     provider=provider,
                     idempotency_key=request.idempotency_key,
-                    metadata=request.template_variables,
+                    metadata=(
+                        request.log_metadata
+                        if request.log_metadata is not None
+                        else request.template_variables
+                    ),
                 )
 
                 log_response = (
@@ -605,6 +609,7 @@ class NotificationService:
                         text_content=text_content,
                         from_email=from_email,
                         from_name=from_name,
+                        idempotency_key=request.idempotency_key,
                     )
                 )
 
@@ -709,6 +714,48 @@ class NotificationService:
                 continue
 
             try:
+                template_variables = row.get("metadata") or {}
+                log_metadata = None
+                from_email = None
+                from_name = None
+                if event_key == "lead.interest_submitted":
+                    # Lead alert logs intentionally retain only the lead id,
+                    # so retries rehydrate the current private lead row rather
+                    # than persisting contact details in notification metadata.
+                    lead_metadata = (
+                        template_variables
+                        if isinstance(template_variables, dict)
+                        else {}
+                    )
+                    lead_id_value = lead_metadata.get("lead_id")
+                    if not lead_id_value:
+                        summary.failed += 1
+                        logger.error(
+                            "Cannot retry interest notification %s: lead id is missing",
+                            row.get("id"),
+                        )
+                        continue
+                    from src.leads.service import lead_service
+                    from src.notifications.lead_notifier import (
+                        build_interest_lead_template_variables,
+                    )
+
+                    lead, lead_error = await lead_service.get_lead(
+                        UUID(str(lead_id_value))
+                    )
+                    if lead_error or lead is None:
+                        summary.failed += 1
+                        logger.error(
+                            "Cannot retry interest notification %s: %s",
+                            row.get("id"),
+                            lead_error or "lead not found",
+                        )
+                        continue
+                    template_variables = build_interest_lead_template_variables(lead)
+                    log_metadata = lead_metadata
+                    from_email = lead_metadata.get("from_email")
+                    from_name = lead_metadata.get("from_name")
+
                 response = await self.send_notification(
                     SendNotificationRequest(
                         event_key=event_key,
@@ -722,12 +769,15 @@ class NotificationService:
                         user_id=(
                             UUID(str(row["user_id"])) if row.get("user_id") else None
                         ),
-                        template_variables=row.get("metadata") or {},
+                        template_variables=template_variables,
                         template_id=(
                             UUID(str(row["notification_template_id"]))
                             if row.get("notification_template_id")
                             else None
                         ),
+                        from_email=from_email,
+                        from_name=from_name,
+                        log_metadata=log_metadata,
                         idempotency_key=key,
                     )
                 )

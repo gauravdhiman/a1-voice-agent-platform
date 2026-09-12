@@ -28,8 +28,8 @@ export default function PlatformNotificationsPage() {
           Notification Settings
         </h1>
         <p className="text-muted-foreground">
-          Configure verification email sender and Telegram alerts for new
-          signups and invitation joins.
+          Configure the lead-alert recipient, verification email sender, and
+          Telegram alerts for signups, invitation joins, and interest requests.
         </p>
       </div>
       <PlatformNotificationSettingsForm />

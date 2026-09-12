@@ -8,6 +8,7 @@ from uuid import UUID
 
 from opentelemetry import trace
 from src.leads.models import InterestLead, InterestLeadCreate
+
 from shared.organization.service import BaseOrganizationService
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,35 @@ class LeadService(BaseOrganizationService):
         if not rows:
             return None, "Could not record your request. Please try again."
         return InterestLead(**rows[0]), None
+
+    @tracer.start_as_current_span("leads.get_interest_lead")
+    async def get_lead(
+        self, lead_id: UUID
+    ) -> tuple[Optional[InterestLead], Optional[str]]:
+        """Load one lead for an internal notification retry.
+
+        Args:
+            lead_id: The private interest-lead identifier.
+
+        Returns:
+            Tuple of (lead, error). The error is safe for internal callers and
+            does not contain database details.
+        """
+        try:
+            response = (
+                self.supabase.table("interest_leads")
+                .select(_LEAD_COLUMNS)
+                .eq("id", str(lead_id))
+                .single()
+                .execute()
+            )
+        except Exception:
+            logger.error("Interest lead lookup failed", exc_info=True)
+            return None, "Could not load the interest lead."
+        row = getattr(response, "data", None)
+        if not row:
+            return None, "Interest lead not found."
+        return InterestLead(**row), None
 
     @tracer.start_as_current_span("leads.list_interest_leads")
     async def list_leads(

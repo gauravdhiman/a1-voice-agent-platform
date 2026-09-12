@@ -4,11 +4,18 @@
 
 The notification system delivers transactional emails to users for critical events like account verification, password resets, team invitations, subscription changes, and credit alerts. The system integrates with **Resend** for reliable email delivery.
 
-## Signup & Admin Alerts (2026-08)
+## Signup, Lead, and Admin Alerts (2026-09)
 
 - **Email verification**: Email/password signup sends a Resend verification link; sign-in is blocked until verified.
-- **Telegram alerts**: Platform admins can receive Telegram messages on new signups and invitation joins.
-- **Settings UI**: Platform admins configure verification sender and Telegram credentials at `/platform/notifications`.
+- **Lead alerts**: Public demo and interest-form submissions are saved in `interest_leads` and then delivered to the configured platform-admin email and/or Telegram chat.
+- **Telegram alerts**: Platform admins can receive Telegram messages on new signups, invitation joins, and lead submissions.
+- **Settings UI**: Platform admins configure the lead recipient, verification sender, and Telegram credentials at `/platform/notifications`.
+
+Lead delivery is channel-independent. Email requires a configured recipient,
+Resend API key, and sender. Telegram requires the enabled switch, bot token,
+and chat ID. Incomplete channels are skipped, and delivery failures do not
+reject the visitor's successful submission. Email uses the durable
+`lead.interest_submitted` event with lead-id idempotency and retry support.
 
 See also: [Notification System (core docs)](../../02_core_systems/notification_system.md) and [Auth RBAC overview](../authentication_rbac/overview.md).
 

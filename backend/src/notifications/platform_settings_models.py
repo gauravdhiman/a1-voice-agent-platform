@@ -7,7 +7,6 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
-
 from src.auth.models import AuthEmail
 
 PLATFORM_SETTINGS_SINGLETON_ID = UUID("00000000-0000-0000-0000-000000000001")
@@ -26,10 +25,7 @@ def verification_sender_configured(
 ) -> bool:
     """Return True when both verification sender fields are non-empty."""
     return bool(
-        from_email
-        and str(from_email).strip()
-        and from_name
-        and str(from_name).strip()
+        from_email and str(from_email).strip() and from_name and str(from_name).strip()
     )
 
 
@@ -37,6 +33,10 @@ class PlatformNotificationSettings(BaseModel):
     """Platform-wide notification configuration (singleton row)."""
 
     id: UUID
+    platform_admin_email: Optional[EmailStr] = Field(
+        None,
+        description="Recipient for platform-admin lead submission alerts",
+    )
     verification_from_email: Optional[EmailStr] = None
     verification_from_name: Optional[str] = Field(None, max_length=100)
     email_verification_active: bool = Field(
@@ -58,6 +58,10 @@ class PlatformNotificationSettings(BaseModel):
 class PlatformNotificationSettingsUpdate(BaseModel):
     """Update payload for platform notification settings."""
 
+    platform_admin_email: Optional[EmailStr] = Field(
+        None,
+        description="Recipient for platform-admin lead submission alerts",
+    )
     verification_from_email: Optional[EmailStr] = None
     verification_from_name: Optional[str] = Field(None, max_length=100)
     telegram_chat_id: Optional[str] = Field(None, max_length=100)

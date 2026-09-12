@@ -338,6 +338,31 @@ OAUTH_REAUTHORIZATION_REQUIRED_TEMPLATE = """
 """
 
 
+# Platform-admin interest lead alert template
+INTEREST_LEAD_SUBMITTED_TEMPLATE = """
+<h2>New interest request 📩</h2>
+<p>A visitor submitted a request through the {app_name} demo funnel.</p>
+
+<div class="info-box">
+    <p><strong>Name:</strong> {lead_name}</p>
+    <p><strong>Business:</strong> {business_name}</p>
+    <p><strong>Email:</strong> {lead_email}</p>
+    <p><strong>Phone:</strong> {lead_phone}</p>
+    <p><strong>Vertical:</strong> {vertical}</p>
+    <p><strong>Source:</strong> {source}</p>
+    <p><strong>Demo:</strong> {demo_slug}</p>
+    <p><strong>Submitted:</strong> {submitted_at}</p>
+</div>
+
+<p><strong>Message</strong></p>
+<p>{message}</p>
+
+<a href="{interests_url}" class="cta-button">Open interest leads</a>
+
+<p>Follow up with the visitor from the platform Interests tab.</p>
+"""
+
+
 # Template registry for easy access
 TEMPLATE_REGISTRY = {
     "user.signup": {
@@ -459,6 +484,24 @@ TEMPLATE_REGISTRY = {
             "expires_at",
             "reason",
             "action_url",
+            "app_name",
+        ],
+    },
+    "lead.interest_submitted": {
+        "name": "Interest Lead Submitted",
+        "subject": "New interest request from {lead_name}",
+        "html_content": INTEREST_LEAD_SUBMITTED_TEMPLATE,
+        "variables": [
+            "lead_name",
+            "business_name",
+            "lead_email",
+            "lead_phone",
+            "vertical",
+            "message",
+            "source",
+            "demo_slug",
+            "submitted_at",
+            "interests_url",
             "app_name",
         ],
     },

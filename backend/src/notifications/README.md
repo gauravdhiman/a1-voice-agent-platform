@@ -58,11 +58,19 @@ python scripts/seed_notification_events.py
 
 Platform admins: open **Platform → Notifications** (`/platform/notifications`) to set:
 
+- Platform-admin **recipient email** for demo and interest lead alerts
 - Verification email **from address** and **from name** (Resend)
 - Telegram **bot token**, **chat ID**, and enable/disable alerts
 
 OAuth attention reminders do not currently use these Telegram settings; they
 are sent through the durable email notification path.
+
+Public demo and interest-form submissions are retained in `interest_leads` and
+then notify the configured recipient and/or Telegram chat. Email requires the
+recipient, `RESEND_API_KEY`, and a valid sender. Telegram requires the enabled
+switch, bot token, and chat ID. An incomplete channel is skipped; a provider
+failure does not affect the visitor's successful submission. Email failures
+use the existing idempotent retry scheduler.
 
 ## Signup Verification Flow
 
@@ -95,6 +103,7 @@ Triggered on:
 - New email signup
 - New OAuth signup (Google/LinkedIn)
 - User joins via invitation (signup or existing user accepting invite)
+- Public demo and interest-form submissions
 
 Configure at `/platform/notifications`. Alerts are skipped when disabled or
 bot token/chat ID is missing.

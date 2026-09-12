@@ -44,10 +44,12 @@ class PlatformNotificationSettingsService:
         row = response.data
         token_encrypted = row.get("telegram_bot_token_encrypted")
         telegram_bot_id = self._read_telegram_bot_id(token_encrypted)
+        platform_admin_email = row.get("platform_admin_email")
         from_email = row.get("verification_from_email")
         from_name = row.get("verification_from_name")
         return PlatformNotificationSettings(
             id=UUID(row["id"]),
+            platform_admin_email=platform_admin_email,
             verification_from_email=from_email,
             verification_from_name=from_name,
             email_verification_active=verification_sender_configured(
@@ -80,6 +82,8 @@ class PlatformNotificationSettingsService:
         # the admin UI can clear previously saved values.
         fields_set = payload.model_fields_set
 
+        if "platform_admin_email" in fields_set:
+            update_data["platform_admin_email"] = payload.platform_admin_email
         if "verification_from_email" in fields_set:
             update_data["verification_from_email"] = payload.verification_from_email
         if "verification_from_name" in fields_set:
@@ -137,6 +141,11 @@ class PlatformNotificationSettingsService:
         """Return (from_email, from_name) for verification emails."""
         settings_row = await self.get_settings()
         return settings_row.verification_from_email, settings_row.verification_from_name
+
+    async def get_platform_admin_email(self) -> Optional[str]:
+        """Return the configured recipient for platform-admin lead alerts."""
+        settings_row = await self.get_settings()
+        return settings_row.platform_admin_email
 
     async def get_telegram_credentials(
         self,

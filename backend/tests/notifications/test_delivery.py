@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from src.leads.models import InterestLead
 from src.notifications.email_providers import EmailSendResult
 from src.notifications.models import NotificationEvent, SendNotificationRequest
 from src.notifications.service import NotificationService
@@ -123,6 +124,7 @@ async def test_failed_idempotency_key_retries_and_marks_delivery_sent(
 
     assert response.success is True
     assert len(provider.sent) == 1
+    assert provider.sent[0].idempotency_key == "low-credit:org:20:user"
     assert table.update.call_args_list[-1].args[0]["status"] == "sent"
 
 
@@ -166,3 +168,65 @@ async def test_retry_failed_notifications_reuses_the_original_log_key(
     assert result.succeeded == 1
     retry_request = service.send_notification.call_args.args[0]
     assert retry_request.idempotency_key == "low-credit:org:20:user"
+
+
+@pytest.mark.asyncio
+async def test_retry_interest_notification_rehydrates_lead_without_pii_metadata(
+    mock_supabase_client,
+):
+    """Lead retries use the private lead row rather than stored contact fields."""
+    with patch("src.notifications.service.supabase_config") as config, patch(
+        "src.notifications.service.settings"
+    ) as settings:
+        config.client = mock_supabase_client
+        settings.resend_from_email = "noreply@example.com"
+        settings.resend_from_name = "24x7 AI"
+        service = NotificationService(email_provider=FakeEmailProvider())
+
+    log_id = uuid4()
+    lead_id = uuid4()
+    table = mock_supabase_client.table.return_value
+    table.select.return_value.in_.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": str(log_id),
+                "status": "failed",
+                "last_attempt_at": None,
+                "notification_event_id": str(uuid4()),
+                "notification_template_id": None,
+                "organization_id": None,
+                "user_id": None,
+                "recipient_email": "admin@example.com",
+                "recipient_name": "Platform admin",
+                "metadata": {
+                    "kind": "interest_lead",
+                    "lead_id": str(lead_id),
+                    "source": "request-demo",
+                    "from_email": "alerts@example.com",
+                    "from_name": "24x7 AI",
+                },
+                "idempotency_key": f"interest-lead:{lead_id}:email",
+                "notification_events": {"event_key": "lead.interest_submitted"},
+            }
+        ]
+    )
+    service.send_notification = AsyncMock(return_value=MagicMock(success=True))
+    lead = InterestLead(
+        id=lead_id,
+        name="Sam Owner",
+        business_name="Bright Smiles Dental",
+        email="sam@example.com",
+        source="request-demo",
+        status="new",
+        created_at=datetime.now(timezone.utc),
+    )
+    with patch(
+        "src.leads.service.lead_service.get_lead",
+        new=AsyncMock(return_value=(lead, None)),
+    ):
+        result = await service.retry_failed_notifications()
+
+    assert result.succeeded == 1
+    request = service.send_notification.call_args.args[0]
+    assert request.template_variables["lead_name"] == "Sam Owner"
+    assert request.log_metadata["lead_id"] == str(lead_id)
