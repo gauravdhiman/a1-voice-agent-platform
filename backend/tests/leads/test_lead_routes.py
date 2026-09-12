@@ -5,13 +5,12 @@
 - Service maps storage rows to models and hides internals on failure.
 """
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
-
+from fastapi import BackgroundTasks, HTTPException
 from src.leads.models import InterestLeadCreate
 
 LEAD_ID = uuid4()
@@ -58,7 +57,15 @@ def _chain_client(response=None, explode=False):
         execute.side_effect = RuntimeError("db down")
     node = MagicMock()
     node.execute = execute
-    for method in ("select", "insert", "update", "order", "limit", "eq"):
+    for method in (
+        "select",
+        "insert",
+        "update",
+        "order",
+        "limit",
+        "eq",
+        "single",
+    ):
         getattr(node, method).return_value = node
     client = MagicMock()
     client.table.return_value = node
@@ -104,11 +111,69 @@ class TestSubmitInterestLeadRoute:
         with patch(
             "src.leads.routes.lead_service.submit_lead",
             new=AsyncMock(return_value=(Mock(), None)),
+        ), patch(
+            "src.leads.routes.interest_lead_notifier.notify_interest_lead",
+            new=AsyncMock(),
         ):
-            ack = await submit_interest_lead(
-                request=_request(), body=_submit_payload()
-            )
+            ack = await submit_interest_lead(request=_request(), body=_submit_payload())
             assert ack.received is True
+
+    @pytest.mark.asyncio
+    async def test_submit_schedules_notification_after_persisting_lead(self):
+        from src.leads.routes import submit_interest_lead
+
+        lead = Mock(id=LEAD_ID)
+        background_tasks = BackgroundTasks()
+        with patch(
+            "src.leads.routes.lead_service.submit_lead",
+            new=AsyncMock(return_value=(lead, None)),
+        ), patch(
+            "src.leads.routes.interest_lead_notifier.notify_interest_lead",
+            new=AsyncMock(),
+        ) as notify_mock:
+            ack = await submit_interest_lead(
+                request=_request(),
+                body=_submit_payload(source="outcome-form", demo_slug="dental-demo"),
+                background_tasks=background_tasks,
+            )
+            await background_tasks()
+
+        assert ack.received is True
+        notify_mock.assert_awaited_once_with(lead)
+
+    @pytest.mark.asyncio
+    async def test_submit_keeps_ack_when_notification_fails(self):
+        from src.leads.routes import submit_interest_lead
+
+        lead = Mock(id=LEAD_ID)
+        with patch(
+            "src.leads.routes.lead_service.submit_lead",
+            new=AsyncMock(return_value=(lead, None)),
+        ), patch(
+            "src.leads.routes.interest_lead_notifier.notify_interest_lead",
+            new=AsyncMock(side_effect=RuntimeError("provider unavailable")),
+        ):
+            ack = await submit_interest_lead(request=_request(), body=_submit_payload())
+
+        assert ack.received is True
+
+    @pytest.mark.asyncio
+    async def test_submit_rejects_invalid_turnstile(self):
+        from src.leads.routes import submit_interest_lead
+
+        with patch(
+            "src.leads.routes.is_turnstile_configured", return_value=True
+        ), patch(
+            "src.leads.routes.verify_turnstile_token",
+            new=AsyncMock(return_value=False),
+        ), patch(
+            "src.leads.routes.lead_service.submit_lead", new=AsyncMock()
+        ) as submit_mock:
+            with pytest.raises(HTTPException) as exc_info:
+                await submit_interest_lead(request=_request(), body=_submit_payload())
+
+        assert exc_info.value.status_code == 400
+        submit_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_submit_failure_is_safe_500(self):
@@ -119,9 +184,7 @@ class TestSubmitInterestLeadRoute:
             new=AsyncMock(return_value=(None, "Could not record your request.")),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await submit_interest_lead(
-                    request=_request(), body=_submit_payload()
-                )
+                await submit_interest_lead(request=_request(), body=_submit_payload())
             assert exc_info.value.status_code == 500
             assert "sam@example.com" not in str(exc_info.value.detail)
 
@@ -154,9 +217,24 @@ class TestAdminLeadRoutes:
             assert result is sentinel
 
     @pytest.mark.asyncio
+    async def test_list_storage_failure_maps_to_500(self):
+        from src.leads.routes import list_interest_leads
+
+        with patch(
+            "src.leads.routes.lead_service.list_leads",
+            new=AsyncMock(return_value=([], "Could not load interest leads.")),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await list_interest_leads(
+                    request=_request(),
+                    user_data=(uuid4(), _platform_admin_profile()),
+                )
+
+        assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
     async def test_regular_user_cannot_change_status(self):
-        from src.leads.routes import mark_interest_lead_status
-        from src.leads.routes import LeadStatusUpdate
+        from src.leads.routes import LeadStatusUpdate, mark_interest_lead_status
 
         with pytest.raises(HTTPException) as exc_info:
             await mark_interest_lead_status(
@@ -169,8 +247,7 @@ class TestAdminLeadRoutes:
 
     @pytest.mark.asyncio
     async def test_missing_lead_maps_to_404(self):
-        from src.leads.routes import mark_interest_lead_status
-        from src.leads.routes import LeadStatusUpdate
+        from src.leads.routes import LeadStatusUpdate, mark_interest_lead_status
 
         with patch(
             "src.leads.routes.lead_service.mark_status",
@@ -184,6 +261,24 @@ class TestAdminLeadRoutes:
                     user_data=(uuid4(), _platform_admin_profile()),
                 )
             assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_mark_status_returns_updated_lead(self):
+        from src.leads.routes import LeadStatusUpdate, mark_interest_lead_status
+
+        lead = Mock(id=LEAD_ID)
+        with patch(
+            "src.leads.routes.lead_service.mark_status",
+            new=AsyncMock(return_value=(lead, None)),
+        ):
+            result = await mark_interest_lead_status(
+                LEAD_ID,
+                LeadStatusUpdate(status="contacted"),
+                request=_request(),
+                user_data=(uuid4(), _platform_admin_profile()),
+            )
+
+        assert result is lead
 
 
 class TestLeadService:
@@ -226,6 +321,21 @@ class TestLeadService:
         assert error is None
         assert [lead.status for lead in leads] == ["contacted"]
         client.table.assert_called_with("interest_leads")
+
+    @pytest.mark.asyncio
+    async def test_get_lead_returns_private_row(self):
+        from src.leads.service import LeadService
+
+        service = LeadService()
+        service.supabase_config = Mock()
+        service.supabase_config.is_configured.return_value = True
+        service.supabase_config.service_client = _chain_client(_lead_row())
+
+        lead, error = await service.get_lead(LEAD_ID)
+
+        assert error is None
+        assert lead is not None
+        assert lead.id == LEAD_ID
 
     @pytest.mark.asyncio
     async def test_mark_status_missing_row(self):

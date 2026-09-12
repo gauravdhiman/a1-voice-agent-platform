@@ -33,6 +33,7 @@ async def seed_notification_events():
         "credits.purchased": NotificationCategory.BILLING,
         "organization.invitation": NotificationCategory.ORGANIZATION,
         "billing.payment_failed": NotificationCategory.BILLING,
+        "lead.interest_submitted": NotificationCategory.SYSTEM,
     }
 
     seeded_count = 0

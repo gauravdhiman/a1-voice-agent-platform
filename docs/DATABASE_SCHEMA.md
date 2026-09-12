@@ -1342,16 +1342,18 @@ Stores one-time tokens for Resend-delivered email verification during signup.
 
 ### platform_notification_settings
 
-Singleton table for platform-admin notification configuration (verification sender + Telegram alerts).
+Singleton table for platform-admin notification configuration (lead-alert
+recipient, verification sender, and Telegram alerts).
 
 | Column                         | Type         | Constraints              | Description                                      |
 | ------------------------------ | ------------ | ------------------------ | ------------------------------------------------ |
 | id                             | UUID         | PRIMARY KEY              | Fixed singleton ID (`00000000-0000-0000-0000-000000000001`) |
+| platform_admin_email           | VARCHAR(320) | NULLABLE                 | Recipient for platform-admin demo and interest-lead alerts |
 | verification_from_email        | VARCHAR(255) | NULLABLE                 | Resend sender for verification emails            |
 | verification_from_name         | VARCHAR(100) | NULLABLE                 | Display name for verification emails             |
 | telegram_bot_token_encrypted   | TEXT         | NULLABLE                 | Fernet-encrypted Telegram bot token              |
 | telegram_chat_id               | VARCHAR(100) | NULLABLE                 | Telegram chat/group ID for admin alerts          |
-| telegram_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Enable/disable Telegram signup alerts            |
+| telegram_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Enable/disable Telegram signup and lead alerts  |
 | updated_by                     | UUID         | NULLABLE                 | Last platform admin who updated settings         |
 | created_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Creation timestamp                               |
 | updated_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Last update timestamp                            |
@@ -2020,6 +2022,8 @@ erDiagram
 85. `20260906000003` - Merge the main-line organization-tool-visibility head with the controlled-SaaS auth/invitation head. This revision changes no tables or data and restores one connected release-order head for `alembic upgrade head`.
 86. `20260906000004` - Add `call_logs.source_type`, `source_url`, and `source_domain` for phone/web traceability, including indexes for source filtering. Browser session tokens carry sanitized source metadata from the host page; configured embed allowlists are checked against the host-page request origin before a token is issued.
 87. `20260909000001` - Persist the organization-scoped role selected for an invitation and apply it atomically when the invitation is claimed. New invitations support `regular_user` (default) or `org_admin`; legacy invitations remain regular-user invitations.
+88. `20260911000001` - Add optional `platform_notification_settings.platform_admin_email` for the recipient of platform-admin demo and interest-lead alerts.
+89. `20260911000002` - Seed the enabled `lead.interest_submitted` notification event used by public demo and interest-form alerts.
 
 ---
 

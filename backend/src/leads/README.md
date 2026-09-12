@@ -16,6 +16,13 @@ by the demo workflow, never the reverse.
   migration `20260903000001_add_interest_leads.py` and
   `docs/DATABASE_SCHEMA.md` (`interest_leads`).
 
+After a successful insert, the route queues a platform-admin alert in the
+FastAPI background task. Email and Telegram delivery are independent and use
+the recipient, sender, Resend, and Telegram settings documented in
+`backend/src/notifications/README.md`; incomplete channels are skipped and
+delivery failures do not change the public acknowledgement or remove the
+stored lead.
+
 ## Tests
 
 `backend/tests/leads/test_lead_routes.py` — route gating (regular users

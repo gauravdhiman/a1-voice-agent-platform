@@ -30,6 +30,7 @@ def _settings_row(**overrides):
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "id": str(PLATFORM_SETTINGS_SINGLETON_ID),
+        "platform_admin_email": "admin@example.com",
         "verification_from_email": "verify@example.com",
         "verification_from_name": "Platform",
         "telegram_chat_id": "-100123",
@@ -59,6 +60,7 @@ class TestPlatformNotificationSettingsService:
         settings = await settings_service.get_settings()
 
         assert settings.verification_from_email == "verify@example.com"
+        assert settings.platform_admin_email == "admin@example.com"
         assert settings.telegram_bot_token_configured is True
 
     @pytest.mark.asyncio
@@ -130,6 +132,7 @@ class TestPlatformNotificationSettingsService:
         )
 
         payload = PlatformNotificationSettingsUpdate(
+            platform_admin_email=None,
             verification_from_email=None,
             verification_from_name=None,
             telegram_chat_id=None,
@@ -140,6 +143,7 @@ class TestPlatformNotificationSettingsService:
 
         update_data = table_mock.update.call_args.args[0]
         assert update_data["verification_from_email"] is None
+        assert update_data["platform_admin_email"] is None
         assert update_data["verification_from_name"] is None
         assert update_data["telegram_chat_id"] is None
         assert update_data["telegram_bot_token_encrypted"] is None
@@ -166,6 +170,7 @@ class TestPlatformNotificationSettingsService:
 
         update_data = table_mock.update.call_args.args[0]
         assert "verification_from_email" not in update_data
+        assert "platform_admin_email" not in update_data
         assert "verification_from_name" not in update_data
         assert "telegram_chat_id" not in update_data
         assert "telegram_bot_token_encrypted" not in update_data

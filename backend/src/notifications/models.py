@@ -188,6 +188,19 @@ class SendNotificationRequest(BaseModel):
         None, description="Variables to inject into template"
     )
     template_id: Optional[UUID] = Field(None, description="Override default template")
+    from_email: Optional[EmailStr] = Field(
+        None, description="Optional sender email override for this delivery"
+    )
+    from_name: Optional[str] = Field(
+        None, max_length=100, description="Optional sender name override"
+    )
+    log_metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Safe metadata persisted with the delivery log. When omitted, "
+            "template variables are retained for retry compatibility."
+        ),
+    )
     idempotency_key: Optional[str] = Field(
         None,
         max_length=255,
