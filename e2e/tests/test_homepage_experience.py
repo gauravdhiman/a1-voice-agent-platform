@@ -11,10 +11,10 @@ def test_homepage_theme_motion_and_demo_entry(page: Page, base_url: str):
     expect(page.get_by_role("heading", level=1)).to_have_text(
         "Never miss a call.Never miss a customer."
     )
-    page.get_by_role("button", name="Switch to day mode").click()
+    page.get_by_role("switch", name="Switch to day mode").click()
     expect(page.locator('[data-theme="day"]')).to_be_visible()
     page.reload()
-    expect(page.get_by_role("button", name="Switch to night mode")).to_be_visible()
+    expect(page.get_by_role("switch", name="Switch to night mode")).to_be_visible()
     page.get_by_role("button", name="Pause ambient animation").click()
     expect(
         page.get_by_role("button", name="Resume ambient animation")

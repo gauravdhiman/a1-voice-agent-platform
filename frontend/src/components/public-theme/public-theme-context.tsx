@@ -1,78 +1,71 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+  ThemeProvider,
+  useTheme as useSiteTheme,
+} from "@/contexts/theme-context";
 
-/** Shared public theme: night ink blue or day paper blue. */
+/** Public-pages name for the shared theme: night ink blue or day paper blue. */
 export type PublicTheme = "day" | "night";
 
-/** Single storage key shared by the homepage and every public page, so the
- * visitor's day/night choice persists across the whole marketing site. */
-export const PUBLIC_THEME_STORAGE_KEY = "247ai-home-theme";
+/**
+ * The single site-wide theme lives in `contexts/theme-context` under the
+ * "theme" key ("light"/"dark"/"system"). This constant keeps that canonical
+ * key importable from public-pages code and tests.
+ */
+export { THEME_STORAGE_KEY as PUBLIC_THEME_STORAGE_KEY } from "@/contexts/theme-context";
+
+export { ThemeProvider };
 
 interface PublicThemeValue {
   theme: PublicTheme;
   toggleTheme: () => void;
 }
 
-const PublicThemeContext = createContext<PublicThemeValue | null>(null);
-
+/** Reads the visitor's explicit stored choice, if any. */
+function readStoredChoice(): string | null {
+  try {
+    return localStorage.getItem("theme");
+  } catch {
+    return null;
+  }
+}
 /**
- * Holds the visitor's public-site theme. Reads the persisted choice on
- * mount (night until then, matching server render) and syncs across tabs.
- * Storage failures fall back to memory-only switching.
+ * Public-pages view of the single site-wide theme. An explicit choice made
+ * anywhere (public toggle, dashboard settings) is honored everywhere:
+ * "dark" shows night, "light" shows day. With no explicit choice yet, the
+ * public pages keep their historical night default while the dashboard
+ * follows the OS — the moment anyone toggles, both surfaces move together.
+ *
+ * Before hydration the night default is shown so the server render and
+ * first paint match without a flash.
  */
-export function PublicThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<PublicTheme>("night");
+export function usePublicTheme(): PublicThemeValue {
+  const { theme, resolvedTheme, setTheme } = useSiteTheme();
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(PUBLIC_THEME_STORAGE_KEY);
-      if (saved === "day" || saved === "night") setTheme(saved);
-    } catch {
-      /* Storage may be unavailable; the switch still works in memory. */
-    }
-    const onStorage = (event: StorageEvent) => {
-      if (
-        event.key === PUBLIC_THEME_STORAGE_KEY &&
-        (event.newValue === "day" || event.newValue === "night")
-      ) {
-        setTheme(event.newValue);
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    setHydrated(true);
   }, []);
+
+  let night = true;
+  if (hydrated) {
+    const stored = readStoredChoice();
+    if (stored === "light" || stored === "dark") {
+      night = resolvedTheme === "dark";
+    } else if (theme === "dark") {
+      night = true;
+    } else if (theme === "light") {
+      night = false;
+    }
+    // Stored "system" (or nothing, or unreadable storage) with in-memory
+    // "system" keeps the night showcase default.
+  }
 
   const toggleTheme = useCallback(() => {
-    setTheme((previous) => {
-      const next = previous === "night" ? "day" : "night";
-      try {
-        localStorage.setItem(PUBLIC_THEME_STORAGE_KEY, next);
-      } catch {
-        /* Optional persistence. */
-      }
-      return next;
-    });
-  }, []);
+    setTheme(night ? "light" : "dark");
+  }, [night, setTheme]);
 
-  return (
-    <PublicThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </PublicThemeContext.Provider>
-  );
-}
-
-/** Reads the shared public theme. Must be used inside PublicThemeProvider. */
-export function usePublicTheme(): PublicThemeValue {
-  const value = useContext(PublicThemeContext);
-  if (!value)
-    throw new Error("usePublicTheme must be used inside PublicThemeProvider");
-  return value;
+  return { theme: night ? "night" : "day", toggleTheme };
 }

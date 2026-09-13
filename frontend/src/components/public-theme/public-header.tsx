@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Moon, Sun } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { SITE_NAME } from "@/lib/site-config";
 import { usePublicTheme } from "./public-theme-context";
+import { ThemeSwitch } from "./theme-switch";
 import styles from "./public-theme.module.css";
 
 /**
@@ -38,17 +39,7 @@ export function PublicHeader() {
         <Link href="/#pricing">Pricing</Link>
       </nav>
       <div className={styles.headerActions}>
-        <button
-          className={styles.themeSwitch}
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === "night" ? "day" : "night"} mode`}
-        >
-          <Sun size={14} />
-          <span className={styles.switchTrack}>
-            <span />
-          </span>
-          <Moon size={13} />
-        </button>
+        <ThemeSwitch dark={theme === "night"} onToggle={toggleTheme} />
         <Link className={styles.signIn} href="/auth/signin">
           Sign in <ArrowUpRight size={13} />
         </Link>

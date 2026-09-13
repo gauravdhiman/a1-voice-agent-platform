@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { PublicThemeProvider, usePublicTheme } from "./public-theme-context";
+import { ThemeProvider, useOptionalTheme } from "@/contexts/theme-context";
+import { usePublicTheme } from "./public-theme-context";
 import styles from "./public-theme.module.css";
 
 /**
@@ -28,9 +29,12 @@ function ThemedShell({
 }
 
 /**
- * Shared public-site theme root. Provides the persisted day/night choice
- * (same storage key as the homepage) and scopes the atmosphere tokens to
- * the wrapped marketing pages. Dashboard styling is unaffected.
+ * Shared public-site theme root. Consumes the single site-wide theme from
+ * the root layout provider (same state as the dashboard) and scopes the
+ * atmosphere tokens to the wrapped marketing pages — never nesting a
+ * second provider there. Standalone renders (component tests) self-provide
+ * so pages keep rendering outside the full app shell. Dashboard styling is
+ * unaffected.
  */
 export function PublicThemeRoot({
   children,
@@ -39,9 +43,13 @@ export function PublicThemeRoot({
   children: ReactNode;
   className?: string;
 }) {
+  const outer = useOptionalTheme();
+  if (outer) {
+    return <ThemedShell className={className}>{children}</ThemedShell>;
+  }
   return (
-    <PublicThemeProvider>
+    <ThemeProvider>
       <ThemedShell className={className}>{children}</ThemedShell>
-    </PublicThemeProvider>
+    </ThemeProvider>
   );
 }

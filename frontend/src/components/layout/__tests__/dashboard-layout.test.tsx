@@ -41,9 +41,9 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({}),
 }));
 
-// Mock the theme toggle so we don't need a real ThemeProvider in tests.
-vi.mock("@/components/ui/theme-toggle", () => ({
-  ThemeToggle: () => <div data-testid="theme-toggle-stub" />,
+// Mock the shared theme switch so we don't need a real ThemeProvider in tests.
+vi.mock("@/components/public-theme/theme-switch", () => ({
+  SiteThemeSwitch: () => <div data-testid="theme-toggle-stub" />,
 }));
 
 const mockOpenProductTour = vi.fn();

@@ -145,34 +145,8 @@
   gap: 27px;
   font-size: 12px;
 }
-.themeSwitch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  background: none;
-  border: 0;
-  padding: 10px 0;
-}
-.switchTrack {
-  width: 30px;
-  height: 16px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 3px;
-}
-.switchTrack span {
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
-  display: block;
-  border-radius: 50%;
-  transform: translateX(13px);
-  transition: transform 0.3s;
-}
-.home[data-theme="day"] .switchTrack span {
-  transform: translateX(0);
-}
+/* The header switch now comes from the shared public-theme module so the
+ * control looks identical on every page; these local copies are retired. */
 .signIn,
 .headerCta {
   display: flex;

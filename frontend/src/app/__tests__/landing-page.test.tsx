@@ -4,6 +4,7 @@ import React from "react";
 import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "../page";
+import { ThemeProvider } from "@/contexts/theme-context";
 
 vi.mock("@/components/home/particle-field", () => ({
   ParticleField: () => <canvas aria-hidden="true" />,
@@ -23,7 +24,11 @@ afterEach(() => {
 
 describe("Homepage experience", () => {
   it("leads with business outcomes and real demo entry points", () => {
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     expect(screen.getAllByText("24x7 AI").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("heading", {
@@ -51,7 +56,11 @@ describe("Homepage experience", () => {
   });
 
   it("covers one use case per chapter and generalizes tooling in the journey", () => {
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     expect(
       screen.getByRole("heading", { name: /routine questions/i }),
     ).toBeTruthy();
@@ -68,7 +77,11 @@ describe("Homepage experience", () => {
   });
 
   it("lists industries and names specific tools only in integrations", () => {
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     expect(
       screen.getByRole("heading", { name: /take the call/i }),
     ).toBeTruthy();
@@ -88,7 +101,11 @@ describe("Homepage experience", () => {
   });
 
   it("links live demos from the header and covers six integrations", () => {
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     const demoLinks = screen.getAllByRole("link", { name: "Live demos" });
     expect(demoLinks.length).toBeGreaterThanOrEqual(2);
     expect(
@@ -106,19 +123,27 @@ describe("Homepage experience", () => {
   });
 
   it("changes theme, persists the choice, and restores it on return", () => {
-    const { container, unmount } = render(<LandingPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Switch to day mode" }));
+    const { container, unmount } = render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Switch to day mode" }));
     expect(container.querySelector("[data-theme='day']")).toBeTruthy();
-    expect(localStorage.getItem("247ai-home-theme")).toBe("day");
+    expect(localStorage.getItem("theme")).toBe("light");
     unmount();
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     expect(
-      screen.getByRole("button", { name: "Switch to night mode" }),
+      screen.getByRole("switch", { name: "Switch to night mode" }),
     ).toBeTruthy();
     fireEvent.click(
-      screen.getByRole("button", { name: "Switch to night mode" }),
+      screen.getByRole("switch", { name: "Switch to night mode" }),
     );
-    expect(localStorage.getItem("247ai-home-theme")).toBe("night");
+    expect(localStorage.getItem("theme")).toBe("dark");
   });
 
   it("keeps theme switching usable when storage is unavailable", () => {
@@ -128,17 +153,25 @@ describe("Homepage experience", () => {
     const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
       throw new Error("Storage denied");
     });
-    render(<LandingPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Switch to day mode" }));
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Switch to day mode" }));
     expect(
-      screen.getByRole("button", { name: "Switch to night mode" }),
+      screen.getByRole("switch", { name: "Switch to night mode" }),
     ).toBeTruthy();
     read.mockRestore();
     write.mockRestore();
   });
 
   it("provides a reversible pause control", () => {
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Pause ambient animation" }),
     );
@@ -158,7 +191,11 @@ describe("Homepage experience", () => {
   });
 
   it("opens mobile navigation and dismisses it on selection or Escape", () => {
-    render(<LandingPage />);
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
     fireEvent.click(screen.getByLabelText("Open navigation"));
     expect(screen.getByLabelText("Mobile navigation")).toBeTruthy();
     fireEvent.keyDown(screen.getByLabelText("Mobile navigation"), {

@@ -13,6 +13,12 @@
   --button: #d1e9fe;
   --button-ink: #111d2c;
   --glow: #3779b821;
+  /* Shared switch control: explicit mappings so similarly-named tokens on
+   * other surfaces (shadcn --muted/--accent are backgrounds, not text)
+   * can never wash the control out. */
+  --switch-muted: var(--muted);
+  --switch-line: var(--line);
+  --switch-knob: var(--accent);
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -134,7 +140,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted);
+  color: var(--switch-muted, #8a94a6);
   background: none;
   border: 0;
   padding: 10px 0;
@@ -142,21 +148,23 @@
 .switchTrack {
   width: 30px;
   height: 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--switch-line, #8a94a6);
   border-radius: 20px;
   padding: 3px;
 }
 .switchTrack span {
   width: 8px;
   height: 8px;
-  background: var(--accent);
+  background: var(--switch-knob, #8a94a6);
   display: block;
   border-radius: 50%;
-  transform: translateX(13px);
+  transform: translateX(0);
   transition: transform 0.3s;
 }
-.root[data-theme="day"] .switchTrack span {
-  transform: translateX(0);
+/* Knob position is driven by the button's own state (not the page theme),
+ * so the control matches on public pages and in the dashboard alike. */
+.themeSwitch[data-dark="true"] .switchTrack span {
+  transform: translateX(13px);
 }
 .signIn {
   display: flex;

@@ -24,10 +24,8 @@ import {
   Plug,
 } from "lucide-react";
 import { SITE_NAME, SITE_SALES_EMAIL } from "@/lib/site-config";
-import {
-  PublicThemeProvider,
-  usePublicTheme,
-} from "@/components/public-theme/public-theme-context";
+import { usePublicTheme } from "@/components/public-theme/public-theme-context";
+import { ThemeSwitch } from "@/components/public-theme/theme-switch";
 import { ParticleField } from "./particle-field";
 import styles from "./home-page.module.css";
 
@@ -85,18 +83,10 @@ const industries = [
   },
 ];
 
-/** Homepage visual concept. Uses the shared public theme so the visitor's
- * day/night choice persists across the homepage, industry pages, demos,
- * request-demo, and auth pages. Dashboard styling is unaffected. */
+/** Homepage visual concept. Uses the single site-wide theme (shared with
+ * the dashboard), so one toggle is honored everywhere. Dashboard styling
+ * is unaffected. */
 export function HomePage() {
-  return (
-    <PublicThemeProvider>
-      <HomePageInner />
-    </PublicThemeProvider>
-  );
-}
-
-function HomePageInner() {
   const { theme, toggleTheme } = usePublicTheme();
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -159,17 +149,7 @@ function HomePageInner() {
           <a href="#pricing">Pricing</a>
         </nav>
         <div className={styles.headerActions}>
-          <button
-            className={styles.themeSwitch}
-            onClick={toggleTheme}
-            aria-label={`Switch to ${theme === "night" ? "day" : "night"} mode`}
-          >
-            <Sun size={14} />
-            <span className={styles.switchTrack}>
-              <span />
-            </span>
-            <Moon size={13} />
-          </button>
+          <ThemeSwitch dark={theme === "night"} onToggle={toggleTheme} />
           <Link className={styles.signIn} href="/auth/signin">
             Sign in <ArrowUpRight size={13} />
           </Link>
