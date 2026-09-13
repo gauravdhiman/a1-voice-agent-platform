@@ -9,8 +9,10 @@ testimonials, live activity, or performance statistics.
 
 ## Scope and entry points
 
-- Only the homepage is redesigned. Other public routes and the dashboard keep
-  their existing design.
+- Only the homepage carries the particle journey. The day/night choice and
+  the atmosphere tokens are shared with the other public pages (see
+  [public theme](public-theme.md)). Other public routes keep their own
+  layouts and the dashboard keeps its existing design.
 - `frontend/src/app/page.tsx` renders `components/home/home-page.tsx`.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
 - Alex and Jordan retain their existing appointment and service-request demo

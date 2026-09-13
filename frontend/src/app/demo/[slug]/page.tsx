@@ -23,6 +23,9 @@ import { resolveDemoVisualizer } from "@/components/agents-ui/demo-visualizer-co
 import type { LevelMediaManager } from "@/lib/level-media-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
+import { PublicHeader } from "@/components/public-theme/public-header";
+import pt from "@/components/public-theme/public-theme.module.css";
 import {
   demoPublicService,
   type DemoAgentPublic,
@@ -128,6 +131,14 @@ function useTrackVolumeBands(
 }
 
 export default function DemoAgentPage() {
+  return (
+    <PublicThemeRoot>
+      <DemoAgentView />
+    </PublicThemeRoot>
+  );
+}
+
+function DemoAgentView() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
   const router = useRouter();
@@ -554,22 +565,18 @@ export default function DemoAgentPage() {
   }
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-gradient-to-br from-slate-50 via-background to-sky-50/60 dark:from-slate-950 dark:via-background dark:to-slate-950">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-24 -top-32 h-80 w-80 rounded-full bg-sky-200/50 blur-3xl dark:bg-sky-950/30"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-32 top-24 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl dark:bg-indigo-950/20"
-      />
+    <div className={pt.page}>
+      <div className={pt.glow} aria-hidden="true" />
+      <PublicHeader />
 
-      <div className="relative mx-auto flex min-h-dvh max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-        <header className="flex items-center justify-between gap-4">
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <div className="flex items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-background/80 px-3 py-1.5 font-medium shadow-sm backdrop-blur dark:border-slate-800">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              24x7 AI <span className="font-normal text-muted-foreground">/ Demo</span>
+            <span
+              className={pt.smallDetail}
+              style={{ fontSize: 10, letterSpacing: "0.12em" }}
+            >
+              INTERACTIVE VOICE DEMO
             </span>
             {agent.organization_name && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-transparent px-2 py-1">
@@ -585,16 +592,17 @@ export default function DemoAgentPage() {
             Back to home
             <ArrowLeft className="h-3.5 w-3.5" />
           </Link>
-        </header>
+        </div>
 
         <main className="grid flex-1 items-start gap-7 py-7 lg:grid-cols-[minmax(0,1fr)_minmax(390px,460px)] lg:items-center lg:gap-16 lg:py-10">
           <section className="order-2 max-w-2xl lg:order-1">
             <div className="max-w-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-                Interactive voice demo
-              </p>
-              <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-950 dark:text-white sm:text-6xl">
-                Try {agent.name} live.
+              <p className={pt.eyebrow}>INTERACTIVE VOICE DEMO</p>
+              <h1
+                className={pt.title}
+                style={{ fontSize: "clamp(40px, 5vw, 64px)", marginTop: 20 }}
+              >
+                Try {agent.name} <span>live.</span>
               </h1>
               <p className="mt-5 hidden max-w-lg text-base leading-7 text-muted-foreground sm:text-lg lg:block">
                 {description}
@@ -607,22 +615,26 @@ export default function DemoAgentPage() {
             </div>
 
             <div className="mt-8 grid max-w-xl gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200/80 bg-background/70 p-4 shadow-sm backdrop-blur dark:border-slate-800">
+              <div className={`${pt.panel} p-4`}>
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
                   <Mic className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <p className="mt-4 text-sm font-semibold">Talk naturally</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Explain what you need in your own words and let the agent guide the conversation.
+                  Explain what you need in your own words and let the agent
+                  guide the conversation.
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200/80 bg-background/70 p-4 shadow-sm backdrop-blur dark:border-slate-800">
+              <div className={`${pt.panel} p-4`}>
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300">
                   <Database className="h-4 w-4" aria-hidden="true" />
                 </div>
-                <p className="mt-4 text-sm font-semibold">See the handoff happen</p>
+                <p className="mt-4 text-sm font-semibold">
+                  See the handoff happen
+                </p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  The agent completes its configured follow-up so you can see the outcome for yourself.
+                  The agent completes its configured follow-up so you can see
+                  the outcome for yourself.
                 </p>
               </div>
             </div>
@@ -649,10 +661,10 @@ export default function DemoAgentPage() {
 
           <aside className="order-1 w-full lg:order-2 lg:sticky lg:top-8">
             <Card
-              className="gap-0 overflow-hidden border-slate-200/90 bg-card/95 py-0 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-800"
+              className="gap-0 overflow-hidden py-0"
               data-demo-visualizer={visualizer}
             >
-              <CardHeader className="border-b border-slate-200/80 px-5 pb-5 pt-5 dark:border-slate-800 sm:px-6">
+              <CardHeader className="border-b border-border px-5 pb-5 pt-5 sm:px-6">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-primary">
                     Start here
@@ -669,7 +681,8 @@ export default function DemoAgentPage() {
                 </CardTitle>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   <span className="hidden lg:inline">
-                    Take the role of a prospective customer and let the agent handle the next step.
+                    Take the role of a prospective customer and let the agent
+                    handle the next step.
                   </span>
                   <span className="lg:hidden">{description}</span>
                 </p>
@@ -677,7 +690,9 @@ export default function DemoAgentPage() {
               <CardContent className="space-y-4 px-5 py-5 sm:px-6">
                 {demoCallLimitReached ? (
                   <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3.5 text-sm text-destructive">
-                    <p className="font-semibold">This demo is currently unavailable</p>
+                    <p className="font-semibold">
+                      This demo is currently unavailable
+                    </p>
                     <p className="mt-1 text-xs leading-5">
                       {DEMO_TRIAL_EXHAUSTED_MESSAGE}
                     </p>
@@ -700,10 +715,16 @@ export default function DemoAgentPage() {
                         Public demo — use fictional details
                       </h3>
                       <p className="mt-1.5 text-xs leading-5 text-amber-900/80 dark:text-amber-100/80">
-                        This agent writes the information you share to a public demo data store that other visitors may see. Use dummy details only—never real names, email addresses, phone numbers, physical addresses, or confidential information.
+                        This agent writes the information you share to a public
+                        demo data store that other visitors may see. Use dummy
+                        details only—never real names, email addresses, phone
+                        numbers, physical addresses, or confidential
+                        information.
                       </p>
                       <p className="mt-2 text-xs leading-5 text-amber-900/80 dark:text-amber-100/80">
-                        If you provide an email, we&apos;ll try to send a confirmation. Use a secondary inbox or Gmail alias such as{" "}
+                        If you provide an email, we&apos;ll try to send a
+                        confirmation. Use a secondary inbox or Gmail alias such
+                        as{" "}
                         <code className="break-words rounded bg-amber-100 px-1 py-0.5 text-[0.8em] dark:bg-amber-900/70">
                           yourname+demo@gmail.com
                         </code>
@@ -716,7 +737,10 @@ export default function DemoAgentPage() {
                         className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 underline decoration-amber-500/60 underline-offset-4 transition hover:text-amber-950 dark:text-amber-200 dark:hover:text-white"
                       >
                         Learn how Gmail aliases work
-                        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        <ExternalLink
+                          className="h-3.5 w-3.5"
+                          aria-hidden="true"
+                        />
                       </a>
                     </div>
                   </div>
@@ -735,7 +759,8 @@ export default function DemoAgentPage() {
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-amber-400 text-amber-700 accent-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-amber-50 dark:focus:ring-offset-amber-950"
                     />
                     <span>
-                      I understand this is a public demo and will use dummy information.
+                      I understand this is a public demo and will use dummy
+                      information.
                     </span>
                   </label>
                 </section>

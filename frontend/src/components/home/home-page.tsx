@@ -24,6 +24,10 @@ import {
   Plug,
 } from "lucide-react";
 import { SITE_NAME, SITE_SALES_EMAIL } from "@/lib/site-config";
+import {
+  PublicThemeProvider,
+  usePublicTheme,
+} from "@/components/public-theme/public-theme-context";
 import { ParticleField } from "./particle-field";
 import styles from "./home-page.module.css";
 
@@ -81,22 +85,25 @@ const industries = [
   },
 ];
 
-/** Homepage-only visual concept. Keeps the public demo and concierge funnel intact;
- * theme preference is scoped to this page so other platform surfaces are unaffected. */
+/** Homepage visual concept. Uses the shared public theme so the visitor's
+ * day/night choice persists across the homepage, industry pages, demos,
+ * request-demo, and auth pages. Dashboard styling is unaffected. */
 export function HomePage() {
-  const [theme, setTheme] = useState<"day" | "night">("night");
+  return (
+    <PublicThemeProvider>
+      <HomePageInner />
+    </PublicThemeProvider>
+  );
+}
+
+function HomePageInner() {
+  const { theme, toggleTheme } = usePublicTheme();
   const [paused, setPaused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chapter, setChapter] = useState(0);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("247ai-home-theme");
-      if (saved === "day" || saved === "night") setTheme(saved);
-    } catch {
-      /* Storage may be unavailable; the switch still works in memory. */
-    }
     const sections =
       root.current?.querySelectorAll<HTMLElement>("[data-chapter]");
     if (!sections || typeof IntersectionObserver === "undefined") return;
@@ -113,15 +120,6 @@ export function HomePage() {
     return () => observer.disconnect();
   }, []);
 
-  const toggleTheme = () => {
-    const next = theme === "night" ? "day" : "night";
-    setTheme(next);
-    try {
-      localStorage.setItem("247ai-home-theme", next);
-    } catch {
-      /* Optional persistence. */
-    }
-  };
   const closeMenu = () => setMenuOpen(false);
 
   return (
