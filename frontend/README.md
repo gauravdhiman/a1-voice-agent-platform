@@ -2,6 +2,15 @@
 
 Next.js frontend for the multi-tenant SaaS platform.
 
+## Public homepage
+
+The `/` homepage uses the isolated `src/components/home/` visual system:
+business-led scroll chapters, a decorative particle canvas, day/night themes,
+and links to the existing public demos and concierge request flow. The theme
+is saved under `247ai-home-theme`; it does not change dashboard or other public
+page styling. See [homepage experience](../docs/02_features/homepage-experience.md)
+for accessibility, performance, and validation details.
+
 Platform-admin plan configuration is consolidated under **Plan Catalog**. Its
 **Usage pricing** tab shows the finite system-wide voice-minute and monthly
 phone-number rates, with URL-deep-linkable tabs and explanations for each

@@ -10,6 +10,8 @@ Central index for all documentation in the AI Voice Agent Platform.
 
 ## 📖 Documentation Structure
 
+- **[Homepage experience](02_features/homepage-experience.md)** — Home-only visual design, particle storytelling, day/night themes, and validation.
+
 ### 00_getting_started/ - Getting Started
 
 New to the platform? Start here.

@@ -1,87 +1,176 @@
-/**
- * Tests for the public landing page (/).
- *
- * Contract: the landing page must present production-ready, business-oriented
- * messaging for the "24x7 AI" brand:
- *   - Brand is "24x7 AI" (never the stale "VoiceAI" name).
- *   - Hero headline sells the business outcome ("Never miss a call...").
- *   - An industries section ("Built for businesses that live on the phone")
- *     replaces the fabricated customer logos and testimonials.
- *   - Pricing is pilot-anchored ("Request a Demo", plans from $79/mo) with
- *     no full price table (removed $0 / $99 / Custom that could drift from
- *     Stripe). Controlled-SaaS launch: concierge pilots first, self-serve
- *     catalog later.
- *   - Removed fabricated social proof (Acme Corp, TechStart, fake names).
- */
+/** Public homepage contracts: business messaging, working funnel links, scoped
+ * persistent themes, mobile navigation, and an explicit ambient-motion control. */
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-
+import { fireEvent, render, screen, cleanup } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "../page";
 
-describe("Landing page (public marketing messaging)", () => {
-  it("renders the 24x7 AI brand in the header and footer", () => {
-    render(<LandingPage />);
-    // Brand appears in the header nav and the footer.
-    expect(screen.getAllByText("24x7 AI").length).toBeGreaterThan(0);
-    // The stale hardcoded name must be gone.
-    expect(screen.queryByText(/VoiceAI/i)).not.toBeInTheDocument();
-  });
+vi.mock("@/components/home/particle-field", () => ({
+  ParticleField: () => <canvas aria-hidden="true" />,
+}));
 
-  it("leads with a business-outcome hero headline", () => {
+beforeEach(() => {
+  const values = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+  });
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("Homepage experience", () => {
+  it("leads with business outcomes and real demo entry points", () => {
     render(<LandingPage />);
+    expect(screen.getAllByText("24x7 AI").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /never miss a call/i,
+        name: /never miss a call\.\s*never miss a customer/i,
       }),
-    ).toBeInTheDocument();
-    // The "no coding required" differentiator is present in the hero.
-    expect(screen.getAllByText(/no coding required/i).length).toBeGreaterThan(
-      0,
+    ).toBeTruthy();
+    expect(screen.getByText(/no coding required/i)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /meet your ai front desk/i })
+        .getAttribute("href"),
+    ).toBe("/request-demo");
+    expect(
+      screen.getByRole("link", { name: /talk to alex/i }).getAttribute("href"),
+    ).toBe("/demo/pleasant-pediatric-appointments");
+    expect(
+      screen
+        .getByRole("link", { name: /talk to jordan/i })
+        .getAttribute("href"),
+    ).toBe("/demo/copper-ridge-service-request");
+    expect(screen.queryByText(/acme corp|techstart|sarah chen/i)).toBeNull();
+    expect(screen.getByText(/monthly plans from \$79/i)).toBeTruthy();
+    expect(screen.queryByText(/\$99|\$0/)).toBeNull();
+  });
+
+  it("covers one use case per chapter and generalizes tooling in the journey", () => {
+    render(<LandingPage />);
+    expect(
+      screen.getByRole("heading", { name: /routine questions/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: /you're booked/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: /close up shop/i }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/syncs everything to google calendar/i),
+    ).toBeNull();
+    expect(screen.queryByText(/logged to google sheets/i)).toBeNull();
+  });
+
+  it("lists industries and names specific tools only in integrations", () => {
+    render(<LandingPage />);
+    expect(
+      screen.getByRole("heading", { name: /take the call/i }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /dental & medical/i })
+        .getAttribute("href"),
+    ).toBe("/dental");
+    expect(
+      screen
+        .getByRole("link", { name: /hvac, plumbing & roofing/i })
+        .getAttribute("href"),
+    ).toBe("/hvac");
+    expect(
+      screen.getByRole("heading", { name: /plugs into the tools/i }),
+    ).toBeTruthy();
+  });
+
+  it("links live demos from the header and covers six integrations", () => {
+    render(<LandingPage />);
+    const demoLinks = screen.getAllByRole("link", { name: "Live demos" });
+    expect(demoLinks.length).toBeGreaterThanOrEqual(2);
+    expect(
+      demoLinks.some((link) => link.getAttribute("href") === "#demos"),
+    ).toBe(true);
+    for (const name of [
+      /business calendar/i,
+      /records & crm/i,
+      /your business number/i,
+      /your website/i,
+      /rest of your stack/i,
+    ]) {
+      expect(screen.getByRole("heading", { name })).toBeTruthy();
+    }
+  });
+
+  it("changes theme, persists the choice, and restores it on return", () => {
+    const { container, unmount } = render(<LandingPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Switch to day mode" }));
+    expect(container.querySelector("[data-theme='day']")).toBeTruthy();
+    expect(localStorage.getItem("247ai-home-theme")).toBe("day");
+    unmount();
+    render(<LandingPage />);
+    expect(
+      screen.getByRole("button", { name: "Switch to night mode" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch to night mode" }),
     );
+    expect(localStorage.getItem("247ai-home-theme")).toBe("night");
   });
 
-  it("shows an industries section instead of fabricated logos/testimonials", () => {
-    render(<LandingPage />);
-    expect(
-      screen.getByText(/built for businesses that live on the phone/i),
-    ).toBeInTheDocument();
-    // Fabricated social proof removed.
-    expect(screen.queryByText(/acme corp/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/techstart/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/sarah chen/i)).not.toBeInTheDocument();
-  });
-
-  it("features outcome-driven value props", () => {
-    render(<LandingPage />);
-    expect(screen.getByText(/answer every call, 24x7/i)).toBeInTheDocument();
-    expect(screen.getByText(/book & manage appointments/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/follow up & win customers back/i),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps pricing pilot-anchored with no full price table", () => {
-    render(<LandingPage />);
-    expect(screen.getAllByText(/request a demo/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/\$79/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/\$99/)).toBeNull();
-    expect(screen.queryByText(/\$0/)).toBeNull();
-  });
-
-  it("keeps the 'Talk to Sales' CTA legible on the gradient by default", () => {
-    render(<LandingPage />);
-    const talkToSales = screen.getByRole("button", {
-      name: /talk to sales/i,
+  it("keeps theme switching usable when storage is unavailable", () => {
+    const read = vi.spyOn(localStorage, "getItem").mockImplementation(() => {
+      throw new Error("Storage denied");
     });
+    const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new Error("Storage denied");
+    });
+    render(<LandingPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Switch to day mode" }));
+    expect(
+      screen.getByRole("button", { name: "Switch to night mode" }),
+    ).toBeTruthy();
+    read.mockRestore();
+    write.mockRestore();
+  });
 
-    // Regression: the outline variant supplies a bg-background fill (white in
-    // light mode). Combined with text-white, the label was invisible until
-    // hover (hover:bg-blue-700). The CTA must carry its own translucent white
-    // fill + white text so it reads on the blue->cyan gradient immediately.
-    expect(talkToSales.className).not.toContain("bg-background");
-    expect(talkToSales.className).toContain("bg-white/10");
-    expect(talkToSales.className).toContain("text-white");
+  it("provides a reversible pause control", () => {
+    render(<LandingPage />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Pause ambient animation" }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Resume ambient animation" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resume ambient animation" }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Pause ambient animation" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("opens mobile navigation and dismisses it on selection or Escape", () => {
+    render(<LandingPage />);
+    fireEvent.click(screen.getByLabelText("Open navigation"));
+    expect(screen.getByLabelText("Mobile navigation")).toBeTruthy();
+    fireEvent.keyDown(screen.getByLabelText("Mobile navigation"), {
+      key: "Escape",
+    });
+    expect(screen.queryByLabelText("Mobile navigation")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Open navigation"));
+    fireEvent.click(
+      screen
+        .getByLabelText("Mobile navigation")
+        .querySelector('a[href="#demos"]')!,
+    );
+    expect(screen.queryByLabelText("Mobile navigation")).toBeNull();
   });
 });
