@@ -669,7 +669,11 @@ function DemoAgentView() {
                   <span className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-primary">
                     Start here
                   </span>
-                  <span className="rounded-full bg-muted px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
+                    <span
+                      className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"
+                      aria-hidden="true"
+                    />
                     Live voice
                   </span>
                 </div>
