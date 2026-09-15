@@ -60,19 +60,19 @@ const industries = [
     name: "Restaurants & cafés",
     detail:
       "Reservations, party bookings and order questions, handled mid-rush.",
-    href: "/request-demo",
+    href: "/restaurants",
     number: "03",
   },
   {
     name: "Salons, spas & clinics",
     detail: "Chairs filled with bookings and reminders that cut no-shows.",
-    href: "/request-demo",
+    href: "/salons",
     number: "04",
   },
   {
     name: "Real estate & local services",
     detail: "Every enquiry answered, viewings and quotes booked on the spot.",
-    href: "/request-demo",
+    href: "/real-estate",
     number: "05",
   },
   {

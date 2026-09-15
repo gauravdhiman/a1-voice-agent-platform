@@ -17,9 +17,9 @@ testimonials, live activity, or performance statistics.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
 - Alex and Jordan retain their existing appointment and service-request demo
   routes. The homepage itself does not request microphone access or start calls.
-- Dental and home-service links retain `/dental` and `/hvac`. Other industry
-  tiles (restaurants, salons, real estate, general) link to `/request-demo`
-  until dedicated guides exist — the section says so explicitly.
+- Industry tiles link to dedicated guides: `/dental`, `/hvac`,
+  `/restaurants`, `/salons`, and `/real-estate`. The general tile links to
+  `/request-demo` — the section says so explicitly.
 - The journey copy names tool categories ("your business calendar", "your
   records"), never specific vendors. Specific tools are named only in the
   `#integrations` section: business calendar, email, records and CRM, your
