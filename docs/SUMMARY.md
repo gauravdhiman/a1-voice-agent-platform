@@ -6,7 +6,7 @@ Central index for all documentation in the AI Voice Agent Platform.
 
 - **[Sprint Board](SPRINT-BOARD.md)** — Current status, in-progress work, and voice-focused backlog (reconciled 2026-06-19).
 - **[Feature Priority List](PRIORITY-LIST.md)** — Feature backlog with effort/impact and sprint planning.
-- **Product direction: Voice-only.** Chat agents (F3) and multi-channel (F14) are deprioritized.
+- **Product direction: Voice-first.** Chat agents (F3) and general multi-channel (F14) remain deprioritized; browser-based AI avatars are an evaluated, separately priced extension documented in [AI Avatar + Voice Evolution Analysis](05_business/AI_AVATAR_VOICE_EVOLUTION_ANALYSIS.md).
 
 ## 📖 Documentation Structure
 

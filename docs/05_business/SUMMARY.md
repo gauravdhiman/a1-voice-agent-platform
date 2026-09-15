@@ -2,6 +2,12 @@
 
 This directory contains comprehensive documentation for the AI Voice Agent Platform.
 
+## Decision memos
+
+- [AI Avatar + Voice Evolution Analysis](AI_AVATAR_VOICE_EVOLUTION_ANALYSIS.md) -
+  feasibility, architecture options, cost model, safety requirements, and
+  go-to-market recommendation for adding browser-based AI avatars
+
 ## Documentation Structure
 
 ### 01_business/
