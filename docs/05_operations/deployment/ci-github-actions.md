@@ -135,12 +135,13 @@ two manual approvals from racing production migrations or service updates.
 Configure required reviewers on the GitHub `production` environment. Store
 these there:
 
-| Secret                           | Required | Purpose                                      |
-| -------------------------------- | -------- | -------------------------------------------- |
-| `ENV_PROD`                       | Yes      | Complete `.env.prod` contents                |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes      | Google Workload Identity Federation provider |
-| `GCP_SERVICE_ACCOUNT`            | Yes      | Production deployment service account        |
-| `OCI_SSH_KEY`                    | Optional | Production voice-ws VM private key           |
+| Secret                           | Required | Purpose                                                        |
+| -------------------------------- | -------- | -------------------------------------------------------------- |
+| `ENV_PROD`                       | Yes      | Production `.env.prod` contents                                |
+| `NEXT_PUBLIC_POSTHOG_KEY`        | Yes      | PostHog project token injected into the production frontend build |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes      | Google Workload Identity Federation provider                   |
+| `GCP_SERVICE_ACCOUNT`            | Yes      | Production deployment service account                          |
+| `OCI_SSH_KEY`                    | Optional | Production voice-ws VM private key                             |
 
 Optional production environment variables can override the defaults used by the
 deployment scripts: `PRODUCTION_GCP_PROJECT_ID`, `PRODUCTION_GCP_REGION`,

@@ -3,7 +3,8 @@
  *
  * Design rules (controlled-SaaS launch):
  * - Keyless-safe: every function is a no-op unless
- *   `NEXT_PUBLIC_POSTHOG_KEY` is set. Local/dev never emits.
+ *   `NEXT_PUBLIC_POSTHOG_KEY` is set. Local/staging templates leave the key
+ *   empty by default; use a separate project token when collecting there.
  * - No PII ever: property keys that could carry identity
  *   (email, name, phone, …) are stripped before capture. Funnel
  *   properties are slugs, sources, and booleans only.
