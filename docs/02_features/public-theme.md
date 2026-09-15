@@ -55,7 +55,20 @@ dashboard. Dashboard styling is otherwise unaffected.
 - `/dental` and `/hvac` render the shared `IndustryPage` template on the
   public theme. Copy, JSON-LD, and CTA targets are unchanged.
 - `/demo/[slug]` keeps all call logic; only the header, hero, and card
-  chrome moved to the theme. The amber public-demo notice is untouched.
+  chrome moved to the theme, plus example opener lines per agent so
+  first-time callers know what to say. The amber public-demo notice is
+  untouched.
+- `/demo/[slug]/outcome` leads with the proven results (always expanded,
+  plain language: what was saved, where it went, what the tool confirmed),
+  then the business value, star rating, and the interest form. Jargon
+  ("handoff", "workflow", "provider mutation") stays out of headings.
+  Layout order is deliberate: confirmation banner with a "See what was
+  saved" anchor, then the rating strip merged into the conversion panel
+  (both in the main view), then the value strip, then the full captured
+  details at `#call-results`. Star ratings dual-write: one PII-free row
+  per session in the platform (`demo_feedback`, summarized on the admin
+  Interests page) plus the PostHog funnel event; the interest form writes
+  platform leads visible in the same admin surface.
 - `/request-demo`, `/auth/signin`, and `/auth/signup` keep their forms and
   copy; the split brand panels use theme tokens instead of fixed dark
   gradients and stock photos.

@@ -81,12 +81,17 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
 
   if (submitted) {
     return (
-      <div className="text-center py-4 space-y-3" data-testid="outcome-interest-success">
+      <div
+        className="text-center py-4 space-y-3"
+        data-testid="outcome-interest-success"
+      >
         <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto" />
-        <p className="font-semibold text-slate-900">Request received</p>
-        <p className="text-sm text-slate-600">
-          Thanks — we will reach out within one business day to set this up
-          for your business.
+        <p className="font-semibold text-slate-900 dark:text-white">
+          Request received
+        </p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Thanks — we will reach out within one business day to set this up for
+          your business.
         </p>
       </div>
     );
@@ -95,16 +100,20 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="font-semibold text-slate-900">
+        <h3 className="font-semibold text-slate-900 dark:text-white">
           Want this answering your business calls?
         </h3>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Leave your details and we will configure it for you — usually live
           within 48 hours.
         </p>
       </div>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-3">
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          noValidate
+          className="space-y-3"
+        >
           {submitError && (
             <Alert variant="destructive">
               <AlertDescription>{submitError}</AlertDescription>
@@ -118,7 +127,11 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
                 <FormItem>
                   <FormLabel>Your name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Jane Smith" autoComplete="name" {...field} />
+                    <Input
+                      placeholder="Jane Smith"
+                      autoComplete="name"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -188,7 +201,9 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
             className="w-full shadow-lg shadow-primary/15"
             disabled={form.formState.isSubmitting}
           >
-            {form.formState.isSubmitting ? "Sending…" : "Get this for my business"}
+            {form.formState.isSubmitting
+              ? "Sending…"
+              : "Get this for my business"}
           </Button>
           <TurnstileWidget
             onVerify={setCaptchaToken}

@@ -29,6 +29,8 @@ from src.notifications.lead_notifier import interest_lead_notifier
 from src.security.rate_limiter import limiter
 from src.security.turnstile import is_turnstile_configured, verify_turnstile_token
 
+from shared.voice_agents.demo_feedback_service import demo_feedback_service
+
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
@@ -46,6 +48,33 @@ class LeadStatusUpdate(BaseModel):
         pattern="^(new|contacted|invited|converted|dropped)$",
         description="Target follow-up status",
     )
+
+
+class DemoFeedbackSummaryItem(BaseModel):
+    """Aggregate rating counts for one demo slug."""
+
+    demo_slug: str
+    count: int
+    average_rating: Optional[float] = None
+
+
+class DemoFeedbackRecordItem(BaseModel):
+    """One stored visitor rating, safe for platform admins."""
+
+    id: str
+    session_id: str
+    agent_id: str
+    organization_id: str
+    demo_slug: str
+    rating: int
+    created_at: str
+
+
+class DemoFeedbackOverview(BaseModel):
+    """Per-demo aggregates plus the newest ratings."""
+
+    summary: list[DemoFeedbackSummaryItem]
+    recent: list[DemoFeedbackRecordItem]
 
 
 @public_leads_router.post(
@@ -174,3 +203,47 @@ async def mark_interest_lead_status(
         )
     assert lead is not None
     return lead
+
+
+@admin_leads_router.get(
+    "/demo-feedback",
+    response_model=DemoFeedbackOverview,
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Platform admin only"},
+    },
+)
+@tracer.start_as_current_span("leads.routes.list_demo_feedback")
+async def list_demo_feedback(
+    request: Request,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> DemoFeedbackOverview:
+    """Aggregate demo ratings plus the newest rows (platform admins only)."""
+    del request
+    _user_id, profile = user_data
+    assert_platform_role(profile, "platform_admin")
+    summaries = await demo_feedback_service.summary()
+    records = await demo_feedback_service.recent(limit=limit)
+    return DemoFeedbackOverview(
+        summary=[
+            DemoFeedbackSummaryItem(
+                demo_slug=item.demo_slug,
+                count=item.count,
+                average_rating=item.average_rating,
+            )
+            for item in summaries
+        ],
+        recent=[
+            DemoFeedbackRecordItem(
+                id=record.id,
+                session_id=record.session_id,
+                agent_id=record.agent_id,
+                organization_id=record.organization_id,
+                demo_slug=record.demo_slug,
+                rating=record.rating,
+                created_at=record.created_at,
+            )
+            for record in records
+        ],
+    )

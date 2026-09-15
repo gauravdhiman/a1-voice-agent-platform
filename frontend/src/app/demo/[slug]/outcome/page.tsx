@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  ArrowDown,
   ArrowLeft,
-  Building2,
+  ArrowUpRight,
   CalendarDays,
   CheckCircle2,
-  ClipboardCheck,
   Clock3,
   ContactRound,
   ExternalLink,
@@ -17,14 +17,16 @@ import {
   MailCheck,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Wrench,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DemoFeedback } from "@/components/demo/demo-feedback";
 import { OutcomeInterest } from "@/components/demo/outcome-interest";
+import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
+import { PublicHeader } from "@/components/public-theme/public-header";
+import { PublicFooter } from "@/components/public-theme/public-footer";
+import pt from "@/components/public-theme/public-theme.module.css";
 import {
   demoPublicService,
   type DemoOutcome,
@@ -56,7 +58,10 @@ function labelForField(name: string): string {
   );
 }
 
-function valueForField(name: string, value: string | number | boolean | null): string {
+function valueForField(
+  name: string,
+  value: string | number | boolean | null,
+): string {
   if (value === null || value === "") return "—";
   if (name === "duration_minutes" && typeof value === "number") {
     return `${value} minutes`;
@@ -73,6 +78,16 @@ function valueForField(name: string, value: string | number | boolean | null): s
   return String(value);
 }
 
+/** Where the result landed, in the business owner's own words. */
+function destinationLabel(action: DemoOutcomeAction): string {
+  if (action.provider === "google_sheets") return "your spreadsheet";
+  if (action.provider === "hubspot") return "your CRM";
+  if (action.provider === "google_calendar") return "your business calendar";
+  if (action.provider === "gmail" || action.provider === "resend")
+    return "your inbox";
+  return "your business tools";
+}
+
 function providerLabel(action: DemoOutcomeAction): string {
   if (action.provider === "google_sheets") return "Google Sheets";
   if (action.provider === "hubspot") return "HubSpot CRM";
@@ -84,27 +99,27 @@ function providerLabel(action: DemoOutcomeAction): string {
 function actionTitle(action: DemoOutcomeAction): string {
   if (action.action_type === "email_delivery") {
     if (action.status === "succeeded") return "Email confirmation sent";
-    if (action.status === "pending") return "Email confirmation awaiting confirmation";
-    return "Email confirmation not completed";
+    if (action.status === "pending") return "Email waiting to send";
+    return "Email not sent";
   }
   if (action.action_type === "lead_capture") {
-    if (action.status === "succeeded") return "Service inquiry captured";
-    if (action.status === "pending") return "Service inquiry awaiting confirmation";
-    return "Service inquiry details captured";
+    if (action.status === "succeeded") return "New service request saved";
+    if (action.status === "pending") return "Service request waiting";
+    return "Service request not saved";
   }
-  if (action.status === "succeeded") return "Appointment booking confirmed";
-  if (action.status === "pending") return "Appointment booking awaiting confirmation";
-  return "Appointment details captured";
+  if (action.status === "succeeded") return "Appointment booked";
+  if (action.status === "pending") return "Appointment waiting";
+  return "Appointment not booked";
 }
 
-function outcomeHeading(outcome: DemoOutcome): string {
+function outcomeHeading(outcome: DemoOutcome): [string, string] {
   if (outcome.status === "completed") {
-    return `See what ${outcome.agent_name} completed.`;
+    return ["That call just did", "real work."];
   }
   if (outcome.status === "needs_attention") {
-    return `Review what ${outcome.agent_name} captured.`;
+    return ["Almost done.", "One thing needs a look."];
   }
-  return `Review the outcome from ${outcome.agent_name}.`;
+  return ["Nothing got saved", "on that call."];
 }
 
 function actionIcon(action: DemoOutcomeAction) {
@@ -138,130 +153,153 @@ function statusCopy(outcome: DemoOutcome): {
 } {
   if (outcome.status === "completed") {
     return {
-      title: "The handoff is complete",
+      title: "Confirmed by your tools",
       description:
-        "Here is the exact information the agent captured and the provider it updated.",
-      tone: "border-emerald-200 bg-emerald-50/90 text-emerald-950",
+        "Every result below really happened on the call and was confirmed back. Nothing here is a mockup.",
+      tone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100",
     };
   }
   if (outcome.status === "needs_attention") {
     return {
-      title: "The conversation needs attention",
+      title: "Needs your attention",
       description:
-        "The receipt shows what was captured and where the workflow stopped. Nothing is presented as complete unless the provider confirmed it.",
-      tone: "border-amber-200 bg-amber-50/90 text-amber-950",
+        "Here is what got captured and exactly where it stopped. Anything unconfirmed is labeled as such.",
+      tone: "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100",
     };
   }
   return {
-    title: "No provider action was completed",
+    title: "No result to show",
     description:
-      "The call ended before the agent confirmed a lead or appointment mutation. Try the demo again and let the agent finish the handoff.",
-      tone: "border-slate-200 bg-white/85 text-slate-800",
+      "The call ended before anything was saved. Give the agent the final details and try again.",
+    tone: "border-white/10 bg-white/5 text-slate-600 dark:text-slate-300",
   };
+}
+
+function statusPill(action: DemoOutcomeAction): {
+  label: string;
+  className: string;
+} {
+  if (action.status === "succeeded") {
+    return {
+      label: "Done",
+      className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    };
+  }
+  if (action.status === "pending") {
+    return {
+      label: "Waiting",
+      className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    };
+  }
+  return {
+    label: "Didn't go through",
+    className: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  };
+}
+
+function statusTile(action: DemoOutcomeAction): string {
+  if (action.status === "succeeded")
+    return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
+  if (action.status === "pending")
+    return "bg-amber-500/15 text-amber-600 dark:text-amber-300";
+  return "bg-rose-500/15 text-rose-600 dark:text-rose-300";
 }
 
 function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
   const Icon = actionIcon(action);
   const isSuccess = action.status === "succeeded";
-  const isPending = action.status === "pending";
+  const pill = statusPill(action);
   const configuredResultUrl = isSuccess
     ? action.action_type === "email_delivery"
       ? null
       : safeHttpsUrl(action.public_result_url)
     : null;
-  const resultUrl = configuredResultUrl;
   const resultLinkLabel = `Open ${providerLabel(action)} result`;
   const capturedFieldEntries = Object.entries(action.captured_fields);
   return (
-    <Card className="overflow-hidden border-slate-200/90 bg-white/95 shadow-xl shadow-slate-900/5 backdrop-blur">
-      <CardHeader className="border-b border-slate-200/80 bg-slate-50/70 pb-4">
-        <div className="flex items-start gap-3">
-          <div
-            className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-              isSuccess
-                ? "bg-emerald-100 text-emerald-700"
-                : isPending
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-rose-100 text-rose-700"
-            }`}
-          >
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-lg text-slate-950">{actionTitle(action)}</CardTitle>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
-                  isSuccess
-                    ? "bg-emerald-100 text-emerald-700"
-                    : isPending
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-rose-100 text-rose-700"
-                }`}
-              >
-                {isSuccess ? "Confirmed" : isPending ? "Needs confirmation" : "Not completed"}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-600">
-              Destination: <span className="font-medium text-slate-950">{providerLabel(action)}</span>
-            </p>
-          </div>
+    <div className={pt.panel} style={{ padding: 28, overflow: "hidden" }}>
+      <div className="flex items-start gap-4">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${statusTile(action)}`}
+        >
+          <Icon className="h-5 w-5" />
         </div>
-      </CardHeader>
-      <CardContent className="space-y-5 p-5 text-slate-900">
-        {capturedFieldEntries.length > 0 ? (
-          <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Captured details
-            </p>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              {capturedFieldEntries.map(([name, value]) => (
-                <div key={name} className="rounded-xl border border-slate-200/80 bg-slate-50/55 px-3 py-2.5">
-                  <dt className="text-xs text-slate-500">{labelForField(name)}</dt>
-                  <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-slate-900">
-                    {valueForField(name, value)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3
+              style={{
+                fontSize: 20,
+                fontWeight: 400,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              {actionTitle(action)}
+            </h3>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pill.className}`}
+            >
+              {pill.label}
+            </span>
           </div>
-        ) : null}
+          <p className="mt-1.5 text-sm" style={{ color: "var(--muted)" }}>
+            Saved to {destinationLabel(action)}{" "}
+            <span style={{ opacity: 0.75 }}>via {providerLabel(action)}</span>
+          </p>
+        </div>
+      </div>
 
-        <div className="border-t pt-4">
-          <div className="flex items-start gap-2 text-sm">
-            {isSuccess ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-            ) : (
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            )}
-            <div>
-              <p className="font-medium">Provider result</p>
-              <p className="mt-0.5 text-slate-600">
-                {String(action.provider_result.message ||
-                  (isSuccess ? "The provider confirmed the mutation." : "The provider did not confirm the mutation."))}
-              </p>
-              {resultUrl && (
-                <Button
-                  asChild
-                  size="sm"
-                  variant="outline"
-                  className="mt-3 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-950"
-                >
-                  <a
-                    href={resultUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                    {resultLinkLabel}
-                  </a>
-                </Button>
-              )}
-            </div>
-          </div>
+      {capturedFieldEntries.length > 0 ? (
+        <div className="mt-6">
+          <p className={pt.smallDetail}>WHAT WAS COLLECTED</p>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            {capturedFieldEntries.map(([name, value]) => (
+              <div
+                key={name}
+                className="rounded-xl border px-3 py-2.5"
+                style={{ borderColor: "var(--line)" }}
+              >
+                <dt className="text-xs" style={{ color: "var(--muted)" }}>
+                  {labelForField(name)}
+                </dt>
+                <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">
+                  {valueForField(name, value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
-      </CardContent>
-    </Card>
+      ) : null}
+
+      <div
+        className="mt-6 flex items-start gap-2.5 border-t pt-5 text-sm"
+        style={{ borderColor: "var(--line)" }}
+      >
+        {isSuccess ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        )}
+        <div>
+          <p className="font-medium">What your tool confirmed</p>
+          <p className="mt-0.5" style={{ color: "var(--muted)" }}>
+            {String(
+              action.provider_result.message ||
+                (isSuccess
+                  ? "The tool confirmed it saved everything."
+                  : "The tool did not confirm anything was saved."),
+            )}
+          </p>
+          {configuredResultUrl && (
+            <Button asChild size="sm" variant="outline" className="mt-3">
+              <a href={configuredResultUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                {resultLinkLabel}
+              </a>
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -277,7 +315,7 @@ export default function DemoOutcomePage() {
 
   const loadOutcome = React.useCallback(async () => {
     if (!receiptToken) {
-      setError("This receipt link is missing its secure session token.");
+      setError("This summary link is missing its secure session token.");
       setLoading(false);
       return;
     }
@@ -304,7 +342,12 @@ export default function DemoOutcomePage() {
   }, [loadOutcome]);
 
   React.useEffect(() => {
-    if (!outcome || outcome.status !== "no_action" || attempt === 0 || attempt > 4) {
+    if (
+      !outcome ||
+      outcome.status !== "no_action" ||
+      attempt === 0 ||
+      attempt > 4
+    ) {
       return;
     }
     const timer = window.setTimeout(() => void loadOutcome(), 1200);
@@ -313,157 +356,304 @@ export default function DemoOutcomePage() {
 
   if (loading && !outcome) {
     return (
-      <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-sky-50/70 p-6 text-slate-950">
-        <div aria-hidden="true" className="pointer-events-none absolute -left-24 -top-32 h-80 w-80 rounded-full bg-sky-200/50 blur-3xl" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -right-32 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl" />
-        <div className="relative flex items-center gap-3 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm backdrop-blur">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          Preparing your private demo receipt…
+      <PublicThemeRoot>
+        <div className={pt.page}>
+          <div className={pt.glow} aria-hidden="true" />
+          <PublicHeader />
+          <div
+            className="flex flex-1 items-center justify-center p-6"
+            style={{ position: "relative" }}
+          >
+            <div
+              className="flex items-center gap-3 rounded-full border px-4 py-3 text-sm"
+              style={{
+                borderColor: "var(--line)",
+                background: "var(--panel)",
+                color: "var(--muted)",
+              }}
+            >
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              Putting your call summary together…
+            </div>
+          </div>
         </div>
-      </div>
+      </PublicThemeRoot>
     );
   }
 
   if (error && !outcome) {
     return (
-      <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-sky-50/70 p-6 text-center text-slate-950">
-        <div aria-hidden="true" className="pointer-events-none absolute -left-24 -top-32 h-80 w-80 rounded-full bg-sky-200/50 blur-3xl" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -right-32 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl" />
-        <div className="relative flex max-w-md flex-col items-center gap-5">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-100 text-rose-700 shadow-sm">
-            <AlertCircle className="h-7 w-7" />
+      <PublicThemeRoot>
+        <div className={pt.page}>
+          <div className={pt.glow} aria-hidden="true" />
+          <PublicHeader />
+          <div
+            className="flex flex-1 items-center justify-center p-6 text-center"
+            style={{ position: "relative" }}
+          >
+            <div className="flex max-w-md flex-col items-center gap-5">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-300">
+                <AlertCircle className="h-7 w-7" />
+              </div>
+              <div>
+                <h1
+                  className={pt.title}
+                  style={{ fontSize: "clamp(28px, 4vw, 40px)" }}
+                >
+                  Summary unavailable
+                </h1>
+                <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+                  {error}
+                </p>
+              </div>
+              <Button asChild variant="outline">
+                <Link href={`/demo/${encodeURIComponent(slug)}`}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to demo
+                </Link>
+              </Button>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-semibold">Receipt unavailable</h1>
-            <p className="mt-2 text-sm text-slate-600">{error}</p>
-          </div>
-          <Button asChild variant="outline" className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-950">
-            <Link href={`/demo/${encodeURIComponent(slug)}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to demo
-            </Link>
-          </Button>
         </div>
-      </div>
+      </PublicThemeRoot>
     );
   }
 
   if (!outcome) return null;
   const copy = statusCopy(outcome);
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-gradient-to-br from-slate-50 via-white to-sky-50/70 text-slate-950">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-24 -top-32 h-80 w-80 rounded-full bg-sky-200/50 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-32 top-24 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl"
-      />
+    <PublicThemeRoot>
+      <div className={pt.page}>
+        <div className={pt.glow} aria-hidden="true" />
+        <PublicHeader />
 
-      <div className="relative mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-        <header className="flex items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium shadow-sm backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              24x7 AI <span className="font-normal text-slate-500">/ Demo</span>
-            </span>
-            {outcome.organization_name && (
-              <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-slate-600">
-                <Building2 className="h-3.5 w-3.5" />
-                {outcome.organization_name}
-              </span>
-            )}
-          </div>
-          <Link
-            href={`/demo/${encodeURIComponent(slug)}`}
-            className="hidden items-center gap-1 text-xs font-medium text-slate-600 transition hover:text-slate-950 sm:inline-flex"
+        <main style={{ position: "relative" }}>
+          <div
+            className="mx-auto w-full"
+            style={{ maxWidth: 960, padding: "72px 6.5% 40px" }}
           >
-            Back to demo
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </Link>
-        </header>
-
-        <div className="mt-8 flex items-center justify-between gap-4 sm:mt-12">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Demo outcome</p>
-            <h1 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-5xl">
-              {outcomeHeading(outcome)}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className={pt.eyebrow}>
+                <span className={pt.statusDot} />
+                YOUR CALL, PROVEN
+              </p>
+              <p className={pt.smallDetail}>
+                <ShieldCheck
+                  className="mr-1.5 inline h-3.5 w-3.5"
+                  style={{ color: "var(--accent)" }}
+                />
+                PRIVATE CALL SUMMARY · EXPIRES IN 24 HOURS
+              </p>
+            </div>
+            <h1
+              className={pt.title}
+              style={{ fontSize: "clamp(38px, 5vw, 64px)", marginTop: 24 }}
+            >
+              {outcomeHeading(outcome)[0]} <br />
+              <span>{outcomeHeading(outcome)[1]}</span>
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              {copy.description}
+            <p className={pt.lede} style={{ marginTop: 20, maxWidth: 620 }}>
+              {outcome.status === "completed"
+                ? `${outcome.agent_name} handled it end to end. Everything below really happened in business tools, not a mockup.`
+                : outcome.status === "needs_attention"
+                  ? "Here is what got collected and exactly where it stopped. Anything unconfirmed is labeled as such."
+                  : `The call ended before ${outcome.agent_name} could save anything. Give the final details and try again.`}
             </p>
-          </div>
-          <div className="hidden shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-xs text-slate-600 shadow-sm backdrop-blur sm:inline-flex">
-            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            Private session receipt
-          </div>
-        </div>
 
-        <div className={`mt-8 rounded-2xl border p-5 shadow-sm ${copy.tone}`}>
-          <div className="flex items-start gap-3">
-            {outcome.status === "completed" ? (
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-            ) : outcome.status === "needs_attention" ? (
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-            ) : (
-              <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0" />
-            )}
-            <div>
-              <p className="font-semibold">{copy.title}</p>
-              <p className="mt-1 text-sm opacity-80">
-                {outcome.organization_name || "Demo business"}
-                {outcome.actions.length ? ` · ${outcome.actions.length} workflow result${outcome.actions.length === 1 ? "" : "s"}` : ""}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
-            <DemoFeedback demoSlug={slug} />
-          </div>
-          <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-sm">
-            <OutcomeInterest demoSlug={slug} />
-          </div>
-        </div>
-
-        {outcome.actions.length ? (
-          <details className="mt-5 rounded-2xl border border-slate-200/90 bg-white/95 shadow-sm">
-            <summary className="cursor-pointer p-5 text-sm font-medium text-slate-700">
-              Call details — what the agent saved and where
-            </summary>
-            <div className="space-y-5 px-5 pb-5">
-              {outcome.actions.map((action) => (
-                <OutcomeActionCard key={action.id} action={action} />
-              ))}
-            </div>
-          </details>
-        ) : (
-          <Card className="mt-5 border-slate-200/90 bg-white/95 text-slate-950 shadow-xl shadow-slate-900/5">
-            <CardContent className="flex flex-col items-center px-6 py-12 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-                <Wrench className="h-7 w-7" />
+            <div
+              className={`mt-8 rounded-2xl border p-5 ${copy.tone}`}
+              style={{ position: "relative" }}
+            >
+              <div className="flex items-start gap-3">
+                {outcome.status === "completed" ? (
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+                ) : (
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                )}
+                <div>
+                  <p className="font-semibold">{copy.title}</p>
+                  <p className="mt-1 text-sm opacity-80">
+                    {outcome.organization_name || "Demo business"}
+                    {outcome.actions.length
+                      ? ` · ${outcome.actions.length} result${outcome.actions.length === 1 ? "" : "s"} saved`
+                      : ""}
+                  </p>
+                  {outcome.actions.length ? (
+                    <a
+                      href="#call-results"
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4 opacity-90 hover:opacity-100"
+                    >
+                      See what was saved
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                </div>
               </div>
-              <h2 className="mt-5 text-lg font-semibold">The agent did not save a workflow yet</h2>
-              <p className="mt-2 max-w-md text-sm leading-6 text-slate-600">
-                Let the agent confirm the final details before ending the call. This page updates only from a provider-backed action.
-              </p>
-              <Button asChild className="mt-6 shadow-lg shadow-primary/15">
-                <Link href={`/demo/${encodeURIComponent(slug)}`}>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Try the conversation again
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </div>
 
-        <div className="mt-8 flex flex-col gap-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" /> Receipt expires after 24 hours</span>
-          <span>Provider-backed result · No login required</span>
-        </div>
+          <section
+            className="mx-auto w-full"
+            style={{ maxWidth: 960, padding: "8px 6.5% 0" }}
+            aria-label="Your turn"
+          >
+            <div className={pt.panel} style={{ padding: 28 }}>
+              <p className={pt.eyebrow}>YOUR TURN · 30 SECONDS</p>
+              <div className="mt-4">
+                <DemoFeedback demoSlug={slug} receiptToken={receiptToken} />
+              </div>
+              <div
+                className="my-6 border-t"
+                style={{ borderColor: "var(--line)" }}
+              />
+              <OutcomeInterest demoSlug={slug} />
+            </div>
+          </section>
+
+          {outcome.actions.length === 0 && (
+            <section
+              className="mx-auto w-full"
+              style={{ maxWidth: 960, padding: "8px 6.5% 0" }}
+            >
+              <div className={pt.panel} style={{ padding: "48px 24px" }}>
+                <div className="flex flex-col items-center text-center">
+                  <div
+                    className="flex h-14 w-14 items-center justify-center rounded-2xl"
+                    style={{
+                      background: "var(--panel)",
+                      border: "1px solid var(--line)",
+                      color: "var(--accent)",
+                    }}
+                  >
+                    <Wrench className="h-7 w-7" />
+                  </div>
+                  <h2
+                    className={pt.title}
+                    style={{ fontSize: 24, marginTop: 20 }}
+                  >
+                    Nothing got saved on that call
+                  </h2>
+                  <p
+                    className="mt-2 max-w-md text-sm leading-6"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    Let the agent confirm the final details before hanging up.
+                    This page only shows results your tools confirmed.
+                  </p>
+                  <Link
+                    className={pt.primary}
+                    style={{ marginTop: 24 }}
+                    href={`/demo/${encodeURIComponent(slug)}`}
+                  >
+                    <RefreshCw size={16} />
+                    Try the call again
+                  </Link>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section
+            className="mx-auto w-full"
+            style={{ maxWidth: 960, padding: "56px 6.5% 0" }}
+          >
+            <div className={pt.panel} style={{ padding: 28 }}>
+              <p className={pt.eyebrow}>IF THIS RAN YOUR BUSINESS</p>
+              <ul
+                style={{
+                  marginTop: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                  padding: 0,
+                  listStyle: "none",
+                  fontSize: 14,
+                }}
+              >
+                <li className="flex items-center gap-3">
+                  <CheckCircle2
+                    size={17}
+                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                  />
+                  No missed calls, even after hours and weekends.
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2
+                    size={17}
+                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                  />
+                  Bookings land straight in your calendar while you work.
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2
+                    size={17}
+                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                  />
+                  Every caller captured with details, ready for follow-up.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section
+            className="mx-auto w-full"
+            style={{ maxWidth: 960, padding: "24px 6.5% 0" }}
+          >
+            <div className="mt-6 text-center">
+              <Link className={pt.textLink} href="/request-demo">
+                Prefer the full demo form? Request a demo{" "}
+                <ArrowUpRight size={16} />
+              </Link>
+            </div>
+          </section>
+
+          {outcome.actions.length ? (
+            <section
+              id="call-results"
+              className="mx-auto w-full"
+              style={{
+                maxWidth: 960,
+                padding: "40px 6.5% 0",
+                scrollMarginTop: 90,
+              }}
+              aria-label="Call results"
+            >
+              <h2
+                className={pt.title}
+                style={{ fontSize: "clamp(26px, 3vw, 36px)" }}
+              >
+                What {outcome.agent_name} <span>saved for you</span>
+              </h2>
+              <div className="mt-6 flex flex-col gap-5">
+                {outcome.actions.map((action) => (
+                  <OutcomeActionCard key={action.id} action={action} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <div
+            className="mx-auto flex w-full flex-col gap-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+            style={{
+              maxWidth: 960,
+              padding: "40px 6.5% 56px",
+              color: "var(--muted)",
+            }}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Clock3 className="h-3.5 w-3.5" /> Summary expires after 24 hours
+            </span>
+            <Link
+              href={`/demo/${encodeURIComponent(slug)}`}
+              className="inline-flex items-center gap-1.5 hover:opacity-80"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to demo
+            </Link>
+          </div>
+        </main>
+
+        <PublicFooter />
       </div>
-    </main>
+    </PublicThemeRoot>
   );
 }

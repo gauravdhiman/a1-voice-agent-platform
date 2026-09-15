@@ -47,6 +47,33 @@ import {
 const GMAIL_ALIAS_HELP_URL =
   "https://support.google.com/mail/answer/22370?hl=en";
 
+/** Example opener lines per demo, so first-time callers know what to say. */
+const TRY_SCRIPTS: Record<string, { lines: string[]; note: string }> = {
+  "pleasant-pediatric-appointments": {
+    lines: [
+      "I need a cleaning for my daughter next Thursday.",
+      "Do you take new patients?",
+    ],
+    note: "Alex will check real availability and book it.",
+  },
+  "copper-ridge-service-request": {
+    lines: [
+      "My AC is blowing warm air upstairs.",
+      "Can someone come out Thursday morning?",
+    ],
+    note: "Jordan will capture the full request for dispatch.",
+  },
+};
+
+function tryScriptForSlug(slug: string): { lines: string[]; note: string } {
+  return (
+    TRY_SCRIPTS[slug] ?? {
+      lines: ["Hello, I need some help.", "Can you walk me through it?"],
+      note: "The agent will guide the conversation from there.",
+    }
+  );
+}
+
 /**
  * Reads normalized local microphone bands for the public demo visualizers.
  *
@@ -639,6 +666,32 @@ function DemoAgentView() {
               </div>
             </div>
 
+            <div className={`${pt.panel} mt-3 max-w-xl p-4`}>
+              <p
+                className={pt.smallDetail}
+                style={{ fontSize: 10, letterSpacing: "0.12em" }}
+              >
+                NOT SURE WHAT TO SAY? TRY ONE OF THESE LINES
+              </p>
+              <ul className="mt-3 space-y-2">
+                {tryScriptForSlug(slug).lines.map((line) => (
+                  <li
+                    key={line}
+                    className="rounded-xl border px-3 py-2.5 text-sm leading-6"
+                    style={{
+                      borderColor: "var(--line)",
+                      color: "var(--ink)",
+                    }}
+                  >
+                    &ldquo;{line}&rdquo;
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                {tryScriptForSlug(slug).note}
+              </p>
+            </div>
+
             <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
               {callsRemainingLabel ? (
                 <span className="inline-flex items-center gap-1.5">
@@ -792,7 +845,7 @@ function DemoAgentView() {
                   </p>
                 ) : null}
                 <p className="text-center text-[0.7rem] leading-5 text-muted-foreground">
-                  Microphone access required • No platform credits used
+                  Free to try · No signup needed · Microphone access required
                 </p>
               </CardContent>
             </Card>

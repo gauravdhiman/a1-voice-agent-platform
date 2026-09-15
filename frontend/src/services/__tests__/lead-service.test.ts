@@ -6,8 +6,7 @@ const { postMock, getMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/client", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/api/client")>();
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
   return {
     ...actual,
     apiClient: {
@@ -68,5 +67,24 @@ describe("leadService", () => {
     getMock.mockRejectedValue(new Error("Network down"));
 
     await expect(leadService.isPublicSignupEnabled()).resolves.toBe(false);
+  });
+
+  it("loads the demo ratings overview for platform admins", async () => {
+    const overview = { summary: [], recent: [] };
+    getMock.mockResolvedValue({ data: overview });
+
+    const result = await leadService.listDemoFeedback();
+
+    expect(result).toEqual({ success: true, data: overview });
+    expect(getMock).toHaveBeenCalledWith("/api/v1/leads/demo-feedback");
+  });
+
+  it("returns a safe error when ratings fail to load", async () => {
+    getMock.mockRejectedValue(new Error("Network down"));
+
+    const result = await leadService.listDemoFeedback();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Network down");
   });
 });

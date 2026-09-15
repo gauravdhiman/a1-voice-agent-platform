@@ -8,7 +8,10 @@ never block on billing, but can be bounded by platform-admin-configured demo
 call budgets.
 """
 
-from __future__ import annotations
+# NOTE: no `from __future__ import annotations` here on purpose. The
+# rate-limit wrapper resolves body models in foreign globals, where
+# stringified annotations silently demote body models to query params
+# and break /openapi.json generation.
 
 import logging
 from datetime import datetime
@@ -26,6 +29,7 @@ from shared.billing.voice_session_entitlement import (
     is_demo_agent,
     reserve_demo_call_if_needed,
 )
+from shared.voice_agents.demo_feedback_service import demo_feedback_service
 from shared.voice_agents.demo_outcome_service import (
     create_demo_outcome_token,
     demo_outcome_service,
@@ -98,6 +102,18 @@ class DemoOutcomeResponse(BaseModel):
     status: Literal["completed", "needs_attention", "no_action"]
     actions: list[DemoOutcomeActionResponse]
     expires_at: datetime | None = None
+
+
+class DemoFeedbackRequest(BaseModel):
+    """Visitor star rating for one demo call."""
+
+    rating: int
+
+
+class DemoFeedbackAck(BaseModel):
+    """Fixed envelope so submitters cannot probe stored state."""
+
+    received: bool
 
 
 @demo_public_router.get("/{demo_slug}", response_model=DemoAgentPublicResponse)
@@ -220,6 +236,63 @@ async def get_demo_outcome_public(
         actions=actions,
         expires_at=expires_at,
     )
+
+
+@demo_public_router.post(
+    "/{demo_slug}/feedback",
+    response_model=DemoFeedbackAck,
+    responses={
+        400: {"description": "Invalid rating"},
+        404: {"description": "Unknown demo session"},
+        429: {"description": "Too many requests"},
+        500: {"description": "Could not record the rating"},
+    },
+)
+@limiter.limit("10/minute")
+async def submit_demo_feedback(
+    demo_slug: str,
+    request: Request,
+    body: DemoFeedbackRequest,
+    token: str = Query(..., min_length=20, max_length=4096),
+) -> DemoFeedbackAck:
+    """Record one visitor star rating for a demo call.
+
+    The signed receipt token binds the rating to the visitor's own session,
+    and one session keeps a single row (repeat taps update it). The envelope
+    is fixed so submitters cannot probe stored state.
+    """
+    del request
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rating must be between 1 and 5",
+        )
+    normalized = demo_slug.strip().lower()
+    claims = verify_demo_outcome_token(token)
+    if not claims or claims.demo_slug != normalized:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Demo session not found"
+        )
+
+    agent, error = await voice_agent_service.get_demo_agent_by_slug(normalized)
+    if error or not agent or str(agent.id) != claims.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Demo session not found"
+        )
+
+    stored = await demo_feedback_service.submit(
+        session_id=claims.session_id,
+        agent_id=claims.agent_id,
+        organization_id=str(agent.organization_id),
+        demo_slug=normalized,
+        rating=body.rating,
+    )
+    if not stored:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not record the rating",
+        )
+    return DemoFeedbackAck(received=True)
 
 
 @demo_public_router.post(

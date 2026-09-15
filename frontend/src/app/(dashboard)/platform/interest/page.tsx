@@ -6,7 +6,8 @@
  * The owner-visible home for every captured lead: request-demo form,
  * outcome-page form, demo calls, and manual entries. Advance rows
  * through new → contacted → invited → converted (or dropped).
- * Star ratings live in the PostHog demo funnel, not here, by design.
+ * Demo star ratings are summarized at the top (stored in the platform
+ * alongside the PostHog funnel copy).
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -34,6 +35,7 @@ import {
 import { Loader2 } from "lucide-react";
 import {
   leadService,
+  type DemoFeedbackOverview,
   type InterestLead,
   type InterestLeadStatus,
 } from "@/services/lead-service";
@@ -60,6 +62,7 @@ export default function PlatformInterestPage() {
   const isPlatformAdmin = user?.hasRole("platform_admin") ?? false;
   const [statusFilter, setStatusFilter] = useState("all");
   const [leads, setLeads] = useState<InterestLead[]>([]);
+  const [feedback, setFeedback] = useState<DemoFeedbackOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -74,6 +77,10 @@ export default function PlatformInterestPage() {
       setLeads(result.data ?? []);
     } else {
       setError(result.error || "Could not load interest.");
+    }
+    const ratings = await leadService.listDemoFeedback();
+    if (ratings.success) {
+      setFeedback(ratings.data ?? { summary: [], recent: [] });
     }
     setLoading(false);
   }, []);
@@ -91,7 +98,9 @@ export default function PlatformInterestPage() {
     const result = await leadService.updateInterestLeadStatus(lead.id, next);
     if (result.success && result.data) {
       setLeads((current) =>
-        current.map((row) => (row.id === lead.id ? result.data as InterestLead : row)),
+        current.map((row) =>
+          row.id === lead.id ? (result.data as InterestLead) : row,
+        ),
       );
     } else {
       setError(result.error || "Could not update the lead.");
@@ -140,6 +149,42 @@ export default function PlatformInterestPage() {
         </Alert>
       )}
 
+      {feedback && feedback.summary.length > 0 && (
+        <Card data-testid="demo-ratings-card">
+          <CardContent className="py-5">
+            <p className="text-sm font-medium">Demo ratings</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Star ratings visitors left after demo calls, newest aggregated per
+              demo.
+            </p>
+            <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {feedback.summary.map((item) => (
+                <li
+                  key={item.demo_slug}
+                  data-testid={`demo-rating-${item.demo_slug}`}
+                  className="rounded-xl border border-border/60 px-4 py-3"
+                >
+                  <p className="text-xs text-muted-foreground">
+                    {item.demo_slug}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight">
+                    {item.average_rating !== null
+                      ? item.average_rating.toFixed(1)
+                      : "—"}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">
+                      / 5
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {item.count} rating{item.count === 1 ? "" : "s"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -168,7 +213,10 @@ export default function PlatformInterestPage() {
               </TableHeader>
               <TableBody>
                 {leads.map((lead) => (
-                  <TableRow key={lead.id} data-testid={`interest-row-${lead.id}`}>
+                  <TableRow
+                    key={lead.id}
+                    data-testid={`interest-row-${lead.id}`}
+                  >
                     <TableCell>
                       <div className="font-medium">{lead.name}</div>
                       <div className="text-xs text-muted-foreground">

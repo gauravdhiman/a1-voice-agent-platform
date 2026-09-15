@@ -30,11 +30,7 @@ export interface InterestLeadData {
 
 /** Follow-up status of an interest lead. */
 export type InterestLeadStatus =
-  | "new"
-  | "contacted"
-  | "invited"
-  | "converted"
-  | "dropped";
+  "new" | "contacted" | "invited" | "converted" | "dropped";
 
 /** One stored interest lead (platform-admin view). */
 export interface InterestLead {
@@ -68,6 +64,30 @@ export interface InterestLead {
 export interface LeadServiceResult {
   success: boolean;
   error?: string;
+}
+
+/** Aggregate visitor ratings for one demo slug (platform admins). */
+export interface DemoFeedbackSummary {
+  demo_slug: string;
+  count: number;
+  average_rating: number | null;
+}
+
+/** One stored visitor rating (platform admins). */
+export interface DemoFeedbackRecord {
+  id: string;
+  session_id: string;
+  agent_id: string;
+  organization_id: string;
+  demo_slug: string;
+  rating: number;
+  created_at: string;
+}
+
+/** Ratings overview: per-demo aggregates plus the newest rows. */
+export interface DemoFeedbackOverview {
+  summary: DemoFeedbackSummary[];
+  recent: DemoFeedbackRecord[];
 }
 
 /**
@@ -186,4 +206,29 @@ export const leadService = {
   isPublicSignupEnabled,
   listInterestLeads,
   updateInterestLeadStatus,
+  listDemoFeedback,
 };
+
+/**
+ * Lists stored demo ratings with per-demo aggregates (platform admins).
+ *
+ * @returns Envelope with the ratings overview.
+ */
+async function listDemoFeedback(): Promise<
+  LeadServiceResult & { data?: DemoFeedbackOverview }
+> {
+  try {
+    const response = await apiClient.get<DemoFeedbackOverview>(
+      "/api/v1/leads/demo-feedback",
+    );
+    return {
+      success: true,
+      data: response.data ?? { summary: [], recent: [] },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not load ratings.",
+    };
+  }
+}

@@ -87,11 +87,13 @@ describe("DemoAgentPage", () => {
   it("routes a connected timeout/error to the private outcome receipt", async () => {
     const user = userEvent.setup();
     let callbacks: { onError?: (error: Error) => void } | undefined;
-    connectMock.mockImplementationOnce(async (_token, _wsUrl, nextCallbacks) => {
-      callbacks = nextCallbacks;
-      nextCallbacks.onConnected?.();
-      return { disconnect: vi.fn() };
-    });
+    connectMock.mockImplementationOnce(
+      async (_token, _wsUrl, nextCallbacks) => {
+        callbacks = nextCallbacks;
+        nextCallbacks.onConnected?.();
+        return { disconnect: vi.fn() };
+      },
+    );
 
     render(<DemoAgentPage />);
     await screen.findByRole("button", { name: "Talk to Jordan" });
@@ -166,5 +168,14 @@ describe("DemoAgentPage", () => {
     );
 
     expect(startButton).toBeEnabled();
+  });
+
+  it("shows example opener lines so first-time callers know what to say", async () => {
+    render(<DemoAgentPage />);
+    expect(
+      await screen.findByText("NOT SURE WHAT TO SAY? TRY ONE OF THESE LINES"),
+    ).toBeTruthy();
+    expect(screen.getByText(/blowing warm air upstairs/i)).toBeTruthy();
+    expect(screen.getByText(/Free to try/i)).toBeTruthy();
   });
 });

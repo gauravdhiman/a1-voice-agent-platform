@@ -28,7 +28,9 @@ describe("DemoOutcomePage", () => {
   beforeEach(() => {
     getDemoOutcomeMock.mockReset();
     useParamsMock.mockReturnValue({ slug: "copper-ridge-service-request" });
-    useSearchParamsMock.mockReturnValue(new URLSearchParams("token=receipt-token"));
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams("token=receipt-token"),
+    );
   });
 
   it("shows the captured fields and provider destination", async () => {
@@ -81,13 +83,30 @@ describe("DemoOutcomePage", () => {
 
     render(<DemoOutcomePage />);
 
-    expect(await screen.findByText("The handoff is complete")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", {
+        name: /that call just did real work/i,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("What Jordan")).toBeTruthy();
+    expect(screen.getByText("saved for you")).toBeTruthy();
     expect(screen.getByText("Maria Garcia")).toBeTruthy();
     expect(screen.getByText("AC repair")).toBeTruthy();
-    expect(screen.getByText("Google Sheets")).toBeTruthy();
+    expect(screen.getByText("via Google Sheets")).toBeTruthy();
     expect(screen.getByText("Email confirmation sent")).toBeTruthy();
-    expect(screen.getByText("Gmail confirmed the email was sent.")).toBeTruthy();
-    expect(screen.getByText("Gmail")).toBeTruthy();
+    expect(
+      screen.getByText("Gmail confirmed the email was sent."),
+    ).toBeTruthy();
+    expect(screen.getByText("via Gmail")).toBeTruthy();
+    const detailsLink = screen.getByRole("link", {
+      name: "See what was saved",
+    });
+    expect(detailsLink.getAttribute("href")).toBe("#call-results");
+    const turn = screen.getByText("YOUR TURN · 30 SECONDS");
+    const results = screen.getByText("saved for you");
+    expect(
+      turn.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     const resultLink = screen.getByRole("link", {
       name: "Open Google Sheets result",
     });
@@ -115,7 +134,7 @@ describe("DemoOutcomePage", () => {
     render(<DemoOutcomePage />);
 
     expect(
-      await screen.findByText("The agent did not save a workflow yet"),
+      await screen.findByText("Nothing got saved on that call"),
     ).toBeTruthy();
   });
 
@@ -140,7 +159,8 @@ describe("DemoOutcomePage", () => {
           provider_result: {
             record_type: "calendar_event",
             record_id: "event-1",
-            record_url: "https://calendar.google.com/calendar/event?eid=event-1",
+            record_url:
+              "https://calendar.google.com/calendar/event?eid=event-1",
             message: "Appointment booked.",
           },
           public_result_url:
@@ -183,7 +203,8 @@ describe("DemoOutcomePage", () => {
           provider_result: {
             record_type: "calendar_event",
             record_id: "event-2",
-            record_url: "https://calendar.google.com/calendar/event?eid=event-2",
+            record_url:
+              "https://calendar.google.com/calendar/event?eid=event-2",
             message: "Appointment booked.",
           },
           public_result_url: null,
@@ -196,7 +217,13 @@ describe("DemoOutcomePage", () => {
 
     render(<DemoOutcomePage />);
 
-    expect(await screen.findByText("The handoff is complete")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", {
+        name: /that call just did real work/i,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("What Alex")).toBeTruthy();
+    expect(screen.getByText("saved for you")).toBeTruthy();
     expect(
       screen.queryByRole("link", { name: "Open Google Calendar result" }),
     ).toBeNull();
@@ -221,7 +248,8 @@ describe("DemoOutcomePage", () => {
             service_needed: "AC repair",
           },
           provider_result: {
-            message: "The Google Sheets destination is not configured for this demo.",
+            message:
+              "The Google Sheets destination is not configured for this demo.",
           },
           public_result_url:
             "https://docs.google.com/spreadsheets/d/demo-sheet/edit?gid=0#gid=0",
@@ -234,11 +262,15 @@ describe("DemoOutcomePage", () => {
 
     render(<DemoOutcomePage />);
 
-    expect(await screen.findByText("Review what Jordan captured.")).toBeTruthy();
-    expect(screen.getByText("Service inquiry details captured")).toBeTruthy();
-    expect(screen.getByText("Not completed")).toBeTruthy();
     expect(
-      screen.getByText("The Google Sheets destination is not configured for this demo."),
+      await screen.findByRole("heading", { name: /almost done/i }),
+    ).toBeTruthy();
+    expect(screen.getByText("Service request not saved")).toBeTruthy();
+    expect(screen.getByText("Didn't go through")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The Google Sheets destination is not configured for this demo.",
+      ),
     ).toBeTruthy();
     expect(screen.queryByText("Email confirmation")).toBeNull();
     expect(
