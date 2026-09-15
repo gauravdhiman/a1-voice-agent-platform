@@ -30,6 +30,7 @@ describe("posthog analytics", () => {
     vi.clearAllMocks();
     __resetAnalyticsForTests();
     delete process.env[KEY];
+    initMock.mockImplementation((_key, config) => config.loaded({}));
   });
 
   afterEach(() => {
@@ -38,19 +39,19 @@ describe("posthog analytics", () => {
     __resetAnalyticsForTests();
   });
 
-  it("stays disabled without an API key and never initializes", () => {
+  it("stays disabled without an API key and never initializes", async () => {
     expect(isAnalyticsEnabled()).toBe(false);
-    initAnalytics();
+    await initAnalytics();
     trackEvent("demo_played", { demo_slug: "dental" });
     trackPageview("/dental");
     expect(initMock).not.toHaveBeenCalled();
     expect(captureMock).not.toHaveBeenCalled();
   });
 
-  it("initializes once and captures sanitized events", () => {
+  it("initializes once and captures sanitized events", async () => {
     process.env[KEY] = "phc_test";
-    initAnalytics();
-    initAnalytics();
+    await initAnalytics();
+    await initAnalytics();
     expect(initMock).toHaveBeenCalledTimes(1);
 
     trackEvent("interest_submitted", {
@@ -60,6 +61,25 @@ describe("posthog analytics", () => {
     expect(captureMock).toHaveBeenCalledWith("interest_submitted", {
       source: "request-demo",
       vertical: "dental",
+    });
+  });
+
+  it("queues events until the PostHog client is ready", async () => {
+    process.env[KEY] = "phc_test";
+    let finishInitialization!: () => void;
+    initMock.mockImplementation((_key, config) => {
+      finishInitialization = config.loaded;
+    });
+
+    const initialization = initAnalytics();
+    trackEvent("demo_played", { demo_slug: "dental" });
+
+    expect(captureMock).not.toHaveBeenCalled();
+    finishInitialization();
+    await initialization;
+
+    expect(captureMock).toHaveBeenCalledWith("demo_played", {
+      demo_slug: "dental",
     });
   });
 
@@ -75,9 +95,9 @@ describe("posthog analytics", () => {
     ).toEqual({ source: "request-demo", demo_slug: "dental" });
   });
 
-  it("captures pageviews by path only (no query or tokens)", () => {
+  it("captures pageviews by path only (no query or tokens)", async () => {
     process.env[KEY] = "phc_test";
-    initAnalytics();
+    await initAnalytics();
     trackPageview("/demo/dental");
     expect(captureMock).toHaveBeenCalledWith("$pageview", {
       $current_url: "/demo/dental",

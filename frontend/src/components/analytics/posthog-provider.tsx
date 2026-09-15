@@ -28,12 +28,22 @@ export function AnalyticsProvider({ children }: AnalyticsProviderProps) {
 
   useEffect(() => {
     if (!analyticsEnabled) return;
-    void loadAnalytics().then(({ initAnalytics }) => initAnalytics());
-  }, [analyticsEnabled]);
 
-  useEffect(() => {
-    if (!analyticsEnabled || !pathname) return;
-    void loadAnalytics().then(({ trackPageview }) => trackPageview(pathname));
+    let isCurrentPath = true;
+    void loadAnalytics()
+      .then(async ({ initAnalytics, trackPageview }) => {
+        await initAnalytics();
+        if (isCurrentPath) {
+          trackPageview(pathname || window.location.pathname);
+        }
+      })
+      .catch(() => {
+        // Analytics is optional; initialization failures must not affect the app.
+      });
+
+    return () => {
+      isCurrentPath = false;
+    };
   }, [analyticsEnabled, pathname]);
 
   return <>{children}</>;

@@ -42,6 +42,8 @@ const PII_KEYS = new Set([
 ]);
 
 let initialized = false;
+let clientLoaded = false;
+let initializationPromise: Promise<void> | null = null;
 
 /**
  * Returns true when analytics can emit (browser + API key present).
@@ -56,19 +58,43 @@ export function isAnalyticsEnabled(): boolean {
 }
 
 /**
- * Initializes the PostHog client once. Safe to call repeatedly and
- * server-side (both no-op). Reads `NEXT_PUBLIC_POSTHOG_KEY` and
- * `NEXT_PUBLIC_POSTHOG_HOST` (defaults to US cloud).
+ * Initializes the PostHog client once and resolves after the SDK is ready.
+ * Safe to call repeatedly and server-side (both no-op). Reads
+ * `NEXT_PUBLIC_POSTHOG_KEY` and `NEXT_PUBLIC_POSTHOG_HOST` (defaults to US
+ * cloud).
+ *
+ * @returns A promise that resolves when the client can capture events.
  */
-export function initAnalytics(): void {
-  if (initialized || !isAnalyticsEnabled()) return;
+export function initAnalytics(): Promise<void> {
+  if (!isAnalyticsEnabled()) return Promise.resolve();
+  if (initializationPromise) return initializationPromise;
+
   initialized = true;
-  posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY as string, {
-    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
-    person_profiles: "identified_only",
-    capture_pageview: false,
-    capture_pageleave: false,
+  const initPromise = new Promise<void>((resolve, reject) => {
+    try {
+      posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY as string, {
+        api_host:
+          process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
+        person_profiles: "identified_only",
+        capture_pageview: false,
+        capture_pageleave: false,
+        loaded: () => {
+          clientLoaded = true;
+          resolve();
+        },
+      });
+    } catch (error) {
+      reject(error);
+    }
   });
+
+  initializationPromise = initPromise.catch((error: unknown) => {
+    initialized = false;
+    clientLoaded = false;
+    initializationPromise = null;
+    throw error;
+  });
+  return initializationPromise;
 }
 
 /**
@@ -88,7 +114,8 @@ export function sanitizeProperties(
 }
 
 /**
- * Captures one funnel event (no-op unless initialized).
+ * Captures one funnel event, waiting for an in-progress initialization if
+ * needed. Does nothing unless analytics is enabled and initialization began.
  *
  * @param event - Typed event name from `AnalyticsEvents`.
  * @param properties - PII-free properties (sanitized defensively).
@@ -98,20 +125,38 @@ export function trackEvent<T extends AnalyticsEventName>(
   properties: AnalyticsEvents[T] = {} as AnalyticsEvents[T],
 ): void {
   if (!initialized || !isAnalyticsEnabled()) return;
-  posthog.capture(event, sanitizeProperties(properties));
+  captureWhenReady(event, sanitizeProperties(properties));
 }
 
 /**
- * Captures a pageview for the given path (no-op unless initialized).
+ * Captures a pageview for the given path, waiting for an in-progress
+ * initialization if needed. Does nothing unless analytics is enabled and
+ * initialization began.
  *
  * @param path - Route path without query string or tokens.
  */
 export function trackPageview(path: string): void {
   if (!initialized || !isAnalyticsEnabled()) return;
-  posthog.capture("$pageview", { $current_url: path });
+  captureWhenReady("$pageview", { $current_url: path });
+}
+
+function captureWhenReady(
+  event: string,
+  properties: Record<string, unknown>,
+): void {
+  const capture = () => {
+    if (clientLoaded) posthog.capture(event, properties);
+  };
+  if (clientLoaded) {
+    capture();
+  } else if (initializationPromise) {
+    void initializationPromise.then(capture, () => undefined);
+  }
 }
 
 /** Resets module state. Exported for tests only. */
 export function __resetAnalyticsForTests(): void {
   initialized = false;
+  clientLoaded = false;
+  initializationPromise = null;
 }
