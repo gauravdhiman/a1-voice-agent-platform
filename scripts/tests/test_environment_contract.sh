@@ -62,6 +62,22 @@ diff -u \
   <(template_keys "$ROOT/.env.local.example") \
   <(template_keys "$ROOT/.env.prod.example")
 
+for file in .env.local.example .env.staging.example .env.prod.example; do
+  assert_contains "$ROOT/$file" 'NEXT_PUBLIC_POSTHOG_KEY='
+  assert_contains "$ROOT/$file" 'NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com'
+done
+assert_contains "$ROOT/frontend/.env.local.example" 'NEXT_PUBLIC_POSTHOG_KEY='
+assert_contains "$ROOT/frontend/.env.local.example" 'NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com'
+assert_contains "$ROOT/docker-compose.dev.yml" 'NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY:-}'
+assert_contains "$ROOT/docker-compose.dev.yml" 'NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}'
+assert_contains "$ROOT/docker-compose.yml" 'NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY:-}'
+assert_contains "$ROOT/docker-compose.yml" 'NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}'
+assert_contains "$ROOT/frontend/Dockerfile" 'ARG NEXT_PUBLIC_POSTHOG_KEY'
+assert_contains "$ROOT/frontend/Dockerfile" 'ARG NEXT_PUBLIC_POSTHOG_HOST'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'NEXT_PUBLIC_POSTHOG_KEY="$(read_env NEXT_PUBLIC_POSTHOG_KEY)"'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--build-arg "NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}"'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--build-arg "NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}"'
+
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.local"'
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.staging"'
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.prod"'
@@ -179,6 +195,9 @@ assert_contains "$production_workflow" 'full 40-character commit SHA'
 assert_contains "$production_workflow" 'ref: ${{ inputs.ref }}'
 assert_contains "$production_workflow" 'environment: production'
 assert_contains "$production_workflow" 'ENV_PROD: ${{ secrets.ENV_PROD }}'
+assert_contains "$production_workflow" 'NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}'
+assert_contains "$production_workflow" 'NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com'
+assert_contains "$production_workflow" 'The production environment secret NEXT_PUBLIC_POSTHOG_KEY is required.'
 assert_contains "$production_workflow" 'check_alembic_compatibility.py --env-file .env.prod'
 assert_contains "$production_workflow" './scripts/deploy.sh migrate --env-file .env.prod'
 assert_contains "$production_workflow" 'name: Install GCP deployment migration dependencies'

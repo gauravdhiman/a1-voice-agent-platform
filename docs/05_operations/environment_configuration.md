@@ -69,7 +69,8 @@ unclear ownership.
 8. **Use `.env.prod` consistently in deployment automation.** The deploy script,
    production Compose file, migration helpers, GitHub Actions workflow, and
    deployment docs all use `.env.prod`. CI stores its contents in the
-   `ENV_PROD` repository secret.
+   `ENV_PROD` production-environment secret. The production PostHog project key
+   is a separate protected secret injected into the frontend build.
 9. **Keep worktree provider settings synchronized.** The full isolated
    worktree launcher reads non-placeholder voice-provider credentials from the
    worktree `.env.local` or the main checkout `.env.local`, refreshes them into
@@ -104,6 +105,26 @@ target, not a fourth environment file. They consume the selected
 | Direct backend process        | `ENV_FILE=.env.staging python backend/main.py`                        | `.env.staging` |
 | Alembic migration             | `ENV_FILE=.env.staging REVISION=head ./scripts/deploy/run-alembic.sh` | `.env.staging` |
 | Production deployment         | `./scripts/deploy.sh`                                                 | `.env.prod`    |
+
+## PostHog Analytics
+
+PostHog is optional frontend analytics. Set `NEXT_PUBLIC_POSTHOG_KEY` to the
+project token and `NEXT_PUBLIC_POSTHOG_HOST` to the matching ingestion host
+(US Cloud: `https://us.i.posthog.com`). An empty key disables capture. The key
+is intended for browser use and is included in the built frontend.
+
+The root `.env.local.example`, `.env.staging.example`, and `.env.prod.example`
+templates contain both variables; the advanced standalone frontend template
+`frontend/.env.local.example` does too. Use a separate PostHog project for
+local or staging events, or leave those keys empty, so non-production activity
+does not mix with production analytics.
+
+For a direct production build, set both variables in `.env.prod`. The protected
+production workflow injects `NEXT_PUBLIC_POSTHOG_KEY` from its matching GitHub
+environment secret and uses the US Cloud host. Next.js embeds `NEXT_PUBLIC_`
+values into its client bundle at build time, so changing the production
+environment after the image is built requires rebuilding and redeploying it.
+The Docker Compose and GCP deployment paths pass both values into that build.
 
 `docker compose -f docker-compose.dev.yml` defaults to `.env.local`, while
 `docker compose -f docker-compose.yml` defaults to `.env.prod`. The `start.sh`

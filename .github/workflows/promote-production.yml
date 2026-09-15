@@ -105,6 +105,33 @@ jobs:
           ENV_PROD: ${{ secrets.ENV_PROD }}
         run: printf '%s\n' "$ENV_PROD" > .env.prod
 
+      - name: Add production PostHog settings to the frontend build environment
+        env:
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
+        run: |
+          test -n "${NEXT_PUBLIC_POSTHOG_KEY:-}" || {
+            echo "The production environment secret NEXT_PUBLIC_POSTHOG_KEY is required." >&2
+            exit 1
+          }
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(".env.prod")
+          values = {
+              "NEXT_PUBLIC_POSTHOG_KEY": os.environ["NEXT_PUBLIC_POSTHOG_KEY"],
+              "NEXT_PUBLIC_POSTHOG_HOST": os.environ["NEXT_PUBLIC_POSTHOG_HOST"],
+          }
+          lines = [
+              line
+              for line in path.read_text().splitlines()
+              if line.partition("=")[0].strip() not in values
+          ]
+          lines.extend(f"{key}={value}" for key, value in values.items())
+          path.write_text("\n".join(lines) + "\n")
+          PY
+
       - name: Install GCP deployment migration dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
 
