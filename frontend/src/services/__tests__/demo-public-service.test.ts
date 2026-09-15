@@ -130,4 +130,36 @@ describe("demoPublicService", () => {
       expect.objectContaining({ cache: "no-store" }),
     );
   });
+
+  it("posts one visitor rating bound to the receipt token", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ received: true }), { status: 200 }),
+      );
+
+    await demoPublicService.submitDemoFeedback("acme-demo", "receipt-token", 5);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/api/v1/public/demo/acme-demo/feedback?token=receipt-token",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ rating: 5 }),
+      }),
+    );
+  });
+
+  it("surfaces rating failures without leaking internals", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Could not record the rating" }), {
+        status: 500,
+      }),
+    );
+
+    await expect(
+      demoPublicService.submitDemoFeedback("acme-demo", "receipt-token", 5),
+    ).rejects.toThrow("Could not record the rating");
+  });
 });

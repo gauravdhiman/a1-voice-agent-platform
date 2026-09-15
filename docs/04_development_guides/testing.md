@@ -38,6 +38,14 @@ responsiveness; a successful manual call cannot replace a regression test.
 
 ## Public agent and demo-page coverage
 
+The homepage has separate contracts in `frontend/src/app/__tests__/landing-page.test.tsx`
+and `frontend/src/components/home/particle-field.test.tsx`. They cover public entry
+points, theme persistence and unavailable storage, navigation, and animation
+cleanup/reduced motion. `e2e/tests/test_homepage_experience.py` verifies desktop and
+mobile navigation, theme persistence, the demo-request route, and overflow.
+Visually review the scroll formations in both themes; see the
+[homepage experience](../02_features/homepage-experience.md).
+
 The public-agent surface must be covered across the same boundaries used in
 production:
 

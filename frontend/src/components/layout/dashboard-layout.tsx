@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { SiteThemeSwitch } from "@/components/public-theme/theme-switch";
 import { NavigationLink } from "@/components/ui/navigation-link";
 import { OrganizationSwitcher } from "@/components/layout/organization-switcher";
 import {
@@ -374,7 +374,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           <div className="flex items-center space-x-4">
-            <ThemeToggle />
+            <SiteThemeSwitch />
             <Button
               variant="ghost"
               size="icon"

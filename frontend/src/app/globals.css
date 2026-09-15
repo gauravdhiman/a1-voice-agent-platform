@@ -97,6 +97,12 @@ html {
   --ring: oklch(0.43 0.197 257.651);
   /* Primary blue for focus rings */
 
+  /* Shared site-wide theme switch: strong foreground tokens in both modes
+   * so the control never looks washed out or disabled. */
+  --switch-muted: var(--muted-foreground);
+  --switch-line: var(--muted-foreground);
+  --switch-knob: var(--primary);
+
   /* Layered form surfaces — drawer canvas → section → field → control */
   --form-drawer: oklch(0.965 0.014 264.695);
   --form-section: oklch(0.995 0.006 264.695);
@@ -179,6 +185,11 @@ html {
   /* Input field background */
   --ring: oklch(0.43 0.197 257.651);
   /* Primary blue for focus rings */
+
+  /* Shared site-wide theme switch: same strong tokens as light mode. */
+  --switch-muted: var(--muted-foreground);
+  --switch-line: var(--muted-foreground);
+  --switch-knob: var(--primary);
 
   /* Layered form surfaces — dark mode */
   --form-drawer: oklch(0.145 0.03 264.695);

@@ -25,10 +25,14 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CalendarCheck, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { SITE_NAME } from "@/lib/site-config";
 import { leadService } from "@/services/lead-service";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
+import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
+import { PublicHeader } from "@/components/public-theme/public-header";
+import { PublicFooter } from "@/components/public-theme/public-footer";
+import pt from "@/components/public-theme/public-theme.module.css";
 
 const requestDemoSchema = z.object({
   name: z.string().trim().min(1, "Please tell us your name.").max(120),
@@ -99,267 +103,267 @@ export default function RequestDemoPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex">
-      {/* Left Side - Brand & Value Statement (Hidden on mobile) */}
-      <div className="hidden lg:flex w-1/2 bg-zinc-900 relative flex-col justify-between p-12 text-white">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1557426272-fc759fdf7a8d?q=80&w=2070&auto=format&fit=crop')] opacity-20 bg-cover bg-center" />
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/80 to-transparent" />
-
-        <div className="relative z-10">
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="bg-white/10 backdrop-blur-sm w-10 h-10 rounded-lg flex items-center justify-center border border-white/20">
-              <span className="text-white font-bold text-xl">AI</span>
+    <PublicThemeRoot>
+      <div className={pt.page}>
+        <PublicHeader />
+        <div className={pt.split}>
+          {/* Left Side - Brand & Value Statement (Hidden on mobile) */}
+          <div className={pt.splitPanel}>
+            <div className={pt.splitPanelGlow} aria-hidden="true" />
+            <div className={pt.splitPanelInner}>
+              <p className={pt.eyebrow}>
+                <span className={pt.statusDot} />
+                CONCIERGE SETUP · LIVE IN 48 HOURS
+              </p>
+              <h2 style={{ marginTop: 24 }}>
+                See your AI front desk <span>on your own calls.</span>
+              </h2>
+              <p
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1.8,
+                  marginTop: 20,
+                  maxWidth: 420,
+                }}
+              >
+                Tell us about your business and we will set everything up with
+                you - your number, your calendar, your words. Usually live
+                within 48 hours.
+              </p>
+              <ul className={pt.splitPoints}>
+                <li>
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                  <span>Personal setup call, not a self-serve maze</span>
+                </li>
+                <li>
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                  <span>You approve every word before it answers</span>
+                </li>
+                <li>
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                  <span>Pilot plans from $79/mo once it proves itself</span>
+                </li>
+              </ul>
             </div>
-            <span className="text-xl font-bold tracking-tight">
-              {SITE_NAME}
-            </span>
-          </Link>
-        </div>
 
-        <div className="relative z-10 max-w-lg">
-          <CalendarCheck className="h-10 w-10 text-white/50 mb-6" />
-          <h2 className="text-3xl font-bold leading-tight mb-4">
-            See your AI front desk on your own calls.
-          </h2>
-          <p className="text-lg text-white/80 leading-relaxed mb-8">
-            Tell us about your business and we will set everything up with
-            you - your number, your calendar, your words. Usually live
-            within 48 hours.
-          </p>
-          <ul className="space-y-4">
-            <li className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
-              <span className="text-white/80">
-                Personal setup call, not a self-serve maze
-              </span>
-            </li>
-            <li className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
-              <span className="text-white/80">
-                You approve every word before it answers
-              </span>
-            </li>
-            <li className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
-              <span className="text-white/80">
-                Pilot plans from $79/mo once it proves itself
-              </span>
-            </li>
-          </ul>
-        </div>
-
-        <div className="relative z-10 text-sm text-white/40">
-          &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
-        </div>
-      </div>
-
-      {/* Right Side - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <div className="w-full max-w-md space-y-8">
-          <div className="text-center lg:text-left">
-            <div className="lg:hidden flex justify-center mb-6">
-              <Link href="/" className="flex items-center gap-3">
-                <div className="bg-primary w-10 h-10 rounded-lg flex items-center justify-center shadow-md">
-                  <span className="text-primary-foreground font-bold text-xl">
-                    AI
-                  </span>
-                </div>
-              </Link>
+            <div className={pt.splitFoot}>
+              &copy; {new Date().getFullYear()} {SITE_NAME}. All rights
+              reserved.
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Request a demo
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Tell us about your business. We will set up your AI front desk
-              with you — usually live within 48 hours.
-            </p>
           </div>
 
-          <Card className="border-0 shadow-none p-0 bg-transparent">
-            <CardContent className="p-0">
-              {submitted ? (
-                <div
-                  className="text-center py-8 space-y-4"
-                  data-testid="request-demo-success"
-                >
-                  <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto" />
-                  <h2 className="text-xl font-semibold">Request received</h2>
-                  <p className="text-muted-foreground">
-                    Thanks — we will reach out within one business day to
-                    schedule your setup call.
-                  </p>
-                </div>
-              ) : (
-                <Form {...form}>
-                  <form
-                    onSubmit={form.handleSubmit(onSubmit)}
-                    noValidate
-                    className="space-y-4"
-                  >
-                    {submitError && (
-                      <Alert variant="destructive">
-                        <AlertDescription>{submitError}</AlertDescription>
-                      </Alert>
-                    )}
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Your name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Jane Smith"
-                              autoComplete="name"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="businessName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Business name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Bright Smiles Dental"
-                              autoComplete="organization"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Work email</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="email"
-                                placeholder="you@business.com"
-                                autoComplete="email"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="phone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              Callback number{" "}
-                              <span className="text-muted-foreground">
-                                (optional)
-                              </span>
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="tel"
-                                placeholder="(480) 555-0100"
-                                autoComplete="tel"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+          {/* Right Side - Form */}
+          <div className={pt.splitBody}>
+            <div className="w-full max-w-md space-y-8">
+              <div className="text-center lg:text-left">
+                <div className="lg:hidden flex justify-center mb-6">
+                  <Link href="/" className="flex items-center gap-3">
+                    <div className="bg-primary w-10 h-10 rounded-lg flex items-center justify-center shadow-md">
+                      <span className="text-primary-foreground font-bold text-xl">
+                        AI
+                      </span>
                     </div>
-                    <FormField
-                      control={form.control}
-                      name="vertical"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>What kind of business?</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Choose one" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {VERTICALS.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="message"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            What should the AI handle?{" "}
-                            <span className="text-muted-foreground">
-                              (optional)
-                            </span>
-                          </FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="After-hours calls, appointment booking, missed-call follow-up…"
-                              rows={3}
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button
-                      type="submit"
-                      className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base"
-                      disabled={form.formState.isSubmitting}
-                    >
-                      {form.formState.isSubmitting
-                        ? "Sending…"
-                        : "Request my demo"}
-                    </Button>
-                    <TurnstileWidget
-                      onVerify={setCaptchaToken}
-                      onExpire={() => setCaptchaToken(null)}
-                    />
-                  </form>
-                </Form>
-              )}
-            </CardContent>
-          </Card>
+                  </Link>
+                </div>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                  Request a demo
+                </h1>
+                <p className="text-muted-foreground mt-2">
+                  Tell us about your business. We will set up your AI front desk
+                  with you — usually live within 48 hours.
+                </p>
+              </div>
 
-          <p className="text-center text-sm text-muted-foreground">
-            Already invited?{" "}
-            <Link
-              href="/auth/signin"
-              className="font-medium text-primary hover:underline underline-offset-4"
-            >
-              Sign in
-            </Link>
-          </p>
+              <Card className="border-0 shadow-none p-0 bg-transparent">
+                <CardContent className="p-0">
+                  {submitted ? (
+                    <div
+                      className="text-center py-8 space-y-4"
+                      data-testid="request-demo-success"
+                    >
+                      <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto" />
+                      <h2 className="text-xl font-semibold">
+                        Request received
+                      </h2>
+                      <p className="text-muted-foreground">
+                        Thanks — we will reach out within one business day to
+                        schedule your setup call.
+                      </p>
+                    </div>
+                  ) : (
+                    <Form {...form}>
+                      <form
+                        onSubmit={form.handleSubmit(onSubmit)}
+                        noValidate
+                        className="space-y-4"
+                      >
+                        {submitError && (
+                          <Alert variant="destructive">
+                            <AlertDescription>{submitError}</AlertDescription>
+                          </Alert>
+                        )}
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Your name</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="Jane Smith"
+                                  autoComplete="name"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="businessName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Business name</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="Bright Smiles Dental"
+                                  autoComplete="organization"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="email"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Work email</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="email"
+                                    placeholder="you@business.com"
+                                    autoComplete="email"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  Callback number{" "}
+                                  <span className="text-muted-foreground">
+                                    (optional)
+                                  </span>
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="tel"
+                                    placeholder="(480) 555-0100"
+                                    autoComplete="tel"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <FormField
+                          control={form.control}
+                          name="vertical"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>What kind of business?</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Choose one" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {VERTICALS.map((option) => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="message"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                What should the AI handle?{" "}
+                                <span className="text-muted-foreground">
+                                  (optional)
+                                </span>
+                              </FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="After-hours calls, appointment booking, missed-call follow-up…"
+                                  rows={3}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="submit"
+                          className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base"
+                          disabled={form.formState.isSubmitting}
+                        >
+                          {form.formState.isSubmitting
+                            ? "Sending…"
+                            : "Request my demo"}
+                        </Button>
+                        <TurnstileWidget
+                          onVerify={setCaptchaToken}
+                          onExpire={() => setCaptchaToken(null)}
+                        />
+                      </form>
+                    </Form>
+                  )}
+                </CardContent>
+              </Card>
+
+              <p className="text-center text-sm text-muted-foreground">
+                Already invited?{" "}
+                <Link
+                  href="/auth/signin"
+                  className="font-medium text-primary hover:underline underline-offset-4"
+                >
+                  Sign in
+                </Link>
+              </p>
+            </div>
+          </div>
         </div>
+        <PublicFooter />
       </div>
-    </div>
+    </PublicThemeRoot>
   );
 }

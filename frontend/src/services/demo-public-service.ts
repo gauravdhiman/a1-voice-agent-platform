@@ -47,9 +47,7 @@ export interface DemoCallTokenResponse {
 }
 
 export type DemoOutcomeActionType =
-  | "lead_capture"
-  | "appointment_booking"
-  | "email_delivery";
+  "lead_capture" | "appointment_booking" | "email_delivery";
 export type DemoOutcomeActionStatus = "succeeded" | "failed" | "pending";
 
 export interface DemoOutcomeProviderResult {
@@ -115,7 +113,7 @@ class DemoPublicService {
   async getDemoAgent(slug: string): Promise<DemoAgentPublic> {
     const res = await fetch(
       `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}`,
-      { cache: "no-store" }
+      { cache: "no-store" },
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -138,7 +136,7 @@ class DemoPublicService {
       : "";
     const res = await fetch(
       `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}/call-token${sourceUrl}`,
-      { method: "POST", headers: { "Content-Type": "application/json" } }
+      { method: "POST", headers: { "Content-Type": "application/json" } },
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -162,7 +160,10 @@ class DemoPublicService {
    * @returns Promise resolving to the visitor's private outcome.
    * @throws {Error} When the token is missing, expired, or unavailable.
    */
-  async getDemoOutcome(slug: string, receiptToken: string): Promise<DemoOutcome> {
+  async getDemoOutcome(
+    slug: string,
+    receiptToken: string,
+  ): Promise<DemoOutcome> {
     const res = await fetch(
       `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}/outcome?token=${encodeURIComponent(receiptToken)}`,
       { cache: "no-store" },
@@ -172,6 +173,37 @@ class DemoPublicService {
       throw new Error(body.detail || "Demo outcome is unavailable");
     }
     return (await res.json()) as DemoOutcome;
+  }
+
+  /**
+   * Records one visitor star rating for a demo call.
+   *
+   * The signed receipt token binds the rating to the visitor's own
+   * session; repeat taps update the same stored row. The PostHog funnel
+   * event is emitted separately by the caller.
+   *
+   * @param slug - Public demo slug from the current page.
+   * @param receiptToken - Short-lived token returned with the voice token.
+   * @param rating - Star value from 1 to 5.
+   * @throws {Error} When the rating cannot be recorded.
+   */
+  async submitDemoFeedback(
+    slug: string,
+    receiptToken: string,
+    rating: number,
+  ): Promise<void> {
+    const res = await fetch(
+      `${API_BASE_URL}/api/v1/public/demo/${encodeURIComponent(slug)}/feedback?token=${encodeURIComponent(receiptToken)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Could not record the rating");
+    }
   }
 }
 

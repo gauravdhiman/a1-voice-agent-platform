@@ -327,6 +327,36 @@ for retention cleanup.
 
 ---
 
+### demo_feedback
+
+PII-free visitor star ratings for public demo calls (demo slug plus a 1-5
+score, never names or contact details). One row per voice session: repeat
+taps update the same row. Visitors write through the signed receipt-token
+endpoint (`POST /api/v1/public/demo/{slug}/feedback`); platform admins read
+aggregates and recent rows through the service-role API
+(`GET /api/v1/leads/demo-feedback`). The PostHog funnel event remains the
+analytics copy.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Rating row identifier |
+| session_id | VARCHAR(100) | NOT NULL, UNIQUE | Voice session identifier; one rating per session |
+| agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that was rated |
+| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
+| demo_slug | VARCHAR(100) | NOT NULL | Demo URL slug |
+| rating | SMALLINT | NOT NULL, CHECK 1–5 | Star value |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | First rating timestamp |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**RLS**: Enabled with no public or authenticated-user policies; the service
+role is the only database reader/writer.
+
+**Indexes**: `(demo_slug, created_at)` for per-demo aggregates and recency.
+
+**Migrations**: `9f2c4a7b1e3d_add_demo_feedback.py`.
+
+---
+
 ### interest_leads
 
 Private interest-lead capture for the controlled-SaaS funnel
@@ -1870,6 +1900,8 @@ erDiagram
     voice_agents ||--o{ call_logs : "handles"
     voice_agents ||--o{ demo_outcome_receipts : "produces"
     organizations ||--o{ demo_outcome_receipts : "owns"
+    voice_agents ||--o{ demo_feedback : "rated"
+    organizations ||--o{ demo_feedback : "owns"
     %% interest_leads is standalone (no FKs; private funnel table, no relations)
     interest_leads
     organizations ||--o{ callback_escalations : "owns"
@@ -2024,6 +2056,7 @@ erDiagram
 87. `20260909000001` - Persist the organization-scoped role selected for an invitation and apply it atomically when the invitation is claimed. New invitations support `regular_user` (default) or `org_admin`; legacy invitations remain regular-user invitations.
 88. `20260911000001` - Add optional `platform_notification_settings.platform_admin_email` for the recipient of platform-admin demo and interest-lead alerts.
 89. `20260911000002` - Seed the enabled `lead.interest_submitted` notification event used by public demo and interest-form alerts.
+90. `9f2c4a7b1e3d` - Add service-role-only `demo_feedback` for PII-free visitor star ratings on public demo calls (one row per voice session, upsert on repeat taps). Visitors write through the signed receipt-token endpoint; platform admins read aggregates and recent rows.
 
 ---
 

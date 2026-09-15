@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Phone } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { SITE_NAME } from "@/lib/site-config";
+import { ArrowRight, ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
+import { PublicHeader } from "@/components/public-theme/public-header";
+import { PublicFooter } from "@/components/public-theme/public-footer";
+import pt from "@/components/public-theme/public-theme.module.css";
 
 /** One outcome block: what the AI handles for this vertical. */
 export interface IndustryOutcome {
@@ -45,7 +46,9 @@ interface IndustryPageProps {
 }
 
 /**
- * Shared template for vertical SEO landing pages.
+ * Shared template for vertical SEO landing pages, styled with the public
+ * atmosphere theme (same header, tokens, and day/night choice as the
+ * homepage).
  *
  * Same skeleton every time (pain → live demo → concierge setup →
  * outcomes → pricing anchor → FAQ), unique copy per vertical so each
@@ -63,142 +66,237 @@ export function IndustryPage({ content }: IndustryPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
-      <header className="w-full border-b border-border/40">
-        <div className="container flex h-16 items-center justify-between max-w-5xl mx-auto px-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-blue-600 to-cyan-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Phone className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">
-              {SITE_NAME}
-            </span>
-          </Link>
-          <Link href="/request-demo">
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-              Request a Demo
-            </Button>
-          </Link>
-        </div>
-      </header>
+    <PublicThemeRoot>
+      <div className={pt.page}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        />
+        <div className={pt.glow} aria-hidden="true" />
+        <PublicHeader />
 
-      <main className="flex-1">
-        <section className="py-16 md:py-24">
-          <div className="container max-w-3xl mx-auto px-4 text-center">
-            <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl">
-              {content.headline}
-            </h1>
-            <p className="mt-4 text-muted-foreground md:text-xl leading-relaxed">
-              {content.subhead}
-            </p>
-            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-              <Link href={`/demo/${content.demoSlug}`}>
-                <Button
-                  size="lg"
-                  className="bg-blue-600 hover:bg-blue-700 px-8 h-12 text-base"
-                >
+        <main style={{ position: "relative" }}>
+          <section style={{ padding: "88px 6.5% 72px" }}>
+            <div
+              style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}
+            >
+              <p className={pt.eyebrow} style={{ justifyContent: "center" }}>
+                <span className={pt.statusDot} />
+                AI FRONT DESK FOR {content.slug.toUpperCase()}
+              </p>
+              <h1
+                className={pt.title}
+                style={{
+                  fontSize: "clamp(40px, 5vw, 68px)",
+                  margin: "28px 0 20px",
+                }}
+              >
+                {content.headline}
+              </h1>
+              <p
+                className={pt.lede}
+                style={{ maxWidth: 620, margin: "0 auto" }}
+              >
+                {content.subhead}
+              </p>
+              <div
+                style={{
+                  marginTop: 36,
+                  display: "flex",
+                  gap: 22,
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <Link className={pt.primary} href={`/demo/${content.demoSlug}`}>
                   Talk to {content.demoName} now
-                  <ArrowRight className="ml-2 w-4 h-4" />
-                </Button>
-              </Link>
-              <Link href="/request-demo">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="px-8 h-12 text-base"
-                >
-                  Request a Demo
-                </Button>
-              </Link>
+                  <ArrowRight size={16} />
+                </Link>
+                <Link className={pt.textLink} href="/request-demo">
+                  Request a Demo <ArrowUpRight size={16} />
+                </Link>
+              </div>
+              <p
+                className={pt.smallDetail}
+                style={{ marginTop: 22, fontSize: 10 }}
+              >
+                {content.demoBlurb}
+              </p>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">
-              {content.demoBlurb}
-            </p>
-          </div>
-        </section>
+          </section>
 
-        <section className="py-12 md:py-16 bg-muted/30 border-y border-border/40">
-          <div className="container max-w-3xl mx-auto px-4">
-            <h2 className="text-2xl font-bold tracking-tight text-center">
-              Sound familiar?
-            </h2>
-            <ul className="mt-6 space-y-3">
-              {content.pains.map((pain) => (
-                <li key={pain} className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-muted-foreground leading-relaxed">
-                    {pain}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+          <section
+            style={{ borderTop: "1px solid var(--line)", padding: "64px 6.5%" }}
+          >
+            <div style={{ maxWidth: 680, margin: "0 auto" }}>
+              <h2
+                className={pt.title}
+                style={{
+                  fontSize: "clamp(28px, 3vw, 40px)",
+                  textAlign: "center",
+                }}
+              >
+                Sound <span>familiar?</span>
+              </h2>
+              <ul
+                style={{
+                  marginTop: 32,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 18,
+                  padding: 0,
+                  listStyle: "none",
+                }}
+              >
+                {content.pains.map((pain) => (
+                  <li
+                    key={pain}
+                    style={{
+                      display: "flex",
+                      gap: 14,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <CheckCircle2
+                      size={20}
+                      style={{ color: "var(--accent)", flexShrink: 0 }}
+                    />
+                    <span style={{ color: "var(--muted)", lineHeight: 1.8 }}>
+                      {pain}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
 
-        <section className="py-12 md:py-16">
-          <div className="container max-w-5xl mx-auto px-4">
-            <h2 className="text-2xl font-bold tracking-tight text-center md:text-3xl">
-              What your AI front desk handles
-            </h2>
-            <div className="mt-8 grid gap-6 md:grid-cols-2">
-              {content.outcomes.map((outcome) => (
-                <Card key={outcome.title}>
-                  <CardContent className="pt-6">
-                    <h3 className="text-lg font-bold">{outcome.title}</h3>
-                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+          <section
+            style={{ borderTop: "1px solid var(--line)", padding: "64px 6.5%" }}
+          >
+            <div style={{ maxWidth: 960, margin: "0 auto" }}>
+              <h2
+                className={pt.title}
+                style={{
+                  fontSize: "clamp(28px, 3vw, 40px)",
+                  textAlign: "center",
+                }}
+              >
+                What your AI front desk <span>handles</span>
+              </h2>
+              <div
+                style={{
+                  marginTop: 40,
+                  display: "grid",
+                  gap: 24,
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+                }}
+              >
+                {content.outcomes.map((outcome) => (
+                  <div
+                    key={outcome.title}
+                    className={pt.panel}
+                    style={{ padding: 30 }}
+                  >
+                    <h3
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 400,
+                        letterSpacing: "-0.03em",
+                      }}
+                    >
+                      {outcome.title}
+                    </h3>
+                    <p
+                      style={{
+                        marginTop: 10,
+                        fontSize: 13,
+                        lineHeight: 1.8,
+                        color: "var(--muted)",
+                      }}
+                    >
                       {outcome.description}
                     </p>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="py-12 md:py-16 bg-muted/30 border-y border-border/40">
-          <div className="container max-w-3xl mx-auto px-4 text-center">
-            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
-              Live in 48 hours — we set it up with you
-            </h2>
-            <p className="mt-4 text-muted-foreground md:text-lg leading-relaxed">
-              Request a demo, we configure your number, calendar, and test
-              calls around your business, and you approve every word before
-              it answers. Pilot plans from $79/mo as you grow.
-            </p>
-            <Link href="/request-demo" className="inline-block mt-6">
-              <Button
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 px-8 h-12 text-base"
+          <section
+            style={{
+              borderTop: "1px solid var(--line)",
+              padding: "64px 6.5%",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ maxWidth: 640, margin: "0 auto" }}>
+              <p className={pt.eyebrow} style={{ justifyContent: "center" }}>
+                LIVE IN 48 HOURS
+              </p>
+              <h2
+                className={pt.title}
+                style={{ fontSize: "clamp(28px, 3vw, 40px)", marginTop: 20 }}
               >
-                Request a Demo
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
-        </section>
-
-        <section className="py-12 md:py-16">
-          <div className="container max-w-3xl mx-auto px-4">
-            <h2 className="text-2xl font-bold tracking-tight text-center">
-              Common questions
-            </h2>
-            <div className="mt-8 space-y-6">
-              {content.faqs.map((faq) => (
-                <div key={faq.question}>
-                  <h3 className="font-bold">{faq.question}</h3>
-                  <p className="mt-1 text-muted-foreground leading-relaxed">
-                    {faq.answer}
-                  </p>
-                </div>
-              ))}
+                We set it up <span>with you</span>
+              </h2>
+              <p className={pt.lede} style={{ marginTop: 16 }}>
+                Request a demo, we configure your number, calendar, and test
+                calls around your business, and you approve every word before it
+                answers. Pilot plans from $79/mo as you grow.
+              </p>
+              <div style={{ marginTop: 32 }}>
+                <Link className={pt.primary} href="/request-demo">
+                  Request a Demo <ArrowRight size={16} />
+                </Link>
+              </div>
             </div>
-          </div>
-        </section>
-      </main>
-    </div>
+          </section>
+
+          <section
+            style={{ borderTop: "1px solid var(--line)", padding: "64px 6.5%" }}
+          >
+            <div style={{ maxWidth: 680, margin: "0 auto" }}>
+              <h2
+                className={pt.title}
+                style={{
+                  fontSize: "clamp(28px, 3vw, 40px)",
+                  textAlign: "center",
+                }}
+              >
+                Common <span>questions</span>
+              </h2>
+              <div
+                style={{
+                  marginTop: 32,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 28,
+                }}
+              >
+                {content.faqs.map((faq) => (
+                  <div key={faq.question}>
+                    <h3 style={{ fontSize: 17 }}>{faq.question}</h3>
+                    <p
+                      style={{
+                        marginTop: 8,
+                        color: "var(--muted)",
+                        lineHeight: 1.8,
+                        fontSize: 14,
+                      }}
+                    >
+                      {faq.answer}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <PublicFooter />
+      </div>
+    </PublicThemeRoot>
   );
 }
