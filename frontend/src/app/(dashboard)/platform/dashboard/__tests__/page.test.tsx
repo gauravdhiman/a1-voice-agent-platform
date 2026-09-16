@@ -141,7 +141,7 @@ describe("platform overview", () => {
     setChartBounds(volume, 100);
     fireEvent.pointerMove(volume, { pointerType: "mouse", clientX: 80 });
     expect(screen.getByRole("tooltip").getAttribute("aria-label")).toBe(
-      "2026-09-15, 14 calls",
+      "Sep 15, 2026, 14 calls",
     );
     expect(
       Array.from(volume.querySelectorAll("[data-chart-marker]")).map((marker) =>

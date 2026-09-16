@@ -19,8 +19,8 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(autouse=True)
-def dismiss_optional_tour(page: Page):
-    """Dismiss the optional tour so assertions focus on dashboard content."""
+def dismiss_optional_tour_overlay(page: Page):
+    """Dismiss the optional tour when it appears during page interactions."""
     page.add_locator_handler(
         page.get_by_role("button", name="Skip tour"), lambda locator: locator.click()
     )
@@ -39,6 +39,14 @@ def apply_mocks():
     yield
 
 
+def dismiss_optional_tour(page: Page) -> None:
+    """Dismiss the optional tour before dashboard pointer interactions."""
+    skip = page.get_by_role("button", name="Skip tour")
+    if skip.is_visible():
+        skip.click()
+        expect(skip).to_be_hidden(timeout=5000)
+
+
 def sign_in(page: Page, base_url: str, role: str) -> None:
     page.goto(f"{base_url}/auth/signin")
     page.get_by_label("Email Address").fill(f"{role}@247ai.local")
@@ -49,9 +57,7 @@ def sign_in(page: Page, base_url: str, role: str) -> None:
     expect(page.get_by_text("Workspace overview", exact=True)).to_be_visible(
         timeout=30000
     )
-    skip = page.get_by_role("button", name="Skip tour")
-    if skip.is_visible():
-        skip.click()
+    dismiss_optional_tour(page)
 
 
 def wait_until(predicate, page: Page, description: str) -> None:
@@ -68,16 +74,24 @@ def assert_immediate_chart_readout(
     page: Page, chart: Locator, x_fraction: float, expected: str
 ) -> None:
     """Move across a chart and verify its shared, immediate value readout."""
+    dismiss_optional_tour(page)
     expect(chart).to_be_visible()
+    chart.scroll_into_view_if_needed()
     bounds = chart.bounding_box()
     assert bounds is not None
-    page.mouse.move(
-        bounds["x"] + bounds["width"] * x_fraction,
-        bounds["y"] + bounds["height"] / 2,
-    )
+    pointer_x = bounds["x"] + bounds["width"] * x_fraction
+    pointer_y = bounds["y"] + bounds["height"] / 2
     tooltip = chart.get_by_role("tooltip")
-    expect(tooltip).to_be_visible(timeout=1000)
-    expect(tooltip).to_have_attribute("aria-label", expected, timeout=1000)
+    for attempt in range(2):
+        dismiss_optional_tour(page)
+        page.mouse.move(pointer_x, pointer_y)
+        try:
+            expect(tooltip).to_be_visible(timeout=1000)
+            expect(tooltip).to_have_attribute("aria-label", expected, timeout=1000)
+            break
+        except AssertionError:
+            if attempt == 1:
+                raise
     expect(chart.locator("[title]")).to_have_count(0)
 
 

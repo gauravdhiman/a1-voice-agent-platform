@@ -39,6 +39,16 @@ export function getReportingPeriodLabel(period: ReportingPeriod): string {
   );
 }
 
+/** Format an ISO date-only analytics key without shifting it to local time. */
+export function formatReportingDateLabel(value: string): string {
+  const date = new Date(value + "T12:00:00Z");
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 /** Return the rolling day count, or null for a calendar-day period. */
 export function getRollingPeriodDays(period: ReportingPeriod): number | null {
   return ROLLING_PERIOD_DAYS[period] ?? null;

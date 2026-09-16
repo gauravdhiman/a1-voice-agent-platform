@@ -7,6 +7,7 @@ import { Activity, ArrowUpRight, CheckCircle2, Clock3, Phone, RefreshCw, Users }
 import { useAuth } from "@/contexts/auth-context";
 import { callLogService, type CallAnalytics } from "@/services/call-log-service";
 import {
+  formatReportingDateLabel,
   getReportingPeriodLabel,
   REPORTING_PERIOD_OPTIONS,
 } from "@/lib/reporting-period";
@@ -100,7 +101,7 @@ function VolumeChart({
           <InteractiveChart
             data={points}
             chartLabel="Platform daily call volume. Move the pointer or use the arrow keys to inspect each UTC date."
-            label={(point) => point.date}
+            label={(point) => formatReportingDateLabel(point.date)}
             value={(point) =>
               number.format(point.calls) +
               " " +

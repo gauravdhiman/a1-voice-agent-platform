@@ -24,6 +24,7 @@ import {
   type CallLog,
 } from "@/services/call-log-service";
 import {
+  formatReportingDateLabel,
   getReportingDateWindow,
   getReportingPeriodLabel,
   REPORTING_PERIOD_OPTIONS,
@@ -264,16 +265,6 @@ function PlatformPulse({ userId }: { userId: string }) {
   );
 }
 
-/** Format date-only analytics keys without shifting them to the browser timezone. */
-function formatChartDate(value: string): string {
-  const date = new Date(value + "T12:00:00Z");
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  }).format(date);
-}
-
 /** Render daily call volume with pointer and keyboard selection. */
 
 function CallVolume({
@@ -315,7 +306,7 @@ function CallVolume({
           <InteractiveChart
             data={points}
             chartLabel="Daily call volume chart. Move the pointer or use the arrow keys to inspect each day."
-            label={(point) => formatChartDate(point.date)}
+            label={(point) => formatReportingDateLabel(point.date)}
             value={(point) =>
               number.format(point.calls) +
               " " +

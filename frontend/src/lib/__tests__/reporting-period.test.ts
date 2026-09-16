@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatReportingDateLabel,
   getReportingDateWindow,
   getReportingPeriodLabel,
   getRollingPeriodDays,
@@ -7,6 +8,16 @@ import {
 } from "@/lib/reporting-period";
 
 describe("reporting periods", () => {
+  it("formats date-only analytics labels without shifting the UTC date", () => {
+    const expected = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeZone: "UTC",
+    }).format(new Date("2026-09-15T12:00:00Z"));
+
+    expect(formatReportingDateLabel("2026-09-15")).toBe(expected);
+    expect(formatReportingDateLabel("invalid-date")).toBe("invalid-date");
+  });
+
   it("offers the dashboard periods in the requested order", () => {
     expect(REPORTING_PERIOD_OPTIONS.map(({ label }) => label)).toEqual([
       "Today",
