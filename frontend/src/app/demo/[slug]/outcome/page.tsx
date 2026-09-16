@@ -119,7 +119,7 @@ function outcomeHeading(outcome: DemoOutcome): [string, string] {
   if (outcome.status === "needs_attention") {
     return ["Almost done.", "One thing needs a look."];
   }
-  return ["Nothing got saved", "on that call."];
+  return ["Nothing got saved", "on this call."];
 }
 
 function actionIcon(action: DemoOutcomeAction) {
@@ -241,7 +241,7 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
               {pill.label}
             </span>
           </div>
-          <p className="mt-1.5 text-sm" style={{ color: "var(--muted)" }}>
+          <p className="mt-1.5 text-sm" style={{ color: "var(--public-muted)" }}>
             Saved to {destinationLabel(action)}{" "}
             <span style={{ opacity: 0.75 }}>via {providerLabel(action)}</span>
           </p>
@@ -258,7 +258,7 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
                 className="rounded-xl border px-3 py-2.5"
                 style={{ borderColor: "var(--line)" }}
               >
-                <dt className="text-xs" style={{ color: "var(--muted)" }}>
+                <dt className="text-xs" style={{ color: "var(--public-muted)" }}>
                   {labelForField(name)}
                 </dt>
                 <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">
@@ -281,7 +281,7 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
         )}
         <div>
           <p className="font-medium">What your tool confirmed</p>
-          <p className="mt-0.5" style={{ color: "var(--muted)" }}>
+          <p className="mt-0.5" style={{ color: "var(--public-muted)" }}>
             {String(
               action.provider_result.message ||
                 (isSuccess
@@ -369,7 +369,7 @@ export default function DemoOutcomePage() {
               style={{
                 borderColor: "var(--line)",
                 background: "var(--panel)",
-                color: "var(--muted)",
+                color: "var(--public-muted)",
               }}
             >
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -402,7 +402,7 @@ export default function DemoOutcomePage() {
                 >
                   Summary unavailable
                 </h1>
-                <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+                <p className="mt-2 text-sm" style={{ color: "var(--public-muted)" }}>
                   {error}
                 </p>
               </div>
@@ -440,7 +440,7 @@ export default function DemoOutcomePage() {
               <p className={pt.smallDetail}>
                 <ShieldCheck
                   className="mr-1.5 inline h-3.5 w-3.5"
-                  style={{ color: "var(--accent)" }}
+                  style={{ color: "var(--public-accent)" }}
                 />
                 PRIVATE CALL SUMMARY · EXPIRES IN 24 HOURS
               </p>
@@ -522,7 +522,7 @@ export default function DemoOutcomePage() {
                     style={{
                       background: "var(--panel)",
                       border: "1px solid var(--line)",
-                      color: "var(--accent)",
+                      color: "var(--public-accent)",
                     }}
                   >
                     <Wrench className="h-7 w-7" />
@@ -531,14 +531,14 @@ export default function DemoOutcomePage() {
                     className={pt.title}
                     style={{ fontSize: 24, marginTop: 20 }}
                   >
-                    Nothing got saved on that call
+                    Nothing got saved on this call
                   </h2>
                   <p
                     className="mt-2 max-w-md text-sm leading-6"
-                    style={{ color: "var(--muted)" }}
+                    style={{ color: "var(--public-muted)" }}
                   >
                     Let the agent confirm the final details before hanging up.
-                    This page only shows results your tools confirmed.
+                    This page only shows results that tools confirmed.
                   </p>
                   <Link
                     className={pt.primary}
@@ -573,21 +573,21 @@ export default function DemoOutcomePage() {
                 <li className="flex items-center gap-3">
                   <CheckCircle2
                     size={17}
-                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                    style={{ color: "var(--public-accent)", flexShrink: 0 }}
                   />
                   No missed calls, even after hours and weekends.
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2
                     size={17}
-                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                    style={{ color: "var(--public-accent)", flexShrink: 0 }}
                   />
                   Bookings land straight in your calendar while you work.
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2
                     size={17}
-                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                    style={{ color: "var(--public-accent)", flexShrink: 0 }}
                   />
                   Every caller captured with details, ready for follow-up.
                 </li>
@@ -637,7 +637,7 @@ export default function DemoOutcomePage() {
             style={{
               maxWidth: 960,
               padding: "40px 6.5% 56px",
-              color: "var(--muted)",
+              color: "var(--public-muted)",
             }}
           >
             <span className="inline-flex items-center gap-1.5">

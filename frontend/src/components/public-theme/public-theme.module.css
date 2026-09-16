@@ -127,6 +127,8 @@
 }
 .root a {
   text-decoration: none;
+}
+.root a:not([data-slot="button"]) {
   color: inherit;
 }
 .root button {
@@ -351,8 +353,9 @@
 }
 .smallDetail {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 8px;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
   color: var(--public-muted);
 }
 
@@ -386,7 +389,7 @@
  * generic `.root a { color: inherit }` reset (higher specificity wins;
  * without this the primary button text inherits page ink and vanishes
  * on the pale night-mode button). */
-.root .primary {
+.root a.primary {
   color: var(--button-ink);
 }
 .root .signIn {

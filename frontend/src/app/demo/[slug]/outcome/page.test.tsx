@@ -134,7 +134,10 @@ describe("DemoOutcomePage", () => {
     render(<DemoOutcomePage />);
 
     expect(
-      await screen.findByText("Nothing got saved on that call"),
+      await screen.findByText("Nothing got saved on this call"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/This page only shows results that tools confirmed\./),
     ).toBeTruthy();
   });
 
