@@ -655,6 +655,8 @@ html {
 }
 
 :where(
+  [class~="bg-destructive/5"],
+  [class~="bg-destructive/10"],
   [class~="bg-red-50"],
   [class~="bg-red-100"],
   [class~="bg-rose-500/15"],
@@ -787,6 +789,13 @@ html {
 :where(
   [class*="text-red-"],
   [class*="text-rose-"],
+  [class~="text-destructive"],
+  [class~="text-destructive/80"],
+  [class~="text-destructive/90"],
+  [class~="hover:text-destructive"],
+  [class~="focus:text-destructive"],
+  [class~="data-[variant=destructive]:text-destructive"],
+  [class~="data-[variant=destructive]:focus:text-destructive"],
   [class*="dark:text-red-"],
   [class*="dark:text-rose-"],
   [class*="hover:text-red-"],
@@ -832,6 +841,7 @@ html {
 :where(
   [class*="border-red-"],
   [class*="border-rose-"],
+  [class*="border-destructive"],
   [class*="dark:border-red-"],
   [class*="dark:border-rose-"]
 ) {

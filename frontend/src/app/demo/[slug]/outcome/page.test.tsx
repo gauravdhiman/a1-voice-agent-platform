@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getDemoOutcomeMock, useParamsMock, useSearchParamsMock } = vi.hoisted(
@@ -102,10 +102,20 @@ describe("DemoOutcomePage", () => {
       name: "See what was saved",
     });
     expect(detailsLink.getAttribute("href")).toBe("#call-results");
-    const turn = screen.getByText("YOUR TURN · 30 SECONDS");
-    const results = screen.getByText("saved for you");
+    const feedbackRegion = screen.getByRole("complementary", {
+      name: "Feedback and setup request",
+    });
     expect(
-      turn.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING,
+      within(feedbackRegion).getByText("YOUR TURN · 30 SECONDS"),
+    ).toBeTruthy();
+    expect(within(feedbackRegion).getByText("How was this demo?")).toBeTruthy();
+    expect(
+      within(feedbackRegion).getByRole("button", {
+        name: "Get this for my business",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Call results" }),
     ).toBeTruthy();
     const resultLink = screen.getByRole("link", {
       name: "Open Google Sheets result",
@@ -134,8 +144,15 @@ describe("DemoOutcomePage", () => {
     render(<DemoOutcomePage />);
 
     expect(
-      await screen.findByText("Nothing got saved on that call"),
+      await screen.findByText("Nothing got saved on this call"),
     ).toBeTruthy();
+    expect(
+      screen.getByText(/This page only shows results that tools confirmed\./),
+    ).toBeTruthy();
+    const feedbackRegion = screen.getByRole("complementary", {
+      name: "Feedback and setup request",
+    });
+    expect(within(feedbackRegion).getByText("How was this demo?")).toBeTruthy();
   });
 
   it("uses the configured result URL for a Calendar booking", async () => {
@@ -265,6 +282,10 @@ describe("DemoOutcomePage", () => {
     expect(
       await screen.findByRole("heading", { name: /almost done/i }),
     ).toBeTruthy();
+    const feedbackRegion = screen.getByRole("complementary", {
+      name: "Feedback and setup request",
+    });
+    expect(within(feedbackRegion).getByText("How was this demo?")).toBeTruthy();
     expect(screen.getByText("Service request not saved")).toBeTruthy();
     expect(screen.getByText("Didn't go through")).toBeTruthy();
     expect(

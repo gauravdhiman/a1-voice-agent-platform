@@ -160,9 +160,9 @@ export function IndustryPage({ content }: IndustryPageProps) {
                   >
                     <CheckCircle2
                       size={20}
-                      style={{ color: "var(--accent)", flexShrink: 0 }}
+                      style={{ color: "var(--public-accent)", flexShrink: 0 }}
                     />
-                    <span style={{ color: "var(--muted)", lineHeight: 1.8 }}>
+                    <span style={{ color: "var(--public-muted)", lineHeight: 1.8 }}>
                       {pain}
                     </span>
                   </li>
@@ -213,7 +213,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
                         marginTop: 10,
                         fontSize: 13,
                         lineHeight: 1.8,
-                        color: "var(--muted)",
+                        color: "var(--public-muted)",
                       }}
                     >
                       {outcome.description}
@@ -281,7 +281,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
                     <p
                       style={{
                         marginTop: 8,
-                        color: "var(--muted)",
+                        color: "var(--public-muted)",
                         lineHeight: 1.8,
                         fontSize: 14,
                       }}

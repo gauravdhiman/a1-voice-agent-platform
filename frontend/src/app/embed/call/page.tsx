@@ -203,7 +203,7 @@ function EmbedCallContent() {
 
   if (!agentId) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-background">
         <p className="text-red-500">No agent ID provided</p>
       </div>
     );
