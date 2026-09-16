@@ -25,8 +25,8 @@ export function WarningState({
     return (
       <div className={cn("flex items-center justify-center h-64", className)}>
         <div className="flex flex-col items-center space-y-2 text-center">
-          <AlertTriangle className="h-6 w-6 text-yellow-500" />
-          <div className="text-yellow-700 text-sm">{message}</div>
+          <AlertTriangle className="h-6 w-6 status-text-warning" />
+          <div className="status-text-warning text-sm">{message}</div>
           {onAction && (
             <Button
               variant="outline"
@@ -45,15 +45,17 @@ export function WarningState({
 
   return (
     <div className={cn("p-6", className)}>
-      <Card className="border-yellow-200">
+      <Card className="status-callout warning">
         <CardContent className="p-6">
           <div className="flex flex-col items-center text-center space-y-4">
-            <div className="rounded-full bg-yellow-50 p-3">
-              <AlertTriangle className="h-8 w-8 text-yellow-500" />
+            <div className="status-icon-surface warning rounded-full p-3">
+              <AlertTriangle className="h-8 w-8 status-text-warning" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-yellow-800">{title}</h3>
-              <p className="text-sm text-yellow-700 max-w-md">{message}</p>
+              <h3 className="text-lg font-semibold status-text-warning">
+                {title}
+              </h3>
+              <p className="text-sm status-text-warning max-w-md">{message}</p>
             </div>
             {onAction && (
               <Button onClick={onAction} variant="outline">

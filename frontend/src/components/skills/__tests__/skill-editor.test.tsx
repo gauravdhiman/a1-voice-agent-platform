@@ -362,6 +362,42 @@ describe("SkillEditor - platform skill library sheet scrolling", () => {
   });
 });
 
+describe("SkillEditor - Markdown reader contrast", () => {
+  it("uses the inverted typography palette for selected Markdown files", async () => {
+    const filePath = "references/faq.md";
+    const adapter = makeAdapter({
+      loadFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "file-1", file_path: filePath, file_kind: "reference" },
+        ]),
+      getFileContent: vi
+        .fn()
+        .mockResolvedValue("# FAQ\n\nReadable Markdown content."),
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <SkillEditor
+        mode="platform"
+        adapter={adapter}
+        canCreate={false}
+        canEdit={false}
+        canDelete={false}
+        initialSelection={{ slug: FIXTURE_SKILL.slug, filePath }}
+      />,
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    const heading = await screen.findByRole("heading", { name: "FAQ" });
+    expect(
+      heading.closest(".prose")?.classList.contains("dark:prose-invert"),
+    ).toBe(true);
+  });
+});
+
 describe("SkillEditor - create custom skill sheet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
