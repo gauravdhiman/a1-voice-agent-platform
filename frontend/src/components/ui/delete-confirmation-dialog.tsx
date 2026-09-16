@@ -75,7 +75,7 @@ export function DeleteConfirmationDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-red-600">
+          <DialogTitle className="flex items-center gap-2 status-text-danger">
             <AlertTriangle className="h-5 w-5" />
             Delete {itemType}
           </DialogTitle>
@@ -88,20 +88,18 @@ export function DeleteConfirmationDialog({
 
         <div className="space-y-4">
           {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
-              {error}
-            </div>
+            <div className="status-callout danger p-3 text-sm">{error}</div>
           )}
 
           {warnings.length > 0 && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+            <div className="status-callout danger p-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-red-800">
+                <AlertTriangle className="h-5 w-5 status-text-danger mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
                   <p className="font-medium mb-1">
                     Warning: This action is irreversible
                   </p>
-                  <ul className="space-y-1 text-red-700">
+                  <ul className="space-y-1">
                     {warnings.map((warning, index) => (
                       <li key={index}>• {warning}</li>
                     ))}

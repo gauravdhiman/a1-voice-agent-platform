@@ -1197,13 +1197,13 @@ export function SkillEditor({
                 ) : selectedFile.filePath.match(/\.(py|js|ts|sh|bash|yaml|yml|toml)$/) ? (
                   <div className="flex-1 overflow-y-auto p-5"><pre className="text-xs font-mono bg-muted/50 rounded-lg p-4 overflow-x-auto whitespace-pre">{selectedFile.content}</pre></div>
                 ) : (
-                  <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none"><MarkdownRenderer content={selectedFile.content} /></div>
+                  <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate dark:prose-invert max-w-none"><MarkdownRenderer content={selectedFile.content} /></div>
                 )}
               </>
             ) : loadingFileContent ? (
               <div className="flex-1 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate max-w-none"><MarkdownRenderer content={selectedSkill.content} /></div>
+              <div className="flex-1 overflow-y-auto p-5 prose prose-sm prose-slate dark:prose-invert max-w-none"><MarkdownRenderer content={selectedSkill.content} /></div>
             )}
           </>
         ) : (

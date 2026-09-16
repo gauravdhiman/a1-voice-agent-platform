@@ -30,6 +30,15 @@ html {
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-status-success: var(--status-success-bg);
+  --color-status-success-foreground: var(--status-success-fg);
+  --color-status-warning: var(--status-warning-bg);
+  --color-status-warning-foreground: var(--status-warning-fg);
+  --color-status-danger: var(--status-danger-bg);
+  --color-status-danger-foreground: var(--status-danger-fg);
+  --color-status-info: var(--status-info-bg);
+  --color-status-info-foreground: var(--status-info-fg);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -51,177 +60,218 @@ html {
 :root {
   --radius: 0.5rem;
 
-  /* Professional Enterprise Theme - Deep Navy & Sophisticated Blue */
-  /* Light Mode */
-  --background: oklch(0.99 0.005 264.695);
-  /* Very subtle blue-tinted white */
-  --foreground: oklch(0.08 0.041 263.667);
-  /* Deep charcoal blue */
+  /* Public and private pages share these two palettes. */
+  --site-day-surface: #f7faff;
+  --site-day-panel: #edf3fb;
+  --site-day-ink: #172033;
+  --site-day-muted: #526175;
+  --site-day-accent: #1d4fd7;
+  --site-day-accent-soft: #e8f0fb;
+  --site-day-line: #18304a2e;
+  --site-day-button: #1457d9;
+  --site-day-button-ink: #ffffff;
+  --site-day-glow: #6ea8ff59;
+  --site-day-input-border: #c3d1e3;
+  --site-day-shadow: #10243a14;
+  --site-day-destructive: #b42318;
+  --site-day-status-success-action: #216b45;
+  --site-day-status-warning-action: #73520d;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.08 0.041 263.667);
+  --site-night-surface: #080e18;
+  --site-night-panel: #101a28;
+  --site-night-ink: #f0f1ee;
+  --site-night-muted: #9aa7b8;
+  --site-night-accent: #a6d4fc;
+  --site-night-accent-soft: #17283a;
+  --site-night-line: #ffffff24;
+  --site-night-button: #d1e9fe;
+  --site-night-button-ink: #111d2c;
+  --site-night-glow: #3779b821;
+  --site-night-input-border: #394b60;
+  --site-night-shadow: #00000040;
+  --site-night-destructive: #c44450;
+  --site-night-status-success-action: #24714c;
+  --site-night-status-warning-action: #6b511a;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.08 0.041 263.667);
+  --site-day-status-success-bg: #e8f5ec;
+  --site-day-status-success-fg: #1e6744;
+  --site-day-status-success-border: #b7dfc5;
+  --site-day-status-warning-bg: #fff5da;
+  --site-day-status-warning-fg: #80550b;
+  --site-day-status-warning-border: #ead18c;
+  --site-day-status-danger-bg: #fff0ef;
+  --site-day-status-danger-fg: #a52d34;
+  --site-day-status-danger-border: #efc0bf;
+  --site-day-status-info-bg: #ecf4ff;
+  --site-day-status-info-fg: #285293;
+  --site-day-status-info-border: #c7d9f3;
 
-  /* Sophisticated Blue - Primary */
-  --primary: oklch(0.43 0.197 257.651);
-  /* Refined blue-600 */
-  --primary-foreground: oklch(0.98 0.01 264.695);
+  --site-night-status-success-bg: #152d25;
+  --site-night-status-success-fg: #9cddb6;
+  --site-night-status-success-border: #2f644c;
+  --site-night-status-warning-bg: #302817;
+  --site-night-status-warning-fg: #f2ce78;
+  --site-night-status-warning-border: #76602b;
+  --site-night-status-danger-bg: #351f24;
+  --site-night-status-danger-fg: #f3a0a3;
+  --site-night-status-danger-border: #754148;
+  --site-night-status-info-bg: #182b41;
+  --site-night-status-info-fg: #bdd8fa;
+  --site-night-status-info-border: #355675;
 
-  /* Warm Gray - Secondary */
-  --secondary: oklch(0.94 0.019 264.695);
-  /* Sophisticated light gray */
-  --secondary-foreground: oklch(0.16 0.041 263.667);
+  /* The workspace follows the resolved light/dark class on <html>. */
+  --site-surface: var(--site-day-surface);
+  --site-panel: var(--site-day-panel);
+  --site-ink: var(--site-day-ink);
+  --site-muted: var(--site-day-muted);
+  --site-accent: var(--site-day-accent);
+  --site-accent-soft: var(--site-day-accent-soft);
+  --site-line: var(--site-day-line);
+  --site-button: var(--site-day-button);
+  --site-button-ink: var(--site-day-button-ink);
+  --site-glow: var(--site-day-glow);
+  --site-input-border: var(--site-day-input-border);
+  --site-shadow: var(--site-day-shadow);
 
-  /* Subtle Gray - Muted */
-  --muted: oklch(0.96 0.013 264.695);
-  /* Very subtle gray */
-  --muted-foreground: oklch(0.47 0.042 264.364);
-  /* Muted blue-gray */
+  /* Status colors stay distinct from the brand accent and remain readable. */
+  --status-success-bg: var(--site-day-status-success-bg);
+  --status-success-fg: var(--site-day-status-success-fg);
+  --status-success-border: var(--site-day-status-success-border);
+  --status-warning-bg: var(--site-day-status-warning-bg);
+  --status-warning-fg: var(--site-day-status-warning-fg);
+  --status-warning-border: var(--site-day-status-warning-border);
+  --status-danger-bg: var(--site-day-status-danger-bg);
+  --status-danger-fg: var(--site-day-status-danger-fg);
+  --status-danger-border: var(--site-day-status-danger-border);
+  --status-info-bg: var(--site-day-status-info-bg);
+  --status-info-fg: var(--site-day-status-info-fg);
+  --status-info-border: var(--site-day-status-info-border);
+  --status-success-action: var(--site-day-status-success-action);
+  --status-warning-action: var(--site-day-status-warning-action);
 
-  /* Accent Gray */
-  --accent: oklch(0.92 0.024 264.695);
-  /* Light accent gray */
-  --accent-foreground: oklch(0.13 0.041 263.667);
+  --background: var(--site-surface);
+  --foreground: var(--site-ink);
+  --card: var(--site-panel);
+  --card-foreground: var(--site-ink);
+  --popover: var(--site-panel);
+  --popover-foreground: var(--site-ink);
+  --primary: var(--site-button);
+  --primary-foreground: var(--site-button-ink);
+  --secondary: var(--site-panel);
+  --secondary-foreground: var(--site-ink);
+  --muted: var(--site-panel);
+  --muted-foreground: var(--site-muted);
+  --accent: var(--site-accent-soft);
+  --accent-foreground: var(--site-ink);
+  --destructive: var(--site-day-destructive);
+  --destructive-foreground: #ffffff;
+  --border: var(--site-line);
+  --input: var(--site-input-border);
+  --ring: var(--site-accent);
 
-  /* Professional Red - Destructive */
-  --destructive: oklch(0.49 0.236 25.764);
-  /* Refined red */
-  --destructive-foreground: oklch(0.98 0.01 264.695);
+  --switch-muted: var(--site-muted);
+  --switch-line: var(--site-line);
+  --switch-knob: var(--site-accent);
 
-  /* Subtle Borders */
-  --border: oklch(0.88 0.018 264.695);
-  /* Very light gray border */
-  --input: oklch(0.92 0.018 264.695);
-  --ring: oklch(0.43 0.197 257.651);
-  /* Primary blue for focus rings */
+  --form-drawer: var(--site-panel);
+  --form-section: #ffffff;
+  --form-section-border: #d9e3f0;
+  --form-field: #f7faff;
+  --form-field-border: #cbd8e8;
+  --form-control: #ffffff;
+  --form-control-border: #b9c9dc;
 
-  /* Shared site-wide theme switch: strong foreground tokens in both modes
-   * so the control never looks washed out or disabled. */
-  --switch-muted: var(--muted-foreground);
-  --switch-line: var(--muted-foreground);
-  --switch-knob: var(--primary);
+  --chart-1: #1457d9;
+  --chart-2: #24846a;
+  --chart-3: #567bb9;
+  --chart-4: #a9771a;
+  --chart-5: #b7464c;
 
-  /* Layered form surfaces — drawer canvas → section → field → control */
-  --form-drawer: oklch(0.965 0.014 264.695);
-  --form-section: oklch(0.995 0.006 264.695);
-  --form-section-border: oklch(0.86 0.024 264.695);
-  --form-field: oklch(0.975 0.016 264.695);
-  --form-field-border: oklch(0.89 0.02 264.695);
-  --form-control: oklch(1 0 0);
-  --form-control-border: oklch(0.79 0.03 264.695);
-
-  /* Sophisticated Chart Colors */
-  --chart-1: oklch(0.43 0.197 257.651);
-  /* Primary blue */
-  --chart-2: oklch(0.52 0.137 164.851);
-  /* Teal */
-  --chart-3: oklch(0.35 0.095 227.392);
-  /* Purple-blue */
-  --chart-4: oklch(0.72 0.165 84.429);
-  /* Green */
-  --chart-5: oklch(0.67 0.164 70.08);
-  /* Yellow-green */
-
-  /* Sidebar Colors */
-  --sidebar: oklch(0.98 0.008 264.695);
-  /* Very subtle sidebar background */
-  --sidebar-foreground: oklch(0.08 0.041 263.667);
-  --sidebar-primary: oklch(0.43 0.197 257.651);
-  --sidebar-primary-foreground: oklch(0.98 0.01 264.695);
-  --sidebar-accent: oklch(0.92 0.024 264.695);
-  --sidebar-accent-foreground: oklch(0.13 0.041 263.667);
-  --sidebar-border: oklch(0.88 0.018 264.695);
-  --sidebar-ring: oklch(0.43 0.197 257.651);
+  --sidebar: var(--site-surface);
+  --sidebar-foreground: var(--site-ink);
+  --sidebar-primary: var(--site-button);
+  --sidebar-primary-foreground: var(--site-button-ink);
+  --sidebar-accent: var(--site-accent-soft);
+  --sidebar-accent-foreground: var(--site-ink);
+  --sidebar-border: var(--site-line);
+  --sidebar-ring: var(--site-accent);
 }
 
 .dark {
-  /* Professional Enterprise Theme - Dark Mode */
-  /* Lighter Gray Background for Better Contrast */
-  --background: oklch(0.18 0.028 264.695);
-  /* Lighter dark gray for visibility */
-  --foreground: oklch(0.93 0.015 264.695);
-  /* Very light gray with subtle blue tint */
+  --site-surface: var(--site-night-surface);
+  --site-panel: var(--site-night-panel);
+  --site-ink: var(--site-night-ink);
+  --site-muted: var(--site-night-muted);
+  --site-accent: var(--site-night-accent);
+  --site-accent-soft: var(--site-night-accent-soft);
+  --site-line: var(--site-night-line);
+  --site-button: var(--site-night-button);
+  --site-button-ink: var(--site-night-button-ink);
+  --site-glow: var(--site-night-glow);
+  --site-input-border: var(--site-night-input-border);
+  --site-shadow: var(--site-night-shadow);
 
-  /* Card Colors */
-  --card: oklch(0.22 0.032 264.695);
-  /* Lighter card for better differentiation */
-  --card-foreground: oklch(0.93 0.015 264.695);
+  --status-success-bg: var(--site-night-status-success-bg);
+  --status-success-fg: var(--site-night-status-success-fg);
+  --status-success-border: var(--site-night-status-success-border);
+  --status-warning-bg: var(--site-night-status-warning-bg);
+  --status-warning-fg: var(--site-night-status-warning-fg);
+  --status-warning-border: var(--site-night-status-warning-border);
+  --status-danger-bg: var(--site-night-status-danger-bg);
+  --status-danger-fg: var(--site-night-status-danger-fg);
+  --status-danger-border: var(--site-night-status-danger-border);
+  --status-info-bg: var(--site-night-status-info-bg);
+  --status-info-fg: var(--site-night-status-info-fg);
+  --status-info-border: var(--site-night-status-info-border);
+  --status-success-action: var(--site-night-status-success-action);
+  --status-warning-action: var(--site-night-status-warning-action);
 
-  --popover: oklch(0.22 0.032 264.695);
-  --popover-foreground: oklch(0.93 0.015 264.695);
+  --background: var(--site-surface);
+  --foreground: var(--site-ink);
+  --card: var(--site-panel);
+  --card-foreground: var(--site-ink);
+  --popover: var(--site-panel);
+  --popover-foreground: var(--site-ink);
+  --primary: var(--site-button);
+  --primary-foreground: var(--site-button-ink);
+  --secondary: var(--site-panel);
+  --secondary-foreground: var(--site-ink);
+  --muted: var(--site-panel);
+  --muted-foreground: var(--site-muted);
+  --accent: var(--site-accent-soft);
+  --accent-foreground: var(--site-ink);
+  --destructive: var(--site-night-destructive);
+  --destructive-foreground: #ffffff;
+  --border: var(--site-line);
+  --input: var(--site-input-border);
+  --ring: var(--site-accent);
 
-  /* Primary - Consistent with light mode */
-  --primary: oklch(0.43 0.197 257.651);
-  /* Refined blue - same as light mode */
-  --primary-foreground: oklch(0.98 0.01 264.695);
+  --switch-muted: var(--site-muted);
+  --switch-line: var(--site-line);
+  --switch-knob: var(--site-accent);
 
-  /* Lighter Gray - Secondary */
-  --secondary: oklch(0.28 0.032 264.695);
-  /* Lighter gray for contrast */
-  --secondary-foreground: oklch(0.93 0.015 264.695);
+  --form-drawer: var(--site-surface);
+  --form-section: var(--site-panel);
+  --form-section-border: #ffffff24;
+  --form-field: #142236;
+  --form-field-border: #34485f;
+  --form-control: #0c1522;
+  --form-control-border: #50657c;
 
-  /* Muted Dark */
-  --muted: oklch(0.24 0.028 264.695);
-  /* Lighter muted for visibility */
-  --muted-foreground: oklch(0.65 0.032 264.364);
-  /* Muted blue-gray text */
+  --chart-1: #a6d4fc;
+  --chart-2: #74d7b2;
+  --chart-3: #86a3f3;
+  --chart-4: #f1c565;
+  --chart-5: #ef929b;
 
-  /* Accent Dark */
-  --accent: oklch(0.28 0.032 264.695);
-  /* Lighter accent */
-  --accent-foreground: oklch(0.93 0.015 264.695);
-
-  /* Professional Red - Destructive */
-  --destructive: oklch(0.6 0.25 25.764);
-  /* More vibrant for dark mode visibility */
-  --destructive-foreground: oklch(0.98 0.01 264.695);
-
-  /* Lighter Borders for Contrast */
-  --border: oklch(0.32 0.028 264.695);
-  /* Lighter border color for visibility */
-  --input: oklch(0.26 0.028 264.695);
-  /* Input field background */
-  --ring: oklch(0.43 0.197 257.651);
-  /* Primary blue for focus rings */
-
-  /* Shared site-wide theme switch: same strong tokens as light mode. */
-  --switch-muted: var(--muted-foreground);
-  --switch-line: var(--muted-foreground);
-  --switch-knob: var(--primary);
-
-  /* Layered form surfaces — dark mode */
-  --form-drawer: oklch(0.145 0.03 264.695);
-  --form-section: oklch(0.22 0.034 264.695);
-  --form-section-border: oklch(0.36 0.036 264.695);
-  --form-field: oklch(0.19 0.032 264.695);
-  --form-field-border: oklch(0.32 0.032 264.695);
-  --form-control: oklch(0.14 0.028 264.695);
-  --form-control-border: oklch(0.42 0.038 264.695);
-
-  /* Sophisticated Chart Colors - Dark Mode */
-  --chart-1: oklch(0.43 0.197 257.651);
-  /* Primary blue */
-  --chart-2: oklch(0.62 0.156 162.48);
-  /* Teal - slightly brighter for dark mode */
-  --chart-3: oklch(0.67 0.164 70.08);
-  /* Green */
-  --chart-4: oklch(0.55 0.216 303.9);
-  /* Purple */
-  --chart-5: oklch(0.58 0.219 16.439);
-  /* Orange */
-
-  /* Sidebar Colors - Dark Mode */
-  --sidebar: oklch(0.15 0.028 264.695);
-  /* Lighter sidebar background */
-  --sidebar-foreground: oklch(0.93 0.015 264.695);
-  --sidebar-primary: oklch(0.43 0.197 257.651);
-  --sidebar-primary-foreground: oklch(0.98 0.01 264.695);
-  --sidebar-accent: oklch(0.28 0.032 264.695);
-  --sidebar-accent-foreground: oklch(0.93 0.015 264.695);
-  --sidebar-border: oklch(0.32 0.028 264.695);
-  --sidebar-ring: oklch(0.43 0.197 257.651);
+  --sidebar: var(--site-surface);
+  --sidebar-foreground: var(--site-ink);
+  --sidebar-primary: var(--site-button);
+  --sidebar-primary-foreground: var(--site-button-ink);
+  --sidebar-accent: var(--site-accent-soft);
+  --sidebar-accent-foreground: var(--site-ink);
+  --sidebar-border: var(--site-line);
+  --sidebar-ring: var(--site-accent);
 }
 
 @layer base {
@@ -231,31 +281,14 @@ html {
 
   body {
     @apply bg-background text-foreground;
-    /* Add subtle background pattern for sophistication */
-    background-image: radial-gradient(
-        circle at 25% 25%,
-        oklch(0.99 0.005 264.695) 0%,
-        transparent 50%
-      ),
+    background-image:
+      radial-gradient(circle at 25% 25%, var(--site-glow) 0%, transparent 50%),
       radial-gradient(
         circle at 75% 75%,
-        oklch(0.98 0.008 264.695) 0%,
+        color-mix(in srgb, var(--site-glow) 72%, transparent) 0%,
         transparent 50%
       );
     background-attachment: fixed;
-  }
-
-  .dark body {
-    background-image: radial-gradient(
-        circle at 25% 25%,
-        oklch(0.2 0.028 264.695) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        circle at 75% 75%,
-        oklch(0.16 0.028 264.695) 0%,
-        transparent 50%
-      );
   }
 }
 
@@ -301,26 +334,22 @@ html {
   .card {
     @apply bg-card text-card-foreground border-border;
     box-shadow:
-      0 1px 3px 0 oklch(0.08 0.041 263.667 / 0.1),
-      0 1px 2px -1px oklch(0.08 0.041 263.667 / 0.1);
-  }
-
-  .dark .card {
-    box-shadow:
-      0 1px 3px 0 oklch(0.93 0.015 264.695 / 0.1),
-      0 1px 2px -1px oklch(0.93 0.015 264.695 / 0.1);
+      0 1px 3px 0 var(--site-shadow),
+      0 1px 2px -1px var(--site-shadow);
   }
 
   /* Enhanced Button Styles */
   .btn-primary {
     @apply bg-primary text-primary-foreground hover:opacity-90;
     transition: all 0.2s ease-in-out;
-    box-shadow: 0 2px 4px -1px oklch(0.43 0.197 257.651 / 0.3);
+    box-shadow: 0 2px 4px -1px
+      color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px -2px oklch(0.43 0.197 257.651 / 0.4);
+    box-shadow: 0 4px 8px -2px
+      color-mix(in srgb, var(--primary) 40%, transparent);
   }
 
   /* Professional Input Styles */
@@ -331,7 +360,7 @@ html {
 
   .input:focus {
     @apply ring-2 ring-primary/20 border-primary;
-    box-shadow: 0 0 0 2px oklch(0.43 0.197 257.651 / 0.1);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 10%, transparent);
   }
 
   /* Sidebar Enhancements */
@@ -353,7 +382,8 @@ html {
 
   .nav-item.active {
     @apply bg-sidebar-accent text-sidebar-accent-foreground;
-    box-shadow: inset 0 0 0 1px oklch(0.43 0.197 257.651 / 0.2);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--site-accent) 20%, transparent);
   }
 
   /* Professional Table Styles */
@@ -363,41 +393,39 @@ html {
 
   .table th {
     @apply bg-muted/50 text-muted-foreground font-medium;
-    border-bottom: 1px solid oklch(0.88 0.018 264.695);
-  }
-
-  .dark .table th {
-    border-bottom-color: oklch(0.16 0.041 263.667);
+    border-bottom: 1px solid var(--site-line);
   }
 
   /* Status Badge Enhancements */
   .status-badge {
     @apply px-2 py-1 rounded-md text-xs font-medium;
+    border: 1px solid transparent;
     transition: all 0.2s ease-in-out;
   }
 
   .status-badge.success {
-    @apply bg-green-100 text-green-800;
+    background-color: var(--status-success-bg);
+    border-color: var(--status-success-border);
+    color: var(--status-success-fg);
   }
 
   .status-badge.warning {
-    @apply bg-yellow-100 text-yellow-800;
+    background-color: var(--status-warning-bg);
+    border-color: var(--status-warning-border);
+    color: var(--status-warning-fg);
   }
 
-  .status-badge.error {
-    @apply bg-red-100 text-red-800;
+  .status-badge.error,
+  .status-badge.danger {
+    background-color: var(--status-danger-bg);
+    border-color: var(--status-danger-border);
+    color: var(--status-danger-fg);
   }
 
-  .dark .status-badge.success {
-    @apply bg-green-900/50 text-green-300;
-  }
-
-  .dark .status-badge.warning {
-    @apply bg-yellow-900/50 text-yellow-300;
-  }
-
-  .dark .status-badge.error {
-    @apply bg-red-900/50 text-red-300;
+  .status-badge.info {
+    background-color: var(--status-info-bg);
+    border-color: var(--status-info-border);
+    color: var(--status-info-fg);
   }
 
   /* Professional Loading States */
@@ -405,22 +433,12 @@ html {
     @apply bg-muted animate-pulse;
     background: linear-gradient(
       90deg,
-      oklch(0.96 0.013 264.695) 25%,
-      oklch(0.92 0.018 264.695) 50%,
-      oklch(0.96 0.013 264.695) 75%
+      color-mix(in srgb, var(--site-panel) 72%, var(--site-surface)) 25%,
+      var(--site-panel) 50%,
+      color-mix(in srgb, var(--site-panel) 72%, var(--site-surface)) 75%
     );
     background-size: 200% 100%;
     animation: loading 1.5s infinite;
-  }
-
-  .dark .loading-skeleton {
-    background: linear-gradient(
-      90deg,
-      oklch(0.12 0.048 263.667) 25%,
-      oklch(0.16 0.041 263.667) 50%,
-      oklch(0.12 0.048 263.667) 75%
-    );
-    background-size: 200% 100%;
   }
 
   @keyframes loading {
@@ -497,7 +515,356 @@ html {
   }
 
   .animate-orb-halo {
-    animation: orb-halo var(--orb-halo-dur, 1.6s) cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+    animation: orb-halo var(--orb-halo-dur, 1.6s)
+      cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
     will-change: transform, opacity;
   }
+}
+
+/*
+ * Compatibility layer for existing status utilities. New UI should use
+ * status-callout/status-badge classes and the semantic status tokens above.
+ * These unlayered rules keep older Tailwind-colored callouts legible while
+ * individual pages are gradually moved to the shared status vocabulary.
+ */
+.status-callout {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+.status-callout.success {
+  background-color: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success-fg);
+}
+
+.status-callout.warning {
+  background-color: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+  color: var(--status-warning-fg);
+}
+
+.status-callout.danger {
+  background-color: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+  color: var(--status-danger-fg);
+}
+
+.status-callout.info {
+  background-color: var(--status-info-bg);
+  border-color: var(--status-info-border);
+  color: var(--status-info-fg);
+}
+
+.status-icon-surface.warning {
+  background-color: color-mix(
+    in srgb,
+    var(--status-warning-border) 32%,
+    var(--status-warning-bg)
+  );
+}
+
+.status-text-success {
+  color: var(--status-success-fg);
+}
+
+.status-text-warning {
+  color: var(--status-warning-fg);
+}
+
+.status-text-danger {
+  color: var(--status-danger-fg);
+}
+
+.status-text-info {
+  color: var(--status-info-fg);
+}
+
+:where([class~="bg-blue-500"], [class~="bg-blue-600"]) {
+  background-color: var(--site-button);
+}
+
+:where(
+  [class~="bg-blue-500"][class~="text-white"],
+  [class~="bg-blue-600"][class~="text-white"]
+) {
+  color: var(--site-button-ink);
+}
+
+:where([class~="hover:bg-blue-600/90"], [class~="hover:bg-blue-700"]):hover {
+  background-color: color-mix(in srgb, var(--site-button) 88%, var(--site-ink));
+}
+
+:where([class~="bg-green-600"]) {
+  background-color: var(--status-success-action);
+  color: #ffffff;
+}
+
+:where([class~="hover:bg-green-600/90"], [class~="hover:bg-green-700"]):hover {
+  background-color: color-mix(
+    in srgb,
+    var(--status-success-action) 88%,
+    var(--site-ink)
+  );
+}
+
+:where([class~="bg-amber-700"]) {
+  background-color: var(--status-warning-action);
+  color: #ffffff;
+}
+
+:where([class~="hover:bg-amber-800"]):hover {
+  background-color: color-mix(
+    in srgb,
+    var(--status-warning-action) 88%,
+    var(--site-ink)
+  );
+}
+
+:where(
+  [class~="bg-green-50"],
+  [class~="bg-green-100"],
+  [class~="bg-green-500/10"],
+  [class~="bg-emerald-50"],
+  [class~="bg-emerald-50/70"],
+  [class~="bg-emerald-500/10"],
+  [class~="bg-emerald-500/15"],
+  [class~="bg-emerald-100"],
+  [class~="bg-green-900/50"]
+) {
+  background-color: var(--status-success-bg);
+}
+
+:where(
+  [class~="bg-amber-50"],
+  [class~="bg-amber-50/70"],
+  [class~="bg-amber-50/80"],
+  [class~="bg-amber-100"],
+  [class~="bg-amber-100/60"],
+  [class~="bg-amber-200/70"],
+  [class~="bg-amber-500/5"],
+  [class~="bg-amber-500/10"],
+  [class~="bg-amber-500/15"],
+  [class~="bg-yellow-50"],
+  [class~="bg-yellow-100"],
+  [class~="bg-orange-50"],
+  [class~="bg-orange-500/10"],
+  [class~="bg-orange-100"]
+) {
+  background-color: var(--status-warning-bg);
+}
+
+:where(
+  [class~="bg-red-50"],
+  [class~="bg-red-100"],
+  [class~="bg-rose-500/15"],
+  [class~="bg-rose-50"],
+  [class~="bg-red-900/50"]
+) {
+  background-color: var(--status-danger-bg);
+}
+
+:where(
+  [class~="bg-blue-50"],
+  [class~="bg-blue-50/60"],
+  [class~="bg-blue-100"],
+  [class~="bg-blue-500/10"],
+  [class~="bg-cyan-100"],
+  [class~="bg-sky-50/70"]
+) {
+  background-color: var(--status-info-bg);
+}
+
+.dark
+  :where(
+    [class~="bg-green-50"],
+    [class~="bg-green-100"],
+    [class~="bg-green-500/10"],
+    [class~="bg-emerald-50"],
+    [class~="bg-emerald-50/70"],
+    [class~="bg-emerald-500/10"],
+    [class~="bg-emerald-500/15"],
+    [class~="bg-emerald-100"],
+    [class~="bg-green-900/50"],
+    [class~="dark:bg-green-900/30"],
+    [class~="dark:bg-green-950"],
+    [class~="dark:bg-green-950/20"],
+    [class~="dark:bg-green-950/40"],
+    [class~="dark:bg-green-950/50"],
+    [class~="dark:bg-emerald-950/20"]
+  ) {
+  background-color: var(--status-success-bg);
+}
+
+.dark
+  :where(
+    [class~="bg-amber-50"],
+    [class~="bg-amber-50/70"],
+    [class~="bg-amber-50/80"],
+    [class~="bg-amber-100"],
+    [class~="bg-amber-100/60"],
+    [class~="bg-amber-200/70"],
+    [class~="bg-amber-500/5"],
+    [class~="bg-amber-500/10"],
+    [class~="bg-amber-500/15"],
+    [class~="bg-yellow-50"],
+    [class~="bg-yellow-100"],
+    [class~="bg-orange-50"],
+    [class~="bg-orange-500/10"],
+    [class~="bg-orange-100"],
+    [class~="dark:bg-amber-900/30"],
+    [class~="dark:bg-amber-900/70"],
+    [class~="dark:bg-amber-950"],
+    [class~="dark:bg-amber-950/20"],
+    [class~="dark:bg-amber-950/30"],
+    [class~="dark:bg-amber-950/40"],
+    [class~="dark:bg-amber-950/50"],
+    [class~="dark:bg-yellow-900/30"],
+    [class~="dark:bg-yellow-950/20"],
+    [class~="dark:bg-orange-900/30"],
+    [class~="dark:bg-orange-950"]
+  ) {
+  background-color: var(--status-warning-bg);
+}
+
+.dark
+  :where(
+    [class~="bg-red-50"],
+    [class~="bg-red-100"],
+    [class~="bg-rose-500/15"],
+    [class~="bg-red-900/50"],
+    [class~="dark:bg-red-900/30"],
+    [class~="dark:bg-red-950/20"],
+    [class~="dark:bg-red-950/40"],
+    [class~="dark:bg-red-950/50"]
+  ) {
+  background-color: var(--status-danger-bg);
+}
+
+.dark
+  :where(
+    [class~="bg-blue-50"],
+    [class~="bg-blue-50/60"],
+    [class~="bg-blue-100"],
+    [class~="bg-blue-500/10"],
+    [class~="bg-cyan-100"],
+    [class~="bg-sky-50/70"],
+    [class~="dark:bg-blue-900/30"],
+    [class~="dark:bg-blue-950"],
+    [class~="dark:bg-blue-950/30"],
+    [class~="dark:bg-blue-950/50"],
+    [class~="dark:bg-cyan-950/70"],
+    [class~="dark:bg-sky-950/20"]
+  ) {
+  background-color: var(--status-info-bg);
+}
+
+:where(
+  [class*="text-green-"],
+  [class*="text-emerald-"],
+  [class*="dark:text-green-"],
+  [class*="dark:text-emerald-"],
+  [class*="hover:text-green-"],
+  [class*="hover:text-emerald-"]
+) {
+  color: var(--status-success-fg);
+}
+
+:where(
+  [class*="text-amber-"],
+  [class*="text-yellow-"],
+  [class*="text-orange-"],
+  [class*="dark:text-amber-"],
+  [class*="dark:text-yellow-"],
+  [class*="dark:text-orange-"],
+  [class*="hover:text-amber-"],
+  [class*="hover:text-yellow-"],
+  [class*="hover:text-orange-"]
+) {
+  color: var(--status-warning-fg);
+}
+
+:where(
+  [class*="text-red-"],
+  [class*="text-rose-"],
+  [class*="dark:text-red-"],
+  [class*="dark:text-rose-"],
+  [class*="hover:text-red-"],
+  [class*="hover:text-rose-"]
+) {
+  color: var(--status-danger-fg);
+}
+
+:where(
+  [class*="text-blue-"],
+  [class*="text-sky-"],
+  [class*="text-cyan-"],
+  [class*="dark:text-blue-"],
+  [class*="dark:text-sky-"],
+  [class*="dark:text-cyan-"],
+  [class*="hover:text-blue-"],
+  [class*="hover:text-sky-"],
+  [class*="hover:text-cyan-"]
+) {
+  color: var(--status-info-fg);
+}
+
+:where(
+  [class*="border-green-"],
+  [class*="border-emerald-"],
+  [class*="dark:border-green-"],
+  [class*="dark:border-emerald-"]
+) {
+  border-color: var(--status-success-border);
+}
+
+:where(
+  [class*="border-amber-"],
+  [class*="border-yellow-"],
+  [class*="border-orange-"],
+  [class*="dark:border-amber-"],
+  [class*="dark:border-yellow-"],
+  [class*="dark:border-orange-"]
+) {
+  border-color: var(--status-warning-border);
+}
+
+:where(
+  [class*="border-red-"],
+  [class*="border-rose-"],
+  [class*="dark:border-red-"],
+  [class*="dark:border-rose-"]
+) {
+  border-color: var(--status-danger-border);
+}
+
+:where(
+  [class*="border-blue-"],
+  [class*="border-sky-"],
+  [class*="border-cyan-"],
+  [class*="dark:border-blue-"],
+  [class*="dark:border-sky-"],
+  [class*="dark:border-cyan-"]
+) {
+  border-color: var(--status-info-border);
+}
+
+.dark
+  :where(
+    [class~="dark:hover:bg-red-950/20"]:hover,
+    [class~="hover:bg-red-50"]:hover
+  ) {
+  background-color: var(--status-danger-bg);
+}
+
+:where([class~="hover:bg-red-50"]:hover) {
+  background-color: var(--status-danger-bg);
+}
+
+:where(
+  [class~="hover:bg-amber-50"]:hover,
+  [class~="hover:bg-amber-100"]:hover,
+  [class~="hover:bg-yellow-50"]:hover
+) {
+  background-color: var(--status-warning-bg);
 }

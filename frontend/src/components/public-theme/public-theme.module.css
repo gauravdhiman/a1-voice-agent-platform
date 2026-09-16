@@ -4,21 +4,38 @@
  * root also switches every Tailwind `dark:` style and shadcn token inside,
  * so one toggle drives the whole page in both themes. */
 .root {
-  --surface: #080e18;
-  --panel: #101a28;
-  --ink: #f0f1ee;
-  --muted: #9aa7b8;
-  --accent: #a6d4fc;
-  --line: #ffffff24;
-  --button: #d1e9fe;
-  --button-ink: #111d2c;
-  --glow: #3779b821;
+  --surface: var(--site-night-surface);
+  --panel: var(--site-night-panel);
+  --ink: var(--site-night-ink);
+  --public-muted: var(--site-night-muted);
+  --public-accent: var(--site-night-accent);
+  --line: var(--site-night-line);
+  --button: var(--site-night-button);
+  --button-ink: var(--site-night-button-ink);
+  --glow: var(--site-night-glow);
+  --public-shadow: var(--site-night-shadow);
+  --input-border: var(--site-night-input-border);
+  --status-success-bg: var(--site-night-status-success-bg);
+  --status-success-fg: var(--site-night-status-success-fg);
+  --status-success-border: var(--site-night-status-success-border);
+  --status-warning-bg: var(--site-night-status-warning-bg);
+  --status-warning-fg: var(--site-night-status-warning-fg);
+  --status-warning-border: var(--site-night-status-warning-border);
+  --status-danger-bg: var(--site-night-status-danger-bg);
+  --status-danger-fg: var(--site-night-status-danger-fg);
+  --status-danger-border: var(--site-night-status-danger-border);
+  --status-info-bg: var(--site-night-status-info-bg);
+  --status-info-fg: var(--site-night-status-info-fg);
+  --status-info-border: var(--site-night-status-info-border);
+  --status-success-action: var(--site-night-status-success-action);
+  --status-warning-action: var(--site-night-status-warning-action);
+  --destructive: var(--site-night-destructive);
   /* Shared switch control: explicit mappings so similarly-named tokens on
    * other surfaces (shadcn --muted/--accent are backgrounds, not text)
    * can never wash the control out. */
-  --switch-muted: var(--muted);
+  --switch-muted: var(--public-muted);
   --switch-line: var(--line);
-  --switch-knob: var(--accent);
+  --switch-knob: var(--public-accent);
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -29,15 +46,84 @@
     background-color 0.5s;
 }
 .root[data-theme="day"] {
-  --surface: #f7faff;
-  --panel: #edf3fb;
-  --ink: #172033;
-  --muted: #526175;
-  --accent: #1d4fd7;
-  --line: #18304a2e;
-  --button: #1457d9;
-  --button-ink: #ffffff;
-  --glow: #6ea8ff59;
+  --surface: var(--site-day-surface);
+  --panel: var(--site-day-panel);
+  --ink: var(--site-day-ink);
+  --public-muted: var(--site-day-muted);
+  --public-accent: var(--site-day-accent);
+  --line: var(--site-day-line);
+  --button: var(--site-day-button);
+  --button-ink: var(--site-day-button-ink);
+  --glow: var(--site-day-glow);
+  --public-shadow: var(--site-day-shadow);
+  --input-border: var(--site-day-input-border);
+  --status-success-bg: var(--site-day-status-success-bg);
+  --status-success-fg: var(--site-day-status-success-fg);
+  --status-success-border: var(--site-day-status-success-border);
+  --status-warning-bg: var(--site-day-status-warning-bg);
+  --status-warning-fg: var(--site-day-status-warning-fg);
+  --status-warning-border: var(--site-day-status-warning-border);
+  --status-danger-bg: var(--site-day-status-danger-bg);
+  --status-danger-fg: var(--site-day-status-danger-fg);
+  --status-danger-border: var(--site-day-status-danger-border);
+  --status-info-bg: var(--site-day-status-info-bg);
+  --status-info-fg: var(--site-day-status-info-fg);
+  --status-info-border: var(--site-day-status-info-border);
+  --status-success-action: var(--site-day-status-success-action);
+  --status-warning-action: var(--site-day-status-warning-action);
+  --destructive: var(--site-day-destructive);
+}
+
+/* shadcn components inside public shells follow the shell's data-theme, even
+ * while the visitor's workspace theme is still set to the system default. */
+.root[data-theme="day"],
+.root[data-theme="night"] {
+  --site-surface: var(--surface);
+  --site-panel: var(--panel);
+  --site-ink: var(--ink);
+  --site-muted: var(--public-muted);
+  --site-accent: var(--public-accent);
+  --site-accent-soft: color-mix(
+    in srgb,
+    var(--public-accent) 12%,
+    var(--surface)
+  );
+  --site-line: var(--line);
+  --site-button: var(--button);
+  --site-button-ink: var(--button-ink);
+  --site-glow: var(--glow);
+  --site-input-border: var(--input-border);
+  --site-shadow: var(--public-shadow);
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: var(--panel);
+  --card-foreground: var(--ink);
+  --popover: var(--panel);
+  --popover-foreground: var(--ink);
+  --primary: var(--button);
+  --primary-foreground: var(--button-ink);
+  --secondary: var(--panel);
+  --secondary-foreground: var(--ink);
+  --muted: var(--panel);
+  --muted-foreground: var(--public-muted);
+  --accent: color-mix(in srgb, var(--public-accent) 12%, var(--surface));
+  --accent-foreground: var(--ink);
+  --destructive-foreground: #ffffff;
+  --border: var(--line);
+  --input: var(--input-border);
+  --ring: var(--public-accent);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--button);
+  --sidebar-primary-foreground: var(--button-ink);
+  --sidebar-accent: color-mix(
+    in srgb,
+    var(--public-accent) 12%,
+    var(--surface)
+  );
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--public-accent);
 }
 .root a {
   text-decoration: none;
@@ -49,7 +135,7 @@
 }
 .root a:focus-visible,
 .root button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--public-accent);
   outline-offset: 4px;
 }
 
@@ -108,7 +194,7 @@
   flex-shrink: 0;
 }
 .brandMark i {
-  background: var(--accent);
+  background: var(--public-accent);
   border-radius: 50%;
 }
 .brandMark i:nth-child(2),
@@ -122,13 +208,13 @@
   display: flex;
   gap: 26px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--public-muted);
 }
 .nav a {
   transition: color 0.2s;
 }
 .nav a:hover {
-  color: var(--accent);
+  color: var(--public-accent);
 }
 .headerActions {
   display: flex;
@@ -170,11 +256,11 @@
   display: flex;
   gap: 7px;
   align-items: center;
-  color: var(--muted);
+  color: var(--public-muted);
   transition: color 0.2s;
 }
 .signIn:hover {
-  color: var(--accent);
+  color: var(--public-accent);
 }
 .headerCta {
   display: flex;
@@ -204,7 +290,7 @@
 }
 .footerTop > p {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--public-muted);
 }
 .footerLinks {
   margin-left: auto;
@@ -212,10 +298,10 @@
   align-items: center;
   gap: 22px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--public-muted);
 }
 .footerLinks a:hover {
-  color: var(--accent);
+  color: var(--public-accent);
 }
 .footerBottom {
   display: flex;
@@ -223,7 +309,7 @@
   align-items: center;
   border-top: 1px solid var(--line);
   padding-top: 22px;
-  color: var(--muted);
+  color: var(--public-muted);
   font-size: 11px;
   gap: 16px;
   flex-wrap: wrap;
@@ -239,13 +325,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--accent);
+  color: var(--public-accent);
 }
 .statusDot {
   display: inline-block;
   width: 6px;
   height: 6px;
-  background: var(--accent);
+  background: var(--public-accent);
   border-radius: 50%;
   box-shadow: 0 0 12px var(--glow);
   flex-shrink: 0;
@@ -256,10 +342,10 @@
   line-height: 1.06;
 }
 .title span {
-  color: var(--accent);
+  color: var(--public-accent);
 }
 .lede {
-  color: var(--muted);
+  color: var(--public-muted);
   font-size: clamp(15px, 1.17vw, 18px);
   line-height: 1.8;
 }
@@ -267,7 +353,7 @@
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 8px;
   letter-spacing: 0.12em;
-  color: var(--muted);
+  color: var(--public-muted);
 }
 
 /* Shared panel card + primary button. */
@@ -304,7 +390,7 @@
   color: var(--button-ink);
 }
 .root .signIn {
-  color: var(--muted);
+  color: var(--public-muted);
 }
 .textLink {
   display: inline-flex;
@@ -313,7 +399,7 @@
   font-size: 13px;
 }
 .textLink:hover {
-  color: var(--accent);
+  color: var(--public-accent);
 }
 
 /* Split layout for request-demo and auth pages. */
@@ -353,11 +439,11 @@
   line-height: 1.1;
 }
 .splitPanel h2 span {
-  color: var(--accent);
+  color: var(--public-accent);
 }
 .splitPanel > .splitPanelInner > p,
 .splitPoints {
-  color: var(--muted);
+  color: var(--public-muted);
 }
 .splitPoints {
   list-style: none;
@@ -374,14 +460,14 @@
   gap: 12px;
 }
 .splitPoints svg {
-  color: var(--accent);
+  color: var(--public-accent);
   flex-shrink: 0;
 }
 .splitFoot {
   position: relative;
   z-index: 1;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--public-muted);
 }
 .splitBody {
   flex: 1;
