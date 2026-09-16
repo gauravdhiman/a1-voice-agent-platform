@@ -181,6 +181,47 @@ describe("DashboardLayout - permission-aware nav", () => {
     vi.unstubAllEnvs();
   });
 
+  it("collapses mobile navigation and closes it after a route change", () => {
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn((query: string) => ({
+      ...original(query),
+      matches: query === "(max-width: 767px)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    try {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const view = render(
+        <DashboardLayout>
+          <div />
+        </DashboardLayout>,
+        { wrapper: makeWrapper(queryClient) },
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Expand navigation" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Close navigation" }),
+      ).toBeTruthy();
+      mockUsePathname.mockReturnValue("/calls");
+      view.rerender(
+        <DashboardLayout>
+          <div />
+        </DashboardLayout>,
+      );
+      expect(
+        screen.getByRole("button", { name: "Expand navigation" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Close navigation" }),
+      ).toBeNull();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it("renders the brand as a wordmark + single 'AI' chip (no duplicate AI)", () => {
     // With the real brand ("24x7 AI") the sidebar used to render "AI 24x7 AI":
     // the "AI" logo chip next to the full app name, which already ends in

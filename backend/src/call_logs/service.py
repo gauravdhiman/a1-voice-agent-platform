@@ -1,10 +1,14 @@
 """Service layer for call log operations."""
 
+import asyncio
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
+from datetime import datetime, time, timedelta, timezone
+from typing import Literal, Optional, Tuple
 from uuid import UUID
+from zoneinfo import ZoneInfo
+
+from opentelemetry import trace
 
 from shared.config import supabase_config
 
@@ -17,6 +21,8 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
+UNASSIGNED_AGENT_KEY = "__unassigned__"
 
 
 class CallLogService:
@@ -169,13 +175,16 @@ class CallLogService:
         recording_only: bool = False,
         page: int = 1,
         page_size: int = 25,
+        date_to_exclusive: Optional[datetime] = None,
     ) -> Tuple[Optional[CallLogsResponse], Optional[str]]:
         """List call logs with optional filters and pagination.
 
         When ``recording_only`` is enabled, only calls with a completed
         recording artifact are returned. The filter is applied before
         pagination so an agent's recordings tab does not hide recordings on
-        later pages because unrecorded calls occupy the first page.
+        later pages because unrecorded calls occupy the first page. Use
+        ``date_to_exclusive`` for half-open reporting windows; ``date_to``
+        remains inclusive for existing callers.
         """
         try:
             recording_call_ids: Optional[set[str]] = None
@@ -230,7 +239,9 @@ class CallLogService:
                 query = query.eq("source_type", source_type)
             if date_from:
                 query = query.gte("created_at", date_from.isoformat())
-            if date_to:
+            if date_to_exclusive:
+                query = query.lt("created_at", date_to_exclusive.isoformat())
+            elif date_to:
                 query = query.lte("created_at", date_to.isoformat())
 
             offset = (page - 1) * page_size
@@ -281,98 +292,235 @@ class CallLogService:
             logger.error(f"Error listing call logs: {e}", exc_info=True)
             return None, str(e)
 
+    @tracer.start_as_current_span("call_logs.get_analytics")
     async def get_analytics(
-        self, organization_id: UUID
+        self,
+        organization_id: Optional[UUID],
+        *,
+        period_days: int = 30,
+        calendar_period: Optional[Literal["today", "yesterday"]] = None,
+        call_status: Optional[str] = None,
+        timezone_name: str = "UTC",
     ) -> Tuple[Optional[CallAnalytics], Optional[str]]:
-        """Compute call analytics for the given organization."""
+        """Aggregate authorized call metrics for a rolling or calendar period.
+
+        The report keeps its fixed 7-day and 30-day totals while charts, status
+        totals, and agent snapshots use the selected rolling or calendar period.
+        None organization_id means the platform-wide pulse; its hours are UTC.
+        Returns (analytics, None) or (None, safe_error), never partial totals.
+        """
         try:
+            if period_days not in {7, 15, 30} or calendar_period not in {
+                None,
+                "today",
+                "yesterday",
+            }:
+                return None, "Unsupported reporting period"
+            report_timezone = ZoneInfo(
+                timezone_name if organization_id is not None else "UTC"
+            )
             now = datetime.now(timezone.utc)
             week_ago = now - timedelta(days=7)
             month_ago = now - timedelta(days=30)
+            local_today = now.astimezone(report_timezone).date()
+            calendar_date = None
+            if calendar_period is not None:
+                calendar_date = (
+                    local_today
+                    if calendar_period == "today"
+                    else local_today - timedelta(days=1)
+                )
+                selected_start = datetime.combine(
+                    calendar_date, time.min, tzinfo=report_timezone
+                ).astimezone(timezone.utc)
+                selected_end = (
+                    now
+                    if calendar_period == "today"
+                    else datetime.combine(
+                        local_today, time.min, tzinfo=report_timezone
+                    ).astimezone(timezone.utc)
+                )
+            else:
+                selected_start = now - timedelta(days=period_days)
+                selected_end = now
 
-            # Fetch all calls in the last 30 days (sufficient for week + month stats)
-            result = (
-                self.supabase.table("call_logs")
-                .select("*")
-                .eq("organization_id", str(organization_id))
-                .gte("created_at", month_ago.isoformat())
-                .execute()
-            )
-            rows = result.data or []
+            # Page narrow rows: PostgREST caps each response. Never return a
+            # silently truncated total, and keep synchronous I/O off the loop.
+            rows = []
+            for offset in range(0, 100_000, 1000):
+                query = (
+                    self.supabase.table("call_logs")
+                    .select(
+                        "id,organization_id,agent_id,created_at,duration,status,source_type"
+                    )
+                    .gte("created_at", month_ago.isoformat())
+                    .lt("created_at", now.isoformat())
+                    .order("created_at")
+                    .order("id")
+                    .range(offset, offset + 999)
+                )
+                if organization_id is not None:
+                    query = query.eq("organization_id", str(organization_id))
+                result = await asyncio.to_thread(query.execute)
+                batch = result.data or []
+                rows.extend(batch)
+                if len(batch) < 1000:
+                    break
+            else:
+                return None, "Analytics volume exceeds the supported reporting limit"
 
-            total_calls_week = 0
-            total_calls_month = len(rows)
-            total_duration = 0
-            calls_by_agent: dict = defaultdict(
-                lambda: {"count": 0, "agent_id": None, "agent_name": "Unknown"}
-            )
-            calls_by_hour: dict = defaultdict(int)
-            calls_by_status: dict = defaultdict(int)
-
+            parsed_rows = []
+            available_statuses = set()
             for row in rows:
                 created = datetime.fromisoformat(
                     row["created_at"].replace("Z", "+00:00")
                 )
-                if created >= week_ago:
-                    total_calls_week += 1
+                row_status = row.get("status", "unknown")
+                available_statuses.add(row_status)
+                duration = row.get("duration")
+                parsed_rows.append((row, created, row_status, duration))
 
-                duration = row.get("duration") or 0
-                total_duration += duration
-
-                agent_id = row.get("agent_id") or "unknown"
-                calls_by_agent[agent_id]["count"] += 1
-                calls_by_agent[agent_id]["agent_id"] = agent_id
-
-                hour = created.hour
-                calls_by_hour[hour] += 1
-
-                status = row.get("status", "unknown")
-                calls_by_status[status] += 1
-
-            avg_duration = (
-                (total_duration / total_calls_month) if total_calls_month > 0 else 0.0
+            selected_rows = [
+                (row, created, row_status, duration)
+                for row, created, row_status, duration in parsed_rows
+                if selected_start <= created < selected_end
+                and (call_status is None or row_status == call_status)
+            ]
+            completed_durations = [
+                duration
+                for _, _, row_status, duration in selected_rows
+                if row_status == "completed" and duration is not None
+            ]
+            selected_average_duration = (
+                round(sum(completed_durations) / len(completed_durations), 1)
+                if completed_durations
+                else None
             )
 
-            # Fetch agent names for the IDs we have
-            agent_ids = [k for k in calls_by_agent if k != "unknown"]
+            calls_by_agent: dict = defaultdict(
+                lambda: {
+                    "count": 0,
+                    "agent_id": None,
+                    "agent_name": "Unknown",
+                    "completed_durations": [],
+                    "last_call_at": None,
+                    "last_call_status": None,
+                    "last_call_duration_seconds": None,
+                    "last_call_source_type": None,
+                }
+            )
+            calls_by_hour: dict = defaultdict(int)
+            calls_by_status: dict = defaultdict(int)
+            calls_by_day: dict = defaultdict(int)
+
+            for row, created, row_status, duration in selected_rows:
+                agent_key = row.get("agent_id") or UNASSIGNED_AGENT_KEY
+                agent = calls_by_agent[agent_key]
+                agent["count"] += 1
+                agent["agent_id"] = row.get("agent_id")
+                if row_status == "completed" and duration is not None:
+                    agent["completed_durations"].append(duration)
+                agent["last_call_at"] = created.isoformat()
+                agent["last_call_status"] = row_status
+                agent["last_call_duration_seconds"] = row.get("duration")
+                agent["last_call_source_type"] = row.get("source_type")
+
+                local_created = created.astimezone(report_timezone)
+                calls_by_hour[local_created.hour] += 1
+                calls_by_day[local_created.date().isoformat()] += 1
+                calls_by_status[row_status] += 1
+
+            agent_ids = [
+                agent_id
+                for agent_id in calls_by_agent
+                if agent_id != UNASSIGNED_AGENT_KEY
+            ]
             agent_names: dict = {}
-            if agent_ids:
-                agents_result = (
+            for offset in range(0, len(agent_ids), 100):
+                query = (
                     self.supabase.table("voice_agents")
                     .select("id, name")
-                    .in_("id", agent_ids)
-                    .execute()
+                    .in_("id", agent_ids[offset : offset + 100])
                 )
-                agent_names = {a["id"]: a["name"] for a in (agents_result.data or [])}
+                if organization_id is not None:
+                    query = query.eq("organization_id", str(organization_id))
+                agents_result = await asyncio.to_thread(query.execute)
+                agent_names.update(
+                    {agent["id"]: agent["name"] for agent in (agents_result.data or [])}
+                )
 
-            for agent_id, data in calls_by_agent.items():
-                data["agent_name"] = agent_names.get(agent_id, "Unknown")
+            for agent_id, agent in calls_by_agent.items():
+                agent["agent_name"] = (
+                    "Unassigned calls"
+                    if agent_id == UNASSIGNED_AGENT_KEY
+                    else agent_names.get(agent_id, "Unknown")
+                )
+                durations = agent["completed_durations"]
+                agent["avg_duration_seconds"] = (
+                    round(sum(durations) / len(durations), 1) if durations else None
+                )
+                del agent["completed_durations"]
 
-            # Build hour-by-hour list (0-23)
+            if calendar_date is not None:
+                report_dates = [calendar_date]
+            else:
+                day_start = selected_start.astimezone(report_timezone).date()
+                day_count = (local_today - day_start).days
+                report_dates = [
+                    day_start + timedelta(days=day) for day in range(day_count + 1)
+                ]
+            day_list = [
+                {
+                    "date": report_date.isoformat(),
+                    "calls": calls_by_day.get(report_date.isoformat(), 0),
+                }
+                for report_date in report_dates
+            ]
             hour_list = [
-                {"hour": h, "calls": calls_by_hour.get(h, 0)} for h in range(24)
+                {"hour": hour, "calls": calls_by_hour.get(hour, 0)}
+                for hour in range(24)
             ]
             status_list = [
-                {"status": s, "count": c} for s, c in calls_by_status.items()
+                {"status": row_status, "count": count}
+                for row_status, count in sorted(calls_by_status.items())
             ]
             agent_list = sorted(
-                calls_by_agent.values(), key=lambda x: x["count"], reverse=True
+                calls_by_agent.values(), key=lambda row: row["count"], reverse=True
             )
+            recorded_durations = [
+                duration for *_, duration in parsed_rows if duration is not None
+            ]
 
             return (
                 CallAnalytics(
-                    total_calls_week=total_calls_week,
-                    total_calls_month=total_calls_month,
-                    avg_duration_seconds=round(avg_duration, 1),
+                    active_organizations=len({row["organization_id"] for row in rows}),
+                    total_calls_week=sum(
+                        1 for _, created, _, _ in parsed_rows if created >= week_ago
+                    ),
+                    total_calls_month=len(rows),
+                    avg_duration_seconds=(
+                        round(sum(recorded_durations) / len(recorded_durations), 1)
+                        if recorded_durations
+                        else 0.0
+                    ),
                     calls_by_agent=agent_list,
                     calls_by_hour=hour_list,
                     calls_by_status=status_list,
+                    selected_period_days=1 if calendar_period else period_days,
+                    selected_status=call_status,
+                    selected_total_calls=len(selected_rows),
+                    selected_active_organizations=len(
+                        {row["organization_id"] for row, _, _, _ in selected_rows}
+                    ),
+                    selected_average_duration_seconds=selected_average_duration,
+                    calls_by_day=day_list,
+                    available_statuses=sorted(available_statuses),
                 ),
                 None,
             )
-        except Exception as e:
-            logger.error(f"Error computing analytics: {e}", exc_info=True)
-            return None, str(e)
+        except Exception:
+            logger.error("Error computing call analytics", exc_info=True)
+            return None, "Call analytics unavailable"
 
 
 call_log_service = CallLogService()

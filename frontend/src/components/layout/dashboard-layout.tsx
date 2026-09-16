@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useOrganization } from "@/contexts/organization-context";
@@ -59,6 +59,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const searchParams = useSearchParams();
   const { openProductTour } = useProductTour();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 767px)");
+    const update = () => setSidebarCollapsed(mobile.matches);
+    update();
+    mobile.addEventListener("change", update);
+    return () => mobile.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      setSidebarCollapsed(true);
+    }
+  }, [pathname]);
 
   // Sidebar brand. If the name ends in " AI" (e.g. "24x7 AI"), strip the
   // trailing " AI" from the wordmark so the "AI" logo chip below is not
@@ -204,11 +218,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="h-screen bg-background flex overflow-hidden font-sans">
+      {!sidebarCollapsed && (
+        <button
+          aria-label="Close navigation"
+          onClick={() => setSidebarCollapsed(true)}
+          className="fixed inset-0 z-20 bg-black/30 md:hidden"
+        />
+      )}
       {/* Sidebar */}
       <aside
         className={`bg-sidebar border-r border-sidebar-border shadow-sm transition-all duration-300 ease-in-out ${
-          sidebarCollapsed ? "w-16" : "w-64"
-        } flex flex-col h-full z-20`}
+          sidebarCollapsed
+            ? "hidden md:flex md:w-16"
+            : "fixed inset-y-0 left-0 w-64 md:relative"
+        } flex flex-col shrink-0 h-full z-30`}
       >
         {/* Sidebar Header */}
         <div
@@ -259,6 +282,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Collapse navigation"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className={`h-8 w-8 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent ${
               sidebarCollapsed ? "hidden" : ""
@@ -329,7 +353,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-muted/30">
+      <div className="min-w-0 flex-1 flex flex-col h-full overflow-hidden bg-muted/30">
         {/* Header */}
         <header className="h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-6 z-10">
           <div className="flex items-center">
@@ -337,6 +361,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Expand navigation"
                 onClick={() => setSidebarCollapsed(false)}
                 className="mr-4 h-8 w-8 text-muted-foreground hover:text-foreground"
               >
