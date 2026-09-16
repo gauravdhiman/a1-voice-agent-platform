@@ -70,6 +70,27 @@ def _assert_contrast(locator: Locator, minimum: float) -> None:
     )
 
 
+def _assert_input_border_state(locator: Locator) -> None:
+    """Valid fields stay neutral and invalid fields get the danger color."""
+    colors = locator.evaluate(
+        """element => {
+            const original = element.getAttribute("aria-invalid");
+            const originalBorder = element.style.borderColor;
+            const normal = getComputedStyle(element).borderColor;
+            element.style.borderColor = "var(--input-border)";
+            const themed = getComputedStyle(element).borderColor;
+            element.style.borderColor = originalBorder;
+            element.setAttribute("aria-invalid", "true");
+            const invalid = getComputedStyle(element).borderColor;
+            if (original === null) element.removeAttribute("aria-invalid");
+            else element.setAttribute("aria-invalid", original);
+            return { normal, themed, invalid };
+        }"""
+    )
+    assert colors["normal"] == colors["themed"]
+    assert colors["themed"] != colors["invalid"]
+
+
 def test_outcome_interest_form_posts_to_leads(page: Page, base_url: str, step):
     """A visitor converts on the outcome page without retyping elsewhere."""
     demo_slug = "copper-ridge-service-request"
@@ -221,12 +242,25 @@ def test_outcome_secondary_content_is_legible_in_both_themes(
     expect(empty_description).to_contain_text(
         "This page only shows results that tools confirmed."
     )
+    feedback_region = page.get_by_role(
+        "complementary", name="Feedback and setup request"
+    )
+    feedback_sticky = page.get_by_test_id("outcome-feedback-sticky")
+    details_region = page.get_by_role("region", name="Call details and results")
     tool_icon = empty_heading.locator("xpath=../..").locator("svg").first
     benefits_heading = page.get_by_text("IF THIS RAN YOUR BUSINESS")
     benefit_icons = benefits_heading.locator("xpath=..").locator("svg")
     expiration = page.get_by_text("Summary expires after 24 hours")
     back_link = page.get_by_role("link", name="Back to demo")
     try_again = page.get_by_role("link", name="Try the call again", exact=True)
+    name_input = page.get_by_label("Your name")
+
+    expect(feedback_region).to_be_visible()
+    expect(feedback_sticky).to_have_css("position", "sticky")
+    detail_box = details_region.bounding_box()
+    feedback_box = feedback_region.bounding_box()
+    assert detail_box is not None and feedback_box is not None
+    assert feedback_box["x"] > detail_box["x"]
 
     for theme in ("day", "night"):
         _set_public_theme(page, theme)
@@ -237,15 +271,30 @@ def test_outcome_secondary_content_is_legible_in_both_themes(
         _assert_contrast(expiration, 4.5)
         _assert_contrast(back_link, 4.5)
         _assert_contrast(try_again, 4.5)
+        _assert_input_border_state(name_input)
         expect(benefit_icons).to_have_count(3)
         for index in range(3):
             _assert_contrast(benefit_icons.nth(index), 3.0)
 
+    page.evaluate("document.documentElement.style.scrollBehavior = 'auto'")
+    page.evaluate("window.scrollTo(0, 500)")
+    page.wait_for_function("window.scrollY >= 500")
+    sticky_box = feedback_sticky.bounding_box()
+    assert sticky_box is not None
+    assert abs(sticky_box["y"] - 24) <= 2
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(feedback_sticky).to_have_css("position", "static")
+
     step("Check saved fields and provider confirmation in both themes")
+    page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{base_url}/demo/{saved_slug}/outcome?token=receipt-123")
     expect(
         page.get_by_role("heading", name="That call just did real work.")
     ).to_be_visible(timeout=15000)
+    expect(
+        page.get_by_role("complementary", name="Feedback and setup request")
+    ).to_be_visible()
     saved_to = page.locator("p").filter(has_text="Saved to your spreadsheet")
     collected_label = page.get_by_text("WHAT WAS COLLECTED")
     field_label = page.locator("dt").filter(has_text="Name").first

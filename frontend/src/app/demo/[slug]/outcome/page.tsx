@@ -427,11 +427,8 @@ export default function DemoOutcomePage() {
         <div className={pt.glow} aria-hidden="true" />
         <PublicHeader />
 
-        <main style={{ position: "relative" }}>
-          <div
-            className="mx-auto w-full"
-            style={{ maxWidth: 960, padding: "72px 6.5% 40px" }}
-          >
+        <main className={pt.outcomeLayout} style={{ position: "relative" }}>
+          <section className={pt.outcomeIntro} aria-label="Call summary">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className={pt.eyebrow}>
                 <span className={pt.statusDot} />
@@ -490,166 +487,158 @@ export default function DemoOutcomePage() {
                 </div>
               </div>
             </div>
-          </div>
-
-          <section
-            className="mx-auto w-full"
-            style={{ maxWidth: 960, padding: "8px 6.5% 0" }}
-            aria-label="Your turn"
-          >
-            <div className={pt.panel} style={{ padding: 28 }}>
-              <p className={pt.eyebrow}>YOUR TURN · 30 SECONDS</p>
-              <div className="mt-4">
-                <DemoFeedback demoSlug={slug} receiptToken={receiptToken} />
-              </div>
-              <div
-                className="my-6 border-t"
-                style={{ borderColor: "var(--line)" }}
-              />
-              <OutcomeInterest demoSlug={slug} />
-            </div>
           </section>
 
-          {outcome.actions.length === 0 && (
-            <section
-              className="mx-auto w-full"
-              style={{ maxWidth: 960, padding: "8px 6.5% 0" }}
+          <aside
+            className={pt.outcomeFeedbackColumn}
+            aria-label="Feedback and setup request"
+          >
+            <div
+              className={pt.outcomeFeedbackSticky}
+              data-testid="outcome-feedback-sticky"
             >
-              <div className={pt.panel} style={{ padding: "48px 24px" }}>
-                <div className="flex flex-col items-center text-center">
-                  <div
-                    className="flex h-14 w-14 items-center justify-center rounded-2xl"
-                    style={{
-                      background: "var(--panel)",
-                      border: "1px solid var(--line)",
-                      color: "var(--public-accent)",
-                    }}
-                  >
-                    <Wrench className="h-7 w-7" />
-                  </div>
-                  <h2
-                    className={pt.title}
-                    style={{ fontSize: 24, marginTop: 20 }}
-                  >
-                    Nothing got saved on this call
-                  </h2>
-                  <p
-                    className="mt-2 max-w-md text-sm leading-6"
-                    style={{ color: "var(--public-muted)" }}
-                  >
-                    Let the agent confirm the final details before hanging up.
-                    This page only shows results that tools confirmed.
-                  </p>
-                  <Link
-                    className={pt.primary}
-                    style={{ marginTop: 24 }}
-                    href={`/demo/${encodeURIComponent(slug)}`}
-                  >
-                    <RefreshCw size={16} />
-                    Try the call again
-                  </Link>
+              <div className={pt.panel} style={{ padding: 24 }}>
+                <p className={pt.eyebrow}>YOUR TURN · 30 SECONDS</p>
+                <div className="mt-4">
+                  <DemoFeedback demoSlug={slug} receiptToken={receiptToken} />
                 </div>
+                <div
+                  className="my-6 border-t"
+                  style={{ borderColor: "var(--line)" }}
+                />
+                <OutcomeInterest demoSlug={slug} />
+              </div>
+            </div>
+          </aside>
+
+          <section
+            className={pt.outcomeDetails}
+            aria-label="Call details and results"
+          >
+            {outcome.actions.length === 0 && (
+              <section className="w-full">
+                <div className={pt.panel} style={{ padding: "48px 24px" }}>
+                  <div className="flex flex-col items-center text-center">
+                    <div
+                      className="flex h-14 w-14 items-center justify-center rounded-2xl"
+                      style={{
+                        background: "var(--panel)",
+                        border: "1px solid var(--line)",
+                        color: "var(--public-accent)",
+                      }}
+                    >
+                      <Wrench className="h-7 w-7" />
+                    </div>
+                    <h2
+                      className={pt.title}
+                      style={{ fontSize: 24, marginTop: 20 }}
+                    >
+                      Nothing got saved on this call
+                    </h2>
+                    <p
+                      className="mt-2 max-w-md text-sm leading-6"
+                      style={{ color: "var(--public-muted)" }}
+                    >
+                      Let the agent confirm the final details before hanging up.
+                      This page only shows results that tools confirmed.
+                    </p>
+                    <Link
+                      className={pt.primary}
+                      style={{ marginTop: 24 }}
+                      href={`/demo/${encodeURIComponent(slug)}`}
+                    >
+                      <RefreshCw size={16} />
+                      Try the call again
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {outcome.actions.length ? (
+              <section
+                id="call-results"
+                className="w-full"
+                style={{ scrollMarginTop: 90 }}
+                aria-label="Call results"
+              >
+                <h2
+                  className={pt.title}
+                  style={{ fontSize: "clamp(26px, 3vw, 36px)" }}
+                >
+                  What {outcome.agent_name} <span>saved for you</span>
+                </h2>
+                <div className="mt-6 flex flex-col gap-5">
+                  {outcome.actions.map((action) => (
+                    <OutcomeActionCard key={action.id} action={action} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="w-full">
+              <div className={pt.panel} style={{ padding: 28 }}>
+                <p className={pt.eyebrow}>IF THIS RAN YOUR BUSINESS</p>
+                <ul
+                  style={{
+                    marginTop: 20,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
+                    padding: 0,
+                    listStyle: "none",
+                    fontSize: 14,
+                  }}
+                >
+                  <li className="flex items-center gap-3">
+                    <CheckCircle2
+                      size={17}
+                      style={{ color: "var(--public-accent)", flexShrink: 0 }}
+                    />
+                    No missed calls, even after hours and weekends.
+                  </li>
+                  <li className="flex items-center gap-3">
+                    <CheckCircle2
+                      size={17}
+                      style={{ color: "var(--public-accent)", flexShrink: 0 }}
+                    />
+                    Bookings land straight in your calendar while you work.
+                  </li>
+                  <li className="flex items-center gap-3">
+                    <CheckCircle2
+                      size={17}
+                      style={{ color: "var(--public-accent)", flexShrink: 0 }}
+                    />
+                    Every caller captured with details, ready for follow-up.
+                  </li>
+                </ul>
               </div>
             </section>
-          )}
 
-          <section
-            className="mx-auto w-full"
-            style={{ maxWidth: 960, padding: "56px 6.5% 0" }}
-          >
-            <div className={pt.panel} style={{ padding: 28 }}>
-              <p className={pt.eyebrow}>IF THIS RAN YOUR BUSINESS</p>
-              <ul
-                style={{
-                  marginTop: 20,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
-                  padding: 0,
-                  listStyle: "none",
-                  fontSize: 14,
-                }}
+            <section className="w-full">
+              <div>
+                <Link className={pt.textLink} href="/request-demo">
+                  Prefer the full demo form? Request a demo{" "}
+                  <ArrowUpRight size={16} />
+                </Link>
+              </div>
+            </section>
+
+            <footer
+              className="flex w-full flex-col gap-3 border-t pt-5 text-xs text-[var(--public-muted)] sm:flex-row sm:items-center sm:justify-between"
+              style={{ borderColor: "var(--line)" }}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Clock3 className="h-3.5 w-3.5" /> Summary expires after 24 hours
+              </span>
+              <Link
+                href={`/demo/${encodeURIComponent(slug)}`}
+                className="inline-flex items-center gap-1.5 hover:opacity-80"
               >
-                <li className="flex items-center gap-3">
-                  <CheckCircle2
-                    size={17}
-                    style={{ color: "var(--public-accent)", flexShrink: 0 }}
-                  />
-                  No missed calls, even after hours and weekends.
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle2
-                    size={17}
-                    style={{ color: "var(--public-accent)", flexShrink: 0 }}
-                  />
-                  Bookings land straight in your calendar while you work.
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle2
-                    size={17}
-                    style={{ color: "var(--public-accent)", flexShrink: 0 }}
-                  />
-                  Every caller captured with details, ready for follow-up.
-                </li>
-              </ul>
-            </div>
-          </section>
-
-          <section
-            className="mx-auto w-full"
-            style={{ maxWidth: 960, padding: "24px 6.5% 0" }}
-          >
-            <div className="mt-6 text-center">
-              <Link className={pt.textLink} href="/request-demo">
-                Prefer the full demo form? Request a demo{" "}
-                <ArrowUpRight size={16} />
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to demo
               </Link>
-            </div>
+            </footer>
           </section>
-
-          {outcome.actions.length ? (
-            <section
-              id="call-results"
-              className="mx-auto w-full"
-              style={{
-                maxWidth: 960,
-                padding: "40px 6.5% 0",
-                scrollMarginTop: 90,
-              }}
-              aria-label="Call results"
-            >
-              <h2
-                className={pt.title}
-                style={{ fontSize: "clamp(26px, 3vw, 36px)" }}
-              >
-                What {outcome.agent_name} <span>saved for you</span>
-              </h2>
-              <div className="mt-6 flex flex-col gap-5">
-                {outcome.actions.map((action) => (
-                  <OutcomeActionCard key={action.id} action={action} />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <div
-            className="mx-auto flex w-full flex-col gap-3 text-xs sm:flex-row sm:items-center sm:justify-between"
-            style={{
-              maxWidth: 960,
-              padding: "40px 6.5% 56px",
-              color: "var(--public-muted)",
-            }}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <Clock3 className="h-3.5 w-3.5" /> Summary expires after 24 hours
-            </span>
-            <Link
-              href={`/demo/${encodeURIComponent(slug)}`}
-              className="inline-flex items-center gap-1.5 hover:opacity-80"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to demo
-            </Link>
-          </div>
         </main>
 
         <PublicFooter />
