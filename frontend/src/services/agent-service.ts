@@ -3,6 +3,7 @@ import { apiClient } from "@/lib/api/client";
 import { getCurrentPageSourceUrl } from "@/lib/source-url";
 import type {
   VoiceAgent,
+  OrganizationAgentSummary,
   VoiceAgentCreate,
   VoiceAgentUpdate,
   PlatformTool,
@@ -23,6 +24,14 @@ class AgentService {
     const response = await apiClient.post<VoiceAgent>(
       this.agentBaseUrl,
       agentData,
+    );
+    return response.data;
+  }
+
+  /** Return agent counts for the selected workspace without downloading prompts. */
+  async getOrganizationAgentSummary(orgId: string): Promise<OrganizationAgentSummary> {
+    const response = await apiClient.get<OrganizationAgentSummary>(
+      `${this.agentBaseUrl}/organization/${orgId}/summary`,
     );
     return response.data;
   }

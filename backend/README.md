@@ -442,3 +442,8 @@ local dashboards, call correlation, privacy, alert rules and production rollout.
 The isolated worktree launcher provisions the monitoring stack. Backend and voice
 SDK exports are bounded and asynchronous; browser API correlation needs no public
 collector credentials.
+
+## Role-specific dashboard
+
+See [dashboard behavior and API contracts](../docs/02_features/dashboard.md) for
+role scope, live metric definitions, authorization and reporting limits.

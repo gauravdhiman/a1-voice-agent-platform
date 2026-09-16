@@ -1,4 +1,6 @@
 import { apiClient } from "@/lib/api/client";
+import { getRollingPeriodDays } from "@/lib/reporting-period";
+import type { ReportingPeriod } from "@/lib/reporting-period";
 
 /** Stable source categories recorded for each voice call. */
 export type CallSourceType =
@@ -40,10 +42,27 @@ export interface CallLogsResponse {
 }
 
 export interface CallAnalytics {
+  active_organizations: number;
   total_calls_week: number;
   total_calls_month: number;
   avg_duration_seconds: number;
-  calls_by_agent: { agent_id: string; agent_name: string; count: number }[];
+  selected_period_days: number;
+  selected_status: string | null;
+  selected_total_calls: number;
+  selected_active_organizations: number;
+  selected_average_duration_seconds: number | null;
+  available_statuses: string[];
+  calls_by_agent: {
+    agent_id: string | null;
+    agent_name: string;
+    count: number;
+    avg_duration_seconds: number | null;
+    last_call_at: string | null;
+    last_call_status: string | null;
+    last_call_duration_seconds: number | null;
+    last_call_source_type: CallSourceType | null;
+  }[];
+  calls_by_day: { date: string; calls: number }[];
   calls_by_hour: { hour: number; calls: number }[];
   calls_by_status: { status: string; count: number }[];
 }
@@ -54,9 +73,23 @@ export interface CallLogListParams {
   source_type?: CallSourceType;
   date_from?: string;
   date_to?: string;
+  date_to_exclusive?: string;
   recording_only?: boolean;
   page?: number;
   page_size?: number;
+}
+
+function appendPeriodQuery(
+  query: URLSearchParams,
+  period: ReportingPeriod,
+  includeDefault: boolean,
+): void {
+  const days = getRollingPeriodDays(period);
+  if (days === null) {
+    query.set("period", period);
+  } else if (includeDefault || period !== "last_30_days") {
+    query.set("period_days", String(days));
+  }
 }
 
 class CallLogService {
@@ -72,6 +105,9 @@ class CallLogService {
     if (params.source_type) query.set("source_type", params.source_type);
     if (params.date_from) query.set("date_from", params.date_from);
     if (params.date_to) query.set("date_to", params.date_to);
+    if (params.date_to_exclusive) {
+      query.set("date_to_exclusive", params.date_to_exclusive);
+    }
     if (params.recording_only) query.set("recording_only", "true");
     if (params.page) query.set("page", String(params.page));
     if (params.page_size) query.set("page_size", String(params.page_size));
@@ -81,9 +117,40 @@ class CallLogService {
     return response.data;
   }
 
-  async getAnalytics(orgId: string): Promise<CallAnalytics> {
+  async getAnalytics(
+    orgId: string,
+    period: ReportingPeriod = "last_30_days",
+    status?: string,
+    timezoneName = "UTC",
+  ): Promise<CallAnalytics> {
+    const query = new URLSearchParams();
+    appendPeriodQuery(query, period, true);
+    query.set("timezone_name", timezoneName);
+    if (status) query.set("status", status);
     const response = await apiClient.get<CallAnalytics>(
-      `${this.base}/organization/${orgId}/analytics`,
+      `${this.base}/organization/${orgId}/analytics?${query.toString()}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Loads the cross-organization report restricted to platform administrators.
+   *
+   * @param period - Calendar day or rolling reporting window; defaults to 30 days.
+   * @param status - Optional recorded call status to include.
+   * @returns Platform-wide call aggregates in UTC.
+   */
+  async getPlatformAnalytics(
+    period: ReportingPeriod = "last_30_days",
+    status?: string,
+  ): Promise<CallAnalytics> {
+    const query = new URLSearchParams();
+    appendPeriodQuery(query, period, false);
+    if (status) query.set("status", status);
+    const queryString = query.toString();
+    const suffix = queryString ? `?${queryString}` : "";
+    const response = await apiClient.get<CallAnalytics>(
+      `${this.base}/platform/analytics${suffix}`,
     );
     return response.data;
   }

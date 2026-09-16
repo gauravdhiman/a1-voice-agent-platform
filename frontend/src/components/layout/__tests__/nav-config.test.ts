@@ -154,6 +154,7 @@ describe("nav-config", () => {
 
   it("platform_admin section contains Organizations and the platform catalogs", () => {
     const names = NAV_SECTIONS.platform_admin.map((i) => i.name);
+    expect(names).toContain("Platform overview");
     expect(names).toContain("Organizations");
     expect(names).toContain("All Users");
     expect(names).toContain("Platform Skills");

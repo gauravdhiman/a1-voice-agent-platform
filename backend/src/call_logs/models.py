@@ -74,9 +74,17 @@ class CallLogsResponse(BaseModel):
 class CallAnalytics(BaseModel):
     """Analytics summary for calls."""
 
+    active_organizations: int = 0
     total_calls_week: int
     total_calls_month: int
     avg_duration_seconds: float
     calls_by_agent: List[dict]
     calls_by_hour: List[dict]
     calls_by_status: List[dict]
+    selected_period_days: int = 30
+    selected_status: Optional[str] = None
+    selected_total_calls: int = 0
+    selected_active_organizations: int = 0
+    selected_average_duration_seconds: Optional[float] = None
+    calls_by_day: List[dict] = Field(default_factory=list)
+    available_statuses: List[str] = Field(default_factory=list)

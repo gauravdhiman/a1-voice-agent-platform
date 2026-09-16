@@ -8,6 +8,8 @@ Central index for all documentation in the AI Voice Agent Platform.
 - **[Feature Priority List](PRIORITY-LIST.md)** — Feature backlog with effort/impact and sprint planning.
 - **Product direction: Voice-first.** Chat agents (F3) and general multi-channel (F14) remain deprioritized; browser-based AI avatars are an evaluated, separately priced extension documented in [AI Avatar + Voice Evolution Analysis](05_business/AI_AVATAR_VOICE_EVOLUTION_ANALYSIS.md).
 
+- **[Role-specific dashboard](02_features/dashboard.md)** — Live call metrics, role scope, follow-up work and credit capacity.
+
 ## 📖 Documentation Structure
 
 - **[Homepage experience](02_features/homepage-experience.md)** — Home-only visual design, particle storytelling, day/night themes, and validation.

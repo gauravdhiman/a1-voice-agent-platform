@@ -16,6 +16,12 @@ export enum ConnectionStatus {
   CONFIGURATION_REQUIRED = "configuration_required", // Attached but missing required tool configuration
 }
 
+/** Scoped agent counts returned by the workspace dashboard endpoint. */
+export interface OrganizationAgentSummary {
+  total_agents: number;
+  active_agents: number;
+}
+
 export interface VoiceAgent {
   id: string;
   organization_id: string;

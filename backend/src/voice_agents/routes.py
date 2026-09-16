@@ -2,6 +2,7 @@
 Voice Agent API routes for multi-tenant SaaS platform.
 """
 
+import asyncio
 import logging
 from typing import List, Optional
 from uuid import UUID
@@ -27,13 +28,20 @@ from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
 from shared.voice_agents.models import VoiceAgent, VoiceAgentCreate, VoiceAgentUpdate
 from shared.voice_agents.preset_service import preset_service
 from shared.voice_agents.prompt_builder import PromptBuilder
-from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 from shared.voice_agents.service import voice_agent_service
+from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 from shared.voice_agents.voice_session_service import voice_session_service
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 agent_router = APIRouter(prefix="/api/v1/agents", tags=["Voice Agents"])
+
+
+class OrganizationAgentSummary(BaseModel):
+    """Aggregate agent capacity without returning prompts or configuration."""
+
+    total_agents: int
+    active_agents: int
 
 
 class TestTokenResponse(BaseModel):
@@ -199,6 +207,48 @@ async def get_org_agents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
         )
     return agents
+
+
+@agent_router.get(
+    "/organization/{org_id}/summary", response_model=OrganizationAgentSummary
+)
+@tracer.start_as_current_span("voice_agent.routes.get_org_agent_summary")
+async def get_org_agent_summary(
+    org_id: UUID, user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user)
+):
+    """Return scoped agent counts without exposing agent instructions or settings."""
+    _, user_profile = user_data
+    assert_has_permission(
+        user_profile,
+        "agent",
+        "read",
+        org_id,
+        error_message="Insufficient permissions to view agents for this organization",
+    )
+
+    def count_agents(active_only: bool = False):
+        query = (
+            voice_agent_service.supabase.table("voice_agents")
+            .select("id", count="exact", head=True)
+            .eq("organization_id", str(org_id))
+        )
+        if active_only:
+            query = query.eq("is_active", True)
+        return query.execute().count or 0
+
+    try:
+        total_agents, active_agents = await asyncio.gather(
+            asyncio.to_thread(count_agents), asyncio.to_thread(count_agents, True)
+        )
+    except Exception as exc:
+        logger.error("Failed to load organization agent summary", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent summary unavailable",
+        ) from exc
+    return OrganizationAgentSummary(
+        total_agents=total_agents, active_agents=active_agents
+    )
 
 
 @agent_router.get("/my-agents", response_model=List[VoiceAgent])
