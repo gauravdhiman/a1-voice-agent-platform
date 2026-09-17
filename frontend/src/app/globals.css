@@ -525,7 +525,10 @@ html {
  * Compatibility layer for existing status utilities. New UI should use
  * status-callout/status-badge classes and the semantic status tokens above.
  * These unlayered rules keep older Tailwind-colored callouts legible while
- * individual pages are gradually moved to the shared status vocabulary.
+ * individual pages are gradually moved to the shared status vocabulary. The
+ * utility remaps below match only unprefixed utility tokens; state variants
+ * such as `aria-invalid:` and `data-[variant=destructive]:` are scoped by
+ * their state selectors so they cannot tint every resting control.
  */
 .status-callout {
   border: 1px solid transparent;
@@ -762,101 +765,98 @@ html {
 }
 
 :where(
-  [class*="text-green-"],
-  [class*="text-emerald-"],
-  [class*="dark:text-green-"],
-  [class*="dark:text-emerald-"],
-  [class*="hover:text-green-"],
-  [class*="hover:text-emerald-"]
+  [class^="text-green-"],
+  [class*=" text-green-"],
+  [class^="text-emerald-"],
+  [class*=" text-emerald-"]
 ) {
   color: var(--status-success-fg);
 }
 
 :where(
-  [class*="text-amber-"],
-  [class*="text-yellow-"],
-  [class*="text-orange-"],
-  [class*="dark:text-amber-"],
-  [class*="dark:text-yellow-"],
-  [class*="dark:text-orange-"],
-  [class*="hover:text-amber-"],
-  [class*="hover:text-yellow-"],
-  [class*="hover:text-orange-"]
+  [class^="text-amber-"],
+  [class*=" text-amber-"],
+  [class^="text-yellow-"],
+  [class*=" text-yellow-"],
+  [class^="text-orange-"],
+  [class*=" text-orange-"]
 ) {
   color: var(--status-warning-fg);
 }
 
 :where(
-  [class*="text-red-"],
-  [class*="text-rose-"],
+  [class^="text-red-"],
+  [class*=" text-red-"],
+  [class^="text-rose-"],
+  [class*=" text-rose-"],
   [class~="text-destructive"],
   [class~="text-destructive/80"],
-  [class~="text-destructive/90"],
-  [class~="hover:text-destructive"],
-  [class~="focus:text-destructive"],
-  [class~="data-[variant=destructive]:text-destructive"],
-  [class~="data-[variant=destructive]:focus:text-destructive"],
-  [class*="dark:text-red-"],
-  [class*="dark:text-rose-"],
-  [class*="hover:text-red-"],
-  [class*="hover:text-rose-"]
+  [class~="text-destructive/90"]
 ) {
   color: var(--status-danger-fg);
 }
 
 :where(
-  [class*="text-blue-"],
-  [class*="text-sky-"],
-  [class*="text-cyan-"],
-  [class*="dark:text-blue-"],
-  [class*="dark:text-sky-"],
-  [class*="dark:text-cyan-"],
-  [class*="hover:text-blue-"],
-  [class*="hover:text-sky-"],
-  [class*="hover:text-cyan-"]
+  [class^="text-blue-"],
+  [class*=" text-blue-"],
+  [class^="text-sky-"],
+  [class*=" text-sky-"],
+  [class^="text-cyan-"],
+  [class*=" text-cyan-"]
 ) {
   color: var(--status-info-fg);
 }
 
 :where(
-  [class*="border-green-"],
-  [class*="border-emerald-"],
-  [class*="dark:border-green-"],
-  [class*="dark:border-emerald-"]
+  [class^="border-green-"],
+  [class*=" border-green-"],
+  [class^="border-emerald-"],
+  [class*=" border-emerald-"]
 ) {
   border-color: var(--status-success-border);
 }
 
 :where(
-  [class*="border-amber-"],
-  [class*="border-yellow-"],
-  [class*="border-orange-"],
-  [class*="dark:border-amber-"],
-  [class*="dark:border-yellow-"],
-  [class*="dark:border-orange-"]
+  [class^="border-amber-"],
+  [class*=" border-amber-"],
+  [class^="border-yellow-"],
+  [class*=" border-yellow-"],
+  [class^="border-orange-"],
+  [class*=" border-orange-"]
 ) {
   border-color: var(--status-warning-border);
 }
 
 :where(
-  [class*="border-red-"],
-  [class*="border-rose-"],
-  [class*="border-destructive"],
-  [class*="dark:border-red-"],
-  [class*="dark:border-rose-"]
+  [class^="border-red-"],
+  [class*=" border-red-"],
+  [class^="border-rose-"],
+  [class*=" border-rose-"],
+  [class^="border-destructive"],
+  [class*=" border-destructive"]
 ) {
   border-color: var(--status-danger-border);
 }
 
 :where(
-  [class*="border-blue-"],
-  [class*="border-sky-"],
-  [class*="border-cyan-"],
-  [class*="dark:border-blue-"],
-  [class*="dark:border-sky-"],
-  [class*="dark:border-cyan-"]
+  [class^="border-blue-"],
+  [class*=" border-blue-"],
+  [class^="border-sky-"],
+  [class*=" border-sky-"],
+  [class^="border-cyan-"],
+  [class*=" border-cyan-"]
 ) {
   border-color: var(--status-info-border);
+}
+
+/* Variant utilities describe an element state. Scope the semantic override
+ * to that state instead of matching the utility text in every class list. */
+:where([data-variant="destructive"]) {
+  color: var(--status-danger-fg);
+}
+
+:where([data-variant="destructive"] svg) {
+  color: var(--status-danger-fg) !important;
 }
 
 .dark
