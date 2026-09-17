@@ -86,11 +86,11 @@ async def run_bot(
 ) -> None:
     """Run one authenticated Pipecat voice session.
 
-    The selected agent preset determines whether this builds Gemini Live or a
-    modular Deepgram → OpenAI/Cerebras → Cartesia pipeline. Browser protobuf and
-    Twilio serializers share the same transport and assembly path. A positive
-    ``max_call_duration_seconds`` starts at transport connection time and
-    cancels the pipeline when reached.
+    The selected agent preset determines whether this builds Google/OpenAI
+    realtime speech or a modular Deepgram → OpenAI/Cerebras → Cartesia
+    pipeline. Browser protobuf and Twilio serializers share the same transport
+    and assembly path. A positive ``max_call_duration_seconds`` starts at
+    transport connection time and cancels the pipeline when reached.
     """
     frame_serializer = serializer or BrowserWebSocketFrameSerializer()
     with operation("voice.setup"):
@@ -212,8 +212,11 @@ async def run_bot(
         nonlocal duration_task
         await mark_call_answered(call_log_id)
         event("call.answered")
-        context.add_message({"role": "user", "content": _GREETING_INSTRUCTION})
-        await task.queue_frames([LLMRunFrame()])
+        if bundle.speech.mode == "realtime" and bundle.speech.greeting:
+            await bundle.speech.greeting(_GREETING_INSTRUCTION)
+        else:
+            context.add_message({"role": "user", "content": _GREETING_INSTRUCTION})
+            await task.queue_frames([LLMRunFrame()])
         if (
             duration_task is None
             and max_call_duration_seconds

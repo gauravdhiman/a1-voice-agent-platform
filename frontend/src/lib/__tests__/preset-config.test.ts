@@ -27,7 +27,9 @@ describe("parseParams", () => {
   });
 
   it("valid JSON object -> parsed, no error", () => {
-    const { params, error } = parseParams('{"language":"en","keywords":["hi"]}');
+    const { params, error } = parseParams(
+      '{"language":"en","keywords":["hi"]}',
+    );
     expect(error).toBeNull();
     expect(params).toEqual({ language: "en", keywords: ["hi"] });
   });
@@ -127,6 +129,7 @@ describe("buildRealtimeConfig", () => {
 
   it("coerces numeric strings to numbers", () => {
     const cfg = buildRealtimeConfig({
+      provider: "google",
       model: "custom-model",
       voice: "Charon",
       temperature: "0.3",
@@ -144,6 +147,7 @@ describe("buildRealtimeConfig", () => {
 
   it("falls back to defaults on blank numeric fields", () => {
     const cfg = buildRealtimeConfig({
+      provider: "google",
       model: "",
       voice: "",
       temperature: "",
@@ -172,6 +176,28 @@ describe("buildRealtimeConfig", () => {
         "voice",
       ].sort(),
     );
+  });
+
+  it("emits only worker-supported OpenAI realtime fields", () => {
+    const cfg = buildRealtimeConfig({
+      provider: "openai",
+      model: "gpt-live-1",
+      voice: "marin",
+      temperature: "0.2",
+      silence_duration_ms: "100",
+      prefix_padding_ms: "50",
+      paramsText: '{"unsupported":true}',
+    });
+    expect(cfg).toEqual({
+      engine_mode: "realtime",
+      provider: "openai",
+      model: "gpt-live-1",
+      voice: "marin",
+      temperature: 0.7,
+      silence_duration_ms: 500,
+      prefix_padding_ms: 200,
+      params: {},
+    });
   });
 });
 
@@ -203,8 +229,16 @@ describe("buildPipelineConfig", () => {
 
 describe("buildSpeechConfig", () => {
   it("dispatches on engine mode", () => {
-    const realtime = buildSpeechConfig("realtime", defaultRealtimeForm(), defaultPipelineForm());
-    const pipeline = buildSpeechConfig("pipeline", defaultRealtimeForm(), defaultPipelineForm());
+    const realtime = buildSpeechConfig(
+      "realtime",
+      defaultRealtimeForm(),
+      defaultPipelineForm(),
+    );
+    const pipeline = buildSpeechConfig(
+      "pipeline",
+      defaultRealtimeForm(),
+      defaultPipelineForm(),
+    );
     expect(realtime.engine_mode).toBe("realtime");
     expect(pipeline.engine_mode).toBe("pipeline");
     expect(realtime.provider).toBe("google");
@@ -215,6 +249,7 @@ describe("buildSpeechConfig", () => {
 describe("formStateFromConfig (edit prefill)", () => {
   it("round-trips a realtime config", () => {
     const cfg = buildRealtimeConfig({
+      provider: "google",
       model: "m",
       voice: "v",
       temperature: "0.4",
@@ -228,6 +263,20 @@ describe("formStateFromConfig (edit prefill)", () => {
     expect(realtime.voice).toBe("v");
     expect(realtime.temperature).toBe("0.4");
     expect(realtime.paramsText).toContain('"x": 1');
+  });
+
+  it("prefills OpenAI realtime model and voice selections", () => {
+    const { realtime } = formStateFromConfig({
+      engine_mode: "realtime",
+      provider: "openai",
+      model: "gpt-realtime-2.1",
+      voice: "cedar",
+      params: {},
+    });
+    expect(realtime.provider).toBe("openai");
+    expect(realtime.model).toBe("gpt-realtime-2.1");
+    expect(realtime.voice).toBe("cedar");
+    expect(realtime.paramsText).toBe("");
   });
 
   it("round-trips a pipeline config with vad", () => {
@@ -270,7 +319,9 @@ describe("formStateFromConfig (edit prefill)", () => {
   it("falls back to defaults for null/unknown config", () => {
     const { mode, realtime, pipeline } = formStateFromConfig(null);
     expect(mode).toBe("realtime");
-    expect(realtime.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
+    expect(realtime.model).toBe(
+      "gemini-2.5-flash-native-audio-preview-12-2025",
+    );
     expect(pipeline.stt.provider).toBe("deepgram");
   });
 });

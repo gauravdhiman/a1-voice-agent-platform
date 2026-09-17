@@ -26,15 +26,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   buildSpeechConfig,
+  defaultRealtimeForm,
   formStateFromConfig,
   LLM_PROVIDERS,
+  OPENAI_REALTIME_DEFAULT_MODEL,
+  OPENAI_REALTIME_DEFAULT_VOICE,
+  OPENAI_REALTIME_MODEL_VOICES,
+  OPENAI_REALTIME_MODELS,
   parseParams,
+  REALTIME_PROVIDERS,
   STT_PROVIDERS,
   TTS_PROVIDERS,
   VAD_PROVIDERS,
   type EngineMode,
   type PipelineFormState,
   type RealtimeFormState,
+  type RealtimeProvider,
   type StageFormState,
   type TtsStageFormState,
 } from "@/lib/preset-config";
@@ -254,6 +261,27 @@ export function PresetConfigForm({
     setMode(next);
   };
 
+  const switchRealtimeProvider = (provider: RealtimeProvider) => {
+    setRealtime({
+      ...defaultRealtimeForm(),
+      provider,
+      ...(provider === "openai"
+        ? {
+            model: OPENAI_REALTIME_DEFAULT_MODEL,
+            voice: OPENAI_REALTIME_DEFAULT_VOICE,
+          }
+        : {}),
+    });
+  };
+
+  const openAiVoices =
+    realtime.provider === "openai" &&
+    (OPENAI_REALTIME_MODELS as readonly string[]).includes(realtime.model)
+      ? OPENAI_REALTIME_MODEL_VOICES[
+          realtime.model as keyof typeof OPENAI_REALTIME_MODEL_VOICES
+        ]
+      : [];
+
   return (
     <div className="form-surface space-y-4">
       <div className="form-section space-y-1">
@@ -278,7 +306,7 @@ export function PresetConfigForm({
         </div>
         <p className="text-xs text-muted-foreground">
           {mode === "realtime"
-            ? "One Google Gemini native-audio model handles STT + LLM + TTS."
+            ? "One Google Gemini or OpenAI voice model handles STT + LLM + TTS."
             : "STT → LLM → TTS cascade; each stage swappable. A 'mixed' preset uses deprecated livekit_inference provider for some stages and direct providers for others."}
         </p>
       </div>
@@ -287,88 +315,155 @@ export function PresetConfigForm({
         <div className="form-surface space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="form-field space-y-1">
-              <Label className="text-xs">Model</Label>
-              <Input
-                value={realtime.model}
+              <Label className="text-xs">Provider</Label>
+              <select
+                className="form-control w-full rounded-md px-2 py-1 text-sm"
+                value={realtime.provider}
                 onChange={(e) =>
-                  setRealtime({ ...realtime, model: e.target.value })
+                  switchRealtimeProvider(e.target.value as RealtimeProvider)
                 }
-                className="form-control"
-              />
+              >
+                {REALTIME_PROVIDERS.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider === "google" ? "Google Gemini" : "OpenAI"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field space-y-1">
+              <Label className="text-xs">Model</Label>
+              {realtime.provider === "openai" ? (
+                <select
+                  className="form-control w-full rounded-md px-2 py-1 text-sm"
+                  value={realtime.model}
+                  onChange={(e) => {
+                    const model = e.target
+                      .value as keyof typeof OPENAI_REALTIME_MODEL_VOICES;
+                    const voices = OPENAI_REALTIME_MODEL_VOICES[model];
+                    setRealtime({
+                      ...realtime,
+                      model,
+                      voice: (voices as readonly string[]).includes(
+                        realtime.voice,
+                      )
+                        ? realtime.voice
+                        : OPENAI_REALTIME_DEFAULT_VOICE,
+                    });
+                  }}
+                >
+                  {OPENAI_REALTIME_MODELS.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  value={realtime.model}
+                  onChange={(e) =>
+                    setRealtime({ ...realtime, model: e.target.value })
+                  }
+                  className="form-control"
+                />
+              )}
             </div>
             <div className="form-field space-y-1">
               <Label className="text-xs">Voice</Label>
-              <Input
-                value={realtime.voice}
-                onChange={(e) =>
-                  setRealtime({ ...realtime, voice: e.target.value })
-                }
-                className="form-control"
-              />
+              {realtime.provider === "openai" ? (
+                <select
+                  className="form-control w-full rounded-md px-2 py-1 text-sm"
+                  value={realtime.voice}
+                  onChange={(e) =>
+                    setRealtime({ ...realtime, voice: e.target.value })
+                  }
+                >
+                  {openAiVoices.map((voice) => (
+                    <option key={voice} value={voice}>
+                      {voice}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  value={realtime.voice}
+                  onChange={(e) =>
+                    setRealtime({ ...realtime, voice: e.target.value })
+                  }
+                  className="form-control"
+                />
+              )}
             </div>
-            <div className="form-field space-y-1">
-              <Label className="text-xs">Temperature</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={realtime.temperature}
-                onChange={(e) =>
-                  setRealtime({ ...realtime, temperature: e.target.value })
-                }
-                className="form-control"
-              />
-            </div>
-            <div className="form-field space-y-1">
-              <Label className="text-xs">Silence duration (ms)</Label>
-              <Input
-                type="number"
-                value={realtime.silence_duration_ms}
-                onChange={(e) =>
-                  setRealtime({
-                    ...realtime,
-                    silence_duration_ms: e.target.value,
-                  })
-                }
-                className="form-control"
-              />
-            </div>
-            <div className="form-field space-y-1">
-              <Label className="text-xs">Prefix padding (ms)</Label>
-              <Input
-                type="number"
-                value={realtime.prefix_padding_ms}
-                onChange={(e) =>
-                  setRealtime({
-                    ...realtime,
-                    prefix_padding_ms: e.target.value,
-                  })
-                }
-                className="form-control"
-              />
-            </div>
+            {realtime.provider === "google" ? (
+              <div className="form-field space-y-1">
+                <Label className="text-xs">Temperature</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={realtime.temperature}
+                  onChange={(e) =>
+                    setRealtime({ ...realtime, temperature: e.target.value })
+                  }
+                  className="form-control"
+                />
+              </div>
+            ) : null}
+            {realtime.provider === "google" ? (
+              <div className="form-field space-y-1">
+                <Label className="text-xs">Silence duration (ms)</Label>
+                <Input
+                  type="number"
+                  value={realtime.silence_duration_ms}
+                  onChange={(e) =>
+                    setRealtime({
+                      ...realtime,
+                      silence_duration_ms: e.target.value,
+                    })
+                  }
+                  className="form-control"
+                />
+              </div>
+            ) : null}
+            {realtime.provider === "google" ? (
+              <div className="form-field space-y-1">
+                <Label className="text-xs">Prefix padding (ms)</Label>
+                <Input
+                  type="number"
+                  value={realtime.prefix_padding_ms}
+                  onChange={(e) =>
+                    setRealtime({
+                      ...realtime,
+                      prefix_padding_ms: e.target.value,
+                    })
+                  }
+                  className="form-control"
+                />
+              </div>
+            ) : null}
           </div>
-          <div className="form-field space-y-1">
-            <Label className="text-xs">
-              Params{" "}
-              <span className="text-muted-foreground">
-                (JSON object, reserved)
-              </span>
-            </Label>
-            <Textarea
-              className="form-control font-mono text-xs"
-              rows={2}
-              value={realtime.paramsText}
-              onChange={(e) =>
-                setRealtime({ ...realtime, paramsText: e.target.value })
-              }
-              placeholder="{}"
-            />
-            {parseParams(realtime.paramsText).error && (
-              <p className="text-xs text-destructive">
-                {parseParams(realtime.paramsText).error}
-              </p>
-            )}
-          </div>
+          {realtime.provider === "google" ? (
+            <div className="form-field space-y-1">
+              <Label className="text-xs">
+                Params{" "}
+                <span className="text-muted-foreground">
+                  (JSON object, reserved)
+                </span>
+              </Label>
+              <Textarea
+                className="form-control font-mono text-xs"
+                rows={2}
+                value={realtime.paramsText}
+                onChange={(e) =>
+                  setRealtime({ ...realtime, paramsText: e.target.value })
+                }
+                placeholder="{}"
+              />
+              {parseParams(realtime.paramsText).error && (
+                <p className="text-xs text-destructive">
+                  {parseParams(realtime.paramsText).error}
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="form-surface space-y-3">

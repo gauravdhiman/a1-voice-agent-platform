@@ -132,9 +132,9 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
             tools=tools_schema,
         )
     except ValueError as exc:
-        # Pipeline presets with missing direct-provider keys must not kill the
-        # call — fall back to Gemini realtime the same way a bad preset falls
-        # back elsewhere in voice-ws.
+        # Pipeline presets with missing direct-provider keys retain the legacy
+        # Gemini fallback. Realtime provider failures are surfaced unchanged so
+        # an OpenAI preset cannot silently run on a different provider.
         if isinstance(speech_config, PipelineSpeechConfig):
             logger.error(
                 "Agent %s: pipeline speech config could not be built (%s); "

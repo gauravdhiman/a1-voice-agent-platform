@@ -10,7 +10,7 @@
  * without rendering React.
  *
  * Two engine modes:
- *  - `realtime`  — a single end-to-end Google Gemini native-audio model.
+ *  - `realtime`  — a single end-to-end Google Gemini or OpenAI voice model.
  *  - `pipeline`  — modular STT -> LLM -> TTS cascade (+ optional VAD). Each
  *    stage uses a direct provider API (Deepgram, OpenAI, Cartesia, etc.).
  *
@@ -33,7 +33,47 @@ export const DEFAULT_REALTIME_TEMPERATURE = 0.7;
 export const DEFAULT_REALTIME_SILENCE_MS = 500;
 export const DEFAULT_REALTIME_PREFIX_MS = 200;
 
+export const REALTIME_PROVIDERS = ["google", "openai"] as const;
+export type RealtimeProvider = (typeof REALTIME_PROVIDERS)[number];
+export const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-live-1" as const;
+export const OPENAI_REALTIME_DEFAULT_VOICE = "marin" as const;
+export const OPENAI_REALTIME_MODELS = [
+  "gpt-live-1",
+  "gpt-realtime-2.1",
+] as const;
+export const OPENAI_REALTIME_MODEL_VOICES = {
+  "gpt-live-1": [
+    "marin",
+    "quartz",
+    "ripple",
+    "vesper",
+    "willow",
+    "stone",
+    "gleam",
+    "meridian",
+    "bossa",
+    "tempo",
+    "beacon",
+    "delta",
+    "cinder",
+  ],
+  "gpt-realtime-2.1": [
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "sage",
+    "shimmer",
+    "verse",
+    "marin",
+    "cedar",
+  ],
+} as const;
+export type OpenAIRealtimeModel = (typeof OPENAI_REALTIME_MODELS)[number];
+
 export interface RealtimeFormState {
+  provider: RealtimeProvider;
   model: string;
   voice: string;
   temperature: string; // numeric input kept as string; coerced on build
@@ -73,6 +113,7 @@ export type EngineMode = "realtime" | "pipeline";
 /** A blank realtime form seeded with the backend defaults. */
 export function defaultRealtimeForm(): RealtimeFormState {
   return {
+    provider: "google",
     model: DEFAULT_REALTIME_MODEL,
     voice: DEFAULT_REALTIME_VOICE,
     temperature: String(DEFAULT_REALTIME_TEMPERATURE),
@@ -110,14 +151,19 @@ export function defaultPipelineForm(): PipelineFormState {
  * the form can block submit and show the user what to fix. Non-object JSON
  * (e.g. a bare string) is also an error — `params` must be an object.
  */
-export function parseParams(
-  text: string,
-): { params: Record<string, unknown>; error: string | null } {
+export function parseParams(text: string): {
+  params: Record<string, unknown>;
+  error: string | null;
+} {
   const trimmed = text.trim();
   if (!trimmed) return { params: {}, error: null };
   try {
     const parsed: unknown = JSON.parse(trimmed);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       return { params: {}, error: "params must be a JSON object" };
     }
     return { params: parsed as Record<string, unknown>, error: null };
@@ -148,7 +194,9 @@ export function buildStage(stage: StageFormState): Record<string, unknown> {
  * ``voice`` key in the params JSON is stripped on emit so the backend never
  * sees duplicate sources.
  */
-export function buildTtsStage(stage: TtsStageFormState): Record<string, unknown> {
+export function buildTtsStage(
+  stage: TtsStageFormState,
+): Record<string, unknown> {
   const { params } = parseParams(stage.paramsText);
   const cleanParams = { ...params };
   delete cleanParams.voice;
@@ -180,14 +228,41 @@ export function buildRealtimeConfig(
     // The form should gate submit before calling this, but stay safe: drop the
     // invalid params and emit a valid config rather than throwing.
   }
+  if (s.provider === "openai") {
+    const model = (OPENAI_REALTIME_MODELS as readonly string[]).includes(
+      s.model.trim(),
+    )
+      ? (s.model.trim() as OpenAIRealtimeModel)
+      : OPENAI_REALTIME_DEFAULT_MODEL;
+    const voices = OPENAI_REALTIME_MODEL_VOICES[model];
+    const voice = (voices as readonly string[]).includes(s.voice.trim())
+      ? s.voice.trim()
+      : OPENAI_REALTIME_DEFAULT_VOICE;
+    return {
+      engine_mode: "realtime",
+      provider: "openai",
+      model,
+      voice,
+      temperature: DEFAULT_REALTIME_TEMPERATURE,
+      silence_duration_ms: DEFAULT_REALTIME_SILENCE_MS,
+      prefix_padding_ms: DEFAULT_REALTIME_PREFIX_MS,
+      params: {},
+    };
+  }
   return {
     engine_mode: "realtime",
     provider: "google",
     model: s.model.trim() || DEFAULT_REALTIME_MODEL,
     voice: s.voice.trim() || DEFAULT_REALTIME_VOICE,
     temperature: toNumber(s.temperature, DEFAULT_REALTIME_TEMPERATURE),
-    silence_duration_ms: toNumber(s.silence_duration_ms, DEFAULT_REALTIME_SILENCE_MS),
-    prefix_padding_ms: toNumber(s.prefix_padding_ms, DEFAULT_REALTIME_PREFIX_MS),
+    silence_duration_ms: toNumber(
+      s.silence_duration_ms,
+      DEFAULT_REALTIME_SILENCE_MS,
+    ),
+    prefix_padding_ms: toNumber(
+      s.prefix_padding_ms,
+      DEFAULT_REALTIME_PREFIX_MS,
+    ),
     params,
   };
 }
@@ -243,20 +318,41 @@ export function formStateFromConfig(
   }
   if (mode === "realtime") {
     const c = config as Record<string, unknown>;
-    if (typeof c.model === "string") realtime.model = c.model;
-    if (typeof c.voice === "string") realtime.voice = c.voice;
-    if (c.temperature !== undefined) realtime.temperature = String(c.temperature);
-    if (c.silence_duration_ms !== undefined)
-      realtime.silence_duration_ms = String(c.silence_duration_ms);
-    if (c.prefix_padding_ms !== undefined)
-      realtime.prefix_padding_ms = String(c.prefix_padding_ms);
-    if (c.params && typeof c.params === "object")
-      realtime.paramsText = JSON.stringify(c.params, null, 2);
+    const provider: RealtimeProvider =
+      c.provider === "openai" ? "openai" : "google";
+    realtime.provider = provider;
+    if (provider === "openai") {
+      const model =
+        typeof c.model === "string" &&
+        (OPENAI_REALTIME_MODELS as readonly string[]).includes(c.model)
+          ? (c.model as OpenAIRealtimeModel)
+          : OPENAI_REALTIME_DEFAULT_MODEL;
+      const modelVoices = OPENAI_REALTIME_MODEL_VOICES[model];
+      realtime.model = model;
+      realtime.voice =
+        typeof c.voice === "string" &&
+        (modelVoices as readonly string[]).includes(c.voice)
+          ? c.voice
+          : OPENAI_REALTIME_DEFAULT_VOICE;
+      realtime.paramsText = "";
+    } else {
+      if (typeof c.model === "string") realtime.model = c.model;
+      if (typeof c.voice === "string") realtime.voice = c.voice;
+      if (c.temperature !== undefined)
+        realtime.temperature = String(c.temperature);
+      if (c.silence_duration_ms !== undefined)
+        realtime.silence_duration_ms = String(c.silence_duration_ms);
+      if (c.prefix_padding_ms !== undefined)
+        realtime.prefix_padding_ms = String(c.prefix_padding_ms);
+      if (c.params && typeof c.params === "object")
+        realtime.paramsText = JSON.stringify(c.params, null, 2);
+    }
   } else {
     const c = config as Record<string, unknown>;
     const toStage = (key: string): StageFormState => {
       const raw = c[key] as Record<string, unknown> | undefined;
-      if (!raw || typeof raw !== "object") return { provider: "", model: "", paramsText: "" };
+      if (!raw || typeof raw !== "object")
+        return { provider: "", model: "", paramsText: "" };
       return {
         provider: typeof raw.provider === "string" ? raw.provider : "",
         model: typeof raw.model === "string" ? raw.model : "",
@@ -273,7 +369,11 @@ export function formStateFromConfig(
       }
       let voice = typeof raw.voice === "string" ? raw.voice : "";
       let paramsObj: Record<string, unknown> = {};
-      if (raw.params && typeof raw.params === "object" && !Array.isArray(raw.params)) {
+      if (
+        raw.params &&
+        typeof raw.params === "object" &&
+        !Array.isArray(raw.params)
+      ) {
         paramsObj = { ...(raw.params as Record<string, unknown>) };
       }
       // Legacy configs may store voice only inside params — hoist to the field.
@@ -297,7 +397,8 @@ export function formStateFromConfig(
     const vadRaw = c.vad as Record<string, unknown> | null | undefined;
     if (vadRaw && typeof vadRaw === "object") {
       pipeline.vad = {
-        provider: typeof vadRaw.provider === "string" ? vadRaw.provider : "silero",
+        provider:
+          typeof vadRaw.provider === "string" ? vadRaw.provider : "silero",
         model: typeof vadRaw.model === "string" ? vadRaw.model : "",
         paramsText:
           vadRaw.params && typeof vadRaw.params === "object"

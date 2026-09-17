@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from src.speech.factory import build_speech_components
 
 from shared.voice_agents.speech_config import (
     LLMStageConfig,
@@ -14,7 +14,6 @@ from shared.voice_agents.speech_config import (
     STTStageConfig,
     TTSStageConfig,
 )
-from src.speech.factory import build_speech_components
 
 
 def _pipeline(
@@ -50,7 +49,9 @@ class TestBuildSpeechComponentsPipeline:
             tts_cls.return_value = MagicMock(name="tts")
 
             result = build_speech_components(
-                _pipeline(stt_model="nova-3", llm_model="gpt-4o-mini", tts_voice="voice-1"),
+                _pipeline(
+                    stt_model="nova-3", llm_model="gpt-4o-mini", tts_voice="voice-1"
+                ),
                 {
                     "deepgram": "dg",
                     "openai": "sk",
@@ -215,3 +216,51 @@ class TestBuildSpeechComponentsPipeline:
             )
         assert result.mode == "realtime"
         gemini_cls.assert_called_once()
+
+    def test_gpt_live_uses_openai_live_adapter(self) -> None:
+        """GPT-Live uses the custom delegation-capable WebSocket adapter."""
+        with patch("src.speech.factory.OpenAILiveLLMService") as live_cls:
+            live_service = MagicMock()
+            live_cls.return_value = live_service
+            result = build_speech_components(
+                RealtimeSpeechConfig(provider="openai"),
+                {"openai": "openai-key"},
+                "system prompt",
+            )
+
+        live_cls.assert_called_once_with(
+            api_key="openai-key",
+            model="gpt-live-1",
+            voice="marin",
+            system_instruction="system prompt",
+            tools=None,
+        )
+        assert result.llm is live_service
+        assert result.greeting == live_service.send_greeting
+
+    def test_openai_realtime_model_uses_pinned_pipecat_service(self) -> None:
+        """The standard OpenAI realtime model uses Pipecat's native adapter."""
+        with (
+            patch("src.speech.factory.OpenAIRealtimeLLMService") as realtime_cls,
+            patch(
+                "src.speech.factory.OpenAIRealtimeLLMService.Settings"
+            ) as settings_cls,
+        ):
+            settings_cls.return_value = MagicMock()
+            realtime_cls.return_value = MagicMock()
+            build_speech_components(
+                RealtimeSpeechConfig(
+                    provider="openai",
+                    model="gpt-realtime-2.1",
+                    voice="cedar",
+                ),
+                {"openai": "openai-key"},
+                "system prompt",
+            )
+
+        settings_cls.assert_called_once()
+        assert settings_cls.call_args.kwargs["model"] == "gpt-realtime-2.1"
+        assert settings_cls.call_args.kwargs["system_instruction"] == "system prompt"
+        properties = settings_cls.call_args.kwargs["session_properties"]
+        assert properties.audio.output.voice == "cedar"
+        assert properties.audio.input.turn_detection.silence_duration_ms == 500

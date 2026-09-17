@@ -4,7 +4,8 @@ The resolver is the seam between a preset's ``SpeechConfig`` (which providers an
 agent's engine needs) and the credentials those providers run on. It produces the
 ``api_keys`` map the speech-provider factory expects:
 
-- ``realtime`` engine -> ``{"google": <key>}``
+- ``realtime`` engine -> the configured provider key, for example
+  ``{"google": <key>}`` or ``{"openai": <key>}``
 - ``pipeline`` engine -> one entry per direct stage provider, e.g.
   ``{"deepgram": ..., "openai": ..., "cartesia": ...}``.
 
@@ -79,15 +80,15 @@ def _providers_needed(speech_config: SpeechConfig) -> set[str]:
         speech_config: A validated RealtimeSpeechConfig or PipelineSpeechConfig.
 
     Returns:
-        A set of provider keys: ``{"google"}`` for realtime, or the per-stage
-        direct providers for pipeline. Providers without an env mapping (e.g.
-        ``silero``) are excluded — they need no key.
+        The configured realtime provider or the per-stage direct providers for
+        pipeline. Providers without an env mapping (e.g. ``silero``) are
+        excluded — they need no key.
 
     Raises:
         TypeError: If ``speech_config`` is neither realtime nor pipeline config.
     """
     if isinstance(speech_config, RealtimeSpeechConfig):
-        return {"google"}
+        return {speech_config.provider}
     if isinstance(speech_config, PipelineSpeechConfig):
         needed: set[str] = set()
         for stage_name, stage in (

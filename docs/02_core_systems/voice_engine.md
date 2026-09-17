@@ -12,14 +12,15 @@ The voice engine is the part of the platform that turns an authenticated session
 into a conversation. It supports **two configurable engines per agent**, chosen via
 the agent's `speech_config`:
 
-- **Realtime (end-to-end)** — a single speech model (Google Gemini native-audio)
-  handles STT + LLM + TTS together. This is the original behavior.
+- **Realtime (end-to-end)** — a single speech model handles STT + LLM + TTS
+  together. The worker supports Google Gemini native-audio and OpenAI
+  (`gpt-live-1` plus the standard `gpt-realtime-2.1` adapter).
 - **Pipeline (modular)** — an STT → LLM → TTS cascade where each stage can use a
   different provider/model, independently configurable. (Config + seam landed in
   Phase 1; per-stage providers wired in Phase 2.)
 
-The design goal is **modularity and reuse**: everything except *how the
-`AgentSession` is constructed* is shared between the two engines — room dispatch,
+The design goal is **modularity and reuse**: everything except _how the
+`AgentSession` is constructed_ is shared between the two engines — room dispatch,
 prompt building, the two-tier tool system (in-tree `BaseTool`s + remote MCP +
 skills), greeting, and cleanup.
 
@@ -37,14 +38,14 @@ flowchart TD
     Prompt --> Setup["voice-ws session_setup + speech/factory"]
     Keys --> Setup
     Fetch --> Tools["Tools + MCP + skills (shared)"]
-    Tools --> Agent["Pipecat pipeline or Gemini realtime"]
+    Tools --> Agent["Pipecat pipeline or Google/OpenAI realtime"]
     Setup --> Agent
     Agent --> Start["Audio in/out (browser or Twilio Stream)"]
 ```
 
 `voice-ws` session setup is the only place the two engines diverge. It delegates
 provider construction to `voice-ws/src/speech/factory.py` and assembles either a
-Gemini Realtime session or a modular Pipecat pipeline.
+Google/OpenAI realtime session or a modular Pipecat pipeline.
 
 ## Components
 
@@ -52,10 +53,12 @@ Gemini Realtime session or a modular Pipecat pipeline.
 
 A Pydantic discriminated union on `engine_mode`:
 
-- `RealtimeSpeechConfig` — `engine_mode=realtime`, Google native-audio model,
-  voice, temperature, endpointing. Defaults **exactly reproduce** the constants
-  previously hardcoded in the worker, so `default_realtime_config()` is
-  behavior-neutral (legacy agents with no `speech_config` get today's tuning).
+- `RealtimeSpeechConfig` — `engine_mode=realtime`, a supported provider/model,
+  voice, and provider-specific tuning. Google keeps the existing arbitrary model
+  and endpointing fields. OpenAI supports `gpt-live-1` and `gpt-realtime-2.1`
+  with per-model voice validation; its params and Gemini-only tuning remain at
+  their inert defaults. Defaults **exactly reproduce** the legacy Google
+  constants, so `default_realtime_config()` remains behavior-neutral.
 - `PipelineSpeechConfig` — `engine_mode=pipeline`, with `stt` / `llm` / `tts`
   (required) and `vad` / `turn_detection` (optional) stage configs.
 - `StageConfig` — `provider` (factory dispatch key) + `model` + open `params`
@@ -121,7 +124,8 @@ are never persisted in or returned by the call-log API. Migration
 ### `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3)
 
 `resolve_api_keys(speech_config, org, use_platform_credits)` → the `api_keys` map
-the factory expects. Reads all per-org provider keys from one Fernet-encrypted
+the factory expects. Realtime resolves the provider selected by the config
+(`google` or `openai`); pipeline resolves each stage. It reads all per-org provider keys from one Fernet-encrypted
 `organizations.provider_credentials` blob (via `decrypt_data`), with platform env
 fallback and the `use_platform_credits` toggle. **Only the providers the config
 needs appear**; missing providers are omitted (the factory fails fast with a
@@ -131,16 +135,19 @@ via `normalize_stage_provider()`; voice-ws (Pipecat) credentials are no longer u
 ### `voice-ws/src/speech/factory.py` — Pipecat provider factory
 
 Each builder returns a **Pipecat-compatible service** (STT, LLM, TTS, VAD) for pipeline
-presets, or a Gemini Realtime adapter for `engine_mode=realtime`.
+presets, or a provider-specific realtime adapter for `engine_mode=realtime`.
 
-- Realtime — Google Gemini native-audio (see `voice-ws/src/bot.py`, session setup)
+- Realtime — Google Gemini native-audio, OpenAI Realtime, or the custom
+  GPT-Live WebSocket/delegation adapter (see `voice-ws/src/bot.py`, session setup)
 - Pipeline — Deepgram STT, OpenAI/Cerebras/OpenRouter LLM, Cartesia/Fish TTS
 - `normalize_stage_provider()` — maps deprecated `livekit_inference` slug to direct providers
 
 ### `voice-ws/src/session_setup.py` — the seam
 
-Loads agent, preset, prompt, tools, MCP, and skills; builds the Pipecat pipeline or
-Gemini Realtime session for `/ws` and `/twilio`.
+Loads agent, preset, prompt, tools, MCP, and skills; builds the Pipecat pipeline
+or selected realtime session for `/ws` and `/twilio`. Pipeline-only provider
+fallback remains separate; a realtime provider failure is surfaced rather than
+silently switching models.
 
 ## Why tools are engine-agnostic
 
@@ -243,22 +250,22 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     Credentials" Card on `/organization` with its own Save button (separate from
     the main org form, avoiding the empty-string-clears-everything footgun).
     `type="password"` inputs per provider (google/deepgram/openai/cartesia/cerebras
-    + livekit `{api_key, api_secret}`); save sends `provider_credentials_input`
-    with **only touched fields** (non-empty string to set, `null` to explicitly
-    clear, omitted to preserve). Read view shows green-dot "Configured" / gray
-    "Not configured" pills driven by the backend-derived
-    `provider_credentials_status` map (booleans only — never decrypted values).
-    Gated on `canUpdateOrganization` + the page-level platform/org-admin check.
+    - livekit `{api_key, api_secret}`); save sends `provider_credentials_input`
+      with **only touched fields** (non-empty string to set, `null` to explicitly
+      clear, omitted to preserve). Read view shows green-dot "Configured" / gray
+      "Not configured" pills driven by the backend-derived
+      `provider_credentials_status` map (booleans only — never decrypted values).
+      Gated on `canUpdateOrganization` + the page-level platform/org-admin check.
   - **Backend (C support):** `organization/service.py` computes
     `provider_credentials_status` from the decrypted blob on read and attaches it
     to the org response (no decrypted values exposed); surfaced as a read-only
     field on `Organization` (`shared/organization/models.py`).
-  Validation: `tsc --noEmit` clean on source; full vitest suite green (532 tests);
-  backend org-credentials tests green (20); browser smoke (create/publish/edit/
-  unpublish/delete + 409 `in_use` dialog, picker prefill + clear cycle, org-cred
-  set/clear pills, non-platform-admin denied) all pass. Throwaway smoke agent
-  deleted; the two presets authored during validation are kept as starter catalog
-  content (owner decision).
+    Validation: `tsc --noEmit` clean on source; full vitest suite green (532 tests);
+    backend org-credentials tests green (20); browser smoke (create/publish/edit/
+    unpublish/delete + 409 `in_use` dialog, picker prefill + clear cycle, org-cred
+    set/clear pills, non-platform-admin denied) all pass. Throwaway smoke agent
+    deleted; the two presets authored during validation are kept as starter catalog
+    content (owner decision).
 - **Phase 4 follow-ups (done)** — two enhancements to the Phase 4 surface:
   - **System default voice profile.** The Phase 4 fallback for an agent with
     `preset_id=null` was a hardcoded `default_realtime_config()` in voice-ws —
@@ -291,15 +298,15 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     `ai-agent` still redirect). The credentials Card renamed "Voice Provider
     Credentials" → **"Third-party API Credentials"**. No logic change to the
     save/cred-status flow.
-    - **Follow-up: Google key moved off the Info tab.** The Google API key field
-      was removed from the "Organization Info" tab (edit + read views); google is
-      now managed **exclusively** on the "API Credentials" tab. The Info tab no
-      longer sends `google_api_key` on save. The backend `update_organization`
-      now validates a google key arriving via `provider_credentials_input`
-      (the credentials-tab path) exactly like the legacy `google_api_key`
-      field — invalid keys are rejected before any write (`Invalid Google API
-      key: …`). The legacy `google_api_key` write path is retained for any
-      other caller but the frontend no longer uses it.
+  - **Follow-up: Google key moved off the Info tab.** The Google API key field
+    was removed from the "Organization Info" tab (edit + read views); google is
+    now managed **exclusively** on the "API Credentials" tab. The Info tab no
+    longer sends `google_api_key` on save. The backend `update_organization`
+    now validates a google key arriving via `provider_credentials_input`
+    (the credentials-tab path) exactly like the legacy `google_api_key`
+    field — invalid keys are rejected before any write (for example,
+    `Invalid Google API key: …`). The legacy `google_api_key` write path is
+    retained for any other caller but the frontend no longer uses it.
 - **Phase 5** — latency hardening (borrowed from HF `speech-to-speech`) + the
   explicit turn-detector builder.
 

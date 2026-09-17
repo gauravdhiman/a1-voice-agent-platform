@@ -7,16 +7,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from src.session_setup import prepare_voice_session
 
 from shared.voice_agents.prompt_builder import GENERIC_SYSTEM_GUARDRAILS
 from shared.voice_agents.speech_config import (
     LLMStageConfig,
     PipelineSpeechConfig,
+    RealtimeSpeechConfig,
     STTStageConfig,
     TTSStageConfig,
 )
 from shared.voice_agents.voice_session_service import VoiceSessionClaims
-from src.session_setup import prepare_voice_session
 
 
 def _claims(agent_id: str) -> VoiceSessionClaims:
@@ -106,6 +107,59 @@ class TestPrepareVoiceSession:
         assert bundle.speech_config.engine_mode == "realtime"
 
     @pytest.mark.asyncio
+    async def test_realtime_build_failure_is_not_fallback(self) -> None:
+        """A selected OpenAI realtime failure must reach the caller unchanged."""
+        agent_id = uuid4()
+        agent = SimpleNamespace(
+            id=agent_id,
+            organization_id=None,
+            use_platform_credits=False,
+            instructions_markdown=None,
+            name="Test Agent",
+            persona=None,
+            tone=None,
+            mission=None,
+            custom_instructions=None,
+        )
+        realtime_cfg = RealtimeSpeechConfig(provider="openai")
+
+        with (
+            patch(
+                "src.session_setup.voice_agent_service.get_agent_by_id",
+                new=AsyncMock(return_value=(agent, None)),
+            ),
+            patch(
+                "src.session_setup.assemble_agent_tools",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        schemas=[],
+                        handlers={},
+                        mcp_clients=[],
+                        enabled_tool_names=[],
+                        unavailable_tools=[],
+                        skill_summaries=[],
+                    )
+                ),
+            ),
+            patch(
+                "src.session_setup.resolve_speech_config_for_agent",
+                new=AsyncMock(return_value=realtime_cfg),
+            ),
+            patch(
+                "src.session_setup.resolve_api_keys",
+                return_value={"openai": "openai-key"},
+            ),
+            patch(
+                "src.session_setup.build_speech_components",
+                side_effect=ValueError("OpenAI Live unavailable"),
+            ) as build_mock,
+        ):
+            with pytest.raises(ValueError, match="OpenAI Live unavailable"):
+                await prepare_voice_session(_claims(str(agent_id)))
+
+        build_mock.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_uses_organization_timezone_in_prompt(self, monkeypatch) -> None:
         """Org IANA timezone anchors the CURRENT DATE AND TIME section."""
         agent_id = uuid4()
@@ -156,7 +210,8 @@ class TestPrepareVoiceSession:
                 "src.session_setup.resolve_speech_config_for_agent",
                 new=AsyncMock(
                     return_value=__import__(
-                        "shared.voice_agents.speech_config", fromlist=["default_realtime_config"]
+                        "shared.voice_agents.speech_config",
+                        fromlist=["default_realtime_config"],
                     ).default_realtime_config()
                 ),
             ),

@@ -8,8 +8,12 @@ the service from ``config.engine_mode``).
 import pytest
 from pydantic import ValidationError
 
-from shared.voice_agents.preset_models import (Preset, PresetCreate,
-                                               PresetType, PresetUpdate)
+from shared.voice_agents.preset_models import (
+    Preset,
+    PresetCreate,
+    PresetType,
+    PresetUpdate,
+)
 
 
 class TestPresetModels:
@@ -22,6 +26,37 @@ class TestPresetModels:
             config={"engine_mode": "realtime"},
         )
         assert preset.config.engine_mode.value == "realtime"
+
+    def test_create_openai_realtime_config_validates_supported_model(self):
+        """OpenAI realtime presets receive the GPT-Live defaults."""
+        preset = PresetCreate(
+            name="OpenAI Live",
+            config={
+                "engine_mode": "realtime",
+                "provider": "openai",
+            },
+        )
+        assert preset.config.provider == "openai"
+        assert preset.config.model == "gpt-live-1"
+        assert preset.config.voice == "marin"
+
+    @pytest.mark.parametrize(
+        "override, message",
+        [
+            ({"model": "gpt-unknown"}, "model"),
+            ({"model": "gpt-realtime-2.1", "voice": "quartz"}, "voice"),
+            ({"params": {"temperature": 0.2}}, "params"),
+            ({"temperature": 0.2}, "temperature"),
+            ({"silence_duration_ms": 300}, "silence_duration_ms"),
+        ],
+    )
+    def test_create_rejects_unsupported_openai_realtime_options(
+        self, override, message
+    ):
+        """The shared contract rejects options the worker cannot execute."""
+        config = {"engine_mode": "realtime", "provider": "openai", **override}
+        with pytest.raises(ValidationError, match=message):
+            PresetCreate(name="Invalid OpenAI Live", config=config)
 
     def test_create_pipeline_config_validates(self):
         """A pipeline config body validates into the discriminated union."""

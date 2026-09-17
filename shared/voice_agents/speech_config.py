@@ -11,16 +11,17 @@ This module defines the typed contract between three layers:
 
 Two engine modes are supported via a discriminated union on ``engine_mode``:
 
-- ``realtime`` — a single end-to-end speech model (Google Gemini native-audio)
-  that handles STT + LLM + TTS together. This is the existing behavior.
+- ``realtime`` — a single end-to-end speech model (Google Gemini or OpenAI)
+  that handles STT + LLM + TTS together.
 - ``pipeline`` — a modular cascade where each stage (STT, LLM, TTS, VAD, turn
   detection) can use a different provider/model, independently configurable.
 
 Design notes:
 
 - ``RealtimeSpeechConfig`` defaults match the voice-ws Gemini realtime provider
-  (model, voice, temperature, endpointing). ``default_realtime_config()`` keeps
-  legacy agents (no ``speech_config`` column) on the same tuning.
+  (model, voice, temperature, endpointing). OpenAI model/voice combinations are
+  limited to the adapters implemented by voice-ws. ``default_realtime_config()``
+  keeps legacy agents (no ``speech_config`` column) on the same tuning.
 - The pipeline stage configs (``STTStageConfig`` etc.) carry a ``provider``
   dispatch key, an optional provider-specific ``model`` id, and an open
   ``params`` dict for provider-specific kwargs — so the factory can swap a
@@ -32,7 +33,7 @@ Design notes:
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 # ---------------------------------------------------------------------------
 # Engine mode
@@ -44,8 +45,8 @@ class EngineMode(str, Enum):
 
     Attributes:
         REALTIME: End-to-end speech model — one model does STT+LLM+TTS
-            (e.g. Google Gemini native-audio). Lowest component count, single
-            provider.
+            (e.g. Google Gemini or OpenAI voice models). Lowest component
+            count, single provider.
         PIPELINE: Modular STT -> LLM -> TTS cascade, each stage independently
             configurable with a different provider/model. Maximum flexibility.
     """
@@ -136,9 +137,49 @@ DEFAULT_REALTIME_TEMPERATURE = 0.7
 DEFAULT_ENDPOINTING_SILENCE_DURATION_MS = 500
 DEFAULT_ENDPOINTING_PREFIX_PADDING_MS = 200
 
+RealtimeProvider = Literal["google", "openai"]
+REALTIME_PROVIDERS: tuple[RealtimeProvider, ...] = ("google", "openai")
+
+OPENAI_REALTIME_DEFAULT_MODEL = "gpt-live-1"
+OPENAI_REALTIME_DEFAULT_VOICE = "marin"
+OPENAI_REALTIME_MODELS = ("gpt-live-1", "gpt-realtime-2.1")
+OPENAI_REALTIME_MODEL_VOICES: dict[str, frozenset[str]] = {
+    "gpt-live-1": frozenset(
+        {
+            "marin",
+            "quartz",
+            "ripple",
+            "vesper",
+            "willow",
+            "stone",
+            "gleam",
+            "meridian",
+            "bossa",
+            "tempo",
+            "beacon",
+            "delta",
+            "cinder",
+        }
+    ),
+    "gpt-realtime-2.1": frozenset(
+        {
+            "alloy",
+            "ash",
+            "ballad",
+            "coral",
+            "echo",
+            "sage",
+            "shimmer",
+            "verse",
+            "marin",
+            "cedar",
+        }
+    ),
+}
+
 
 class RealtimeSpeechConfig(BaseModel):
-    """Config for the end-to-end realtime engine (Google Gemini native-audio).
+    """Config for the end-to-end realtime engine.
 
     A single model handles STT + LLM + TTS. The non-tunable parts of the
     realtime tuning (thinking disabled, barge-in enabled) are fixed in the
@@ -146,25 +187,75 @@ class RealtimeSpeechConfig(BaseModel):
 
     Attributes:
         engine_mode: Always ``realtime`` (discriminator).
-        provider: Always ``google`` (the only supported realtime provider).
-        model: The Gemini native-audio model id.
-        voice: The Gemini voice name.
-        temperature: Sampling temperature.
-        silence_duration_ms: Trailing silence before end-of-turn (endpointing).
-        prefix_padding_ms: Pre-speech audio kept to avoid clipping.
-        params: Reserved for future provider-specific kwargs.
+        provider: Realtime provider implemented by the voice runtime.
+        model: Provider model id. Google accepts the provider's current model
+            catalog; OpenAI is limited to the worker-supported models below.
+        voice: Provider voice name. OpenAI voices are validated per model.
+        temperature: Google sampling temperature. OpenAI Live currently uses
+            its server-side defaults, so this must remain at the inert default.
+        silence_duration_ms: Google trailing silence before end-of-turn.
+        prefix_padding_ms: Google pre-speech audio kept to avoid clipping.
+        params: Google provider-specific kwargs. OpenAI Live currently has no
+            configurable params in this contract.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     engine_mode: Literal[EngineMode.REALTIME] = EngineMode.REALTIME
-    provider: Literal["google"] = "google"
+    provider: RealtimeProvider = "google"
     model: str = DEFAULT_REALTIME_MODEL
     voice: str = DEFAULT_REALTIME_VOICE
     temperature: float = DEFAULT_REALTIME_TEMPERATURE
     silence_duration_ms: int = DEFAULT_ENDPOINTING_SILENCE_DURATION_MS
     prefix_padding_ms: int = DEFAULT_ENDPOINTING_PREFIX_PADDING_MS
     params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_provider_defaults(cls, data: Any) -> Any:
+        """Apply OpenAI defaults without changing legacy Google defaults."""
+        if not isinstance(data, dict) or data.get("provider") != "openai":
+            return data
+        normalized = dict(data)
+        normalized.setdefault("model", OPENAI_REALTIME_DEFAULT_MODEL)
+        normalized.setdefault("voice", OPENAI_REALTIME_DEFAULT_VOICE)
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_provider_contract(self) -> "RealtimeSpeechConfig":
+        """Reject realtime combinations the worker cannot execute safely."""
+        if self.provider == "google":
+            return self
+
+        if self.model not in OPENAI_REALTIME_MODEL_VOICES:
+            raise ValueError(
+                "OpenAI realtime model must be one of "
+                f"{', '.join(OPENAI_REALTIME_MODELS)}."
+            )
+        if self.voice not in OPENAI_REALTIME_MODEL_VOICES[self.model]:
+            voices = ", ".join(sorted(OPENAI_REALTIME_MODEL_VOICES[self.model]))
+            raise ValueError(
+                f"Voice '{self.voice}' is not supported by OpenAI realtime model "
+                f"'{self.model}'. Choose one of: {voices}."
+            )
+        if self.params:
+            raise ValueError("OpenAI realtime params must be an empty object.")
+        if self.temperature != DEFAULT_REALTIME_TEMPERATURE:
+            raise ValueError(
+                "OpenAI realtime temperature is not configurable; use "
+                f"{DEFAULT_REALTIME_TEMPERATURE}."
+            )
+        if self.silence_duration_ms != DEFAULT_ENDPOINTING_SILENCE_DURATION_MS:
+            raise ValueError(
+                "OpenAI realtime silence_duration_ms is not configurable; use "
+                f"{DEFAULT_ENDPOINTING_SILENCE_DURATION_MS}."
+            )
+        if self.prefix_padding_ms != DEFAULT_ENDPOINTING_PREFIX_PADDING_MS:
+            raise ValueError(
+                "OpenAI realtime prefix_padding_ms is not configurable; use "
+                f"{DEFAULT_ENDPOINTING_PREFIX_PADDING_MS}."
+            )
+        return self
 
 
 class PipelineSpeechConfig(BaseModel):
@@ -258,6 +349,12 @@ def parse_speech_config(
 
 __all__ = [
     "EngineMode",
+    "RealtimeProvider",
+    "REALTIME_PROVIDERS",
+    "OPENAI_REALTIME_DEFAULT_MODEL",
+    "OPENAI_REALTIME_DEFAULT_VOICE",
+    "OPENAI_REALTIME_MODELS",
+    "OPENAI_REALTIME_MODEL_VOICES",
     "StageConfig",
     "STTStageConfig",
     "LLMStageConfig",
