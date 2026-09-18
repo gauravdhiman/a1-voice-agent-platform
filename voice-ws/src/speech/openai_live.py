@@ -151,7 +151,6 @@ class OpenAILiveLLMService(LLMService[Any]):
         self._output_sample_rate = DEFAULT_OUTPUT_SAMPLE_RATE
         self._input_transcript_fragments: list[str] = []
         self._response_started = False
-        self._response_completed = False
         self._seen_tool_calls: set[str] = set()
         self._submitted_tool_calls: set[str] = set()
         self._tool_results: dict[str, Any] = {}
@@ -266,7 +265,12 @@ class OpenAILiveLLMService(LLMService[Any]):
             self._context = frame.context
         elif isinstance(frame, InputAudioRawFrame):
             self._output_sample_rate = frame.sample_rate
-            if self._session_ready and not self._closing:
+            if (
+                self._session_ready
+                and not self._closing
+                and not self._closed.is_set()
+                and self._fatal_error is None
+            ):
                 await self._send_input_audio(frame)
 
         await self.push_frame(frame, direction)
@@ -381,13 +385,17 @@ class OpenAILiveLLMService(LLMService[Any]):
                     ),
                     fatal=True,
                 )
+        else:
+            if not self._closed.is_set():
+                await self._report_error(
+                    (
+                        "session_finalization_unconfirmed"
+                        if self._session_ready
+                        else "connection_closed"
+                    ),
+                    fatal=True,
+                )
         finally:
-            if (
-                not self._session_ready
-                and self._fatal_error is None
-                and not self._closing
-            ):
-                await self._report_error("connection_closed", fatal=True)
             if not self._started.is_set():
                 self._started.set()
 
@@ -434,7 +442,6 @@ class OpenAILiveLLMService(LLMService[Any]):
             return
         if event_type == "session.interrupted":
             self._response_started = False
-            self._response_completed = False
             await self.push_frame(InterruptionFrame())
             return
         if event_type == "session.delegation.created":
@@ -462,7 +469,6 @@ class OpenAILiveLLMService(LLMService[Any]):
                 source="responses",
                 identity=self._response_usage_identity(event),
             )
-            self._response_completed = True
 
     @staticmethod
     def _response_usage_identity(event: Mapping[str, Any]) -> str:
@@ -656,13 +662,8 @@ class OpenAILiveLLMService(LLMService[Any]):
         """Accumulate ordered Live input transcript fragments for the next handoff."""
         if not isinstance(text, str) or not text:
             return
-        if (
-            self._response_started
-            and self._response_completed
-            and not self._input_transcript_fragments
-        ):
+        if self._response_started:
             self._response_started = False
-            self._response_completed = False
         self._input_transcript_fragments.append(text)
 
     async def _begin_response_handoff(self) -> None:
@@ -670,7 +671,6 @@ class OpenAILiveLLMService(LLMService[Any]):
         if self._response_started:
             return
         self._response_started = True
-        self._response_completed = False
         transcript = "".join(self._input_transcript_fragments)
         self._input_transcript_fragments.clear()
         if transcript:
@@ -827,7 +827,11 @@ class OpenAILiveLLMService(LLMService[Any]):
         """Send one JSON command without exposing its body in logs."""
         if self._websocket is None:
             raise OpenAILiveError("OpenAI Live socket is not connected.")
-        if not allow_before_start and not self._session_ready:
+        if not allow_before_start and (
+            not self._session_ready
+            or self._closed.is_set()
+            or self._fatal_error is not None
+        ):
             raise OpenAILiveError("OpenAI Live session is not ready.")
         async with self._send_lock:
             await self._websocket.send(json.dumps(event, separators=(",", ":")))

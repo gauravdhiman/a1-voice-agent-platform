@@ -50,7 +50,12 @@ class FakeWebSocket:
 
 @pytest.mark.asyncio
 async def test_connect_sends_session_start_and_waits_for_started() -> None:
-    websocket = FakeWebSocket([{"type": "session.started"}])
+    websocket = FakeWebSocket(
+        [
+            {"type": "session.started"},
+            {"type": "session.closed", "reason": "close_requested"},
+        ]
+    )
 
     async def connect(uri: str, **kwargs):
         assert uri == OPENAI_LIVE_URL
@@ -105,6 +110,33 @@ async def test_clean_eof_before_session_started_fails_startup() -> None:
     assert service._session_ready is False
     assert service._fatal_error is not None
     assert service._fatal_error.code == "connection_closed"
+    assert websocket.closed is True
+
+
+@pytest.mark.asyncio
+async def test_clean_eof_after_session_started_fails_startup() -> None:
+    websocket = FakeWebSocket([{"type": "session.started"}])
+
+    async def connect(_uri: str, **_kwargs):
+        return websocket
+
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+        websocket_factory=connect,
+        connection_timeout=1,
+        close_timeout=0.01,
+    )
+
+    with pytest.raises(OpenAILiveError) as error:
+        await service._connect()
+
+    assert error.value.code == "session_finalization_unconfirmed"
+    assert service._session_ready is True
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "session_finalization_unconfirmed"
     assert websocket.closed is True
 
 
@@ -171,6 +203,38 @@ async def test_input_transcript_fragments_accumulate_upstream() -> None:
         == FrameDirection.UPSTREAM
     )
     assert isinstance(frames[1], LLMFullResponseStartFrame)
+
+
+@pytest.mark.asyncio
+async def test_each_live_turn_hands_off_ordered_input_transcript_once() -> None:
+    """A later Live turn is not held behind delegated Responses completion."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.push_frame = AsyncMock()
+
+    events = [
+        {"type": "session.input_transcript.delta", "delta": "First turn"},
+        {"type": "session.output_transcript.delta", "delta": "First reply"},
+        {"type": "session.input_transcript.delta", "delta": "Second turn"},
+        {"type": "session.output_transcript.delta", "delta": "Second reply"},
+    ]
+    for event in events:
+        await service._handle_event(event)
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    transcripts = [
+        frame.text for frame in frames if isinstance(frame, TranscriptionFrame)
+    ]
+    response_starts = [
+        frame for frame in frames if isinstance(frame, LLMFullResponseStartFrame)
+    ]
+    assert transcripts == ["First turn", "Second turn"]
+    assert len(response_starts) == 2
+    assert service._input_transcript_fragments == []
 
 
 @pytest.mark.asyncio
