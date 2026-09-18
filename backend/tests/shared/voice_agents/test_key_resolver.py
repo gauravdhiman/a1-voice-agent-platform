@@ -15,7 +15,6 @@ encrypted ``provider_credentials`` blob and the platform env vars to produce the
   plaintext ``google_api_key`` column.
 """
 
-import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -35,8 +34,8 @@ from shared.voice_agents.speech_config import (
 )
 
 
-def _realtime() -> RealtimeSpeechConfig:
-    return RealtimeSpeechConfig()
+def _realtime(provider: str = "google") -> RealtimeSpeechConfig:
+    return RealtimeSpeechConfig(provider=provider)
 
 
 def _pipeline(
@@ -99,6 +98,13 @@ class TestKeyResolver:
         patch_decrypt.return_value = creds
         api_keys = resolve_api_keys(_realtime(), org=org)
         assert api_keys == {"google": "org-gemini"}
+
+    def test_openai_realtime_uses_openai_key_only(self, patch_decrypt, clean_env):
+        """OpenAI realtime does not accidentally require a Gemini key."""
+        clean_env.setenv("OPENAI_API_KEY", "plat-openai")
+        clean_env.setenv("GEMINI_API_KEY", "plat-gemini")
+        api_keys = resolve_api_keys(_realtime("openai"), org=None)
+        assert api_keys == {"openai": "plat-openai"}
 
     def test_realtime_use_platform_credits_ignores_org(self, patch_decrypt, clean_env):
         """use_platform_credits=True forces the platform env even when org has a key."""

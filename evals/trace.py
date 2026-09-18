@@ -7,6 +7,7 @@ can be applied in CI, offline replay, and production incident analysis.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
@@ -112,7 +113,8 @@ def _validate_schema_arguments(
     for required in schema.get("required", []) or []:
         if required not in arguments:
             violations.append(
-                f"schema violation for {tool_name}: missing required argument '{required}'"
+                f"schema violation for {tool_name}: "
+                f"missing required argument '{required}'"
             )
     for name, value in arguments.items():
         property_schema = properties.get(name)
@@ -202,12 +204,72 @@ def _validate_assistant_expectations(
             evaluation.checks.append("assistant duplicate-message check passed")
 
 
+def _normalize_delegated_events(events: list[Any]) -> list[Any]:
+    """Project nested Responses function calls into the generic trace contract."""
+    normalized: list[Any] = []
+    call_names: dict[str, str] = {}
+    for event in events:
+        if not isinstance(event, Mapping) or event.get("type") not in {
+            "response_event",
+            "response.event",
+        }:
+            normalized.append(event)
+            continue
+
+        nested = event.get("event")
+        if not isinstance(nested, Mapping):
+            normalized.append(event)
+            continue
+        if nested.get("type") != "response.output_item.done":
+            continue
+        item = nested.get("item")
+        if not isinstance(item, Mapping):
+            continue
+        item_type = item.get("type")
+        call_id = item.get("call_id")
+        if item_type == "function_call":
+            name = str(item.get("name") or "")
+            if isinstance(call_id, str) and call_id:
+                call_names[call_id] = name
+            arguments = item.get("arguments", {})
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    pass
+            normalized.append(
+                {
+                    "type": "tool_call",
+                    "name": name,
+                    "call_id": call_id,
+                    "arguments": arguments,
+                }
+            )
+        elif item_type == "function_call_output":
+            output = item.get("output")
+            if isinstance(output, str):
+                try:
+                    output = json.loads(output)
+                except json.JSONDecodeError:
+                    pass
+            normalized.append(
+                {
+                    "type": "tool_result",
+                    "name": call_names.get(str(call_id), ""),
+                    "call_id": call_id,
+                    "result": output,
+                }
+            )
+    return normalized
+
+
 def evaluate_trace(trace: Mapping[str, Any]) -> TraceEvaluation:
     """Evaluate a model/tool trace against generic safety contracts.
 
     The accepted trace shape is a mapping with ``scenario_id`` and an ordered
-    ``events`` list.  Events have ``type`` values ``tool_call``, ``tool_result``,
-    ``assistant``, or ``user``.  Optional scenario keys are
+    ``events`` list. Events may also contain ``response_event`` entries from a
+    delegated Responses stream; completed function-call items are normalized to
+    the same tool-call/result contract before validation. Optional scenario keys are
     ``expected_tool_sequence``, ``forbidden_tools``, ``max_tool_calls``, and
     ``assistant_expectations``.
 
@@ -223,6 +285,7 @@ def evaluate_trace(trace: Mapping[str, Any]) -> TraceEvaluation:
     if not isinstance(events, list):
         evaluation.failures.append("trace events must be a list")
         return evaluation
+    events = _normalize_delegated_events(events)
 
     tool_calls = [
         event
@@ -257,7 +320,7 @@ def evaluate_trace(trace: Mapping[str, Any]) -> TraceEvaluation:
             break
             evaluation.checks.append(f"expected tool called: {expected_name}")
 
-    pending_tools: list[str] = []
+    pending_tools: list[tuple[str, str | None]] = []
     last_tool_result: Mapping[str, Any] | None = None
     last_tool_name = ""
     for event in events:
@@ -288,23 +351,38 @@ def evaluate_trace(trace: Mapping[str, Any]) -> TraceEvaluation:
                     evaluation.failures.append(
                         f"datetime argument '{path}' must include a timezone offset"
                     )
-            pending_tools.append(name)
+            call_id = event.get("call_id")
+            pending_tools.append((name, call_id if isinstance(call_id, str) else None))
             last_tool_name = name
             last_tool_result = None
         elif event_type == "tool_result":
             name = str(event.get("name") or "")
             result = event.get("result")
-            if name not in pending_tools:
+            call_id = event.get("call_id")
+            call_id = call_id if isinstance(call_id, str) else None
+            match_index = next(
+                (
+                    index
+                    for index, (pending_name, pending_call_id) in enumerate(
+                        pending_tools
+                    )
+                    if (call_id and pending_call_id == call_id)
+                    or (not call_id and pending_name == name)
+                ),
+                None,
+            )
+            if match_index is None:
                 evaluation.failures.append(f"tool result has no matching call: {name}")
             else:
-                pending_tools.remove(name)
+                pending_tools.pop(match_index)
             last_tool_name = name
             last_tool_result = result if isinstance(result, Mapping) else None
             if isinstance(result, Mapping) and result.get("status") == "error":
                 details = result.get("error")
                 if not isinstance(details, Mapping):
                     evaluation.failures.append(
-                        f"error result is not actionable: {name} is missing error details"
+                        f"error result is not actionable: {name} is missing "
+                        "error details"
                     )
                 else:
                     required_fields = {"code", "message", "next_action"}
@@ -336,7 +414,7 @@ def evaluate_trace(trace: Mapping[str, Any]) -> TraceEvaluation:
                 else:
                     evaluation.checks.append("assistant success claim verified")
 
-    for name in pending_tools:
+    for name, _call_id in pending_tools:
         evaluation.failures.append(f"tool call has no result: {name}")
 
     max_tool_calls = trace.get("max_tool_calls")

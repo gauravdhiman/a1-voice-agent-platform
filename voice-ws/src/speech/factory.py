@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.audio.utils import create_stream_resampler
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import InputAudioRawFrame
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.fish.tts import FishAudioTTSService, FishAudioTTSSettings
@@ -15,11 +18,24 @@ from pipecat.services.google.gemini_live.llm import (
     GeminiVADParams,
 )
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.openai.realtime.events import (
+    AudioConfiguration,
+    AudioInput,
+    AudioOutput,
+    InputAudioTranscription,
+    SessionProperties,
+    TurnDetection,
+)
+from pipecat.services.openai.realtime.llm import (
+    OpenAIRealtimeLLMService as PipecatOpenAIRealtimeLLMService,
+)
 from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
+from src.speech.openai_live import OpenAILiveLLMService
 from src.speech.thinking_text_filter import ThinkingChannelTextFilter
 
 from shared.voice_agents.model_capabilities import OPENROUTER_DEFAULT_MODEL
 from shared.voice_agents.speech_config import (
+    OPENAI_REALTIME_MODEL_VOICES,
     PipelineSpeechConfig,
     RealtimeSpeechConfig,
     SpeechConfig,
@@ -38,7 +54,7 @@ OPENROUTER_DISABLE_REASONING = {
 
 
 def _merge_openrouter_extra(preset_extra: dict[str, Any] | None) -> dict[str, Any]:
-    """Merge preset LLM extras without passing unsupported top-level kwargs to the SDK."""
+    """Merge preset LLM extras without passing unsupported SDK kwargs."""
     extra: dict[str, Any] = {
         "extra_body": dict(OPENROUTER_DISABLE_REASONING["extra_body"]),
     }
@@ -62,10 +78,39 @@ def _pipeline_tts_text_filters() -> list[ThinkingChannelTextFilter]:
 
 @dataclass
 class RealtimeComponents:
-    """Configured end-to-end Gemini Live component bundle."""
+    """Configured end-to-end realtime component bundle."""
 
     mode: Literal["realtime"]
-    llm: GeminiLiveLLMService
+    llm: Any
+    greeting: Callable[[str], Awaitable[None]] | None = None
+
+
+class OpenAIRealtimeLLMService(PipecatOpenAIRealtimeLLMService):
+    """Keep the pinned OpenAI Realtime adapter's provider audio contract.
+
+    The browser and Twilio transports intentionally remain 16 kHz. Pipecat's
+    OpenAI Realtime service forwards input bytes unchanged and the provider
+    session is fixed at 24 kHz, so conversion belongs at this adapter seam.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._provider_input_resampler = create_stream_resampler()
+
+    async def _send_user_audio(self, frame: InputAudioRawFrame) -> None:
+        """Resample transport audio before the pinned adapter sends it."""
+        if frame.sample_rate != 24000:
+            audio = await self._provider_input_resampler.resample(
+                frame.audio,
+                frame.sample_rate,
+                24000,
+            )
+            frame = InputAudioRawFrame(
+                audio=audio,
+                sample_rate=24000,
+                num_channels=frame.num_channels,
+            )
+        await super()._send_user_audio(frame)
 
 
 @dataclass
@@ -106,11 +151,12 @@ def _stage_provider(config: Any, stage: str) -> str:
 
 
 def _require_key(api_keys: dict[str, Any], provider: str, stage: str) -> str:
-    """Return a provider key or raise an actionable pipeline configuration error."""
+    """Return a provider key or raise an actionable configuration error."""
     api_key = api_keys.get(provider)
     if not api_key:
         raise ValueError(
-            f"Pipeline {stage} provider '{provider}' requires a '{provider}' API key."
+            f"{stage.capitalize()} provider '{provider}' requires a "
+            f"'{provider}' API key."
         )
     return str(api_key)
 
@@ -227,22 +273,79 @@ def build_speech_components(
         ValueError: For missing provider keys or unsupported stage mappings.
     """
     if isinstance(speech_config, RealtimeSpeechConfig):
-        api_key = _require_key(api_keys, "google", "realtime")
+        api_key = _require_key(api_keys, speech_config.provider, "realtime")
+        if speech_config.provider == "google":
+            return RealtimeComponents(
+                mode="realtime",
+                llm=GeminiLiveLLMService(
+                    api_key=api_key,
+                    tools=tools,
+                    settings=GeminiLiveLLMService.Settings(
+                        model=_normalize_gemini_model(speech_config.model),
+                        voice=speech_config.voice,
+                        system_instruction=system_instruction,
+                        temperature=speech_config.temperature,
+                        thinking={"thinking_budget": 0},
+                        vad=GeminiVADParams(
+                            silence_duration_ms=speech_config.silence_duration_ms,
+                            prefix_padding_ms=speech_config.prefix_padding_ms,
+                        ),
+                    ),
+                ),
+            )
+
+        if speech_config.model not in OPENAI_REALTIME_MODEL_VOICES:
+            raise ValueError(
+                f"OpenAI realtime model '{speech_config.model}' is not supported."
+            )
+        if speech_config.model == "gpt-live-1":
+            service = OpenAILiveLLMService(
+                api_key=api_key,
+                model=speech_config.model,
+                voice=speech_config.voice,
+                system_instruction=system_instruction,
+                tools=tools,
+            )
+            return RealtimeComponents(
+                mode="realtime",
+                llm=service,
+                greeting=service.send_greeting,
+            )
+
+        session_properties = SessionProperties(
+            model=speech_config.model,
+            output_modalities=["audio"],
+            instructions=system_instruction,
+            audio=AudioConfiguration(
+                input=AudioInput(
+                    transcription=InputAudioTranscription(),
+                    turn_detection=TurnDetection(
+                        prefix_padding_ms=speech_config.prefix_padding_ms,
+                        silence_duration_ms=speech_config.silence_duration_ms,
+                    ),
+                ),
+                output=AudioOutput(voice=speech_config.voice),
+            ),
+            tools=tools,
+            tool_choice="auto" if tools and tools.standard_tools else None,
+        )
         return RealtimeComponents(
             mode="realtime",
-            llm=GeminiLiveLLMService(
+            llm=OpenAIRealtimeLLMService(
                 api_key=api_key,
-                tools=tools,
-                settings=GeminiLiveLLMService.Settings(
-                    model=_normalize_gemini_model(speech_config.model),
-                    voice=speech_config.voice,
+                settings=OpenAIRealtimeLLMService.Settings(
+                    model=speech_config.model,
                     system_instruction=system_instruction,
-                    temperature=speech_config.temperature,
-                    thinking={"thinking_budget": 0},
-                    vad=GeminiVADParams(
-                        silence_duration_ms=speech_config.silence_duration_ms,
-                        prefix_padding_ms=speech_config.prefix_padding_ms,
-                    ),
+                    temperature=None,
+                    max_tokens=None,
+                    top_p=None,
+                    top_k=None,
+                    frequency_penalty=None,
+                    presence_penalty=None,
+                    seed=None,
+                    filter_incomplete_user_turns=False,
+                    user_turn_completion_config=None,
+                    session_properties=session_properties,
                 ),
             ),
         )

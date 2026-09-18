@@ -6,7 +6,6 @@ env fallback, or ``use_platform_credits``). Provider names are never exposed to
 org-facing APIs — only the boolean result is surfaced.
 """
 
-import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -22,8 +21,8 @@ from shared.voice_agents.speech_config import (
 )
 
 
-def _realtime() -> RealtimeSpeechConfig:
-    return RealtimeSpeechConfig()
+def _realtime(provider: str = "google") -> RealtimeSpeechConfig:
+    return RealtimeSpeechConfig(provider=provider)
 
 
 def _pipeline(
@@ -66,27 +65,32 @@ def clean_env(monkeypatch):
 class TestIsPresetReady:
     """Unit tests for :func:`is_preset_ready`."""
 
-    def test_realtime_ready_when_org_has_google(
-        self, patch_decrypt, clean_env
-    ):
+    def test_realtime_ready_when_org_has_google(self, patch_decrypt, clean_env):
         org, creds = _org({"google": "g-key"})
         patch_decrypt.return_value = creds
         assert is_preset_ready(_realtime(), org, use_platform_credits=False) is True
 
-    def test_realtime_not_ready_when_no_keys_anywhere(
-        self, patch_decrypt, clean_env
-    ):
+    def test_realtime_not_ready_when_no_keys_anywhere(self, patch_decrypt, clean_env):
         org, creds = _org({})
         patch_decrypt.return_value = creds
         assert is_preset_ready(_realtime(), org, use_platform_credits=False) is False
 
-    def test_realtime_ready_from_platform_env(
-        self, patch_decrypt, clean_env
-    ):
+    def test_realtime_ready_from_platform_env(self, patch_decrypt, clean_env):
         org, creds = _org({})
         patch_decrypt.return_value = creds
         clean_env.setenv("GEMINI_API_KEY", "platform-g")
         assert is_preset_ready(_realtime(), org, use_platform_credits=False) is True
+
+    def test_openai_realtime_ready_from_openai_platform_env(
+        self, patch_decrypt, clean_env
+    ):
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+        clean_env.setenv("OPENAI_API_KEY", "platform-openai")
+        assert (
+            is_preset_ready(_realtime("openai"), org, use_platform_credits=False)
+            is True
+        )
 
     def test_realtime_not_ready_for_org_catalog_when_only_platform_env(
         self, patch_decrypt, clean_env
@@ -122,18 +126,12 @@ class TestIsPresetReady:
             is True
         )
 
-    def test_pipeline_ready_when_all_stage_keys_present(
-        self, patch_decrypt, clean_env
-    ):
-        org, creds = _org(
-            {"deepgram": "d", "openai": "o", "cartesia": "c"}
-        )
+    def test_pipeline_ready_when_all_stage_keys_present(self, patch_decrypt, clean_env):
+        org, creds = _org({"deepgram": "d", "openai": "o", "cartesia": "c"})
         patch_decrypt.return_value = creds
         assert is_preset_ready(_pipeline(), org, use_platform_credits=False) is True
 
-    def test_pipeline_not_ready_when_one_stage_missing(
-        self, patch_decrypt, clean_env
-    ):
+    def test_pipeline_not_ready_when_one_stage_missing(self, patch_decrypt, clean_env):
         org, creds = _org({"deepgram": "d", "openai": "o"})
         patch_decrypt.return_value = creds
         assert is_preset_ready(_pipeline(), org, use_platform_credits=False) is False
@@ -144,9 +142,7 @@ class TestIsPresetReady:
         org, creds = _org({"google": "org-g"})
         patch_decrypt.return_value = creds
         clean_env.setenv("GEMINI_API_KEY", "platform-g")
-        assert (
-            is_preset_ready(_realtime(), org, use_platform_credits=True) is True
-        )
+        assert is_preset_ready(_realtime(), org, use_platform_credits=True) is True
 
     def test_livekit_inference_stt_requires_deepgram_key(
         self, patch_decrypt, clean_env

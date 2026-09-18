@@ -68,11 +68,11 @@ shared/
 │   ├── tool_models.py       # Pydantic models for tools
 │   ├── voice_session_service.py  # Short-lived JWT for voice-ws sessions
 │   ├── models.py           # Voice agent data models
-│   ├── speech_config.py   # Per-agent speech engine config (realtime vs pipeline; discriminated union)
+│   ├── speech_config.py   # Provider-aware realtime/pipeline config contract
 │   ├── preset_models.py   # Platform-admin preset Pydantic models (Phase 3)
 │   ├── preset_service.py  # Platform-admin preset catalog CRUD (Phase 3; mirrors tool_service)
 │   ├── model_capabilities.py # Provider-backed model capability validation for live presets
-│   ├── key_resolver.py    # Per-org provider key resolver: SpeechConfig + encrypted provider_credentials -> api_keys (Phase 3)
+│   ├── key_resolver.py    # Per-org provider key resolver: SpeechConfig + encrypted provider_credentials -> api_keys
 │   ├── tools/             # Tool implementation framework
 │   │   ├── base/
 │   │   │   ├── base_tool.py            # Base class for tools

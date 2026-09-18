@@ -1,4 +1,4 @@
-# Pipecat voice WebSocket worker (Phase 1: Gemini Realtime)
+# Pipecat voice WebSocket worker (Gemini/OpenAI realtime + pipeline)
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-dotenv>=1.0.0
@@ -12,6 +12,7 @@ pydantic-settings>=2.0.0
 # alter live-call and recording behavior and must be upgraded deliberately.
 # Last reviewed against the upstream 1.8.1 release on 2026-08-28.
 pipecat-ai[websocket,google,deepgram,openai,openrouter,cartesia,fish,silero]==1.8.1
+websockets>=13.1,<16
 numpy==2.4.6
 soxr==1.0.0
 mcp>=1.28.1,<2
