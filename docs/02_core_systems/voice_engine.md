@@ -138,7 +138,10 @@ Each builder returns a **Pipecat-compatible service** (STT, LLM, TTS, VAD) for p
 presets, or a provider-specific realtime adapter for `engine_mode=realtime`.
 
 - Realtime — Google Gemini native-audio, OpenAI Realtime, or the custom
-  GPT-Live WebSocket/delegation adapter (see `voice-ws/src/bot.py`, session setup)
+  GPT-Live WebSocket/delegation adapter (see `voice-ws/src/bot.py`, session setup).
+  GPT-Live keeps audio at the provider's 24 kHz boundary, preserves upstream
+  input transcript fragments, reports cumulative usage through Pipecat metrics,
+  and requires a confirmed `session.closed` event before a call is completed.
 - Pipeline — Deepgram STT, OpenAI/Cerebras/OpenRouter LLM, Cartesia/Fish TTS
 - `normalize_stage_provider()` — maps deprecated `livekit_inference` slug to direct providers
 
@@ -346,11 +349,12 @@ warmup) are **future hardening**, not prerequisites for the core capability.
   `preset_type`; publish flip; list `only_published`/`include_drafts`; usage
   join; delete `in_use` guard + `force`; `(result, error)` shape; all
   failure/exception/not-found branches (100% coverage).
-- `backend/tests/shared/voice_agents/test_key_resolver.py` — realtime →
-  `{"google"}`; pipeline direct-only → no `livekit`; Inference stage → `livekit`
-  present; `use_platform_credits` forces env; org key wins; missing → omitted;
-  `livekit` nested dict shape; google from decrypted blob not plaintext column;
-  unsupported-config `TypeError`; empty org blob (100% coverage).
+- `backend/tests/shared/voice_agents/test_key_resolver.py` — realtime resolves
+  the selected provider (Google or OpenAI); pipeline direct-only → no `livekit`;
+  Inference stage → `livekit` present; `use_platform_credits` forces env; org
+  key wins; missing → omitted; `livekit` nested dict shape; google from
+  decrypted blob not plaintext column; unsupported-config `TypeError`; empty
+  org blob (100% coverage).
 - `backend/tests/voice_agents/test_preset_routes.py` — 403 for non-admin on
   create/publish/unpublish/usage/delete + `include_drafts`; 201/200 success for
   platform_admin; list published-only vs drafts; 409 `in_use` with agent list;

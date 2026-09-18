@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.audio.utils import create_stream_resampler
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import InputAudioRawFrame
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.fish.tts import FishAudioTTSService, FishAudioTTSSettings
@@ -20,10 +22,13 @@ from pipecat.services.openai.realtime.events import (
     AudioConfiguration,
     AudioInput,
     AudioOutput,
+    InputAudioTranscription,
     SessionProperties,
     TurnDetection,
 )
-from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
+from pipecat.services.openai.realtime.llm import (
+    OpenAIRealtimeLLMService as PipecatOpenAIRealtimeLLMService,
+)
 from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
 from src.speech.openai_live import OpenAILiveLLMService
 from src.speech.thinking_text_filter import ThinkingChannelTextFilter
@@ -78,6 +83,34 @@ class RealtimeComponents:
     mode: Literal["realtime"]
     llm: Any
     greeting: Callable[[str], Awaitable[None]] | None = None
+
+
+class OpenAIRealtimeLLMService(PipecatOpenAIRealtimeLLMService):
+    """Keep the pinned OpenAI Realtime adapter's provider audio contract.
+
+    The browser and Twilio transports intentionally remain 16 kHz. Pipecat's
+    OpenAI Realtime service forwards input bytes unchanged and the provider
+    session is fixed at 24 kHz, so conversion belongs at this adapter seam.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._provider_input_resampler = create_stream_resampler()
+
+    async def _send_user_audio(self, frame: InputAudioRawFrame) -> None:
+        """Resample transport audio before the pinned adapter sends it."""
+        if frame.sample_rate != 24000:
+            audio = await self._provider_input_resampler.resample(
+                frame.audio,
+                frame.sample_rate,
+                24000,
+            )
+            frame = InputAudioRawFrame(
+                audio=audio,
+                sample_rate=24000,
+                num_channels=frame.num_channels,
+            )
+        await super()._send_user_audio(frame)
 
 
 @dataclass
@@ -285,10 +318,11 @@ def build_speech_components(
             instructions=system_instruction,
             audio=AudioConfiguration(
                 input=AudioInput(
+                    transcription=InputAudioTranscription(),
                     turn_detection=TurnDetection(
                         prefix_padding_ms=speech_config.prefix_padding_ms,
                         silence_duration_ms=speech_config.silence_duration_ms,
-                    )
+                    ),
                 ),
                 output=AudioOutput(voice=speech_config.voice),
             ),

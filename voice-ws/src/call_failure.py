@@ -41,6 +41,19 @@ def classify_pipeline_failure(error: object) -> CallFailure:
     text = _error_text(error).lower()
 
     if (
+        "session_finalization_unconfirmed" in text
+        or "finalization unconfirmed" in text
+        or getattr(error, "code", None) == "session_finalization_unconfirmed"
+    ):
+        return CallFailure(
+            code="session_finalization_unconfirmed",
+            message=(
+                "The speech provider did not confirm session finalization. "
+                "Review the voice runtime logs before treating this call as complete."
+            ),
+        )
+
+    if (
         "reasoning" in text
         and any(term in text for term in ("mandatory", "required"))
         and any(term in text for term in ("disable", "none", "cannot"))

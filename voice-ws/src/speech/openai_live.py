@@ -7,6 +7,7 @@ import base64
 import copy
 import json
 import logging
+import math
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
@@ -21,22 +22,21 @@ from pipecat.frames.frames import (
     InterimTranscriptionFrame,
     InterruptionFrame,
     LLMContextFrame,
-    LLMFullResponseEndFrame,
-    LLMFullResponseStartFrame,
     LLMServiceMetadataFrame,
     LLMTextFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
-    TTSStartedFrame,
-    TTSStoppedFrame,
     TTSTextFrame,
 )
+from pipecat.metrics.metrics import LLMTokenUsage
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.services.llm_service import FunctionCallFromLLM, LLMService, LLMSettings
 from pipecat.utils.time import time_now_iso8601
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
+
+from shared.observability.signals import event, record
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +47,16 @@ DEFAULT_OUTPUT_SAMPLE_RATE = 16000
 DEFAULT_CLOSE_TIMEOUT_SECONDS = 15.0
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 15.0
 DEFAULT_TOOL_TIMEOUT_SECONDS = 60.0
+MAX_SAFE_USAGE_VALUE = 10**12
+_SUCCESSFUL_CLOSE_REASONS = {"close_requested", "remote_hangup", "expired"}
 
 
 class OpenAILiveError(RuntimeError):
     """Safe runtime error for an OpenAI Live connection or protocol failure."""
+
+    def __init__(self, message: str, *, code: str = "provider_error") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 WebSocketFactory = Callable[..., Awaitable[Any]]
@@ -80,7 +86,9 @@ class OpenAILiveLLMService(LLMService[Any]):
     GPT-Live owns the speech-to-speech turn loop. The service therefore sends
     audio directly after the session handshake and only uses Pipecat's LLM
     function registry when a delegated Responses event completes a function
-    call.
+    call. Live does not provide an output-audio-done event, so audio is a
+    continuous stream: interruption frames are the playback boundary and the
+    adapter does not invent per-response TTS brackets from backend completion.
     """
 
     def __init__(
@@ -134,24 +142,56 @@ class OpenAILiveLLMService(LLMService[Any]):
         self._closed = asyncio.Event()
         self._fatal_error: OpenAILiveError | None = None
         self._closing = False
+        self._session_ready = False
+        self._closed_reason: str | None = None
         self._ack_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._context: LLMContext | None = None
         self._input_resampler = create_stream_resampler()
         self._output_resampler = create_stream_resampler()
         self._output_sample_rate = DEFAULT_OUTPUT_SAMPLE_RATE
-        self._speech_active = False
+        self._input_transcript_parts: dict[str, str] = {}
         self._seen_tool_calls: set[str] = set()
         self._submitted_tool_calls: set[str] = set()
         self._tool_results: dict[str, Any] = {}
         self._tool_result_events: dict[str, asyncio.Event] = {}
+        self._usage_snapshots: dict[str, dict[str, Any]] = {
+            "live": {},
+            "responses": {},
+        }
+        self._response_usage_snapshots: dict[str, dict[str, Any]] = {}
 
     def service_metadata_frame(self) -> LLMServiceMetadataFrame:
-        """Declare a realtime service whose provider does not emit turn frames."""
+        """Declare a continuous realtime service without provider turn frames."""
         self._warn_if_realtime_service_emits_no_turn_frames(emits_turn_frames=False)
         return LLMServiceMetadataFrame(
             service_name=self.name,
             is_realtime_service=True,
         )
+
+    @property
+    def usage_snapshot(self) -> dict[str, Any]:
+        """Return the latest validated provider usage without raw payloads."""
+        return {
+            "live": dict(self._usage_snapshots["live"]),
+            "responses": {
+                key: dict(value)
+                for key, value in self._response_usage_snapshots.items()
+            },
+            "finalized": self._closed.is_set()
+            and self._closed_reason in _SUCCESSFUL_CLOSE_REASONS,
+        }
+
+    @property
+    def finalization_failure_code(self) -> str | None:
+        """Expose only finalization failure codes to the call tracker."""
+        if self._fatal_error is None:
+            return None
+        if self._fatal_error.code in {
+            "provider_session_closed",
+            "session_finalization_unconfirmed",
+        }:
+            return self._fatal_error.code
+        return None
 
     async def setup(self, setup: FrameProcessorSetup) -> None:
         """Connect and complete the GPT-Live startup handshake."""
@@ -226,8 +266,6 @@ class OpenAILiveLLMService(LLMService[Any]):
             self._output_sample_rate = frame.sample_rate
             if self._started.is_set() and not self._closing:
                 await self._send_input_audio(frame)
-        elif isinstance(frame, InterruptionFrame):
-            await self._finish_speech()
 
         await self.push_frame(frame, direction)
 
@@ -313,15 +351,29 @@ class OpenAILiveLLMService(LLMService[Any]):
         except asyncio.CancelledError:
             raise
         except ConnectionClosed:
-            if not self._closing:
-                await self._report_error("connection_closed", fatal=True)
+            if not self._closed.is_set():
+                await self._report_error(
+                    (
+                        "session_finalization_unconfirmed"
+                        if self._closing
+                        else "connection_closed"
+                    ),
+                    fatal=True,
+                )
         except Exception as exc:  # noqa: BLE001 - provider transport boundary
-            if not self._closing:
+            if not self._closing or not self._closed.is_set():
                 logger.error(
                     "OpenAI Live receive loop failed type=%s",
                     type(exc).__name__,
                 )
-                await self._report_error("receive_failed", fatal=True)
+                await self._report_error(
+                    (
+                        "session_finalization_unconfirmed"
+                        if self._closing
+                        else "receive_failed"
+                    ),
+                    fatal=True,
+                )
         finally:
             if not self._started.is_set():
                 self._started.set()
@@ -332,11 +384,26 @@ class OpenAILiveLLMService(LLMService[Any]):
         self._resolve_ack(event)
 
         if event_type == "session.started":
+            self._session_ready = True
             self._started.set()
             return
+        if event_type == "session.usage.updated":
+            await self._record_usage(event.get("usage"), source="live")
+            return
         if event_type == "session.closed":
+            reason = event.get("reason")
+            self._closed_reason = reason if isinstance(reason, str) else None
+            await self._record_usage(event.get("usage"), source="live")
             self._closed.set()
-            await self._finish_speech()
+            if self._closed_reason not in _SUCCESSFUL_CLOSE_REASONS:
+                await self._report_error(
+                    (
+                        "session_finalization_unconfirmed"
+                        if self._closed_reason == "connection_lost"
+                        else "provider_session_closed"
+                    ),
+                    fatal=True,
+                )
             return
         if event_type == "error":
             error = event.get("error")
@@ -350,18 +417,22 @@ class OpenAILiveLLMService(LLMService[Any]):
             await self._handle_output_text(event.get("delta"))
             return
         if event_type == "session.input_transcript.delta":
-            await self._handle_input_text(event.get("delta"), finalized=False)
+            await self._handle_input_text(
+                event.get("delta"), finalized=False, item_id=event.get("item_id")
+            )
             return
         if event_type in {
             "session.input_transcript.done",
             "session.input_transcript.completed",
         }:
             await self._handle_input_text(
-                event.get("transcript") or event.get("text"), finalized=True
+                event.get("transcript") or event.get("text"),
+                finalized=True,
+                item_id=event.get("item_id"),
             )
             return
         if event_type == "session.interrupted":
-            await self._finish_speech()
+            await self.push_frame(InterruptionFrame())
             return
         if event_type == "session.delegation.created":
             return
@@ -377,6 +448,160 @@ class OpenAILiveLLMService(LLMService[Any]):
             item = event.get("item")
             if isinstance(item, dict) and item.get("type") == "function_call":
                 await self._handle_function_call(item)
+            return
+        if event_type == "response.completed":
+            response = event.get("response")
+            usage = event.get("usage")
+            if usage is None and isinstance(response, dict):
+                usage = response.get("usage")
+            await self._record_usage(
+                usage,
+                source="responses",
+                identity=self._response_usage_identity(event),
+            )
+
+    @staticmethod
+    def _response_usage_identity(event: Mapping[str, Any]) -> str:
+        """Return a stable, non-sensitive key for one Responses stream."""
+        response = event.get("response")
+        if isinstance(response, Mapping):
+            for key in ("id", "response_id"):
+                value = response.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        for key in ("id", "response_id"):
+            value = event.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return "latest"
+
+    @staticmethod
+    def _normalize_usage(raw_usage: Any) -> dict[str, int | float]:
+        """Keep only bounded numeric usage fields from a provider snapshot."""
+        if not isinstance(raw_usage, Mapping):
+            return {}
+        usage: dict[str, int | float] = {}
+        for key in (
+            "seconds",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "cached_tokens",
+            "reasoning_tokens",
+            "input_audio_tokens",
+            "output_audio_tokens",
+        ):
+            value = raw_usage.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            if (
+                not math.isfinite(float(value))
+                or value < 0
+                or value > MAX_SAFE_USAGE_VALUE
+            ):
+                continue
+            usage[key] = float(value) if isinstance(value, float) else value
+
+        for details_key, audio_key in (
+            ("input_token_details", "input_audio_tokens"),
+            ("output_token_details", "output_audio_tokens"),
+        ):
+            details = raw_usage.get(details_key)
+            if not isinstance(details, Mapping):
+                continue
+            for source_key, target_key in (
+                ("audio_tokens", audio_key),
+                ("cached_tokens", "cached_tokens"),
+                ("reasoning_tokens", "reasoning_tokens"),
+            ):
+                value = details.get(source_key)
+                if (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(float(value))
+                    and 0 <= value <= MAX_SAFE_USAGE_VALUE
+                ):
+                    usage[target_key] = int(value) if isinstance(value, int) else value
+        return usage
+
+    async def _record_usage(
+        self,
+        raw_usage: Any,
+        *,
+        source: str,
+        identity: str = "latest",
+    ) -> None:
+        """Retain cumulative usage and emit only safe snapshot deltas."""
+        snapshot = self._normalize_usage(raw_usage)
+        if not snapshot:
+            return
+
+        if source == "live":
+            previous = self._usage_snapshots["live"]
+            self._usage_snapshots["live"] = dict(snapshot)
+        else:
+            previous = self._response_usage_snapshots.get(identity, {})
+            self._response_usage_snapshots[identity] = dict(snapshot)
+            self._usage_snapshots["responses"] = dict(snapshot)
+
+        delta: dict[str, int | float] = {}
+        for key, value in snapshot.items():
+            old_value = previous.get(key, 0)
+            if isinstance(value, (int, float)) and isinstance(old_value, (int, float)):
+                difference = value - old_value
+                if difference > 0:
+                    delta[key] = difference
+
+        seconds = delta.get("seconds")
+        if isinstance(seconds, (int, float)) and seconds > 0:
+            record(
+                "platform.ai.audio.seconds",
+                float(seconds),
+                kind="histogram",
+                provider="openai",
+                stage="llm",
+            )
+            event("ai.usage", provider="openai", audio_seconds=float(seconds))
+
+        token_keys = {
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "cached_tokens",
+            "reasoning_tokens",
+            "input_audio_tokens",
+            "output_audio_tokens",
+        }
+        if not token_keys.intersection(delta):
+            return
+        input_tokens = int(delta.get("input_tokens", 0))
+        output_tokens = int(delta.get("output_tokens", 0))
+        total_tokens = int(delta.get("total_tokens", input_tokens + output_tokens))
+        await self.start_llm_usage_metrics(
+            LLMTokenUsage(
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                total_tokens=total_tokens,
+                cache_read_input_tokens=(
+                    int(delta["cached_tokens"]) if "cached_tokens" in delta else None
+                ),
+                reasoning_tokens=(
+                    int(delta["reasoning_tokens"])
+                    if "reasoning_tokens" in delta
+                    else None
+                ),
+                input_audio_tokens=(
+                    int(delta["input_audio_tokens"])
+                    if "input_audio_tokens" in delta
+                    else None
+                ),
+                output_audio_tokens=(
+                    int(delta["output_audio_tokens"])
+                    if "output_audio_tokens" in delta
+                    else None
+                ),
+            )
+        )
 
     async def _handle_audio_delta(self, encoded_audio: Any) -> None:
         """Decode and resample provider PCM before emitting Pipecat audio."""
@@ -398,7 +623,6 @@ class OpenAILiveLLMService(LLMService[Any]):
             return
         if not audio:
             return
-        await self._start_speech()
         await self.push_frame(
             TTSAudioRawFrame(
                 audio=audio,
@@ -411,7 +635,6 @@ class OpenAILiveLLMService(LLMService[Any]):
         """Expose provider transcript text for UI telemetry and context."""
         if not isinstance(text, str) or not text:
             return
-        await self._start_speech()
         llm_frame = LLMTextFrame(text)
         llm_frame.append_to_context = False
         tts_frame = TTSTextFrame(text, AggregationType.SENTENCE)
@@ -420,27 +643,44 @@ class OpenAILiveLLMService(LLMService[Any]):
         await self.push_frame(llm_frame)
         await self.push_frame(tts_frame)
 
-    async def _handle_input_text(self, text: Any, *, finalized: bool) -> None:
-        """Expose input transcript fragments without retaining raw events."""
+    async def _handle_input_text(
+        self,
+        text: Any,
+        *,
+        finalized: bool,
+        item_id: Any = None,
+    ) -> None:
+        """Accumulate input transcript fragments into the upstream user turn."""
         if not isinstance(text, str) or not text:
+            return
+        key = item_id if isinstance(item_id, str) and item_id else "current"
+        if finalized:
+            transcript = text
+            self._input_transcript_parts.pop(key, None)
+        else:
+            transcript = self._input_transcript_parts.get(key, "") + text
+            self._input_transcript_parts[key] = transcript
+        if not transcript:
             return
         timestamp = time_now_iso8601()
         if finalized:
             await self.push_frame(
                 TranscriptionFrame(
-                    text=text,
+                    text=transcript,
                     user_id="",
                     timestamp=timestamp,
                     finalized=True,
-                )
+                ),
+                direction=FrameDirection.UPSTREAM,
             )
         else:
             await self.push_frame(
                 InterimTranscriptionFrame(
-                    text=text,
+                    text=transcript,
                     user_id="",
                     timestamp=timestamp,
-                )
+                ),
+                direction=FrameDirection.UPSTREAM,
             )
 
     async def _handle_function_call(self, item: dict[str, Any]) -> None:
@@ -596,51 +836,55 @@ class OpenAILiveLLMService(LLMService[Any]):
         if self._fatal_error:
             raise self._fatal_error
 
-    async def _start_speech(self) -> None:
-        """Emit one response-start bracket for each spoken response."""
-        if self._speech_active:
-            return
-        self._speech_active = True
-        await self.push_frame(LLMFullResponseStartFrame())
-        await self.push_frame(TTSStartedFrame())
-
-    async def _finish_speech(self) -> None:
-        """Emit the matching response-end bracket when speech stops."""
-        if not self._speech_active:
-            return
-        self._speech_active = False
-        await self.push_frame(TTSStoppedFrame())
-        await self.push_frame(LLMFullResponseEndFrame())
-
     async def _report_error(self, code: str, *, fatal: bool) -> None:
         """Publish a safe error frame and retain only a non-sensitive code."""
         if fatal and self._fatal_error is None:
-            self._fatal_error = OpenAILiveError(f"OpenAI Live error: {code}.")
+            self._fatal_error = OpenAILiveError(
+                f"OpenAI Live error: {code}.",
+                code=code,
+            )
         if fatal:
             self._started.set()
         with suppress(Exception):
             await self.push_error(
                 error_msg="OpenAI Live session failed.",
-                exception=OpenAILiveError(f"OpenAI Live error: {code}."),
+                exception=OpenAILiveError(
+                    f"OpenAI Live error: {code}.",
+                    code=code,
+                ),
                 fatal=fatal,
             )
         logger.error("OpenAI Live session error code=%s", code)
 
     async def _disconnect(self) -> None:
         """Request provider finalization, then close the socket and task."""
-        if self._websocket is None:
+        websocket = self._websocket
+        if websocket is None:
             return
         self._closing = True
-        if self._started.is_set() and not self._closed.is_set():
-            with suppress(Exception):
+        if self._session_ready and not self._closed.is_set():
+            try:
                 await self._send(
                     {"type": "session.close", "event_id": self._event_id()},
                     allow_before_start=True,
                 )
-            with suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(self._closed.wait(), timeout=self._close_timeout)
-        with suppress(Exception):
-            await self._websocket.close()
+            except Exception:  # noqa: BLE001 - preserve finalization failure safely
+                await self._report_error("session_finalization_unconfirmed", fatal=True)
+            if not self._closed.is_set():
+                try:
+                    await asyncio.wait_for(
+                        self._closed.wait(), timeout=self._close_timeout
+                    )
+                except asyncio.TimeoutError:
+                    await self._report_error(
+                        "session_finalization_unconfirmed", fatal=True
+                    )
+
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001 - transport cleanup must continue
+            if self._session_ready and not self._closed.is_set():
+                await self._report_error("session_finalization_unconfirmed", fatal=True)
         if (
             self._receive_task is not None
             and self._receive_task is not asyncio.current_task()

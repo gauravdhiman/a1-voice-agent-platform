@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import base64
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from src.speech.factory import build_speech_components
+from pipecat.frames.frames import InputAudioRawFrame
+from src.speech.factory import OpenAIRealtimeLLMService, build_speech_components
 
 from shared.voice_agents.speech_config import (
     LLMStageConfig,
@@ -263,4 +265,34 @@ class TestBuildSpeechComponentsPipeline:
         assert settings_cls.call_args.kwargs["system_instruction"] == "system prompt"
         properties = settings_cls.call_args.kwargs["session_properties"]
         assert properties.audio.output.voice == "cedar"
+        assert properties.audio.input.transcription is not None
         assert properties.audio.input.turn_detection.silence_duration_ms == 500
+
+
+@pytest.mark.asyncio
+async def test_openai_realtime_resamples_transport_audio_before_provider_send() -> None:
+    """The standard OpenAI adapter sends 24 kHz audio to its provider boundary."""
+    service = OpenAIRealtimeLLMService(
+        api_key="openai-key",
+        settings=OpenAIRealtimeLLMService.Settings(
+            model="gpt-realtime-2.1",
+            system_instruction="system prompt",
+        ),
+    )
+    service._provider_input_resampler.resample = AsyncMock(
+        return_value=b"converted-audio"
+    )
+    service.send_client_event = AsyncMock()
+
+    frame = InputAudioRawFrame(
+        audio=b"transport-audio",
+        sample_rate=16000,
+        num_channels=1,
+    )
+    await service._send_user_audio(frame)
+
+    service._provider_input_resampler.resample.assert_awaited_once_with(
+        b"transport-audio", 16000, 24000
+    )
+    event = service.send_client_event.await_args.args[0]
+    assert base64.b64decode(event.audio) == b"converted-audio"

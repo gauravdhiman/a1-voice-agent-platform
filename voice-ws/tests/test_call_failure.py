@@ -11,6 +11,10 @@ from src.call_failure import CallFailureState, classify_pipeline_failure
             "Reasoning is mandatory for this endpoint and cannot be disabled",
             "model_reasoning_required",
         ),
+        (
+            "OpenAI Live error: session_finalization_unconfirmed.",
+            "session_finalization_unconfirmed",
+        ),
         ("provider returned HTTP 401 Unauthorized", "provider_authentication_error"),
         ("provider returned HTTP 429 rate limit exceeded", "provider_rate_limited"),
         ("provider request timed out", "provider_unavailable"),

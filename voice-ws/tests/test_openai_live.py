@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 from collections import deque
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from pipecat.frames.frames import TTSAudioRawFrame
+from pipecat.frames.frames import (
+    InterimTranscriptionFrame,
+    TranscriptionFrame,
+    TTSAudioRawFrame,
+)
+from pipecat.processors.frame_processor import FrameDirection
+from pipecat.utils.asyncio.task_manager import TaskManager
 from src.speech.openai_live import OPENAI_LIVE_URL, OpenAILiveLLMService
+from websockets.exceptions import ConnectionClosedOK
 
 
 class FakeWebSocket:
@@ -93,15 +102,61 @@ async def test_output_audio_is_resampled_to_pipeline_rate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_backend_response_completion_does_not_end_live_audio() -> None:
-    """Responses completion is independent from GPT-Live audio playback."""
+async def test_input_transcript_fragments_accumulate_upstream() -> None:
+    """Live input fragments form one upstream user transcript for the aggregator."""
     service = OpenAILiveLLMService(
         api_key="secret",
         model="gpt-live-1",
         voice="marin",
         system_instruction="prompt",
     )
-    service._speech_active = True
+    service.push_frame = AsyncMock()
+
+    await service._handle_event(
+        {
+            "type": "session.input_transcript.delta",
+            "item_id": "item_1",
+            "delta": "Hello ",
+        }
+    )
+    await service._handle_event(
+        {
+            "type": "session.input_transcript.delta",
+            "item_id": "item_1",
+            "delta": "there",
+        }
+    )
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    assert [frame.text for frame in frames] == ["Hello ", "Hello there"]
+    assert all(isinstance(frame, InterimTranscriptionFrame) for frame in frames)
+    assert all(
+        call.kwargs["direction"] == FrameDirection.UPSTREAM
+        for call in service.push_frame.await_args_list
+    )
+
+    await service._handle_event(
+        {
+            "type": "session.input_transcript.completed",
+            "item_id": "item_1",
+            "transcript": "Hello there",
+        }
+    )
+    final_call = service.push_frame.await_args_list[-1]
+    assert isinstance(final_call.args[0], TranscriptionFrame)
+    assert final_call.args[0].text == "Hello there"
+    assert final_call.kwargs["direction"] == FrameDirection.UPSTREAM
+
+
+@pytest.mark.asyncio
+async def test_backend_response_completion_does_not_fabricate_audio_lifecycle() -> None:
+    """Live has no audio-done event, so backend completion emits no fake bracket."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
     service.push_frame = AsyncMock()
 
     await service._handle_event(
@@ -111,8 +166,200 @@ async def test_backend_response_completion_does_not_end_live_audio() -> None:
         }
     )
 
-    assert service._speech_active is True
     service.push_frame.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_usage_snapshots_are_validated_cumulative_and_retained() -> None:
+    """Live and nested Responses usage is retained without double-counting snapshots."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.start_llm_usage_metrics = AsyncMock()
+
+    with (
+        patch("src.speech.openai_live.record") as record,
+        patch("src.speech.openai_live.event") as usage_event,
+    ):
+        await service._handle_event(
+            {
+                "type": "session.usage.updated",
+                "usage": {
+                    "seconds": 10.0,
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "input_token_details": {"audio_tokens": 8},
+                    "untrusted": 999,
+                    "seconds_invalid": math.nan,
+                },
+            }
+        )
+        await service._handle_event(
+            {
+                "type": "session.usage.updated",
+                "usage": {
+                    "seconds": 15.0,
+                    "input_tokens": 130,
+                    "output_tokens": 35,
+                    "input_token_details": {"audio_tokens": 10},
+                },
+            }
+        )
+        response_event = {
+            "type": "response.event",
+            "event": {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_1",
+                    "usage": {"input_tokens": 4, "output_tokens": 3},
+                },
+            },
+        }
+        await service._handle_event(response_event)
+        await service._handle_event(response_event)
+
+    assert service.usage_snapshot["live"] == {
+        "seconds": 15.0,
+        "input_tokens": 130,
+        "output_tokens": 35,
+        "input_audio_tokens": 10,
+    }
+    assert service.usage_snapshot["responses"]["resp_1"] == {
+        "input_tokens": 4,
+        "output_tokens": 3,
+    }
+    assert [call.args[1] for call in record.call_args_list] == [10.0, 5.0]
+    assert [call.kwargs["audio_seconds"] for call in usage_event.call_args_list] == [
+        10.0,
+        5.0,
+    ]
+    assert service.start_llm_usage_metrics.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_terminal_usage_is_retained_and_marks_finalization_confirmed() -> None:
+    """The terminal close snapshot is retained before a successful close."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.start_llm_usage_metrics = AsyncMock()
+
+    await service._handle_event(
+        {
+            "type": "session.closed",
+            "reason": "close_requested",
+            "usage": {"seconds": 12.5, "input_tokens": 40, "output_tokens": 9},
+        }
+    )
+
+    assert service.usage_snapshot == {
+        "live": {"seconds": 12.5, "input_tokens": 40, "output_tokens": 9},
+        "responses": {},
+        "finalized": True,
+    }
+    service.start_llm_usage_metrics.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_peer_close_before_session_closed_is_unconfirmed() -> None:
+    """A peer close during teardown cannot be treated as confirmed finalization."""
+
+    class PeerCloseWebSocket(FakeWebSocket):
+        async def __anext__(self):
+            raise ConnectionClosedOK(None, None)
+
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service._websocket = PeerCloseWebSocket()
+    service._closing = True
+    service.push_error = AsyncMock()
+
+    await service._receive_events()
+
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "session_finalization_unconfirmed"
+    assert service.finalization_failure_code == "session_finalization_unconfirmed"
+
+
+@pytest.mark.asyncio
+async def test_session_closed_connection_loss_is_unconfirmed() -> None:
+    """A provider connection-loss close cannot be reported as a completed call."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.push_error = AsyncMock()
+
+    await service._handle_event({"type": "session.closed", "reason": "connection_lost"})
+
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "session_finalization_unconfirmed"
+    assert service.finalization_failure_code == "session_finalization_unconfirmed"
+    assert service.usage_snapshot["finalized"] is False
+
+
+@pytest.mark.asyncio
+async def test_disconnect_requires_terminal_session_event() -> None:
+    """Teardown marks finalization unconfirmed when the provider never closes."""
+    websocket = FakeWebSocket()
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+        close_timeout=0,
+    )
+    service._websocket = websocket
+    service._session_ready = True
+    service.push_error = AsyncMock()
+
+    await service._disconnect()
+
+    assert websocket.sent[0]["type"] == "session.close"
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "session_finalization_unconfirmed"
+    assert service.finalization_failure_code == "session_finalization_unconfirmed"
+
+
+@pytest.mark.asyncio
+async def test_disconnect_records_session_close_send_failure() -> None:
+    """A failed close command is retained as an unconfirmed finalization."""
+
+    class FailingSessionCloseWebSocket(FakeWebSocket):
+        async def send(self, payload: str) -> None:
+            event = json.loads(payload)
+            if event["type"] == "session.close":
+                raise RuntimeError("close rejected")
+            await super().send(payload)
+
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+        close_timeout=0,
+    )
+    service._websocket = FailingSessionCloseWebSocket()
+    service._session_ready = True
+    service.push_error = AsyncMock()
+
+    await service._disconnect()
+
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "session_finalization_unconfirmed"
+    assert service.finalization_failure_code == "session_finalization_unconfirmed"
 
 
 @pytest.mark.asyncio
@@ -126,14 +373,19 @@ async def test_only_nested_completed_function_calls_execute_and_resume_once() ->
     )
     service._websocket = websocket
     service._started.set()
-    service.register_function("lookup", AsyncMock())
+    service._task_manager = TaskManager()
+    service._setup = SimpleNamespace(
+        pipeline_worker=SimpleNamespace(app_resources=None, worker_runner=None)
+    )
+    service.broadcast_frame = AsyncMock()
+    handler_calls = []
 
-    async def run_function_calls(calls) -> None:
-        call_id = calls[0].tool_call_id
-        service._tool_results[call_id] = {"status": "ok"}
-        service._tool_result_events[call_id].set()
+    async def handler(params) -> None:
+        handler_calls.append(params)
+        await params.result_callback({"status": "ok"})
 
-    service.run_function_calls = AsyncMock(side_effect=run_function_calls)
+    service.register_function("lookup", handler)
+    await service._create_sequential_runner_task()
     item = {
         "type": "function_call",
         "call_id": "call_1",
@@ -162,7 +414,11 @@ async def test_only_nested_completed_function_calls_execute_and_resume_once() ->
         "response.create",
     ]
     assert websocket.sent[0]["item"]["output"] == '{"status": "ok"}'
-    service.run_function_calls.assert_awaited_once()
+    assert len(handler_calls) == 1
+    assert handler_calls[0].function_name == "lookup"
+    assert handler_calls[0].tool_call_id == "call_1"
+    assert handler_calls[0].arguments == {"query": "Phoenix"}
+    await service._cancel_sequential_runner_task()
 
 
 @pytest.mark.asyncio

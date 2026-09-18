@@ -253,6 +253,9 @@ async def run_bot(
                     await recording_coordinator.persist()
             except Exception:  # noqa: BLE001 - cleanup must continue
                 logger.exception("Failed to persist recording artifact")
+        finalization_code = getattr(llm, "finalization_failure_code", None)
+        if isinstance(finalization_code, str):
+            failure_state.capture(classify_pipeline_failure(finalization_code))
         failure = failure_state.failure
         if failure:
             telemetry_failure(failure.code)
