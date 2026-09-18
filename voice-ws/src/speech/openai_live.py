@@ -11,6 +11,7 @@ import math
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
+from time import monotonic
 from typing import Any
 
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
@@ -48,6 +49,10 @@ DEFAULT_CLOSE_TIMEOUT_SECONDS = 15.0
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 15.0
 DEFAULT_TOOL_TIMEOUT_SECONDS = 60.0
 MAX_SAFE_USAGE_VALUE = 10**12
+# Live transcript events have no authoritative turn-completed event. Keep a
+# short, bounded grouping window for fragments whose timeline metadata is
+# missing or arrives after the assistant has started speaking.
+OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS = 1000
 _SUCCESSFUL_CLOSE_REASONS = {"close_requested", "remote_hangup", "expired"}
 
 
@@ -89,6 +94,13 @@ class OpenAILiveLLMService(LLMService[Any]):
     call. Live does not provide an output-audio-done event, so audio is a
     continuous stream: interruption frames are the playback boundary and the
     adapter does not invent per-response TTS brackets from backend completion.
+
+    Live transcript deltas also do not identify completed turns. The adapter
+    groups input by the provider's timeline intervals when available, treating
+    late or overlapping fragments as part of the open response and forwarding
+    them upstream without reopening that response. When intervals are absent,
+    the same decision uses the bounded grouping gap above; only a later input
+    beyond that gap can start the next handoff.
     """
 
     def __init__(
@@ -151,6 +163,9 @@ class OpenAILiveLLMService(LLMService[Any]):
         self._output_sample_rate = DEFAULT_OUTPUT_SAMPLE_RATE
         self._input_transcript_fragments: list[str] = []
         self._response_started = False
+        self._last_input_end_ms: int | None = None
+        self._last_output_end_ms: int | None = None
+        self._last_output_at: float | None = None
         self._seen_tool_calls: set[str] = set()
         self._submitted_tool_calls: set[str] = set()
         self._tool_results: dict[str, Any] = {}
@@ -435,10 +450,18 @@ class OpenAILiveLLMService(LLMService[Any]):
             await self._handle_audio_delta(event.get("delta"))
             return
         if event_type == "session.output_transcript.delta":
-            await self._handle_output_text(event.get("delta"))
+            await self._handle_output_text(
+                event.get("delta"),
+                start_ms=event.get("start_ms"),
+                end_ms=event.get("end_ms"),
+            )
             return
         if event_type == "session.input_transcript.delta":
-            await self._handle_input_text(event.get("delta"))
+            await self._handle_input_text(
+                event.get("delta"),
+                start_ms=event.get("start_ms"),
+                end_ms=event.get("end_ms"),
+            )
             return
         if event_type == "session.interrupted":
             self._response_started = False
@@ -633,6 +656,7 @@ class OpenAILiveLLMService(LLMService[Any]):
             return
         if not audio:
             return
+        self._note_output_activity()
         await self._begin_response_handoff()
         await self.push_frame(
             TTSAudioRawFrame(
@@ -642,10 +666,17 @@ class OpenAILiveLLMService(LLMService[Any]):
             )
         )
 
-    async def _handle_output_text(self, text: Any) -> None:
+    async def _handle_output_text(
+        self,
+        text: Any,
+        *,
+        start_ms: Any = None,
+        end_ms: Any = None,
+    ) -> None:
         """Expose provider transcript text for UI telemetry and context."""
         if not isinstance(text, str) or not text:
             return
+        self._note_output_activity(start_ms=start_ms, end_ms=end_ms)
         await self._begin_response_handoff()
         llm_frame = LLMTextFrame(text)
         llm_frame.append_to_context = False
@@ -658,13 +689,93 @@ class OpenAILiveLLMService(LLMService[Any]):
     async def _handle_input_text(
         self,
         text: Any,
+        *,
+        start_ms: Any = None,
+        end_ms: Any = None,
     ) -> None:
-        """Accumulate ordered Live input transcript fragments for the next handoff."""
+        """Group Live input fragments without reopening an active response."""
         if not isinstance(text, str) or not text:
             return
-        if self._response_started:
+
+        normalized_end_ms = self._timeline_ms(end_ms)
+        starts_new_turn = self._response_started and self._starts_new_turn(start_ms)
+        if normalized_end_ms is not None:
+            if self._last_input_end_ms is None:
+                self._last_input_end_ms = normalized_end_ms
+            else:
+                self._last_input_end_ms = max(
+                    self._last_input_end_ms,
+                    normalized_end_ms,
+                )
+
+        if starts_new_turn:
             self._response_started = False
-        self._input_transcript_fragments.append(text)
+        if self._response_started:
+            # The paired realtime aggregator keeps its handoff flush open for
+            # late transcription frames. Forward this fragment without a new
+            # response start so it can join the current user message.
+            await self._emit_transcription(text)
+        else:
+            self._input_transcript_fragments.append(text)
+
+    @staticmethod
+    def _timeline_ms(value: Any) -> int | None:
+        """Normalize an optional finite, non-negative Live timeline value."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if not math.isfinite(float(value)) or value < 0 or value > MAX_SAFE_USAGE_VALUE:
+            return None
+        return int(value)
+
+    def _note_output_activity(
+        self, *, start_ms: Any = None, end_ms: Any = None
+    ) -> None:
+        """Record the latest output activity used by transcript grouping."""
+        self._last_output_at = monotonic()
+        normalized_start_ms = self._timeline_ms(start_ms)
+        normalized_end_ms = self._timeline_ms(end_ms)
+        if normalized_end_ms is None or (
+            normalized_start_ms is not None and normalized_end_ms < normalized_start_ms
+        ):
+            return
+        if self._last_output_end_ms is None:
+            self._last_output_end_ms = normalized_end_ms
+        else:
+            self._last_output_end_ms = max(
+                self._last_output_end_ms,
+                normalized_end_ms,
+            )
+
+    def _starts_new_turn(self, start_ms: Any) -> bool:
+        """Return whether an input fragment is outside the active grouping window."""
+        normalized_start_ms = self._timeline_ms(start_ms)
+        if normalized_start_ms is not None:
+            if self._last_output_end_ms is not None:
+                return normalized_start_ms > (
+                    self._last_output_end_ms + OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS
+                )
+            if self._last_input_end_ms is not None:
+                return normalized_start_ms > (
+                    self._last_input_end_ms + OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS
+                )
+
+        return bool(
+            self._last_output_at is not None
+            and monotonic() - self._last_output_at
+            > OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS / 1000
+        )
+
+    async def _emit_transcription(self, text: str) -> None:
+        """Forward one finalized transcript fragment to the paired aggregator."""
+        await self.push_frame(
+            TranscriptionFrame(
+                text=text,
+                user_id="",
+                timestamp=time_now_iso8601(),
+                finalized=True,
+            ),
+            direction=FrameDirection.UPSTREAM,
+        )
 
     async def _begin_response_handoff(self) -> None:
         """Finalize the current Live transcript before the assistant turn starts."""
@@ -674,15 +785,7 @@ class OpenAILiveLLMService(LLMService[Any]):
         transcript = "".join(self._input_transcript_fragments)
         self._input_transcript_fragments.clear()
         if transcript:
-            await self.push_frame(
-                TranscriptionFrame(
-                    text=transcript,
-                    user_id="",
-                    timestamp=time_now_iso8601(),
-                    finalized=True,
-                ),
-                direction=FrameDirection.UPSTREAM,
-            )
+            await self._emit_transcription(transcript)
         await self.push_frame(LLMFullResponseStartFrame())
 
     async def _handle_function_call(self, item: dict[str, Any]) -> None:

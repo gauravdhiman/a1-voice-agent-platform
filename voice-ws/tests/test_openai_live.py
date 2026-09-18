@@ -217,10 +217,30 @@ async def test_each_live_turn_hands_off_ordered_input_transcript_once() -> None:
     service.push_frame = AsyncMock()
 
     events = [
-        {"type": "session.input_transcript.delta", "delta": "First turn"},
-        {"type": "session.output_transcript.delta", "delta": "First reply"},
-        {"type": "session.input_transcript.delta", "delta": "Second turn"},
-        {"type": "session.output_transcript.delta", "delta": "Second reply"},
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "First turn",
+            "start_ms": 100,
+            "end_ms": 300,
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "First reply",
+            "start_ms": 300,
+            "end_ms": 600,
+        },
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "Second turn",
+            "start_ms": 1800,
+            "end_ms": 2000,
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "Second reply",
+            "start_ms": 2000,
+            "end_ms": 2300,
+        },
     ]
     for event in events:
         await service._handle_event(event)
@@ -235,6 +255,99 @@ async def test_each_live_turn_hands_off_ordered_input_transcript_once() -> None:
     assert transcripts == ["First turn", "Second turn"]
     assert len(response_starts) == 2
     assert service._input_transcript_fragments == []
+
+
+@pytest.mark.asyncio
+async def test_late_input_fragment_does_not_reopen_response_handoff() -> None:
+    """A delayed input fragment joins the open user handoff exactly once."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.push_frame = AsyncMock()
+
+    events = [
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "Hello",
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "Hi",
+        },
+        {
+            "type": "session.input_transcript.delta",
+            "delta": " there",
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": " there",
+        },
+    ]
+    with patch("src.speech.openai_live.monotonic", return_value=0.0):
+        for event in events:
+            await service._handle_event(event)
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    assert [
+        frame.text for frame in frames if isinstance(frame, TranscriptionFrame)
+    ] == [
+        "Hello",
+        " there",
+    ]
+    assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 1
+
+
+@pytest.mark.asyncio
+async def test_overlapping_input_interval_does_not_start_second_response() -> None:
+    """A user interval overlapping assistant speech remains one exchange."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.push_frame = AsyncMock()
+
+    events = [
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "Actually",
+            "start_ms": 1000,
+            "end_ms": 1200,
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "Sure",
+            "start_ms": 1200,
+            "end_ms": 1600,
+        },
+        {
+            "type": "session.input_transcript.delta",
+            "delta": " wait",
+            "start_ms": 1450,
+            "end_ms": 1750,
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": " one moment",
+            "start_ms": 1600,
+            "end_ms": 1900,
+        },
+    ]
+    for event in events:
+        await service._handle_event(event)
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    assert [
+        frame.text for frame in frames if isinstance(frame, TranscriptionFrame)
+    ] == [
+        "Actually",
+        " wait",
+    ]
+    assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 1
 
 
 @pytest.mark.asyncio
