@@ -11,13 +11,17 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from pipecat.frames.frames import (
-    InterimTranscriptionFrame,
+    LLMFullResponseStartFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.utils.asyncio.task_manager import TaskManager
-from src.speech.openai_live import OPENAI_LIVE_URL, OpenAILiveLLMService
+from src.speech.openai_live import (
+    OPENAI_LIVE_URL,
+    OpenAILiveError,
+    OpenAILiveLLMService,
+)
 from websockets.exceptions import ConnectionClosedOK
 
 
@@ -79,6 +83,32 @@ async def test_connect_sends_session_start_and_waits_for_started() -> None:
 
 
 @pytest.mark.asyncio
+async def test_clean_eof_before_session_started_fails_startup() -> None:
+    websocket = FakeWebSocket()
+
+    async def connect(_uri: str, **_kwargs):
+        return websocket
+
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+        websocket_factory=connect,
+        connection_timeout=1,
+        close_timeout=0.01,
+    )
+
+    with pytest.raises(OpenAILiveError):
+        await service._connect()
+
+    assert service._session_ready is False
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "connection_closed"
+    assert websocket.closed is True
+
+
+@pytest.mark.asyncio
 async def test_output_audio_is_resampled_to_pipeline_rate() -> None:
     service = OpenAILiveLLMService(
         api_key="secret",
@@ -103,7 +133,7 @@ async def test_output_audio_is_resampled_to_pipeline_rate() -> None:
 
 @pytest.mark.asyncio
 async def test_input_transcript_fragments_accumulate_upstream() -> None:
-    """Live input fragments form one upstream user transcript for the aggregator."""
+    """Live input fragments finalize before the realtime assistant handoff."""
     service = OpenAILiveLLMService(
         api_key="secret",
         model="gpt-live-1",
@@ -115,37 +145,32 @@ async def test_input_transcript_fragments_accumulate_upstream() -> None:
     await service._handle_event(
         {
             "type": "session.input_transcript.delta",
-            "item_id": "item_1",
             "delta": "Hello ",
         }
     )
     await service._handle_event(
         {
             "type": "session.input_transcript.delta",
-            "item_id": "item_1",
             "delta": "there",
         }
     )
 
-    frames = [call.args[0] for call in service.push_frame.await_args_list]
-    assert [frame.text for frame in frames] == ["Hello ", "Hello there"]
-    assert all(isinstance(frame, InterimTranscriptionFrame) for frame in frames)
-    assert all(
-        call.kwargs["direction"] == FrameDirection.UPSTREAM
-        for call in service.push_frame.await_args_list
-    )
-
     await service._handle_event(
         {
-            "type": "session.input_transcript.completed",
-            "item_id": "item_1",
-            "transcript": "Hello there",
+            "type": "session.output_transcript.delta",
+            "delta": "Hi there.",
         }
     )
-    final_call = service.push_frame.await_args_list[-1]
-    assert isinstance(final_call.args[0], TranscriptionFrame)
-    assert final_call.args[0].text == "Hello there"
-    assert final_call.kwargs["direction"] == FrameDirection.UPSTREAM
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    assert isinstance(frames[0], TranscriptionFrame)
+    assert frames[0].text == "Hello there"
+    assert frames[0].finalized is True
+    assert (
+        service.push_frame.await_args_list[0].kwargs["direction"]
+        == FrameDirection.UPSTREAM
+    )
+    assert isinstance(frames[1], LLMFullResponseStartFrame)
 
 
 @pytest.mark.asyncio
@@ -373,6 +398,7 @@ async def test_only_nested_completed_function_calls_execute_and_resume_once() ->
     )
     service._websocket = websocket
     service._started.set()
+    service._session_ready = True
     service._task_manager = TaskManager()
     service._setup = SimpleNamespace(
         pipeline_worker=SimpleNamespace(app_resources=None, worker_runner=None)
@@ -433,6 +459,7 @@ async def test_greeting_uses_acknowledged_instruction_and_commentary_events() ->
     )
     service._websocket = websocket
     service._started.set()
+    service._session_ready = True
 
     async def acknowledge(event_type: str) -> None:
         event = websocket.sent[-1]

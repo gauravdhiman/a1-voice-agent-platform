@@ -19,9 +19,9 @@ from pipecat.frames.frames import (
     AggregationType,
     Frame,
     InputAudioRawFrame,
-    InterimTranscriptionFrame,
     InterruptionFrame,
     LLMContextFrame,
+    LLMFullResponseStartFrame,
     LLMServiceMetadataFrame,
     LLMTextFrame,
     TranscriptionFrame,
@@ -149,7 +149,9 @@ class OpenAILiveLLMService(LLMService[Any]):
         self._input_resampler = create_stream_resampler()
         self._output_resampler = create_stream_resampler()
         self._output_sample_rate = DEFAULT_OUTPUT_SAMPLE_RATE
-        self._input_transcript_parts: dict[str, str] = {}
+        self._input_transcript_fragments: list[str] = []
+        self._response_started = False
+        self._response_completed = False
         self._seen_tool_calls: set[str] = set()
         self._submitted_tool_calls: set[str] = set()
         self._tool_results: dict[str, Any] = {}
@@ -264,7 +266,7 @@ class OpenAILiveLLMService(LLMService[Any]):
             self._context = frame.context
         elif isinstance(frame, InputAudioRawFrame):
             self._output_sample_rate = frame.sample_rate
-            if self._started.is_set() and not self._closing:
+            if self._session_ready and not self._closing:
                 await self._send_input_audio(frame)
 
         await self.push_frame(frame, direction)
@@ -300,8 +302,13 @@ class OpenAILiveLLMService(LLMService[Any]):
             await self._disconnect()
             raise OpenAILiveError("OpenAI Live connection failed.") from exc
 
-        if self._fatal_error:
-            error = self._fatal_error
+        if self._fatal_error or not self._session_ready:
+            if self._fatal_error is None:
+                await self._report_error("connection_closed", fatal=True)
+            error = self._fatal_error or OpenAILiveError(
+                "OpenAI Live session did not become ready.",
+                code="connection_closed",
+            )
             await self._disconnect()
             raise error
 
@@ -375,6 +382,12 @@ class OpenAILiveLLMService(LLMService[Any]):
                     fatal=True,
                 )
         finally:
+            if (
+                not self._session_ready
+                and self._fatal_error is None
+                and not self._closing
+            ):
+                await self._report_error("connection_closed", fatal=True)
             if not self._started.is_set():
                 self._started.set()
 
@@ -417,21 +430,11 @@ class OpenAILiveLLMService(LLMService[Any]):
             await self._handle_output_text(event.get("delta"))
             return
         if event_type == "session.input_transcript.delta":
-            await self._handle_input_text(
-                event.get("delta"), finalized=False, item_id=event.get("item_id")
-            )
-            return
-        if event_type in {
-            "session.input_transcript.done",
-            "session.input_transcript.completed",
-        }:
-            await self._handle_input_text(
-                event.get("transcript") or event.get("text"),
-                finalized=True,
-                item_id=event.get("item_id"),
-            )
+            await self._handle_input_text(event.get("delta"))
             return
         if event_type == "session.interrupted":
+            self._response_started = False
+            self._response_completed = False
             await self.push_frame(InterruptionFrame())
             return
         if event_type == "session.delegation.created":
@@ -459,6 +462,7 @@ class OpenAILiveLLMService(LLMService[Any]):
                 source="responses",
                 identity=self._response_usage_identity(event),
             )
+            self._response_completed = True
 
     @staticmethod
     def _response_usage_identity(event: Mapping[str, Any]) -> str:
@@ -623,6 +627,7 @@ class OpenAILiveLLMService(LLMService[Any]):
             return
         if not audio:
             return
+        await self._begin_response_handoff()
         await self.push_frame(
             TTSAudioRawFrame(
                 audio=audio,
@@ -635,6 +640,7 @@ class OpenAILiveLLMService(LLMService[Any]):
         """Expose provider transcript text for UI telemetry and context."""
         if not isinstance(text, str) or not text:
             return
+        await self._begin_response_handoff()
         llm_frame = LLMTextFrame(text)
         llm_frame.append_to_context = False
         tts_frame = TTSTextFrame(text, AggregationType.SENTENCE)
@@ -646,42 +652,38 @@ class OpenAILiveLLMService(LLMService[Any]):
     async def _handle_input_text(
         self,
         text: Any,
-        *,
-        finalized: bool,
-        item_id: Any = None,
     ) -> None:
-        """Accumulate input transcript fragments into the upstream user turn."""
+        """Accumulate ordered Live input transcript fragments for the next handoff."""
         if not isinstance(text, str) or not text:
             return
-        key = item_id if isinstance(item_id, str) and item_id else "current"
-        if finalized:
-            transcript = text
-            self._input_transcript_parts.pop(key, None)
-        else:
-            transcript = self._input_transcript_parts.get(key, "") + text
-            self._input_transcript_parts[key] = transcript
-        if not transcript:
+        if (
+            self._response_started
+            and self._response_completed
+            and not self._input_transcript_fragments
+        ):
+            self._response_started = False
+            self._response_completed = False
+        self._input_transcript_fragments.append(text)
+
+    async def _begin_response_handoff(self) -> None:
+        """Finalize the current Live transcript before the assistant turn starts."""
+        if self._response_started:
             return
-        timestamp = time_now_iso8601()
-        if finalized:
+        self._response_started = True
+        self._response_completed = False
+        transcript = "".join(self._input_transcript_fragments)
+        self._input_transcript_fragments.clear()
+        if transcript:
             await self.push_frame(
                 TranscriptionFrame(
                     text=transcript,
                     user_id="",
-                    timestamp=timestamp,
+                    timestamp=time_now_iso8601(),
                     finalized=True,
                 ),
                 direction=FrameDirection.UPSTREAM,
             )
-        else:
-            await self.push_frame(
-                InterimTranscriptionFrame(
-                    text=transcript,
-                    user_id="",
-                    timestamp=timestamp,
-                ),
-                direction=FrameDirection.UPSTREAM,
-            )
+        await self.push_frame(LLMFullResponseStartFrame())
 
     async def _handle_function_call(self, item: dict[str, Any]) -> None:
         """Execute one completed delegated function and resume Responses once."""
@@ -825,7 +827,7 @@ class OpenAILiveLLMService(LLMService[Any]):
         """Send one JSON command without exposing its body in logs."""
         if self._websocket is None:
             raise OpenAILiveError("OpenAI Live socket is not connected.")
-        if not allow_before_start and not self._started.is_set():
+        if not allow_before_start and not self._session_ready:
             raise OpenAILiveError("OpenAI Live session is not ready.")
         async with self._send_lock:
             await self._websocket.send(json.dumps(event, separators=(",", ":")))
@@ -835,6 +837,12 @@ class OpenAILiveLLMService(LLMService[Any]):
         await asyncio.wait_for(self._started.wait(), timeout=self._connection_timeout)
         if self._fatal_error:
             raise self._fatal_error
+        if not self._session_ready:
+            await self._report_error("connection_closed", fatal=True)
+            raise self._fatal_error or OpenAILiveError(
+                "OpenAI Live session did not become ready.",
+                code="connection_closed",
+            )
 
     async def _report_error(self, code: str, *, fatal: bool) -> None:
         """Publish a safe error frame and retain only a non-sensitive code."""
