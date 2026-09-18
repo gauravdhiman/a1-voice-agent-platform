@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import math
@@ -258,6 +259,44 @@ async def test_each_live_turn_hands_off_ordered_input_transcript_once() -> None:
 
 
 @pytest.mark.asyncio
+async def test_metadata_free_second_turn_hands_off_after_deferred_flush_window() -> (
+    None
+):
+    """A rapid metadata-free turn waits for the paired realtime flush boundary."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.push_frame = AsyncMock()
+
+    with patch("src.speech.openai_live.OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS", 1):
+        await service._handle_event(
+            {"type": "session.input_transcript.delta", "delta": "First turn"}
+        )
+        await service._handle_event(
+            {"type": "session.output_transcript.delta", "delta": "First reply"}
+        )
+        # This arrives before the one-second production window closes, so it
+        # is held until the existing realtime aggregator can flush turn one.
+        await service._handle_event(
+            {"type": "session.input_transcript.delta", "delta": "Second turn"}
+        )
+        await asyncio.sleep(0.01)
+        await service._handle_event(
+            {"type": "session.output_transcript.delta", "delta": "Second reply"}
+        )
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    assert [
+        frame.text for frame in frames if isinstance(frame, TranscriptionFrame)
+    ] == ["First turn", "Second turn"]
+    assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 2
+    assert service._pending_input_fragments == []
+
+
+@pytest.mark.asyncio
 async def test_late_input_fragment_does_not_reopen_response_handoff() -> None:
     """A delayed input fragment joins the open user handoff exactly once."""
     service = OpenAILiveLLMService(
@@ -311,34 +350,41 @@ async def test_overlapping_input_interval_does_not_start_second_response() -> No
     )
     service.push_frame = AsyncMock()
 
-    events = [
+    await service._handle_event(
         {
             "type": "session.input_transcript.delta",
             "delta": "Actually",
             "start_ms": 1000,
             "end_ms": 1200,
-        },
+        }
+    )
+    await service._handle_event(
         {
             "type": "session.output_transcript.delta",
             "delta": "Sure",
             "start_ms": 1200,
             "end_ms": 1600,
-        },
-        {
-            "type": "session.input_transcript.delta",
-            "delta": " wait",
-            "start_ms": 1450,
-            "end_ms": 1750,
-        },
-        {
-            "type": "session.output_transcript.delta",
-            "delta": " one moment",
-            "start_ms": 1600,
-            "end_ms": 1900,
-        },
-    ]
-    for event in events:
-        await service._handle_event(event)
+        }
+    )
+    with patch("src.speech.openai_live.OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS", 1):
+        await asyncio.sleep(0.01)
+        assert service._handoff_window_ready() is True
+        await service._handle_event(
+            {
+                "type": "session.input_transcript.delta",
+                "delta": " wait",
+                "start_ms": 1450,
+                "end_ms": 1750,
+            }
+        )
+        await service._handle_event(
+            {
+                "type": "session.output_transcript.delta",
+                "delta": " one moment",
+                "start_ms": 1600,
+                "end_ms": 1900,
+            }
+        )
 
     frames = [call.args[0] for call in service.push_frame.await_args_list]
     assert [
