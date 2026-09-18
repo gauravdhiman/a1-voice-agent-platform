@@ -140,8 +140,11 @@ presets, or a provider-specific realtime adapter for `engine_mode=realtime`.
 - Realtime — Google Gemini native-audio, OpenAI Realtime, or the custom
   GPT-Live WebSocket/delegation adapter (see `voice-ws/src/bot.py`, session setup).
   GPT-Live keeps audio at the provider's 24 kHz boundary, preserves upstream
-  input transcript fragments, reports cumulative usage through Pipecat metrics,
-  and requires a confirmed `session.closed` event before a call is completed.
+  input transcript fragments, and groups late/overlapping transcript deltas by
+  the provider's `start_ms`/`end_ms` intervals. Those intervals are required:
+  the adapter rejects transcript events without them instead of guessing a turn
+  from network timing. It reports cumulative usage through Pipecat metrics and
+  requires a confirmed `session.closed` event before a call is completed.
 - Pipeline — Deepgram STT, OpenAI/Cerebras/OpenRouter LLM, Cartesia/Fish TTS
 - `normalize_stage_provider()` — maps deprecated `livekit_inference` slug to direct providers
 

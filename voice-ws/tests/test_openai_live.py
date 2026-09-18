@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import math
@@ -12,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from pipecat.frames.frames import (
+    InterruptionFrame,
     LLMFullResponseStartFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
@@ -179,12 +179,16 @@ async def test_input_transcript_fragments_accumulate_upstream() -> None:
         {
             "type": "session.input_transcript.delta",
             "delta": "Hello ",
+            "start_ms": 100,
+            "end_ms": 200,
         }
     )
     await service._handle_event(
         {
             "type": "session.input_transcript.delta",
             "delta": "there",
+            "start_ms": 200,
+            "end_ms": 300,
         }
     )
 
@@ -192,6 +196,8 @@ async def test_input_transcript_fragments_accumulate_upstream() -> None:
         {
             "type": "session.output_transcript.delta",
             "delta": "Hi there.",
+            "start_ms": 300,
+            "end_ms": 500,
         }
     )
 
@@ -259,10 +265,10 @@ async def test_each_live_turn_hands_off_ordered_input_transcript_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_metadata_free_second_turn_hands_off_after_deferred_flush_window() -> (
+async def test_metadata_free_rapid_turn_is_rejected_without_a_handoff_boundary() -> (
     None
 ):
-    """A rapid metadata-free turn waits for the paired realtime flush boundary."""
+    """Missing provider intervals cannot be classified from event arrival order."""
     service = OpenAILiveLLMService(
         api_key="secret",
         model="gpt-live-1",
@@ -270,30 +276,39 @@ async def test_metadata_free_second_turn_hands_off_after_deferred_flush_window()
         system_instruction="prompt",
     )
     service.push_frame = AsyncMock()
+    service.push_error = AsyncMock()
 
-    with patch("src.speech.openai_live.OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS", 1):
-        await service._handle_event(
-            {"type": "session.input_transcript.delta", "delta": "First turn"}
-        )
-        await service._handle_event(
-            {"type": "session.output_transcript.delta", "delta": "First reply"}
-        )
-        # This arrives before the one-second production window closes, so it
-        # is held until the existing realtime aggregator can flush turn one.
-        await service._handle_event(
-            {"type": "session.input_transcript.delta", "delta": "Second turn"}
-        )
-        await asyncio.sleep(0.01)
-        await service._handle_event(
-            {"type": "session.output_transcript.delta", "delta": "Second reply"}
-        )
+    await service._handle_event(
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "First turn",
+            "start_ms": 100,
+            "end_ms": 300,
+        }
+    )
+    await service._handle_event(
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "First reply",
+            "start_ms": 300,
+            "end_ms": 600,
+        }
+    )
+    await service._handle_event(
+        {"type": "session.input_transcript.delta", "delta": "Second turn"}
+    )
+    await service._handle_event(
+        {"type": "session.output_transcript.delta", "delta": "Second reply"}
+    )
 
     frames = [call.args[0] for call in service.push_frame.await_args_list]
     assert [
         frame.text for frame in frames if isinstance(frame, TranscriptionFrame)
-    ] == ["First turn", "Second turn"]
-    assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 2
-    assert service._pending_input_fragments == []
+    ] == ["First turn"]
+    assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 1
+    assert service._fatal_error is not None
+    assert service._fatal_error.code == "missing_transcript_timeline"
+    service.push_error.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -311,23 +326,30 @@ async def test_late_input_fragment_does_not_reopen_response_handoff() -> None:
         {
             "type": "session.input_transcript.delta",
             "delta": "Hello",
+            "start_ms": 100,
+            "end_ms": 300,
         },
         {
             "type": "session.output_transcript.delta",
             "delta": "Hi",
+            "start_ms": 300,
+            "end_ms": 600,
         },
         {
             "type": "session.input_transcript.delta",
             "delta": " there",
+            "start_ms": 250,
+            "end_ms": 350,
         },
         {
             "type": "session.output_transcript.delta",
             "delta": " there",
+            "start_ms": 500,
+            "end_ms": 700,
         },
     ]
-    with patch("src.speech.openai_live.monotonic", return_value=0.0):
-        for event in events:
-            await service._handle_event(event)
+    for event in events:
+        await service._handle_event(event)
 
     frames = [call.args[0] for call in service.push_frame.await_args_list]
     assert [
@@ -337,6 +359,55 @@ async def test_late_input_fragment_does_not_reopen_response_handoff() -> None:
         " there",
     ]
     assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 1
+
+
+@pytest.mark.asyncio
+async def test_interruption_preserves_the_next_timestamped_turn() -> None:
+    """An interruption resets response state without orphaning accepted input."""
+    service = OpenAILiveLLMService(
+        api_key="secret",
+        model="gpt-live-1",
+        voice="marin",
+        system_instruction="prompt",
+    )
+    service.push_frame = AsyncMock()
+
+    events = [
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "First turn",
+            "start_ms": 100,
+            "end_ms": 300,
+        },
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "First reply",
+            "start_ms": 300,
+            "end_ms": 600,
+        },
+        {
+            "type": "session.input_transcript.delta",
+            "delta": "Interrupted turn",
+            "start_ms": 1800,
+            "end_ms": 2000,
+        },
+        {"type": "session.interrupted"},
+        {
+            "type": "session.output_transcript.delta",
+            "delta": "Second reply",
+            "start_ms": 2000,
+            "end_ms": 2300,
+        },
+    ]
+    for event in events:
+        await service._handle_event(event)
+
+    frames = [call.args[0] for call in service.push_frame.await_args_list]
+    assert [
+        frame.text for frame in frames if isinstance(frame, TranscriptionFrame)
+    ] == ["First turn", "Interrupted turn"]
+    assert sum(isinstance(frame, LLMFullResponseStartFrame) for frame in frames) == 2
+    assert sum(isinstance(frame, InterruptionFrame) for frame in frames) == 1
 
 
 @pytest.mark.asyncio
@@ -366,25 +437,22 @@ async def test_overlapping_input_interval_does_not_start_second_response() -> No
             "end_ms": 1600,
         }
     )
-    with patch("src.speech.openai_live.OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS", 1):
-        await asyncio.sleep(0.01)
-        assert service._handoff_window_ready() is True
-        await service._handle_event(
-            {
-                "type": "session.input_transcript.delta",
-                "delta": " wait",
-                "start_ms": 1450,
-                "end_ms": 1750,
-            }
-        )
-        await service._handle_event(
-            {
-                "type": "session.output_transcript.delta",
-                "delta": " one moment",
-                "start_ms": 1600,
-                "end_ms": 1900,
-            }
-        )
+    await service._handle_event(
+        {
+            "type": "session.input_transcript.delta",
+            "delta": " wait",
+            "start_ms": 1450,
+            "end_ms": 1750,
+        }
+    )
+    await service._handle_event(
+        {
+            "type": "session.output_transcript.delta",
+            "delta": " one moment",
+            "start_ms": 1600,
+            "end_ms": 1900,
+        }
+    )
 
     frames = [call.args[0] for call in service.push_frame.await_args_list]
     assert [

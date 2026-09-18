@@ -11,7 +11,6 @@ import math
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
-from time import monotonic
 from typing import Any
 
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
@@ -49,9 +48,9 @@ DEFAULT_CLOSE_TIMEOUT_SECONDS = 15.0
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 15.0
 DEFAULT_TOOL_TIMEOUT_SECONDS = 60.0
 MAX_SAFE_USAGE_VALUE = 10**12
-# Live transcript events have no authoritative turn-completed event. Keep a
-# short, bounded grouping window for fragments whose timeline metadata is
-# missing or arrives after the assistant has started speaking.
+# Live transcript events have no authoritative turn-completed event. The
+# provider's start/end interval is therefore required for grouping; arrival
+# timing cannot safely distinguish a late fragment from a new turn.
 OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS = 1000
 _SUCCESSFUL_CLOSE_REASONS = {"close_requested", "remote_hangup", "expired"}
 
@@ -96,13 +95,12 @@ class OpenAILiveLLMService(LLMService[Any]):
     adapter does not invent per-response TTS brackets from backend completion.
 
     Live transcript deltas also do not identify completed turns. The adapter
-    groups input by the provider's timeline intervals when available, treating
-    late or overlapping fragments as part of the open response and forwarding
-    them upstream without reopening that response. When intervals are absent,
-    a post-handoff fragment stays pending until the paired realtime aggregator's
-    deferred handoff window closes; an output that arrives first identifies the
-    fragment as late, while a pending fragment at the window boundary starts
-    the next handoff.
+    groups input by the provider's timeline intervals, treating late or
+    overlapping fragments as part of the open response and forwarding them
+    upstream without reopening that response. GPT-Live guarantees those
+    intervals; a transcript event without a valid interval is rejected rather
+    than classified from network arrival timing, which cannot distinguish a
+    late fragment from a new turn.
     """
 
     def __init__(
@@ -164,13 +162,9 @@ class OpenAILiveLLMService(LLMService[Any]):
         self._output_resampler = create_stream_resampler()
         self._output_sample_rate = DEFAULT_OUTPUT_SAMPLE_RATE
         self._input_transcript_fragments: list[str] = []
-        self._pending_input_fragments: list[str] = []
         self._response_started = False
         self._last_input_end_ms: int | None = None
         self._last_output_end_ms: int | None = None
-        self._handoff_window_started_at: float | None = None
-        self._handoff_window_open = False
-        self._handoff_window_task: asyncio.Task[None] | None = None
         self._transcript_lock = asyncio.Lock()
         self._seen_tool_calls: set[str] = set()
         self._submitted_tool_calls: set[str] = set()
@@ -470,8 +464,9 @@ class OpenAILiveLLMService(LLMService[Any]):
             )
             return
         if event_type == "session.interrupted":
-            self._response_started = False
-            await self.push_frame(InterruptionFrame())
+            async with self._transcript_lock:
+                self._response_started = False
+                await self.push_frame(InterruptionFrame())
             return
         if event_type == "session.delegation.created":
             return
@@ -663,8 +658,7 @@ class OpenAILiveLLMService(LLMService[Any]):
         if not audio:
             return
         async with self._transcript_lock:
-            self._note_output_activity()
-            await self._prepare_response_handoff()
+            await self._begin_response_handoff()
             await self.push_frame(
                 TTSAudioRawFrame(
                     audio=audio,
@@ -683,9 +677,12 @@ class OpenAILiveLLMService(LLMService[Any]):
         """Expose provider transcript text for UI telemetry and context."""
         if not isinstance(text, str) or not text:
             return
+        if self._transcript_timeline(start_ms, end_ms) is None:
+            await self._report_error("missing_transcript_timeline", fatal=True)
+            return
         async with self._transcript_lock:
             self._note_output_activity(start_ms=start_ms, end_ms=end_ms)
-            await self._prepare_response_handoff()
+            await self._begin_response_handoff()
             llm_frame = LLMTextFrame(text)
             llm_frame.append_to_context = False
             tts_frame = TTSTextFrame(text, AggregationType.SENTENCE)
@@ -701,38 +698,36 @@ class OpenAILiveLLMService(LLMService[Any]):
         start_ms: Any = None,
         end_ms: Any = None,
     ) -> None:
-        """Group Live input fragments without reopening an active response."""
+        """Group timestamped Live input without reopening an active response."""
         if not isinstance(text, str) or not text:
+            return
+        timeline = self._transcript_timeline(start_ms, end_ms)
+        if timeline is None:
+            await self._report_error("missing_transcript_timeline", fatal=True)
             return
 
         async with self._transcript_lock:
-            normalized_end_ms = self._timeline_ms(end_ms)
-            starts_new_turn = self._response_started and self._starts_new_turn(start_ms)
-            if normalized_end_ms is not None:
-                if self._last_input_end_ms is None:
-                    self._last_input_end_ms = normalized_end_ms
-                else:
-                    self._last_input_end_ms = max(
-                        self._last_input_end_ms,
-                        normalized_end_ms,
-                    )
+            normalized_start_ms, normalized_end_ms = timeline
+            starts_new_turn = self._response_started and self._starts_new_turn(
+                normalized_start_ms
+            )
+            if self._last_input_end_ms is None:
+                self._last_input_end_ms = normalized_end_ms
+            else:
+                self._last_input_end_ms = max(
+                    self._last_input_end_ms,
+                    normalized_end_ms,
+                )
 
             if not self._response_started:
                 self._input_transcript_fragments.append(text)
                 return
 
             if starts_new_turn:
-                await self._promote_pending_input()
+                self._response_started = False
                 self._input_transcript_fragments.append(text)
                 return
 
-            if self._timeline_ms(start_ms) is None and not self._handoff_window_ready():
-                self._pending_input_fragments.append(text)
-                await self._ensure_handoff_window_task()
-                return
-
-            if self._pending_input_fragments:
-                await self._emit_pending_as_late()
             # The paired realtime aggregator keeps its handoff flush open for
             # late transcription frames. Forward this fragment without a new
             # response start so it can join the current user message.
@@ -746,6 +741,19 @@ class OpenAILiveLLMService(LLMService[Any]):
         if not math.isfinite(float(value)) or value < 0 or value > MAX_SAFE_USAGE_VALUE:
             return None
         return int(value)
+
+    @classmethod
+    def _transcript_timeline(cls, start_ms: Any, end_ms: Any) -> tuple[int, int] | None:
+        """Return a valid provider transcript interval or ``None``."""
+        normalized_start_ms = cls._timeline_ms(start_ms)
+        normalized_end_ms = cls._timeline_ms(end_ms)
+        if (
+            normalized_start_ms is None
+            or normalized_end_ms is None
+            or normalized_end_ms < normalized_start_ms
+        ):
+            return None
+        return normalized_start_ms, normalized_end_ms
 
     def _note_output_activity(
         self, *, start_ms: Any = None, end_ms: Any = None
@@ -777,98 +785,7 @@ class OpenAILiveLLMService(LLMService[Any]):
                 return normalized_start_ms > (
                     self._last_input_end_ms + OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS
                 )
-
-        return self._handoff_window_ready()
-
-    def _handoff_window_ready(self) -> bool:
-        """Return whether the paired realtime aggregator can start another turn."""
-        if self._handoff_window_open:
-            return True
-        if self._handoff_window_started_at is None:
-            return False
-        return (
-            monotonic() - self._handoff_window_started_at
-            >= OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS / 1000
-        )
-
-    async def _prepare_response_handoff(self) -> None:
-        """Resolve deferred input fragments before starting an output handoff."""
-        if self._response_started and self._pending_input_fragments:
-            if self._handoff_window_ready():
-                await self._promote_pending_input()
-            else:
-                await self._emit_pending_as_late()
-        await self._begin_response_handoff()
-
-    async def _emit_pending_as_late(self) -> None:
-        """Forward metadata-free fragments into the still-open user handoff."""
-        pending = self._pending_input_fragments
-        self._pending_input_fragments = []
-        for text in pending:
-            await self._emit_transcription(text)
-        await self._cancel_handoff_window_task()
-
-    async def _promote_pending_input(self) -> None:
-        """Move deferred input into a new turn after the prior flush window."""
-        if self._pending_input_fragments:
-            self._input_transcript_fragments.extend(self._pending_input_fragments)
-            self._pending_input_fragments = []
-        self._response_started = False
-        self._handoff_window_open = False
-        await self._cancel_handoff_window_task()
-
-    async def _reset_handoff_window(self) -> None:
-        """Align metadata-free grouping with Pipecat's deferred user flush."""
-        await self._cancel_handoff_window_task()
-        self._handoff_window_started_at = monotonic()
-        self._handoff_window_open = False
-
-    async def _ensure_handoff_window_task(self) -> None:
-        """Schedule the next-turn boundary only while input is ambiguous."""
-        if self._handoff_window_open or self._handoff_window_task is not None:
-            return
-        if self._handoff_window_started_at is None:
-            return
-        self._handoff_window_task = asyncio.create_task(
-            self._wait_for_handoff_window(),
-            name=f"{self}::realtime_transcript_handoff",
-        )
-
-    async def _wait_for_handoff_window(self) -> None:
-        """Open the next-turn boundary after the paired aggregator's wait."""
-        try:
-            # The small margin lets the paired aggregator's equal deferred flush
-            # commit the prior user message before this service emits the next
-            # response-start boundary.
-            started_at = self._handoff_window_started_at
-            elapsed = monotonic() - started_at if started_at is not None else 0
-            await asyncio.sleep(
-                max(OPENAI_LIVE_TRANSCRIPT_GROUPING_GAP_MS / 1000 - elapsed, 0) + 0.001
-            )
-            async with self._transcript_lock:
-                if not self._response_started:
-                    return
-                self._handoff_window_open = True
-                if not self._pending_input_fragments:
-                    return
-                await self._promote_pending_input()
-                await self._begin_response_handoff()
-        except asyncio.CancelledError:
-            raise
-        finally:
-            if self._handoff_window_task is asyncio.current_task():
-                self._handoff_window_task = None
-
-    async def _cancel_handoff_window_task(self) -> None:
-        """Cancel the current transcript boundary task during a state change."""
-        task = self._handoff_window_task
-        self._handoff_window_task = None
-        if task is None or task is asyncio.current_task():
-            return
-        if not task.done():
-            task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        return False
 
     async def _emit_transcription(self, text: str) -> None:
         """Forward one finalized transcript fragment to the paired aggregator."""
@@ -892,7 +809,6 @@ class OpenAILiveLLMService(LLMService[Any]):
         if transcript:
             await self._emit_transcription(transcript)
         await self.push_frame(LLMFullResponseStartFrame())
-        await self._reset_handoff_window()
 
     async def _handle_function_call(self, item: dict[str, Any]) -> None:
         """Execute one completed delegated function and resume Responses once."""
@@ -1079,7 +995,6 @@ class OpenAILiveLLMService(LLMService[Any]):
 
     async def _disconnect(self) -> None:
         """Request provider finalization, then close the socket and task."""
-        await self._cancel_handoff_window_task()
         websocket = self._websocket
         if websocket is None:
             return
