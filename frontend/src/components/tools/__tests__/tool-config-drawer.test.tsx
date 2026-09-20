@@ -67,4 +67,40 @@ describe("ToolConfigDrawer", () => {
       "Required. Paste the full Google Sheets URL or spreadsheet ID.",
     );
   });
+
+  it("uses the theme foreground token for enabled function names", () => {
+    const functionTool = {
+      ...(googleSheetsTool as unknown as Record<string, unknown>),
+      tool_functions_schema: {
+        functions: [
+          {
+            name: "send_email",
+            description: "Send an email.",
+            parameters: { properties: {}, required: [] },
+          },
+        ],
+      },
+    } as never;
+
+    render(
+      <ToolConfigDrawer
+        open
+        onOpenChange={vi.fn()}
+        tool={functionTool}
+        agentTool={{ is_enabled: true, unselected_functions: [] } as never}
+        onSaveConfig={vi.fn()}
+        onToggleFunction={vi.fn()}
+        onToggleAllFunctions={vi.fn()}
+        onOAuth={vi.fn()}
+        onLogout={vi.fn()}
+        onSetApiKey={vi.fn()}
+        onDisconnect={vi.fn()}
+        canEdit
+      />,
+    );
+
+    const functionName = screen.getByText("send_email");
+    expect(functionName.className).toContain("text-primary-foreground");
+    expect(functionName.className).not.toContain("text-white");
+  });
 });

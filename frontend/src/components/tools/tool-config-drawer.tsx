@@ -844,7 +844,7 @@ export function ToolConfigDrawer({
                                 className={cn(
                                   "text-[10px] font-medium",
                                   isEnabled
-                                    ? "text-white"
+                                    ? "text-primary-foreground"
                                     : "text-muted-foreground",
                                 )}
                               >

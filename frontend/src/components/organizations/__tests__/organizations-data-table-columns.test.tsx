@@ -62,4 +62,24 @@ describe("organizationsColumns platform actions", () => {
       screen.getByRole("link", { name: /credits & entitlements/i }),
     ).toHaveAttribute("href", "/organizations/credits?org_id=org-1");
   });
+
+  it("uses the theme foreground token for the organization avatar", () => {
+    const nameColumn = organizationsColumns.find(
+      (column) => "accessorKey" in column && column.accessorKey === "name",
+    );
+
+    if (!nameColumn || typeof nameColumn.cell !== "function") {
+      throw new Error("Organization name column is not configured");
+    }
+
+    const nameCell = nameColumn.cell as (props: {
+      row: { original: typeof ORGANIZATION };
+    }) => React.ReactNode;
+
+    render(nameCell({ row: { original: ORGANIZATION } }));
+
+    const avatar = screen.getByText("A");
+    expect(avatar.className).toContain("text-primary-foreground");
+    expect(avatar.className).not.toContain("text-white");
+  });
 });
