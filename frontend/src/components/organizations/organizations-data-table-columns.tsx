@@ -52,7 +52,7 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
         <div className="flex items-center">
           <div className="bg-primary/10 p-2 rounded-lg mr-3">
             <div className="bg-primary w-5 h-5 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs font-bold">
+              <span className="text-primary-foreground text-xs font-bold">
                 {org.name.charAt(0).toUpperCase()}
               </span>
             </div>
