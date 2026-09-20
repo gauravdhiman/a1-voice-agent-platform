@@ -6,13 +6,14 @@ import {
   Bot,
   ChevronDown,
   Eye,
-  EyeOff,
   FileText,
   Info,
   Loader2,
+  Pencil,
 } from "lucide-react";
 
 import { AgentInstructionsHelpText } from "@/components/agents/agent-instructions-help-text";
+import { BasicMarkdownRenderer } from "@/components/markdown/basic-markdown-renderer";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,6 +37,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgentSystemPrompt } from "@/hooks/use-agent-queries";
 import {
@@ -59,7 +68,7 @@ interface AgentDetailPersonaTabProps {
  *
  * This is intentionally a separate client chunk: the template menu is not
  * needed to load or use the other agent tabs. The system prompt preview uses
- * a lightweight raw-Markdown view here so the Mermaid-capable renderer stays
+ * a lightweight Markdown renderer here so the Mermaid-capable renderer stays
  * out of the first agent route compile.
  */
 export function AgentDetailPersonaTab({
@@ -73,6 +82,8 @@ export function AgentDetailPersonaTab({
   );
   const [pendingTemplate, setPendingTemplate] =
     React.useState<VoiceTemplate | null>(null);
+  const [isEditingInstructions, setIsEditingInstructions] =
+    React.useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = React.useState(false);
   const { data: systemPromptPreview, isLoading: systemPromptLoading } =
     useAgentSystemPrompt(agentId, showSystemPrompt);
@@ -175,122 +186,181 @@ export function AgentDetailPersonaTab({
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <Label
-                  htmlFor="instructions_markdown"
+                  htmlFor={
+                    isEditingInstructions ? "instructions_markdown" : undefined
+                  }
                   className="text-sm font-medium"
                 >
                   Additional Instructions
                 </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  <AgentInstructionsHelpText />
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {isEditingInstructions ? (
+                    <AgentInstructionsHelpText />
+                  ) : (
+                    "Rendered Markdown used to guide the agent."
+                  )}
                 </p>
               </div>
-              {canEdit && voiceTemplates.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <FileText className="w-3.5 h-3.5 mr-1.5" />
-                      Insert template
-                      <ChevronDown className="w-3.5 h-3.5 ml-1" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
-                    {voiceTemplates.map((template) => (
-                      <DropdownMenuItem
-                        key={template.id}
-                        onClick={() => {
-                          if (agentForm.instructions_markdown?.trim()) {
-                            setPendingTemplate(template);
-                            return;
-                          }
-                          insertTemplate(template);
-                        }}
-                      >
-                        <div>
-                          <div className="font-medium text-sm">
-                            {template.name}
+              <div className="flex shrink-0 items-center gap-2">
+                {isEditingInstructions && canEdit && voiceTemplates.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <FileText className="mr-1.5 h-3.5 w-3.5" />
+                        Insert template
+                        <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      {voiceTemplates.map((template) => (
+                        <DropdownMenuItem
+                          key={template.id}
+                          onClick={() => {
+                            if (agentForm.instructions_markdown?.trim()) {
+                              setPendingTemplate(template);
+                              return;
+                            }
+                            insertTemplate(template);
+                          }}
+                        >
+                          <div>
+                            <div className="text-sm font-medium">
+                              {template.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {template.industry}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {template.industry}
-                          </div>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setIsEditingInstructions((current) => !current)
+                    }
+                    aria-label={
+                      isEditingInstructions
+                        ? "Preview instructions"
+                        : "Edit instructions"
+                    }
+                  >
+                    {isEditingInstructions ? (
+                      <>
+                        <Eye className="mr-1.5 h-3.5 w-3.5" />
+                        Preview
+                      </>
+                    ) : (
+                      <>
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                        Edit
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
-            <Textarea
-              id="instructions_markdown"
-              value={agentForm.instructions_markdown}
-              onChange={(event) =>
-                setAgentForm({
-                  ...agentForm,
-                  instructions_markdown: event.target.value,
-                })
-              }
-              placeholder={DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER}
-              className="min-h-[400px] font-mono text-sm"
-              disabled={!canEdit}
-            />
+
+            {isEditingInstructions ? (
+              <Textarea
+                id="instructions_markdown"
+                value={agentForm.instructions_markdown}
+                onChange={(event) =>
+                  setAgentForm({
+                    ...agentForm,
+                    instructions_markdown: event.target.value,
+                  })
+                }
+                placeholder={DEFAULT_AGENT_INSTRUCTIONS_PLACEHOLDER}
+                className="min-h-[400px] font-mono text-sm"
+                disabled={!canEdit}
+              />
+            ) : (
+              <div className="rounded-lg border bg-muted/20 px-4 py-4">
+                {agentForm.instructions_markdown?.trim() ? (
+                  <BasicMarkdownRenderer
+                    content={agentForm.instructions_markdown}
+                    className="prose prose-sm max-w-none dark:prose-invert"
+                  />
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Info className="h-4 w-4" />
+                      <span>No additional instructions yet.</span>
+                    </div>
+                    {canEdit && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditingInstructions(true)}
+                      >
+                        Add instructions
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="border rounded-lg overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowSystemPrompt((current) => !current)}
-              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
-            >
-              <div className="flex items-center gap-2">
-                {showSystemPrompt ? (
-                  <EyeOff className="h-4 w-4 text-slate-600" />
-                ) : (
-                  <Eye className="h-4 w-4 text-slate-600" />
-                )}
-                <span className="font-medium text-sm">
-                  Preview System Prompt
+          <Sheet open={showSystemPrompt} onOpenChange={setShowSystemPrompt}>
+            <SheetTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  <span>Preview System Prompt</span>
                 </span>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {showSystemPrompt ? "Click to hide" : "Click to view"}
-              </span>
-            </button>
-
-            {showSystemPrompt && (
-              <div className="p-4 bg-slate-50 border-t">
-                <p className="text-sm text-muted-foreground mb-3">
-                  This is the final system prompt the AI receives — your
-                  markdown instructions plus system guardrails and tool
-                  guidelines.
-                </p>
+                <span className="text-xs text-muted-foreground">
+                  Opens in a side panel
+                </span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent
+              side="right"
+              className="flex w-full flex-col sm:max-w-2xl"
+            >
+              <SheetHeader className="border-b px-6 pb-4 pt-6">
+                <SheetTitle>System prompt preview</SheetTitle>
+                <SheetDescription>
+                  This is the final prompt the AI receives, including your
+                  Markdown instructions, system guardrails, and tool guidelines.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto px-6 py-5">
                 {systemPromptLoading ? (
-                  <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     <span className="ml-2 text-sm text-muted-foreground">
                       Generating preview...
                     </span>
                   </div>
                 ) : systemPromptPreview ? (
-                  <div className="bg-white border rounded-md p-4 overflow-x-auto">
-                    <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                      <Info className="h-3.5 w-3.5" />
-                      <span>Raw compiled Markdown</span>
-                    </div>
-                    <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-700">
-                      {systemPromptPreview}
-                    </pre>
-                  </div>
+                  <BasicMarkdownRenderer
+                    content={systemPromptPreview}
+                    className="prose prose-sm max-w-none dark:prose-invert"
+                  />
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
+                  <div className="py-12 text-center text-sm text-muted-foreground">
                     Unable to generate preview. Save your instructions first,
                     then check the preview.
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </SheetContent>
+          </Sheet>
         </CardContent>
       </Card>
 
