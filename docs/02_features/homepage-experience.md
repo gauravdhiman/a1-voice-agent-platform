@@ -15,8 +15,9 @@ testimonials, live activity, or performance statistics.
   layouts and the dashboard keeps its existing design.
 - `frontend/src/app/page.tsx` renders `components/home/home-page.tsx`.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
-- Alex and Jordan retain their existing appointment and service-request demo
-  routes. The homepage itself does not request microphone access or start calls.
+- Alex, Jordan, and Sofia retain their appointment, service-request, and
+  restaurant-order demo routes. The homepage itself does not request microphone
+  access or start calls.
 - Industry tiles link to dedicated guides: `/dental`, `/hvac`,
   `/restaurants`, `/salons`, and `/real-estate`. The general tile links to
   `/request-demo` — the section says so explicitly.

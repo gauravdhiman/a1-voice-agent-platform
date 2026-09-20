@@ -50,6 +50,11 @@ describe("Homepage experience", () => {
         .getByRole("link", { name: /talk to jordan/i })
         .getAttribute("href"),
     ).toBe("/demo/copper-ridge-service-request");
+    expect(
+      screen
+        .getByRole("link", { name: /talk to sofia/i })
+        .getAttribute("href"),
+    ).toBe("/demo/verdi-table-restaurant");
     expect(screen.queryByText(/acme corp|techstart|sarah chen/i)).toBeNull();
     expect(screen.getByText(/monthly plans from \$79/i)).toBeTruthy();
     expect(screen.queryByText(/\$99|\$0/)).toBeNull();

@@ -203,11 +203,19 @@ migration and before starting the local application:
 
 It materializes every native implementation currently present in the checked-
 out release under `platform_tools`, including new tools such as
-`Resend_email`, and creates or refreshes the two code-owned public demo agents.
+`Resend_email`, and creates or refreshes the three code-owned public demo agents.
 `--migrate-only` intentionally skips this Docker-backed bootstrap; run
 `scripts/deploy/sync-release-fixtures.sh --env-file .env.staging
 --project-name 247ai-staging` separately when a migration-only validation also
 needs to refresh release data.
+
+The Verdi Table demo intentionally does not seed a `Resend_email` attachment:
+its organization credential, verified sender, and destination route are
+operator-managed and must not be placed in code-owned fixture data. To enable
+email follow-up, a platform administrator must connect/configure `Resend_email`
+from the dashboard for Sofia after bootstrap. Until then, Sofia must explain
+that the order was captured but no email confirmation was sent; she must never
+claim email delivery without an accepted tool result.
 
 ## Production deployment pattern
 

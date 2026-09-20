@@ -108,7 +108,7 @@ button; failed or incomplete handoffs never receive the URL and therefore
 never show that CTA. If the field is blank, no external result CTA is shown,
 even when a provider returns an internal record URL.
 
-The outcome allowlist currently contains the two seeded showcase workflows:
+The outcome allowlist currently contains the three seeded showcase workflows:
 
 - `pleasant-pediatric-appointments` uses the native Google Calendar
   appointment tool. A successful new booking returns the calendar event
@@ -118,6 +118,10 @@ The outcome allowlist currently contains the two seeded showcase workflows:
   lead-capture tool. It appends one complete, confirmed service row with a
   session id, timestamp, caller details, service context, urgency, and callback
   preference. A same-session retry is deduplicated before append.
+- `verdi-table-restaurant` uses the focused native Google Sheets lead-capture
+  tool for confirmed pickup-style order requests. It appends item and quantity
+  details, caller name, phone, and optional email to the configured `Orders!A:L`
+  range; a same-session retry is deduplicated before append.
 
 The seeded prompts carry the business context that is intentionally absent from
 the shared demo organization. Alex identifies as an AI assistant for the
@@ -130,19 +134,26 @@ and prices: a new-patient exam with standard X-rays ($95), routine pediatric
 cleaning ($85), fluoride treatment ($25), and dental sealants ($45 per tooth).
 Jordan can describe the fictional demo services and prices: an HVAC diagnostic
 or inspection visit ($89), an air-conditioning tune-up ($129), a heating-system
-tune-up ($129), and an indoor-air-quality assessment ($79). Both prompts
-identify the agent as a helpful AI assistant, spell names and email addresses
-back for confirmation, redirect unrelated requests, require explicit
-confirmation before provider mutations, and prohibit unsupported claims. Prices
-are clearly presented as illustrative demo rates, not binding quotes. The HVAC
-prompt also handles out-of-hours requests and immediate gas, carbon-monoxide,
-fire, or smoke hazards. The dental prompt is limited to new bookings and does
-not expose or modify existing appointment records. The prompt content is grouped
-into short sections and bullets for disclosure, business facts, services and
-prices, workflow, email follow-up, and safety rules. The public-data notice is
-intentionally a one-time opening reminder; after the caller acknowledges it or
-starts sharing details, the agent moves on unless the caller asks or appears
-confused.
+tune-up ($129), and an indoor-air-quality assessment ($79). Sofia identifies as
+an AI host for the fictional Verdi Table restaurant at 2201 E Juniper Lane,
+Phoenix, AZ 85016,
+open Monday-Thursday 11:00 AM-9:00 PM, Friday-Saturday 11:00 AM-10:00 PM, and
+Sunday 10:00 AM-3:00 PM, with illustrative menu items including Sonoran grain
+bowls ($16), ember chicken sandwiches ($15), and Verde pasta ($17). All three
+prompts identify the agent as a helpful AI assistant or host, spell names and
+email addresses back for confirmation when collected, redirect unrelated
+requests, require explicit confirmation before provider mutations, and prohibit
+unsupported claims. Prices are clearly presented as illustrative demo rates,
+not binding quotes. The HVAC prompt also handles out-of-hours requests and
+immediate gas, carbon-monoxide, fire, or smoke hazards. The dental prompt is
+limited to new bookings and does not expose or modify existing appointment
+records. The restaurant prompt handles only menu, hours, address, and
+pickup-order questions and never processes payment or promises inventory. The
+prompt content is grouped into short sections and bullets for disclosure,
+business facts, services and prices, workflow, email follow-up, and safety
+rules. The public-data notice is intentionally a one-time opening reminder;
+after the caller acknowledges it or starts sharing details, the agent moves on
+unless the caller asks or appears confused.
 
 The allowlist also records an independently attached `send_email`,
 `send_email_reply`, or `send_resend_email` call as a separate `email_delivery`
@@ -178,11 +189,12 @@ customer data.
 
 ### Google Sheets lead-demo setup
 
-The seeded lead demo already has `Google_Sheets_lead_capture` attached. An
-administrator must connect the organization's Google account to that agent and
-set its spreadsheet id (an id or full Sheets URL) in the agent-tool settings.
-The target spreadsheet should contain a tab named `Lead submissions` with this
-header row in columns A:L:
+The seeded lead and restaurant demos already have
+`Google_Sheets_lead_capture` attached. An administrator must connect the
+organization's Google account to each agent and set its spreadsheet id (an id or
+full Sheets URL) in the agent-tool settings. The lead target should contain a
+tab named `Lead submissions`; the restaurant target should contain a tab named
+`Orders`. Both use this header row in columns A:L:
 
 ```text
 Submission ID | Captured at | Lead source | Caller name | Caller email | Caller phone | Service needed | Issue summary | Service address | Urgency | Preferred callback window | Status
@@ -193,7 +205,9 @@ Use `Lead submissions!A:L` as the append range and
 read-only submission-id check first, appends the row once, and reports a
 retryable provider error without automatically repeating a mutation. The
 general-purpose `Google_Sheets` tool remains a separate platform capability;
-it is deliberately not attached to this public agent.
+it is deliberately not attached to these public agents. For the restaurant
+demo, use `Orders!A:L` and `Orders!A:A`; the same idempotent, read-before-append
+contract applies.
 
 To show the sheet after a successful capture, set the demo agent's **Public
 result URL (optional)** field to the public share URL for this dedicated demo

@@ -44,10 +44,10 @@ const content: IndustryPageContent = {
         "When a caller needs a person, the AI offers a callback and alerts your team with the full context.",
     },
   ],
-  demoSlug: "copper-ridge-service-request",
-  demoName: "Jordan",
+  demoSlug: "verdi-table-restaurant",
+  demoName: "Sofia",
   demoBlurb:
-    "Try a live request with Jordan and watch the details land cleanly. Your version is trained on your menu, hours, and tables.",
+    "Try a live order or ask Sofia a menu question. Your version is trained on your menu, hours, and tables.",
   faqs: [
     {
       question: "What happens during a Friday night rush?",

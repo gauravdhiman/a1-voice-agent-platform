@@ -76,7 +76,7 @@ suite and live ingestion checks.
 3. Runs `./scripts/deploy.sh migrate --env-file .env.staging`; the lower-level
    GCP/OCI deployers repeat this idempotent gate before publishing a service.
 4. The GCP deployment's migration-gated bootstrap synchronizes code-owned
-   native tools and the two public demo agents before publishing images.
+   native tools and the three public demo agents before publishing images.
 5. Verifies the phone-number data migration.
 6. Optionally deploys configured staging Cloud Run services (if staging GCP vars are set).
 7. Optionally deploys staging voice-ws (if `STAGING_OCI_SSH_HOST`/`STAGING_OCI_SSH_KEY` are set).
@@ -125,7 +125,7 @@ unless the repository enforces immutable tags. It then:
    against production. The lower-level GCP/OCI deployers repeat the
    idempotent migration gate before publishing each service.
 3. The GCP deployment's migration-gated bootstrap synchronizes code-owned
-   native tools and the two public demo agents before publishing images.
+   native tools and the three public demo agents before publishing images.
 4. Deploys the checked-out ref to the production Cloud Run services.
 5. Deploys the checked-out ref to the production voice-ws VM when configured.
 

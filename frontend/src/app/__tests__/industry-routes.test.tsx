@@ -15,7 +15,7 @@ describe.each([
     name: "restaurants",
     Page: RestaurantsPage,
     heading: "Every call answered, every table filled",
-    demoHref: "/demo/copper-ridge-service-request",
+    demoHref: "/demo/verdi-table-restaurant",
   },
   {
     name: "salons",

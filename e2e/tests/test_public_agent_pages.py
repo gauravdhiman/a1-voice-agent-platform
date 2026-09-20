@@ -181,6 +181,51 @@ def test_public_demo_page_renders_description_and_visualizer_choice(
     expect(page.locator('[data-demo-visualizer="radial"]')).to_be_visible()
 
 
+def test_verdi_table_public_demo_page_renders_restaurant_script(
+    page: Page, base_url: str, step
+):
+    """The restaurant demo slug renders its public description and opener."""
+    demo_slug = "verdi-table-restaurant"
+    page.route(
+        re.compile(rf".*/api/v1/public/demo/{demo_slug}$"),
+        lambda route: _fulfill_json(
+            route,
+            {
+                "id": "00000000-0000-0000-0000-000000000106",
+                "name": "Sofia",
+                "demo_slug": demo_slug,
+                "persona": "Welcoming restaurant host",
+                "mission": "Answer menu questions and capture pickup orders.",
+                "tone": "Welcoming, concise, clear",
+                "public_description": (
+                    "Ask Sofia about Verdi Table's menu and hours, or place a "
+                    "dummy pickup order that gets captured in Google Sheets."
+                ),
+                "demo_calls_remaining": -1,
+                "demo_max_call_duration_seconds": 900,
+                "organization_id": "00000000-0000-0000-0000-000000000203",
+                "organization_name": "24x7 AI Demo Studio",
+            },
+        ),
+    )
+
+    step("Open the Verdi Table restaurant demo")
+    page.goto(f"{base_url}/demo/{demo_slug}")
+
+    expect(page.get_by_role("heading", name="Try Sofia live.")).to_be_visible()
+    expect(
+        page.get_by_role("main").get_by_text(
+            "Ask Sofia about Verdi Table's menu and hours, or place a dummy pickup order that gets captured in Google Sheets."
+        ).first
+    ).to_be_visible()
+    expect(page.get_by_text("What time do you close tonight?")).to_be_visible()
+    expect(
+        page.get_by_text(
+            "Sofia will answer questions or capture a confirmed dummy order."
+        )
+    ).to_be_visible()
+
+
 def test_exhausted_public_demo_page_disables_trial_call(
     page: Page, base_url: str, step
 ):

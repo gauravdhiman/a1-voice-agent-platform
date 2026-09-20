@@ -149,7 +149,7 @@ These do not require building a larger platform, but they must be proven before 
 
 ### Positioning
 
-The strongest wedge is missed-call recovery for single-location US SMBs, demonstrated with two concrete workflows: a dental booking and an HVAC service inquiry. That is more credible than presenting the product as a universal receptionist, emergency dispatcher, CRM, scheduler, and outbound follow-up system at launch.
+The strongest wedge is missed-call recovery for single-location US SMBs, demonstrated with three concrete workflows: a dental booking, an HVAC service inquiry, and a restaurant order plus Q&A flow. That is more credible than presenting the product as a universal receptionist, emergency dispatcher, CRM, scheduler, and outbound follow-up system at launch.
 
 ### User experience
 

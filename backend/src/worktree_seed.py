@@ -31,9 +31,10 @@ PLATFORM_ADMIN_EMAIL = "platform-admin@247ai.local"
 # worktree while each worktree still owns a separate database.
 DEMO_ORGANIZATION_ID = "c521e37a-5588-4906-9330-14364caa0868"
 # Compatibility alias for scripts/tests that still use the original fixture
-# name. Both public demos intentionally share this tenant.
+# name. All public demos intentionally share this tenant.
 STAGING_ORGANIZATION_ID = DEMO_ORGANIZATION_ID
 STAGING_AGENT_ID = "59252f36-255e-4e71-9250-c4ce3ac27eaa"
+RESTAURANT_AGENT_ID = "c28592aa-7b26-4ff9-8477-4aadf41526d8"
 # The first HVAC prototype used a second organization. The seed retires this
 # exact fixture-owned row without deleting provider state.
 LEGACY_HVAC_ORGANIZATION_ID = "e6bbd11b-2dbd-4d75-a0bc-2a3b17f79f17"
@@ -237,6 +238,96 @@ COPPER_RIDGE_INSTRUCTIONS_MARKDOWN = f"""
 {COPPER_RIDGE_ADDITIONAL_INSTRUCTIONS}
 """.strip()
 
+VERDI_TABLE_BUSINESS_CONTEXT = (
+    "Verdi Table is a fictional neighborhood restaurant used for this public demo."
+)
+
+VERDI_TABLE_ADDITIONAL_INSTRUCTIONS = f"""
+# Public-demo disclosure
+- At the beginning of the call, identify yourself as Sofia, a helpful AI host
+  for Verdi Table. Never imply that you are human. Use this opening:
+  "Thanks for calling Verdi Table. I'm Sofia, a helpful AI host. How may I help
+  you today?"
+- Mention the public-demo and dummy-data notice once near the beginning. Once the
+  caller acknowledges it or starts sharing details, do not repeat the notice
+  unless the caller asks or appears confused.
+- Ask callers to use dummy or secondary contact details and not to share payment
+  card numbers, passwords, or other unnecessary sensitive information.
+
+# Business context
+- Restaurant: {VERDI_TABLE_BUSINESS_CONTEXT}
+- Address: 2201 E Juniper Lane, Phoenix, AZ 85016.
+- Time zone: Arizona time.
+- Hours: Monday-Thursday, 11:00 AM-9:00 PM; Friday-Saturday, 11:00 AM-10:00 PM;
+  Sunday, 10:00 AM-3:00 PM.
+
+# Illustrative demo menu
+- Starters: Citrus-chili cauliflower, $9; roasted corn dip, $11.
+- Mains: Sonoran grain bowl, $16; ember chicken sandwich, $15; Verde pasta, $17.
+- Dessert: Prickly pear panna cotta, $8.
+- These are fictional demonstration menu items and prices, not binding quotes.
+  Share only these details when asked and do not invent substitutions, allergens,
+  availability, discounts, delivery promises, or another menu item.
+
+# Scope and safety
+- Answer basic questions about the fictional menu, hours, address, and the
+  restaurant's dine-in concept. Politely redirect unrelated questions.
+- Do not provide medical, allergy, legal, financial, or other professional
+  advice. If a caller reports a severe allergic reaction or another emergency,
+  direct them to emergency services; do not assess the emergency.
+- This demo captures a simple pickup-style order request. Do not process payment,
+  promise inventory, make a reservation, or claim that an order is confirmed by
+  the restaurant.
+
+# Order workflow
+- For an order request, collect the requested item names and quantities, the
+  caller's name, and a phone number. If the caller volunteers an email address,
+  collect it for an optional follow-up; do not require email for an order.
+- Do not call `capture_lead` for a menu or hours question. Call it exactly once
+  only for a caller-confirmed order after collecting the complete details.
+- Before the final confirmation, spell the caller's name one letter at a time
+  and ask the caller to confirm it. Read every item, quantity, name, and phone
+  digit back clearly, preserve corrections, and repeat the read-back until the
+  caller confirms it.
+- Set `user_confirmed` to true only after that explicit read-back confirmation.
+  Use the configured `capture_lead` tool once, mapping the item names and
+  quantities to the service-needed details and the remaining order context to
+  the issue summary. Never claim the order was captured unless the tool returns
+  a successful result. If the tool is unavailable or fails, explain that the
+  order request was not saved and provide the next safe step without pretending
+  it succeeded.
+
+# Email follow-up
+- If the caller has provided and confirmed an email address and an independent
+  email-sending tool is attached, invoke that tool automatically after a
+  successful `capture_lead` result unless the caller declines an email. Follow
+  that tool's own recipient or route rules and include only the confirmed order
+  details.
+- If the email tool confirms success, say that the confirmation email was sent or
+  accepted. If no email tool is attached or it reports a failure, say that the
+  order request was captured but the email confirmation was not sent. Never claim
+  an email was sent without a successful email-tool result.
+
+# Closing
+- After the order request is captured, mention that a summary of what was saved
+  appears on screen with a quick 1-to-5 rating, and invite the caller to tap it.
+  Do not ask for written feedback on the call.
+- End warmly once the caller has nothing more, without repeating the demo notice.
+""".strip()
+
+VERDI_TABLE_INSTRUCTIONS_MARKDOWN = f"""
+# Identity and Persona
+- You are Sofia, a warm and helpful AI host for Verdi Table, a fictional
+  neighborhood restaurant used for this public demo.
+- Your communication style is welcoming, concise, and clear.
+
+# Mission
+- Answer basic restaurant questions and capture a complete, caller-confirmed
+  pickup-style order request after reading the details back.
+
+{VERDI_TABLE_ADDITIONAL_INSTRUCTIONS}
+""".strip()
+
 CALENDAR_DEMO_DISABLED_FUNCTIONS = [
     "find_appointments",
     "update_appointment",
@@ -385,11 +476,42 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "demo_calls_remaining": DEMO_CALLS_REMAINING,
         "demo_max_call_duration_seconds": DEMO_MAX_CALL_DURATION_SECONDS,
     }
+    restaurant_agent = {
+        "id": RESTAURANT_AGENT_ID,
+        "organization_id": organization_id,
+        "name": "Sofia",
+        "phone_number": None,
+        "is_active": True,
+        "persona": (
+            "You are Sofia, a warm and helpful AI host for Verdi Table. "
+            "You answer basic restaurant questions and capture confirmed "
+            "pickup-style order requests."
+        ),
+        "tone": "welcoming, concise, clear",
+        "mission": (
+            "Answer common questions about Verdi Table and capture complete "
+            "caller-confirmed pickup-style order requests."
+        ),
+        "custom_instructions": VERDI_TABLE_ADDITIONAL_INSTRUCTIONS,
+        "instructions_markdown": VERDI_TABLE_INSTRUCTIONS_MARKDOWN,
+        "use_platform_credits": False,
+        "is_published_on_public_page": False,
+        "call_recording_enabled": True,
+        "preset_id": None,
+        "is_demo": True,
+        "demo_slug": "verdi-table-restaurant",
+        "public_description": (
+            "Ask Sofia about Verdi Table's menu and hours, or place a dummy "
+            "pickup order that gets captured in Google Sheets."
+        ),
+        "demo_calls_remaining": DEMO_CALLS_REMAINING,
+        "demo_max_call_duration_seconds": DEMO_MAX_CALL_DURATION_SECONDS,
+    }
     return {
         "organization": organization,
         "agent": appointment_agent,
         "organizations": [organization],
-        "agents": [appointment_agent, lead_agent],
+        "agents": [appointment_agent, lead_agent, restaurant_agent],
         "accounts": [
             {
                 "email": REGULAR_USER_EMAIL,
@@ -414,6 +536,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "agent_tools_by_agent": {
             STAGING_AGENT_ID: [APPOINTMENT_TOOL_NAME],
             HVAC_AGENT_ID: [LEAD_CAPTURE_TOOL_NAME],
+            RESTAURANT_AGENT_ID: [LEAD_CAPTURE_TOOL_NAME],
         },
         "agent_tool_configs": {
             STAGING_AGENT_ID: {
@@ -429,6 +552,13 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
                     "lead_source": "24x7 AI public demo",
                     "append_range": "Lead submissions!A:L",
                     "dedupe_range": "Lead submissions!A:A",
+                }
+            },
+            RESTAURANT_AGENT_ID: {
+                LEAD_CAPTURE_TOOL_NAME: {
+                    "lead_source": "24x7 AI public demo",
+                    "append_range": "Orders!A:L",
+                    "dedupe_range": "Orders!A:A",
                 }
             },
         },
@@ -447,15 +577,16 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "agent_tools_to_disable_by_agent": {
             STAGING_AGENT_ID: ["HubSpot_lead_capture"],
             HVAC_AGENT_ID: ["HubSpot_lead_capture"],
+            RESTAURANT_AGENT_ID: ["HubSpot_lead_capture"],
         },
         "retired_organization_ids": [LEGACY_HVAC_ORGANIZATION_ID],
     }
 
 
 def build_public_demo_records() -> dict[str, Any]:
-    """Build the deployment-safe records for the two public demo agents.
+    """Build the deployment-safe records for the public demo agents.
 
-    The local worktree seed owns both demo content and local-only test
+    The local worktree seed owns all demo content and local-only test
     accounts. Release environments need only the code-owned demo tenant,
     agents, and native tool links. An explicit field allowlist prevents future
     local fixture additions—especially credits, phone numbers, provider
@@ -898,7 +1029,7 @@ def sync_public_demo_fixtures(
     supabase_url: str,
     service_key: str,
 ) -> dict[str, Any]:
-    """Create or refresh the public demo tenant and both demo agents.
+    """Create or refresh the public demo tenant and all demo agents.
 
     This is an explicit deployment/bootstrap operation. It intentionally does
     not create Auth users, grant credits, or replace provider credentials. The

@@ -13,6 +13,7 @@ from backend.src.worktree_seed import (
     ORG_ADMIN_EMAIL,
     PLATFORM_ADMIN_EMAIL,
     REGULAR_USER_EMAIL,
+    RESTAURANT_AGENT_ID,
     STAGING_AGENT_ID,
     WORKTREE_TEST_PASSWORD,
     build_public_demo_records,
@@ -116,6 +117,9 @@ def test_seed_attaches_native_calendar_appointment_tool_without_auth_state() -> 
 
     assert records["agent_tools"] == ["Google_calendar_appointment"]
     assert records["agent_tools_by_agent"][HVAC_AGENT_ID] == [LEAD_CAPTURE_TOOL_NAME]
+    assert records["agent_tools_by_agent"][RESTAURANT_AGENT_ID] == [
+        LEAD_CAPTURE_TOOL_NAME
+    ]
     assert records["agent_tools_to_disable_by_agent"][HVAC_AGENT_ID] == [
         "HubSpot_lead_capture",
     ]
@@ -138,13 +142,20 @@ def test_seed_attaches_native_calendar_appointment_tool_without_auth_state() -> 
         "send_confirmation_email"
         not in records["agent_tool_configs"][HVAC_AGENT_ID][LEAD_CAPTURE_TOOL_NAME]
     )
+    assert records["agent_tool_configs"][RESTAURANT_AGENT_ID][
+        LEAD_CAPTURE_TOOL_NAME
+    ] == {
+        "lead_source": "24x7 AI public demo",
+        "append_range": "Orders!A:L",
+        "dedupe_range": "Orders!A:A",
+    }
 
 
-def test_seed_contains_two_public_demo_workflows() -> None:
-    """The isolated fixture exposes appointment and service-lead demos."""
+def test_seed_contains_three_public_demo_workflows() -> None:
+    """The isolated fixture exposes appointment, service, and order demos."""
     records = build_seed_records("calendar-contract")
 
-    assert len(records["agents"]) == 2
+    assert len(records["agents"]) == 3
     assert len(records["organizations"]) == 1
     assert {agent["organization_id"] for agent in records["agents"]} == {
         records["organization"]["id"]
@@ -152,6 +163,7 @@ def test_seed_contains_two_public_demo_workflows() -> None:
     assert {agent["demo_slug"] for agent in records["agents"]} == {
         "pleasant-pediatric-appointments",
         "copper-ridge-service-request",
+        "verdi-table-restaurant",
     }
     assert all(agent["demo_calls_remaining"] == -1 for agent in records["agents"])
     assert all(
@@ -159,7 +171,13 @@ def test_seed_contains_two_public_demo_workflows() -> None:
     )
     alex = next(agent for agent in records["agents"] if agent["name"] == "Alex")
     jordan = next(agent for agent in records["agents"] if agent["name"] == "Jordan")
-    assert alex["organization_id"] == jordan["organization_id"] == DEMO_ORGANIZATION_ID
+    sofia = next(agent for agent in records["agents"] if agent["name"] == "Sofia")
+    assert (
+        alex["organization_id"]
+        == jordan["organization_id"]
+        == sofia["organization_id"]
+        == DEMO_ORGANIZATION_ID
+    )
     assert (
         "never disclose, search for, reschedule, cancel, or modify"
         in alex["custom_instructions"].lower()
@@ -183,6 +201,18 @@ def test_seed_contains_two_public_demo_workflows() -> None:
     assert "email confirmation was not sent" in jordan_instructions
     assert "do not repeat the notice" in jordan_instructions
     assert "AI voice assistant" not in jordan["instructions_markdown"]
+    sofia_instructions = " ".join(sofia["custom_instructions"].split())
+    assert "Verdi Table" in sofia["instructions_markdown"]
+    assert "2201 E Juniper Lane" in sofia["instructions_markdown"]
+    assert "$16" in sofia["instructions_markdown"]
+    assert (
+        "Do not call `capture_lead` for a menu or hours question"
+        in sofia["custom_instructions"]
+    )
+    assert "capture_lead" in sofia_instructions
+    assert "spell the caller's name one letter at a time" in sofia_instructions
+    assert "email confirmation was not sent" in sofia_instructions
+    assert "quick 1-to-5 rating" in sofia_instructions
     assert records["retired_organization_ids"] == [LEGACY_HVAC_ORGANIZATION_ID]
 
 
@@ -206,6 +236,7 @@ def test_release_demo_records_exclude_local_and_operator_state() -> None:
     assert {agent["demo_slug"] for agent in records["agents"]} == {
         "pleasant-pediatric-appointments",
         "copper-ridge-service-request",
+        "verdi-table-restaurant",
     }
 
 
@@ -227,10 +258,11 @@ def test_public_demo_sync_only_writes_code_owned_fixture_records() -> None:
     records = build_public_demo_records()
     upsert_org.assert_called_once_with(client, records["organization"])
     retire_orgs.assert_called_once_with(client, [LEGACY_HVAC_ORGANIZATION_ID])
-    assert upsert_agent.call_count == 2
+    assert upsert_agent.call_count == 3
     assert result["demo_slugs"] == [
         "pleasant-pediatric-appointments",
         "copper-ridge-service-request",
+        "verdi-table-restaurant",
     ]
     assert result["organization_id"] == DEMO_ORGANIZATION_ID
 

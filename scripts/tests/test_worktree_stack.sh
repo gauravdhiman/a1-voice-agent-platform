@@ -69,6 +69,7 @@ assert_contains "$config_output" "regular-user@247ai.local"
 assert_contains "$config_output" "org-admin@247ai.local"
 assert_contains "$config_output" "platform-admin@247ai.local"
 assert_contains "$config_output" "Password123!"
+assert_contains "$config_output" "/demo/verdi-table-restaurant"
 
 config_file="$state_dir/supabase-project/supabase/config.toml"
 app_env="$state_dir/app.env"
