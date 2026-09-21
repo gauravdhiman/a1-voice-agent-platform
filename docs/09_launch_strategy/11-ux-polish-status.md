@@ -12,13 +12,14 @@
   value props + form). Same validation, same contract, new layout.
 - **Branded 404** (`not-found.tsx`): "This page didn't pick up" + Home /
   Request-demo paths.
-- **Restaurants page removed** (route, sitemap, card link, tests): it
-  pointed at Alex, the dental agent — actively harmful. Git history keeps
-  the file for its agent's return. Launch verticals: dental + HVAC only.
+- **Restaurants page restored** with a dedicated Verdi Table demo link. It now
+  points callers to Sofia's restaurant order and Q&A workflow instead of using
+  the unrelated dental or HVAC demos. Launch verticals: dental + HVAC +
+  restaurants.
 - **Demo feedback loop closed** (was: neither agent-prompted nor form):
   outcome page carries a one-click 1–5 `DemoFeedback` widget emitting
   `demo_feedback {demo_slug, rating}` to PostHog (rating-only: no PII,
-  no moderation surface); both demo seed agents gained a `# Closing`
+  no moderation surface); all three demo seed agents gained a `# Closing`
   section pointing callers at the on-screen rating. Prod demo agents
   need the same closing line mirrored (founder ops, tracked).
 

@@ -63,6 +63,13 @@ const TRY_SCRIPTS: Record<string, { lines: string[]; note: string }> = {
     ],
     note: "Jordan will capture the full request for dispatch.",
   },
+  "verdi-table-restaurant": {
+    lines: [
+      "What time do you close tonight?",
+      "I'd like two Sonoran grain bowls for pickup.",
+    ],
+    note: "Sofia will answer questions or capture a confirmed dummy order.",
+  },
 };
 
 function tryScriptForSlug(slug: string): { lines: string[]; note: string } {

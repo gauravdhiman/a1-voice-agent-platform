@@ -2,7 +2,7 @@
 # Synchronize code-owned release data for a selected environment.
 #
 # This is an explicit bootstrap step, not an application-startup hook. It
-# publishes the native tool catalog and the two public demo agents together so
+# publishes the native tool catalog and the three public demo agents together so
 # a release cannot expose demo pages whose required tools are missing.
 set -euo pipefail
 

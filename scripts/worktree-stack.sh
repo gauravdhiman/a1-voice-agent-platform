@@ -355,6 +355,7 @@ derive_identity() {
   TEST_AGENT_ID="59252f36-255e-4e71-9250-c4ce3ac27eaa"
   TEST_APPOINTMENT_DEMO_SLUG="pleasant-pediatric-appointments"
   TEST_LEAD_DEMO_SLUG="copper-ridge-service-request"
+  TEST_RESTAURANT_DEMO_SLUG="verdi-table-restaurant"
 }
 
 write_metadata() {
@@ -700,6 +701,7 @@ show_test_accounts() {
   echo "Demo URLs:"
   echo "  appointment: http://localhost:${APP_FRONTEND_PORT}/demo/${TEST_APPOINTMENT_DEMO_SLUG}"
   echo "  lead capture: http://localhost:${APP_FRONTEND_PORT}/demo/${TEST_LEAD_DEMO_SLUG}"
+  echo "  restaurant: http://localhost:${APP_FRONTEND_PORT}/demo/${TEST_RESTAURANT_DEMO_SLUG}"
   echo "Test accounts (all use password ${TEST_PASSWORD}):"
   echo "  regular user: ${REGULAR_USER_EMAIL}"
   echo "  org admin: ${ORG_ADMIN_EMAIL}"

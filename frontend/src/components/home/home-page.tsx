@@ -409,7 +409,8 @@ export function HomePage() {
             </h2>
             <p>
               Talk to a demo agent right now. Book a visit. Request a repair.
-              Hear exactly how your after-hours caller would be treated.
+              Place an order. Hear exactly how your after-hours caller would be
+              treated.
             </p>
           </div>
           <div className={styles.demoGrid}>
@@ -471,6 +472,35 @@ export function HomePage() {
                 </span>
               </div>
             </Link>
+            <Link
+              href="/demo/verdi-table-restaurant"
+              className={styles.demoCard}
+            >
+              <div className={styles.demoArt} aria-hidden="true">
+                <div className={styles.dotReceiver} />
+                <span>SOFIA / RESTAURANT ORDERS</span>
+                <ArrowUpRight />
+              </div>
+              <div className={styles.demoBody}>
+                <p className={styles.eyebrow}>THE NEXT ORDER</p>
+                <h3>
+                  In the weeds.
+                  <br />
+                  Still serving the next table.
+                </h3>
+                <p>
+                  Ask Sofia about the menu or place a pickup order. Items,
+                  quantities, and contact details captured while your team
+                  keeps the room moving.
+                </p>
+                <span className={styles.demoLink}>
+                  <span className={styles.playCircle}>
+                    <Play size={11} fill="currentColor" />
+                  </span>{" "}
+                  Talk to Sofia <ArrowUpRight size={17} />
+                </span>
+              </div>
+            </Link>
           </div>
           <p className={styles.demoNote}>
             Interactive demos use example businesses. Your agent is configured
@@ -502,8 +532,9 @@ export function HomePage() {
             ))}
           </div>
           <p className={styles.demoNote}>
-            Dedicated guides for dental and home services are live today. Every
-            other trade gets a concierge setup built around how you work.
+            Dedicated guides for dental, home services, and restaurants are live
+            today. Every other trade gets a concierge setup built around how you
+            work.
           </p>
         </section>
 
