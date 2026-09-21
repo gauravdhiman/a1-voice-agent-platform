@@ -316,6 +316,20 @@
   gap: 16px;
   flex-wrap: wrap;
 }
+.footerAttribution {
+  color: var(--public-muted);
+  font-size: 10px;
+}
+.footerAttribution a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--public-accent);
+}
+.footerAttribution a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 /* Shared typography primitives. */
 .eyebrow {
@@ -365,6 +379,50 @@
   border: 1px solid var(--line);
   border-radius: 7px;
 }
+.outcomeGrid > .panel:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* Quiet cross-sell for businesses that need more than voice automation. */
+.secondaryCta {
+  border-top: 1px solid var(--line);
+  padding: 52px 6.5%;
+}
+.secondaryCtaInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+  gap: 34px;
+  align-items: end;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 30px 34px;
+  background: color-mix(in srgb, var(--panel) 72%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.secondaryCtaTitle {
+  max-width: 650px;
+  margin-top: 16px;
+  font-size: clamp(28px, 3.2vw, 46px);
+}
+.secondaryCtaCopy {
+  max-width: 390px;
+  color: var(--public-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.secondaryCtaLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  color: var(--public-accent);
+  font-size: 13px;
+}
+.secondaryCtaLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 .primary {
   display: inline-flex;
   justify-content: center;
@@ -403,6 +461,79 @@
 }
 .textLink:hover {
   color: var(--public-accent);
+}
+
+/* Research proof strip used on vertical landing pages. Keep the numbers
+ * legible, compact, and explicitly qualified so they support the story
+ * without reading like a performance guarantee. */
+.proofSection {
+  border-top: 1px solid var(--line);
+  padding: 64px 6.5%;
+}
+.proofInner {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.proofHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.8fr);
+  gap: 48px;
+  align-items: end;
+}
+.proofTitle {
+  max-width: 620px;
+  margin-top: 20px;
+  font-size: clamp(30px, 3.6vw, 52px);
+}
+.proofDescription {
+  max-width: 390px;
+  color: var(--public-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.proofGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 44px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--line);
+}
+.proofPoint {
+  min-height: 190px;
+  padding: 28px;
+  background: var(--panel);
+}
+.proofValue {
+  display: block;
+  color: var(--public-accent);
+  font-size: clamp(34px, 4.5vw, 60px);
+  font-weight: 400;
+  letter-spacing: -0.07em;
+  line-height: 1;
+}
+.proofPoint p {
+  max-width: 220px;
+  margin-top: 18px;
+  color: var(--public-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.proofSource {
+  margin-top: 17px;
+  color: var(--public-muted);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  line-height: 1.8;
+}
+.proofSource a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--public-accent) !important;
 }
 
 /* Split layout for request-demo and auth pages. */
@@ -494,6 +625,32 @@
   }
   .footerLinks {
     margin-left: 0;
+  }
+  .secondaryCta {
+    padding: 44px 7%;
+  }
+  .secondaryCtaInner {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 26px 24px;
+  }
+  .proofSection {
+    padding: 52px 7%;
+  }
+  .proofHeader {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .proofTitle {
+    margin-top: 18px;
+  }
+  .proofGrid {
+    grid-template-columns: 1fr;
+    margin-top: 30px;
+  }
+  .proofPoint {
+    min-height: auto;
+    padding: 25px;
   }
 }
 

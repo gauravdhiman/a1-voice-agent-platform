@@ -48,12 +48,15 @@ type RequestDemoValues = z.infer<typeof requestDemoSchema>;
 const VERTICALS = [
   { value: "dental", label: "Dental / medical practice" },
   { value: "hvac", label: "HVAC / home services" },
+  { value: "plumbing", label: "Plumbing / emergency home services" },
+  { value: "auto-repair", label: "Independent auto repair" },
+  { value: "veterinary", label: "Veterinary clinic" },
   { value: "restaurant", label: "Restaurant / hospitality" },
   { value: "other", label: "Something else" },
 ];
 
 /**
- * Public interest form — the front door of the controlled-SaaS funnel.
+ * Public interest form - the front door of the controlled-SaaS funnel.
  *
  * Unauthenticated visitors describe their business; the backend stores the
  * submission privately and the founder follows up with a concierge invite.
@@ -127,7 +130,7 @@ export default function RequestDemoPage() {
                 }}
               >
                 Tell us about your business and we will set everything up with
-                you - your number, your calendar, your words. Usually live
+                you: your number, your calendar, and your words. Usually live
                 within 48 hours.
               </p>
               <ul className={pt.splitPoints}>
@@ -170,7 +173,7 @@ export default function RequestDemoPage() {
                 </h1>
                 <p className="text-muted-foreground mt-2">
                   Tell us about your business. We will set up your AI front desk
-                  with you — usually live within 48 hours.
+                  with you, usually live within 48 hours.
                 </p>
               </div>
 
@@ -186,7 +189,7 @@ export default function RequestDemoPage() {
                         Request received
                       </h2>
                       <p className="text-muted-foreground">
-                        Thanks — we will reach out within one business day to
+                        Thanks, we will reach out within one business day to
                         schedule your setup call.
                       </p>
                     </div>

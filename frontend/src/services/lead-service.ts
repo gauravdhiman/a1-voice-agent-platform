@@ -16,7 +16,7 @@ export interface InterestLeadData {
   email: string;
   /** Callback number. */
   phone?: string;
-  /** Business vertical (dental, hvac, restaurant). */
+  /** Business vertical slug selected on the public request form. */
   vertical?: string;
   /** What the business needs. */
   message?: string;

@@ -14,6 +14,14 @@ const content: IndustryPageContent = {
   demoSlug: "pleasant-pediatric-appointments",
   demoName: "Alex",
   demoBlurb: "Try the live demo.",
+  proof: {
+    eyebrow: "THE CALL, BY THE NUMBERS",
+    title: "The next step should be easy.",
+    description: "A compact proof section.",
+    points: [{ value: "43%", label: "of calls are leads." }],
+    sourceNote: "Directional benchmark.",
+    sources: [{ label: "Research", href: "https://example.com/research" }],
+  },
   faqs: [{ question: "What does it cost?", answer: "Pilots from $79/mo." }],
 };
 
@@ -27,14 +35,60 @@ describe("IndustryPage", () => {
       }),
     ).not.toBeNull();
     expect(screen.getByText("Missed after-hours calls.")).not.toBeNull();
-    const demoLinks = screen.getAllByRole("link", { name: /talk to alex now/i });
+    const demoLinks = screen.getAllByRole("link", {
+      name: /talk to alex now/i,
+    });
     expect(demoLinks.length).toBeGreaterThan(0);
-    expect(
-      demoLinks[0].getAttribute("href"),
-    ).toBe("/demo/pleasant-pediatric-appointments");
+    expect(demoLinks[0].getAttribute("href")).toBe(
+      "/demo/pleasant-pediatric-appointments",
+    );
     expect(
       screen.getAllByRole("link", { name: /request a demo/i }).length,
     ).toBeGreaterThan(0);
+    expect(screen.getByText("43%")).not.toBeNull();
+    expect(
+      screen.getByRole("link", { name: /research/i }).getAttribute("href"),
+    ).toBe("https://example.com/research");
+    const toolsHeading = screen.getByRole("heading", {
+      name: /your existing business tools/i,
+    });
+    expect(toolsHeading).toBeTruthy();
+    expect(toolsHeading.parentElement?.parentElement?.className).toContain(
+      "outcomeGrid",
+    );
+    expect(
+      screen
+        .getAllByRole("link", { name: /explore custom ai solutions/i })
+        .some((link) => link.getAttribute("href") === "https://cognients.com"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("link", {
+          name: /visit cognitive entities llc/i,
+        })
+        .getAttribute("href"),
+    ).toBe("https://cognients.com");
+  });
+
+  it("uses a request-workflow CTA when a vertical has no public demo", () => {
+    const noDemoContent: IndustryPageContent = {
+      ...content,
+      demoSlug: undefined,
+      demoName: undefined,
+      demoBlurb: "No public demo yet.",
+    };
+
+    render(<IndustryPage content={noDemoContent} />);
+
+    expect(
+      screen
+        .getByRole("link", { name: /request this workflow/i })
+        .getAttribute("href"),
+    ).toBe("/request-demo");
+    expect(
+      screen.queryByRole("link", { name: /talk to alex now/i }),
+    ).toBeNull();
+    expect(screen.getByText("No public demo yet.")).not.toBeNull();
   });
 
   it("emits FAQ JSON-LD for search engines", () => {

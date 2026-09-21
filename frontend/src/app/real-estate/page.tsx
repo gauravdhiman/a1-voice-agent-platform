@@ -1,22 +1,29 @@
-import type { Metadata } from "next";
 import {
   IndustryPage,
   type IndustryPageContent,
 } from "@/components/seo/industry-page";
-import { SITE_URL } from "@/lib/site-config";
+import { createMarketingMetadata } from "@/lib/marketing-seo";
 
-export const metadata: Metadata = {
-  title: "AI Receptionist for Real Estate | Every Enquiry Answered",
+export const metadata = createMarketingMetadata({
+  path: "/real-estate-lead-capture",
+  title: "AI Voice Agent for Real Estate Lead Capture",
   description:
-    "Speed wins listings. 24x7 AI answers every buyer and seller call, books viewings straight to your calendar, and captures enquiry details for follow-up. Live in 48 hours.",
-  alternates: { canonical: `${SITE_URL}/real-estate` },
-};
+    "AI voice agent for real estate teams that answers buyer and seller calls, captures lead details, answers approved listing questions, and requests or books viewings.",
+  keywords: [
+    "AI voice agent for real estate",
+    "real estate lead capture",
+    "real estate answering service",
+    "real estate viewing booking",
+    "buyer and seller lead qualification",
+  ],
+});
 
 const content: IndustryPageContent = {
   slug: "real-estate",
+  label: "REAL ESTATE",
   headline: "Every enquiry answered, every viewing booked",
   subhead:
-    "24x7 AI picks up when you are at a closing, on a viewing, or off for the day. It answers listing questions, books viewings to your calendar, and captures every buyer and seller detail for follow-up.",
+    "24x7 AI picks up when you are at a closing, on a viewing, or off for the day. It answers listing questions, requests viewings through your scheduling system, and captures every buyer and seller detail for follow-up.",
   pains: [
     "A hot buyer calls during your viewing and reaches voicemail. By callback time they have another agent.",
     "Weekend enquiries pile up as texts you answer late on Sunday night.",
@@ -24,9 +31,9 @@ const content: IndustryPageContent = {
   ],
   outcomes: [
     {
-      title: "Viewings booked to your calendar",
+      title: "Viewings booked where your team works",
       description:
-        "Offers real windows, confirms the visit with the caller, and records the booking where your day is planned.",
+        "Offers real windows, confirms the visit with the caller, and records the booking in the calendar or scheduling system your team uses.",
     },
     {
       title: "Buyer and seller details, captured whole",
@@ -47,7 +54,40 @@ const content: IndustryPageContent = {
   demoSlug: "copper-ridge-service-request",
   demoName: "Jordan",
   demoBlurb:
-    "Try a live enquiry with Jordan and watch the details land cleanly. Your version is trained on your listings and patches.",
+    "No public real-estate demo yet. Request the workflow and we will shape it around your listings, viewing calendar, and qualification questions.",
+  proof: {
+    eyebrow: "THE LOCAL ENQUIRY, BY THE NUMBERS",
+    title: "A missed enquiry is a lead with nowhere to go.",
+    description:
+      "Real estate is a fast-response business. The first version should focus on one safe outcome: capture intent, answer approved listing questions, and book or request the next human step.",
+    points: [
+      {
+        value: "Up to 85%",
+        label: "of unanswered callers may not call back.",
+      },
+      {
+        value: "42%",
+        label: "of phone leads convert on the call across industries.",
+      },
+      {
+        value: "9%",
+        label:
+          "was CallRail's missed-call rate for real estate in its SMB dataset.",
+      },
+    ],
+    sourceNote:
+      "Directional benchmarks from a broad call dataset. Validate the response-time story with local agents before building a dedicated demo.",
+    sources: [
+      {
+        label: "CallRail SMB benchmark",
+        href: "https://www.callrail.com/blog/callrail-releases-benchmark-report",
+      },
+      {
+        label: "Invoca 2026 benchmarks",
+        href: "https://www.invoca.com/reports/the-invoca-lead-conversion-benchmarks-report-2026",
+      },
+    ],
+  },
   faqs: [
     {
       question: "Can it tell a hot buyer from a casual browser?",
@@ -57,7 +97,7 @@ const content: IndustryPageContent = {
     {
       question: "How do new listings reach the agent?",
       answer:
-        "Share the listing sheet or details any time. We update prices, open-home times, and availability with you, then run test calls until you approve how it sounds.",
+        "Share your listing details or source of truth any time. We update prices, open-home times, and availability with you, then run test calls until you approve how it sounds.",
     },
     {
       question: "How long does setup take?",
