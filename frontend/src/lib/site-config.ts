@@ -25,6 +25,9 @@ export const SITE_DESCRIPTION =
 /** Canonical public marketing site URL (production). */
 export const SITE_URL = "https://www.247ai.live";
 
+/** External destination for the broader custom AI solutions practice. */
+export const SITE_AI_SERVICES_URL = "https://cognients.com";
+
 /** Hostname used for all canonical public URLs. */
 export const SITE_HOST = new URL(SITE_URL).hostname;
 

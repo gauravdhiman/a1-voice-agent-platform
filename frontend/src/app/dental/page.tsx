@@ -1,26 +1,33 @@
-import type { Metadata } from "next";
 import {
   IndustryPage,
   type IndustryPageContent,
 } from "@/components/seo/industry-page";
-import { SITE_URL } from "@/lib/site-config";
+import { createMarketingMetadata } from "@/lib/marketing-seo";
 
-export const metadata: Metadata = {
-  title: "AI Receptionist for Dental Practices",
+export const metadata = createMarketingMetadata({
+  path: "/dental-appointment-booking",
+  title: "AI Receptionist for Dental Appointment Booking",
   description:
-    "Never miss another patient call. 24x7 AI answers after hours, books cleanings and exams to your calendar, and captures callback requests — live in 48 hours.",
-  alternates: { canonical: `${SITE_URL}/dental` },
-};
+    "AI receptionist for dental practices that answers patient calls, books cleanings and exams, captures new-patient details, and handles after-hours requests. Live in 48 hours.",
+  keywords: [
+    "AI receptionist for dentists",
+    "dental appointment booking",
+    "dental answering service",
+    "new patient phone intake",
+    "after-hours dental calls",
+  ],
+});
 
 const content: IndustryPageContent = {
   slug: "dental",
+  label: "DENTAL PRACTICES",
   headline: "Your dental practice, always answering",
   subhead:
-    "24x7 AI picks up every patient call — after hours, weekends, and busy Mondays — books cleanings and exams straight to your calendar, and confirms so fewer patients no-show.",
+    "24x7 AI picks up every patient call after hours, on weekends, and during busy Mondays. It books cleanings and exams to the calendar or scheduling system your practice uses, then confirms so fewer patients no-show.",
   pains: [
     "After-hours callers hear voicemail and book with the practice down the street.",
     "Your front desk spends mornings playing phone tag instead of caring for patients in chairs.",
-    "No-shows eat 15% of your day because reminders depend on someone remembering to send them.",
+    "A caller who cannot reach the front desk has no reason to wait for a callback before trying the next practice.",
   ],
   outcomes: [
     {
@@ -31,12 +38,12 @@ const content: IndustryPageContent = {
     {
       title: "Cleanings and exams, booked to your calendar",
       description:
-        "Checks real availability, confirms the slot with the caller, and writes the event to Google Calendar.",
+        "Checks real availability, confirms the slot with the caller, and writes the event to the scheduling system your practice uses, such as Google Calendar or Microsoft Outlook.",
     },
     {
       title: "Questions answered instantly",
       description:
-        "Hours, location, services, insurance basics — answered from your business info, day or night.",
+        "Hours, location, services, and insurance basics, answered from your business info, day or night.",
     },
     {
       title: "Callbacks, never dead ends",
@@ -47,12 +54,40 @@ const content: IndustryPageContent = {
   demoSlug: "pleasant-pediatric-appointments",
   demoName: "Alex",
   demoBlurb:
-    "Try the live demo: book a dental visit with Alex and watch the calendar update.",
+    "Try the live demo: book a dental visit with Alex and watch the example calendar update. In a real setup, we connect the workflow to the scheduling tools your practice already uses.",
+  proof: {
+    eyebrow: "THE HEALTHCARE CALL, BY THE NUMBERS",
+    title: "The patient is already asking for the next step.",
+    description:
+      "Healthcare callers are often closer to booking than a simple call count suggests. Answering matters, but guiding the conversation to a safe appointment or callback matters more.",
+    points: [
+      {
+        value: "54%",
+        label: "of healthcare callers speak with a person.",
+      },
+      {
+        value: "43%",
+        label: "of answered healthcare calls are leads.",
+      },
+      {
+        value: "45%",
+        label: "of healthcare leads convert on the call.",
+      },
+    ],
+    sourceNote:
+      "Directional averages from Invoca's 2026 healthcare call dataset, not a promise of your results.",
+    sources: [
+      {
+        label: "Invoca healthcare benchmarks",
+        href: "https://www.invoca.com/reports/the-invoca-healthcare-lead-conversion-benchmarks-report-2026",
+      },
+    ],
+  },
   faqs: [
     {
       question: "Do patients know they are talking to an AI?",
       answer:
-        "The agent introduces itself as your practice's AI receptionist. In testing, most callers simply get their booking done — the experience feels like a capable front desk, not a phone tree.",
+        "The agent introduces itself as your practice's AI receptionist, answers within the scope you approve, and offers a human callback when the request needs your team.",
     },
     {
       question: "What happens when a caller needs a real person?",
@@ -62,7 +97,7 @@ const content: IndustryPageContent = {
     {
       question: "How long does setup take?",
       answer:
-        "We configure your number, calendar, hours, and services with you on a setup call, run test bookings until you approve, and go live — usually within 48 hours.",
+        "We configure your number, calendar or scheduling system, hours, and services with you on a setup call, run test bookings until you approve, and go live, usually within 48 hours.",
     },
     {
       question: "What does it cost?",

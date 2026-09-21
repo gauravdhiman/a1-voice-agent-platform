@@ -1,22 +1,29 @@
-import type { Metadata } from "next";
 import {
   IndustryPage,
   type IndustryPageContent,
 } from "@/components/seo/industry-page";
-import { SITE_URL } from "@/lib/site-config";
+import { createMarketingMetadata } from "@/lib/marketing-seo";
 
-export const metadata: Metadata = {
-  title: "AI Receptionist for HVAC & Home Services",
+export const metadata = createMarketingMetadata({
+  path: "/hvac-service-call-answering",
+  title: "AI Receptionist for HVAC Service Calls",
   description:
-    "Stop losing after-hours jobs to voicemail. 24x7 AI triages service calls, books jobs to your calendar, and flags emergencies — live in 48 hours.",
-  alternates: { canonical: `${SITE_URL}/hvac` },
-};
+    "AI receptionist for HVAC and home-service businesses that answers service calls, captures job details, follows emergency triage rules, and books or routes the next step.",
+  keywords: [
+    "AI receptionist for HVAC",
+    "HVAC answering service",
+    "HVAC service call booking",
+    "home-services call answering",
+    "HVAC lead capture",
+  ],
+});
 
 const content: IndustryPageContent = {
   slug: "hvac",
+  label: "HVAC AND HOME SERVICES",
   headline: "Every service call answered, every job captured",
   subhead:
-    "24x7 AI picks up when your techs are on roofs and your office is closed — triages the issue, books the job, and flags true emergencies to your team.",
+    "24x7 AI picks up when your techs are on roofs and your office is closed. It triages the issue, books the job, and flags true emergencies to your team.",
   pains: [
     "Emergency calls at 9pm go to voicemail while the customer calls your competitor.",
     "Your dispatcher spends the day re-typing requests instead of routing techs.",
@@ -26,7 +33,7 @@ const content: IndustryPageContent = {
     {
       title: "Service requests, captured completely",
       description:
-        "Collects name, address, unit symptoms, and availability — then records it all in Google Sheets for dispatch.",
+        "Collects name, address, unit symptoms, and availability, then sends the request to the system your team uses, such as a CRM, dispatch platform, or spreadsheet.",
     },
     {
       title: "Urgent vs routine, triaged on the call",
@@ -47,12 +54,40 @@ const content: IndustryPageContent = {
   demoSlug: "copper-ridge-service-request",
   demoName: "Jordan",
   demoBlurb:
-    "Try the live demo: request HVAC service with Jordan and watch the request land in Sheets.",
+    "Try the live demo: request HVAC service with Jordan and watch the example request land in a spreadsheet. In a real setup, we connect it to the tools your dispatch team already uses.",
+  proof: {
+    eyebrow: "THE HOME-SERVICE CALL, BY THE NUMBERS",
+    title: "Speed is part of the service.",
+    description:
+      "When the office is closed or the crew is out, the first response can decide who gets the job. The agent handles the first safe step, then escalates what needs a person.",
+    points: [
+      {
+        value: "52%",
+        label: "of home-services callers speak with a person.",
+      },
+      {
+        value: "45%",
+        label: "of home-services leads convert on the call.",
+      },
+      {
+        value: "55%",
+        label: "of home-services businesses do not ask leads to book the job.",
+      },
+    ],
+    sourceNote:
+      "Directional averages from Invoca's 2026 home-services call dataset, not a promise of your results.",
+    sources: [
+      {
+        label: "Invoca home-services benchmarks",
+        href: "https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026",
+      },
+    ],
+  },
   faqs: [
     {
       question: "Can it tell an emergency from a routine call?",
       answer:
-        "Yes — you define the triage rules during setup (no-heat, gas smell, water leaks), and the agent follows them on every call, flagging emergencies for your team.",
+        "Yes. You define the triage rules during setup, such as no-heat, gas smell, or water leaks, and the agent follows them on every call, flagging emergencies for your team.",
     },
     {
       question: "What happens when a caller needs a real person?",
@@ -62,7 +97,7 @@ const content: IndustryPageContent = {
     {
       question: "How long does setup take?",
       answer:
-        "We configure your number, service area, triage rules, and calendar with you on a setup call, run test calls until you approve, and go live — usually within 48 hours.",
+        "We configure your number, service area, triage rules, and calendar or dispatch system with you on a setup call, run test calls until you approve, and go live, usually within 48 hours.",
     },
     {
       question: "What does it cost?",

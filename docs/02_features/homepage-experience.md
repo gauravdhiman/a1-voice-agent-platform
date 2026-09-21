@@ -5,7 +5,9 @@ distinct use cases: resolving routine questions on the call, booking
 appointments that grow revenue, and capturing after-hours leads with instant
 alerts. Messaging addresses business owners. Example conversations and booking
 outcomes are labeled as illustrations; the page does not invent customer
-testimonials, live activity, or performance statistics.
+testimonials or live activity. The proof strip uses explicitly sourced,
+directional research benchmarks and labels them as not being a promise of
+customer results.
 
 ## Scope and entry points
 
@@ -18,14 +20,28 @@ testimonials, live activity, or performance statistics.
 - Alex, Jordan, and Sofia retain their appointment, service-request, and
   restaurant-order demo routes. The homepage itself does not request microphone
   access or start calls.
-- Industry tiles link to dedicated guides: `/dental`, `/hvac`,
-  `/restaurants`, `/salons`, and `/real-estate`. The general tile links to
-  `/request-demo` — the section says so explicitly.
+- The proof strip leads with three simple signals: up to 85% of unanswered
+  callers may not call back (CallRail), 42% of phone leads convert on the call
+  (Invoca), and 56% of callers speak with a person (Invoca). Each source is
+  linked in the page and the copy qualifies the numbers as directional.
+- Industry tiles link to descriptive canonical guides: `/dental-appointment-booking`,
+  `/hvac-service-call-answering`, `/restaurant-order-taking`,
+  `/plumbing-service-requests`, `/auto-repair-service-booking`,
+  `/veterinary-appointment-booking`, `/salon-appointment-booking`, and
+  `/real-estate-lead-capture`. The former short paths remain permanent
+  redirects for compatibility. The plumbing, auto-repair, veterinary, salon,
+  and real-estate pages use a request-workflow CTA until a matching public demo
+  is available. The general tile links to `/request-demo`.
 - The journey copy names tool categories ("your business calendar", "your
-  records"), never specific vendors. Specific tools are named only in the
-  `#integrations` section: business calendar, email, records and CRM, your
-  business number, your website embed, and the rest of the visitor's stack
-  (connected during concierge setup).
+  records"). The integrations section and relevant industry proof/demo copy
+  may give examples such as Google Calendar, Microsoft Outlook, Google Sheets,
+  or HubSpot, while making clear the connection is configurable around the
+  visitor's existing stack.
+- The integrations section explicitly welcomes custom business-tool
+  connections. A quiet "beyond voice AI" panel after the main pricing CTA
+  links to the broader custom-AI-solutions practice without competing with the
+  voice-agent conversion path. The footer carries the same secondary
+  attribution link.
 - Pricing retains the existing concierge-pilot positioning and $79 starting
   monthly-plan copy. There is no new checkout or independently maintained plan table.
 

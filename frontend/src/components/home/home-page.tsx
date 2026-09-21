@@ -23,7 +23,11 @@ import {
   MoveUpRight,
   Plug,
 } from "lucide-react";
-import { SITE_NAME, SITE_SALES_EMAIL } from "@/lib/site-config";
+import {
+  SITE_AI_SERVICES_URL,
+  SITE_NAME,
+  SITE_SALES_EMAIL,
+} from "@/lib/site-config";
 import { usePublicTheme } from "@/components/public-theme/public-theme-context";
 import { ThemeSwitch } from "@/components/public-theme/theme-switch";
 import { ParticleField } from "./particle-field";
@@ -47,39 +51,59 @@ const industries = [
   {
     name: "Dental & medical",
     detail: "New-patient intake, cleanings and exams booked, even after hours.",
-    href: "/dental",
+    href: "/dental-appointment-booking",
     number: "01",
   },
   {
     name: "HVAC, plumbing & roofing",
     detail: "Every service call captured while your crew is out on site.",
-    href: "/hvac",
+    href: "/hvac-service-call-answering",
     number: "02",
   },
   {
     name: "Restaurants & cafés",
     detail:
       "Reservations, party bookings and order questions, handled mid-rush.",
-    href: "/restaurants",
+    href: "/restaurant-order-taking",
     number: "03",
   },
   {
-    name: "Salons, spas & clinics",
-    detail: "Chairs filled with bookings and reminders that cut no-shows.",
-    href: "/salons",
+    name: "Plumbing & emergency home services",
+    detail:
+      "Urgency, service area and job details captured while the crew is out.",
+    href: "/plumbing-service-requests",
     number: "04",
   },
   {
-    name: "Real estate & local services",
-    detail: "Every enquiry answered, viewings and quotes booked on the spot.",
-    href: "/real-estate",
+    name: "Independent auto repair",
+    detail:
+      "Vehicle details captured and service appointments requested on the call.",
+    href: "/auto-repair-service-booking",
     number: "05",
+  },
+  {
+    name: "Veterinary clinics",
+    detail: "Routine visits moving while your team cares for patients.",
+    href: "/veterinary-appointment-booking",
+    number: "06",
+  },
+  {
+    name: "Salons, spas & clinics",
+    detail: "Chairs filled with bookings while stylists stay with clients.",
+    href: "/salon-appointment-booking",
+    number: "07",
+  },
+  {
+    name: "Real estate & local services",
+    detail: "Every enquiry captured with the next human step clearly defined.",
+    href: "/real-estate-lead-capture",
+    number: "08",
   },
   {
     name: "Your kind of business",
     detail: "Tell us how you work. We build the front desk around it.",
     href: "/request-demo",
-    number: "06",
+    number: "09",
   },
 ];
 
@@ -230,10 +254,10 @@ export function HomePage() {
                 <span>Never miss a customer.</span>
               </h1>
               <p className={styles.heroDescription}>
-                Your 24x7 AI front desk for local businesses. Every call
-                answered in seconds, even nights, weekends, and mid-rush.
-                <br className={styles.desktopBreak} /> You stay on the job; it
-                handles the phones.
+                A call is a customer asking for a next step. Your 24x7 AI front
+                desk answers in seconds, handles routine questions, books the
+                work, and captures the rest, even nights, weekends, and
+                mid-rush.
               </p>
               <div className={styles.ctaRow}>
                 <Link className={styles.primary} href="/request-demo">
@@ -389,6 +413,70 @@ export function HomePage() {
             </button>
           </div>
         </div>
+
+        <section
+          id="proof"
+          className={styles.proof}
+          aria-labelledby="proof-heading"
+        >
+          <div className={styles.sectionTop}>
+            <p className={styles.eyebrow}>THE CALL IS ALREADY WARM</p>
+            <span className={styles.smallDetail}>
+              DIRECTIONAL BENCHMARKS · NOT PROMISES
+            </span>
+          </div>
+          <div className={styles.proofHeading}>
+            <h2 id="proof-heading">
+              Answering is the first
+              <br />
+              <span>conversion.</span>
+            </h2>
+            <p>
+              Independent call research points to the same opportunity across
+              local businesses: the customer has already raised their hand. The
+              front desk has to make the next step easy.
+            </p>
+          </div>
+          <div className={styles.proofGrid}>
+            <article className={styles.proofCard}>
+              <strong>Up to 85%</strong>
+              <p>of callers who reach voicemail may not call back.</p>
+              <span className={styles.smallDetail}>
+                CALLRAIL · 1.1M SMB CONVERSATIONS
+              </span>
+            </article>
+            <article className={styles.proofCard}>
+              <strong>42%</strong>
+              <p>of phone leads convert on the call.</p>
+              <span className={styles.smallDetail}>INVOCA · 70M+ CALLS</span>
+            </article>
+            <article className={styles.proofCard}>
+              <strong>56%</strong>
+              <p>of business callers speak with a person.</p>
+              <span className={styles.smallDetail}>INVOCA · 70M+ CALLS</span>
+            </article>
+          </div>
+          <p className={styles.proofNote}>
+            Benchmarks are directional and do not predict your results.{" "}
+            <a
+              href="https://www.callrail.com/blog/callrail-releases-benchmark-report"
+              target="_blank"
+              rel="noreferrer"
+            >
+              CallRail SMB benchmark{" "}
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </a>{" "}
+            ·{" "}
+            <a
+              href="https://www.invoca.com/reports/the-invoca-lead-conversion-benchmarks-report-2026"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Invoca 2026 benchmark{" "}
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </a>
+          </p>
+        </section>
 
         <section
           id="demos"
@@ -551,8 +639,8 @@ export function HomePage() {
           </h2>
           <p className={styles.sectionSub}>
             Calendar, inbox, records, and your business number, connected during
-            setup, so bookings and leads land where your team already works. Run
-            something else? We connect that too.
+            setup, so bookings and leads land where your team already works. We
+            can adapt the connection to the tools your business already uses.
           </p>
           <div className={styles.integrationGrid}>
             <div className={styles.integrationCard}>
@@ -561,8 +649,9 @@ export function HomePage() {
               </span>
               <h3>Business calendar</h3>
               <p>
-                Bookings, reschedules, and reminders land on your calendar.
-                Works with Google Calendar, Cal.com, and more.
+                Bookings, reschedules, and reminders land in the calendar or
+                scheduling system you choose. Examples include Google Calendar,
+                Microsoft Outlook, Cal.com, and more.
               </p>
             </div>
             <div className={styles.integrationCard}>
@@ -581,8 +670,9 @@ export function HomePage() {
               </span>
               <h3>Records &amp; CRM</h3>
               <p>
-                Every call logged with name, number, and outcome. Sheets works
-                out of the box, and we connect your CRM on setup.
+                Every call is logged with name, number, and outcome. We can send
+                that context to a spreadsheet, CRM, dispatch system, or another
+                workflow, such as Google Sheets or HubSpot.
               </p>
             </div>
             <div className={styles.integrationCard}>
@@ -609,10 +699,10 @@ export function HomePage() {
               <span className={styles.integrationIcon}>
                 <Plug size={22} />
               </span>
-              <h3>The rest of your stack</h3>
+              <h3>Custom business tools</h3>
               <p>
-                Booking software, trade tools, or something custom. Tell us what
-                you run and we connect it during setup.
+                If your team runs on a tool we have not listed, we can scope a
+                custom integration around it during setup.
               </p>
             </div>
           </div>
@@ -649,7 +739,7 @@ export function HomePage() {
                 <h3>Tell us how you work.</h3>
                 <p>
                   Your services, prices, hours, and the calls you want handled.
-                  a 30-second brief.
+                  Start with a 30-second brief.
                 </p>
               </div>
             </li>
@@ -658,8 +748,9 @@ export function HomePage() {
               <div>
                 <h3>We build it with you.</h3>
                 <p>
-                  Number, calendar, and records connected. Test calls until it
-                  sounds like your front desk.
+                  Your number, calendar or scheduling system, and records
+                  destination connected. Test calls until it sounds like your
+                  front desk.
                 </p>
               </div>
             </li>
@@ -668,8 +759,8 @@ export function HomePage() {
               <div>
                 <h3>Approve it. Go live in 48 hours.</h3>
                 <p>
-                  You sign off every word. Then every call gets answered.
-                  nights, weekends, and busy hours.
+                  You sign off every word. Then every call gets answered at
+                  night, on weekends, and during busy hours.
                 </p>
               </div>
             </li>
@@ -707,6 +798,37 @@ export function HomePage() {
           </div>
           <div className={styles.closingOrbit} aria-hidden="true" />
         </section>
+
+        <section
+          className={styles.beyondVoice}
+          aria-labelledby="beyond-voice-heading"
+        >
+          <div className={styles.beyondVoiceInner}>
+            <div>
+              <p className={styles.eyebrow}>BEYOND VOICE AI</p>
+              <h2 id="beyond-voice-heading">
+                Need more than a front desk?
+                <br />
+                <span>We can build the workflow too.</span>
+              </h2>
+            </div>
+            <div>
+              <p className={styles.beyondVoiceCopy}>
+                We also build custom AI solutions to automate the daily work
+                around your business. Explore the broader practice when your
+                needs go beyond phone calls.
+              </p>
+              <a
+                className={styles.textLink}
+                href={SITE_AI_SERVICES_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Explore custom AI solutions <ArrowUpRight size={17} />
+              </a>
+            </div>
+          </div>
+        </section>
       </main>
       <footer className={styles.footer}>
         <div className={styles.footerTop}>
@@ -722,6 +844,18 @@ export function HomePage() {
         <div className={styles.footerBottom}>
           <span>
             © {new Date().getFullYear()} {SITE_NAME}
+          </span>
+          <span className={styles.footerAttribution}>
+            Built by an AI solutions company:{" "}
+            <a
+              href={SITE_AI_SERVICES_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Visit Cognitive Entities LLC"
+            >
+              Cognitive Entities LLC{" "}
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </a>
           </span>
           <div>
             <a href="#demos">Live demos</a>

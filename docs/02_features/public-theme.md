@@ -28,7 +28,8 @@ dashboard. Dashboard styling is otherwise unaffected.
   cards, alerts) as well as the token-based chrome.
 - `public-theme.module.css` holds the token values (mirroring the homepage
   atmosphere) plus the shared header, footer, eyebrow, panel, button, and
-  split-layout primitives. Root-scoped color rules (`.root .primary`,
+  split-layout primitives. Industry pages also use a quiet secondary AI
+  solutions callout near the bottom. Root-scoped color rules (`.root .primary`,
   `.root .signIn`) keep button and link colors winning over the generic
   `.root a` reset.
 - `theme-switch.tsx` is the single switch visual for the whole site (sun,
@@ -52,8 +53,11 @@ dashboard. Dashboard styling is otherwise unaffected.
 
 - `/` renders the particle journey on the shared theme (see
   [homepage experience](homepage-experience.md)); its look is unchanged.
-- `/dental` and `/hvac` render the shared `IndustryPage` template on the
-  public theme. Copy, JSON-LD, and CTA targets are unchanged.
+- The descriptive industry routes render the shared `IndustryPage` template on
+  the public theme. Each page includes a fifth outcome card for existing
+  business-tool integrations and a secondary AI-solutions callout below the
+  main conversion path. The shared footer includes the same subtle attribution
+  link.
 - `/demo/[slug]` keeps all call logic; only the header, hero, and card
   chrome moved to the theme, plus example opener lines per agent so
   first-time callers know what to say. The amber public-demo notice is

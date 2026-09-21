@@ -1,19 +1,26 @@
-import type { Metadata } from "next";
 import {
   IndustryPage,
   type IndustryPageContent,
 } from "@/components/seo/industry-page";
-import { SITE_URL } from "@/lib/site-config";
+import { createMarketingMetadata } from "@/lib/marketing-seo";
 
-export const metadata: Metadata = {
-  title: "AI Receptionist for Restaurants | Never Miss a Reservation",
+export const metadata = createMarketingMetadata({
+  path: "/restaurant-order-taking",
+  title: "AI Voice Agent for Restaurant Orders and Inquiries",
   description:
-    "Missed calls cost covers. 24x7 AI answers every restaurant call, takes reservations and party bookings, and answers hours and directions questions. Live in 48 hours.",
-  alternates: { canonical: `${SITE_URL}/restaurants` },
-};
+    "AI voice agent for restaurants that answers phone orders and reservation calls, handles menu and hours questions, and captures catering or party inquiries.",
+  keywords: [
+    "AI voice agent for restaurants",
+    "restaurant phone ordering",
+    "restaurant reservation calls",
+    "restaurant answering service",
+    "restaurant inquiry handling",
+  ],
+});
 
 const content: IndustryPageContent = {
   slug: "restaurants",
+  label: "RESTAURANTS",
   headline: "Every call answered, every table filled",
   subhead:
     "24x7 AI picks up mid-rush, after close, and on your day off. It takes reservations, captures party and catering requests with full details, and answers the questions callers always ask.",
@@ -48,6 +55,38 @@ const content: IndustryPageContent = {
   demoName: "Sofia",
   demoBlurb:
     "Try a live order or ask Sofia a menu question. Your version is trained on your menu, hours, and tables.",
+  proof: {
+    eyebrow: "THE LOCAL CALL, BY THE NUMBERS",
+    title: "Your busiest minutes are when the phone matters most.",
+    description:
+      "Restaurant-specific benchmarks are still worth validating, so this page uses cross-industry call data as a directional signal, then keeps the promise concrete: answer, resolve, reserve, or capture the request.",
+    points: [
+      {
+        value: "Up to 85%",
+        label: "of callers who reach voicemail may not call back.",
+      },
+      {
+        value: "56%",
+        label: "of business callers speak with a person.",
+      },
+      {
+        value: "42%",
+        label: "of phone leads convert on the call.",
+      },
+    ],
+    sourceNote:
+      "Cross-industry directional benchmarks; restaurant-specific results should be validated in a pilot.",
+    sources: [
+      {
+        label: "CallRail SMB benchmark",
+        href: "https://www.callrail.com/blog/callrail-releases-benchmark-report",
+      },
+      {
+        label: "Invoca 2026 benchmarks",
+        href: "https://www.invoca.com/reports/the-invoca-lead-conversion-benchmarks-report-2026",
+      },
+    ],
+  },
   faqs: [
     {
       question: "What happens during a Friday night rush?",

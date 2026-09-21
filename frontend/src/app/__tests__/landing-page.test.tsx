@@ -37,6 +37,9 @@ describe("Homepage experience", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText(/no coding required/i)).toBeTruthy();
+    expect(screen.getByText("Up to 85%")).toBeTruthy();
+    expect(screen.getByText("42%")).toBeTruthy();
+    expect(screen.getByText("56%")).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /meet your ai front desk/i })
@@ -94,12 +97,22 @@ describe("Homepage experience", () => {
       screen
         .getByRole("link", { name: /dental & medical/i })
         .getAttribute("href"),
-    ).toBe("/dental");
+    ).toBe("/dental-appointment-booking");
     expect(
       screen
         .getByRole("link", { name: /hvac, plumbing & roofing/i })
         .getAttribute("href"),
-    ).toBe("/hvac");
+    ).toBe("/hvac-service-call-answering");
+    expect(
+      screen
+        .getByRole("link", { name: /plumbing & emergency home services/i })
+        .getAttribute("href"),
+    ).toBe("/plumbing-service-requests");
+    expect(
+      screen
+        .getByRole("link", { name: /independent auto repair/i })
+        .getAttribute("href"),
+    ).toBe("/auto-repair-service-booking");
     expect(
       screen.getByRole("heading", { name: /plugs into the tools/i }),
     ).toBeTruthy();
@@ -121,10 +134,25 @@ describe("Homepage experience", () => {
       /records & crm/i,
       /your business number/i,
       /your website/i,
-      /rest of your stack/i,
+      /custom business tools/i,
     ]) {
       expect(screen.getByRole("heading", { name })).toBeTruthy();
     }
+    expect(
+      screen.getByRole("heading", { name: /need more than a front desk/i }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("link", { name: /explore custom ai solutions/i })
+        .some((link) => link.getAttribute("href") === "https://cognients.com"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("link", {
+          name: /visit cognitive entities llc/i,
+        })
+        .getAttribute("href"),
+    ).toBe("https://cognients.com");
   });
 
   it("changes theme, persists the choice, and restores it on return", () => {

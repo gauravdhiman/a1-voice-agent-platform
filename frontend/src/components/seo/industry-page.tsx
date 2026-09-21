@@ -3,6 +3,7 @@ import { ArrowRight, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { PublicFooter } from "@/components/public-theme/public-footer";
+import { SITE_AI_SERVICES_URL } from "@/lib/site-config";
 import pt from "@/components/public-theme/public-theme.module.css";
 
 /** One outcome block: what the AI handles for this vertical. */
@@ -19,10 +20,44 @@ export interface IndustryFaq {
   answer: string;
 }
 
+/** A research source linked from the proof section. */
+export interface IndustrySource {
+  /** Human-readable source name. */
+  label: string;
+  /** Public URL for the underlying research. */
+  href: string;
+}
+
+/** One benchmark card shown between the pain and solution sections. */
+export interface IndustryProofPoint {
+  /** The large number, such as `43%` or `Up to 85%`. */
+  value: string;
+  /** What the number measures, written for a business owner. */
+  label: string;
+}
+
+/** Evidence that gives a vertical landing page a credible reason to act. */
+export interface IndustryProof {
+  /** Small section label. */
+  eyebrow: string;
+  /** Conversion-oriented heading for the evidence. */
+  title: string;
+  /** Short explanation of why the benchmark matters. */
+  description: string;
+  /** Usually three points; keep this compact on the page. */
+  points: IndustryProofPoint[];
+  /** Plain-language qualification for the research. */
+  sourceNote: string;
+  /** Source links shown below the cards. */
+  sources: IndustrySource[];
+}
+
 /** All copy for a vertical landing page. */
 export interface IndustryPageContent {
   /** URL slug (dental, hvac, restaurants). */
   slug: string;
+  /** Human-readable label shown in the public page eyebrow. */
+  label?: string;
   /** H1 headline. */
   headline: string;
   /** Hero sub-copy. */
@@ -31,12 +66,14 @@ export interface IndustryPageContent {
   pains: string[];
   /** What the AI handles, as outcome blocks. */
   outcomes: IndustryOutcome[];
-  /** Demo agent slug to try live. */
-  demoSlug: string;
-  /** Demo agent display name. */
-  demoName: string;
-  /** One-line demo pitch. */
-  demoBlurb: string;
+  /** Demo agent slug to try live, when this vertical has a public demo. */
+  demoSlug?: string;
+  /** Demo agent display name, when this vertical has a public demo. */
+  demoName?: string;
+  /** One-line demo pitch or a transparent no-demo note. */
+  demoBlurb?: string;
+  /** Optional benchmark evidence for this vertical. */
+  proof?: IndustryProof;
   /** FAQs (rendered + JSON-LD). */
   faqs: IndustryFaq[];
 }
@@ -50,11 +87,19 @@ interface IndustryPageProps {
  * atmosphere theme (same header, tokens, and day/night choice as the
  * homepage).
  *
- * Same skeleton every time (pain → live demo → concierge setup →
+ * Same skeleton every time (pain → proof → live demo or request → concierge setup →
  * outcomes → pricing anchor → FAQ), unique copy per vertical so each
  * page earns its own search intent.
  */
 export function IndustryPage({ content }: IndustryPageProps) {
+  const handledOutcomes = [
+    ...content.outcomes,
+    {
+      title: "Your existing business tools",
+      description:
+        "We connect the workflow to the calendar, CRM, dispatch system, spreadsheet, or other tools your team already uses. Custom integrations are welcome.",
+    },
+  ];
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -82,7 +127,8 @@ export function IndustryPage({ content }: IndustryPageProps) {
             >
               <p className={pt.eyebrow} style={{ justifyContent: "center" }}>
                 <span className={pt.statusDot} />
-                AI FRONT DESK FOR {content.slug.toUpperCase()}
+                AI FRONT DESK FOR{" "}
+                {(content.label ?? content.slug).toUpperCase()}
               </p>
               <h1
                 className={pt.title}
@@ -109,19 +155,31 @@ export function IndustryPage({ content }: IndustryPageProps) {
                   alignItems: "center",
                 }}
               >
-                <Link className={pt.primary} href={`/demo/${content.demoSlug}`}>
-                  Talk to {content.demoName} now
-                  <ArrowRight size={16} />
-                </Link>
-                <Link className={pt.textLink} href="/request-demo">
-                  Request a Demo <ArrowUpRight size={16} />
-                </Link>
+                {content.demoSlug && content.demoName ? (
+                  <Link
+                    className={pt.primary}
+                    href={`/demo/${content.demoSlug}`}
+                  >
+                    Talk to {content.demoName} now
+                    <ArrowRight size={16} />
+                  </Link>
+                ) : (
+                  <Link className={pt.primary} href="/request-demo">
+                    Request this workflow <ArrowRight size={16} />
+                  </Link>
+                )}
+                {content.demoSlug && content.demoName ? (
+                  <Link className={pt.textLink} href="/request-demo">
+                    Request a Demo <ArrowUpRight size={16} />
+                  </Link>
+                ) : null}
               </div>
               <p
                 className={pt.smallDetail}
                 style={{ marginTop: 22, fontSize: 10 }}
               >
-                {content.demoBlurb}
+                {content.demoBlurb ??
+                  "No public demo yet - tell us what your calls need and we will shape the first workflow with you."}
               </p>
             </div>
           </section>
@@ -162,7 +220,9 @@ export function IndustryPage({ content }: IndustryPageProps) {
                       size={20}
                       style={{ color: "var(--public-accent)", flexShrink: 0 }}
                     />
-                    <span style={{ color: "var(--public-muted)", lineHeight: 1.8 }}>
+                    <span
+                      style={{ color: "var(--public-muted)", lineHeight: 1.8 }}
+                    >
                       {pain}
                     </span>
                   </li>
@@ -170,6 +230,53 @@ export function IndustryPage({ content }: IndustryPageProps) {
               </ul>
             </div>
           </section>
+
+          {content.proof ? (
+            <section
+              className={pt.proofSection}
+              aria-labelledby="proof-heading"
+            >
+              <div className={pt.proofInner}>
+                <div className={pt.proofHeader}>
+                  <div>
+                    <p className={pt.eyebrow}>{content.proof.eyebrow}</p>
+                    <h2
+                      className={`${pt.title} ${pt.proofTitle}`}
+                      id="proof-heading"
+                    >
+                      {content.proof.title}
+                    </h2>
+                  </div>
+                  <p className={pt.proofDescription}>
+                    {content.proof.description}
+                  </p>
+                </div>
+                <div className={pt.proofGrid}>
+                  {content.proof.points.map((point) => (
+                    <div
+                      className={pt.proofPoint}
+                      key={point.value + point.label}
+                    >
+                      <strong className={pt.proofValue}>{point.value}</strong>
+                      <p>{point.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className={pt.proofSource}>
+                  {content.proof.sourceNote}{" "}
+                  {content.proof.sources.map((source, index) => (
+                    <span key={source.href}>
+                      {index > 0 ? " · " : ""}
+                      <a href={source.href} target="_blank" rel="noreferrer">
+                        {source.label}
+                        <ArrowUpRight size={12} aria-hidden="true" />
+                      </a>
+                    </span>
+                  ))}
+                </p>
+              </div>
+            </section>
+          ) : null}
 
           <section
             style={{ borderTop: "1px solid var(--line)", padding: "64px 6.5%" }}
@@ -185,6 +292,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
                 What your AI front desk <span>handles</span>
               </h2>
               <div
+                className={pt.outcomeGrid}
                 style={{
                   marginTop: 40,
                   display: "grid",
@@ -193,7 +301,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
                     "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
                 }}
               >
-                {content.outcomes.map((outcome) => (
+                {handledOutcomes.map((outcome) => (
                   <div
                     key={outcome.title}
                     className={pt.panel}
@@ -242,9 +350,9 @@ export function IndustryPage({ content }: IndustryPageProps) {
                 We set it up <span>with you</span>
               </h2>
               <p className={pt.lede} style={{ marginTop: 16 }}>
-                Request a demo, we configure your number, calendar, and test
-                calls around your business, and you approve every word before it
-                answers. Pilot plans from $79/mo as you grow.
+                Request a demo, we configure your number, calendar or scheduling
+                system, and test calls around your business. You approve every
+                word before it answers. Pilot plans from $79/mo as you grow.
               </p>
               <div style={{ marginTop: 32 }}>
                 <Link className={pt.primary} href="/request-demo">
@@ -290,6 +398,39 @@ export function IndustryPage({ content }: IndustryPageProps) {
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          <section
+            className={pt.secondaryCta}
+            aria-labelledby="broader-ai-heading"
+          >
+            <div className={pt.secondaryCtaInner}>
+              <div>
+                <p className={pt.eyebrow}>BEYOND THE FRONT DESK</p>
+                <h2
+                  id="broader-ai-heading"
+                  className={`${pt.title} ${pt.secondaryCtaTitle}`}
+                >
+                  Need more than voice?{" "}
+                  <span>We can build the workflow too.</span>
+                </h2>
+              </div>
+              <div>
+                <p className={pt.secondaryCtaCopy}>
+                  We also design custom AI solutions that automate the daily
+                  workflows around your business. Explore the broader practice
+                  when your needs go beyond phone calls.
+                </p>
+                <a
+                  className={pt.secondaryCtaLink}
+                  href={SITE_AI_SERVICES_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Explore custom AI solutions <ArrowUpRight size={15} />
+                </a>
               </div>
             </div>
           </section>

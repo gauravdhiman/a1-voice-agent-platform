@@ -373,7 +373,7 @@ leads persist until converted/dropped and are never shown to visitors.
 | business_name | VARCHAR(160) | NULLABLE | Business name |
 | email | VARCHAR(320) | NOT NULL | Contact email (indexed, never probed publicly) |
 | phone | VARCHAR(32) | NULLABLE | Callback number |
-| vertical | VARCHAR(40) | NULLABLE | Business vertical (`dental`, `hvac`, `restaurant`) |
+| vertical | VARCHAR(40) | NULLABLE | Business vertical slug selected on the public request form |
 | message | TEXT | NULLABLE | What the business needs |
 | source | VARCHAR(40) | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `demo-call`, or `manual` | Capture channel |
 | demo_slug | VARCHAR(100) | NULLABLE | Demo agent slug when captured post-demo |

@@ -17,7 +17,7 @@ class InterestLeadCreate(BaseModel):
     email: EmailStr = Field(..., description="Contact email address")
     phone: Optional[str] = Field(None, max_length=32, description="Callback number")
     vertical: Optional[str] = Field(
-        None, max_length=40, description="Business vertical (dental, hvac, restaurant)"
+        None, max_length=40, description="Business vertical slug from the public form"
     )
     message: Optional[str] = Field(
         None, max_length=2000, description="What the business needs"
