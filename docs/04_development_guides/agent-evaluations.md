@@ -19,6 +19,10 @@ The evaluation system therefore separates four questions:
 No single test can answer all four questions. A green deterministic suite is a
 strong signal for the first two, but it is not evidence that Gemini Live, STT,
 TTS, network latency, or a particular prompt will always behave correctly.
+For tool-enabled feature acceptance, pair these evaluations with the
+[integration-function acceptance gate](testing.md#integration-function-acceptance-gate);
+the gate requires the realistic integrated trace and no-tool/provider-outage
+evidence that a direct evaluation run may not cover.
 
 ## Current implementation
 

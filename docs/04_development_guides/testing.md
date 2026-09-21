@@ -36,6 +36,146 @@ responsiveness; a successful manual call cannot replace a regression test.
 - Production incidents become redacted replay traces or deterministic
   regression scenarios before the fix is considered complete.
 
+## Integration-function acceptance gate
+
+Use this gate for any tool-enabled feature that introduces or changes a
+business use case. A tool can be contract-compatible and still be the wrong
+tool for the job. QA executes the gate and records the evidence; Review checks
+that evidence before approval. This gate supplements unit, contract, and
+deterministic evaluation coverage; it does not replace them.
+
+### 1. Semantic fit is required
+
+Before running the integrated trace, map the requested use case to every
+selected tool. Record the mapping in the QA evidence. For each tool, include:
+
+| Required mapping | Evidence to record |
+| ---------------- | ------------------ |
+| Purpose | What real user need this tool satisfies and why this tool is the intended one |
+| Inputs | Realistic values, required/optional fields, accepted values, and the source of each value |
+| Outputs | The result shape and how the runtime/user will use it |
+| Side effects | Records, messages, external mutations, or other state changes expected |
+| Configuration | Agent instructions, enabled tool/function, tenant, permissions, timezone, credential binding/reference (never secret values), and provider settings |
+
+Reject a tool that is only schema- or contract-compatible but semantically
+wrong for the requested use case. For example, an HVAC lead-capture tool must
+not be reused to take restaurant orders merely because both accept contact
+details. A semantic mismatch is a **FAIL**, even when the invocation and unit
+tests pass.
+
+### 2. Trace the integrated function
+
+Use a realistic use-case fixture through the intended entrypoint and runtime
+(for example, the configured agent surface, API, or voice runtime). The trace
+must show all of the following:
+
+- **Selection and invocation:** the user/request context, selected tool, exact
+  realistic arguments, and the runtime entrypoint that invoked it.
+- **Provider or stateful fake behavior:** the provider request and response, or
+  a stateful fake that persists and exposes the relevant reads/writes. A direct
+  unit mock or a contract-only schema assertion is not sufficient.
+- **Read-back and result handling:** the returned value is read by the runtime,
+  mapped to the user-visible/result contract, and errors are classified safely.
+- **Expected side effects:** verify the resulting records/state and ownership;
+  include exact-once behavior for retries or duplicate invocations. Demonstrate
+  the idempotency key or equivalent mechanism where the operation can mutate
+  state.
+- **No-tool path:** run a realistic request that does not require a tool and
+  verify that no tool is selected, invoked, or allowed to create a side effect.
+- **Provider-unavailable path:** make the provider or stateful fake unavailable
+  and verify safe, actionable failure handling, no false success, no unintended
+  partial/duplicate write, and the documented retry classification.
+
+If the provider is external, use an authorized non-production provider or the
+repository's stateful fake. Live-provider evidence is required when the
+release lane or acceptance criteria call for provider-specific behavior; its
+absence is **UNVERIFIED**, never PASS by implication.
+
+### Evidence record and verdict
+
+QA's record must be reproducible and contain:
+
+| Field | Required content |
+| ----- | ---------------- |
+| Scope | Use case, selected tool(s), acceptance criteria, and semantic-fit map |
+| Environment | Branch/commit, environment/config, entrypoint/runtime, tenant, and fixture/seed identifier |
+| Commands and trace | Exact commands or user steps; selection, arguments, provider/fake interactions, read-back, and results |
+| Side-effect checks | Before/after state, expected records, duplicate/retry result, and no-tool result |
+| Failure paths | Provider-unavailable result, safe error, retry classification, and cleanup outcome |
+| Raw evidence | Redacted logs, trace IDs, API responses, screenshots/recording for browser-facing flows, and links to durable test artifacts |
+| Verdict | PASS, FAIL, or UNVERIFIED, with release recommendation and next owner |
+
+Use these rules:
+
+- **PASS:** semantic fit is accepted and every integrated trace item above is
+  evidenced with expected results; no unresolved acceptance failure remains.
+- **FAIL:** the tool is semantically wrong or the observed behavior violates
+  the expected invocation, result, side-effect, idempotency, no-tool, or
+  provider-unavailable contract. QA records reproduction and routes the defect
+  to the Builder/feature owner.
+- **UNVERIFIED:** required integrated/provider evidence is missing, redacted
+  beyond reviewability, or could not run. Missing evidence is a release
+  blocker until the QA owner supplies it or the engineering/release owner
+  explicitly changes the acceptance scope; it is never PASS by implication.
+
+The release recommendation is **safe** only for PASS, **not safe** for FAIL or
+an unresolved UNVERIFIED gate. A **safe with noted risks** recommendation is
+allowed only for separately documented, non-blocking risks after the required
+gate is complete; it cannot waive missing semantic or integrated evidence.
+When evidence fails, QA owns the evidence/defect record, the Builder or feature
+owner owns a behavior fix, and the engineering/release owner owns any explicit
+scope or environment decision.
+
+### Copyable issue-description blocks
+
+Paste the following in a delegated QA issue:
+
+```markdown
+## Integration-function acceptance gate
+
+Follow [the canonical gate](docs/04_development_guides/testing.md#integration-function-acceptance-gate).
+
+- Use case and acceptance criteria:
+- Selected tool(s) and semantic-fit map (purpose, inputs, outputs, side effects, configuration):
+- Environment/branch/commit and entrypoint/runtime:
+- Agent/tenant/permission/timezone/provider configuration (credential reference only; no secret values):
+- Realistic fixture/seed and test account (no secrets or PII):
+- Exact commands or user steps:
+- Selection/invocation and realistic arguments:
+- Provider or stateful-fake behavior and read-back/result handling:
+- Expected side effects and duplicate/retry/idempotency result:
+- No-tool path and result:
+- Provider-unavailable path, safe error, and retry classification:
+- Redacted logs/traces/screenshots/artifacts:
+- Verdict (PASS / FAIL / UNVERIFIED):
+- Release recommendation (safe / safe with noted risks / not safe):
+- If FAIL or UNVERIFIED, defect/blocker link and next owner/action:
+
+Direct unit or contract mocks alone do not satisfy this gate.
+```
+
+Paste the following in a Review issue or review section:
+
+```markdown
+## Review: integration-function acceptance gate
+
+Review [the canonical gate](docs/04_development_guides/testing.md#integration-function-acceptance-gate)
+and the QA evidence before approval.
+
+- Is the requested use case mapped to each tool's purpose, inputs, outputs,
+  side effects, and configuration? Reject contract-compatible semantic mismatch.
+- Does the trace use the intended entrypoint/runtime and a realistic fixture?
+- Are selection, realistic arguments, provider/stateful-fake behavior,
+  read-back/result handling, side effects, and duplicate/idempotency behavior
+  evidenced?
+- Are the no-tool and provider-unavailable paths evidenced with safe results?
+- Are commands, environment/commit, fixture, redacted raw evidence, and verdict
+  reproducible?
+- Review verdict: APPROVE / REQUEST CHANGES / UNVERIFIED.
+- If evidence fails, return it to the Builder/feature owner with the missing
+  evidence or defect and next action; do not approve by implication.
+```
+
 ## Public agent and demo-page coverage
 
 The homepage has separate contracts in `frontend/src/app/__tests__/landing-page.test.tsx`
