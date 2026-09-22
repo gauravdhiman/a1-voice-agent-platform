@@ -237,9 +237,13 @@ function HeaderMultiSelect({
 export interface GoogleSheetsConfigEditorProps {
   agentToolId: string;
   config: Record<string, unknown>;
+  initialDefaultRange: string;
+  isOpen: boolean;
+  hasUnsavedChanges: boolean;
   authenticated: boolean;
   canEdit: boolean;
   onConfigChange: (key: string, value: string) => void;
+  onReadinessChange: (isReady: boolean) => void;
   onDiscover: (
     agentToolId: string,
     spreadsheetId: string,
@@ -312,26 +316,59 @@ function selectedByConfiguredValues(
 export function GoogleSheetsConfigEditor({
   agentToolId,
   config,
+  initialDefaultRange,
+  isOpen,
+  hasUnsavedChanges,
   authenticated,
   canEdit,
   onConfigChange,
+  onReadinessChange,
   onDiscover,
 }: GoogleSheetsConfigEditorProps) {
   const [sheets, setSheets] = React.useState<GoogleSheetsDiscoveredSheet[]>([]);
   const [selectedTitle, setSelectedTitle] = React.useState(() =>
-    sheetFromRange(textValue(config, "default_range")),
+    sheetFromRange(initialDefaultRange),
   );
   const [selectedHeaders, setSelectedHeaders] = React.useState<string[]>([]);
   const [agentFields, setAgentFields] = React.useState<string[]>([]);
   const [requiredFields, setRequiredFields] = React.useState<string[]>([]);
   const [isDiscovering, setIsDiscovering] = React.useState(false);
+  const [hasCurrentDiscovery, setHasCurrentDiscovery] = React.useState(false);
   const [discoveryError, setDiscoveryError] = React.useState<string | null>(
     null,
   );
+  const discoveryRequestId = React.useRef(0);
+  const autoDiscoveryAttempted = React.useRef(false);
+
+  React.useEffect(
+    () => () => {
+      discoveryRequestId.current += 1;
+    },
+    [],
+  );
+
+  const clearDiscoveredState = React.useCallback(() => {
+    setSheets([]);
+    setSelectedTitle("");
+    setSelectedHeaders([]);
+    setAgentFields([]);
+    setRequiredFields([]);
+    setHasCurrentDiscovery(false);
+    setIsDiscovering(false);
+    setDiscoveryError(null);
+  }, []);
 
   const selectedSheet = React.useMemo(
     () => sheets.find((sheet) => sheet.title === selectedTitle) ?? null,
     [selectedTitle, sheets],
+  );
+
+  const updateConfig = React.useCallback(
+    (key: string, value: string) => {
+      onReadinessChange(false);
+      onConfigChange(key, value);
+    },
+    [onConfigChange, onReadinessChange],
   );
 
   const applySheet = React.useCallback(
@@ -364,10 +401,10 @@ export function GoogleSheetsConfigEditor({
 
       const reference = sheetReference(sheet.title);
       const endColumn = columnLetters(sheet.headers.length);
-      onConfigChange("default_range", `${reference}!A1:${endColumn}1000`);
-      onConfigChange("header_range", `${reference}!A1:${endColumn}1`);
-      onConfigChange("agent_columns", configuredAgentFields.join(", "));
-      onConfigChange("required_columns", configuredRequiredFields.join(", "));
+      updateConfig("default_range", `${reference}!A1:${endColumn}1000`);
+      updateConfig("header_range", `${reference}!A1:${endColumn}1`);
+      updateConfig("agent_columns", configuredAgentFields.join(", "));
+      updateConfig("required_columns", configuredRequiredFields.join(", "));
       for (const field of MANAGED_FIELDS) {
         const configuredValue = textValue(config, field.key);
         if (
@@ -376,46 +413,117 @@ export function GoogleSheetsConfigEditor({
             (header) => canonical(header) === canonical(configuredValue),
           )
         ) {
-          onConfigChange(field.key, "");
+          updateConfig(field.key, "");
           if (field.key === "source_column") {
-            onConfigChange("source_value", "");
+            updateConfig("source_value", "");
           }
           if (field.key === "status_column") {
-            onConfigChange("status_value", "");
+            updateConfig("status_value", "");
           }
         }
       }
     },
-    [config, onConfigChange],
+    [config, updateConfig],
   );
 
-  const handleDiscover = async () => {
+  const handleDiscover = React.useCallback(async () => {
     const spreadsheetId = textValue(config, "spreadsheet_id").trim();
     if (!spreadsheetId) {
+      clearDiscoveredState();
       setDiscoveryError("Enter a Google Sheets URL or spreadsheet ID first.");
       return;
     }
+    const requestId = discoveryRequestId.current + 1;
+    discoveryRequestId.current = requestId;
+    onReadinessChange(false);
+    setSheets([]);
+    setSelectedHeaders([]);
+    setAgentFields([]);
+    setRequiredFields([]);
+    setHasCurrentDiscovery(false);
     setIsDiscovering(true);
     setDiscoveryError(null);
     try {
       const result = await onDiscover(agentToolId, spreadsheetId);
+      if (discoveryRequestId.current !== requestId) return;
       setSheets(result.sheets);
+      const configuredTitle = sheetFromRange(
+        textValue(config, "default_range"),
+      );
+      const preferredTitle = configuredTitle || selectedTitle;
       const preferred =
-        result.sheets.find((sheet) => sheet.title === selectedTitle) ??
+        result.sheets.find((sheet) => sheet.title === preferredTitle) ??
         result.sheets.find((sheet) => sheet.headers.length > 0) ??
         result.sheets[0];
-      if (preferred) applySheet(preferred);
+      if (preferred) {
+        applySheet(preferred);
+        setHasCurrentDiscovery(true);
+      }
       if (!preferred) {
         setDiscoveryError("No tabs were found in this spreadsheet.");
       }
     } catch (error) {
+      if (discoveryRequestId.current !== requestId) return;
       setDiscoveryError(
         error instanceof Error
           ? error.message
           : "Google Sheets could not be inspected. Check the URL and connection.",
       );
     } finally {
-      setIsDiscovering(false);
+      if (discoveryRequestId.current === requestId) {
+        setIsDiscovering(false);
+      }
+    }
+  }, [
+    agentToolId,
+    applySheet,
+    clearDiscoveredState,
+    config,
+    onDiscover,
+    onReadinessChange,
+    selectedTitle,
+  ]);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      autoDiscoveryAttempted.current = false;
+      return;
+    }
+    if (!authenticated || autoDiscoveryAttempted.current) return;
+
+    // Attempt once per drawer-open cycle. Do not send a request for each
+    // keystroke while a user is entering a new spreadsheet URL.
+    autoDiscoveryAttempted.current = true;
+    const hasSavedColumnSettings = Boolean(
+      textValue(config, "default_range").trim() ||
+        textValue(config, "header_range").trim() ||
+        textValue(config, "agent_columns").trim(),
+    );
+    if (
+      textValue(config, "spreadsheet_id").trim() &&
+      hasSavedColumnSettings
+    ) {
+      void handleDiscover();
+    }
+  }, [authenticated, config, handleDiscover, isOpen]);
+
+  const handleSpreadsheetIdChange = (value: string) => {
+    discoveryRequestId.current += 1;
+    clearDiscoveredState();
+    updateConfig("spreadsheet_id", value);
+    for (const key of [
+      "default_range",
+      "header_range",
+      "agent_columns",
+      "required_columns",
+      "idempotency_column",
+      "timestamp_column",
+      "source_column",
+      "source_value",
+      "status_column",
+      "status_value",
+    ]) {
+      updateConfig(key, "");
     }
   };
 
@@ -425,18 +533,18 @@ export function GoogleSheetsConfigEditor({
     );
     setAgentFields(next);
     setRequiredFields(nextRequired);
-    onConfigChange("agent_columns", next.join(", "));
-    onConfigChange("required_columns", nextRequired.join(", "));
+    updateConfig("agent_columns", next.join(", "));
+    updateConfig("required_columns", nextRequired.join(", "));
   };
 
   const updateRequiredFields = (next: string[]) => {
     setRequiredFields(next);
-    onConfigChange("required_columns", next.join(", "));
+    updateConfig("required_columns", next.join(", "));
   };
 
   const updateManagedField = (key: string, value: string) => {
     const nextValue = value === NONE_VALUE ? "" : value;
-    onConfigChange(key, nextValue);
+    updateConfig(key, nextValue);
     if (!nextValue) return;
 
     const nextAgentFields = agentFields.filter(
@@ -447,11 +555,11 @@ export function GoogleSheetsConfigEditor({
     );
     if (nextAgentFields.length !== agentFields.length) {
       setAgentFields(nextAgentFields);
-      onConfigChange("agent_columns", nextAgentFields.join(", "));
+      updateConfig("agent_columns", nextAgentFields.join(", "));
     }
     if (nextRequiredFields.length !== requiredFields.length) {
       setRequiredFields(nextRequiredFields);
-      onConfigChange("required_columns", nextRequiredFields.join(", "));
+      updateConfig("required_columns", nextRequiredFields.join(", "));
     }
   };
 
@@ -465,10 +573,110 @@ export function GoogleSheetsConfigEditor({
   const agentSelectableHeaders = selectedHeaders.filter(
     (header) => !configuredManagedKeys.has(canonical(header)),
   );
+  const configuredAgentFields = csvValues(textValue(config, "agent_columns"));
+  const configuredRequiredFields = csvValues(
+    textValue(config, "required_columns"),
+  );
+  const availableHeaderKeys = new Set(selectedHeaders.map(canonical));
+  const configuredAgentKeys = configuredAgentFields.map(canonical);
+  const configuredRequiredKeys = configuredRequiredFields.map(canonical);
+  const managedColumns = MANAGED_FIELDS.map((field) =>
+    textValue(config, field.key).trim(),
+  ).filter(Boolean);
+  const managedColumnKeys = managedColumns.map(canonical);
+  const configuredRangeTab = sheetFromRange(
+    textValue(config, "default_range"),
+  );
+  const configuredHeaderTab = sheetFromRange(
+    textValue(config, "header_range"),
+  );
+  const mappingsAreValid = Boolean(
+    selectedSheet &&
+      selectedHeaders.length > 0 &&
+      selectedSheet.issues.length === 0 &&
+      configuredRangeTab === selectedSheet.title &&
+      configuredHeaderTab === selectedSheet.title &&
+      configuredAgentFields.length > 0 &&
+      new Set(configuredAgentKeys).size === configuredAgentKeys.length &&
+      configuredAgentKeys.every(
+        (key) =>
+          availableHeaderKeys.has(key) && !managedColumnKeys.includes(key),
+      ) &&
+      configuredRequiredKeys.every((key) => configuredAgentKeys.includes(key)) &&
+      new Set(managedColumnKeys).size === managedColumnKeys.length &&
+      managedColumnKeys.every((key) => availableHeaderKeys.has(key)) &&
+      !(
+        textValue(config, "source_value").trim() &&
+        !textValue(config, "source_column").trim()
+      ) &&
+      !(
+        textValue(config, "status_value").trim() &&
+        !textValue(config, "status_column").trim()
+      ),
+  );
+  const isConfigurationReady = Boolean(
+    isOpen &&
+      authenticated &&
+      textValue(config, "spreadsheet_id").trim() &&
+      hasCurrentDiscovery &&
+      !isDiscovering &&
+      !discoveryError &&
+      mappingsAreValid,
+  );
+
+  React.useEffect(() => {
+    onReadinessChange(isConfigurationReady);
+  }, [isConfigurationReady, onReadinessChange]);
+
+  const configurationMessage = !authenticated
+    ? "Connect Google Sheets to verify the setup."
+    : !textValue(config, "spreadsheet_id").trim()
+      ? "Add a spreadsheet URL, then discover its columns."
+      : isDiscovering
+        ? "Checking the saved setup against the current sheet…"
+        : discoveryError
+          ? "Not configured: the sheet could not be verified."
+          : !hasCurrentDiscovery
+            ? "Not configured: discover the sheet columns to verify this setup."
+            : isConfigurationReady
+              ? hasUnsavedChanges
+                ? "Setup verified. Save changes to apply this configuration."
+                : "Configured: the selected fields match the current sheet."
+              : "Not configured: check the tab, headers, and selected agent fields.";
 
   return (
     <TooltipProvider delayDuration={250}>
       <div className="space-y-5">
+      <div
+        role="status"
+        aria-live="polite"
+        className={cn(
+          "flex items-start gap-2 rounded-md border px-3 py-2.5 text-xs",
+          isConfigurationReady
+            ? "border-emerald-300/70 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
+            : isDiscovering
+              ? "border-primary/25 bg-primary/[0.04] text-foreground"
+              : "border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100",
+        )}
+      >
+        {isConfigurationReady ? (
+          <CheckCircle2
+            className="mt-0.5 h-4 w-4 shrink-0"
+            aria-hidden="true"
+          />
+        ) : isDiscovering ? (
+          <Loader2
+            className="mt-0.5 h-4 w-4 shrink-0 animate-spin"
+            aria-hidden="true"
+          />
+        ) : (
+          <AlertCircle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            aria-hidden="true"
+          />
+        )}
+        <span className="font-medium">{configurationMessage}</span>
+      </div>
       <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4 dark:bg-primary/[0.08]">
         <div className="flex items-start gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
@@ -494,9 +702,7 @@ export function GoogleSheetsConfigEditor({
               id="google-sheets-spreadsheet-id"
               aria-label="Google Sheets URL or spreadsheet ID"
               value={textValue(config, "spreadsheet_id")}
-              onChange={(event) =>
-                onConfigChange("spreadsheet_id", event.target.value)
-              }
+              onChange={(event) => handleSpreadsheetIdChange(event.target.value)}
               placeholder="https://docs.google.com/spreadsheets/d/..."
               disabled={!canEdit}
               className="h-10 bg-background text-foreground"
@@ -515,6 +721,14 @@ export function GoogleSheetsConfigEditor({
             )}
             {isDiscovering ? "Reading columns" : "Discover columns"}
           </Button>
+          {textValue(config, "spreadsheet_id").trim() &&
+            (!textValue(config, "default_range").trim() ||
+              !textValue(config, "agent_columns").trim()) && (
+              <p className="text-xs text-muted-foreground" role="status">
+                Discover the current columns and select agent fields before
+                saving this spreadsheet.
+              </p>
+            )}
         </div>
         {!authenticated && (
           <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">

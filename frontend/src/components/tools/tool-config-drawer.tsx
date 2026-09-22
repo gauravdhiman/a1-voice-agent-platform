@@ -109,9 +109,20 @@ export function ToolConfigDrawer({
   canEdit,
   isSaving = false,
 }: ToolConfigDrawerProps) {
-  const [localConfig, setLocalConfig] = React.useState<Record<string, unknown>>(
-    {},
+  const [storedLocalConfig, setStoredLocalConfig] = React.useState<
+    Record<string, unknown>
+  >(
+    () => agentTool?.config ?? {},
   );
+  const [localConfigOwnerId, setLocalConfigOwnerId] = React.useState(
+    () => agentTool?.id,
+  );
+  const localConfig =
+    localConfigOwnerId === agentTool?.id
+      ? storedLocalConfig
+      : (agentTool?.config ?? {});
+  const [googleSheetsConfigReady, setGoogleSheetsConfigReady] =
+    React.useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const [isConnecting, setIsConnecting] = React.useState(false);
   const [showApiKeyInput, setShowApiKeyInput] = React.useState(false);
@@ -129,9 +140,14 @@ export function ToolConfigDrawer({
   const currentTime = useLiveTime();
 
   React.useEffect(() => {
-    setLocalConfig(agentTool?.config ?? {});
+    setStoredLocalConfig(agentTool?.config ?? {});
+    setLocalConfigOwnerId(agentTool?.id);
     setHasUnsavedChanges(false);
-  }, [agentTool?.config, open]);
+  }, [agentTool?.id, agentTool?.config, open]);
+
+  React.useEffect(() => {
+    setGoogleSheetsConfigReady(false);
+  }, [agentTool?.id, open]);
 
   React.useEffect(() => {
     setExpandedFunctionName(null);
@@ -170,6 +186,8 @@ export function ToolConfigDrawer({
   const isResendEmailTool = tool.name === RESEND_EMAIL_TOOL_NAME;
   const isGoogleSheetsTool =
     tool.name === "Google_Sheets" && Boolean(onDiscoverGoogleSheetHeaders);
+  const canSaveGoogleSheetsConfig =
+    !isGoogleSheetsTool || googleSheetsConfigReady;
   const resendRoutes = React.useMemo(
     () => parseResendEmailRoutes(localConfig.routes),
     [localConfig.routes],
@@ -188,7 +206,8 @@ export function ToolConfigDrawer({
     isApiKey && tool.requires_auth === false;
 
   const handleConfigChange = (key: string, value: string) => {
-    setLocalConfig((current) => ({ ...current, [key]: value }));
+    if ((localConfig[key] ?? "") === value) return;
+    setStoredLocalConfig((current) => ({ ...current, [key]: value }));
     setHasUnsavedChanges(true);
   };
 
@@ -203,12 +222,12 @@ export function ToolConfigDrawer({
     field: "from_email" | "from_name",
     value: string,
   ) => {
-    setLocalConfig((current) => ({ ...current, [field]: value }));
+    setStoredLocalConfig((current) => ({ ...current, [field]: value }));
     setHasUnsavedChanges(true);
   };
 
   const handleResendRoutesChange = (routes: ResendEmailRouteConfig[]) => {
-    setLocalConfig((current) => ({ ...current, routes }));
+    setStoredLocalConfig((current) => ({ ...current, routes }));
     setHasUnsavedChanges(true);
   };
 
@@ -625,7 +644,11 @@ export function ToolConfigDrawer({
                   <Button
                     size="sm"
                     onClick={handleSaveConfig}
-                    disabled={isSaving || Boolean(resendConfigError)}
+                    disabled={
+                      isSaving ||
+                      Boolean(resendConfigError) ||
+                      !canSaveGoogleSheetsConfig
+                    }
                   >
                     {isSaving ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -670,11 +693,20 @@ export function ToolConfigDrawer({
                 />
               ) : isGoogleSheetsTool && agentTool && onDiscoverGoogleSheetHeaders ? (
                 <GoogleSheetsConfigEditor
+                  key={agentTool.id}
                   agentToolId={agentTool.id}
                   config={localConfig}
+                  isOpen={open}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  initialDefaultRange={
+                    typeof agentTool.config?.default_range === "string"
+                      ? agentTool.config.default_range
+                      : ""
+                  }
                   authenticated={authenticated}
                   canEdit={canEdit}
                   onConfigChange={handleConfigChange}
+                  onReadinessChange={setGoogleSheetsConfigReady}
                   onDiscover={onDiscoverGoogleSheetHeaders}
                 />
               ) : (
