@@ -200,6 +200,15 @@ Required fields use searchable multi-selects so wide sheets stay compact; all
 discovered business headers start selected as Agent fields while managed
 headers stay in their metadata selectors. Cell values and OAuth
 credentials never go to the browser.
+Each discovery request reads the current headers from Google Sheets. The
+displayed columns belong to the selected agent attachment and spreadsheet URL;
+changing the URL clears its prior tab, range, and column mappings. Discover the
+new columns and select at least one Agent field before saving the new target.
+While a refresh is pending or after it fails, the previous column list is not
+shown as if it came from the current spreadsheet. Reopening a saved attachment
+automatically re-reads its current headers and restores the saved selections;
+the setup is marked configured only after the live headers and mappings
+validate, and saving remains disabled until then.
 The retired `Google_Sheets_lead_capture` catalog row is no longer available for
 new attachments; existing saved links remain runtime-compatible while they are
 migrated to the generic row contract. The lead and restaurant targets may use
