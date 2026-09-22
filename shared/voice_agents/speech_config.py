@@ -131,8 +131,8 @@ class TurnDetectionConfig(StageConfig):
 
 
 # Default Gemini native-audio realtime model id used by voice-ws.
-DEFAULT_REALTIME_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
-DEFAULT_REALTIME_VOICE = "Puck"
+DEFAULT_REALTIME_MODEL = "gemini-3.8-live"
+DEFAULT_REALTIME_VOICE = "Zephyr"
 DEFAULT_REALTIME_TEMPERATURE = 0.7
 DEFAULT_ENDPOINTING_SILENCE_DURATION_MS = 500
 DEFAULT_ENDPOINTING_PREFIX_PADDING_MS = 200
@@ -300,8 +300,8 @@ def default_realtime_config() -> RealtimeSpeechConfig:
     exactly the same realtime tuning as before the pipeline feature.
 
     Returns:
-        RealtimeSpeechConfig with all defaults (Google native-audio model,
-        Puck voice, temperature 0.7, endpointing 500/200ms).
+        RealtimeSpeechConfig with all defaults (Gemini 3.8 Live,
+        Zephyr voice, temperature 0.7, endpointing 500/200ms).
     """
     return RealtimeSpeechConfig()
 

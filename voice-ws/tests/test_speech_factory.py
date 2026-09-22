@@ -192,8 +192,10 @@ class TestBuildSpeechComponentsPipeline:
                 "system",
             )
 
-    def test_realtime_disables_gemini_thinking(self) -> None:
-        """Realtime Gemini Live must disable thinking for latency and speech quality."""
+    def test_gemini_38_live_uses_default_model_voice_without_thinking_override(
+        self,
+    ) -> None:
+        """Gemini 3.8 Live rejects the legacy thinking-budget setting."""
         with (
             patch("src.speech.factory.GeminiLiveLLMService") as gemini_cls,
             patch("src.speech.factory.GeminiLiveLLMService.Settings") as settings_cls,
@@ -202,6 +204,27 @@ class TestBuildSpeechComponentsPipeline:
             gemini_cls.return_value = MagicMock()
             build_speech_components(
                 RealtimeSpeechConfig(),
+                {"google": "gem"},
+                "system",
+            )
+        settings_kwargs = settings_cls.call_args.kwargs
+        assert settings_kwargs["model"] == "models/gemini-3.8-live"
+        assert settings_kwargs["voice"] == "Zephyr"
+        assert "thinking" not in settings_kwargs
+
+    def test_legacy_gemini_realtime_disables_thinking(self) -> None:
+        """Gemini 2.5 continues to receive the low-latency thinking override."""
+        with (
+            patch("src.speech.factory.GeminiLiveLLMService") as gemini_cls,
+            patch("src.speech.factory.GeminiLiveLLMService.Settings") as settings_cls,
+        ):
+            settings_cls.return_value = MagicMock()
+            gemini_cls.return_value = MagicMock()
+            build_speech_components(
+                RealtimeSpeechConfig(
+                    model="gemini-2.5-flash-native-audio-preview-12-2025",
+                    voice="Puck",
+                ),
                 {"google": "gem"},
                 "system",
             )

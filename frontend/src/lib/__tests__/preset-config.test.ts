@@ -118,8 +118,8 @@ describe("buildRealtimeConfig", () => {
     expect(cfg).toEqual({
       engine_mode: "realtime",
       provider: "google",
-      model: "gemini-2.5-flash-native-audio-preview-12-2025",
-      voice: "Puck",
+      model: "gemini-3.8-live",
+      voice: "Zephyr",
       temperature: 0.7,
       silence_duration_ms: 500,
       prefix_padding_ms: 200,
@@ -155,8 +155,8 @@ describe("buildRealtimeConfig", () => {
       prefix_padding_ms: "",
       paramsText: "",
     });
-    expect(cfg.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
-    expect(cfg.voice).toBe("Puck");
+    expect(cfg.model).toBe("gemini-3.8-live");
+    expect(cfg.voice).toBe("Zephyr");
     expect(cfg.temperature).toBe(0.7);
     expect(cfg.silence_duration_ms).toBe(500);
     expect(cfg.prefix_padding_ms).toBe(200);
@@ -320,7 +320,7 @@ describe("formStateFromConfig (edit prefill)", () => {
     const { mode, realtime, pipeline } = formStateFromConfig(null);
     expect(mode).toBe("realtime");
     expect(realtime.model).toBe(
-      "gemini-2.5-flash-native-audio-preview-12-2025",
+      "gemini-3.8-live",
     );
     expect(pipeline.stt.provider).toBe("deepgram");
   });

@@ -8,7 +8,8 @@ OpenAI/Cerebras/OpenRouter → Cartesia/Fish pipeline (direct providers only).
 The legacy LiveKit **`worker/`** package was removed from the repo; git history
 retains it for reference only.
 
-The Python voice runtime pins `pipecat-ai` to `1.8.1`. The browser packages
+The Python voice runtime pins `pipecat-ai` to `1.11.0` for Gemini 3.8 Live
+support. The browser packages
 (`@pipecat-ai/client-js` and `@pipecat-ai/websocket-transport`) are versioned
 independently and are unchanged by this runtime upgrade. Upgrade the Python
 runtime only with the voice regression suite, recording checks, and live
