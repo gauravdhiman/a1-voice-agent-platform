@@ -75,7 +75,8 @@ describe("PresetConfigForm realtime provider controls", () => {
     expect(screen.getByText("Temperature")).toBeTruthy();
     expect(screen.getByText("Params")).toBeTruthy();
     expect(
-      screen.getByDisplayValue("gemini-2.5-flash-native-audio-preview-12-2025"),
+      screen.getByDisplayValue("gemini-3.8-live"),
     ).toBeTruthy();
+    expect(screen.getByDisplayValue("Zephyr")).toBeTruthy();
   });
 });

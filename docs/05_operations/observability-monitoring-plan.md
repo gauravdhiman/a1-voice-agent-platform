@@ -597,7 +597,7 @@ Backend requirements:
 
 Create one conversation root span after token verification and close it on
 disconnect or terminal call state. Add the following child spans/metrics,
-using Pipecat's built-in tracing hooks where supported by the pinned `1.8.1`
+using Pipecat's built-in tracing hooks where supported by the pinned `1.11.0`
 dependency and wrapping boundaries where it is not:
 
 | Boundary                 | Span attributes                                                 | Metrics                                                           |

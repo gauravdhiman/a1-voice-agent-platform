@@ -69,11 +69,11 @@ def test_repository_has_one_merged_head() -> None:
     config.set_main_option("script_location", str(ROOT / "backend" / "alembic"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == ["20260828000001"]
+    assert script.get_heads() == ["20260922000001"]
 
 
 def test_repository_head_helper_is_database_independent() -> None:
     """The CI graph check must not need a live database."""
     assert check_alembic_compatibility.get_repository_heads(ROOT) == (
-        "20260828000001",
+        "20260922000001",
     )

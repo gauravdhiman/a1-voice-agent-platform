@@ -15,3 +15,5 @@ def test_shared_importable_from_repo_root_on_sys_path() -> None:
 
     config = default_realtime_config()
     assert config.engine_mode == "realtime"
+    assert config.model == "gemini-3.8-live"
+    assert config.voice == "Zephyr"

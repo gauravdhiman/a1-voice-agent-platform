@@ -275,22 +275,27 @@ def build_speech_components(
     if isinstance(speech_config, RealtimeSpeechConfig):
         api_key = _require_key(api_keys, speech_config.provider, "realtime")
         if speech_config.provider == "google":
+            settings_options: dict[str, Any] = {
+                "model": _normalize_gemini_model(speech_config.model),
+                "voice": speech_config.voice,
+                "system_instruction": system_instruction,
+                "temperature": speech_config.temperature,
+                "vad": GeminiVADParams(
+                    silence_duration_ms=speech_config.silence_duration_ms,
+                    prefix_padding_ms=speech_config.prefix_padding_ms,
+                ),
+            }
+            # Gemini 3.8 Live manages its reasoning internally and rejects the
+            # legacy Gemini 2.5 `thinking_budget` setting. Preserve the
+            # low-latency override for older model configurations.
+            if speech_config.model != "gemini-3.8-live":
+                settings_options["thinking"] = {"thinking_budget": 0}
             return RealtimeComponents(
                 mode="realtime",
                 llm=GeminiLiveLLMService(
                     api_key=api_key,
                     tools=tools,
-                    settings=GeminiLiveLLMService.Settings(
-                        model=_normalize_gemini_model(speech_config.model),
-                        voice=speech_config.voice,
-                        system_instruction=system_instruction,
-                        temperature=speech_config.temperature,
-                        thinking={"thinking_budget": 0},
-                        vad=GeminiVADParams(
-                            silence_duration_ms=speech_config.silence_duration_ms,
-                            prefix_padding_ms=speech_config.prefix_padding_ms,
-                        ),
-                    ),
+                    settings=GeminiLiveLLMService.Settings(**settings_options),
                 ),
             )
 

@@ -27,8 +27,8 @@ export const VAD_PROVIDERS = ["silero"] as const;
 
 /** Default realtime field values — mirror `speech_config.py` constants. */
 export const DEFAULT_REALTIME_MODEL =
-  "gemini-2.5-flash-native-audio-preview-12-2025";
-export const DEFAULT_REALTIME_VOICE = "Puck";
+  "gemini-3.8-live";
+export const DEFAULT_REALTIME_VOICE = "Zephyr";
 export const DEFAULT_REALTIME_TEMPERATURE = 0.7;
 export const DEFAULT_REALTIME_SILENCE_MS = 500;
 export const DEFAULT_REALTIME_PREFIX_MS = 200;
