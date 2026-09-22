@@ -135,8 +135,9 @@ in each agent's instructions; the organization has no industry, location, or
 free-form business details. All demos have unlimited calls (`-1`) and a
 15-minute per-call cap, with call recording enabled so the agent detail page
 exposes Call History. The seed attaches the native Google Calendar appointment
-tool to Alex and the focused Google Sheets lead-capture tool to Jordan and
-Sofia, while leaving OAuth state empty so each worktree can authorize providers
+tool to Alex and the configurable Google Sheets row tool to Jordan and Sofia,
+with only the row-creation function enabled for those demos. OAuth state stays
+empty so each worktree can authorize providers
 independently. Any old HVAC prototype organization is marked inactive during
 reseeding rather than deleted. Future code-owned demo fixtures must reuse this
 same organization rather than creating a new tenant; keep business identity,

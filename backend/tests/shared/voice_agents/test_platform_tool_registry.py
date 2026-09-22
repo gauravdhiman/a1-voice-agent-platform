@@ -556,7 +556,7 @@ class TestPlatformToolRegistry:
         assert "Google_Sheets" in tool_names
 
     def test_google_sheets_functions(self, registry):
-        """Test Google Sheets tool has expected functions."""
+        """Only the configured, header-aware row contract is model-visible."""
         # Register tools first
         registry.register_tools_from_package(
             "shared.voice_agents.tools.implementations"
@@ -567,19 +567,29 @@ class TestPlatformToolRegistry:
         function_names = [f.__name__ for f in functions]
 
         # Check for expected functions
-        expected_functions = [
-            "get_sheet_values",
-            "append_row",
-            "update_cell",
-            "search_in_sheet",
-            "create_spreadsheet",
-            "get_spreadsheet_info",
-            "clear_range",
-            "batch_update_values",
-        ]
+        assert set(function_names) == {
+            "create_row",
+            "find_rows",
+            "read_rows",
+            "update_row",
+        }
 
-        for expected in expected_functions:
-            assert expected in function_names, f"Missing function: {expected}"
+        create_schema = registry._extract_schema_from_function(
+            next(
+                function for function in functions if function.__name__ == "create_row"
+            )
+        )
+        assert create_schema is not None
+        assert create_schema["parameters"]["properties"]["values"] == {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"},
+                ]
+            },
+        }
 
     def test_google_sheets_tool_metadata(self, registry):
         """Test Google Sheets tool has proper metadata."""
@@ -598,6 +608,36 @@ class TestPlatformToolRegistry:
         assert tool_instance.metadata is not None
         assert tool_instance.metadata.name == "Google_Sheets"
         assert "Google Sheets" in tool_instance.metadata.description
+        assert "agent_columns" in tool_instance.metadata.config_schema["properties"]
+
+    def test_google_sheets_model_guidance_uses_configured_agent_fields(self, registry):
+        """Configured business fields are clear to the model without exposing destinations."""
+        registry.register_tools_from_package(
+            "shared.voice_agents.tools.implementations"
+        )
+        sheets_class = registry.get_tool_class("Google_Sheets")
+        assert sheets_class is not None
+
+        tool_instance = sheets_class(
+            config={
+                "agent_columns": "Customer Name, Items, Quantity",
+                "required_columns": "Customer Name, Items",
+                "idempotency_column": "Order ID",
+                "status_column": "Order Status",
+                "status_value": "New",
+            },
+            sensitive_config={},
+        )
+
+        guidance = tool_instance.model_function_guidance("create_row")
+
+        assert "Customer Name" in guidance
+        assert "Items" in guidance
+        assert "Quantity" in guidance
+        assert "Order ID" in guidance
+        assert "Order Status" in guidance
+        assert "Customer Name" in guidance.split("Required for create_row:", 1)[1]
+        assert "spreadsheet" not in guidance.lower()
         assert tool_instance.metadata.requires_auth is True
         assert tool_instance.metadata.auth_type == "oauth2"
 

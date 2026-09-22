@@ -1602,6 +1602,62 @@ class ToolService:
             )
             return [], str(e)
 
+    @tracer.start_as_current_span("tool.get_agent_tool_with_sensitive_config")
+    async def get_agent_tool_with_sensitive_config(
+        self, agent_tool_id: UUID
+    ) -> tuple[Optional[AgentTool], Optional[str]]:
+        """Get one agent-tool attachment with its decrypted runtime config.
+
+        The voice worker normally loads every attachment for an agent. Setup
+        and diagnostic endpoints should scope that access to one attachment so
+        an OAuth token for an unrelated tool is never needlessly materialized.
+        """
+        try:
+            response = (
+                self.supabase.table("agent_tools")
+                .select("*, tool:platform_tools(*)")
+                .eq("id", str(agent_tool_id))
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None, None
+
+            item = response.data[0]
+            tool_data = item.pop("tool", None)
+            sensitive_config = None
+            if item.get("sensitive_config"):
+                try:
+                    decrypted_config = decrypt_data(item.get("sensitive_config"))
+                    if isinstance(decrypted_config, dict):
+                        sensitive_config = decrypted_config
+                except Exception as exc:  # noqa: BLE001 - do not expose secrets
+                    logger.error(
+                        "Error decrypting sensitive config (%s)", type(exc).__name__
+                    )
+
+            agent_tool = AgentTool(
+                id=item["id"],
+                agent_id=item["agent_id"],
+                tool_id=item["tool_id"],
+                config=item.get("config"),
+                sensitive_config=sensitive_config,
+                unselected_functions=item.get("unselected_functions"),
+                is_enabled=item.get("is_enabled", True),
+                last_refreshed_at=item.get("last_refreshed_at"),
+                created_at=item["created_at"],
+                updated_at=item["updated_at"],
+            )
+            if tool_data:
+                agent_tool.tool = PlatformTool(**tool_data)
+            return agent_tool, None
+        except Exception as exc:  # noqa: BLE001 - preserve service contract
+            logger.error(
+                "Error getting agent tool with sensitive config (%s)",
+                type(exc).__name__,
+            )
+            return None, str(exc)
+
     @tracer.start_as_current_span("tool.get_agent_tool_by_id")
     async def get_agent_tool_by_id(
         self, agent_tool_id: UUID

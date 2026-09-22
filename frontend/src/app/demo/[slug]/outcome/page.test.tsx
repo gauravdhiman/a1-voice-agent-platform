@@ -108,7 +108,9 @@ describe("DemoOutcomePage", () => {
     expect(
       within(feedbackRegion).getByText("YOUR TURN · 30 SECONDS"),
     ).toBeTruthy();
-    expect(within(feedbackRegion).getByText("How was this demo?")).toBeTruthy();
+    expect(
+      within(feedbackRegion).getByText("How was your demo call with Jordan?"),
+    ).toBeTruthy();
     expect(
       within(feedbackRegion).getByRole("button", {
         name: "Get this for my business",
@@ -152,7 +154,48 @@ describe("DemoOutcomePage", () => {
     const feedbackRegion = screen.getByRole("complementary", {
       name: "Feedback and setup request",
     });
-    expect(within(feedbackRegion).getByText("How was this demo?")).toBeTruthy();
+    expect(
+      within(feedbackRegion).getByText("How was your demo call with Jordan?"),
+    ).toBeTruthy();
+  });
+
+  it("renders a generic Sheets row receipt with its configured business label", async () => {
+    getDemoOutcomeMock.mockResolvedValue({
+      demo_slug: "verdi-table-restaurant",
+      agent_name: "Sofia",
+      organization_name: "24x7 AI Demo Studio",
+      status: "completed",
+      actions: [
+        {
+          id: "receipt-order-1",
+          action_type: "sheet_row_created",
+          provider: "google_sheets",
+          status: "succeeded",
+          error_code: null,
+          captured_fields: {
+            "Caller name": "Maria Garcia",
+            "Service needed": "Two Sonoran grain bowls",
+          },
+          provider_result: {
+            record_type: "row",
+            record_label: "order request",
+            record_id: "session-1",
+            message: "Order request saved in Google Sheets.",
+          },
+          public_result_url: null,
+          created_at: "2026-09-20T10:00:00Z",
+          expires_at: "2026-09-21T10:00:00Z",
+        },
+      ],
+      expires_at: "2026-09-21T10:00:00Z",
+    });
+
+    render(<DemoOutcomePage />);
+
+    expect(await screen.findByText("Order request saved")).toBeTruthy();
+    expect(screen.getByText("Two Sonoran grain bowls")).toBeTruthy();
+    expect(screen.getByText("via Google Sheets")).toBeTruthy();
+    expect(screen.getByText("What the tools confirmed")).toBeTruthy();
   });
 
   it("uses the configured result URL for a Calendar booking", async () => {
@@ -285,7 +328,9 @@ describe("DemoOutcomePage", () => {
     const feedbackRegion = screen.getByRole("complementary", {
       name: "Feedback and setup request",
     });
-    expect(within(feedbackRegion).getByText("How was this demo?")).toBeTruthy();
+    expect(
+      within(feedbackRegion).getByText("How was your demo call with Jordan?"),
+    ).toBeTruthy();
     expect(screen.getByText("Service request not saved")).toBeTruthy();
     expect(screen.getByText("Didn't go through")).toBeTruthy();
     expect(

@@ -286,6 +286,71 @@ def _lead_payload(
     return fields, summary
 
 
+_PUBLIC_SHEET_FIELDS = {
+    "caller name",
+    "caller email",
+    "caller phone",
+    "service needed",
+    "issue summary",
+    "service address",
+    "urgency",
+    "preferred callback window",
+    "customer name",
+    "customer email",
+    "customer phone",
+    "item",
+    "items",
+    "quantity",
+    "order details",
+    "order notes",
+    "pickup notes",
+    "notes",
+}
+
+
+def _sheet_row_payload(
+    arguments: dict[str, Any], result: Any
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build a bounded public receipt for a generic Sheets row mutation.
+
+    The generic tool accepts arbitrary header names, but a public demo receipt
+    must not mirror arbitrary sheet cells back to an unauthenticated visitor.
+    Only the business fields used by the shipped demos are allowlisted here;
+    the provider summary contains identifiers and status only.
+    """
+    values = arguments.get("values")
+    fields: dict[str, Any] = {}
+    if isinstance(values, dict):
+        for key, value in values.items():
+            normalized_key = " ".join(str(key).strip().split()).casefold()
+            if normalized_key not in _PUBLIC_SHEET_FIELDS:
+                continue
+            if isinstance(value, (dict, list, tuple, set)):
+                continue
+            text_value = _text(value, limit=1000)
+            if text_value:
+                fields[str(key).strip()] = text_value
+
+    result_dict = result if isinstance(result, dict) else {}
+    sheet = (
+        result_dict.get("sheet") if isinstance(result_dict.get("sheet"), dict) else {}
+    )
+    summary = {
+        "record_type": _text(sheet.get("record_type") or "row", limit=64) or "row",
+        "record_label": _text(sheet.get("record_label"), limit=80) or None,
+        "record_id": _text(sheet.get("record_id"), limit=120) or None,
+        "record_status": _text(result_dict.get("status"), limit=64) or None,
+        "updated_range": _text(sheet.get("updated_range"), limit=200) or None,
+        "deduplicated": (
+            result_dict.get("deduplicated")
+            if isinstance(result_dict.get("deduplicated"), bool)
+            else None
+        ),
+        "message": _text(result_dict.get("message"), limit=500) or None,
+    }
+    return fields, summary
+
+
 def _appointment_payload(
     arguments: dict[str, Any], result: Any
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -423,6 +488,12 @@ def build_demo_outcome_payload(
         if provider not in {"hubspot", "google_sheets"}:
             provider = "hubspot"
         fields, summary = _lead_payload(arguments, result)
+        status = _status_for_result(result)
+        error_code = _error_code(result)
+    elif function_name == "create_row":
+        action_type = "sheet_row_created"
+        provider = "google_sheets"
+        fields, summary = _sheet_row_payload(arguments, result)
         status = _status_for_result(result)
         error_code = _error_code(result)
     elif function_name == "create_appointment":

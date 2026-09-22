@@ -24,6 +24,11 @@ describe("OutcomeInterest", () => {
     submitMock.mockResolvedValue({ success: true });
     render(<OutcomeInterest demoSlug="copper-ridge-service-request" />);
 
+    expect(
+      screen.getByRole("heading", {
+        name: "Want this to answer your business calls?",
+      }),
+    ).toBeTruthy();
     await user.type(screen.getByLabelText(/your name/i), "Sam Owner");
     await user.type(screen.getByLabelText(/work email/i), "sam@example.com");
     await user.click(

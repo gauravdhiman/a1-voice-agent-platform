@@ -40,6 +40,7 @@ from shared.voice_agents.tools.base.oauth_support import (
     sanitize_oauth_config,
     validate_oauth_endpoint_url,
 )
+from shared.voice_agents.tools.google_sheets_service import GoogleSheetsService
 from shared.voice_agents.tools.mcp.errors import format_mcp_client_error
 from shared.voice_agents.tools.mcp.json_http_client import (
     McpJsonRpcError,
@@ -192,6 +193,35 @@ class McpParseRequest(BaseModel):
     """Raw pasted ``mcpServers`` JSON config to parse into server configs."""
 
     raw: str
+
+
+class GoogleSheetsDiscoverRequest(BaseModel):
+    """Spreadsheet destination submitted for read-only header discovery."""
+
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=10,
+        max_length=500,
+        description="Google Sheets URL or spreadsheet id to inspect",
+    )
+
+
+class GoogleSheetsDiscoveredSheet(BaseModel):
+    """One spreadsheet tab and the safe metadata needed by the setup UI."""
+
+    title: str
+    sheet_id: Optional[int] = None
+    headers: list[str] = Field(default_factory=list)
+    header_range: str
+    issues: list[str] = Field(default_factory=list)
+
+
+class GoogleSheetsDiscoverResponse(BaseModel):
+    """Read-only Google Sheets tab/header discovery result."""
+
+    status: str
+    provider: str
+    sheets: list[GoogleSheetsDiscoveredSheet] = Field(default_factory=list)
 
 
 async def _assert_agent_tool_admin(
@@ -999,6 +1029,70 @@ async def get_agent_tools(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
         )
     return tools
+
+
+@tool_router.post(
+    "/agent/{agent_tool_id}/google-sheets/discover",
+    response_model=GoogleSheetsDiscoverResponse,
+)
+@tracer.start_as_current_span("tool.routes.discover_google_sheets_headers")
+async def discover_google_sheets_headers(
+    agent_tool_id: UUID,
+    request: GoogleSheetsDiscoverRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Discover spreadsheet tabs and first-row headers for one attachment.
+
+    The endpoint is intentionally read-only and scoped to an already
+    authenticated ``Google_Sheets`` attachment.  It lets the configuration UI
+    offer tab and column selectors without exposing spreadsheet cell data or
+    OAuth credentials to the browser.
+    """
+    _, user_profile = user_data
+    public_agent_tool = await _assert_agent_tool_admin(agent_tool_id, user_profile)
+    if not public_agent_tool.tool or public_agent_tool.tool.name != "Google_Sheets":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Header discovery is available for the Google Sheets tool only.",
+        )
+
+    agent_tool, error = await tool_service.get_agent_tool_with_sensitive_config(
+        agent_tool_id
+    )
+    if error or agent_tool is None or agent_tool.tool is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Google Sheets connection not found.",
+        )
+
+    sensitive_config = agent_tool.sensitive_config or {}
+    config = agent_tool.config or {}
+    service = GoogleSheetsService(
+        access_token=str(sensitive_config.get("access_token") or ""),
+        spreadsheet_id=request.spreadsheet_id,
+        default_range=str(config.get("default_range") or "Sheet1!A1:Z1000"),
+        header_range=str(config.get("header_range") or ""),
+        agent_columns=str(config.get("agent_columns") or ""),
+    )
+    result = await service.discover_sheet_headers()
+    if result.get("status") == "succeeded":
+        return result
+
+    error_payload = result.get("error") if isinstance(result, dict) else None
+    error_code = error_payload.get("code") if isinstance(error_payload, dict) else ""
+    http_status = (
+        status.HTTP_401_UNAUTHORIZED
+        if error_code == "authentication_required"
+        else (
+            status.HTTP_400_BAD_REQUEST
+            if error_code in {"invalid_configuration", "invalid_input"}
+            else status.HTTP_502_BAD_GATEWAY
+        )
+    )
+    raise HTTPException(
+        status_code=http_status,
+        detail=result.get("message", "Google Sheets header discovery failed."),
+    )
 
 
 async def _resolve_tool_auth_config(tool_name: str) -> dict | None:

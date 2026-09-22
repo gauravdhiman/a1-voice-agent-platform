@@ -110,9 +110,14 @@ def _json_schema_for_annotation(annotation: Any) -> dict[str, Any]:
     if origin is dict:
         args = get_args(annotation)
         value_annotation = args[1] if len(args) > 1 else Any
+        value_schema = (
+            _scalar_schema()
+            if value_annotation is Any
+            else _json_schema_for_annotation(value_annotation)
+        )
         return {
             "type": "object",
-            "additionalProperties": _json_schema_for_annotation(value_annotation),
+            "additionalProperties": value_schema,
         }
 
     primitive = {
@@ -130,6 +135,17 @@ def _json_schema_for_annotation(annotation: Any) -> dict[str, Any]:
     if primitive:
         return {"type": primitive}
     return {"type": "string"}
+
+
+def _scalar_schema() -> dict[str, Any]:
+    """Describe the scalar JSON values accepted in a sheet cell."""
+    return {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "boolean"},
+        ]
+    }
 
 
 def build_function_schema(function: Callable[..., Any]) -> FunctionSchema:
@@ -168,6 +184,44 @@ def build_function_schema(function: Callable[..., Any]) -> FunctionSchema:
         description=inspect.getdoc(function) or "",
         properties=properties,
         required=required,
+    )
+
+
+def apply_model_function_guidance(
+    schema: FunctionSchema,
+    tool_instance: Any,
+) -> FunctionSchema:
+    """Apply safe attachment-specific schema and guidance to a function schema.
+
+    Native tools may narrow generic catalog properties after an attachment is
+    loaded. The optional hook is deliberately capability-neutral: a tool can
+    constrain arguments from trusted configuration without teaching this
+    assembly layer about provider-specific fields.
+    """
+    properties_method = getattr(tool_instance, "model_function_properties", None)
+    if callable(properties_method):
+        properties = properties_method(schema.name, schema.properties)
+        if isinstance(properties, dict):
+            schema = FunctionSchema(
+                name=schema.name,
+                description=schema.description,
+                properties=properties,
+                required=schema.required,
+                handler=getattr(schema, "handler", None),
+            )
+
+    guidance_method = getattr(tool_instance, "model_function_guidance", None)
+    if not callable(guidance_method):
+        return schema
+    guidance = guidance_method(schema.name)
+    if not guidance:
+        return schema
+    return FunctionSchema(
+        name=schema.name,
+        description=f"{schema.description.rstrip()}\n\n{guidance.strip()}",
+        properties=schema.properties,
+        required=schema.required,
+        handler=getattr(schema, "handler", None),
     )
 
 
@@ -369,6 +423,7 @@ async def assemble_agent_tools(
             if _is_function_unselected(registry, function, skipped):
                 continue
             schema = build_function_schema(function)
+            schema = apply_model_function_guidance(schema, instance)
             handler = create_legacy_tool_handler(
                 getattr(instance, function.__name__),
                 runtime_context=runtime_context,

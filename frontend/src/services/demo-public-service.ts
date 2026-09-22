@@ -47,11 +47,15 @@ export interface DemoCallTokenResponse {
 }
 
 export type DemoOutcomeActionType =
-  "lead_capture" | "appointment_booking" | "email_delivery";
+  | "lead_capture"
+  | "appointment_booking"
+  | "email_delivery"
+  | "sheet_row_created";
 export type DemoOutcomeActionStatus = "succeeded" | "failed" | "pending";
 
 export interface DemoOutcomeProviderResult {
   record_type?: string | null;
+  record_label?: string | null;
   record_id?: string | null;
   /** Provider-generated link, present only when it is safe to expose. */
   record_url?: string | null;

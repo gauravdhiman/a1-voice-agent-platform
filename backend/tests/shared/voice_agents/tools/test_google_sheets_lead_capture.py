@@ -173,26 +173,33 @@ async def test_capture_lead_validates_before_provider_io() -> None:
     assert calls == 0
 
 
-def test_registry_exposes_only_the_business_level_sheets_action() -> None:
-    """The public demo adapter must not expose arbitrary spreadsheet methods."""
+def test_registry_does_not_publish_the_retired_lead_only_adapter() -> None:
+    """The retired adapter remains runtime-compatible but is not cataloged."""
     registry = PlatformToolRegistry()
     registry.register_tools_from_package("shared.voice_agents.tools.implementations")
 
-    tool_class = registry.get_tool_class("Google_Sheets_lead_capture")
-    functions = registry.get_tool_functions("Google_Sheets_lead_capture")
-
-    assert tool_class is GoogleSheetsLeadCaptureTool
-    assert [function.__name__ for function in functions] == ["capture_lead"]
+    assert registry.get_tool_class("Google_Sheets_lead_capture") is not None
+    assert registry.get_tool_functions("Google_Sheets_lead_capture")
     assert "Google_Sheets" in registry.get_tool_names()
-    config_schema = tool_class().metadata.config_schema
-    assert (
-        "Editor access" in config_schema["properties"]["spreadsheet_id"]["description"]
-    )
-    assert (
-        "does not need to match"
-        in config_schema["properties"]["lead_source"]["description"]
-    )
-    assert "send_confirmation_email" not in config_schema["properties"]
+    assert GoogleSheetsLeadCaptureTool.DEPRECATED_TOOL is True
+
+
+@pytest.mark.asyncio
+async def test_registry_does_not_resync_the_retired_lead_only_adapter() -> None:
+    """Catalog sync skips the prototype so it stays unavailable for new links."""
+    registry = PlatformToolRegistry()
+    registry.register_tools_from_package("shared.voice_agents.tools.implementations")
+    synced_names: list[str] = []
+
+    class FakeToolService:
+        async def upsert_platform_tool(self, tool_data):
+            synced_names.append(tool_data.name)
+            return None, None
+
+    await registry.sync_with_db(FakeToolService())
+
+    assert "Google_Sheets" in synced_names
+    assert "Google_Sheets_lead_capture" not in synced_names
 
 
 @pytest.mark.asyncio

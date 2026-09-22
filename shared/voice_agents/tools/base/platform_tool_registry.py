@@ -11,7 +11,19 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from typing import Any, Callable, Dict, List, Optional, Type, get_type_hints
+from types import UnionType
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from shared.voice_agents.tool_models import PlatformToolCreate
 from shared.voice_agents.tool_service import ToolService
@@ -81,6 +93,7 @@ class PlatformToolRegistry:
         Extract public async tool methods that accept ``ToolContext``.
         """
         methods = []
+        exposed_names = getattr(type(tool_instance), "EXPOSED_FUNCTION_NAMES", None)
 
         # Get all callable members of the class
         for name, member in inspect.getmembers(tool_instance):
@@ -89,6 +102,9 @@ class PlatformToolRegistry:
                 continue
 
             if name.startswith("_"):
+                continue
+
+            if exposed_names is not None and name not in exposed_names:
                 continue
 
             # Skip property getters
@@ -137,6 +153,12 @@ class PlatformToolRegistry:
         )
 
         for name, tool_class in self._tools.items():
+            if getattr(tool_class, "DEPRECATED_TOOL", False):
+                logger.info(
+                    "Platform Registry: Skipping deprecated catalog tool: %s",
+                    name,
+                )
+                continue
             tool_instance = tool_class()
             metadata = tool_instance.metadata
 
@@ -229,18 +251,7 @@ class PlatformToolRegistry:
                     if annotation is ToolContext:
                         continue
 
-                param_info = {"type": "string"}
-
-                # Try to get type annotation
-                if annotation != inspect.Parameter.empty:
-                    if annotation == int:
-                        param_info["type"] = "integer"
-                    elif annotation == float:
-                        param_info["type"] = "number"
-                    elif annotation == bool:
-                        param_info["type"] = "boolean"
-                    elif annotation == list:
-                        param_info["type"] = "array"
+                param_info = self._json_schema_for_annotation(annotation)
 
                 parameters["properties"][param_name] = param_info
 
@@ -263,6 +274,66 @@ class PlatformToolRegistry:
                 f"Platform Registry: Failed to extract schema from function {func.__name__}: {e}"  # noqa: E501
             )
             return None
+
+    def _json_schema_for_annotation(self, annotation: Any) -> Dict[str, Any]:
+        """Convert native annotations into provider-safe function schemas."""
+        if annotation is inspect.Parameter.empty or annotation is Any:
+            return {"type": "string"}
+
+        origin = get_origin(annotation)
+        if origin in (Union, UnionType):
+            choices = [
+                choice for choice in get_args(annotation) if choice is not type(None)
+            ]
+            if len(choices) == 1:
+                return self._json_schema_for_annotation(choices[0])
+            return {"type": "string"}
+
+        if origin in (list, tuple, set):
+            args = get_args(annotation)
+            item_annotation = args[0] if args else Any
+            return {
+                "type": "array",
+                "items": self._json_schema_for_annotation(item_annotation),
+            }
+
+        if origin is dict:
+            args = get_args(annotation)
+            value_annotation = args[1] if len(args) > 1 else Any
+            value_schema = (
+                self._scalar_schema()
+                if value_annotation is Any
+                else self._json_schema_for_annotation(value_annotation)
+            )
+            return {
+                "type": "object",
+                "additionalProperties": value_schema,
+            }
+
+        primitive = {
+            int: "integer",
+            float: "number",
+            bool: "boolean",
+            str: "string",
+            dict: "object",
+            list: "array",
+        }.get(annotation)
+        if primitive == "array":
+            return {"type": "array", "items": {"type": "string"}}
+        if primitive:
+            return {"type": primitive}
+        return {"type": "string"}
+
+    @staticmethod
+    def _scalar_schema() -> Dict[str, Any]:
+        """Describe the JSON scalar values accepted in a sheet cell."""
+        return {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "number"},
+                {"type": "boolean"},
+            ]
+        }
 
     def get_tool_class(self, name: str) -> Type[BaseTool] | None:
         return self._tools.get(name)

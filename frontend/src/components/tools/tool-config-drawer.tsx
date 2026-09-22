@@ -47,6 +47,8 @@ import {
   ResendEmailConfigEditor,
   ResendEmailRouteConfig,
 } from "@/components/tools/resend-email-config";
+import { GoogleSheetsConfigEditor } from "@/components/tools/google-sheets-config";
+import type { GoogleSheetsDiscovery } from "@/types/agent";
 import {
   Tooltip,
   TooltipContent,
@@ -79,6 +81,11 @@ export interface ToolConfigDrawerProps {
   onOAuth: (toolName: string) => Promise<void>;
   onLogout: (agentToolId: string) => Promise<void>;
   onSetApiKey: (agentToolId: string, apiKey: string) => Promise<void>;
+  /** Read-only tab/header discovery for the guided Google Sheets setup. */
+  onDiscoverGoogleSheetHeaders?: (
+    agentToolId: string,
+    spreadsheetId: string,
+  ) => Promise<GoogleSheetsDiscovery>;
   onDisconnect: () => void;
   canEdit: boolean;
   isSaving?: boolean;
@@ -97,6 +104,7 @@ export function ToolConfigDrawer({
   onOAuth,
   onLogout,
   onSetApiKey,
+  onDiscoverGoogleSheetHeaders,
   onDisconnect,
   canEdit,
   isSaving = false,
@@ -138,12 +146,14 @@ export function ToolConfigDrawer({
 
   const schema = tool.config_schema as {
     requires_auth?: boolean;
+    required?: string[];
     properties?: Record<
       string,
       {
         title?: string;
         description?: string;
         default?: unknown;
+        required?: boolean;
       }
     >;
   } | null;
@@ -158,6 +168,8 @@ export function ToolConfigDrawer({
   ).length;
   const allFunctionsEnabled = enabledFunctionCount === functions.length;
   const isResendEmailTool = tool.name === RESEND_EMAIL_TOOL_NAME;
+  const isGoogleSheetsTool =
+    tool.name === "Google_Sheets" && Boolean(onDiscoverGoogleSheetHeaders);
   const resendRoutes = React.useMemo(
     () => parseResendEmailRoutes(localConfig.routes),
     [localConfig.routes],
@@ -176,8 +188,7 @@ export function ToolConfigDrawer({
     isApiKey && tool.requires_auth === false;
 
   const handleConfigChange = (key: string, value: string) => {
-    const newConfig = { ...localConfig, [key]: value };
-    setLocalConfig(newConfig);
+    setLocalConfig((current) => ({ ...current, [key]: value }));
     setHasUnsavedChanges(true);
   };
 
@@ -657,11 +668,26 @@ export function ToolConfigDrawer({
                   onChange={handleResendRoutesChange}
                   canEdit={canEdit}
                 />
+              ) : isGoogleSheetsTool && agentTool && onDiscoverGoogleSheetHeaders ? (
+                <GoogleSheetsConfigEditor
+                  agentToolId={agentTool.id}
+                  config={localConfig}
+                  authenticated={authenticated}
+                  canEdit={canEdit}
+                  onConfigChange={handleConfigChange}
+                  onDiscover={onDiscoverGoogleSheetHeaders}
+                />
               ) : (
                 <TooltipProvider delayDuration={300}>
                   <div className="grid gap-3">
                     {Object.entries(schema.properties).map(([key, prop]) => {
                       const fieldLabel = prop.title || formatConfigLabel(key);
+                      const isRequired =
+                        prop.required === true ||
+                        schema.required?.includes(key) ||
+                        /^required(?:[.:]|\s)/.test(
+                          prop.description?.trim().toLowerCase() ?? "",
+                        );
                       const helpText =
                         prop.description ||
                         `Configure ${fieldLabel.toLowerCase()}.`;
@@ -678,6 +704,16 @@ export function ToolConfigDrawer({
                             >
                               {fieldLabel}
                             </Label>
+                            <span
+                              className={cn(
+                                "rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+                                isRequired
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {isRequired ? "Required" : "Optional"}
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button

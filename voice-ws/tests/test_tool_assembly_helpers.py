@@ -8,6 +8,7 @@ from typing import Any
 from src.tools.assembly import (
     _is_function_unselected,
     _resolve_runtime_sensitive_config,
+    apply_model_function_guidance,
     build_function_schema,
     create_legacy_tool_handler,
 )
@@ -79,27 +80,113 @@ class TestToolAssemblyHelpers:
         assert "duration_minutes" in schema.properties
         assert "window_start" in schema.properties
 
-    def test_build_function_schema_includes_array_items_for_gemini(self) -> None:
-        """Gemini Live requires array parameters to declare item schemas."""
-        schema = build_function_schema(GoogleSheetsTool.append_row)
+    def test_build_function_schema_exposes_header_keyed_row_values(self) -> None:
+        """The generic contract passes a validated header-to-cell object."""
+        schema = build_function_schema(GoogleSheetsTool.create_row)
 
         values_schema = schema.properties["values"]
-        assert values_schema["type"] == "array"
-        assert "items" in values_schema
-        assert values_schema["items"]["type"] == "string"
+        assert values_schema == {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"},
+                ]
+            },
+        }
 
-    def test_build_function_schema_nested_arrays_and_object_items(self) -> None:
-        """2D arrays and list-of-object params must also declare items."""
-        update_schema = build_function_schema(GoogleSheetsTool.update_cell)
-        values_schema = update_schema.properties["values"]
-        assert values_schema["type"] == "array"
-        assert values_schema["items"]["type"] == "array"
-        assert values_schema["items"]["items"]["type"] == "string"
+    def test_build_function_schema_update_requires_exact_match(self) -> None:
+        """Updates expose a match key and a partial header-keyed patch."""
+        schema = build_function_schema(GoogleSheetsTool.update_row)
 
-        batch_schema = build_function_schema(GoogleSheetsTool.batch_update_values)
-        updates_schema = batch_schema.properties["updates"]
-        assert updates_schema["type"] == "array"
-        assert updates_schema["items"]["type"] == "object"
+        assert schema.required == ["match_column", "match_value", "values"]
+        assert schema.properties["values"] == {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"},
+                ]
+            },
+        }
+
+    def test_configured_agent_fields_are_added_to_model_guidance(self) -> None:
+        """The runtime schema teaches the model the attachment's field names."""
+        tool = GoogleSheetsTool(
+            config={
+                "agent_columns": "Customer Name, Items, Quantity",
+                "required_columns": "Customer Name, Items",
+                "idempotency_column": "Order ID",
+            }
+        )
+        schema = build_function_schema(GoogleSheetsTool.create_row)
+
+        schema = apply_model_function_guidance(schema, tool)
+
+        assert "`Customer Name`" in schema.description
+        assert "`Items`" in schema.description
+        assert "`Quantity`" in schema.description
+        assert "Required for create_row" in schema.description
+        assert "`Order ID` (idempotency key)" in schema.description
+
+    def test_configured_row_schema_uses_exact_headers_and_required_fields(self) -> None:
+        """Configured row values reject renamed keys before provider I/O."""
+        tool = GoogleSheetsTool(
+            config={
+                "agent_columns": "Caller Name, Phone, Order details, Notes",
+                "required_columns": "Caller Name, Phone, Order details",
+                "idempotency_column": "Submission ID",
+            }
+        )
+
+        schema = apply_model_function_guidance(
+            build_function_schema(GoogleSheetsTool.create_row),
+            tool,
+        )
+
+        values_schema = schema.properties["values"]
+        assert values_schema["additionalProperties"] is False
+        assert list(values_schema["properties"]) == [
+            "Caller Name",
+            "Phone",
+            "Order details",
+            "Notes",
+        ]
+        assert values_schema["required"] == [
+            "Caller Name",
+            "Phone",
+            "Order details",
+        ]
+        assert "Submission ID" not in values_schema["properties"]
+
+    def test_update_schema_allows_business_patch_but_not_managed_values(self) -> None:
+        """Updates expose exact match headers and business-only patches."""
+        tool = GoogleSheetsTool(
+            config={
+                "agent_columns": "Caller Name, Phone",
+                "idempotency_column": "Submission ID",
+                "timestamp_column": "Captured at",
+            }
+        )
+
+        schema = apply_model_function_guidance(
+            build_function_schema(GoogleSheetsTool.update_row),
+            tool,
+        )
+
+        assert schema.properties["match_column"]["enum"] == [
+            "Caller Name",
+            "Phone",
+            "Submission ID",
+            "Captured at",
+        ]
+        assert schema.properties["values"]["additionalProperties"] is False
+        assert list(schema.properties["values"]["properties"]) == [
+            "Caller Name",
+            "Phone",
+        ]
 
     def test_build_function_schema_preserves_pep604_optional_primitive_type(
         self,

@@ -40,7 +40,11 @@ from shared.voice_agents.public_page_service import public_page_service
 from shared.voice_agents.service import voice_agent_service
 
 logger = logging.getLogger(__name__)
-_PRIMARY_DEMO_ACTION_TYPES = {"lead_capture", "appointment_booking"}
+_PRIMARY_DEMO_ACTION_TYPES = {
+    "lead_capture",
+    "appointment_booking",
+    "sheet_row_created",
+}
 # Public demos remain free to use, but token issuance is bounded per source so
 # one visitor cannot turn an unlimited demo into an unattended spend loop.
 DEMO_CALL_TOKEN_RATE_LIMIT = "5/hour"
@@ -82,7 +86,12 @@ class DemoOutcomeActionResponse(BaseModel):
     """One visitor-visible side effect from a demo workflow."""
 
     id: UUID
-    action_type: Literal["lead_capture", "appointment_booking", "email_delivery"]
+    action_type: Literal[
+        "lead_capture",
+        "appointment_booking",
+        "email_delivery",
+        "sheet_row_created",
+    ]
     provider: str
     status: Literal["succeeded", "failed", "pending"]
     error_code: str | None = None

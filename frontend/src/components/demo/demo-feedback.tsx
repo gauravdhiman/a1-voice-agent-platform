@@ -7,6 +7,8 @@ import { demoPublicService } from "@/services/demo-public-service";
 import { cn } from "@/lib/utils";
 
 interface DemoFeedbackProps {
+  /** Display name of the agent that handled the demo call. */
+  agentName: string;
   /** Demo agent slug, recorded with the rating (no PII ever). */
   demoSlug: string;
   /**
@@ -26,7 +28,11 @@ interface DemoFeedbackProps {
  * a public demo page is a PII and moderation liability. Detailed interest
  * goes through the request-demo form instead.
  */
-export function DemoFeedback({ demoSlug, receiptToken }: DemoFeedbackProps) {
+export function DemoFeedback({
+  agentName,
+  demoSlug,
+  receiptToken,
+}: DemoFeedbackProps) {
   const [rating, setRating] = useState<number | null>(null);
 
   async function choose(value: number) {
@@ -61,7 +67,7 @@ export function DemoFeedback({ demoSlug, receiptToken }: DemoFeedbackProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
       <p className="text-sm font-medium text-slate-900 dark:text-white">
-        How was this demo?
+        How was your demo call with {agentName}?
       </p>
       <div
         className="flex items-center gap-1"
