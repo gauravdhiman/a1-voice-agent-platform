@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List, Optional
+from typing import Any, ClassVar, List, Optional
 
 import httpx
 from pydantic import Field
@@ -12,11 +12,25 @@ from shared.voice_agents.tools.base.base_tool import (
     ToolMetadata,
 )
 from shared.voice_agents.tools.base.tool_context import ToolContext
+from shared.voice_agents.tools.google_sheets_service import GoogleSheetsService
 
 logger = logging.getLogger(__name__)
 
 
 class GoogleSheetsTool(BaseTool):
+    """Configured Google Sheets row operations for any agent workflow.
+
+    The file retains a few legacy provider helpers for internal compatibility,
+    but only the four safe row operations in ``EXPOSED_FUNCTION_NAMES`` are
+    assembled into voice sessions.  Spreadsheet ids and ranges come from the
+    agent attachment configuration; the model receives the configured Agent
+    fields and supplies header-keyed values.
+    """
+
+    EXPOSED_FUNCTION_NAMES: ClassVar[frozenset[str]] = frozenset(
+        {"read_rows", "find_rows", "create_row", "update_row"}
+    )
+
     class AuthConfig(GoogleAuthConfig):
         scopes: list[str] = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -29,11 +43,79 @@ class GoogleSheetsTool(BaseTool):
     class Config(BaseConfig):
         spreadsheet_id: str = Field(
             default="",
-            description="Default Google Spreadsheet ID to use for operations",
+            description=(
+                "Required. Paste the full Google Sheets URL or spreadsheet ID. "
+                "The connected Google account must have Editor access."
+            ),
         )
         default_range: str = Field(
             default="Sheet1!A1:Z1000",
-            description="Default range for sheet operations (e.g., 'Sheet1!A1:B10')",
+            description=(
+                "Configured working area, including its header row, such as "
+                "'Orders!A:L'. Voice operations stay on this tab."
+            ),
+        )
+        header_range: str = Field(
+            default="",
+            description=(
+                "Optional header row range. Leave blank to derive row 1 from "
+                "the configured working area."
+            ),
+        )
+        agent_columns: str = Field(
+            default="",
+            title="Agent fields",
+            description=(
+                "Required comma-separated sheet headers the agent may use for "
+                "business data, such as 'Customer name, Items, Pickup time'. "
+                "Use the exact names from row 1. Leave generated columns such "
+                "as the idempotency, timestamp, source, and status columns out; "
+                "the attachment fills those automatically."
+            ),
+        )
+        idempotency_column: str = Field(
+            default="",
+            description=(
+                "Optional stable key header. When set, create_row uses the "
+                "voice session id and will not append the same session twice."
+            ),
+        )
+        timestamp_column: str = Field(
+            default="",
+            description=(
+                "Optional header that receives the current UTC timestamp when "
+                "create_row does not supply it."
+            ),
+        )
+        source_column: str = Field(
+            default="",
+            description="Optional header for a configured source label.",
+        )
+        source_value: str = Field(
+            default="",
+            description="Optional value written to the configured source column.",
+        )
+        status_column: str = Field(
+            default="",
+            description="Optional header for a default status value.",
+        )
+        status_value: str = Field(
+            default="",
+            description="Optional status written when create_row omits that column.",
+        )
+        required_columns: str = Field(
+            default="",
+            description=(
+                "Optional comma-separated header names that create_row must "
+                "receive before it can write."
+            ),
+        )
+        record_label: str = Field(
+            default="spreadsheet row",
+            description=(
+                "Short business label used in safe results, such as 'order "
+                "request' or 'service inquiry'."
+            ),
         )
 
     class SensitiveConfig(BaseSensitiveConfig):
@@ -46,14 +128,119 @@ class GoogleSheetsTool(BaseTool):
         return ToolMetadata(
             name="Google_Sheets",
             description=(
-                "Read, write, and manage Google Sheets data. "
-                "Supports reading values, appending rows, updating cells, "
-                "searching data, and creating spreadsheets."
+                "Manage rows in one configured Google Sheets spreadsheet. Supports bounded "
+                "reads, searches, idempotent row creation, and exact-match row "
+                "updates with header validation."
             ),
             requires_auth=True,
             auth_type="oauth2",
             auth_config=self.AuthConfig().model_dump(),
             config_schema=self.Config.model_json_schema(),
+        )
+
+    def check_configuration(self) -> list[str]:
+        """Surface missing destination/range setup in the agent tool card."""
+        return self._service().configuration_issues()
+
+    def _service(self) -> GoogleSheetsService:
+        """Build the configured provider service for this agent attachment."""
+        config = self.config
+        return GoogleSheetsService(
+            access_token=self.sensitive_config.access_token,
+            spreadsheet_id=config.spreadsheet_id,
+            default_range=config.default_range,
+            header_range=config.header_range,
+            agent_columns=config.agent_columns,
+            idempotency_column=config.idempotency_column,
+            timestamp_column=config.timestamp_column,
+            source_column=config.source_column,
+            source_value=config.source_value,
+            status_column=config.status_column,
+            status_value=config.status_value,
+            required_columns=config.required_columns,
+            record_label=config.record_label,
+        )
+
+    def model_function_guidance(self, function_name: str) -> str:
+        """Describe the configured business fields to the voice model."""
+        return self._service().model_function_guidance(function_name)
+
+    def model_function_properties(
+        self,
+        function_name: str,
+        properties: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Constrain row arguments to this attachment's exact headers."""
+        return self._service().model_function_properties(function_name, properties)
+
+    async def read_rows(
+        self,
+        context: ToolContext,
+        range: str = "",
+        max_rows: int = 50,
+    ) -> dict[str, Any]:
+        """Read bounded rows from the configured sheet area.
+
+        Use this before a write when the workflow needs to inspect existing
+        records.  The model may narrow the configured range to the same tab,
+        but cannot choose another spreadsheet or tab.
+        """
+        return await self._service().read_rows(
+            context=context,
+            range=range,
+            max_rows=max_rows,
+        )
+
+    async def find_rows(
+        self,
+        context: ToolContext,
+        query: str,
+        column: str = "",
+        range: str = "",
+        max_results: int = 20,
+    ) -> dict[str, Any]:
+        """Find matching rows by header value in the configured sheet area."""
+        return await self._service().find_rows(
+            context=context,
+            query=query,
+            column=column,
+            range=range,
+            max_results=max_results,
+        )
+
+    async def create_row(
+        self,
+        context: ToolContext,
+        values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create one validated row using the sheet's header names as keys.
+
+        The agent instructions should collect and confirm the business fields,
+        then pass a mapping keyed by the configured Agent fields. Generated
+        columns and same-session deduplication are handled by the configured
+        attachment. If the result is retryable ``needs_details``, correct the
+        missing field or exact header once; never claim that a row was saved
+        without a successful result.
+        """
+        return await self._service().create_row(context=context, values=values)
+
+    async def update_row(
+        self,
+        context: ToolContext,
+        match_column: str,
+        match_value: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update business fields on exactly one exact-match row.
+
+        The idempotency, timestamp, source, and status columns remain managed
+        by the attachment and cannot be changed through this function.
+        """
+        return await self._service().update_row(
+            context=context,
+            match_column=match_column,
+            match_value=match_value,
+            values=values,
         )
 
     async def get_sheet_values(

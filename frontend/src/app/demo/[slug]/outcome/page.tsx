@@ -13,6 +13,7 @@ import {
   Clock3,
   ContactRound,
   ExternalLink,
+  FileSpreadsheet,
   Loader2,
   MailCheck,
   RefreshCw,
@@ -107,6 +108,17 @@ function actionTitle(action: DemoOutcomeAction): string {
     if (action.status === "pending") return "Service request waiting";
     return "Service request not saved";
   }
+  if (action.action_type === "sheet_row_created") {
+    const configuredLabel = action.provider_result.record_label;
+    const label =
+      typeof configuredLabel === "string" && configuredLabel.trim()
+        ? configuredLabel.trim()
+        : "Record";
+    const title = label.charAt(0).toUpperCase() + label.slice(1);
+    if (action.status === "succeeded") return `${title} saved`;
+    if (action.status === "pending") return `${title} waiting`;
+    return `${title} not saved`;
+  }
   if (action.status === "succeeded") return "Appointment booked";
   if (action.status === "pending") return "Appointment waiting";
   return "Appointment not booked";
@@ -124,6 +136,7 @@ function outcomeHeading(outcome: DemoOutcome): [string, string] {
 
 function actionIcon(action: DemoOutcomeAction) {
   if (action.action_type === "lead_capture") return ContactRound;
+  if (action.action_type === "sheet_row_created") return FileSpreadsheet;
   if (action.action_type === "email_delivery") return MailCheck;
   return CalendarDays;
 }
@@ -242,7 +255,8 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
             </span>
           </div>
           <p className="mt-1.5 text-sm" style={{ color: "var(--public-muted)" }}>
-            Saved to {destinationLabel(action)}{" "}
+            {action.status === "succeeded" ? "Saved to" : "Attempted in"}{" "}
+            {destinationLabel(action)}{" "}
             <span style={{ opacity: 0.75 }}>via {providerLabel(action)}</span>
           </p>
         </div>
@@ -280,13 +294,13 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         )}
         <div>
-          <p className="font-medium">What your tool confirmed</p>
+          <p className="font-medium">What the tools confirmed</p>
           <p className="mt-0.5" style={{ color: "var(--public-muted)" }}>
             {String(
-              action.provider_result.message ||
+                action.provider_result.message ||
                 (isSuccess
-                  ? "The tool confirmed it saved everything."
-                  : "The tool did not confirm anything was saved."),
+                  ? "The tools confirmed it saved everything."
+                  : "The tools did not confirm anything was saved."),
             )}
           </p>
           {configuredResultUrl && (
@@ -500,7 +514,11 @@ export default function DemoOutcomePage() {
               <div className={pt.panel} style={{ padding: 24 }}>
                 <p className={pt.eyebrow}>YOUR TURN · 30 SECONDS</p>
                 <div className="mt-4">
-                  <DemoFeedback demoSlug={slug} receiptToken={receiptToken} />
+                  <DemoFeedback
+                    agentName={outcome.agent_name}
+                    demoSlug={slug}
+                    receiptToken={receiptToken}
+                  />
                 </div>
                 <div
                   className="my-6 border-t"

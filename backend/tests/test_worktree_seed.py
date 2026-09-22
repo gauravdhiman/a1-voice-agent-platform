@@ -7,9 +7,10 @@ from unittest.mock import MagicMock, patch
 from backend.src.worktree_seed import (
     CALENDAR_DEMO_DISABLED_FUNCTIONS,
     DEMO_ORGANIZATION_ID,
+    GOOGLE_SHEETS_TOOL_NAME,
     HVAC_AGENT_ID,
-    LEAD_CAPTURE_TOOL_NAME,
     LEGACY_HVAC_ORGANIZATION_ID,
+    LEGACY_SHEETS_TOOL_NAME,
     ORG_ADMIN_EMAIL,
     PLATFORM_ADMIN_EMAIL,
     REGULAR_USER_EMAIL,
@@ -116,12 +117,13 @@ def test_seed_attaches_native_calendar_appointment_tool_without_auth_state() -> 
     records = build_seed_records("calendar-contract")
 
     assert records["agent_tools"] == ["Google_calendar_appointment"]
-    assert records["agent_tools_by_agent"][HVAC_AGENT_ID] == [LEAD_CAPTURE_TOOL_NAME]
+    assert records["agent_tools_by_agent"][HVAC_AGENT_ID] == [GOOGLE_SHEETS_TOOL_NAME]
     assert records["agent_tools_by_agent"][RESTAURANT_AGENT_ID] == [
-        LEAD_CAPTURE_TOOL_NAME
+        GOOGLE_SHEETS_TOOL_NAME
     ]
     assert records["agent_tools_to_disable_by_agent"][HVAC_AGENT_ID] == [
         "HubSpot_lead_capture",
+        LEGACY_SHEETS_TOOL_NAME,
     ]
     assert records["agent_tools_to_disable_by_agent"][STAGING_AGENT_ID] == [
         "HubSpot_lead_capture",
@@ -140,14 +142,23 @@ def test_seed_attaches_native_calendar_appointment_tool_without_auth_state() -> 
     )
     assert (
         "send_confirmation_email"
-        not in records["agent_tool_configs"][HVAC_AGENT_ID][LEAD_CAPTURE_TOOL_NAME]
+        not in records["agent_tool_configs"][HVAC_AGENT_ID][GOOGLE_SHEETS_TOOL_NAME]
     )
     assert records["agent_tool_configs"][RESTAURANT_AGENT_ID][
-        LEAD_CAPTURE_TOOL_NAME
+        GOOGLE_SHEETS_TOOL_NAME
     ] == {
-        "lead_source": "24x7 AI public demo",
-        "append_range": "Orders!A:L",
-        "dedupe_range": "Orders!A:A",
+        "spreadsheet_id": "",
+        "default_range": "Orders!A1:L1000",
+        "header_range": "Orders!A1:L1",
+        "agent_columns": "Customer Name, Phone, Items",
+        "idempotency_column": "Submission ID",
+        "timestamp_column": "Captured at",
+        "source_column": "Lead source",
+        "source_value": "24x7 AI Demo Call",
+        "status_column": "",
+        "status_value": "",
+        "required_columns": "Customer Name, Phone, Items",
+        "record_label": "order request",
     }
 
 
@@ -196,20 +207,28 @@ def test_seed_contains_three_public_demo_workflows() -> None:
     assert "# Service-inquiry workflow" in jordan["custom_instructions"]
     assert "# Email follow-up" in jordan["custom_instructions"]
     assert "spell the caller's name one letter at a time" in jordan_instructions.lower()
-    assert "if an email is provided" in jordan_instructions.lower()
+    assert "spell the email one character at a time" in jordan_instructions.lower()
+    assert "do not rename them, convert them to snake_case, or invent aliases" in (
+        jordan_instructions.lower()
+    )
     assert "invoke that tool automatically" in jordan_instructions
     assert "email confirmation was not sent" in jordan_instructions
     assert "do not repeat the notice" in jordan_instructions
+    assert "capture_lead" not in jordan_instructions
+    assert "create_row" in jordan_instructions
     assert "AI voice assistant" not in jordan["instructions_markdown"]
     sofia_instructions = " ".join(sofia["custom_instructions"].split())
     assert "Verdi Table" in sofia["instructions_markdown"]
     assert "2201 E Juniper Lane" in sofia["instructions_markdown"]
     assert "$16" in sofia["instructions_markdown"]
     assert (
-        "Do not call `capture_lead` for a menu or hours question"
+        "Do not call `create_row` for a menu or hours question"
         in sofia["custom_instructions"]
     )
-    assert "capture_lead" in sofia_instructions
+    assert "create_row" in sofia_instructions
+    assert "do not rename them, convert them to snake_case, or invent aliases" in (
+        sofia_instructions.lower()
+    )
     assert "spell the caller's name one letter at a time" in sofia_instructions
     assert "email confirmation was not sent" in sofia_instructions
     assert "quick 1-to-5 rating" in sofia_instructions

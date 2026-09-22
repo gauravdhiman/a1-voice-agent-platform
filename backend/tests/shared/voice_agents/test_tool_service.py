@@ -493,6 +493,57 @@ class TestToolService:
         assert tools[0].tool.name == "Gmail"
         # Note: AgentToolResponse doesn't include sensitive_config by design
 
+    async def test_get_agent_tool_with_sensitive_config_scopes_one_attachment(
+        self, tool_service, mock_supabase_client
+    ):
+        """Header discovery loads only the selected attachment's token."""
+        agent_id = uuid4()
+        tool_id = uuid4()
+        agent_tool_id = uuid4()
+        mock_response = MagicMock()
+        mock_response.data = [
+            {
+                "id": str(agent_tool_id),
+                "agent_id": str(agent_id),
+                "tool_id": str(tool_id),
+                "config": {"spreadsheet_id": "sheet-id-123456"},
+                "unselected_functions": [],
+                "sensitive_config": "encrypted-token",
+                "is_enabled": True,
+                "tool": {
+                    "id": str(tool_id),
+                    "name": "Google_Sheets",
+                    "description": "Google Sheets",
+                    "config_schema": {},
+                    "auth_type": "oauth2",
+                    "requires_auth": True,
+                    "auth_config": {},
+                    "tool_functions_schema": {},
+                    "is_active": True,
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z",
+                },
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            }
+        ]
+        mock_supabase_client.table.return_value.execute.return_value = mock_response
+
+        with patch(
+            "shared.voice_agents.tool_service.decrypt_data",
+            return_value={"access_token": "token"},
+        ):
+            result, error = await tool_service.get_agent_tool_with_sensitive_config(
+                agent_tool_id
+            )
+
+        assert error is None
+        assert result is not None
+        assert result.tool is not None
+        assert result.tool.name == "Google_Sheets"
+        assert result.sensitive_config == {"access_token": "token"}
+        mock_supabase_client.table.assert_called_once_with("agent_tools")
+
     async def test_update_agent_tool(self, tool_service, mock_supabase_client):
         """Test updating agent tool."""
         agent_tool_id = uuid4()
@@ -1653,24 +1704,19 @@ class TestAgentToolConfigurationStatus:
         """Jordan's exact failure surfaces before any call runs."""
         from shared.voice_agents.tool_models import ConnectionStatus
 
-        row = self._agent_tool_row(
-            "Google_Sheets_lead_capture", {"spreadsheet_id": ""}
-        )
+        row = self._agent_tool_row("Google_Sheets", {"spreadsheet_id": ""})
         mock_response = MagicMock()
         mock_response.data = [row]
-        mock_supabase_client.table.return_value.execute.return_value = (
-            mock_response
-        )
+        mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         tools, error = await tool_service.get_agent_tools(uuid4())
 
         assert error is None
         assert len(tools) == 1
-        assert (
-            tools[0].connection_status == ConnectionStatus.CONFIGURATION_REQUIRED
-        )
+        assert tools[0].connection_status == ConnectionStatus.CONFIGURATION_REQUIRED
         assert tools[0].configuration_issues == [
-            "spreadsheet destination is not set"
+            "spreadsheet destination is not set",
+            "agent fields are not set",
         ]
 
     async def test_complete_attachment_keeps_derived_status(
@@ -1680,22 +1726,23 @@ class TestAgentToolConfigurationStatus:
         from shared.voice_agents.tool_models import ConnectionStatus
 
         row = self._agent_tool_row(
-            "Google_Sheets_lead_capture",
-            {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"},
+            "Google_Sheets",
+            {
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "agent_columns": "Customer name, Items",
+            },
         )
         mock_response = MagicMock()
         mock_response.data = [row]
-        mock_supabase_client.table.return_value.execute.return_value = (
-            mock_response
-        )
+        mock_supabase_client.table.return_value.execute.return_value = mock_response
 
         tools, error = await tool_service.get_agent_tools(uuid4())
 
         assert error is None
         assert tools[0].configuration_issues == []
-        assert (
-            tools[0].connection_status == ConnectionStatus.CONNECTED_NO_AUTH
-        )
+        assert tools[0].connection_status == ConnectionStatus.CONNECTED_NO_AUTH
+
+
 class TestOrganizationToolVisibility:
     """Organization overrides are sparse and default to visible."""
 

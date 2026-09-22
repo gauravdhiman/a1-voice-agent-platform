@@ -220,6 +220,12 @@ export function AgentDetailToolsTab({
     [updateAgentToolMutation],
   );
 
+  const handleDiscoverGoogleSheetHeaders = React.useCallback(
+    (agentToolId: string, spreadsheetId: string) =>
+      agentService.discoverGoogleSheetHeaders(agentToolId, spreadsheetId),
+    [],
+  );
+
   const handleOAuth = React.useCallback(
     async (toolName: string) => {
       try {
@@ -544,6 +550,7 @@ export function AgentDetailToolsTab({
           onOAuth={handleOAuth}
           onLogout={handleLogout}
           onSetApiKey={handleSetApiKey}
+          onDiscoverGoogleSheetHeaders={handleDiscoverGoogleSheetHeaders}
           onDisconnect={() => {
             const agentTool = localAgentTools.find(
               (candidate) => candidate.tool_id === selectedTool.id,

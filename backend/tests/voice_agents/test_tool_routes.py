@@ -481,6 +481,70 @@ class TestToolRoutesPermissions:
                 assert result["deleted"] is True
 
 
+class TestGoogleSheetsHeaderDiscovery:
+    """Header discovery stays scoped to the authenticated attachment."""
+
+    @pytest.mark.asyncio
+    async def test_discover_headers_returns_safe_metadata(self):
+        from src.voice_agents.tool_routes import (
+            GoogleSheetsDiscoverRequest,
+            discover_google_sheets_headers,
+        )
+
+        public_tool = Mock()
+        public_tool.tool = Mock()
+        public_tool.tool.name = "Google_Sheets"
+        runtime_tool = Mock()
+        runtime_tool.tool = public_tool.tool
+        runtime_tool.config = {"default_range": "Orders!A1:L1000"}
+        runtime_tool.sensitive_config = {"access_token": "secret"}
+        payload = {
+            "status": "succeeded",
+            "provider": "google_sheets",
+            "sheets": [
+                {
+                    "title": "Orders",
+                    "sheet_id": 7,
+                    "headers": ["Customer", "Items"],
+                    "header_range": "Orders!A1:B1",
+                    "issues": [],
+                }
+            ],
+        }
+        profile = _make_user_profile(is_platform_admin=True)
+
+        with patch(
+            "src.voice_agents.tool_routes._assert_agent_tool_admin",
+            new_callable=AsyncMock,
+            return_value=public_tool,
+        ):
+            with patch(
+                "src.voice_agents.tool_routes.tool_service"
+            ) as mock_tool_service:
+                mock_tool_service.get_agent_tool_with_sensitive_config = AsyncMock(
+                    return_value=(runtime_tool, None)
+                )
+                with patch(
+                    "src.voice_agents.tool_routes.GoogleSheetsService"
+                ) as service_class:
+                    service_class.return_value.discover_sheet_headers = AsyncMock(
+                        return_value=payload
+                    )
+
+                    result = await discover_google_sheets_headers(
+                        agent_tool_id=TEST_AGENT_TOOL_ID,
+                        request=GoogleSheetsDiscoverRequest(
+                            spreadsheet_id="sheet-id-123456"
+                        ),
+                        user_data=(TEST_USER_ID, profile),
+                    )
+
+        assert result == payload
+        service_class.assert_called_once()
+        assert service_class.call_args.kwargs["access_token"] == "secret"
+        assert service_class.call_args.kwargs["spreadsheet_id"] == "sheet-id-123456"
+
+
 class TestPremiumToolGate:
     """Premium tools are catalog-visible but gated at attach time.
 

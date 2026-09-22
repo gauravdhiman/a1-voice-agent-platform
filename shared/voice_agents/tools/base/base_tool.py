@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -71,3 +71,35 @@ class BaseTool(ABC):
             Human-readable issue strings, empty when complete.
         """
         return []
+
+    def model_function_guidance(self, function_name: str) -> str:
+        """Return attachment-specific guidance for a model-facing function.
+
+        Native tools normally expose a stable function schema from their
+        method signature.  A configured attachment may add safe, non-secret
+        guidance (for example, the business columns an agent may use) without
+        exposing provider credentials or changing the function contract.
+
+        Args:
+            function_name: The function name being assembled for the model.
+
+        Returns:
+            Additional plain-text guidance, or an empty string when the tool
+            has no configuration-specific guidance.
+        """
+        del function_name
+        return ""
+
+    def model_function_properties(
+        self,
+        function_name: str,
+        properties: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return an optional attachment-specific function property schema.
+
+        A configured native tool may narrow a generic catalog schema using
+        trusted attachment settings. The default preserves the catalog schema
+        so existing tools remain unchanged.
+        """
+        del function_name
+        return properties

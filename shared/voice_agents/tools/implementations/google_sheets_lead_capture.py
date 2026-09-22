@@ -1,4 +1,4 @@
-"""Focused Google Sheets lead-capture tool for the public service demo."""
+"""Deprecated Jordan-specific Sheets adapter kept for migration compatibility."""
 
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -21,13 +21,16 @@ from shared.voice_agents.tools.google_sheets_lead_service import (
 
 
 class GoogleSheetsLeadCaptureTool(BaseTool):
-    """Capture one confirmed service inquiry in a configured Google Sheet.
+    """Legacy confirmed service-inquiry adapter retained for old imports.
 
-    This is intentionally separate from the general-purpose ``Google_Sheets``
-    tool. The public demo gives the model one typed business action; it never
-    needs to choose a spreadsheet, construct arbitrary row arrays, or browse
-    the organization's other spreadsheets.
+    New catalog rows and agent attachments must use the configurable
+    ``Google_Sheets`` row operations instead.
     """
+
+    # Kept for backwards-compatible imports and migration tests only. New
+    # catalog syncs and runtime assembly use the configurable Google_Sheets
+    # row operations instead of this Jordan-specific action.
+    DEPRECATED_TOOL = True
 
     class AuthConfig(GoogleAuthConfig):
         """OAuth scopes used by the existing Google Sheets connection flow."""

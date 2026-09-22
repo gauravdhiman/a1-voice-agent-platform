@@ -26,7 +26,7 @@ describe("DemoFeedback", () => {
 
   it("emits one rating event with slug and no PII", async () => {
     const user = userEvent.setup();
-    render(<DemoFeedback demoSlug="dental" />);
+    render(<DemoFeedback agentName="Jordan" demoSlug="dental" />);
 
     await user.click(screen.getByRole("button", { name: "Rate 4 out of 5" }));
 
@@ -40,7 +40,7 @@ describe("DemoFeedback", () => {
 
   it("ignores repeat clicks after the first rating", async () => {
     const user = userEvent.setup();
-    render(<DemoFeedback demoSlug="dental" />);
+    render(<DemoFeedback agentName="Jordan" demoSlug="dental" />);
 
     await user.click(screen.getByRole("button", { name: "Rate 5 out of 5" }));
     expect(screen.queryByRole("button", { name: /rate/i })).toBeNull();
@@ -50,7 +50,13 @@ describe("DemoFeedback", () => {
   it("stores the rating in the platform when a receipt token is present", async () => {
     const user = userEvent.setup();
     submitMock.mockResolvedValue(undefined);
-    render(<DemoFeedback demoSlug="dental" receiptToken="receipt-token" />);
+    render(
+      <DemoFeedback
+        agentName="Jordan"
+        demoSlug="dental"
+        receiptToken="receipt-token"
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Rate 4 out of 5" }));
 
@@ -60,7 +66,7 @@ describe("DemoFeedback", () => {
 
   it("keeps analytics-only behavior without a receipt token", async () => {
     const user = userEvent.setup();
-    render(<DemoFeedback demoSlug="dental" />);
+    render(<DemoFeedback agentName="Jordan" demoSlug="dental" />);
 
     await user.click(screen.getByRole("button", { name: "Rate 4 out of 5" }));
 
@@ -72,7 +78,13 @@ describe("DemoFeedback", () => {
   it("still thanks the visitor when the platform write fails", async () => {
     const user = userEvent.setup();
     submitMock.mockRejectedValue(new Error("Network down"));
-    render(<DemoFeedback demoSlug="dental" receiptToken="receipt-token" />);
+    render(
+      <DemoFeedback
+        agentName="Jordan"
+        demoSlug="dental"
+        receiptToken="receipt-token"
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Rate 5 out of 5" }));
 

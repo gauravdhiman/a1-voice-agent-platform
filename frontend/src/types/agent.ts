@@ -313,6 +313,22 @@ export interface AgentTool {
   tool?: PlatformTool;
 }
 
+/** Read-only tab/header metadata returned while configuring Google Sheets. */
+export interface GoogleSheetsDiscoveredSheet {
+  title: string;
+  sheet_id: number | null;
+  headers: string[];
+  header_range: string;
+  issues: string[];
+}
+
+/** Safe result of the authenticated Google Sheets header discovery probe. */
+export interface GoogleSheetsDiscovery {
+  status: "succeeded";
+  provider: "google_sheets";
+  sheets: GoogleSheetsDiscoveredSheet[];
+}
+
 export interface AgentToolCreate {
   agent_id: string;
   tool_id: string;

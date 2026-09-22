@@ -114,14 +114,12 @@ The outcome allowlist currently contains the three seeded showcase workflows:
   appointment tool. A successful new booking returns the calendar event
   summary. The public fixture exposes availability lookup and new booking only;
   existing-event search, update, and cancellation functions are disabled.
-- `copper-ridge-service-request` uses the focused native Google Sheets
-  lead-capture tool. It appends one complete, confirmed service row with a
-  session id, timestamp, caller details, service context, urgency, and callback
-  preference. A same-session retry is deduplicated before append.
-- `verdi-table-restaurant` uses the focused native Google Sheets lead-capture
-  tool for confirmed pickup-style order requests. It appends item and quantity
-  details, caller name, phone, and optional email to the configured `Orders!A:L`
-  range; a same-session retry is deduplicated before append.
+- `copper-ridge-service-request` and `verdi-table-restaurant` use the native
+  configurable `Google_Sheets` tool. Each attachment selects its working tab,
+  header range, generated columns, and the row operations that the agent needs.
+  The shipped demos enable `create_row` and exact-match `update_row`; the same
+  tool can also expose bounded `read_rows` and `find_rows` operations for other
+  agents. Both demos use a session id for read-before-append deduplication.
 
 The seeded prompts carry the business context that is intentionally absent from
 the shared demo organization. Alex identifies as an AI assistant for the
@@ -141,7 +139,8 @@ open Monday-Thursday 11:00 AM-9:00 PM, Friday-Saturday 11:00 AM-10:00 PM, and
 Sunday 10:00 AM-3:00 PM, with illustrative menu items including Sonoran grain
 bowls ($16), ember chicken sandwiches ($15), and Verde pasta ($17). All three
 prompts identify the agent as a helpful AI assistant or host, spell names and
-email addresses back for confirmation when collected, redirect unrelated
+email addresses back for confirmation when collected, repeat the exact address
+read-back before every send or resend, redirect unrelated
 requests, require explicit confirmation before provider mutations, and prohibit
 unsupported claims. Prices are clearly presented as illustrative demo rates,
 not binding quotes. The HVAC prompt also handles out-of-hours requests and
@@ -163,12 +162,14 @@ The primary Calendar, Sheets, and HubSpot tools do not send email or know that
 an email tool exists. For the seeded demos, when the caller provides and confirms
 an email address and an independent email-sending tool is attached, the agent's
 instructions tell it to invoke that tool automatically after the primary
-provider confirms success, unless the caller declines. The agent reports the
-tool's actual result: it says the confirmation was sent or accepted only after
-success, and otherwise says that the primary action succeeded but the email was
-not sent. The email tool's own contract decides how recipients or configured
-routes are handled. Gmail sends to caller-confirmed recipients; Resend sends
-only to its administrator-configured business routes.
+provider confirms success, unless the caller declines. Immediately before each
+send, including a resend, it reads the exact address back and waits for an
+explicit yes; a resend never inherits an earlier confirmation. The agent
+reports the tool's actual result: it says the confirmation was sent or accepted
+only after success, and otherwise says that the primary action succeeded but the
+email was not sent. The email tool's own contract decides how recipients or
+configured routes are handled. Gmail sends to caller-confirmed recipients;
+Resend sends only to its administrator-configured business routes.
 
 The agents call those provider tools directly, just like customer agents do.
 The receipt is a presentation boundary added after an allowlisted tool result;
@@ -187,27 +188,86 @@ row-level access control mechanism. The seeded demo spreadsheet must remain a
 dedicated platform-admin-owned demo store and must not contain internal or
 customer data.
 
-### Google Sheets lead-demo setup
+### Google Sheets row-tool setup
 
-The seeded lead and restaurant demos already have
-`Google_Sheets_lead_capture` attached. An administrator must connect the
-organization's Google account to each agent and set its spreadsheet id (an id or
-full Sheets URL) in the agent-tool settings. The lead target should contain a
-tab named `Lead submissions`; the restaurant target should contain a tab named
-`Orders`. Both use this header row in columns A:L:
+The seeded lead and restaurant demos already have `Google_Sheets` attached. An
+administrator connects the organization's Google account to each agent, pastes
+the spreadsheet id or full Sheets URL, and clicks **Discover columns**. The
+setup screen reads tab names and row-one header labels through the backend
+connection, then lets the administrator choose the data tab, Agent fields,
+Required fields, and optional managed columns from selectors. Agent and
+Required fields use searchable multi-selects so wide sheets stay compact; all
+discovered business headers start selected as Agent fields while managed
+headers stay in their metadata selectors. Cell values and OAuth
+credentials never go to the browser.
+The retired `Google_Sheets_lead_capture` catalog row is no longer available for
+new attachments; existing saved links remain runtime-compatible while they are
+migrated to the generic row contract. The lead and restaurant targets may use
+different tab names and different business headers. Choose the headers that
+match each workflow after discovery; only the optional platform-managed columns
+need stable metadata roles.
+
+Jordan's seeded lead sheet uses a header row like this in its tab:
 
 ```text
 Submission ID | Captured at | Lead source | Caller name | Caller email | Caller phone | Service needed | Issue summary | Service address | Urgency | Preferred callback window | Status
 ```
 
-Use `Lead submissions!A:L` as the append range and
-`Lead submissions!A:A` as the deduplication range. The demo action performs a
-read-only submission-id check first, appends the row once, and reports a
-retryable provider error without automatically repeating a mutation. The
-general-purpose `Google_Sheets` tool remains a separate platform capability;
-it is deliberately not attached to these public agents. For the restaurant
-demo, use `Orders!A:L` and `Orders!A:A`; the same idempotent, read-before-append
-contract applies.
+Sofia's seeded restaurant tab uses the smaller use-case-specific row
+`Submission ID | Captured at | Lead source | Customer Name | Phone | Items`.
+
+The administrator does not need to type A1 ranges or header names. Selecting a
+tab generates its bounded working range and header range automatically. Set
+`Submission ID` as the idempotency column, `Captured at` as the timestamp
+column, `Lead source` to `24x7 AI public demo`, and `Status` to `New` when those
+headers exist. The demo action performs a
+read-only submission-id check first, appends one row keyed by the sheet headers,
+and reports a retryable provider error without automatically repeating a
+mutation.
+
+For the seeded lead attachment, select all eight caller and service fields as
+Agent fields and mark all eight required so Jordan cannot save a partial
+inquiry. For the seeded restaurant attachment, select `Customer Name`, `Phone`,
+and `Items` as Agent fields and mark all three required. Sofia keeps quantities
+in the `Items` value when the sheet has no separate quantity column. An optional
+email can still be collected for an independently attached email tool even when
+the order sheet does not store it. Generated metadata such as `Submission ID`,
+`Captured at`, `Lead source`, and `Status` stays out of the Agent fields and is
+filled by the attachment.
+
+`Google_Sheets` is intentionally generic. Its model-facing operations never
+accept a spreadsheet id or an arbitrary tab: the agent attachment owns the
+destination and working area. `create_row` accepts a mapping from header names
+to scalar cell values, `read_rows` returns bounded header-keyed objects,
+`find_rows` searches those objects, and `update_row` changes one row only after
+an exact match (ambiguous matches are rejected). Agent configuration can hide
+individual functions, so a restaurant can expose only `create_row` while an
+inventory agent can enable reads and exact updates as well.
+
+Each attachment's **Agent fields** are chosen from the discovered row-one
+headers. The runtime adds those fields to the model-facing function guidance
+and closes the row-value schema around those exact keys, so renamed or
+snake_case variants are rejected before a provider mutation. **Required fields**
+is a separate subset used both in the model schema and at the service boundary
+to reject incomplete creates. `update_row` accepts partial business-field
+patches but cannot change managed metadata. The idempotency,
+timestamp, source, and initial-status columns remain optional system-managed
+fields; the model is told that the attachment fills them and does not need to
+provide them. This lets each agent use a small, use-case-appropriate schema
+without exposing the spreadsheet destination to the model. If a saved mapping no
+longer exists in the selected tab, the write stops with a configuration error
+that asks the administrator to rediscover and save the columns; the model is
+never asked to guess a replacement header.
+
+The seeded demos use familiar headers shown above for easy setup, but another
+agent can use entirely different, meaningful headers by selecting its own Agent
+fields and managed columns. Runtime tool guidance supplies those names to the
+model, so business workflow instructions do not need to repeat the column list.
+Discovery starts all current business headers selected, removes columns assigned
+to managed roles, clears managed mappings that disappeared, and resets stale
+business selections to the current header set. Discovery warns when a tab has
+no headers, blank headers, or duplicates; the tool also validates the final
+values against the live header row before writing.
 
 To show the sheet after a successful capture, set the demo agent's **Public
 result URL (optional)** field to the public share URL for this dedicated demo
@@ -216,10 +276,12 @@ every visitor who can open the sheet can see its rows. Use a platform-admin-
 owned demo sheet containing synthetic data only, and leave the field blank if
 the external destination should not be shown.
 
-The agent Tools drawer shows an information tooltip beside each configuration
-field. The tooltip stays available after a value is entered and mirrors the
-tool schema's setup guidance, including accepted URL/range formats and required
-permissions.
+The Google Sheets editor keeps the setup actions in the same drawer: connect,
+discover, choose a tab, select fields, and save. It labels each setup item as
+**Required** or **Optional**, including the optional managed-column selectors.
+Other tool editors continue to show the same Required/Optional marker and an
+information tooltip beside each raw configuration field; those tooltips stay
+available after a value is entered and mirror the tool schema's setup guidance.
 
 Demo metadata includes `demo_calls_remaining` and
 `demo_max_call_duration_seconds`. Successful token responses include the
@@ -312,12 +374,9 @@ The schema details and migration history are maintained in
 The isolated worktree stack and the explicit release bootstrap materialize both
 showcase agents and their native tool configurations. The seeded demos use
 unlimited calls and a 15-minute cap. A deployed environment must configure
-Google OAuth credentials for the
-appointment and lead demos, connect the relevant Google account to each agent,
-and set the lead agent's spreadsheet id plus its `Lead submissions` sheet
-ranges. The lead demo uses the focused Sheets action rather than the
-general-purpose `Google_Sheets` toolbox, so the model cannot browse or mutate
-unrelated spreadsheets. Email is optional and must be attached/configured as
+Google OAuth credentials for the appointment and Sheets demos, connect the
+relevant Google account to each agent, and set each Sheets agent's spreadsheet
+id, discover its tabs, and select its columns. Email is optional and must be attached/configured as
 its own Gmail or Resend tool. When a caller provides and confirms an email, the
 seeded instructions automatically attempt the email action after the primary
 provider succeeds and report whether that action succeeded. HubSpot remains
@@ -341,8 +400,9 @@ The feature is covered at each boundary:
   outcome retrieval, and safe error translation. Component tests validate the
   disabled exhausted-demo state, finite/unlimited limit copy, and successful
   or failed outcome rendering.
-- **Tool contract and deterministic evaluation tests** cover the focused
-  Google Sheets row contract, confirmation and dedupe behavior, provider
+- **Tool contract and deterministic evaluation tests** cover the configurable
+  Google Sheets row contract, header validation, exact-match updates,
+  confirmation and dedupe behavior, provider
   failures, independent Gmail/Resend receipt actions, the separately
   supported HubSpot contact/note integration, and the appointment/lead
   workflows without writing to real providers.

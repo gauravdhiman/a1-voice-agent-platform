@@ -526,7 +526,10 @@ class GmailTool(BaseTool):
             Compose and send an email to specified recipients immediately.
 
         Instructions:
-            Always confirm email addresses with user before sending.
+            Always read the exact recipient address back and get explicit user
+            confirmation immediately before every send, including a resend.
+            Pass only the exact spelling the user confirmed; never infer,
+            correct, or silently normalize an address.
             Ensure subject line accurately reflects email content.
             Format body as plain text, not HTML (system handles conversion).
 

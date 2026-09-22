@@ -101,7 +101,7 @@ export function OutcomeInterest({ demoSlug }: OutcomeInterestProps) {
     <div className="space-y-3">
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white">
-          Want this answering your business calls?
+          Want this to answer your business calls?
         </h3>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Leave your details and we will configure it for you — usually live

@@ -40,7 +40,12 @@ RESTAURANT_AGENT_ID = "c28592aa-7b26-4ff9-8477-4aadf41526d8"
 LEGACY_HVAC_ORGANIZATION_ID = "e6bbd11b-2dbd-4d75-a0bc-2a3b17f79f17"
 HVAC_AGENT_ID = "7c974e5a-9cde-4fd4-8cf1-c13f4d94f8b0"
 APPOINTMENT_TOOL_NAME = "Google_calendar_appointment"
-LEAD_CAPTURE_TOOL_NAME = "Google_Sheets_lead_capture"
+GOOGLE_SHEETS_TOOL_NAME = "Google_Sheets"
+# Retained only so the seed can disable pre-existing links created by the
+# Jordan-specific prototype. New agents must attach the generic tool above.
+LEGACY_SHEETS_TOOL_NAME = "Google_Sheets_lead_capture"
+# Compatibility alias for callers that still import the prototype constant.
+LEAD_CAPTURE_TOOL_NAME = LEGACY_SHEETS_TOOL_NAME
 DEMO_CALLS_REMAINING = -1
 DEMO_MAX_CALL_DURATION_SECONDS = 900
 
@@ -113,6 +118,11 @@ PLEASANT_PEDIATRIC_ADDITIONAL_INSTRUCTIONS = f"""
   successful calendar booking unless the caller declines an email. Follow that
   tool's own recipient or route rules and include only the confirmed booking
   details.
+- Immediately before every send, including a resend, read the exact recipient
+  address back character by character (letters, numbers, "at", "dot", hyphens,
+  and underscores) and wait for an explicit yes. A request to resend does not
+  carry forward confirmation. Pass the exact spelling the caller confirmed;
+  never infer, correct, or silently normalize an address.
 - If the email tool confirms success, say that the confirmation email was sent or
   accepted. If no email tool is attached or it reports a failure, say that the
   booking succeeded but the email confirmation was not sent. Never claim an email
@@ -193,25 +203,42 @@ COPPER_RIDGE_ADDITIONAL_INSTRUCTIONS = f"""
   sensitive data.
 
 # Service-inquiry workflow
-- Collect the service needed, concise issue description, caller name, phone or
-  email, customer service address, urgency, and preferred callback window. Do
-  not invent missing values.
+- Collect the service needed, concise issue description, caller name, phone
+  number, email address, customer service address, urgency, and preferred
+  callback window. Do not invent missing values; if a required detail is not
+  available, ask once more and explain that the inquiry cannot be saved until
+  the caller confirms it.
 - Before the final confirmation, spell the caller's name one letter at a time
-  and ask the caller to confirm it. If an email is provided, spell it one
-  character at a time, explicitly saying letters, numbers, "at", "dot", hyphens,
-  and underscores, then ask the caller to confirm it. Preserve corrections and
-  repeat the spelling until confirmed. Do this at least once before calling
-  `capture_lead`. If a phone number is provided, read its digits back clearly.
+  and ask the caller to confirm it. Spell the email one character at a time,
+  explicitly saying letters, numbers, "at", "dot", hyphens, and underscores,
+  then ask the caller to confirm it. Preserve corrections and repeat the
+  spelling until confirmed. Do this at least once before calling
+  `create_row`. Read the confirmed phone number's digits back clearly.
 - Read every field back and ask for explicit confirmation before calling
-  `capture_lead`. Call it once after confirmation and never claim the inquiry was
-  saved unless the tool returns a successful result.
+  `create_row`. Call it after confirmation with a `values` object keyed by the
+  configured Agent fields shown in the Google Sheets function guidance. Use only
+  those exact header keys; do not rename them, convert them to snake_case, or
+  invent aliases. The configured Google Sheets attachment supplies the
+  submission id, timestamp, source, and initial status. If the tool returns a
+  retryable `needs_details` result, correct the header or value and retry once;
+  never loop. If it returns a configuration error, stop and explain that the
+  inquiry was not saved. Never claim the inquiry was saved unless the tool
+  returns a successful result.
+- If the caller corrects a detail after a successful save, use `update_row` with
+  the exact idempotency header and the record id returned by `create_row`.
+  Update only the corrected business fields and never change the managed key.
 
 # Email follow-up
 - If the caller has provided and confirmed an email address and an independent
   email-sending tool is attached, invoke that tool automatically after a
-  successful `capture_lead` result unless the caller declines an email. Follow
+  successful `create_row` result unless the caller declines an email. Follow
   that tool's own recipient or route rules and include only the confirmed
   inquiry details.
+- Immediately before every send, including a resend, read the exact recipient
+  address back character by character (letters, numbers, "at", "dot", hyphens,
+  and underscores) and wait for an explicit yes. A request to resend does not
+  carry forward confirmation. Pass the exact spelling the caller confirmed;
+  never infer, correct, or silently normalize an address.
 - If the email tool confirms success, say that the confirmation email was sent or
   accepted. If no email tool is attached or it reports a failure, say that the
   inquiry was captured but the email confirmation was not sent. Never claim an
@@ -283,26 +310,40 @@ VERDI_TABLE_ADDITIONAL_INSTRUCTIONS = f"""
 - For an order request, collect the requested item names and quantities, the
   caller's name, and a phone number. If the caller volunteers an email address,
   collect it for an optional follow-up; do not require email for an order.
-- Do not call `capture_lead` for a menu or hours question. Call it exactly once
-  only for a caller-confirmed order after collecting the complete details.
+- Do not call `create_row` for a menu or hours question. Call it only for a
+  caller-confirmed order after collecting the complete details.
 - Before the final confirmation, spell the caller's name one letter at a time
   and ask the caller to confirm it. Read every item, quantity, name, and phone
   digit back clearly, preserve corrections, and repeat the read-back until the
   caller confirms it.
-- Set `user_confirmed` to true only after that explicit read-back confirmation.
-  Use the configured `capture_lead` tool once, mapping the item names and
-  quantities to the service-needed details and the remaining order context to
-  the issue summary. Never claim the order was captured unless the tool returns
-  a successful result. If the tool is unavailable or fails, explain that the
-  order request was not saved and provide the next safe step without pretending
-  it succeeded.
+- After that explicit read-back confirmation, call the configured `create_row`
+  tool with a `values` object keyed by the configured Agent fields shown in the
+  Google Sheets function guidance. Use only those exact header keys; do not
+  rename them, convert them to snake_case, or invent aliases. Map the confirmed
+  items, quantities, pickup context, and caller details to those configured
+  fields and preserve each quantity. If the sheet has no
+  separate quantity header, include quantities in the configured item or
+  order-details value (for example, `Items`). The attachment supplies the
+  submission id, timestamp, source, and initial status.
+  If the tool returns a retryable `needs_details` result, correct the header or
+  value and retry once; never loop. If it returns a configuration error, explain
+  that the order request was not saved and provide the next safe step without
+  pretending it succeeded.
+- If the caller corrects a detail after a successful save, use `update_row` with
+  the exact idempotency header and the record id returned by `create_row`.
+  Update only the corrected business fields and never change the managed key.
 
 # Email follow-up
 - If the caller has provided and confirmed an email address and an independent
   email-sending tool is attached, invoke that tool automatically after a
-  successful `capture_lead` result unless the caller declines an email. Follow
+  successful `create_row` result unless the caller declines an email. Follow
   that tool's own recipient or route rules and include only the confirmed order
   details.
+- Immediately before every send, including a resend, read the exact recipient
+  address back character by character (letters, numbers, "at", "dot", hyphens,
+  and underscores) and wait for an explicit yes. A request to resend does not
+  carry forward confirmation. Pass the exact spelling the caller confirmed;
+  never infer, correct, or silently normalize an address.
 - If the email tool confirms success, say that the confirmation email was sent or
   accepted. If no email tool is attached or it reports a failure, say that the
   order request was captured but the email confirmation was not sent. Never claim
@@ -535,8 +576,8 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "agent_tools": [APPOINTMENT_TOOL_NAME],
         "agent_tools_by_agent": {
             STAGING_AGENT_ID: [APPOINTMENT_TOOL_NAME],
-            HVAC_AGENT_ID: [LEAD_CAPTURE_TOOL_NAME],
-            RESTAURANT_AGENT_ID: [LEAD_CAPTURE_TOOL_NAME],
+            HVAC_AGENT_ID: [GOOGLE_SHEETS_TOOL_NAME],
+            RESTAURANT_AGENT_ID: [GOOGLE_SHEETS_TOOL_NAME],
         },
         "agent_tool_configs": {
             STAGING_AGENT_ID: {
@@ -548,17 +589,43 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
                 }
             },
             HVAC_AGENT_ID: {
-                LEAD_CAPTURE_TOOL_NAME: {
-                    "lead_source": "24x7 AI public demo",
-                    "append_range": "Lead submissions!A:L",
-                    "dedupe_range": "Lead submissions!A:A",
+                GOOGLE_SHEETS_TOOL_NAME: {
+                    "spreadsheet_id": "",
+                    "default_range": "Lead submissions!A1:L1000",
+                    "header_range": "Lead submissions!A1:L1",
+                    "agent_columns": (
+                        "Caller name, Caller email, Caller phone, Service needed, "
+                        "Issue summary, Service address, Urgency, "
+                        "Preferred callback window"
+                    ),
+                    "idempotency_column": "Submission ID",
+                    "timestamp_column": "Captured at",
+                    "source_column": "Lead source",
+                    "source_value": "24x7 AI public demo",
+                    "status_column": "Status",
+                    "status_value": "New",
+                    "required_columns": (
+                        "Caller name, Caller email, Caller phone, Service needed, "
+                        "Issue summary, Service address, Urgency, "
+                        "Preferred callback window"
+                    ),
+                    "record_label": "service inquiry",
                 }
             },
             RESTAURANT_AGENT_ID: {
-                LEAD_CAPTURE_TOOL_NAME: {
-                    "lead_source": "24x7 AI public demo",
-                    "append_range": "Orders!A:L",
-                    "dedupe_range": "Orders!A:A",
+                GOOGLE_SHEETS_TOOL_NAME: {
+                    "spreadsheet_id": "",
+                    "default_range": "Orders!A1:L1000",
+                    "header_range": "Orders!A1:L1",
+                    "agent_columns": ("Customer Name, Phone, Items"),
+                    "idempotency_column": "Submission ID",
+                    "timestamp_column": "Captured at",
+                    "source_column": "Lead source",
+                    "source_value": "24x7 AI Demo Call",
+                    "status_column": "",
+                    "status_value": "",
+                    "required_columns": "Customer Name, Phone, Items",
+                    "record_label": "order request",
                 }
             },
         },
@@ -568,7 +635,19 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "agent_tool_function_exclusions": {
             STAGING_AGENT_ID: {
                 APPOINTMENT_TOOL_NAME: list(CALENDAR_DEMO_DISABLED_FUNCTIONS),
-            }
+            },
+            HVAC_AGENT_ID: {
+                GOOGLE_SHEETS_TOOL_NAME: [
+                    "read_rows",
+                    "find_rows",
+                ],
+            },
+            RESTAURANT_AGENT_ID: {
+                GOOGLE_SHEETS_TOOL_NAME: [
+                    "read_rows",
+                    "find_rows",
+                ],
+            },
         },
         # The earlier local prototype attached HubSpot to these demos. Disable
         # that exact stale link during reseeding while preserving its saved
@@ -576,8 +655,8 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         # tools remain independently configurable by the platform administrator.
         "agent_tools_to_disable_by_agent": {
             STAGING_AGENT_ID: ["HubSpot_lead_capture"],
-            HVAC_AGENT_ID: ["HubSpot_lead_capture"],
-            RESTAURANT_AGENT_ID: ["HubSpot_lead_capture"],
+            HVAC_AGENT_ID: ["HubSpot_lead_capture", LEGACY_SHEETS_TOOL_NAME],
+            RESTAURANT_AGENT_ID: ["HubSpot_lead_capture", LEGACY_SHEETS_TOOL_NAME],
         },
         "retired_organization_ids": [LEGACY_HVAC_ORGANIZATION_ID],
     }

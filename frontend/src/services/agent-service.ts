@@ -13,6 +13,7 @@ import type {
   AgentToolUpdate,
   DiscoveredMcpTool,
   ParsedMcpServersResult,
+  GoogleSheetsDiscovery,
 } from "@/types/agent";
 
 class AgentService {
@@ -270,6 +271,18 @@ class AgentService {
     const response = await apiClient.put<AgentTool>(
       `${this.toolBaseUrl}/agent/${agentToolId}`,
       updateData,
+    );
+    return response.data;
+  }
+
+  /** Discover tabs and first-row headers through the authenticated backend connection. */
+  async discoverGoogleSheetHeaders(
+    agentToolId: string,
+    spreadsheetId: string,
+  ): Promise<GoogleSheetsDiscovery> {
+    const response = await apiClient.post<GoogleSheetsDiscovery>(
+      `${this.toolBaseUrl}/agent/${agentToolId}/google-sheets/discover`,
+      { spreadsheet_id: spreadsheetId },
     );
     return response.data;
   }

@@ -5,36 +5,40 @@ from shared.voice_agents.tool_health import check_tool_configuration
 
 class TestCheckToolConfiguration:
     def test_sheets_missing_destination_is_flagged(self) -> None:
-        """Jordan's exact failure: ranges set, spreadsheet absent."""
+        """Every generic Sheets attachment must name its destination."""
         assert check_tool_configuration(
-            "Google_Sheets_lead_capture",
+            "Google_Sheets",
             {
                 "spreadsheet_id": "",
-                "append_range": "Lead submissions!A:L",
-                "dedupe_range": "Lead submissions!A:A",
-                "lead_source": "24x7 AI public demo",
+                "default_range": "Lead submissions!A1:L1000",
+                "header_range": "Lead submissions!A1:L1",
             },
-        ) == ["spreadsheet destination is not set"]
+        ) == ["spreadsheet destination is not set", "agent fields are not set"]
 
     def test_sheets_complete_config_is_clean(self) -> None:
         """A pasted spreadsheet ID clears the card."""
         assert (
             check_tool_configuration(
-                "Google_Sheets_lead_capture",
-                {"spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"},
+                "Google_Sheets",
+                {
+                    "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "agent_columns": "Customer name, Items",
+                },
             )
             == []
         )
+
     def test_sheets_full_url_is_accepted_like_the_runtime(self) -> None:
         """The field invites full URLs and the service extracts them."""
         assert (
             check_tool_configuration(
-                "Google_Sheets_lead_capture",
+                "Google_Sheets",
                 {
                     "spreadsheet_id": (
                         "https://docs.google.com/spreadsheets/d/"
                         "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
-                    )
+                    ),
+                    "agent_columns": "Customer name, Items",
                 },
             )
             == []
@@ -94,8 +98,12 @@ class TestCheckToolConfiguration:
         ]
         assert check_tool_configuration("Google_calendar", {}) == []
         assert check_tool_configuration("Google_calendar_appointment", {}) == []
-        assert check_tool_configuration("Google_Sheets", {}) == []
+        assert check_tool_configuration("Google_Sheets", {}) == [
+            "spreadsheet destination is not set",
+            "agent fields are not set",
+        ]
         assert check_tool_configuration("HubSpot_lead_capture", {}) == []
+
     def test_callback_reports_every_gap(self) -> None:
         """Owner callback needs a sender and at least one owner route."""
         assert check_tool_configuration(

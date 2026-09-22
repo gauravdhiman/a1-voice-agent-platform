@@ -305,7 +305,7 @@ after a tool result.
 | agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that performed the action |
 | organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
 | demo_slug | VARCHAR(100) | NOT NULL | Demo URL slug bound into the signed receipt |
-| action_type | VARCHAR(40) | NOT NULL, CHECK `lead_capture`, `appointment_booking`, or `email_delivery` | Publicly allowlisted action category |
+| action_type | VARCHAR(40) | NOT NULL, CHECK `lead_capture`, `appointment_booking`, `email_delivery`, or `sheet_row_created` | Publicly allowlisted action category |
 | provider | VARCHAR(40) | NOT NULL | Provider label, currently `hubspot`, `google_sheets`, `google_calendar`, `gmail`, or `resend` |
 | status | VARCHAR(20) | NOT NULL, CHECK `succeeded`, `failed`, or `pending` | Visitor-safe action state |
 | error_code | VARCHAR(80) | NULLABLE | Stable safe error code when the action needs attention |
@@ -322,8 +322,9 @@ expired rows and returns `Cache-Control: private, no-store`.
 **Indexes**: `(session_id, created_at)` for receipt lookup and `(expires_at)`
 for retention cleanup.
 
-**Migrations**: `20260830000001_add_demo_outcome_receipts.py` and
-`20260901000002_add_demo_email_outcome_action.py`.
+**Migrations**: `20260830000001_add_demo_outcome_receipts.py`,
+`20260901000002_add_demo_email_outcome_action.py`, and
+`20260920000001_generic_google_sheets_rows.py`.
 
 ---
 
@@ -2057,6 +2058,7 @@ erDiagram
 88. `20260911000001` - Add optional `platform_notification_settings.platform_admin_email` for the recipient of platform-admin demo and interest-lead alerts.
 89. `20260911000002` - Seed the enabled `lead.interest_submitted` notification event used by public demo and interest-form alerts.
 90. `9f2c4a7b1e3d` - Add service-role-only `demo_feedback` for PII-free visitor star ratings on public demo calls (one row per voice session, upsert on repeat taps). Visitors write through the signed receipt-token endpoint; platform admins read aggregates and recent rows.
+91. `20260920000001` - Replace the Jordan-specific Google Sheets catalog path with the configurable `Google_Sheets` row contract (`read_rows`, `find_rows`, `create_row`, and `update_row`), allow `sheet_row_created` demo receipts, and retire the legacy `Google_Sheets_lead_capture` catalog row while keeping saved links runtime-compatible.
 
 ---
 

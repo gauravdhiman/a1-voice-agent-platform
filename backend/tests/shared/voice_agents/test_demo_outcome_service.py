@@ -77,6 +77,53 @@ def test_outcome_payload_supports_google_sheets_lead_rows() -> None:
     }
 
 
+def test_outcome_payload_supports_generic_google_sheets_rows() -> None:
+    """Generic row creation gets a truthful, bounded visitor receipt."""
+    payload = build_demo_outcome_payload(
+        function_name="create_row",
+        arguments={
+            "values": {
+                "Caller name": "Maria Garcia",
+                "Service needed": "Two Sonoran grain bowls",
+                "Submission ID": "session-1",
+                "Secret note": "must-not-be-recorded",
+            }
+        },
+        result={
+            "status": "created",
+            "provider": "google_sheets",
+            "message": "Order request saved in Google Sheets.",
+            "sheet": {
+                "record_type": "row",
+                "record_label": "order request",
+                "record_id": "session-1",
+                "updated_range": "Orders!A2:L2",
+            },
+            "deduplicated": False,
+        },
+    )
+
+    assert payload == {
+        "action_type": "sheet_row_created",
+        "provider": "google_sheets",
+        "status": "succeeded",
+        "error_code": None,
+        "captured_fields": {
+            "Caller name": "Maria Garcia",
+            "Service needed": "Two Sonoran grain bowls",
+        },
+        "provider_result": {
+            "record_type": "row",
+            "record_label": "order request",
+            "record_id": "session-1",
+            "record_status": "created",
+            "updated_range": "Orders!A2:L2",
+            "deduplicated": False,
+            "message": "Order request saved in Google Sheets.",
+        },
+    }
+
+
 def test_outcome_payload_records_gmail_as_a_separate_pii_free_action() -> None:
     """An attached Gmail tool is shown independently without exposing its message."""
     payload = build_demo_outcome_payload(
