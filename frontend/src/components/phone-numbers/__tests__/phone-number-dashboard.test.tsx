@@ -176,6 +176,21 @@ describe("<PhoneNumberDashboard> (N1 #2 — write-action gate)", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps each phone number card clipped to its responsive surface", () => {
+    render(
+      <PhoneNumberDashboard
+        organizationId="org-1"
+        phoneNumbers={FIXTURE_NUMBERS}
+        isLoading={false}
+        canManage
+      />,
+    );
+
+    expect(screen.getByTestId("phone-number-card").className).toContain(
+      "overflow-hidden",
+    );
+  });
+
   it("uses Disconnect for customer-owned numbers", () => {
     render(
       <PhoneNumberDashboard

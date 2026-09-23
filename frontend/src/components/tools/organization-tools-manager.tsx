@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 import { Eye, EyeOff, Loader2, Search, Server, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -31,7 +37,11 @@ export function OrganizationToolsManager({
 }: OrganizationToolsManagerProps) {
   const [search, setSearch] = useState("");
   const [pendingToolId, setPendingToolId] = useState<string | null>(null);
-  const { data: tools = [], isLoading, isError } = useOrganizationTools(orgId, {
+  const {
+    data: tools = [],
+    isLoading,
+    isError,
+  } = useOrganizationTools(orgId, {
     includeHidden: true,
   });
   const visibilityMutation = useSetOrganizationToolVisibility();
@@ -130,7 +140,10 @@ export function OrganizationToolsManager({
                         {toolLabel(tool)}
                       </h3>
                       {tool.tool_source === "mcp" && (
-                        <Badge variant="outline" className="h-5 gap-1 text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className="h-5 gap-1 text-[10px]"
+                        >
                           <Server className="h-3 w-3" />
                           MCP
                         </Badge>
@@ -143,7 +156,9 @@ export function OrganizationToolsManager({
                       {isVisible ? (
                         <>
                           <Eye className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="text-muted-foreground">Visible to agents</span>
+                          <span className="text-muted-foreground">
+                            Visible to agents
+                          </span>
                         </>
                       ) : (
                         <>
@@ -155,10 +170,19 @@ export function OrganizationToolsManager({
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center">
-                    {isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
+                  <div
+                    className="flex h-8 w-[4.5rem] shrink-0 items-center justify-end gap-2"
+                    aria-busy={isPending}
+                    data-testid="organization-tool-visibility-slot"
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                      {isPending && (
+                        <Loader2
+                          aria-label="Saving tool visibility"
+                          className="h-4 w-4 animate-spin text-muted-foreground"
+                        />
+                      )}
+                    </span>
                     <Switch
                       checked={isVisible}
                       onCheckedChange={(checked) =>

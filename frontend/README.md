@@ -28,8 +28,9 @@ runtime-owned billing rule.
 
 Pages behind authentication share `DashboardLayout` and are validated at
 mobile (390px), tablet (768px), laptop (1280px), desktop (1440px), and
-widescreen (1920px) widths. On mobile, navigation opens as a right-side drawer
-and the page header exposes the current route; dense data tables scroll inside
+widescreen (1920px) widths. On mobile, the menu trigger and right-side
+navigation drawer share the same edge, and the page header exposes the current
+route; dense data tables scroll inside
 their own surface, while multi-panel editors and form actions stack below their
 usable breakpoint. Keep new private-page content inside the shrinkable
 `dashboard-page` container and preserve explicit overflow surfaces for dense

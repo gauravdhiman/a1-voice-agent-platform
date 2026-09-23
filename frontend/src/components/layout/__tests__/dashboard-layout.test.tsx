@@ -199,6 +199,11 @@ describe("DashboardLayout - permission-aware nav", () => {
         </DashboardLayout>,
         { wrapper: makeWrapper(queryClient) },
       );
+      expect(
+        within(screen.getByTestId("dashboard-header-actions")).getByTestId(
+          "mobile-nav-toggle",
+        ),
+      ).toBeTruthy();
       fireEvent.click(
         screen.getByRole("button", { name: "Expand navigation" }),
       );

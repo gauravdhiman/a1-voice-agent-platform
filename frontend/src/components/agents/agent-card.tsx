@@ -120,15 +120,15 @@ export function AgentCard({
             : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-75",
         )}
       >
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 flex-1">
-              <div className="bg-primary/10 p-3 rounded-lg">
+        <div className="p-4 sm:p-5">
+          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 w-full items-center gap-4 sm:flex-1">
+              <div className="shrink-0 rounded-lg bg-primary/10 p-3">
                 <Bot className="h-5 w-5 text-primary" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-3 mb-2">
-                  <h4 className="font-semibold text-base truncate">
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                  <h4 className="min-w-0 max-w-full truncate font-semibold text-base">
                     {agent.name}
                   </h4>
                   <Badge
@@ -138,25 +138,35 @@ export function AgentCard({
                     {agent.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </div>
-                <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   {organizationName && (
-                    <span className="flex items-center">
+                    <span className="flex min-w-0 max-w-full items-center">
                       <Building2 className="h-3.5 w-3.5 mr-1.5" />
-                      <span className="truncate">{organizationName}</span>
+                      <span className="min-w-0 truncate">
+                        {organizationName}
+                      </span>
                     </span>
                   )}
                   {agent.phone_number && (
-                    <span className="flex items-center">
+                    <span className="flex min-w-0 max-w-full items-center">
                       <Phone className="h-3.5 w-3.5 mr-1.5" />
-                      <span>{agent.phone_number}</span>
+                      <span className="break-words">{agent.phone_number}</span>
                     </span>
                   )}
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2 ml-4">
+            <div
+              className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:pl-4"
+              data-testid="agent-card-actions"
+            >
               {canEdit && (
-                <Button size="sm" variant="outline" onClick={handleEdit}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 sm:flex-none"
+                  onClick={handleEdit}
+                >
                   <Edit3 className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
@@ -165,6 +175,7 @@ export function AgentCard({
                 <Button
                   size="sm"
                   variant="outline"
+                  className="flex-1 sm:flex-none"
                   onClick={handleConfigureTools}
                 >
                   <Wrench className="h-4 w-4 mr-2" />

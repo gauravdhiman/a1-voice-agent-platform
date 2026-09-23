@@ -59,11 +59,7 @@ const FIXTURE_AGENT: VoiceAgent = {
 
 function makeWrapper(queryClient: QueryClient) {
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      children,
-    );
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
 /**
@@ -204,9 +200,33 @@ describe("AgentCard - row-action permission gates", () => {
         { wrapper: makeWrapper(queryClient) },
       );
 
-      expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /^tools$/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^edit$/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^tools$/i }),
+      ).toBeInTheDocument();
       expect(queryTrashIcons().length).toBeGreaterThan(0);
+    });
+
+    it("keeps the action cluster in a full-width mobile row", () => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <AgentCard
+          agent={FIXTURE_AGENT}
+          organizationName="Acme"
+          onDelete={vi.fn()}
+          view="list"
+        />,
+        { wrapper: makeWrapper(queryClient) },
+      );
+
+      const actions = screen.getByTestId("agent-card-actions");
+      expect(actions.className).toContain("w-full");
+      expect(actions.className).toContain("sm:w-auto");
     });
   });
 
@@ -335,8 +355,12 @@ describe("AgentCard - row-action permission gates", () => {
         { wrapper: makeWrapper(queryClient) },
       );
 
-      expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /^tools$/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^edit$/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^tools$/i }),
+      ).toBeInTheDocument();
       expect(queryTrashIcons().length).toBeGreaterThan(0);
     });
 
