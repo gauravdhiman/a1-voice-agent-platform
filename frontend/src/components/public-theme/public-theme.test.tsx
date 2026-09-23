@@ -160,7 +160,7 @@ describe("ThemeSwitch", () => {
 });
 
 describe("Public chrome", () => {
-  it("links the homepage sections, sign-in, and demo request", () => {
+  it("links the homepage sections, sign-in, and conversation CTA", () => {
     render(
       <ThemeProvider>
         <PublicThemeRoot>
@@ -180,7 +180,7 @@ describe("Public chrome", () => {
     }
     expect(
       screen
-        .getAllByRole("link", { name: /request a demo/i })
+        .getAllByRole("link", { name: /let's talk/i })
         .every((link) => link.getAttribute("href") === "/request-demo"),
     ).toBe(true);
     expect(
@@ -188,5 +188,27 @@ describe("Public chrome", () => {
         .getAllByRole("link", { name: /sign in/i })
         .every((link) => link.getAttribute("href") === "/auth/signin"),
     ).toBe(true);
+  });
+
+  it("opens a right-drawer navigation and closes it on selection", () => {
+    render(
+      <ThemeProvider>
+        <PublicThemeRoot>
+          <PublicHeader />
+        </PublicThemeRoot>
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Open navigation"));
+    const mobileNavigation = screen.getByLabelText("Mobile navigation");
+    const liveDemosLink = mobileNavigation.querySelector(
+      'a[href="/#demos"]',
+    );
+    expect(liveDemosLink).toBeTruthy();
+
+    fireEvent.click(liveDemosLink!);
+    expect(
+      screen.queryByRole("navigation", { name: "Mobile navigation" }),
+    ).toBeNull();
   });
 });
