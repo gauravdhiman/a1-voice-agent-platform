@@ -60,6 +60,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { openProductTour } = useProductTour();
+  // Keep the server and first client render identical; the media query below
+  // applies the mobile shell immediately after hydration without a mismatch.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -375,18 +377,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-background/95 px-3 shadow-sm backdrop-blur sm:h-14 sm:px-5 lg:px-6">
           <div className="flex min-w-0 items-center gap-2">
-            {sidebarCollapsed && (
+            {sidebarCollapsed && !isMobile && (
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Expand navigation"
+                aria-label="Expand navigation rail"
                 aria-expanded={!sidebarCollapsed}
                 onClick={() => setSidebarCollapsed(false)}
-                data-testid="mobile-nav-toggle"
-                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground sm:mr-2"
+                className="hidden h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground md:flex sm:mr-2"
               >
-                <Menu className="h-5 w-5 md:hidden" />
-                <ChevronRight className="hidden h-4 w-4 md:block" />
+                <ChevronRight className="h-4 w-4" />
               </Button>
             )}
 
@@ -422,7 +422,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <div
+            className="flex shrink-0 items-center gap-1 sm:gap-2"
+            data-testid="dashboard-header-actions"
+          >
             <SiteThemeSwitch />
             <Button
               variant="ghost"
@@ -484,6 +487,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {sidebarCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Expand navigation"
+                aria-expanded={!sidebarCollapsed}
+                onClick={() => setSidebarCollapsed(false)}
+                data-testid="mobile-nav-toggle"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            )}
           </div>
         </header>
 

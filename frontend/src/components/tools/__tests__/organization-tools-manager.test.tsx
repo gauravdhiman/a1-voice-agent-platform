@@ -67,4 +67,17 @@ describe("OrganizationToolsManager", () => {
       screen.getByRole("switch", { name: "Show google calendar" }),
     ).toBeDisabled();
   });
+
+  it("reserves a stable control slot while visibility is saving", () => {
+    render(<OrganizationToolsManager orgId="org-1" canEdit />);
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Show google calendar" }),
+    );
+
+    const slot = screen.getByTestId("organization-tool-visibility-slot");
+    expect(slot.getAttribute("aria-busy")).toBe("true");
+    expect(slot.className).toContain("w-[4.5rem]");
+    expect(screen.getByLabelText("Saving tool visibility")).toBeTruthy();
+  });
 });

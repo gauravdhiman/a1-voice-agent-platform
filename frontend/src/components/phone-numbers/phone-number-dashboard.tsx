@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,7 +12,15 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Loader2, Phone, UserX, UserPlus, Trash2, Plus, Link2 } from "lucide-react";
+import {
+  Loader2,
+  Phone,
+  UserX,
+  UserPlus,
+  Trash2,
+  Plus,
+  Link2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   AvailablePhoneNumber,
@@ -59,12 +64,12 @@ export function PhoneNumberDashboard({
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [selectedNumber, setSelectedNumber] = useState<PhoneNumberWithAgent | null>(
-    null,
-  );
+  const [selectedNumber, setSelectedNumber] =
+    useState<PhoneNumberWithAgent | null>(null);
   const [selectedDetailsNumber, setSelectedDetailsNumber] =
     useState<PhoneNumberWithAgent | null>(null);
-  const [selectedAvailableNumber, setSelectedAvailableNumber] = useState<AvailablePhoneNumber | null>(null);
+  const [selectedAvailableNumber, setSelectedAvailableNumber] =
+    useState<AvailablePhoneNumber | null>(null);
 
   const unusedCount = phoneNumbers.filter((n) => !n.assigned_agent_id).length;
 
@@ -91,7 +96,9 @@ export function PhoneNumberDashboard({
   };
 
   const handleCancelSuccess = (message?: string) => {
-    toast.success(message || "Phone number released or disconnected successfully");
+    toast.success(
+      message || "Phone number released or disconnected successfully",
+    );
     setCancelDialogOpen(false);
     setSelectedNumber(null);
     onRefresh?.();
@@ -167,7 +174,10 @@ export function PhoneNumberDashboard({
                   <Plus className="h-4 w-4 mr-2" />
                   Search & Purchase
                 </Button>
-                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setImportDialogOpen(true)}
+                >
                   <Link2 className="h-4 w-4 mr-2" />
                   Connect Existing
                 </Button>
@@ -180,11 +190,17 @@ export function PhoneNumberDashboard({
           <div className="flex justify-end">
             {canManage && (
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setSearchDialogOpen(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setSearchDialogOpen(true)}
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Search & Purchase
                 </Button>
-                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setImportDialogOpen(true)}
+                >
                   <Link2 className="h-4 w-4 mr-2" />
                   Connect Existing
                 </Button>
@@ -192,64 +208,72 @@ export function PhoneNumberDashboard({
             )}
           </div>
           {phoneNumbers.map((number) => (
-            <Card key={number.id}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-3">
-                      <Phone className="w-6 h-6 text-muted-foreground" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold text-lg">
-                            {formatPhoneNumber(number.phone_number)}
-                          </div>
-                          {number.management_mode === "customer_managed" &&
-                            number.status === "verification_required" && (
-                              <Button
-                                type="button"
-                                variant="link"
-                                size="sm"
-                                className="h-auto p-0 text-xs"
-                                onClick={() => handleDetails(number)}
-                              >
-                                View setup details
-                              </Button>
-                            )}
+            <Card
+              key={number.id}
+              className="overflow-hidden"
+              data-testid="phone-number-card"
+            >
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                    <Phone className="mt-1 h-6 w-6 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <div className="break-words font-semibold text-base sm:text-lg">
+                          {formatPhoneNumber(number.phone_number)}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Badge variant="outline">
-                            {getPhoneNumberTypeLabel(number.phone_number_type)}
-                          </Badge>
-                          {getStatusBadge(
-                            number.status,
-                            !!number.assigned_agent_id,
+                        {number.management_mode === "customer_managed" &&
+                          number.status === "verification_required" && (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-xs"
+                              onClick={() => handleDetails(number)}
+                            >
+                              View setup details
+                            </Button>
                           )}
-                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <Badge variant="outline">
+                          {getPhoneNumberTypeLabel(number.phone_number_type)}
+                        </Badge>
+                        {getStatusBadge(
+                          number.status,
+                          !!number.assigned_agent_id,
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <div className="text-sm text-muted-foreground">Monthly</div>
-                      <div className="font-semibold">
+                  <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between lg:items-center lg:justify-end">
+                    <div className="text-left sm:text-right">
+                      <div className="text-sm text-muted-foreground">
+                        Monthly
+                      </div>
+                      <div className="font-semibold break-words">
                         {number.management_mode === "customer_managed"
                           ? "No platform rental"
                           : `${number.monthly_cost_credits} credits`}
                       </div>
                     </div>
 
-                    <div className="text-right min-w-[150px]">
+                    <div className="min-w-0 text-left sm:min-w-[150px] sm:text-right">
                       {number.assigned_agent_id ? (
                         <>
                           <div className="text-sm text-muted-foreground">
                             Assigned to
                           </div>
-                          <div className="font-medium">{number.agent_name}</div>
+                          <div className="break-words font-medium">
+                            {number.agent_name}
+                          </div>
                         </>
                       ) : (
                         <>
-                          <div className="text-sm text-muted-foreground">Status</div>
+                          <div className="text-sm text-muted-foreground">
+                            Status
+                          </div>
                           <div className="font-medium text-muted-foreground">
                             Not assigned
                           </div>
@@ -257,7 +281,7 @@ export function PhoneNumberDashboard({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       {canManage &&
                         !number.assigned_agent_id &&
                         number.status !== "cancelled" && (
@@ -317,7 +341,9 @@ export function PhoneNumberDashboard({
         <SheetContent className="flex flex-col w-full sm:max-w-xl">
           <SheetHeader className="px-6 pt-6 pb-4 border-b">
             <SheetTitle>Search & Purchase Phone Number</SheetTitle>
-            <SheetDescription>Find and select a phone number for your organization</SheetDescription>
+            <SheetDescription>
+              Find and select a phone number for your organization
+            </SheetDescription>
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-5">
             <PhoneNumberSearch
