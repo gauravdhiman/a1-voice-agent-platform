@@ -215,6 +215,8 @@ shown as if it came from the current spreadsheet. Reopening a saved attachment
 automatically re-reads its current headers and restores the saved selections;
 the setup is marked configured only after the live headers and mappings
 validate, and saving remains disabled until then.
+When setup is incomplete, the status message and disabled Save button tooltip
+identify the specific step or mapping that needs attention.
 The retired `Google_Sheets_lead_capture` catalog row is no longer available for
 new attachments; existing saved links remain runtime-compatible while they are
 migrated to the generic row contract. The lead and restaurant targets may use
