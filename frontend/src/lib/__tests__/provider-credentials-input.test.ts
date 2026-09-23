@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProviderCredentialDescriptionsInput,
   buildProviderCredentialsInput,
   countPendingProviderCredentialChanges,
 } from "@/lib/provider-credentials-input";
@@ -62,5 +63,34 @@ describe("countPendingProviderCredentialChanges", () => {
         openrouter: true,
       }),
     ).toBe(2);
+  });
+
+  it("counts a provider touched only through its description once", () => {
+    expect(
+      countPendingProviderCredentialChanges(
+        { openai: false },
+        { openai: true, deepgram: true },
+      ),
+    ).toBe(2);
+  });
+});
+
+describe("buildProviderCredentialDescriptionsInput", () => {
+  it("trims and sends only touched notes", () => {
+    expect(
+      buildProviderCredentialDescriptionsInput(
+        { openai: " Production key ", deepgram: "ignored" },
+        { openai: true },
+      ),
+    ).toEqual({ openai: "Production key" });
+  });
+
+  it("clears a touched note when the draft is empty", () => {
+    expect(
+      buildProviderCredentialDescriptionsInput(
+        { openrouter: "   " },
+        { openrouter: true },
+      ),
+    ).toEqual({ openrouter: null });
   });
 });

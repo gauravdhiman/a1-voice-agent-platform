@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/card";
 import {
   countPendingProviderCredentialChanges,
+  PROVIDER_DEFINITIONS,
   PROVIDER_LABELS,
+  ProviderCredentialDescriptions,
   ProviderCredsDraft,
   SimpleProviderKey,
   SIMPLE_PROVIDER_KEYS,
@@ -29,8 +31,14 @@ export interface ProviderCredentialsCardProps {
   draft: ProviderCredsDraft;
   onDraftChange: (draft: ProviderCredsDraft) => void;
   touched: Record<string, boolean>;
+  descriptions: ProviderCredentialDescriptions;
+  descriptionTouched: Record<string, boolean>;
   onMarkTouched: (key: string) => void;
   onClearTouched: (key: string) => void;
+  onDescriptionChange: (key: SimpleProviderKey, value: string) => void;
+  onMarkDescriptionTouched: (key: string) => void;
+  onClearDescriptionTouched: (key: string) => void;
+  onResetDescription: (key: SimpleProviderKey) => void;
   onSave: () => void | Promise<void>;
   onRemoveProvider: (key: SimpleProviderKey) => void | Promise<void>;
   saving?: boolean;
@@ -61,8 +69,14 @@ export function ProviderCredentialsCard({
   draft,
   onDraftChange,
   touched,
+  descriptions,
+  descriptionTouched,
   onMarkTouched,
   onClearTouched,
+  onDescriptionChange,
+  onMarkDescriptionTouched,
+  onClearDescriptionTouched,
+  onResetDescription,
   onSave,
   onRemoveProvider,
   saving = false,
@@ -73,7 +87,10 @@ export function ProviderCredentialsCard({
     Record<string, boolean>
   >({});
 
-  const pendingCount = countPendingProviderCredentialChanges(touched);
+  const pendingCount = countPendingProviderCredentialChanges(
+    touched,
+    descriptionTouched,
+  );
   const busy = saving || removingProvider !== null;
 
   const startEdit = (key: string) => {
@@ -84,6 +101,8 @@ export function ProviderCredentialsCard({
     setEditingKeys((prev) => ({ ...prev, [key]: false }));
     onDraftChange({ ...draft, [key]: "" });
     onClearTouched(key);
+    onResetDescription(key);
+    onClearDescriptionTouched(key);
   };
 
   const handleRemove = async (key: SimpleProviderKey) => {
@@ -106,8 +125,8 @@ export function ProviderCredentialsCard({
         <CardDescription>
           Per-provider API keys for the modular voice engine and outbound
           integrations. Keys are encrypted at rest and never shown after
-          saving. Use each row to add, update, or remove a specific provider
-          without affecting the others.
+          saving. Use the provider links for key setup, the help icons for
+          guidance, and the optional descriptions for your own reference.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-5 pt-0">
@@ -118,15 +137,24 @@ export function ProviderCredentialsCard({
                 <ProviderCredentialRow
                   key={key}
                   label={`${PROVIDER_LABELS[key]} API key`}
+                  helpText={PROVIDER_DEFINITIONS[key].helpText}
+                  setupUrl={PROVIDER_DEFINITIONS[key].setupUrl}
                   configured={Boolean(status[key])}
                   value={draft[key]}
+                  description={descriptions[key] ?? ""}
                   editing={Boolean(editingKeys[key])}
-                  pendingChange={Boolean(touched[key])}
+                  pendingChange={Boolean(
+                    touched[key] || descriptionTouched[key],
+                  )}
                   disabled={busy}
                   removing={removingProvider === key}
                   onStartEdit={() => startEdit(key)}
                   onCancelEdit={() => cancelEdit(key)}
                   onChange={(value) => updateSimpleField(key, value)}
+                  onDescriptionChange={(value) => {
+                    onDescriptionChange(key, value);
+                    onMarkDescriptionTouched(key);
+                  }}
                   onRemove={() => handleRemove(key)}
                 />
               ))}
@@ -135,7 +163,7 @@ export function ProviderCredentialsCard({
             {pendingCount > 0 ? (
               <p className="text-sm text-amber-700">
                 {pendingCount} unsaved change{pendingCount === 1 ? "" : "s"} —
-                click Save credentials to apply.
+                click Save changes to apply.
               </p>
             ) : null}
           </>
@@ -158,8 +186,8 @@ export function ProviderCredentialsCard({
               {saving
                 ? "Saving..."
                 : pendingCount > 0
-                  ? `Save credentials (${pendingCount})`
-                  : "Save credentials"}
+                  ? `Save changes (${pendingCount})`
+                  : "Save changes"}
             </span>
           </Button>
         </CardFooter>

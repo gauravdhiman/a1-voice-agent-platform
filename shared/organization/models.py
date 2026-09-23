@@ -180,6 +180,15 @@ class OrganizationUpdate(BaseModel):
             "provider_credentials['google'] for back-compat with the existing UI."
         ),
     )
+    provider_credentials_descriptions_input: Optional[Dict[str, Optional[str]]] = Field(
+        None,
+        exclude=True,
+        description=(
+            "Non-secret per-provider reference notes supplied from the UI. "
+            "A null or empty value clears a provider's note; omitted providers "
+            "are preserved. Notes are stored separately from API credentials."
+        ),
+    )
     public_page_enabled: Optional[bool] = Field(
         None,
         description="Enable the public organization showcase page at /o/{slug}.",
@@ -216,5 +225,12 @@ class Organization(OrganizationBase):
             "openrouter, fish, resend}. Surfaced so the org-settings UI can show "
             "Configured/Not-configured pills per provider without exposing "
             "secrets to the frontend. Read-only; not an input field."
+        ),
+    )
+    provider_credentials_descriptions: Optional[Dict[str, str]] = Field(
+        default=None,
+        description=(
+            "Non-secret per-provider reference notes for the organization API "
+            "credentials. Read-only; credential values are never included."
         ),
     )

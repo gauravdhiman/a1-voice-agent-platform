@@ -65,6 +65,7 @@ Stores tenant organization information. Each organization represents a separate 
 | business_details | TEXT         | NULLABLE                | Comprehensive business context for AI agents (hours, services, policies...) |
 | timezone         | VARCHAR(64)  | NULLABLE                | IANA timezone for voice agent date/time anchoring (e.g. `America/Phoenix`). When unset, `voice-ws` falls back to platform `AGENT_DEFAULT_TIMEZONE`, then `UTC` — migration 20260804000001 |
 | provider_credentials | TEXT     | NULLABLE                | Fernet-encrypted JSON of all per-org provider keys via `encrypt_data`/`decrypt_data` (`shared/common/security.py`): `{google, deepgram, openai, cartesia, cerebras, …}` (only the set keys present). The `key_resolver` decrypts this to build the `api_keys` map for `voice-ws/src/speech/factory.py`. Legacy `livekit` entries may exist in older rows but are unused after the Pipecat cutover. Replaces the legacy plaintext `google_api_key` as the source of truth (that column is retained but unused; dropped in a follow-up migration). Backfilled from `google_api_key` — migration 20260729000001 |
+| provider_credentials_descriptions | JSONB | NULLABLE | Non-secret per-provider reference notes entered on the API Credentials screen. Stored separately from encrypted keys and returned as `provider_credentials_descriptions`; migration 20260923000001 |
 | public_page_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE | Master toggle for the public org showcase at `/o/{slug}` — migration 20260731000001 |
 | public_page_passphrase_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | When true, visitors must submit a passphrase before listing agents — migration 20260731000001 |
 | public_page_passphrase_hash | TEXT | NULLABLE | PBKDF2-SHA256 hash of the org passphrase (never returned to clients) — migration 20260731000001 |
@@ -83,6 +84,11 @@ in `backend/src/organization/service.py` from the decrypted
 values. Drives the Configured/Not-configured pills on the org-settings page. The
 Per-provider flags reflect which keys exist in the decrypted blob. Legacy `livekit`
 entries are ignored by `voice-ws` after the Pipecat cutover.
+
+**Derived response metadata:** `provider_credentials_descriptions` is a sparse
+map of provider name to the user's optional reference note. It contains no
+credential material and is stored in the separate JSONB column above. Empty
+notes are removed rather than persisted.
 
 ---
 
@@ -2060,6 +2066,7 @@ erDiagram
 90. `9f2c4a7b1e3d` - Add service-role-only `demo_feedback` for PII-free visitor star ratings on public demo calls (one row per voice session, upsert on repeat taps). Visitors write through the signed receipt-token endpoint; platform admins read aggregates and recent rows.
 91. `20260920000001` - Replace the Jordan-specific Google Sheets catalog path with the configurable `Google_Sheets` row contract (`read_rows`, `find_rows`, `create_row`, and `update_row`), allow `sheet_row_created` demo receipts, and retire the legacy `Google_Sheets_lead_capture` catalog row while keeping saved links runtime-compatible.
 92. `20260922000001` - Update the existing system-default realtime voice preset to Google `gemini-3.8-live` with the `Zephyr` voice while preserving its other runtime settings. Explicit agent presets are unchanged.
+93. `20260923000001` - Add `organizations.provider_credentials_descriptions` (JSONB NULLABLE) for non-secret per-provider reference notes on the API Credentials screen. Notes are edited through `provider_credentials_descriptions_input` and stored separately from encrypted provider keys.
 
 ---
 

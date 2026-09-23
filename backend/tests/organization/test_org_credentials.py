@@ -25,7 +25,13 @@ def organization_service(mock_supabase_client):
         return OrganizationService()
 
 
-def _row(org_id, *, provider_credentials=None, google_api_key=None):
+def _row(
+    org_id,
+    *,
+    provider_credentials=None,
+    google_api_key=None,
+    provider_credentials_descriptions=None,
+):
     """Build a raw organizations row dict as Supabase would return it."""
     now = datetime.now(timezone.utc).isoformat()
     return {
@@ -40,6 +46,7 @@ def _row(org_id, *, provider_credentials=None, google_api_key=None):
         "business_details": None,
         "google_api_key": google_api_key,
         "provider_credentials": provider_credentials,
+        "provider_credentials_descriptions": provider_credentials_descriptions,
         "onboarding_completed": False,
         "created_at": now,
         "updated_at": now,
@@ -273,6 +280,75 @@ class TestOrgProviderCredentialsWrite:
         mock_enc.assert_not_called()
         mock_supabase_client.table.return_value.update.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_provider_description_is_saved_without_touching_credentials(
+        self, organization_service, mock_supabase_client
+    ):
+        org_id = uuid4()
+        existing_resp = MagicMock()
+        existing_resp.data = [
+            {"provider_credentials_descriptions": {"openai": "Old project note"}}
+        ]
+        updated_resp = MagicMock()
+        updated_resp.data = [
+            _row(
+                org_id,
+                provider_credentials="ENC_BLOB",
+                provider_credentials_descriptions={"openai": " Production project "},
+            )
+        ]
+
+        table_mock = mock_supabase_client.table.return_value
+        table_mock.execute.side_effect = [existing_resp, updated_resp]
+
+        with patch("src.organization.service.encrypt_data") as mock_enc:
+            result, error = await organization_service.update_organization(
+                org_id,
+                OrganizationUpdate(
+                    provider_credentials_descriptions_input={
+                        "openai": " Production project "
+                    }
+                ),
+            )
+
+        assert error is None
+        assert result is not None
+        mock_enc.assert_not_called()
+        update_call = table_mock.update.call_args
+        assert update_call.args[0] == {
+            "provider_credentials_descriptions": {"openai": "Production project"}
+        }
+
+    @pytest.mark.asyncio
+    async def test_provider_description_rejects_unknown_provider(
+        self, organization_service, mock_supabase_client
+    ):
+        result, error = await organization_service.update_organization(
+            uuid4(),
+            OrganizationUpdate(
+                provider_credentials_descriptions_input={"unknown": "note"}
+            ),
+        )
+
+        assert result is None
+        assert error == "Unsupported provider description: unknown"
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_provider_description_rejects_oversized_note(
+        self, organization_service, mock_supabase_client
+    ):
+        result, error = await organization_service.update_organization(
+            uuid4(),
+            OrganizationUpdate(
+                provider_credentials_descriptions_input={"openai": "x" * 1001}
+            ),
+        )
+
+        assert result is None
+        assert "1000 characters or fewer" in error
+        mock_supabase_client.table.return_value.update.assert_not_called()
+
 
 class TestOrgProviderCredentialsRead:
     """_organization_from_dict resolves the Google key from the blob."""
@@ -316,6 +392,23 @@ class TestOrgProviderCredentialsRead:
                 _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
             )
         assert org.google_api_key is None
+
+    def test_reads_provider_descriptions_without_exposing_credentials(self):
+        with patch("src.organization.service.decrypt_data") as mock_dec:
+            mock_dec.return_value = {"openai": "SECRET_O"}
+            org = OrganizationService._organization_from_dict(
+                _row(
+                    uuid4(),
+                    provider_credentials="ENC_BLOB",
+                    provider_credentials_descriptions={
+                        "openai": "Production project",
+                        "unknown": "Ignore me",
+                        "deepgram": "  ",
+                    },
+                )
+            )
+
+        assert org.provider_credentials_descriptions == {"openai": "Production project"}
 
 
 class TestMergeProviderCredentials:
@@ -376,6 +469,29 @@ class TestMergeProviderCredentials:
             )
         # Existing blob undecryptable → start fresh, only the new key remains.
         mock_enc.assert_called_once_with({"google": "G1"})
+
+
+class TestMergeProviderCredentialDescriptions:
+    """Unit tests for sparse, non-secret provider reference notes."""
+
+    def test_merge_trims_and_preserves_omitted_notes(self):
+        descriptions = OrganizationService._merge_provider_credentials_descriptions(
+            {"google": "Google project", "openai": "Old note"},
+            {"openai": " New note "},
+        )
+
+        assert descriptions == {
+            "google": "Google project",
+            "openai": "New note",
+        }
+
+    def test_merge_none_clears_note_and_returns_none_when_empty(self):
+        descriptions = OrganizationService._merge_provider_credentials_descriptions(
+            {"openai": "Old note"},
+            {"openai": None},
+        )
+
+        assert descriptions is None
 
 
 class TestProviderCredentialsStatus:

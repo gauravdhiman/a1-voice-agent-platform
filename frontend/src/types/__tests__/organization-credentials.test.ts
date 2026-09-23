@@ -20,6 +20,12 @@ describe("Organization provider_credentials_status (read)", () => {
       .toMatchTypeOf<Record<string, boolean> | undefined>();
   });
 
+  it("Organization exposes non-secret provider descriptions", () => {
+    expectTypeOf<Organization>()
+      .toHaveProperty("provider_credentials_descriptions")
+      .toMatchTypeOf<Record<string, string> | undefined>();
+  });
+
   it("a fully-formed status map round-trips through the interface", () => {
     const org: Organization = {
       id: "o1",
@@ -53,6 +59,12 @@ describe("OrganizationUpdate provider_credentials_input (write)", () => {
   it("OrganizationUpdate exposes provider_credentials_input as optional", () => {
     expectTypeOf<OrganizationUpdate>()
       .toHaveProperty("provider_credentials_input")
+      .toMatchTypeOf<Record<string, string | null> | undefined>();
+  });
+
+  it("OrganizationUpdate exposes provider credential descriptions", () => {
+    expectTypeOf<OrganizationUpdate>()
+      .toHaveProperty("provider_credentials_descriptions_input")
       .toMatchTypeOf<Record<string, string | null> | undefined>();
   });
 

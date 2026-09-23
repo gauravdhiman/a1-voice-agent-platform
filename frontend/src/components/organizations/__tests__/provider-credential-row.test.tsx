@@ -28,6 +28,31 @@ describe("ProviderCredentialRow", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows provider setup guidance and help affordance", () => {
+    render(
+      <ProviderCredentialRow
+        label="OpenRouter API key"
+        helpText="Create an OpenRouter key in the settings page."
+        setupUrl="https://openrouter.ai/settings/keys"
+        configured={false}
+        value=""
+        editing={false}
+        onChange={vi.fn()}
+        onRemove={vi.fn()}
+        onStartEdit={vi.fn()}
+        onCancelEdit={vi.fn()}
+      />,
+    );
+
+    const setupLink = screen.getByRole("link", { name: /get an api key/i });
+    expect(setupLink.getAttribute("href")).toBe(
+      "https://openrouter.ai/settings/keys",
+    );
+    expect(
+      screen.getByRole("button", { name: /help for openrouter api key/i }),
+    ).toBeTruthy();
+  });
+
   it("shows Update and Remove when configured", () => {
     render(
       <ProviderCredentialRow
@@ -101,5 +126,30 @@ describe("ProviderCredentialRow", () => {
     const input = screen.getByPlaceholderText(/paste your api key/i);
     await user.type(input, "secret");
     expect(onChange).toHaveBeenCalled();
+  });
+
+  it("shows and edits the optional provider description", async () => {
+    const user = userEvent.setup();
+    const onDescriptionChange = vi.fn();
+
+    render(
+      <ProviderCredentialRow
+        label="OpenAI API key"
+        configured={true}
+        value=""
+        description="Production project"
+        editing={true}
+        onChange={vi.fn()}
+        onDescriptionChange={onDescriptionChange}
+        onRemove={vi.fn()}
+        onStartEdit={vi.fn()}
+        onCancelEdit={vi.fn()}
+      />,
+    );
+
+    const description = screen.getByRole("textbox", { name: /description/i });
+    expect((description as HTMLTextAreaElement).value).toBe("Production project");
+    await user.type(description, " only");
+    expect(onDescriptionChange).toHaveBeenCalled();
   });
 });
