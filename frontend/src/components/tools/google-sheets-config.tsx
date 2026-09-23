@@ -237,7 +237,6 @@ function HeaderMultiSelect({
 export interface GoogleSheetsConfigEditorProps {
   agentToolId: string;
   config: Record<string, unknown>;
-  initialDefaultRange: string;
   isOpen: boolean;
   hasUnsavedChanges: boolean;
   authenticated: boolean;
@@ -291,6 +290,16 @@ function sheetFromRange(range: string): string {
   );
 }
 
+function sheetKey(sheet: GoogleSheetsDiscoveredSheet): string {
+  return sheet.sheet_id === null
+    ? `title:${sheet.title}`
+    : String(sheet.sheet_id);
+}
+
+function nonEmptyHeaderCount(sheet: GoogleSheetsDiscoveredSheet): number {
+  return sheet.headers.filter((header) => header.trim()).length;
+}
+
 function selectedByConfiguredValues(
   configured: string[],
   headers: string[],
@@ -316,7 +325,6 @@ function selectedByConfiguredValues(
 export function GoogleSheetsConfigEditor({
   agentToolId,
   config,
-  initialDefaultRange,
   isOpen,
   hasUnsavedChanges,
   authenticated,
@@ -326,9 +334,7 @@ export function GoogleSheetsConfigEditor({
   onDiscover,
 }: GoogleSheetsConfigEditorProps) {
   const [sheets, setSheets] = React.useState<GoogleSheetsDiscoveredSheet[]>([]);
-  const [selectedTitle, setSelectedTitle] = React.useState(() =>
-    sheetFromRange(initialDefaultRange),
-  );
+  const [selectedTitle, setSelectedTitle] = React.useState("");
   const [selectedHeaders, setSelectedHeaders] = React.useState<string[]>([]);
   const [agentFields, setAgentFields] = React.useState<string[]>([]);
   const [requiredFields, setRequiredFields] = React.useState<string[]>([]);
@@ -362,6 +368,8 @@ export function GoogleSheetsConfigEditor({
     () => sheets.find((sheet) => sheet.title === selectedTitle) ?? null,
     [selectedTitle, sheets],
   );
+  const needsTabSelection =
+    !selectedSheet && sheets.length > 1;
 
   const updateConfig = React.useCallback(
     (key: string, value: string) => {
@@ -384,6 +392,7 @@ export function GoogleSheetsConfigEditor({
       );
       setSelectedTitle(sheet.title);
       setSelectedHeaders(usableHeaders);
+      updateConfig("selected_sheet_id", sheetKey(sheet));
       const configuredAgentFields = selectedByConfiguredValues(
         csvValues(textValue(config, "agent_columns")).filter(
           (field) => !configuredManagedKeys.has(canonical(field)),
@@ -447,19 +456,34 @@ export function GoogleSheetsConfigEditor({
       const result = await onDiscover(agentToolId, spreadsheetId);
       if (discoveryRequestId.current !== requestId) return;
       setSheets(result.sheets);
-      const configuredTitle = sheetFromRange(
-        textValue(config, "default_range"),
+      // Older configurations may contain a default range produced when the
+      // editor silently chose the first tab. Restore a selection across
+      // drawer visits only when its stable sheet ID was explicitly saved.
+      const configuredSheetId = textValue(config, "selected_sheet_id").trim();
+      const matchingSavedTab = configuredSheetId
+        ? result.sheets.find((sheet) => sheetKey(sheet) === configuredSheetId)
+        : undefined;
+      const tabsWithHeaders = result.sheets.filter((sheet) =>
+        nonEmptyHeaderCount(sheet) > 0,
       );
-      const preferredTitle = configuredTitle || selectedTitle;
+      // A first-time setup may point at a workbook with unrelated tabs. Do
+      // not silently configure whichever populated tab Google returns first;
+      // let the administrator choose when discovery is ambiguous.
       const preferred =
-        result.sheets.find((sheet) => sheet.title === preferredTitle) ??
-        result.sheets.find((sheet) => sheet.headers.length > 0) ??
-        result.sheets[0];
+        matchingSavedTab ??
+        result.sheets.find((sheet) => sheet.title === selectedTitle) ??
+        (tabsWithHeaders.length === 1
+          ? tabsWithHeaders[0]
+          : result.sheets.length === 1
+            ? result.sheets[0]
+            : undefined);
       if (preferred) {
         applySheet(preferred);
         setHasCurrentDiscovery(true);
+      } else {
+        setSelectedTitle("");
       }
-      if (!preferred) {
+      if (!preferred && result.sheets.length === 0) {
         setDiscoveryError("No tabs were found in this spreadsheet.");
       }
     } catch (error) {
@@ -495,7 +519,7 @@ export function GoogleSheetsConfigEditor({
     // keystroke while a user is entering a new spreadsheet URL.
     autoDiscoveryAttempted.current = true;
     const hasSavedColumnSettings = Boolean(
-      textValue(config, "default_range").trim() ||
+      textValue(config, "selected_sheet_id").trim() ||
         textValue(config, "header_range").trim() ||
         textValue(config, "agent_columns").trim(),
     );
@@ -522,6 +546,7 @@ export function GoogleSheetsConfigEditor({
       "source_value",
       "status_column",
       "status_value",
+      "selected_sheet_id",
     ]) {
       updateConfig(key, "");
     }
@@ -593,6 +618,7 @@ export function GoogleSheetsConfigEditor({
   const mappingsAreValid = Boolean(
     selectedSheet &&
       selectedHeaders.length > 0 &&
+      textValue(config, "selected_sheet_id") === sheetKey(selectedSheet) &&
       selectedSheet.issues.length === 0 &&
       configuredRangeTab === selectedSheet.title &&
       configuredHeaderTab === selectedSheet.title &&
@@ -637,7 +663,9 @@ export function GoogleSheetsConfigEditor({
         : discoveryError
           ? "Not configured: the sheet could not be verified."
           : !hasCurrentDiscovery
-            ? "Not configured: discover the sheet columns to verify this setup."
+            ? needsTabSelection
+              ? "Not configured: choose the data tab for this workflow."
+              : "Not configured: discover the sheet columns to verify this setup."
             : isConfigurationReady
               ? hasUnsavedChanges
                 ? "Setup verified. Save changes to apply this configuration."
@@ -756,12 +784,15 @@ export function GoogleSheetsConfigEditor({
               </p>
             </div>
             <Select
-              value={selectedTitle || undefined}
+              value={selectedTitle}
               onValueChange={(value) => {
                 const sheet = sheets.find(
                   (candidate) => candidate.title === value,
                 );
-                if (sheet) applySheet(sheet);
+                if (sheet) {
+                  applySheet(sheet);
+                  setHasCurrentDiscovery(true);
+                }
               }}
               disabled={!canEdit}
             >
@@ -777,12 +808,20 @@ export function GoogleSheetsConfigEditor({
                     key={`${sheet.title}-${sheet.sheet_id ?? "tab"}`}
                     value={sheet.title}
                   >
-                    {sheet.title}
+                    {sheet.title} ({nonEmptyHeaderCount(sheet)} columns)
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {needsTabSelection && (
+            <p className="text-xs text-muted-foreground" role="status">
+              Choose the tab for this workflow. Column counts are shown with
+              each tab so you can verify the correct sheet before mapping
+              fields.
+            </p>
+          )}
 
           {selectedSheet &&
           !selectedSheet.headers.some((header) => header.trim()) ? (

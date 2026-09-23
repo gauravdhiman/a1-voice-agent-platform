@@ -62,6 +62,13 @@ class GoogleSheetsTool(BaseTool):
                 "the configured working area."
             ),
         )
+        selected_sheet_id: str = Field(
+            default="",
+            description=(
+                "Internal setup metadata used to restore the tab selected during "
+                "Google Sheets discovery. Do not use this as a model field."
+            ),
+        )
         agent_columns: str = Field(
             default="",
             title="Agent fields",
