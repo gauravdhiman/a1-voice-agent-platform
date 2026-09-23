@@ -65,6 +65,29 @@ def _context() -> ToolContext:
     )
 
 
+def test_find_rows_model_schema_omits_empty_column_enum_value() -> None:
+    """Optional all-column searches stay valid for Gemini Live schemas."""
+    service = _service(lambda _request: httpx.Response(200))
+
+    properties = service.model_function_properties(
+        "find_rows",
+        {"column": {"type": "string"}},
+    )
+
+    assert properties["column"]["enum"] == [
+        "Caller name",
+        "Caller email",
+        "Caller phone",
+        "Service needed",
+        "Issue summary",
+        "Submission ID",
+        "Captured at",
+        "Lead source",
+        "Status",
+    ]
+    assert "" not in properties["column"]["enum"]
+
+
 @pytest.mark.asyncio
 async def test_create_row_uses_headers_and_generated_columns() -> None:
     """A row is assembled from header keys, not model-supplied column arrays."""

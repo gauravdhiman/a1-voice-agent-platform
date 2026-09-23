@@ -230,8 +230,8 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
   const resultLinkLabel = `Open ${providerLabel(action)} result`;
   const capturedFieldEntries = Object.entries(action.captured_fields);
   return (
-    <div className={pt.panel} style={{ padding: 28, overflow: "hidden" }}>
-      <div className="flex items-start gap-4">
+    <div className={`${pt.panel} ${pt.outcomeActionCard}`}>
+      <div className={pt.outcomeActionHeader}>
         <div
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${statusTile(action)}`}
         >
@@ -239,13 +239,7 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3
-              style={{
-                fontSize: 20,
-                fontWeight: 400,
-                letterSpacing: "-0.03em",
-              }}
-            >
+            <h3 className={pt.outcomeActionTitle}>
               {actionTitle(action)}
             </h3>
             <span
@@ -293,7 +287,7 @@ function OutcomeActionCard({ action }: { action: DemoOutcomeAction }) {
         ) : (
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         )}
-        <div>
+        <div className={pt.outcomeActionMessage}>
           <p className="font-medium">What the tools confirmed</p>
           <p className="mt-0.5" style={{ color: "var(--public-muted)" }}>
             {String(
@@ -441,9 +435,9 @@ export default function DemoOutcomePage() {
         <div className={pt.glow} aria-hidden="true" />
         <PublicHeader />
 
-        <main className={pt.outcomeLayout} style={{ position: "relative" }}>
+        <main className={pt.outcomeLayout}>
           <section className={pt.outcomeIntro} aria-label="Call summary">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className={pt.outcomeTopline}>
               <p className={pt.eyebrow}>
                 <span className={pt.statusDot} />
                 YOUR CALL, PROVEN
@@ -457,13 +451,12 @@ export default function DemoOutcomePage() {
               </p>
             </div>
             <h1
-              className={pt.title}
-              style={{ fontSize: "clamp(38px, 5vw, 64px)", marginTop: 24 }}
+              className={`${pt.title} ${pt.outcomeTitle}`}
             >
               {outcomeHeading(outcome)[0]} <br />
               <span>{outcomeHeading(outcome)[1]}</span>
             </h1>
-            <p className={pt.lede} style={{ marginTop: 20, maxWidth: 620 }}>
+            <p className={`${pt.lede} ${pt.outcomeLede}`}>
               {outcome.status === "completed"
                 ? `${outcome.agent_name} handled it end to end. Everything below really happened in business tools, not a mockup.`
                 : outcome.status === "needs_attention"
@@ -472,8 +465,7 @@ export default function DemoOutcomePage() {
             </p>
 
             <div
-              className={`mt-8 rounded-2xl border p-5 ${copy.tone}`}
-              style={{ position: "relative" }}
+              className={`${pt.outcomeStatusBanner} ${copy.tone}`}
             >
               <div className="flex items-start gap-3">
                 {outcome.status === "completed" ? (
@@ -511,7 +503,7 @@ export default function DemoOutcomePage() {
               className={pt.outcomeFeedbackSticky}
               data-testid="outcome-feedback-sticky"
             >
-              <div className={pt.panel} style={{ padding: 24 }}>
+              <div className={`${pt.panel} ${pt.outcomeFeedbackPanel}`}>
                 <p className={pt.eyebrow}>YOUR TURN · 30 SECONDS</p>
                 <div className="mt-4">
                   <DemoFeedback
@@ -535,7 +527,7 @@ export default function DemoOutcomePage() {
           >
             {outcome.actions.length === 0 && (
               <section className="w-full">
-                <div className={pt.panel} style={{ padding: "48px 24px" }}>
+                <div className={`${pt.panel} ${pt.outcomeEmptyPanel}`}>
                   <div className="flex flex-col items-center text-center">
                     <div
                       className="flex h-14 w-14 items-center justify-center rounded-2xl"
@@ -548,8 +540,7 @@ export default function DemoOutcomePage() {
                       <Wrench className="h-7 w-7" />
                     </div>
                     <h2
-                      className={pt.title}
-                      style={{ fontSize: 24, marginTop: 20 }}
+                      className={`${pt.title} ${pt.outcomeSubheading}`}
                     >
                       Nothing got saved on this call
                     </h2>
@@ -581,12 +572,11 @@ export default function DemoOutcomePage() {
                 aria-label="Call results"
               >
                 <h2
-                  className={pt.title}
-                  style={{ fontSize: "clamp(26px, 3vw, 36px)" }}
+                  className={`${pt.title} ${pt.outcomeResultsTitle}`}
                 >
                   What {outcome.agent_name} <span>saved for you</span>
                 </h2>
-                <div className="mt-6 flex flex-col gap-5">
+                <div className={pt.outcomeActionList}>
                   {outcome.actions.map((action) => (
                     <OutcomeActionCard key={action.id} action={action} />
                   ))}
@@ -595,7 +585,7 @@ export default function DemoOutcomePage() {
             ) : null}
 
             <section className="w-full">
-              <div className={pt.panel} style={{ padding: 28 }}>
+              <div className={`${pt.panel} ${pt.outcomeBusinessPanel}`}>
                 <p className={pt.eyebrow}>IF THIS RAN YOUR BUSINESS</p>
                 <ul
                   style={{
@@ -643,7 +633,7 @@ export default function DemoOutcomePage() {
             </section>
 
             <footer
-              className="flex w-full flex-col gap-3 border-t pt-5 text-xs text-[var(--public-muted)] sm:flex-row sm:items-center sm:justify-between"
+              className={pt.outcomeReceiptFooter}
               style={{ borderColor: "var(--line)" }}
             >
               <span className="inline-flex items-center gap-1.5">

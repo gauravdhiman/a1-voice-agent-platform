@@ -30,6 +30,7 @@ from shared.voice_agents.tool_models import ToolSource
 from shared.voice_agents.tool_service import tool_service
 from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
 from shared.voice_agents.tools.base.tool_context import ToolContext
+from shared.voice_agents.tools.mcp.schema_sanitize import sanitize_schema_for_gemini
 
 logger = logging.getLogger(__name__)
 
@@ -202,13 +203,30 @@ def apply_model_function_guidance(
     if callable(properties_method):
         properties = properties_method(schema.name, schema.properties)
         if isinstance(properties, dict):
-            schema = FunctionSchema(
-                name=schema.name,
-                description=schema.description,
-                properties=properties,
-                required=schema.required,
-                handler=getattr(schema, "handler", None),
-            )
+            schema_properties = properties
+        else:
+            schema_properties = schema.properties
+    else:
+        schema_properties = schema.properties
+
+    # Native attachment schemas are assembled in this module, while MCP
+    # schemas are sanitized in their adapter. Keep the same Gemini Live
+    # compatibility boundary for both paths so a future optional enum cannot
+    # take down every call during provider session setup.
+    sanitized_schema = sanitize_schema_for_gemini(
+        {"type": "object", "properties": schema_properties}
+    )
+    if isinstance(sanitized_schema, dict) and isinstance(
+        sanitized_schema.get("properties"), dict
+    ):
+        schema_properties = sanitized_schema["properties"]
+        schema = FunctionSchema(
+            name=schema.name,
+            description=schema.description,
+            properties=schema_properties,
+            required=schema.required,
+            handler=getattr(schema, "handler", None),
+        )
 
     guidance_method = getattr(tool_instance, "model_function_guidance", None)
     if not callable(guidance_method):

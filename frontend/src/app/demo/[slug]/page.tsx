@@ -603,9 +603,9 @@ function DemoAgentView() {
       <div className={pt.glow} aria-hidden="true" />
       <PublicHeader />
 
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className={pt.demoLayout}>
+        <div className={pt.demoContextBar}>
+          <div className={pt.demoContextDetails}>
             <span
               className={pt.smallDetail}
               style={{ fontSize: 10, letterSpacing: "0.12em" }}
@@ -613,7 +613,7 @@ function DemoAgentView() {
               INTERACTIVE VOICE DEMO
             </span>
             {agent.organization_name && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-transparent px-2 py-1">
+              <span className={pt.demoContextOrg}>
                 <Building2 className="h-3.5 w-3.5" />
                 {agent.organization_name}
               </span>
@@ -628,13 +628,12 @@ function DemoAgentView() {
           </Link>
         </div>
 
-        <main className="grid flex-1 items-start gap-7 py-7 lg:grid-cols-[minmax(0,1fr)_minmax(390px,460px)] lg:items-center lg:gap-16 lg:py-10">
-          <section className="order-2 max-w-2xl lg:order-1">
-            <div className="max-w-xl">
+        <main className={pt.demoMain}>
+          <section className={pt.demoIntro}>
+            <div className={pt.demoIntroCopy}>
               <p className={pt.eyebrow}>INTERACTIVE VOICE DEMO</p>
               <h1
-                className={pt.title}
-                style={{ fontSize: "clamp(40px, 5vw, 64px)", marginTop: 20 }}
+                className={`${pt.title} ${pt.demoTitle}`}
               >
                 Try {agent.name} <span>live.</span>
               </h1>
@@ -648,8 +647,8 @@ function DemoAgentView() {
               )}
             </div>
 
-            <div className="mt-8 grid max-w-xl gap-3 sm:grid-cols-2">
-              <div className={`${pt.panel} p-4`}>
+            <div className={pt.demoInfoGrid}>
+              <div className={`${pt.panel} ${pt.demoInfoPanel}`}>
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
                   <Mic className="h-4 w-4" aria-hidden="true" />
                 </div>
@@ -659,7 +658,7 @@ function DemoAgentView() {
                   guide the conversation.
                 </p>
               </div>
-              <div className={`${pt.panel} p-4`}>
+              <div className={`${pt.panel} ${pt.demoInfoPanel}`}>
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300">
                   <Database className="h-4 w-4" aria-hidden="true" />
                 </div>
@@ -673,7 +672,7 @@ function DemoAgentView() {
               </div>
             </div>
 
-            <div className={`${pt.panel} mt-3 max-w-xl p-4`}>
+            <div className={`${pt.panel} ${pt.demoTryPanel}`}>
               <p
                 className={pt.smallDetail}
                 style={{ fontSize: 10, letterSpacing: "0.12em" }}
@@ -699,7 +698,7 @@ function DemoAgentView() {
               </p>
             </div>
 
-            <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <div className={pt.demoMeta}>
               {callsRemainingLabel ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -719,9 +718,9 @@ function DemoAgentView() {
             </div>
           </section>
 
-          <aside className="order-1 w-full lg:order-2 lg:sticky lg:top-8">
+          <aside className={pt.demoCallColumn}>
             <Card
-              className="gap-0 overflow-hidden py-0"
+              className={`${pt.demoCallCard} gap-0 overflow-hidden py-0`}
               data-demo-visualizer={visualizer}
             >
               <CardHeader className="border-b border-border px-5 pb-5 pt-5 sm:px-6">
@@ -859,7 +858,7 @@ function DemoAgentView() {
           </aside>
         </main>
 
-        <footer className="flex items-center justify-center gap-1.5 pt-2 text-center text-xs text-muted-foreground">
+        <footer className={pt.demoFooter}>
           <span>Demo agents are for showcasing only.</span>
           <Link href="/" className="underline underline-offset-4">
             Back to home

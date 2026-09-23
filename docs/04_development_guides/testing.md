@@ -31,6 +31,9 @@ responsiveness; a successful manual call cannot replace a regression test.
 - Tool or MCP changes add contract tests and a deterministic evaluation
   scenario/trace when model-facing selection, arguments, ordering,
   confirmation, idempotency, or errors can change.
+- Realtime tool-schema changes also run the voice-ws schema compatibility tests.
+  Gemini Live optional arguments are represented by omission, never by an empty
+  string inside an enum; provider validation happens before model audio starts.
 - UI changes update component/service tests and the durable E2E journey. Keep
   loading, empty, error, accessibility, and permission states covered.
 - Production incidents become redacted replay traces or deterministic

@@ -324,14 +324,27 @@ def test_public_demo_outcome_page_shows_provider_backed_receipt(
     page.goto(f"{base_url}/demo/{demo_slug}/outcome?token=visitor-receipt-token-123456")
 
     step("Verify the captured inquiry and provider confirmation")
-    expect(page.get_by_text("The handoff is complete")).to_be_visible()
-    step("Open call details to inspect the provider-backed receipt")
-    page.get_by_text("Call details").click()
+    expect(page.get_by_text("Confirmed by your tools")).to_be_visible()
+    expect(page.get_by_text("See what was saved")).to_be_visible()
     expect(page.get_by_text("Maria Garcia")).to_be_visible()
     expect(page.get_by_text("AC repair")).to_be_visible()
-    expect(page.get_by_text("Google Sheets", exact=True)).to_be_visible()
+    expect(page.get_by_text("via Google Sheets")).to_be_visible()
     expect(page.get_by_text("Email confirmation sent")).to_be_visible()
     expect(page.get_by_text("Gmail confirmed the email was sent.")).to_be_visible()
+
+    step("Verify the receipt stays within the viewport on common form factors")
+    for viewport_width, viewport_height in (
+        (320, 740),
+        (390, 844),
+        (768, 1024),
+        (1280, 900),
+    ):
+        page.set_viewport_size(
+            {"width": viewport_width, "height": viewport_height}
+        )
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= window.innerWidth"
+        )
 
 
 def test_public_demo_outcome_page_is_clear_when_provider_save_fails(
@@ -376,11 +389,9 @@ def test_public_demo_outcome_page_is_clear_when_provider_save_fails(
     page.goto(f"{base_url}/demo/{demo_slug}/outcome?token=visitor-receipt-token-123456")
 
     step("Verify the receipt distinguishes captured details from a failed save")
-    expect(page.get_by_text("Review what Jordan captured.")).to_be_visible()
-    step("Open call details to inspect the provider failure")
-    page.get_by_text("Call details").click()
-    expect(page.get_by_text("Service inquiry details captured")).to_be_visible()
-    expect(page.get_by_text("Not completed")).to_be_visible()
+    expect(page.get_by_role("heading", name="Almost done.")).to_be_visible()
+    expect(page.get_by_text("Service request not saved")).to_be_visible()
+    expect(page.get_by_text("Didn't go through")).to_be_visible()
     expect(
         page.get_by_text(
             "The Google Sheets destination is not configured for this demo."

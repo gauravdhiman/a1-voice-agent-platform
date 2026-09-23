@@ -15,6 +15,7 @@ from src.tools.assembly import (
 
 from shared.voice_agents.tools.base.platform_tool_registry import PlatformToolRegistry
 from shared.voice_agents.tools.base.tool_context import ToolContext
+from shared.voice_agents.tools.mcp.schema_sanitize import sanitize_schema_for_gemini
 from shared.voice_agents.tools.implementations.google_calendar_appointment import (
     GoogleCalendarAppointmentTool,
 )
@@ -187,6 +188,50 @@ class TestToolAssemblyHelpers:
             "Caller Name",
             "Phone",
         ]
+
+    def test_find_rows_optional_column_has_a_gemini_safe_enum(self) -> None:
+        """An omitted column searches all headers without an empty enum item."""
+        tool = GoogleSheetsTool(
+            config={
+                "agent_columns": "Caller Name, Phone",
+                "idempotency_column": "Submission ID",
+            }
+        )
+
+        schema = apply_model_function_guidance(
+            build_function_schema(GoogleSheetsTool.find_rows),
+            tool,
+        )
+
+        assert schema.properties["column"]["enum"] == [
+            "Caller Name",
+            "Phone",
+            "Submission ID",
+        ]
+        assert "column" not in schema.required
+        assert "" not in schema.properties["column"]["enum"]
+
+    def test_gemini_schema_sanitizer_removes_empty_enum_values_recursively(
+        self,
+    ) -> None:
+        """Provider setup must not receive empty enum values from any tool."""
+        schema = sanitize_schema_for_gemini(
+            {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "enum": ["", "Caller Name"]},
+                    "nested": {
+                        "type": "object",
+                        "properties": {
+                            "status": {"type": "string", "enum": [""]}
+                        },
+                    },
+                },
+            }
+        )
+
+        assert schema["properties"]["column"]["enum"] == ["Caller Name"]
+        assert "enum" not in schema["properties"]["nested"]["properties"]["status"]
 
     def test_build_function_schema_preserves_pep604_optional_primitive_type(
         self,
