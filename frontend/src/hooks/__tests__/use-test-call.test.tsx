@@ -29,8 +29,13 @@ describe("useTestCall", () => {
   });
 
   it("does not send a second disconnect when the voice server closes the socket", async () => {
-    let callbacks: { onConnected?: () => void; onDisconnected?: () => void } =
-      {};
+    let callbacks: {
+      onConnected?: () => void;
+      onDisconnected?: () => void;
+      onBotAudioTrack?: (track: MediaStreamTrack | null) => void;
+      onLocalAudioTrack?: (track: MediaStreamTrack | null) => void;
+      onLevelManager?: (manager: unknown) => void;
+    } = {};
     mocks.connect.mockImplementation(async (_token, _wsUrl, nextCallbacks) => {
       callbacks = nextCallbacks;
       nextCallbacks.onClientCreated?.({ enableMic: vi.fn() });
@@ -46,6 +51,18 @@ describe("useTestCall", () => {
       await result.current.startCall();
     });
     expect(result.current.isConnected).toBe(true);
+
+    const agentTrack = {} as MediaStreamTrack;
+    const localTrack = {} as MediaStreamTrack;
+    const levelManager = { readLevels: vi.fn() };
+    act(() => {
+      callbacks.onBotAudioTrack?.(agentTrack);
+      callbacks.onLocalAudioTrack?.(localTrack);
+      callbacks.onLevelManager?.(levelManager);
+    });
+    expect(result.current.agentTrack).toBe(agentTrack);
+    expect(result.current.localTrack).toBe(localTrack);
+    expect(result.current.levelManager).toBe(levelManager);
 
     await act(async () => {
       callbacks.onDisconnected?.();

@@ -9,8 +9,10 @@ vi.mock("@/hooks/use-test-call", () => ({
   useTestCall: mocks.useTestCall,
 }));
 
-vi.mock("@/components/agents-ui/agent-audio-visualizer-wave", () => ({
-  AgentAudioVisualizerWave: () => <div data-testid="audio-visualizer" />,
+vi.mock("@/components/agents-ui/agent-audio-radial-v4", () => ({
+  AgentAudioRadialV4: ({ color, active }: { color?: string; active?: boolean }) => (
+    <div data-testid="audio-visualizer" data-color={color} data-active={active} />
+  ),
 }));
 
 import { TestCallModal } from "@/components/agents/test-call-modal";
@@ -25,6 +27,9 @@ function mockTestCall() {
     isMuted: false,
     isAgentSpeaking: false,
     isUserSpeaking: false,
+    agentTrack: null,
+    localTrack: null,
+    levelManager: null,
   });
 }
 
@@ -58,5 +63,35 @@ describe("TestCallModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close test call" }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("uses the shared radial visualizer for both call participants", () => {
+    mocks.useTestCall.mockReturnValue({
+      isConnecting: false,
+      isConnected: true,
+      startCall: vi.fn(),
+      endCall: vi.fn(),
+      toggleMute: vi.fn(),
+      isMuted: false,
+      isAgentSpeaking: true,
+      isUserSpeaking: false,
+      agentTrack: null,
+      localTrack: {} as MediaStreamTrack,
+      levelManager: { readLevels: vi.fn(() => ({ level: 0.4 })) },
+    });
+
+    render(
+      <TestCallModal
+        open
+        onOpenChange={vi.fn()}
+        agentId="agent-1"
+        agentName="Support Agent"
+      />,
+    );
+
+    expect(screen.getAllByTestId("audio-visualizer")).toHaveLength(2);
+    const agentVisualizer = screen.getAllByTestId("audio-visualizer")[0];
+    expect(agentVisualizer?.getAttribute("data-color")).toBe("#22d3ee");
+    expect(agentVisualizer?.getAttribute("data-active")).toBe("true");
   });
 });

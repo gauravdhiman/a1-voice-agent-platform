@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useTestCall } from "@/hooks/use-test-call";
-import { AgentAudioVisualizerWave } from "@/components/agents-ui/agent-audio-visualizer-wave";
+import { AgentAudioRadialV4 } from "@/components/agents-ui/agent-audio-radial-v4";
 
 interface TestCallModalProps {
   open: boolean;
@@ -43,6 +43,8 @@ export function TestCallModal({
     isAgentSpeaking,
     isUserSpeaking,
     isMuted,
+    localTrack,
+    levelManager,
   } = useTestCall({
     agentId,
     onConnected: () => {
@@ -151,28 +153,32 @@ export function TestCallModal({
             <>
               <div className="w-full max-w-sm space-y-4">
                 <div>
-                  <div className="text-center mb-2">
+                  <div className="mb-2 text-center">
                     <span className="text-sm font-medium text-gray-700">{agentName}</span>
                   </div>
-                  <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
-                    <AgentAudioVisualizerWave
-                      state={isAgentSpeaking ? "speaking" : "listening"}
-                      color="#22c55e"
-                      className="w-full h-full"
+                  <div className="flex justify-center">
+                    <AgentAudioRadialV4
+                      getAudioLevel={() => levelManager?.readLevels().level ?? null}
+                      active={isAgentSpeaking}
+                      size={220}
+                      barCount={72}
+                      color="#22d3ee"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-center mb-2">
+                  <div className="mb-2 text-center">
                     <span className="text-sm font-medium text-gray-700">You</span>
                     {isMuted && <span className="ml-2 text-xs text-red-500">(Muted)</span>}
                   </div>
-                  <div className="h-32 bg-white rounded-xl shadow-sm border overflow-hidden">
-                    <AgentAudioVisualizerWave
-                      state={isMuted ? "idle" : isUserSpeaking ? "speaking" : "listening"}
-                      color={isMuted ? "#9ca3af" : "#3b82f6"}
-                      className="w-full h-full"
+                  <div className="flex justify-center">
+                    <AgentAudioRadialV4
+                      track={isMuted ? null : localTrack}
+                      active={isUserSpeaking}
+                      size={220}
+                      barCount={72}
+                      color={isMuted ? "#9ca3af" : "#818cf8"}
                     />
                   </div>
                 </div>
