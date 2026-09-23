@@ -185,6 +185,7 @@
   letter-spacing: -0.06em;
   font-weight: 600;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .brandMark {
   width: 22px;
@@ -260,6 +261,8 @@
   align-items: center;
   color: var(--public-muted);
   transition: color 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .signIn:hover {
   color: var(--public-accent);
@@ -272,6 +275,8 @@
   border: 1px solid var(--line);
   border-radius: 4px;
   transition: background-color 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .headerCta:hover {
   background: var(--panel);
@@ -615,6 +620,17 @@
     display: flex;
   }
 }
+/* Small laptops and tablets: the anchor nav wraps below ~980px, so hide it
+ * early. Sign in and the demo CTA stay visible; footer links keep every
+ * destination reachable. */
+@media (max-width: 1000px) {
+  .nav {
+    display: none;
+  }
+  .headerActions {
+    gap: 16px;
+  }
+}
 @media (max-width: 760px) {
   .nav,
   .signIn {
@@ -651,6 +667,34 @@
   .proofPoint {
     min-height: auto;
     padding: 25px;
+  }
+}
+
+/* Phones: compact the header so brand, theme switch, and the demo CTA fit
+ * side by side from 360px up without wrapping the CTA label. */
+@media (max-width: 480px) {
+  .header {
+    padding: 0 16px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 19px;
+    gap: 10px;
+  }
+  .headerActions {
+    gap: 10px;
+  }
+  .headerCta {
+    padding: 9px 12px;
+    font-size: 11px;
+  }
+}
+/* Very small phones: hide the decorative sun/moon icons (the sliding track
+ * stays fully functional, and the button keeps its accessible label) so the
+ * header still fits at 320px. */
+@media (max-width: 360px) {
+  .themeSwitch > svg {
+    display: none;
   }
 }
 
