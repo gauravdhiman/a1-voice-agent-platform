@@ -1157,6 +1157,48 @@
     font-size: 6px;
   }
 }
+/* Tablet portrait: the desktop header crowds below ~840px (brand overlaps
+ * the nav), so switch to the hamburger menu early. Content breakpoints stay
+ * at 760px; only the header changes here. The dropdown anchors to the
+ * header bottom so it fits both the 86px desktop header and tablets. */
+@media (max-width: 860px) {
+  .desktopNav,
+  .signIn,
+  .headerCta {
+    display: none;
+  }
+  .menuToggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 0;
+    color: var(--ink);
+    padding: 8px;
+  }
+  .menuToggle svg {
+    width: 20px;
+  }
+  .headerActions {
+    gap: 16px;
+  }
+  .mobileNav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 6% 28px;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .mobileNav a {
+    padding: 13px 0;
+    font-size: 15px;
+  }
+}
 @media (max-width: 760px) {
   .header {
     height: 70px;
