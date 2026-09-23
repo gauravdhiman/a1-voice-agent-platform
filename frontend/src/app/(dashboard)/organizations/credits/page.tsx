@@ -81,7 +81,7 @@ export default function PlatformOrganizationCreditsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <Button asChild variant="ghost" className="mb-3 -ml-3">
             <Link href="/organizations">
               <ArrowLeft className="h-4 w-4" />
@@ -89,7 +89,7 @@ export default function PlatformOrganizationCreditsPage() {
             </Link>
           </Button>
           <p className="text-sm font-medium text-primary">Platform Admin</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Credits &amp; entitlements
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
@@ -98,9 +98,9 @@ export default function PlatformOrganizationCreditsPage() {
             in the organization&apos;s Billing area.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm">
+        <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm">
           <Building2 className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{organization.name}</span>
+          <span className="truncate font-medium">{organization.name}</span>
         </div>
       </div>
 

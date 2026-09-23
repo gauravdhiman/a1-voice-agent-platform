@@ -17,12 +17,12 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center space-x-4">
-        <div className="bg-primary/10 p-2 rounded-lg">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+        <div className="shrink-0 rounded-lg bg-primary/10 p-2">
           <SettingsIcon className="h-6 w-6 text-primary" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">Settings</h1>
           <p className="text-sm text-muted-foreground">
             Manage your account and application preferences
           </p>
@@ -44,7 +44,7 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div>
                 <h4 className="text-sm font-medium mb-3">Theme</h4>
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div
                     className={`border rounded-lg p-3 cursor-pointer transition-all ${
                       theme === "light"

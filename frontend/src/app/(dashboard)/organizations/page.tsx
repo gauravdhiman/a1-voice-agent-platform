@@ -85,11 +85,11 @@ export default function OrganizationsPage() {
   }
 
   return (
-    <div className="px-6 py-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Organizations</h1>
+    <div className="px-0 py-4 sm:py-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Organizations</h1>
             <p className="text-gray-600 mt-2">
               Manage your organizations and view their details
             </p>
@@ -97,7 +97,7 @@ export default function OrganizationsPage() {
           {isPlatformAdmin && (
             <Button
               onClick={() => setCreateDialogOpen(true)}
-              className="flex items-center gap-2"
+              className="flex w-full items-center justify-center gap-2 sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               Create Organization

@@ -122,8 +122,8 @@ export default function PlatformInterestPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Interest</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Interest</h1>
           <p className="text-muted-foreground mt-1">
             Every captured lead, newest first. Work them new → contacted →
             invited → converted.

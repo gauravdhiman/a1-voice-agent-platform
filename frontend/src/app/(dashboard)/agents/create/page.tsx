@@ -29,7 +29,7 @@ export default function CreateAgentPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="mx-auto w-full max-w-4xl px-0 py-4 sm:py-8">
       <AgentCreateWidget />
     </div>
   );

@@ -386,6 +386,76 @@ html {
       color-mix(in srgb, var(--site-accent) 20%, transparent);
   }
 
+  /* Authenticated workspace layout primitives. These keep every private
+   * route inside a shrinkable column and give dense tables a deliberate
+   * horizontal scroll surface on small screens. */
+  .dashboard-shell {
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--site-surface) 94%, var(--site-accent)) 0%,
+        var(--site-surface) 42%,
+        color-mix(in srgb, var(--site-panel) 86%, var(--site-surface)) 100%
+      );
+  }
+
+  .dashboard-page,
+  .dashboard-page > *,
+  .dashboard-page [data-slot="card"],
+  .dashboard-page [data-slot="card-header"],
+  .dashboard-page [data-slot="card-content"],
+  .dashboard-page [data-slot="card-footer"] {
+    min-width: 0;
+  }
+
+  .dashboard-page [data-slot="card-title"] {
+    overflow-wrap: anywhere;
+  }
+
+  .responsive-data-table__scroll {
+    scrollbar-color: color-mix(in srgb, var(--site-accent) 42%, transparent)
+      transparent;
+    scrollbar-width: thin;
+  }
+
+  .responsive-data-table__scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .responsive-data-table__scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--site-accent) 42%, transparent);
+    border-radius: 999px;
+  }
+
+  .dashboard-page :where(input, select, textarea) {
+    max-width: 100%;
+  }
+
+  @media (max-width: 639px) {
+    .dashboard-page [data-slot="card"] {
+      border-radius: 1rem;
+    }
+
+    .dashboard-page [data-slot="card-header"],
+    .dashboard-page [data-slot="card-content"],
+    .dashboard-page [data-slot="card-footer"] {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    .dashboard-page [data-slot="card-header"] {
+      gap: 0.5rem;
+    }
+
+    .dashboard-page h1 {
+      text-wrap: balance;
+    }
+
+    .dashboard-page .responsive-data-table {
+      border-radius: 0.875rem;
+    }
+  }
+
   /* Professional Table Styles */
   .table {
     @apply bg-card border-border;

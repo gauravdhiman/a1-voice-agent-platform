@@ -52,7 +52,7 @@ export default function PlatformPlansPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           Plan Catalog
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -65,10 +65,10 @@ export default function PlatformPlansPage() {
         onValueChange={handleTabChange}
         className="space-y-5"
       >
-        <TabsList>
-          <TabsTrigger value="plans">Plans</TabsTrigger>
-          <TabsTrigger value="entitlements">Entitlements</TabsTrigger>
-          <TabsTrigger value="usage">Usage pricing</TabsTrigger>
+        <TabsList className="max-w-full overflow-x-auto">
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="plans">Plans</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="entitlements">Entitlements</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="usage">Usage pricing</TabsTrigger>
         </TabsList>
         <TabsContent value="plans" className="mt-0">
           <PlatformPlansManager />

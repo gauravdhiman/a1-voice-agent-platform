@@ -141,12 +141,12 @@ export default function CallsPage() {
   return (
     <div className="space-y-6" data-tour="calls-page">
       {/* Header */}
-      <div className="flex items-center space-x-4">
-        <div className="bg-primary/10 p-3 rounded-lg">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+        <div className="shrink-0 rounded-lg bg-primary/10 p-3">
           <Phone className="h-6 w-6 text-primary" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">Call Log</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold sm:text-2xl">Call Log</h1>
           <p className="text-sm text-muted-foreground">
             Phone and web call history for {organizationName}
           </p>

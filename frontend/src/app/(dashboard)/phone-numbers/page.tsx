@@ -78,7 +78,7 @@ export default function PhoneNumbersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Phone Numbers</h1>
+        <h1 className="text-xl font-bold text-foreground sm:text-2xl">Phone Numbers</h1>
         <p className="text-sm text-muted-foreground">
           Manage your phone numbers, assign them to voice agents, and track
           your credit balance.

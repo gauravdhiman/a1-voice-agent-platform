@@ -9,6 +9,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Menu,
+  X,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,10 +61,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const searchParams = useSearchParams();
   const { openProductTour } = useProductTour();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 767px)");
-    const update = () => setSidebarCollapsed(mobile.matches);
+    const update = () => {
+      setIsMobile(mobile.matches);
+      setSidebarCollapsed(mobile.matches);
+    };
     update();
     mobile.addEventListener("change", update);
     return () => mobile.removeEventListener("change", update);
@@ -73,6 +79,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       setSidebarCollapsed(true);
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (!isMobile || sidebarCollapsed) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMobile, sidebarCollapsed]);
 
   // Sidebar brand. If the name ends in " AI" (e.g. "24x7 AI"), strip the
   // trailing " AI" from the wordmark so the "AI" logo chip below is not
@@ -217,25 +233,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden font-sans">
+    <div className="dashboard-shell flex h-[100dvh] overflow-hidden bg-background font-sans">
       {!sidebarCollapsed && (
         <button
-          aria-label="Close navigation"
+          aria-label="Dismiss navigation"
           onClick={() => setSidebarCollapsed(true)}
-          className="fixed inset-0 z-20 bg-black/30 md:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[2px] transition-opacity md:hidden"
         />
       )}
       {/* Sidebar */}
       <aside
+        data-testid="dashboard-sidebar"
         className={`bg-sidebar border-r border-sidebar-border shadow-sm transition-all duration-300 ease-in-out ${
           sidebarCollapsed
             ? "hidden md:flex md:w-16"
-            : "fixed inset-y-0 left-0 w-64 md:relative"
-        } flex flex-col shrink-0 h-full z-30`}
+            : "fixed inset-y-0 right-0 z-50 w-[84vw] max-w-sm border-l border-r-0 shadow-2xl md:relative md:inset-y-auto md:right-auto md:z-auto md:w-64 md:border-l-0 md:border-r md:shadow-sm"
+        } flex h-full shrink-0 flex-col`}
       >
         {/* Sidebar Header */}
         <div
-          className="h-14 flex items-center justify-between px-4 border-b border-sidebar-border bg-sidebar"
+          className="flex h-16 items-center justify-between border-b border-sidebar-border bg-sidebar px-4 sm:h-14"
           data-tour="brand"
         >
           {!sidebarCollapsed && (
@@ -279,17 +296,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </span>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Collapse navigation"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className={`h-8 w-8 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent ${
-              sidebarCollapsed ? "hidden" : ""
-            }`}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+          {!sidebarCollapsed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={isMobile ? "Close navigation" : "Collapse navigation"}
+              onClick={() => setSidebarCollapsed(true)}
+              className="h-9 w-9 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <X className="h-4 w-4 md:hidden" />
+              <ChevronLeft className="hidden h-4 w-4 md:block" />
+            </Button>
+          )}
         </div>
 
         {/* Organization switcher (N1 redesign). Sits between the header
@@ -303,7 +321,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
 
         {/* Navigation */}
-        <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        <div className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           <NavSectionGroup
             section="workspace"
             items={NAV_SECTIONS.workspace}
@@ -325,7 +343,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-sidebar-border bg-sidebar">
+        <div className="border-t border-sidebar-border bg-sidebar p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div
             className={`flex items-center ${
               sidebarCollapsed ? "justify-center" : "space-x-3"
@@ -353,24 +371,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <div className="min-w-0 flex-1 flex flex-col h-full overflow-hidden bg-muted/30">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
         {/* Header */}
-        <header className="h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-6 z-10">
-          <div className="flex items-center">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-background/95 px-3 shadow-sm backdrop-blur sm:h-14 sm:px-5 lg:px-6">
+          <div className="flex min-w-0 items-center gap-2">
             {sidebarCollapsed && (
               <Button
                 variant="ghost"
                 size="icon"
                 aria-label="Expand navigation"
+                aria-expanded={!sidebarCollapsed}
                 onClick={() => setSidebarCollapsed(false)}
-                className="mr-4 h-8 w-8 text-muted-foreground hover:text-foreground"
+                data-testid="mobile-nav-toggle"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground sm:mr-2"
               >
-                <ChevronRight className="h-4 w-4" />
+                <Menu className="h-5 w-5 md:hidden" />
+                <ChevronRight className="hidden h-4 w-4 md:block" />
               </Button>
             )}
 
             {/* Breadcrumbs */}
-            <nav className="hidden md:flex" aria-label="Breadcrumb">
+            <nav className="hidden min-w-0 sm:flex" aria-label="Breadcrumb">
               <ol className="inline-flex items-center space-x-1 md:space-x-2">
                 {getBreadcrumbs().map((breadcrumb, index) => (
                   <li key={index} className="inline-flex items-center">
@@ -396,9 +417,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 ))}
               </ol>
             </nav>
+            <span className="truncate text-sm font-semibold text-foreground sm:hidden">
+              {getBreadcrumbs().at(-1)?.name ?? "Dashboard"}
+            </span>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <SiteThemeSwitch />
             <Button
               variant="ghost"
@@ -464,8 +488,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-6xl mx-auto">{children}</div>
+        <main className="dashboard-main min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-5 sm:py-6 lg:px-6 lg:py-8">
+          <div className="dashboard-page mx-auto w-full min-w-0 max-w-[1440px]">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -70,13 +70,13 @@ function MembersPageContent({
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <div className="bg-primary/10 p-2 rounded-lg">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="shrink-0 rounded-lg bg-primary/10 p-2">
               <Users className="h-6 w-6 text-primary" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-foreground sm:text-2xl">
                 {validatedOrg?.name || "Organization"} Members
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -87,7 +87,7 @@ function MembersPageContent({
 
           {userPermissions.canManageMembers && (
             <Button
-              className="flex items-center space-x-2"
+              className="flex w-full items-center justify-center gap-2 sm:w-auto"
               size="sm"
               onClick={() => setInviteDialogOpen(true)}
             >

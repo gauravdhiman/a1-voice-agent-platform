@@ -73,8 +73,9 @@ export function DataTable<TData, TValue>({
         filterColumn={filterColumn}
         filterPlaceholder={filterPlaceholder}
       />
-      <div className="rounded-md border mt-4">
-        <Table>
+      <div className="responsive-data-table mt-4 overflow-hidden rounded-xl border">
+        <div className="responsive-data-table__scroll overflow-x-auto">
+          <Table className="min-w-[42rem]">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -197,7 +198,8 @@ export function DataTable<TData, TValue>({
               </TableRow>
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
       <DataTablePagination table={table} />
     </div>

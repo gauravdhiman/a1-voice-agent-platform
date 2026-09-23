@@ -71,9 +71,9 @@ export default function CallbacksPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <PhoneCall className="w-6 h-6 text-blue-600" />
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl">
+            <PhoneCall className="h-6 w-6 shrink-0 text-blue-600" />
             Callback requests
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -82,7 +82,7 @@ export default function CallbacksPage() {
           </p>
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48" aria-label="Filter by status">
+          <SelectTrigger className="w-full sm:w-48" aria-label="Filter by status">
             <SelectValue placeholder="All callbacks" />
           </SelectTrigger>
             <SelectContent>
@@ -142,12 +142,12 @@ export default function CallbacksPage() {
           {items.map((item) => (
             <Card key={item.id} data-testid={`callback-row-${item.id}`}>
               <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-base font-semibold">
+                <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="min-w-0 text-base font-semibold">
                     {item.caller_phone}
                     {item.caller_name ? ` · ${item.caller_name}` : ""}
                   </CardTitle>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {item.urgency === "urgent" && (
                       <Badge variant="destructive">Urgent</Badge>
                     )}
@@ -161,13 +161,13 @@ export default function CallbacksPage() {
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {item.reason}
                 </p>
-                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <div className="flex flex-col items-start gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                   <span>
                     {new Date(item.created_at).toLocaleString()}
                     {item.notified ? " · owner alerted" : " · logged manually"}
                   </span>
                   {canManage && item.status !== "resolved" && (
-                    <div className="flex gap-2">
+                    <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                       {item.status === "new" && (
                         <Button
                           size="sm"

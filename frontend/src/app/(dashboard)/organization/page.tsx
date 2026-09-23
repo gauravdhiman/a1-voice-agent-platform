@@ -551,13 +551,13 @@ export default function OrganizationPage() {
     <div className="space-y-6">
       {/* Organization Header */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <div className="bg-primary/10 p-2 rounded-lg">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="shrink-0 rounded-lg bg-primary/10 p-2">
               <Building2 className="h-6 w-6 text-primary" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-foreground sm:text-2xl">
                 {displayOrg.name}
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -567,7 +567,7 @@ export default function OrganizationPage() {
           </div>
 
           {canUpdateOrganization && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" className="flex items-center space-x-2">
@@ -600,13 +600,13 @@ export default function OrganizationPage() {
           )}
         </div>
 
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-muted-foreground flex items-center">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="flex items-center text-sm text-muted-foreground">
             <Calendar className="h-4 w-4 mr-1" />
             Created {new Date(validatedOrg.created_at).toLocaleDateString()}
           </span>
           {userRoles.length > 0 && (
-            <span className="text-sm text-muted-foreground flex items-center">
+            <span className="flex items-center text-sm text-muted-foreground">
               <Crown className="h-4 w-4 mr-1" />
               {userRoles.length === 1
                 ? userRoles[0].name
@@ -626,10 +626,10 @@ export default function OrganizationPage() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="w-full">
-          <TabsTrigger value="info">Organization Info</TabsTrigger>
-          <TabsTrigger value="credentials">API Credentials</TabsTrigger>
-          <TabsTrigger value="public">Public Page</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="info">Organization Info</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="credentials">API Credentials</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="public">Public Page</TabsTrigger>
         </TabsList>
 
         {/* Organization Info tab */}
@@ -694,7 +694,7 @@ export default function OrganizationPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="industry">Industry</Label>
                       <Input
@@ -884,7 +884,7 @@ During monsoon season (July-September), we have extended hours for flood-related
                       {displayOrg.description || "No description"}
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">
                         Industry
@@ -960,7 +960,7 @@ During monsoon season (July-September), we have extended hours for flood-related
               )}
             </CardContent>
             {isEditing && (
-              <CardFooter className="flex justify-end space-x-2 p-5 border-t bg-muted/20">
+              <CardFooter className="flex flex-col-reverse items-stretch gap-2 border-t bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-end">
                 <Button
                   variant="outline"
                   size="sm"
