@@ -6,6 +6,7 @@ import {
   connectPipecatVoiceCall,
   disconnectPipecatVoiceCall,
 } from "@/lib/pipecat-voice-client";
+import type { LevelMediaManager } from "@/lib/level-media-manager";
 
 /**
  * Browser test-call hook using Pipecat WebSocket transport.
@@ -17,6 +18,9 @@ export interface TestCallState {
   error: string | null;
   isAgentSpeaking: boolean;
   isUserSpeaking: boolean;
+  agentTrack: MediaStreamTrack | null;
+  localTrack: MediaStreamTrack | null;
+  levelManager: LevelMediaManager | null;
 }
 
 export interface UseTestCallOptions {
@@ -45,6 +49,9 @@ export function useTestCall({
     error: null,
     isAgentSpeaking: false,
     isUserSpeaking: false,
+    agentTrack: null,
+    localTrack: null,
+    levelManager: null,
   });
 
   const [isMuted, setIsMuted] = useState(false);
@@ -60,6 +67,9 @@ export function useTestCall({
       error: null,
       isAgentSpeaking: false,
       isUserSpeaking: false,
+      agentTrack: null,
+      localTrack: null,
+      levelManager: null,
     });
   }, []);
 
@@ -162,6 +172,18 @@ export function useTestCall({
               isAgentSpeaking,
               isUserSpeaking,
             }));
+          },
+          onBotAudioTrack: (agentTrack) => {
+            if (!isCurrentAttempt()) return;
+            setState((prev) => ({ ...prev, agentTrack }));
+          },
+          onLocalAudioTrack: (localTrack) => {
+            if (!isCurrentAttempt()) return;
+            setState((prev) => ({ ...prev, localTrack }));
+          },
+          onLevelManager: (levelManager) => {
+            if (!isCurrentAttempt()) return;
+            setState((prev) => ({ ...prev, levelManager }));
           },
         },
       );
