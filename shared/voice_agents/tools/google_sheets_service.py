@@ -277,7 +277,10 @@ class GoogleSheetsService:
         if function_name == "find_rows" and "column" in updated:
             updated["column"] = {
                 "type": "string",
-                "enum": ["", *configured_headers],
+                # ``column`` is optional; omitting it already means search all
+                # columns. Empty-string sentinel values are rejected by Gemini
+                # Live's function-schema validator.
+                "enum": configured_headers,
             }
         return updated
 

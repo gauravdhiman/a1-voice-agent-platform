@@ -606,6 +606,9 @@ Production voice release gate:
   regenerated.
 - Check voice-ws logs first for WebSocket 1006; a matching entitlement error is
   a billing/authorization problem, not automatically a TLS problem.
+- Gemini Live function schemas must omit optional values instead of encoding
+  them as empty enum members; run the voice schema-compatibility tests when
+  changing native tool properties or the realtime model/runtime.
 
 ## 13. Continuous learning
 

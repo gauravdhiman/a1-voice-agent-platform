@@ -15,6 +15,15 @@ independently and are unchanged by this runtime upgrade. Upgrade the Python
 runtime only with the voice regression suite, recording checks, and live
 staging call gates described in the repository testing and release guides.
 
+### Gemini Live tool-schema compatibility
+
+Native and MCP function declarations pass through the shared Gemini schema
+sanitizer before Pipecat creates a realtime session. Optional arguments must be
+omitted when unset; they must not use an empty string as an enum member. Gemini
+rejects that declaration during session setup, before the model can return
+audio. Keep the source tool contract and the sanitizer regression tests aligned
+when adding or narrowing model-facing properties.
+
 At call teardown, this worker rounds connected duration up to whole minutes and
 settles the complete charge through the atomic billing RPC. An admitted call is
 allowed to finish even if the final settlement creates a temporary negative

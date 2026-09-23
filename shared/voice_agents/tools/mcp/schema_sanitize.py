@@ -1,6 +1,6 @@
-"""Gemini-compatible JSON Schema sanitizer for MCP tool arguments.
+"""Gemini-compatible JSON Schema sanitizer for model tool arguments.
 
-Transport-neutral — used by the Pipecat voice-ws MCP path and schema tests.
+Transport-neutral — used by the Pipecat voice-ws native and MCP paths.
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ def sanitize_schema_for_gemini(schema: Any) -> Any:
     """Strip JSON Schema keys Gemini's ``Schema`` model rejects, recursively.
 
     Args:
-        schema: A JSON Schema fragment (dict, list, or scalar) from an MCP
-            server's ``inputSchema``.
+        schema: A JSON Schema fragment (dict, list, or scalar) from a native
+            tool or an MCP server's ``inputSchema``.
 
     Returns:
         A schema fragment with only Gemini-accepted keys retained.
@@ -66,6 +66,13 @@ def sanitize_schema_for_gemini(schema: Any) -> Any:
                     for name, sub in value.items()
                     if isinstance(sub, (dict, list))
                 }
+            elif key == "enum" and isinstance(value, list):
+                # Optional string parameters must be omitted when unset. An
+                # empty-string sentinel is not a valid Gemini enum item and
+                # causes the whole Live setup request to be rejected.
+                non_empty_values = [item for item in value if item != ""]
+                if non_empty_values:
+                    sanitized[key] = non_empty_values
             elif key == "items":
                 if isinstance(value, list):
                     sanitized[key] = [
