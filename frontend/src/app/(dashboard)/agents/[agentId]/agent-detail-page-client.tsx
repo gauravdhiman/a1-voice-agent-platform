@@ -404,22 +404,22 @@ export default function AgentDetailPage({ children }: AgentDetailPageProps) {
   return (
     <AgentDetailPageContext.Provider value={contextValue}>
       <div className="space-y-6" data-tour="agent-detail-page">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="bg-primary/10 p-3 rounded-lg">
+            <div className="shrink-0 rounded-lg bg-primary/10 p-3">
               <Bot className="h-6 w-6 text-primary" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold">{agent.name}</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-bold sm:text-2xl">{agent.name}</h1>
               <p className="text-sm text-muted-foreground">
                 {organization?.name || "Unknown Organization"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {canEdit && (
               <>
                 <Button
@@ -459,13 +459,13 @@ export default function AgentDetailPage({ children }: AgentDetailPageProps) {
           onValueChange={handleTabChange}
           className="space-y-6"
         >
-          <TabsList className="w-full" data-tour="agent-detail-tabs">
-            <TabsTrigger value="persona">Persona</TabsTrigger>
-            <TabsTrigger value="skills">Skills</TabsTrigger>
-            <TabsTrigger value="tools">Tools</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsList className="w-full justify-start overflow-x-auto" data-tour="agent-detail-tabs">
+            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="persona">Persona</TabsTrigger>
+            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="skills">Skills</TabsTrigger>
+            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="tools">Tools</TabsTrigger>
+            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="settings">Settings</TabsTrigger>
             {recordingsTabVisible && (
-              <TabsTrigger value="recordings">Call History</TabsTrigger>
+              <TabsTrigger className="shrink-0 px-3 sm:px-6" value="recordings">Call History</TabsTrigger>
             )}
           </TabsList>
 

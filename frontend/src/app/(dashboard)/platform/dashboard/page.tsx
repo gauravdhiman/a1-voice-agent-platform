@@ -273,7 +273,7 @@ export default function PlatformDashboardPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Platform administration</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Platform overview</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Platform overview</h1>
           <p className="mt-1 text-sm text-muted-foreground">Cross-organization voice activity. Workspace dashboards remain scoped to the selected organization.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

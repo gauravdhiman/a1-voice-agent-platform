@@ -184,13 +184,13 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-6" data-tour="agents-page">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="bg-primary/10 p-3 rounded-lg">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="shrink-0 rounded-lg bg-primary/10 p-3">
             <Bot className="h-6 w-6 text-primary" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">Voice Agents</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold sm:text-2xl">Voice Agents</h1>
             <p className="text-sm text-muted-foreground">
               {isPlatformAdmin
                 ? "Manage your AI voice agents across all organizations"
@@ -200,7 +200,7 @@ export default function AgentsPage() {
         </div>
 
         {canCreateAgent && (
-          <Button onClick={handleAddAgent} data-tour="agents-create">
+          <Button onClick={handleAddAgent} data-tour="agents-create" className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             New Agent
           </Button>

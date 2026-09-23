@@ -790,11 +790,11 @@ export function SkillEditor({
 
   return (
     <div
-      className={`flex gap-4 h-full min-h-[60vh] ${className ?? ""}`}
+      className={`flex min-h-[60vh] flex-col gap-4 lg:h-full lg:flex-row ${className ?? ""}`}
       data-tour="skills-editor"
     >
       {/* Left panel — skill list with expandable file tree */}
-      <div className="w-80 shrink-0 flex flex-col border rounded-lg bg-card h-full overflow-hidden">
+      <div className="flex h-[28rem] w-full shrink-0 flex-col overflow-hidden rounded-lg border bg-card lg:h-full lg:w-80">
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{skills.length} skills</span>
@@ -1161,7 +1161,7 @@ export function SkillEditor({
               <>
                 <div className="px-4 py-2 border-b bg-muted/30 text-xs text-muted-foreground">Adding reference file</div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="se-new-file-path">File Path</Label>
                       <Input id="se-new-file-path" value={newFile.file_path} onChange={(e) => setNewFile((f) => ({ ...f, file_path: e.target.value }))} placeholder="references/faqs.md" className="font-mono text-sm" />

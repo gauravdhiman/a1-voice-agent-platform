@@ -29,7 +29,7 @@ export default function PlatformTemplatesPage() {
     <div className="space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Platform Admin</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">Use Case Templates</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Use Case Templates</h1>
         <p className="mt-1 max-w-3xl text-muted-foreground">
           Create reusable Markdown-backed starting points for agent setup. Active templates are available in both the create wizard and the agent editor.
         </p>

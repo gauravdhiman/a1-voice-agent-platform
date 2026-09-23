@@ -166,9 +166,9 @@ export default function PlatformSkillsPage() {
   }
 
   return (
-    <div className="space-y-6 h-[calc(100vh-12rem)]">
+    <div className="min-h-[calc(100dvh-12rem)] space-y-6 lg:h-[calc(100vh-12rem)]">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Platform Skills</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Platform Skills</h1>
         <p className="text-muted-foreground mt-1">
           Manage built-in skill templates available to all organizations. Edit a skill in the right
           pane, add reference files, or import from a URL.

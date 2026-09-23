@@ -89,7 +89,7 @@ function StepIndicator({
   const currentIndex = stages.indexOf(currentStage);
 
   return (
-    <div className="flex items-center justify-between mb-8">
+    <div className="mb-8 flex items-center justify-between gap-1 overflow-x-auto px-1 pb-2 sm:gap-0">
       {stages.map((stage, index) => {
         const config = stageConfig[stage];
         const isCompleted = index < currentIndex;
@@ -97,7 +97,7 @@ function StepIndicator({
 
         return (
           <React.Fragment key={stage}>
-            <div className="flex flex-col items-center flex-1">
+            <div className="flex min-w-[3.5rem] flex-1 flex-col items-center">
               <div
                 className={cn(
                   "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all",
@@ -116,9 +116,9 @@ function StepIndicator({
               </div>
               <span
                 className={cn(
-                  "text-xs mt-2 font-medium",
+                  "mt-2 hidden text-center text-xs font-medium sm:block",
                   isCurrent
-                    ? "text-foreground"
+                    ? "block text-foreground"
                     : isCompleted
                       ? "text-primary"
                       : "text-muted-foreground",
@@ -130,7 +130,7 @@ function StepIndicator({
             {index < stages.length - 1 && (
               <div
                 className={cn(
-                  "flex-1 h-0.5 mx-4 transition-colors",
+                  "min-w-4 flex-1 h-0.5 mx-1 transition-colors sm:mx-4",
                   isCompleted ? "bg-primary" : "bg-muted",
                 )}
               />
@@ -673,7 +673,7 @@ export function AgentCreateWidget() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto w-full max-w-2xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Create New Voice Agent</h1>
         <p className="text-muted-foreground mt-1">
@@ -681,7 +681,7 @@ export function AgentCreateWidget() {
         </p>
       </div>
 
-      <Card className="p-6">
+      <Card className="p-4 sm:p-6">
         {!isSuccessStage && (
           <StepIndicator stages={indicatorStages} currentStage={currentStage} />
         )}
@@ -714,7 +714,7 @@ export function AgentCreateWidget() {
               {currentStage === "review" && renderReviewStage()}
 
               {currentStage !== "template" && (
-                <div className="flex items-center justify-between pt-6 border-t">
+                <div className="flex flex-col gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
                   <Button
                     type="button"
                     variant="outline"
@@ -725,7 +725,7 @@ export function AgentCreateWidget() {
                     Back
                   </Button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
                     {isLastStage ? (
                       <Button
                         type="submit"
@@ -741,7 +741,7 @@ export function AgentCreateWidget() {
                         )}
                       </Button>
                     ) : (
-                      <Button type="button" onClick={handleNext}>
+                      <Button type="button" onClick={handleNext} className="flex-1 sm:flex-none">
                         Next Step
                         <ChevronRight className="h-4 w-4 ml-2" />
                       </Button>

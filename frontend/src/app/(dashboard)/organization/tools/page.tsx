@@ -25,7 +25,7 @@ export default function OrganizationToolsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Organization Tools</h1>
+        <h1 className="text-xl font-bold text-foreground sm:text-2xl">Organization Tools</h1>
         <p className="text-sm text-muted-foreground">
           Control which published tools your organization can connect to new
           voice agents.

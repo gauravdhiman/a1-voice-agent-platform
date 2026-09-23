@@ -222,9 +222,9 @@ export default function BillingPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-foreground sm:text-2xl">
               Billing & Subscriptions
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -234,6 +234,7 @@ export default function BillingPage() {
           <Button
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={refresh}
             disabled={isRefetching}
           >
@@ -326,10 +327,10 @@ export default function BillingPage() {
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="w-full">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="plans">Plans</TabsTrigger>
-          <TabsTrigger value="credits">Credits</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="overview">Overview</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="plans">Plans</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="credits">Credits</TabsTrigger>
         </TabsList>
 
         {/* Plans Tab */}

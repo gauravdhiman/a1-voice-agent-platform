@@ -24,6 +24,17 @@ Platform-admin plan configuration is consolidated under **Plan Catalog**. Its
 phone-number rates, with URL-deep-linkable tabs and explanations for each
 runtime-owned billing rule.
 
+## Authenticated responsive shell
+
+Pages behind authentication share `DashboardLayout` and are validated at
+mobile (390px), tablet (768px), laptop (1280px), desktop (1440px), and
+widescreen (1920px) widths. On mobile, navigation opens as a right-side drawer
+and the page header exposes the current route; dense data tables scroll inside
+their own surface, while multi-panel editors and form actions stack below their
+usable breakpoint. Keep new private-page content inside the shrinkable
+`dashboard-page` container and preserve explicit overflow surfaces for dense
+tables rather than allowing the document itself to overflow.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
