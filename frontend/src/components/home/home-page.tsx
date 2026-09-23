@@ -10,8 +10,6 @@ import {
   Moon,
   Pause,
   Play,
-  Menu,
-  X,
   Phone,
   CalendarCheck,
   CalendarDays,
@@ -29,7 +27,7 @@ import {
   SITE_SALES_EMAIL,
 } from "@/lib/site-config";
 import { usePublicTheme } from "@/components/public-theme/public-theme-context";
-import { ThemeSwitch } from "@/components/public-theme/theme-switch";
+import { PublicHeader } from "@/components/public-theme/public-header";
 import { ParticleField } from "./particle-field";
 import styles from "./home-page.module.css";
 
@@ -113,7 +111,6 @@ const industries = [
 export function HomePage() {
   const { theme, toggleTheme } = usePublicTheme();
   const [paused, setPaused] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [chapter, setChapter] = useState(0);
   const root = useRef<HTMLDivElement>(null);
 
@@ -134,8 +131,6 @@ export function HomePage() {
     return () => observer.disconnect();
   }, []);
 
-  const closeMenu = () => setMenuOpen(false);
-
   return (
     <div
       ref={root}
@@ -146,87 +141,7 @@ export function HomePage() {
       <a className={styles.skip} href="#main-content">
         Skip to content
       </a>
-      <header className={styles.header}>
-        <Link
-          href="/"
-          className={styles.brand}
-          aria-label={`${SITE_NAME} home`}
-        >
-          <span className={styles.brandMark} aria-hidden="true">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>{SITE_NAME}</span>
-        </Link>
-        <nav className={styles.desktopNav} aria-label="Main navigation">
-          <a href="#features">Use cases</a>
-          <a href="#demos">Live demos</a>
-          <a href="#industries">For your business</a>
-          <a href="#integrations">Integrations</a>
-          <a href="#pricing">Pricing</a>
-        </nav>
-        <div className={styles.headerActions}>
-          <ThemeSwitch dark={theme === "night"} onToggle={toggleTheme} />
-          <Link className={styles.signIn} href="/auth/signin">
-            Sign in <ArrowUpRight size={13} />
-          </Link>
-          <Link className={styles.headerCta} href="/request-demo">
-            Let’s talk <ArrowUpRight size={14} />
-          </Link>
-          <button
-            className={styles.menuToggle}
-            aria-label={menuOpen ? "Close navigation" : "Open navigation"}
-            aria-expanded={menuOpen}
-            aria-controls="home-mobile-nav"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            {menuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-        {menuOpen && (
-          <nav
-            id="home-mobile-nav"
-            className={styles.mobileNav}
-            aria-label="Mobile navigation"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                closeMenu();
-                root.current
-                  ?.querySelector<HTMLButtonElement>(
-                    `[aria-controls="home-mobile-nav"]`,
-                  )
-                  ?.focus();
-              }
-            }}
-          >
-            <a href="#features" onClick={closeMenu}>
-              Use cases
-            </a>
-            <a href="#industries" onClick={closeMenu}>
-              For your business
-            </a>
-            <a href="#integrations" onClick={closeMenu}>
-              Integrations
-            </a>
-            <a href="#demos" onClick={closeMenu}>
-              Live demos
-            </a>
-            <a href="#pricing" onClick={closeMenu}>
-              Pricing
-            </a>
-            <Link href="/auth/signin" onClick={closeMenu}>
-              Sign in
-            </Link>
-          </nav>
-        )}
-      </header>
+      <PublicHeader />
 
       <main id="main-content">
         <div className={styles.journey} data-journey>

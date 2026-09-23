@@ -133,18 +133,6 @@
 .skip:focus {
   top: 12px;
 }
-.header {
-  height: 86px;
-  padding: 0 4.4%;
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -153,64 +141,6 @@
   letter-spacing: -0.06em;
   font-weight: 600;
   white-space: nowrap;
-}
-.brandMark {
-  width: 23px;
-  height: 23px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  transform: rotate(-10deg);
-}
-.brandMark i {
-  background: var(--accent);
-  border-radius: 50%;
-}
-.brandMark i:nth-child(2),
-.brandMark i:nth-child(6) {
-  opacity: 0.5;
-}
-.brandMark i:nth-child(3) {
-  opacity: 0.18;
-}
-.desktopNav {
-  display: flex;
-  gap: 30px;
-  font-size: 12px;
-}
-.desktopNav a,
-.signIn {
-  transition: color 0.2s;
-}
-.desktopNav a:hover,
-.signIn:hover {
-  color: var(--accent);
-}
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: 27px;
-  font-size: 12px;
-}
-/* The header switch now comes from the shared public-theme module so the
- * control looks identical on every page; these local copies are retired. */
-.signIn,
-.headerCta {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-}
-.headerCta {
-  padding: 11px 17px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-}
-.headerCta:hover {
-  background: var(--panel);
-}
-.menuToggle,
-.mobileNav {
-  display: none;
 }
 .journey {
   position: relative;
@@ -1120,13 +1050,6 @@
   }
 }
 @media (max-width: 1050px) {
-  .desktopNav {
-    gap: 18px;
-    font-size: 11px;
-  }
-  .headerActions {
-    gap: 17px;
-  }
   .scene {
     padding-left: 5%;
     padding-right: 5%;
@@ -1157,96 +1080,7 @@
     font-size: 6px;
   }
 }
-/* Tablet portrait: the desktop header crowds below ~840px (brand overlaps
- * the nav), so switch to the hamburger menu early. Content breakpoints stay
- * at 760px; only the header changes here. The dropdown anchors to the
- * header bottom so it fits both the 86px desktop header and tablets. */
-@media (max-width: 860px) {
-  .desktopNav,
-  .signIn,
-  .headerCta {
-    display: none;
-  }
-  .menuToggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: 0;
-    color: var(--ink);
-    padding: 8px;
-  }
-  .menuToggle svg {
-    width: 20px;
-  }
-  .headerActions {
-    gap: 16px;
-  }
-  .mobileNav {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 20px 6% 28px;
-    gap: 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-  }
-  .mobileNav a {
-    padding: 13px 0;
-    font-size: 15px;
-  }
-}
 @media (max-width: 760px) {
-  .header {
-    height: 70px;
-    padding: 0 6%;
-  }
-  .brand {
-    font-size: 22px;
-  }
-  .brandMark {
-    width: 21px;
-    height: 21px;
-  }
-  .desktopNav,
-  .signIn,
-  .headerCta {
-    display: none;
-  }
-  .menuToggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: 0;
-    color: var(--ink);
-    padding: 8px;
-  }
-  .menuToggle svg {
-    width: 20px;
-  }
-  .headerActions {
-    gap: 16px;
-  }
-  .mobileNav {
-    position: absolute;
-    top: 70px;
-    left: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 20px 6% 28px;
-    gap: 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-  }
-  .mobileNav a {
-    padding: 13px 0;
-    font-size: 15px;
-  }
   .home h2 {
     font-size: clamp(37px, 8.9vw, 58px);
   }

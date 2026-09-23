@@ -33,8 +33,8 @@ dashboard. Dashboard styling is otherwise unaffected.
   `.root .signIn`) keep button and link colors winning over the generic
   `.root a` reset.
 - `theme-switch.tsx` is the single switch visual for the whole site (sun,
-  sliding knob, moon, `role="switch"`), used by the public header, the
-  homepage header, and the dashboard header alike. The knob position comes
+  sliding knob, moon, `role="switch"`), used by the shared public header and
+  the dashboard header alike. The knob position comes
   from the button's own `data-dark` state. Colors come from explicit
   `--switch-*` mappings per surface (atmosphere tokens on public pages,
   shadcn foreground tokens in `globals.css` for the dashboard), because
@@ -44,15 +44,23 @@ dashboard. Dashboard styling is otherwise unaffected.
   wires it to the resolved site-wide theme for the dashboard header. The
   dashboard settings page keeps its explicit light/dark/system selector,
   since a binary switch cannot express "follow system."
-- `public-header.tsx` / `public-footer.tsx` are the common chrome. Header
-  anchors point at homepage sections (`/#features`, `/#demos`,
-  `/#industries`, `/#integrations`, `/#pricing`) so they work from every
-  public page.
+- `public-header.tsx` / `public-footer.tsx` are the common chrome for the
+  homepage, landing pages, demos, request-demo, and auth routes. Header
+  anchors point at homepage sections (`/#features`, `/#demos`, `/#industries`,
+  `/#integrations`, `/#pricing`) so they work from every public page. At the
+  mobile breakpoint the same header exposes a keyboard-dismissible right-side
+  drawer approximately 80% of the viewport wide; selecting a destination or
+  clicking the scrim closes it, and the drawer intentionally keeps the
+  homepage's compact navigation without duplicating the conversation CTA.
+- Demo call cards use a compact short-desktop layout so the call action stays
+  reachable on 1280×720 screens while the full spacing remains available on
+  taller displays.
 
 ## Page coverage
 
 - `/` renders the particle journey on the shared theme (see
-  [homepage experience](homepage-experience.md)); its look is unchanged.
+  [homepage experience](homepage-experience.md)) and uses the same shared
+  header component as every other public route.
 - The descriptive industry routes render the shared `IndustryPage` template on
   the public theme. Each page includes a fifth outcome card for existing
   business-tool integrations and a secondary AI-solutions callout below the

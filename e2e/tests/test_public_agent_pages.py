@@ -170,6 +170,20 @@ def test_public_demo_page_renders_description_and_visualizer_choice(
     expect(
         page.get_by_role("link", name="Learn how Gmail aliases work")
     ).to_have_attribute("href", "https://support.google.com/mail/answer/22370?hl=en")
+
+    step("Verify the shared mobile header opens a right-side drawer")
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.get_by_role("button", name="Open navigation").click()
+    mobile_nav = page.get_by_role("navigation", name="Mobile navigation")
+    expect(mobile_nav).to_be_visible()
+    drawer_box = mobile_nav.bounding_box()
+    assert drawer_box is not None
+    assert drawer_box["x"] + drawer_box["width"] >= 389
+    assert drawer_box["width"] >= 390 * 0.75
+    page.keyboard.press("Escape")
+    expect(mobile_nav).to_have_count(0)
+    assert page.evaluate("document.body.style.overflow") == ""
+
     page.get_by_role(
         "checkbox",
         name="I understand this is a public demo and will use dummy information.",

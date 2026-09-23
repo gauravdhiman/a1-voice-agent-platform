@@ -239,7 +239,7 @@ describe("Homepage experience", () => {
     fireEvent.click(
       screen
         .getByLabelText("Mobile navigation")
-        .querySelector('a[href="#demos"]')!,
+        .querySelector('a[href="/#demos"]')!,
     );
     expect(screen.queryByLabelText("Mobile navigation")).toBeNull();
   });

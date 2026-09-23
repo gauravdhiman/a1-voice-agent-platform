@@ -164,32 +164,32 @@
 
 /* Shared header. */
 .header {
-  height: 72px;
+  --public-header-height: 86px;
+  height: var(--public-header-height);
   padding: 0 4.4%;
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line, var(--site-line));
+  background: var(--surface, var(--site-surface));
 }
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  font-size: 21px;
+  font-size: 23px;
   letter-spacing: -0.06em;
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .brandMark {
-  width: 22px;
-  height: 22px;
+  width: 23px;
+  height: 23px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 3px;
@@ -197,7 +197,7 @@
   flex-shrink: 0;
 }
 .brandMark i {
-  background: var(--public-accent);
+  background: var(--public-accent, var(--accent));
   border-radius: 50%;
 }
 .brandMark i:nth-child(2),
@@ -209,27 +209,27 @@
 }
 .nav {
   display: flex;
-  gap: 26px;
+  gap: 30px;
   font-size: 12px;
-  color: var(--public-muted);
+  color: var(--public-muted, var(--muted));
 }
 .nav a {
   transition: color 0.2s;
 }
 .nav a:hover {
-  color: var(--public-accent);
+  color: var(--public-accent, var(--accent));
 }
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 27px;
   font-size: 12px;
 }
 .themeSwitch {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--switch-muted, #8a94a6);
+  color: var(--switch-muted, var(--public-muted, var(--muted, #8a94a6)));
   background: none;
   border: 0;
   padding: 10px 0;
@@ -237,14 +237,14 @@
 .switchTrack {
   width: 30px;
   height: 16px;
-  border: 1px solid var(--switch-line, #8a94a6);
+  border: 1px solid var(--switch-line, var(--line, #8a94a6));
   border-radius: 20px;
   padding: 3px;
 }
 .switchTrack span {
   width: 8px;
   height: 8px;
-  background: var(--switch-knob, #8a94a6);
+  background: var(--switch-knob, var(--public-accent, var(--accent, #8a94a6)));
   display: block;
   border-radius: 50%;
   transform: translateX(0);
@@ -259,27 +259,63 @@
   display: flex;
   gap: 7px;
   align-items: center;
-  color: var(--public-muted);
+  color: var(--public-muted, var(--muted));
   transition: color 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .signIn:hover {
-  color: var(--public-accent);
+  color: var(--public-accent, var(--accent));
 }
 .headerCta {
   display: flex;
   gap: 7px;
   align-items: center;
-  padding: 10px 16px;
-  border: 1px solid var(--line);
+  padding: 11px 17px;
+  border: 1px solid var(--line, var(--site-line));
   border-radius: 4px;
   transition: background-color 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .headerCta:hover {
-  background: var(--panel);
+  background: var(--panel, var(--site-panel));
+}
+.menuToggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  color: var(--ink, var(--site-ink));
+  background: none;
+  border: 0;
+}
+.menuToggle svg {
+  width: 20px;
+  height: 20px;
+}
+.mobileNavScrim,
+.mobileNav {
+  display: none;
+}
+.mobileNavEyebrow {
+  margin: 0 0 12px;
+  color: var(--public-accent, var(--accent));
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+.mobileNav a {
+  display: block;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line, var(--site-line));
+  color: var(--ink, var(--site-ink));
+  font-size: 15px;
+  transition: color 0.2s, padding-left 0.2s;
+}
+.mobileNav a:hover {
+  padding-left: 8px;
+  color: var(--public-accent, var(--accent));
 }
 
 /* Shared footer. */
@@ -620,24 +656,51 @@
     display: flex;
   }
 }
-/* Small laptops and tablets: the anchor nav wraps below ~980px, so hide it
- * early. Sign in and the demo CTA stay visible; footer links keep every
- * destination reachable. */
-@media (max-width: 1000px) {
-  .nav {
+/* Match the homepage navigation breakpoint everywhere. The mobile menu is a
+ * right-side drawer instead of a full-width block, keeping the current page
+ * visible behind a quiet scrim while giving the navigation room to breathe. */
+@media (max-width: 860px) {
+  .nav,
+  .signIn,
+  .headerCta {
     display: none;
+  }
+  .menuToggle {
+    display: flex;
   }
   .headerActions {
     gap: 16px;
   }
-}
-@media (max-width: 760px) {
-  .nav,
-  .signIn {
-    display: none;
+  .mobileNavScrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: color-mix(in srgb, var(--surface, var(--site-surface)) 34%, transparent);
+    cursor: default;
   }
-  .headerActions {
-    gap: 14px;
+  .mobileNav {
+    position: fixed;
+    top: var(--public-header-height);
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    width: 80vw;
+    max-width: 560px;
+    min-width: min(280px, 80vw);
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 28px 32px 40px;
+    border-left: 1px solid var(--line, var(--site-line));
+    background: var(--surface, var(--site-surface));
+    box-shadow: -24px 0 80px color-mix(in srgb, #000 28%, transparent);
+    animation: publicDrawerIn 0.24s ease-out both;
   }
   .footerLinks {
     margin-left: 0;
@@ -670,31 +733,38 @@
   }
 }
 
-/* Phones: compact the header so brand, theme switch, and the demo CTA fit
- * side by side from 360px up without wrapping the CTA label. */
-@media (max-width: 480px) {
+@media (max-width: 760px) {
   .header {
-    padding: 0 16px;
-    gap: 10px;
+    --public-header-height: 70px;
+    height: var(--public-header-height);
+    padding: 0 6%;
   }
   .brand {
-    font-size: 19px;
-    gap: 10px;
+    font-size: 22px;
+  }
+  .brandMark {
+    width: 21px;
+    height: 21px;
   }
   .headerActions {
-    gap: 10px;
-  }
-  .headerCta {
-    padding: 9px 12px;
-    font-size: 11px;
+    gap: 16px;
   }
 }
-/* Very small phones: hide the decorative sun/moon icons (the sliding track
- * stays fully functional, and the button keeps its accessible label) so the
- * header still fits at 320px. */
-@media (max-width: 360px) {
-  .themeSwitch > svg {
-    display: none;
+
+@keyframes publicDrawerIn {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileNav {
+    animation: none;
   }
 }
 
@@ -932,6 +1002,31 @@
   padding-top: 20px;
   color: var(--public-muted);
   font-size: 12px;
+}
+/* On short desktop viewports the demo card should lead from the top of the
+ * content row, keeping the call action reachable without requiring a scroll.
+ * Taller screens retain the centered composition above. */
+@media (min-width: 1121px) and (max-height: 800px) {
+  .demoMain {
+    align-items: start;
+    padding-top: 28px;
+    padding-bottom: 16px;
+  }
+  .demoCallCard :global([data-slot="card-header"]) {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  .demoCallCard :global([data-slot="card-content"]) {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  .demoCallCard :global([data-slot="card-content"] > section) {
+    padding: 12px;
+  }
+  .demoCallCard
+    :global([data-slot="card-content"] > :not([hidden]) ~ :not([hidden])) {
+    margin-top: 12px;
+  }
 }
 @supports (height: 100dvh) {
   .outcomeFeedbackSticky {

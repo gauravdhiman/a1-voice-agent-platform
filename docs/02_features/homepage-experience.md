@@ -11,9 +11,9 @@ customer results.
 
 ## Scope and entry points
 
-- Only the homepage carries the particle journey. The day/night choice and
-  the atmosphere tokens are shared with the other public pages (see
-  [public theme](public-theme.md)). Other public routes keep their own
+- Only the homepage carries the particle journey. The day/night choice,
+  atmosphere tokens, and public header are shared with the other public pages
+  (see [public theme](public-theme.md)). Other public routes keep their own
   layouts and the dashboard keeps its existing design.
 - `frontend/src/app/page.tsx` renders `components/home/home-page.tsx`.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
@@ -74,7 +74,8 @@ adds a small decorative offset without React state updates per frame.
 The pause button stops ambient movement and reveal animations; scrolling can
 still select a new static formation. OS reduced-motion preference disables
 ambient movement and CSS transitions/reveals, including when changed mid-session.
-Mobile navigation supports Escape and closes after selecting a destination.
+The shared public mobile navigation opens as a right-side drawer, supports
+Escape, and closes after selecting a destination or clicking outside it.
 The page includes a skip link, visible focus outlines, and labeled controls.
 
 ## Validation

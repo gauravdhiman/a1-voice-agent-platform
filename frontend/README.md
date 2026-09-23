@@ -13,9 +13,10 @@ for accessibility, performance, and validation details.
 
 ## Public theme
 
-Industry pages, live demos, request-demo, and auth share the homepage
-atmosphere through `src/components/public-theme/` (persisted day/night
-choice, common header/footer, token primitives). See
+Industry pages, live demos, request-demo, auth, and the homepage share the
+public atmosphere through `src/components/public-theme/` (persisted day/night
+choice, one common header/footer, token primitives, and the mobile right-side
+navigation drawer). See
 [public theme](../docs/02_features/public-theme.md).
 
 Platform-admin plan configuration is consolidated under **Plan Catalog**. Its
