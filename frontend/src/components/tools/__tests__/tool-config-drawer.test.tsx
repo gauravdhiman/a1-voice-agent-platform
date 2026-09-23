@@ -161,7 +161,7 @@ describe("ToolConfigDrawer", () => {
 
     expect(
       screen.getByText(
-        "Not configured: discover the sheet columns to verify this setup.",
+        "Discover columns to verify this spreadsheet before saving.",
       ),
     ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Discover columns" }));
@@ -197,6 +197,108 @@ describe("ToolConfigDrawer", () => {
     await user.click(requiredFields);
     await user.click(await screen.findByRole("option", { name: "Items" }));
     expect(requiredFields.textContent).toContain("1 of 2 columns selected");
+  });
+
+  it("keeps Save enabled while valid required and managed fields are configured", async () => {
+    const user = userEvent.setup();
+    const onDiscover = vi.fn().mockResolvedValue({
+      status: "succeeded",
+      provider: "google_sheets",
+      sheets: [
+        {
+          title: "Orders",
+          sheet_id: 7,
+          headers: [
+            "Submission ID",
+            "Captured at",
+            "Order source",
+            "Status",
+            "Customer name",
+            "Phone",
+          ],
+          header_range: "Orders!A1:F1",
+          issues: [],
+        },
+      ],
+    });
+    const onSaveConfig = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ToolConfigDrawer
+        open
+        onOpenChange={vi.fn()}
+        tool={googleSheetsTool}
+        agentTool={
+          {
+            id: "agent-tool-1",
+            config: { spreadsheet_id: "sheet-id-123456" },
+            auth_status: AuthStatus.AUTHENTICATED,
+            token_expires_at: null,
+            is_enabled: true,
+            unselected_functions: [],
+          } as never
+        }
+        onSaveConfig={onSaveConfig}
+        onToggleFunction={vi.fn()}
+        onToggleAllFunctions={vi.fn()}
+        onOAuth={vi.fn()}
+        onLogout={vi.fn()}
+        onSetApiKey={vi.fn()}
+        onDiscoverGoogleSheetHeaders={onDiscover}
+        onDisconnect={vi.fn()}
+        canEdit
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Discover columns" }));
+    const requiredFields = await screen.findByRole("combobox", {
+      name: "Required fields",
+    });
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+
+    await user.click(requiredFields);
+    await user.click(screen.getByRole("button", { name: "Select all" }));
+    await user.keyboard("{Escape}");
+    expect(requiredFields.textContent).toContain("All 6 columns selected");
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+
+    const managedSelections = [
+      ["Duplicate check", "Submission ID"],
+      ["Captured at", "Captured at"],
+      ["Source", "Order source"],
+      ["Status", "Status"],
+    ] as const;
+    for (const [label, header] of managedSelections) {
+      const selector = screen.getByRole("combobox", { name: label });
+      selector.focus();
+      await user.keyboard("{Enter}");
+      await user.keyboard(header);
+      await user.keyboard("{Enter}");
+      expect(selector.textContent).toContain(header);
+      expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+    }
+
+    await user.type(await screen.findByLabelText("Source value"), "Demo call");
+    await user.type(await screen.findByLabelText("Initial status"), "New");
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+
+    await user.click(saveButton);
+    await waitFor(() => {
+      expect(onSaveConfig).toHaveBeenCalledWith(
+        "agent-tool-1",
+        expect.objectContaining({
+          agent_columns: "Customer name, Phone",
+          required_columns: "Customer name, Phone",
+          idempotency_column: "Submission ID",
+          timestamp_column: "Captured at",
+          source_column: "Order source",
+          source_value: "Demo call",
+          status_column: "Status",
+          status_value: "New",
+        }),
+      );
+    });
   });
 
   it("restores saved column settings and revalidates them when reopened", async () => {
@@ -323,14 +425,16 @@ describe("ToolConfigDrawer", () => {
     await user.click(screen.getByRole("button", { name: "Clear" }));
 
     expect(
-      await screen.findByText(
-        "Not configured: check the tab, headers, and selected agent fields.",
-      ),
+      await screen.findByText("Select at least one Agent field."),
     ).toBeTruthy();
+    const saveButton = screen.getByRole("button", { name: "Save" });
     expect(
-      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
-        .disabled,
+      (saveButton as HTMLButtonElement).disabled,
     ).toBe(true);
+    await user.hover(saveButton.parentElement as HTMLElement);
+    expect((await screen.findByRole("tooltip")).textContent).toContain(
+      "Select at least one Agent field.",
+    );
   });
 
   it("reconciles stale business and managed mappings when discovering headers", async () => {
@@ -665,7 +769,7 @@ describe("ToolConfigDrawer", () => {
       await screen.findByText(/Choose the tab for this workflow/),
     ).toBeTruthy();
     expect(
-      screen.getByText("Not configured: choose the data tab for this workflow."),
+      screen.getByText("Choose the data tab for this workflow."),
     ).toBeTruthy();
     const tabSelector = screen.getByRole("combobox", {
       name: "Spreadsheet tab",

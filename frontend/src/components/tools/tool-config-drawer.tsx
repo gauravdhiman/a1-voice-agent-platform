@@ -123,6 +123,8 @@ export function ToolConfigDrawer({
       : (agentTool?.config ?? {});
   const [googleSheetsConfigReady, setGoogleSheetsConfigReady] =
     React.useState(false);
+  const [googleSheetsSaveBlockReason, setGoogleSheetsSaveBlockReason] =
+    React.useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const [isConnecting, setIsConnecting] = React.useState(false);
   const [showApiKeyInput, setShowApiKeyInput] = React.useState(false);
@@ -147,6 +149,7 @@ export function ToolConfigDrawer({
 
   React.useEffect(() => {
     setGoogleSheetsConfigReady(false);
+    setGoogleSheetsSaveBlockReason("");
   }, [agentTool?.id, open]);
 
   React.useEffect(() => {
@@ -211,12 +214,33 @@ export function ToolConfigDrawer({
     setHasUnsavedChanges(true);
   };
 
+  const handleGoogleSheetsReadinessChange = React.useCallback(
+    (isReady: boolean, reason?: string) => {
+      setGoogleSheetsConfigReady(isReady);
+      setGoogleSheetsSaveBlockReason(reason ?? "");
+    },
+    [],
+  );
+
   const handleSaveConfig = async () => {
     if (!agentTool) return;
     if (isResendEmailTool && resendConfigError) return;
     await onSaveConfig(agentTool.id, localConfig);
     setHasUnsavedChanges(false);
   };
+
+  const saveButton = (
+    <Button
+      size="sm"
+      onClick={handleSaveConfig}
+      disabled={
+        isSaving || Boolean(resendConfigError) || !canSaveGoogleSheetsConfig
+      }
+    >
+      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+      Save
+    </Button>
+  );
 
   const handleResendSenderChange = (
     field: "from_email" | "from_name",
@@ -641,20 +665,27 @@ export function ToolConfigDrawer({
                   <span>Configuration</span>
                 </div>
                 {hasUnsavedChanges && canEdit && (
-                  <Button
-                    size="sm"
-                    onClick={handleSaveConfig}
-                    disabled={
-                      isSaving ||
-                      Boolean(resendConfigError) ||
-                      !canSaveGoogleSheetsConfig
-                    }
-                  >
-                    {isSaving ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : null}
-                    Save
-                  </Button>
+                  isGoogleSheetsTool && !googleSheetsConfigReady ? (
+                    <TooltipProvider delayDuration={250}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            aria-label="Why is Save disabled?"
+                            className="inline-flex cursor-not-allowed"
+                            tabIndex={0}
+                          >
+                            {saveButton}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {googleSheetsSaveBlockReason ||
+                            "Discover columns and resolve the setup message before saving."}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    saveButton
+                  )
                 )}
               </div>
               {isResendEmailTool && resendCredentialConfigured === false && (
@@ -701,7 +732,7 @@ export function ToolConfigDrawer({
                   authenticated={authenticated}
                   canEdit={canEdit}
                   onConfigChange={handleConfigChange}
-                  onReadinessChange={setGoogleSheetsConfigReady}
+                  onReadinessChange={handleGoogleSheetsReadinessChange}
                   onDiscover={onDiscoverGoogleSheetHeaders}
                 />
               ) : (

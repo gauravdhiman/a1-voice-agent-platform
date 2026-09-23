@@ -242,7 +242,7 @@ export interface GoogleSheetsConfigEditorProps {
   authenticated: boolean;
   canEdit: boolean;
   onConfigChange: (key: string, value: string) => void;
-  onReadinessChange: (isReady: boolean) => void;
+  onReadinessChange: (isReady: boolean, reason?: string) => void;
   onDiscover: (
     agentToolId: string,
     spreadsheetId: string,
@@ -373,10 +373,9 @@ export function GoogleSheetsConfigEditor({
 
   const updateConfig = React.useCallback(
     (key: string, value: string) => {
-      onReadinessChange(false);
       onConfigChange(key, value);
     },
-    [onConfigChange, onReadinessChange],
+    [onConfigChange],
   );
 
   const applySheet = React.useCallback(
@@ -615,6 +614,32 @@ export function GoogleSheetsConfigEditor({
   const configuredHeaderTab = sheetFromRange(
     textValue(config, "header_range"),
   );
+  const hasUniqueAgentFields =
+    new Set(configuredAgentKeys).size === configuredAgentKeys.length;
+  const hasValidAgentFields =
+    configuredAgentFields.length > 0 &&
+    hasUniqueAgentFields &&
+    configuredAgentKeys.every(
+      (key) =>
+        availableHeaderKeys.has(key) && !managedColumnKeys.includes(key),
+    );
+  const hasValidRequiredFields = configuredRequiredKeys.every((key) =>
+    configuredAgentKeys.includes(key),
+  );
+  const hasUniqueManagedColumns =
+    new Set(managedColumnKeys).size === managedColumnKeys.length;
+  const hasValidManagedColumns = managedColumnKeys.every((key) =>
+    availableHeaderKeys.has(key),
+  );
+  const hasValidManagedValues =
+    !(
+      textValue(config, "source_value").trim() &&
+      !textValue(config, "source_column").trim()
+    ) &&
+    !(
+      textValue(config, "status_value").trim() &&
+      !textValue(config, "status_column").trim()
+    );
   const mappingsAreValid = Boolean(
     selectedSheet &&
       selectedHeaders.length > 0 &&
@@ -622,24 +647,84 @@ export function GoogleSheetsConfigEditor({
       selectedSheet.issues.length === 0 &&
       configuredRangeTab === selectedSheet.title &&
       configuredHeaderTab === selectedSheet.title &&
-      configuredAgentFields.length > 0 &&
-      new Set(configuredAgentKeys).size === configuredAgentKeys.length &&
-      configuredAgentKeys.every(
-        (key) =>
-          availableHeaderKeys.has(key) && !managedColumnKeys.includes(key),
-      ) &&
-      configuredRequiredKeys.every((key) => configuredAgentKeys.includes(key)) &&
-      new Set(managedColumnKeys).size === managedColumnKeys.length &&
-      managedColumnKeys.every((key) => availableHeaderKeys.has(key)) &&
-      !(
-        textValue(config, "source_value").trim() &&
-        !textValue(config, "source_column").trim()
-      ) &&
-      !(
-        textValue(config, "status_value").trim() &&
-        !textValue(config, "status_column").trim()
-      ),
+      hasValidAgentFields &&
+      hasValidRequiredFields &&
+      hasUniqueManagedColumns &&
+      hasValidManagedColumns &&
+      hasValidManagedValues,
   );
+  const readinessIssue = (() => {
+    if (!isOpen) return undefined;
+    if (!authenticated) {
+      return "Connect Google Sheets before saving this configuration.";
+    }
+    if (!textValue(config, "spreadsheet_id").trim()) {
+      return "Add a spreadsheet URL or ID before saving.";
+    }
+    if (isDiscovering) {
+      return "Wait for column discovery to finish before saving.";
+    }
+    if (discoveryError) {
+      return "Resolve the column discovery error above, then try Discover columns again.";
+    }
+    if (!hasCurrentDiscovery) {
+      return needsTabSelection
+        ? "Choose the data tab for this workflow."
+        : "Discover columns to verify this spreadsheet before saving.";
+    }
+    if (!selectedSheet) {
+      return "Select a data tab from the discovered spreadsheet.";
+    }
+    if (!selectedHeaders.length) {
+      return "Add column names to row 1 of the selected tab, then discover columns again.";
+    }
+    if (selectedSheet.issues.length > 0) {
+      return `Resolve the selected tab issue before saving: ${selectedSheet.issues.join(" ")}`;
+    }
+    if (textValue(config, "selected_sheet_id") !== sheetKey(selectedSheet)) {
+      return "Confirm the selected tab again so its saved identity matches.";
+    }
+    if (
+      configuredRangeTab !== selectedSheet.title ||
+      configuredHeaderTab !== selectedSheet.title
+    ) {
+      return "Select the tab again to refresh its working and header ranges.";
+    }
+    if (configuredAgentFields.length === 0) {
+      return "Select at least one Agent field.";
+    }
+    if (!hasUniqueAgentFields) {
+      return "Remove duplicate columns from Agent fields.";
+    }
+    if (!hasValidAgentFields) {
+      return "Agent fields must match this tab and exclude managed columns.";
+    }
+    if (!hasValidRequiredFields) {
+      return "Required fields must also be selected as Agent fields.";
+    }
+    if (!hasUniqueManagedColumns) {
+      return "Use a different sheet column for each managed setting.";
+    }
+    if (!hasValidManagedColumns) {
+      return "Choose managed columns from the selected tab or set them to Not used.";
+    }
+    if (
+      textValue(config, "source_value").trim() &&
+      !textValue(config, "source_column").trim()
+    ) {
+      return "Choose a Source column or clear the Source value.";
+    }
+    if (
+      textValue(config, "status_value").trim() &&
+      !textValue(config, "status_column").trim()
+    ) {
+      return "Choose a Status column or clear the Initial status value.";
+    }
+    if (!hasValidManagedValues) {
+      return "Review the managed column values before saving.";
+    }
+    return undefined;
+  })();
   const isConfigurationReady = Boolean(
     isOpen &&
       authenticated &&
@@ -651,26 +736,17 @@ export function GoogleSheetsConfigEditor({
   );
 
   React.useEffect(() => {
-    onReadinessChange(isConfigurationReady);
-  }, [isConfigurationReady, onReadinessChange]);
+    onReadinessChange(
+      isConfigurationReady,
+      isConfigurationReady ? undefined : readinessIssue,
+    );
+  }, [isConfigurationReady, onReadinessChange, readinessIssue]);
 
-  const configurationMessage = !authenticated
-    ? "Connect Google Sheets to verify the setup."
-    : !textValue(config, "spreadsheet_id").trim()
-      ? "Add a spreadsheet URL, then discover its columns."
-      : isDiscovering
-        ? "Checking the saved setup against the current sheet…"
-        : discoveryError
-          ? "Not configured: the sheet could not be verified."
-          : !hasCurrentDiscovery
-            ? needsTabSelection
-              ? "Not configured: choose the data tab for this workflow."
-              : "Not configured: discover the sheet columns to verify this setup."
-            : isConfigurationReady
-              ? hasUnsavedChanges
-                ? "Setup verified. Save changes to apply this configuration."
-                : "Configured: the selected fields match the current sheet."
-              : "Not configured: check the tab, headers, and selected agent fields.";
+  const configurationMessage = isConfigurationReady
+    ? hasUnsavedChanges
+      ? "Setup verified. Save changes to apply this configuration."
+      : "Configured: the selected fields match the current sheet."
+    : readinessIssue || "Review the selected tab and its column mappings.";
 
   return (
     <TooltipProvider delayDuration={250}>
