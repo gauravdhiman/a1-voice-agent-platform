@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -221,6 +221,7 @@ describe("ToolConfigDrawer", () => {
         id: "agent-tool-1",
         config: {
           spreadsheet_id: "sheet-id-123456",
+          selected_sheet_id: "7",
           default_range: "Orders!A1:C1000",
           header_range: "Orders!A1:C1",
           agent_columns: "Customer, Items",
@@ -571,17 +572,17 @@ describe("ToolConfigDrawer", () => {
         provider: "google_sheets",
         sheets: [
           {
-            title: "Restaurant Orders",
-            sheet_id: 8,
-            headers: sofiaHeaders,
-            header_range: "'Restaurant Orders'!A1:H1",
-            issues: [],
-          },
-          {
             title: "Lead submissions",
             sheet_id: 7,
             headers: jordanHeaders,
             header_range: "'Lead submissions'!A1:L1",
+            issues: [],
+          },
+          {
+            title: "Restaurant Orders",
+            sheet_id: 8,
+            headers: sofiaHeaders,
+            header_range: "'Restaurant Orders'!A1:H1",
             issues: [],
           },
         ],
@@ -608,6 +609,7 @@ describe("ToolConfigDrawer", () => {
             id: "jordan-sheets-tool",
             config: {
               spreadsheet_id: "jordan-sheet-id-123456",
+              selected_sheet_id: "7",
               default_range: "'Lead submissions'!A1:L1000",
             },
             auth_status: AuthStatus.AUTHENTICATED,
@@ -629,7 +631,15 @@ describe("ToolConfigDrawer", () => {
         agentTool={
           {
             id: "sofia-sheets-tool",
-            config: { spreadsheet_id: "sofia-sheet-id-123456" },
+            config: {
+              spreadsheet_id: "sofia-sheet-id-123456",
+              // An unverified default range must not silently select a tab.
+              default_range: "'Lead submissions'!A1:L1000",
+              // Legacy configurations also need to confirm their tab once.
+              header_range: "'Lead submissions'!A1:L1",
+              agent_columns:
+                "Caller name, Caller email, Caller phone, Service needed, Issue summary",
+            },
             auth_status: AuthStatus.AUTHENTICATED,
             token_expires_at: null,
             is_enabled: true,
@@ -651,11 +661,62 @@ describe("ToolConfigDrawer", () => {
         ).value,
       ).toBe("sofia-sheet-id-123456");
     });
-    await user.click(screen.getByRole("button", { name: "Discover columns" }));
+    expect(
+      await screen.findByText(/Choose the tab for this workflow/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Not configured: choose the data tab for this workflow."),
+    ).toBeTruthy();
+    const tabSelector = screen.getByRole("combobox", {
+      name: "Spreadsheet tab",
+    });
+    tabSelector.focus();
+    await user.keyboard("{Enter}");
+    expect(
+      screen.getByRole("option", { name: "Lead submissions (12 columns)" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("option", { name: "Restaurant Orders (8 columns)" }),
+    );
     const agentFields = await screen.findByRole("combobox", {
       name: "Agent fields",
     });
     expect(agentFields.textContent).toContain("All 8 columns selected");
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(drawerProps.onSaveConfig).toHaveBeenCalledWith(
+        "sofia-sheets-tool",
+        expect.objectContaining({ selected_sheet_id: "8" }),
+      );
+    });
+    onDiscover.mockResolvedValue({
+      status: "succeeded",
+      provider: "google_sheets",
+      sheets: [
+        {
+          title: "Lead submissions",
+          sheet_id: 7,
+          headers: jordanHeaders,
+          header_range: "'Lead submissions'!A1:L1",
+          issues: [],
+        },
+        {
+          title: "Restaurant Orders",
+          sheet_id: 8,
+          headers: sofiaHeaders,
+          header_range: "'Restaurant Orders'!A1:H1",
+          issues: [],
+        },
+      ],
+    });
+    await user.click(screen.getByRole("button", { name: "Discover columns" }));
+    expect(
+      (await screen.findByRole("combobox", { name: "Agent fields" })).textContent,
+    ).toContain("All 8 columns selected");
     expect(onDiscover).toHaveBeenLastCalledWith(
       "sofia-sheets-tool",
       "sofia-sheet-id-123456",

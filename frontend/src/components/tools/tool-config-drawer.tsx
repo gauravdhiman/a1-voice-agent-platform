@@ -698,11 +698,6 @@ export function ToolConfigDrawer({
                   config={localConfig}
                   isOpen={open}
                   hasUnsavedChanges={hasUnsavedChanges}
-                  initialDefaultRange={
-                    typeof agentTool.config?.default_range === "string"
-                      ? agentTool.config.default_range
-                      : ""
-                  }
                   authenticated={authenticated}
                   canEdit={canEdit}
                   onConfigChange={handleConfigChange}

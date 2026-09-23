@@ -200,6 +200,12 @@ Required fields use searchable multi-selects so wide sheets stay compact; all
 discovered business headers start selected as Agent fields while managed
 headers stay in their metadata selectors. Cell values and OAuth
 credentials never go to the browser.
+When a workbook has multiple populated tabs and no saved tab identifier, the
+editor asks the administrator to choose instead of silently selecting the
+first tab. This also lets older configurations confirm their tab once. Each
+tab option includes its current non-empty header count to make the intended
+destination easier to identify; the selected tab ID is saved so later visits
+restore that same tab even if tabs are reordered or renamed.
 Each discovery request reads the current headers from Google Sheets. The
 displayed columns belong to the selected agent attachment and spreadsheet URL;
 changing the URL clears its prior tab, range, and column mappings. Discover the
