@@ -45,6 +45,20 @@ organization_errors_counter = meter.create_counter(
     "organization.errors", description="Number of organization operation errors"
 )
 
+SUPPORTED_PROVIDER_CREDENTIAL_KEYS = frozenset(
+    {
+        "google",
+        "deepgram",
+        "openai",
+        "cartesia",
+        "cerebras",
+        "openrouter",
+        "fish",
+        "resend",
+    }
+)
+MAX_PROVIDER_CREDENTIAL_DESCRIPTION_LENGTH = 1000
+
 
 class OrganizationService(BaseOrganizationService):
     """Service for handling organization operations."""
@@ -67,6 +81,10 @@ class OrganizationService(BaseOrganizationService):
         org-settings UI can show Configured/Not-configured pills per provider
         without exposing secrets to the frontend.
 
+        Provider reference notes are read from their separate JSONB column and
+        returned as non-secret display metadata. They are never mixed into the
+        encrypted credential blob consumed by the voice runtime.
+
         Args:
             org_dict: A raw row from the ``organizations`` table.
 
@@ -75,7 +93,7 @@ class OrganizationService(BaseOrganizationService):
             decrypted blob (so the existing org-settings UI form still works),
             ``provider_credentials`` carrying the opaque encrypted blob, and
             ``provider_credentials_status`` carrying the per-provider boolean
-            map.
+            map, plus any saved provider reference notes.
         """
         provider_credentials = org_dict.get("provider_credentials")
         google_api_key = org_dict.get("google_api_key")
@@ -94,6 +112,16 @@ class OrganizationService(BaseOrganizationService):
                     e,
                     exc_info=True,
                 )
+        provider_credentials_descriptions: dict[str, str] = {}
+        raw_descriptions = org_dict.get("provider_credentials_descriptions")
+        if isinstance(raw_descriptions, dict):
+            provider_credentials_descriptions = {
+                provider: value.strip()
+                for provider, value in raw_descriptions.items()
+                if provider in SUPPORTED_PROVIDER_CREDENTIAL_KEYS
+                and isinstance(value, str)
+                and value.strip()
+            }
         # Per-provider "configured?" booleans. `google` is True when resolvable
         # from the blob OR the legacy plaintext column fallback; string providers
         # are True when present in the decrypted blob.
@@ -121,6 +149,9 @@ class OrganizationService(BaseOrganizationService):
             google_api_key=google_api_key,
             provider_credentials=provider_credentials,
             provider_credentials_status=provider_credentials_status,
+            provider_credentials_descriptions=(
+                provider_credentials_descriptions or None
+            ),
             onboarding_completed=org_dict.get("onboarding_completed", False),
             public_page_enabled=bool(org_dict.get("public_page_enabled", False)),
             public_page_passphrase_enabled=bool(
@@ -170,6 +201,33 @@ class OrganizationService(BaseOrganizationService):
         if not creds:
             return None
         return encrypt_data(creds)
+
+    @staticmethod
+    def _merge_provider_credentials_descriptions(
+        existing_descriptions: Optional[dict], updates: dict
+    ) -> Optional[dict[str, str]]:
+        """Merge non-secret provider reference notes.
+
+        Empty and ``None`` values remove a note. Returning ``None`` when no
+        notes remain keeps the JSONB column sparse.
+        """
+        descriptions = (
+            {
+                provider: value
+                for provider, value in existing_descriptions.items()
+                if provider in SUPPORTED_PROVIDER_CREDENTIAL_KEYS
+                and isinstance(value, str)
+                and value.strip()
+            }
+            if isinstance(existing_descriptions, dict)
+            else {}
+        )
+        for provider, value in updates.items():
+            if value is None or not value.strip():
+                descriptions.pop(provider, None)
+            else:
+                descriptions[provider] = value.strip()
+        return descriptions or None
 
     @tracer.start_as_current_span("organization.create_organization")
     async def create_organization(
@@ -479,24 +537,61 @@ class OrganizationService(BaseOrganizationService):
                         return None, f"Invalid Google API key: {validation_error}"
                 cred_updates.update(org_data.provider_credentials_input)
 
-            if cred_updates:
-                # Fetch the existing blob to merge (preserves other providers).
+            description_updates: Optional[dict[str, Optional[str]]] = None
+            if org_data.provider_credentials_descriptions_input is not None:
+                description_updates = {}
+                for (
+                    provider,
+                    value,
+                ) in org_data.provider_credentials_descriptions_input.items():
+                    if provider not in SUPPORTED_PROVIDER_CREDENTIAL_KEYS:
+                        return None, f"Unsupported provider description: {provider}"
+                    if (
+                        value is not None
+                        and len(value.strip())
+                        > MAX_PROVIDER_CREDENTIAL_DESCRIPTION_LENGTH
+                    ):
+                        return (
+                            None,
+                            "Provider credential descriptions must be 1000 "
+                            "characters or fewer.",
+                        )
+                    description_updates[provider] = value
+                if not description_updates:
+                    description_updates = None
+
+            if cred_updates or description_updates is not None:
+                # Fetch the existing credential and/or note data to merge while
+                # preserving providers and notes omitted by this update.
+                select_columns = []
+                if cred_updates:
+                    select_columns.append("provider_credentials")
+                if description_updates is not None:
+                    select_columns.append("provider_credentials_descriptions")
                 existing = (
                     self.supabase.table("organizations")
-                    .select("provider_credentials")
+                    .select(",".join(select_columns))
                     .eq("id", str(org_id))
                     .limit(1)
                     .execute()
                 )
-                existing_blob = None
-                if existing.data:
-                    existing_blob = existing.data[0].get("provider_credentials")
-                new_blob = self._merge_provider_credentials(existing_blob, cred_updates)
-                update_data["provider_credentials"] = new_blob
-                # The secret now lives only in the encrypted blob; clear the
-                # legacy plaintext column (retained for rollback safety, dropped
-                # in a follow-up migration once the encrypted path is verified).
-                update_data["google_api_key"] = None
+                existing_row = existing.data[0] if existing.data else {}
+                if cred_updates:
+                    new_blob = self._merge_provider_credentials(
+                        existing_row.get("provider_credentials"), cred_updates
+                    )
+                    update_data["provider_credentials"] = new_blob
+                    # The secret now lives only in the encrypted blob; clear the
+                    # legacy plaintext column (retained for rollback safety, dropped
+                    # in a follow-up migration once the encrypted path is verified).
+                    update_data["google_api_key"] = None
+                if description_updates is not None:
+                    update_data["provider_credentials_descriptions"] = (
+                        self._merge_provider_credentials_descriptions(
+                            existing_row.get("provider_credentials_descriptions"),
+                            description_updates,
+                        )
+                    )
 
             if org_data.public_page_enabled is not None:
                 update_data["public_page_enabled"] = org_data.public_page_enabled

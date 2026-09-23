@@ -261,6 +261,12 @@ warmup) are **future hardening**, not prerequisites for the core capability.
       clear, omitted to preserve). Read view shows green-dot "Configured" / gray
       "Not configured" pills driven by the backend-derived
       `provider_credentials_status` map (booleans only — never decrypted values).
+      Each provider row also links to its provider dashboard or API-key
+      documentation, exposes provider-specific help text, and supports an
+      optional non-secret reference description. Descriptions are persisted in
+      `organizations.provider_credentials_descriptions` through
+      `provider_credentials_descriptions_input`; they are never sent to the
+      provider runtime.
       Gated on `canUpdateOrganization` + the page-level platform/org-admin check.
   - **Backend (C support):** `organization/service.py` computes
     `provider_credentials_status` from the decrypted blob on read and attaches it

@@ -452,6 +452,11 @@ flowchart TD
     preserve). Read view shows Configured/Not-configured pills driven by the
     backend-derived `provider_credentials_status` map (booleans only — never
     decrypted values). Gated on `canUpdateOrganization` + platform/org-admin check.
+    Each provider row includes a provider dashboard/API-key link, a tooltip with
+    provider-specific guidance, and an optional non-secret reference description.
+    Descriptions are stored separately in
+    `organizations.provider_credentials_descriptions` and are never consumed by
+    the voice runtime.
   - **Backend (C support):** `organization/service.py` computes
     `provider_credentials_status` from the decrypted blob on read and attaches it
     to the org response (no decrypted values exposed); surfaced read-only on

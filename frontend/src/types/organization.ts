@@ -26,6 +26,8 @@ export interface Organization {
    * Drives the Configured/Not-configured pills on the org-settings page.
    */
   provider_credentials_status?: Record<string, boolean>;
+  /** Optional non-secret reference notes keyed by provider name. */
+  provider_credentials_descriptions?: Record<string, string>;
   /** When true, `/o/{slug}` is available to visitors. */
   public_page_enabled?: boolean;
   /** When true, visitors must enter a passphrase before listing agents. */
@@ -91,6 +93,8 @@ export interface OrganizationUpdate {
    * openai, cartesia, cerebras, openrouter, fish, resend.
    */
   provider_credentials_input?: Record<string, string | null>;
+  /** Non-secret per-provider reference notes; omitted providers are preserved. */
+  provider_credentials_descriptions_input?: Record<string, string | null>;
   public_page_enabled?: boolean;
   public_page_passphrase_enabled?: boolean;
   /** Write-only: set or rotate the public page passphrase (never returned). */

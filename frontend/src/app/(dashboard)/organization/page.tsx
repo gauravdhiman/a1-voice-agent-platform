@@ -53,8 +53,10 @@ import {
   Info,
 } from "lucide-react";
 import {
+  buildProviderCredentialDescriptionsInput,
   buildProviderCredentialsInput,
   PROVIDER_LABELS,
+  ProviderCredentialDescriptions,
   ProviderCredentialKey,
 } from "@/lib/provider-credentials-input";
 import {
@@ -72,6 +74,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   OrganizationCompleteData,
   OrganizationEnhanced,
+  OrganizationUpdate,
 } from "@/types/organization";
 
 import { organizationService } from "@/services/organization-service";
@@ -137,6 +140,11 @@ export default function OrganizationPage() {
   const [providerCredsTouched, setProviderCredsTouched] = useState<
     Record<string, boolean>
   >({});
+  const [providerCredDescriptions, setProviderCredDescriptions] = useState<
+    ProviderCredentialDescriptions
+  >({});
+  const [providerCredDescriptionsTouched, setProviderCredDescriptionsTouched] =
+    useState<Record<string, boolean>>({});
   const [providerCredsSaving, setProviderCredsSaving] = useState(false);
   const [removingProviderCred, setRemovingProviderCred] =
     useState<ProviderCredentialKey | null>(null);
@@ -156,6 +164,7 @@ export default function OrganizationPage() {
         orgId,
       )) as OrganizationEnhanced;
       setOrganizationData({ organization: org });
+      setProviderCredDescriptions(org.provider_credentials_descriptions ?? {});
       setEditedOrg({
         name: org.name,
         description: org.description || "",
@@ -345,24 +354,45 @@ export default function OrganizationPage() {
     setProviderCredsTouched({});
   };
 
+  const resetProviderCredDescriptionDraft = () => {
+    setProviderCredDescriptionsTouched({});
+  };
+
   const handleSaveProviderCreds = async () => {
     if (!orgId) return;
-    const input = buildProviderCredentialsInput(
+    const credentialInput = buildProviderCredentialsInput(
       providerCreds,
       providerCredsTouched,
     );
-    if (Object.keys(input).length === 0) {
-      toast.info("No provider credentials changed.");
+    const descriptionInput = buildProviderCredentialDescriptionsInput(
+      providerCredDescriptions,
+      providerCredDescriptionsTouched,
+    );
+    if (
+      Object.keys(credentialInput).length === 0 &&
+      Object.keys(descriptionInput).length === 0
+    ) {
+      toast.info("No provider credential changes.");
       return;
     }
     setProviderCredsSaving(true);
     try {
-      const response = await organizationService.updateOrganization(orgId, {
-        provider_credentials_input: input,
-      });
+      const update: OrganizationUpdate = {};
+      if (Object.keys(credentialInput).length > 0) {
+        update.provider_credentials_input = credentialInput;
+      }
+      if (Object.keys(descriptionInput).length > 0) {
+        update.provider_credentials_descriptions_input = descriptionInput;
+      }
+      const response = await organizationService.updateOrganization(orgId, update);
       setOrganizationData({ organization: response as OrganizationEnhanced });
+      setProviderCredDescriptions(
+        (response as OrganizationEnhanced).provider_credentials_descriptions ??
+          {},
+      );
       resetProviderCredDraft();
-      toast.success("Voice provider credentials saved");
+      resetProviderCredDescriptionDraft();
+      toast.success("Provider credential changes saved");
     } catch (error: unknown) {
       console.error("Failed to save provider credentials:", error);
       const errorMessage =
@@ -393,6 +423,30 @@ export default function OrganizationPage() {
       delete next[key];
       return next;
     });
+  };
+
+  const markProviderCredDescriptionTouched = (key: string) => {
+    setProviderCredDescriptionsTouched((prev) =>
+      prev[key] ? prev : { ...prev, [key]: true },
+    );
+  };
+
+  const clearProviderCredDescriptionTouched = (key: string) => {
+    setProviderCredDescriptionsTouched((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const resetProviderCredDescription = (key: ProviderCredentialKey) => {
+    setProviderCredDescriptions((prev) => ({
+      ...prev,
+      [key]: organizationData?.organization.provider_credentials_descriptions?.[
+        key
+      ] ?? "",
+    }));
   };
 
   /**
@@ -945,8 +999,19 @@ During monsoon season (July-September), we have extended hours for flood-related
             draft={providerCreds}
             onDraftChange={setProviderCreds}
             touched={providerCredsTouched}
+            descriptions={providerCredDescriptions}
+            descriptionTouched={providerCredDescriptionsTouched}
             onMarkTouched={markProviderCredTouched}
             onClearTouched={clearProviderCredTouched}
+            onDescriptionChange={(key, value) =>
+              setProviderCredDescriptions((prev) => ({
+                ...prev,
+                [key]: value,
+              }))
+            }
+            onMarkDescriptionTouched={markProviderCredDescriptionTouched}
+            onClearDescriptionTouched={clearProviderCredDescriptionTouched}
+            onResetDescription={resetProviderCredDescription}
             onSave={handleSaveProviderCreds}
             onRemoveProvider={handleRemoveProviderCred}
             saving={providerCredsSaving}
