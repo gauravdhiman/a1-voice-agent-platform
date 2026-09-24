@@ -80,11 +80,17 @@ describe("PhoneNumberSearch", () => {
       "maxLength",
       "16",
     );
-    await user.type(screen.getByLabelText(/phone number pattern/i), "480{Enter}");
+    await user.type(
+      screen.getByLabelText(/phone number pattern/i),
+      "480{Enter}",
+    );
 
     await waitFor(() => {
       expect(searchAvailable).toHaveBeenCalledWith(
-        expect.objectContaining({ contains: "480", search_mode: "begins_with" }),
+        expect.objectContaining({
+          contains: "480",
+          search_mode: "begins_with",
+        }),
       );
     });
   });
@@ -93,13 +99,18 @@ describe("PhoneNumberSearch", () => {
     const user = userEvent.setup();
     render(<PhoneNumberSearch creditBalance={100} />);
 
-    const searchButton = screen.getByRole("button", { name: /search numbers/i });
+    const searchButton = screen.getByRole("button", {
+      name: /search numbers/i,
+    });
     expect(searchButton).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent(
       /search is unavailable.*minimum of 200 credits/i,
     );
 
-    await user.type(screen.getByLabelText(/phone number pattern/i), "480{Enter}");
+    await user.type(
+      screen.getByLabelText(/phone number pattern/i),
+      "480{Enter}",
+    );
     expect(searchAvailable).not.toHaveBeenCalled();
   });
 
@@ -112,7 +123,9 @@ describe("PhoneNumberSearch", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/insufficient credits/i)).toHaveClass("text-red-900");
+      expect(screen.getByText(/insufficient credits/i)).toHaveClass(
+        "text-red-900",
+      );
     });
   });
 
@@ -121,7 +134,10 @@ describe("PhoneNumberSearch", () => {
     searchAvailable.mockRejectedValueOnce(new Error("provider unavailable"));
     render(<PhoneNumberSearch creditBalance={200} />);
 
-    await user.type(screen.getByLabelText(/phone number pattern/i), "480{Enter}");
+    await user.type(
+      screen.getByLabelText(/phone number pattern/i),
+      "480{Enter}",
+    );
 
     await waitFor(() => expect(searchAvailable).toHaveBeenCalledTimes(1));
   });
@@ -133,7 +149,11 @@ describe("PhoneNumberSearch", () => {
       ...SEARCH_RESPONSE,
       items: [
         AVAILABLE_NUMBER,
-        { ...AVAILABLE_NUMBER, phone_number: "+14805550101", monthly_cost_credits: 200 },
+        {
+          ...AVAILABLE_NUMBER,
+          phone_number: "+14805550101",
+          monthly_cost_credits: 200,
+        },
       ],
     });
     render(
@@ -143,8 +163,20 @@ describe("PhoneNumberSearch", () => {
       />,
     );
 
-    await user.type(screen.getByLabelText(/phone number pattern/i), "480{Enter}");
-    const selectButtons = await screen.findAllByRole("button", { name: "Select" });
+    await user.type(
+      screen.getByLabelText(/phone number pattern/i),
+      "480{Enter}",
+    );
+    const resultCard = (await screen.findByText("+1 (480) 555-0100")).closest(
+      "div.rounded-lg",
+    );
+    expect(resultCard).toBeTruthy();
+    expect(resultCard?.className).toContain("flex-col");
+    expect(resultCard?.className).toContain("lg:flex-row");
+    const selectButtons = await screen.findAllByRole("button", {
+      name: "Select",
+    });
+    expect(selectButtons[0]).toHaveClass("w-full", "lg:w-auto");
     await user.click(selectButtons[1]);
 
     expect(onNumberSelected).toHaveBeenCalledWith(
@@ -159,8 +191,9 @@ describe("PhoneNumberSearch", () => {
       screen.getByRole("form", { name: /available phone number search/i }),
     );
 
-    const availableNumbersCard = (await screen.findByText("Available Numbers"))
-      .closest('[data-slot="card"]');
+    const availableNumbersCard = (
+      await screen.findByText("Available Numbers")
+    ).closest('[data-slot="card"]');
 
     expect(availableNumbersCard).toHaveClass("flex-1", "min-h-0");
     expect(

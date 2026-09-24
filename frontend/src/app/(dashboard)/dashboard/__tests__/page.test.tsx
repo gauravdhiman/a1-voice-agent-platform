@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +24,8 @@ vi.mock("@/contexts/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
-      hasRole: (role: string) => role === "platform_admin" && mocks.role === role,
+      hasRole: (role: string) =>
+        role === "platform_admin" && mocks.role === role,
     },
   }),
 }));
@@ -178,9 +185,17 @@ describe("workspace dashboard", () => {
     mount();
     await screen.findAllByText("Fixture receptionist");
 
-    expect(screen.getByRole("heading", { name: "Test workspace" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Dashboard filters" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Call performance" }).querySelector("#dashboard-period")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Test workspace" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Dashboard filters" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("region", { name: "Call performance" })
+        .querySelector("#dashboard-period"),
+    ).toBeNull();
     expect(screen.getByText("Call performance")).toBeTruthy();
     expect(screen.getByText("Peak call hours")).toBeTruthy();
     expect(screen.getByText(/Busiest: 14:00/)).toBeTruthy();
@@ -200,10 +215,15 @@ describe("workspace dashboard", () => {
     expect(mocks.agentSummary).toHaveBeenCalledWith("org-1");
     expect(mocks.billing).not.toHaveBeenCalled();
 
-    const [, listFilters] = mocks.callList.mock.calls.at(-1) as [string, Record<string, string | number>];
+    const [, listFilters] = mocks.callList.mock.calls.at(-1) as [
+      string,
+      Record<string, string | number>,
+    ];
     expect(listFilters.page_size).toBe(6);
     expect(listFilters.status).toBeUndefined();
-    expect(new Date(listFilters.date_to_exclusive).getTime()).toBeGreaterThan(new Date(listFilters.date_from).getTime());
+    expect(new Date(listFilters.date_to_exclusive).getTime()).toBeGreaterThan(
+      new Date(listFilters.date_from).getTime(),
+    );
     expect(screen.queryByText("Total Revenue")).toBeNull();
   });
 
@@ -213,11 +233,20 @@ describe("workspace dashboard", () => {
     await screen.findAllByText("Fixture receptionist");
     await screen.findByText("Organizations with calls");
 
-    expect(screen.getByRole("heading", { name: "Test workspace" })).toBeTruthy();
-    expect(mocks.analytics).toHaveBeenCalledWith("org-1", "last_30_days", undefined, "America/Phoenix");
+    expect(
+      screen.getByRole("heading", { name: "Test workspace" }),
+    ).toBeTruthy();
+    expect(mocks.analytics).toHaveBeenCalledWith(
+      "org-1",
+      "last_30_days",
+      undefined,
+      "America/Phoenix",
+    );
     expect(mocks.api).toHaveBeenCalledWith("/api/v1/calls/platform/analytics");
     expect(screen.getByText("Platform pulse")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /View platform overview/ })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /View platform overview/ }),
+    ).toBeTruthy();
   });
 
   it("updates the call chart readout immediately as the pointer moves between days", async () => {
@@ -232,9 +261,9 @@ describe("workspace dashboard", () => {
     expect(markers).toHaveLength(2);
     expect(markerClasses[0]).toContain("h-1.5 w-1.5");
     expect(markerClasses[0]).toContain("rounded-full");
-    expect(markerClasses.every((className) => className === markerClasses[0])).toBe(
-      true,
-    );
+    expect(
+      markerClasses.every((className) => className === markerClasses[0]),
+    ).toBe(true);
     setChartBounds(chart, 100);
 
     fireEvent.pointerMove(chart, { pointerType: "mouse", clientX: 20 });
@@ -306,9 +335,21 @@ describe("workspace dashboard", () => {
     expect(screen.getByRole("link", { name: "Create agent" })).toBeTruthy();
     expect(mocks.billing).toHaveBeenCalledWith("org-1");
     const followUp = screen.getByText("Follow-up requests").closest("section");
-    const accountCapacity = screen.getByText("Account capacity").closest("section");
+    const accountCapacity = screen
+      .getByText("Account capacity")
+      .closest("section");
+    const recentCalls = screen.getByText("Recent calls").closest("section");
+    expect(recentCalls).toHaveClass("min-w-0");
+    expect(recentCalls?.querySelector(".overflow-x-auto")).toHaveClass(
+      "min-w-0",
+      "w-full",
+    );
+    expect(followUp).toHaveClass("min-w-0");
+    expect(accountCapacity).toHaveClass("min-w-0");
     expect(followUp?.parentElement?.className ?? "").toContain("xl:col-span-8");
-    expect(accountCapacity?.parentElement?.className ?? "").toContain("xl:col-span-4");
+    expect(accountCapacity?.parentElement?.className ?? "").toContain(
+      "xl:col-span-4",
+    );
   });
 
   it("changes the period and status filter for both metrics and the recent-call preview", async () => {
@@ -316,8 +357,12 @@ describe("workspace dashboard", () => {
     mount();
     await screen.findAllByText("Fixture receptionist");
 
-    const periodFilter = screen.getByLabelText("Call reporting period") as HTMLSelectElement;
-    expect(Array.from(periodFilter.options).map((option) => option.textContent)).toEqual([
+    const periodFilter = screen.getByLabelText(
+      "Call reporting period",
+    ) as HTMLSelectElement;
+    expect(
+      Array.from(periodFilter.options).map((option) => option.textContent),
+    ).toEqual([
       "Today",
       "Yesterday",
       "Last 7 days",
@@ -327,31 +372,64 @@ describe("workspace dashboard", () => {
 
     await user.selectOptions(periodFilter, "last_7_days");
     await waitFor(() =>
-      expect(mocks.analytics).toHaveBeenCalledWith("org-1", "last_7_days", undefined, "America/Phoenix"),
+      expect(mocks.analytics).toHaveBeenCalledWith(
+        "org-1",
+        "last_7_days",
+        undefined,
+        "America/Phoenix",
+      ),
     );
 
-    await user.selectOptions(screen.getByLabelText("Call status filter"), "failed");
-    expect(screen.getByLabelText("Call status filter")).toHaveProperty("value", "failed");
+    await user.selectOptions(
+      screen.getByLabelText("Call status filter"),
+      "failed",
+    );
+    expect(screen.getByLabelText("Call status filter")).toHaveProperty(
+      "value",
+      "failed",
+    );
     await waitFor(() =>
-      expect(mocks.analytics).toHaveBeenCalledWith("org-1", "last_7_days", "failed", "America/Phoenix"),
+      expect(mocks.analytics).toHaveBeenCalledWith(
+        "org-1",
+        "last_7_days",
+        "failed",
+        "America/Phoenix",
+      ),
     );
     await waitFor(() => {
-      const [, filters] = mocks.callList.mock.calls.at(-1) as [string, Record<string, string | number>];
+      const [, filters] = mocks.callList.mock.calls.at(-1) as [
+        string,
+        Record<string, string | number>,
+      ];
       expect(filters.status).toBe("failed");
       expect(filters.page_size).toBe(6);
       expect(filters.date_to).toBeUndefined();
-      expect(Number(new Date(filters.date_to_exclusive)) - Number(new Date(filters.date_from))).toBe(7 * 24 * 60 * 60 * 1000);
+      expect(
+        Number(new Date(filters.date_to_exclusive)) -
+          Number(new Date(filters.date_from)),
+      ).toBe(7 * 24 * 60 * 60 * 1000);
     });
 
     await user.selectOptions(periodFilter, "yesterday");
     await waitFor(() =>
-      expect(mocks.analytics).toHaveBeenCalledWith("org-1", "yesterday", "failed", "America/Phoenix"),
+      expect(mocks.analytics).toHaveBeenCalledWith(
+        "org-1",
+        "yesterday",
+        "failed",
+        "America/Phoenix",
+      ),
     );
     await waitFor(() => {
-      const [, filters] = mocks.callList.mock.calls.at(-1) as [string, Record<string, string | number>];
+      const [, filters] = mocks.callList.mock.calls.at(-1) as [
+        string,
+        Record<string, string | number>,
+      ];
       expect(filters.status).toBe("failed");
       expect(filters.date_to).toBeUndefined();
-      expect(Number(new Date(filters.date_to_exclusive)) - Number(new Date(filters.date_from))).toBe(24 * 60 * 60 * 1000);
+      expect(
+        Number(new Date(filters.date_to_exclusive)) -
+          Number(new Date(filters.date_from)),
+      ).toBe(24 * 60 * 60 * 1000);
     });
   });
 
@@ -361,7 +439,9 @@ describe("workspace dashboard", () => {
     mount();
     await screen.findByText("Organizations with calls");
 
-    expect(screen.getByRole("heading", { name: "Choose a workspace" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Choose a workspace" }),
+    ).toBeTruthy();
     expect(mocks.analytics).not.toHaveBeenCalled();
     expect(mocks.api).toHaveBeenCalledWith("/api/v1/calls/platform/analytics");
     expect(mocks.agentSummary).not.toHaveBeenCalled();
@@ -389,20 +469,34 @@ describe("workspace dashboard", () => {
       calls_by_status: [],
       calls_by_agent: [],
       calls_by_day: [],
-      calls_by_hour: Array.from({ length: 24 }, (_, hour) => ({ hour, calls: 0 })),
+      calls_by_hour: Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        calls: 0,
+      })),
     });
     mount();
 
     await screen.findByText("No calls in this period");
-    expect(screen.getAllByText("No calls match these filters.")).toHaveLength(2);
+    expect(screen.getAllByText("No calls match these filters.")).toHaveLength(
+      2,
+    );
     expect(screen.queryByText("Busiest agents")).toBeNull();
   });
 
   it("uses the new organization scope and clears a prior organization's status", async () => {
     const { rerender, client } = mount();
     await screen.findAllByText("Fixture receptionist");
-    fireEvent.change(screen.getByLabelText("Call status filter"), { target: { value: "failed" } });
-    await waitFor(() => expect(mocks.analytics).toHaveBeenCalledWith("org-1", "last_30_days", "failed", "America/Phoenix"));
+    fireEvent.change(screen.getByLabelText("Call status filter"), {
+      target: { value: "failed" },
+    });
+    await waitFor(() =>
+      expect(mocks.analytics).toHaveBeenCalledWith(
+        "org-1",
+        "last_30_days",
+        "failed",
+        "America/Phoenix",
+      ),
+    );
 
     mocks.orgId = "org-2";
     rerender(
@@ -410,7 +504,17 @@ describe("workspace dashboard", () => {
         <DashboardPage />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(mocks.analytics).toHaveBeenCalledWith("org-2", "last_30_days", undefined, "America/Phoenix"));
-    expect(screen.getByLabelText("Call status filter")).toHaveProperty("value", "");
+    await waitFor(() =>
+      expect(mocks.analytics).toHaveBeenCalledWith(
+        "org-2",
+        "last_30_days",
+        undefined,
+        "America/Phoenix",
+      ),
+    );
+    expect(screen.getByLabelText("Call status filter")).toHaveProperty(
+      "value",
+      "",
+    );
   });
 });

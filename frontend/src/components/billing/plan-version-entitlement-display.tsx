@@ -225,23 +225,25 @@ function OrderedEntitlementRow({
         opacity: dragging ? 0.92 : 1,
       }}
       aria-grabbed={dragging}
-      className={`relative flex items-start gap-2 ${
+      className={`relative flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start ${
         dragging
           ? "z-10 rounded-lg border border-primary/50 bg-background shadow-xl ring-2 ring-primary/20"
           : ""
       }`}
     >
-      {draggable ? (
-        <GripVertical
-          className="mt-3 h-4 w-4 shrink-0 cursor-grab text-muted-foreground"
-          aria-hidden="true"
-        />
-      ) : null}
-      <div className="min-w-0 flex-1">
-        <EntitlementReadOnlyRow item={item} definition={definition} />
+      <div className="flex min-w-0 flex-1 items-start gap-2">
+        {draggable ? (
+          <GripVertical
+            className="mt-3 h-4 w-4 shrink-0 cursor-grab text-muted-foreground"
+            aria-hidden="true"
+          />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <EntitlementReadOnlyRow item={item} definition={definition} />
+        </div>
       </div>
       {draggable ? (
-        <div className="flex shrink-0 items-center gap-1 pt-1">
+        <div className="flex w-full shrink-0 justify-end gap-1 sm:w-auto sm:pt-1">
           <Button
             type="button"
             size="icon"
@@ -279,10 +281,12 @@ function EntitlementReadOnlyRow({
   const valueType = definition?.value_type ?? "integer";
 
   return (
-    <div className="rounded-lg border bg-muted/10 px-3 py-2.5 space-y-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <span className="font-medium text-sm truncate">{displayName}</span>
+    <div className="min-w-0 space-y-1.5 rounded-lg border bg-muted/10 px-3 py-2.5">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="max-w-full break-words text-sm font-medium sm:truncate">
+            {displayName}
+          </span>
           {definition ? (
             <>
               <Badge variant="outline">{definition.kind}</Badge>
@@ -291,13 +295,17 @@ function EntitlementReadOnlyRow({
           ) : null}
           <CatalogHelpTooltip content={entitlementHelpText(item.key)} />
         </div>
-        <EntitlementValuePreview
-          item={item}
-          definition={definition}
-          valueType={valueType}
-        />
+        <div className="max-w-full shrink-0 self-start sm:self-auto">
+          <EntitlementValuePreview
+            item={item}
+            definition={definition}
+            valueType={valueType}
+          />
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground font-mono">{item.key}</p>
+      <p className="break-all font-mono text-xs text-muted-foreground">
+        {item.key}
+      </p>
     </div>
   );
 }
@@ -313,9 +321,9 @@ function EntitlementValuePreview({
 }) {
   if (valueType === "boolean") {
     return (
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex max-w-full flex-wrap items-center gap-2">
         <Switch checked={item.booleanValue === true} disabled aria-readonly />
-        <span className="text-sm text-muted-foreground">
+        <span className="break-words text-sm text-muted-foreground">
           {item.booleanValue ? "Enabled" : "Disabled"}
         </span>
       </div>
@@ -324,15 +332,15 @@ function EntitlementValuePreview({
 
   if (valueType === "unlimited" || item.unlimited) {
     return (
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex max-w-full flex-wrap items-center gap-2">
         <Switch checked={item.unlimited === true} disabled aria-readonly />
-        <span className="text-sm font-medium">Unlimited</span>
+        <span className="break-words text-sm font-medium">Unlimited</span>
       </div>
     );
   }
 
   return (
-    <span className="text-sm font-semibold tabular-nums shrink-0">
+    <span className="max-w-full break-words text-sm font-semibold tabular-nums">
       {formatEntitlementDisplayValue(item, definition)}
     </span>
   );

@@ -41,9 +41,7 @@ interface PhoneNumberSearchProps {
   className?: string;
 }
 
-const COUNTRIES = [
-  { code: "US", name: "United States" },
-];
+const COUNTRIES = [{ code: "US", name: "United States" }];
 
 const NUMBER_TYPES: { value: PhoneNumberType; label: string }[] = [
   { value: "local", label: "Local" },
@@ -66,9 +64,8 @@ export function PhoneNumberSearch({
   const [numberType, setNumberType] = useState<PhoneNumberType>("local");
   const [areaCode, setAreaCode] = useState("");
   const [contains, setContains] = useState("");
-  const [searchMode, setSearchMode] = useState<PhoneNumberSearchMode>(
-    "contains",
-  );
+  const [searchMode, setSearchMode] =
+    useState<PhoneNumberSearchMode>("contains");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<AvailablePhoneNumber[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -315,22 +312,24 @@ export function PhoneNumberSearch({
                 {results.map((number) => (
                   <div
                     key={number.phone_number}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex flex-col gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 lg:flex-row lg:items-center lg:justify-between lg:p-4"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <div className="font-medium">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <Phone className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <div className="break-all font-medium lg:break-normal">
                             {formatPhoneNumber(number.phone_number)}
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Badge variant="outline">
-                              {getPhoneNumberTypeLabel(number.phone_number_type)}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                            <Badge className="shrink-0" variant="outline">
+                              {getPhoneNumberTypeLabel(
+                                number.phone_number_type,
+                              )}
                             </Badge>
                             {number.locality && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
+                              <span className="flex min-w-0 items-center gap-1 break-words">
+                                <MapPin className="h-3 w-3 shrink-0" />
                                 {number.locality}
                               </span>
                             )}
@@ -339,9 +338,9 @@ export function PhoneNumberSearch({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="font-semibold">
+                    <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center lg:justify-end">
+                      <div className="min-w-0 text-left lg:text-right">
+                        <div className="whitespace-nowrap font-semibold">
                           {number.monthly_cost_credits} credits/mo
                         </div>
                         {!canAfford(number.monthly_cost_credits) && (
@@ -355,6 +354,7 @@ export function PhoneNumberSearch({
                       </div>
                       <Button
                         size="sm"
+                        className="w-full lg:w-auto"
                         disabled={!canAfford(number.monthly_cost_credits)}
                         onClick={() => onNumberSelected?.(number)}
                       >

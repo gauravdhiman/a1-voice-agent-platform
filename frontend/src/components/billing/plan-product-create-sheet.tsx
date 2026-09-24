@@ -77,76 +77,84 @@ export function PlanProductCreateSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        className="flex flex-col w-full sm:max-w-md p-0"
+        className="flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           document.getElementById("create-product-slug")?.focus();
         }}
       >
-        <SheetHeader className="px-6 pt-6 pb-4 border-b text-left space-y-2">
+        <SheetHeader className="shrink-0 space-y-2 border-b px-4 pb-4 pr-12 pt-5 text-left sm:px-6 sm:pr-14 sm:pt-6">
           <SheetTitle>New plan product</SheetTitle>
           <SheetDescription>
-            Create a billing family (e.g. Starter monthly). A matching Stripe Product
-            is created automatically when Stripe is configured.
+            Create a billing family (e.g. Starter monthly). A matching Stripe
+            Product is created automatically when Stripe is configured.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          <div className="space-y-2">
-            <CatalogFieldLabel htmlFor="create-product-slug" help={PLAN_CATALOG_FIELD_HELP.slug}>
-              Slug
-            </CatalogFieldLabel>
-            <Input
-              id="create-product-slug"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="pro-monthly"
-            />
-          </div>
-          <div className="space-y-2">
-            <CatalogFieldLabel
-              htmlFor="create-product-name"
-              help={PLAN_CATALOG_FIELD_HELP.displayName}
-            >
-              Display name
-            </CatalogFieldLabel>
-            <Input
-              id="create-product-name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Pro (Monthly)"
-            />
-          </div>
-          <div className="space-y-2">
-            <CatalogFieldLabel help={PLAN_CATALOG_FIELD_HELP.billingInterval}>
-              Billing cadence
-            </CatalogFieldLabel>
-            <Select
-              value={billingInterval}
-              onValueChange={(v) => setBillingInterval(v as BillingCadence)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="annual">Annual</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Determines which catalog tab this product appears under. Applied to the
-              first draft you create.
-            </p>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <CatalogFieldLabel
+                htmlFor="create-product-slug"
+                help={PLAN_CATALOG_FIELD_HELP.slug}
+              >
+                Slug
+              </CatalogFieldLabel>
+              <Input
+                id="create-product-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="pro-monthly"
+              />
+            </div>
+            <div className="space-y-2">
+              <CatalogFieldLabel
+                htmlFor="create-product-name"
+                help={PLAN_CATALOG_FIELD_HELP.displayName}
+              >
+                Display name
+              </CatalogFieldLabel>
+              <Input
+                id="create-product-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Pro (Monthly)"
+              />
+            </div>
+            <div className="space-y-2">
+              <CatalogFieldLabel help={PLAN_CATALOG_FIELD_HELP.billingInterval}>
+                Billing cadence
+              </CatalogFieldLabel>
+              <Select
+                value={billingInterval}
+                onValueChange={(v) => setBillingInterval(v as BillingCadence)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Determines which catalog tab this product appears under. Applied
+                to the first draft you create.
+              </p>
+            </div>
           </div>
         </div>
 
-        <SheetFooter className="px-6 py-4 border-t mt-auto sm:justify-end">
+        <SheetFooter className="mt-auto shrink-0 gap-2 border-t bg-background/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
           <Button
             type="button"
+            className="w-full sm:w-auto"
             onClick={() => void handleSubmit()}
             disabled={submitting || !slug.trim() || !displayName.trim()}
           >
-            {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {submitting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
             Create product
           </Button>
         </SheetFooter>

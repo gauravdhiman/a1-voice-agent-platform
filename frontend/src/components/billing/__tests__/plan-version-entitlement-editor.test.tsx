@@ -158,6 +158,37 @@ describe("PlanVersionEntitlementEditor ordering", () => {
     ]);
   });
 
+  it("stacks published-version reorder controls on narrow screens", () => {
+    render(
+      <PlanVersionEntitlementDisplay
+        version={
+          {
+            entitlements: [
+              {
+                id: "1",
+                entitlement_key: "max_agents",
+                value: { type: "integer", value: 5 },
+                display_order: 0,
+              },
+            ],
+          } as never
+        }
+        definitions={definitions}
+        onReorder={() => undefined}
+      />,
+    );
+
+    expect(screen.getByTestId("entitlement-item-max_agents")).toHaveClass(
+      "min-w-0",
+      "flex-col",
+      "sm:flex-row",
+    );
+    expect(
+      screen.getByRole("button", { name: "Move Maximum agents up" })
+        .parentElement,
+    ).toHaveClass("w-full", "sm:w-auto");
+  });
+
   it("reorders an immutable version while dragging across a target", () => {
     const onReorder = vi.fn();
 
