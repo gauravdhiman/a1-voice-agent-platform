@@ -323,6 +323,11 @@ Required coverage by change:
 - Tool/MCP/agent behavior: tool contract tests plus a deterministic eval
   scenario or trace when model selection, arguments, ordering, confirmation,
   idempotency, or actionable errors can change.
+- Tool-enabled business-workflow changes: follow the [integration-function
+  acceptance gate](docs/04_development_guides/testing.md#integration-function-acceptance-gate);
+  implementing and reviewing agents must record semantic fit, the changed
+  runtime boundary, applicable integrated/safety evidence, and a PASS, FAIL, or
+  UNVERIFIED verdict. Never infer PASS from missing evidence.
 - Browser-facing behavior: durable Playwright E2E coverage for the critical
   workflow, plus an interactive browser smoke test when UI risk warrants it.
 - Voice behavior: voice-ws integration tests and, for release-critical

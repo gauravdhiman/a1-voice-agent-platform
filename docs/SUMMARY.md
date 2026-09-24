@@ -154,7 +154,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 3. **[Development Setup](05_operations/deployment/worktree-and-release-strategy.md)** - Isolated local dev environment setup
 4. **[Test User Cleanup](04_development_guides/cleanup_test_user.md)** - Remove test/sandbox users and their resources
 5. **[Agent Evaluations](04_development_guides/agent-evaluations.md)** - Deterministic tool workflows and model trace checks
-6. **[Integration-function acceptance gate](04_development_guides/testing.md#integration-function-acceptance-gate)** - Required semantic-fit and integrated tool-use evidence for QA and Review
+6. **[Integration-function acceptance gate](04_development_guides/testing.md#integration-function-acceptance-gate)** - Agent checklist for semantic fit, runtime wiring, side effects, and evidence-based review
 
 ## 🎯 Quick Start Guide
 
