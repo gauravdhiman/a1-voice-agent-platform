@@ -159,8 +159,7 @@ export function PlatformToolsManager({
   const [oauthClientSecret, setOauthClientSecret] = React.useState("");
   const [oauthRefreshMode, setOauthRefreshMode] =
     React.useState<OAuthRefreshMode>("unknown");
-  const [oauthRefreshInterval, setOauthRefreshInterval] =
-    React.useState("");
+  const [oauthRefreshInterval, setOauthRefreshInterval] = React.useState("");
   const [description, setDescription] = React.useState("");
   // Premium flag: premium tools require the org plan to entitle the
   // ``premium_tools`` feature before an org can attach them.
@@ -1443,9 +1442,9 @@ export function PlatformToolsManager({
                   key={tool.id}
                   className="flex flex-col items-start justify-between gap-4 rounded-2xl border bg-background p-4 transition-colors hover:bg-muted/20 sm:flex-row sm:items-center"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-medium">
+                  <div className="w-full min-w-0 flex-1">
+                    <div className="mb-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="min-w-0 break-words text-sm font-medium">
                         {tool.name.replace(/_/g, " ")}
                       </span>
                       {tool.tool_source === "mcp" && (
@@ -1518,12 +1517,13 @@ export function PlatformToolsManager({
                         </div>
                       )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
                     {tool.tool_source === "mcp" &&
                       tool.auth_type === "oauth2" && (
                         <Button
                           size="sm"
                           variant="outline"
+                          className="w-full sm:w-auto"
                           onClick={() =>
                             void handlePlatformOAuthDiscovery(tool.id)
                           }
@@ -1549,6 +1549,7 @@ export function PlatformToolsManager({
                     <Button
                       size="sm"
                       variant={tool.is_premium ? "default" : "outline"}
+                      className="w-full sm:w-auto"
                       onClick={() => handlePremiumToggle(tool)}
                       disabled={isBusy}
                       title={
@@ -1563,6 +1564,7 @@ export function PlatformToolsManager({
                     <Button
                       size="sm"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() => handlePublishToggle(tool)}
                       disabled={isBusy}
                     >
@@ -1582,6 +1584,7 @@ export function PlatformToolsManager({
                       <Button
                         size="sm"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => startEdit(tool)}
                         disabled={isBusy}
                         aria-label="Edit"
@@ -1597,11 +1600,13 @@ export function PlatformToolsManager({
                       <Button
                         size="sm"
                         variant="ghost"
+                        className="w-full sm:w-auto"
                         onClick={() => handleDelete(tool)}
                         disabled={isBusy}
                         aria-label="Delete"
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <span>Delete</span>
                       </Button>
                     )}
                   </div>

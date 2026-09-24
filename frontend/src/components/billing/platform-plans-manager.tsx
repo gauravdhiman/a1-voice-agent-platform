@@ -133,15 +133,20 @@ function PlanVersionPreview({
           }
         />
       ) : null}
-      <div className="flex w-full flex-wrap items-center justify-between gap-2">
-        <Button variant="outline" size="sm" onClick={onBack}>
+      <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Button
+          className="w-full sm:w-auto"
+          variant="outline"
+          size="sm"
+          onClick={onBack}
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
           {version.status === "draft"
             ? "Back to edit"
             : "Back to version details"}
         </Button>
         {onPublish ? (
-          <Button size="sm" onClick={onPublish}>
+          <Button className="w-full sm:w-auto" size="sm" onClick={onPublish}>
             Publish
           </Button>
         ) : null}
@@ -485,14 +490,17 @@ export function PlatformPlansManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold">Plan catalog</h2>
           <p className="text-sm text-muted-foreground">
             Manage billing products, version snapshots, and entitlements.
           </p>
         </div>
-        <Button onClick={() => setCreateSheetOpen(true)}>
+        <Button
+          className="w-full sm:w-auto"
+          onClick={() => setCreateSheetOpen(true)}
+        >
           <Plus className="mr-2 h-4 w-4" />
           New plan product
         </Button>
@@ -509,11 +517,11 @@ export function PlatformPlansManager() {
           productBillingBySlug={productBillingBySlug}
         />
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="text-lg">Version details</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="min-w-0 space-y-4">
             {loadingVersion ? (
               <div className="flex items-center gap-2 text-muted-foreground py-8">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -716,8 +724,9 @@ export function PlatformPlansManager() {
                           onChange={setAssignedEntitlements}
                         />
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
                           <Button
+                            className="w-full sm:w-auto"
                             onClick={() => void handleSaveDraft()}
                             disabled={saving}
                           >
@@ -728,12 +737,16 @@ export function PlatformPlansManager() {
                             )}
                             Save draft
                           </Button>
-                          <Button onClick={() => setPreviewing(true)}>
+                          <Button
+                            className="w-full sm:w-auto"
+                            onClick={() => setPreviewing(true)}
+                          >
                             <Eye className="mr-2 h-4 w-4" />
                             Preview
                           </Button>
                           <Button
                             variant="destructive"
+                            className="w-full sm:w-auto"
                             onClick={() => void handleDeleteDraft()}
                             disabled={deleting}
                           >
@@ -800,7 +813,7 @@ export function PlatformPlansManager() {
                               <p className="text-muted-foreground">
                                 Stripe price ID
                               </p>
-                              <p className="font-mono text-xs">
+                              <p className="break-all font-mono text-xs">
                                 {selectedVersion.stripe_price_id}
                               </p>
                             </div>
@@ -822,9 +835,10 @@ export function PlatformPlansManager() {
                           above; clone the version to create a new draft for
                           value changes.
                         </p>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
                           <Button
                             variant="outline"
+                            className="w-full sm:w-auto"
                             onClick={() => setPreviewing(true)}
                           >
                             <Eye className="mr-2 h-4 w-4" />
@@ -832,6 +846,7 @@ export function PlatformPlansManager() {
                           </Button>
                           <Button
                             variant="outline"
+                            className="w-full sm:w-auto"
                             disabled={products.some(
                               (p) =>
                                 p.id === selectedVersion.plan_product_id &&

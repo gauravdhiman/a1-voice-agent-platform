@@ -105,9 +105,7 @@ export function PlatformPhoneNumberSettingsForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone_billing_interval">
-            Billing check (hours)
-          </Label>
+          <Label htmlFor="phone_billing_interval">Billing check (hours)</Label>
           <Input
             id="phone_billing_interval"
             type="number"
@@ -119,9 +117,7 @@ export function PlatformPhoneNumberSettingsForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone_release_interval">
-            Release retry (hours)
-          </Label>
+          <Label htmlFor="phone_release_interval">Release retry (hours)</Label>
           <Input
             id="phone_release_interval"
             type="number"
@@ -133,8 +129,12 @@ export function PlatformPhoneNumberSettingsForm() {
           />
         </div>
       </div>
-      <Button type="submit" disabled={saving}>
-        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+      <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
+        {saving ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Save className="mr-2 h-4 w-4" />
+        )}
         Save settings
       </Button>
       {settings?.updated_at && (

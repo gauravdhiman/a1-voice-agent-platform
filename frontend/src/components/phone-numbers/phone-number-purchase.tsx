@@ -65,7 +65,9 @@ export function PhoneNumberPurchase({
     } catch (error) {
       console.error("Error purchasing phone number:", error);
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to purchase phone number";
+        error instanceof Error
+          ? error.message
+          : "Failed to purchase phone number";
       toast.error(errorMessage);
     } finally {
       setPurchasing(false);
@@ -84,7 +86,7 @@ export function PhoneNumberPurchase({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Coins className="w-5 h-5" />
@@ -96,14 +98,14 @@ export function PhoneNumberPurchase({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="p-4 border rounded-lg bg-muted/30">
-            <div className="flex items-center justify-between">
-              <div>
+          <div className="rounded-lg border bg-muted/30 p-3 sm:p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <div className="font-semibold text-lg">
                   {formatPhoneNumber(selectedNumber.phone_number)}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Badge variant="outline">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Badge className="shrink-0" variant="outline">
                     {getPhoneNumberTypeLabel(selectedNumber.phone_number_type)}
                   </Badge>
                   {selectedNumber.locality && (
@@ -111,8 +113,8 @@ export function PhoneNumberPurchase({
                   )}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="font-semibold">
+              <div className="text-left sm:text-right">
+                <div className="whitespace-nowrap font-semibold">
                   {selectedNumber.monthly_cost_credits} credits
                 </div>
                 <div className="text-xs text-muted-foreground">per month</div>
@@ -135,8 +137,9 @@ export function PhoneNumberPurchase({
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Insufficient credits. You need {selectedNumber.monthly_cost_credits}{" "}
-                credits but only have {creditBalance}.
+                Insufficient credits. You need{" "}
+                {selectedNumber.monthly_cost_credits} credits but only have{" "}
+                {creditBalance}.
               </AlertDescription>
             </Alert>
           )}
@@ -145,8 +148,8 @@ export function PhoneNumberPurchase({
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               By purchasing, you agree to be charged monthly. If you cancel, the
-              number will be released immediately and you will not be refunded for
-              the current period.
+              number will be released immediately and you will not be refunded
+              for the current period.
             </AlertDescription>
           </Alert>
 
@@ -158,18 +161,25 @@ export function PhoneNumberPurchase({
               className="mt-1"
             />
             <span className="text-sm text-muted-foreground">
-              I understand that I will be charged {selectedNumber.monthly_cost_credits}{" "}
-              credits per month and that if I cancel, the number will be released
-              immediately with no refund.
+              I understand that I will be charged{" "}
+              {selectedNumber.monthly_cost_credits} credits per month and that
+              if I cancel, the number will be released immediately with no
+              refund.
             </span>
           </label>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={purchasing}>
+        <DialogFooter className="gap-2">
+          <Button
+            className="w-full sm:w-auto"
+            variant="outline"
+            onClick={handleClose}
+            disabled={purchasing}
+          >
             Cancel
           </Button>
           <Button
+            className="w-full sm:w-auto"
             onClick={handlePurchase}
             disabled={!canAfford || !acknowledged || purchasing}
           >

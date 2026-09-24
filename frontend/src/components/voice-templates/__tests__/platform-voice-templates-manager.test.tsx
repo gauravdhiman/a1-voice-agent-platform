@@ -36,7 +36,12 @@ const TEMPLATE: VoiceTemplate = {
   updated_at: "2026-08-14T00:00:00Z",
 };
 
-const INACTIVE_TEMPLATE = { ...TEMPLATE, id: "template-2", name: "Archived Template", is_active: false };
+const INACTIVE_TEMPLATE = {
+  ...TEMPLATE,
+  id: "template-2",
+  name: "Archived Template",
+  is_active: false,
+};
 
 describe("PlatformVoiceTemplatesManager", () => {
   beforeEach(() => {
@@ -53,14 +58,18 @@ describe("PlatformVoiceTemplatesManager", () => {
   it("lists active and inactive templates and selects a template for inspection", async () => {
     render(<PlatformVoiceTemplatesManager />);
 
-    expect((await screen.findAllByText("Dental Receptionist")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("Dental Receptionist")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Archived Template")).toBeInTheDocument();
 
     expect(
       screen.queryByRole("button", { name: "Preview Dental Receptionist" }),
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByText("Dental Receptionist")[0]);
-    expect(screen.getByRole("heading", { name: "Dental Receptionist" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Dental Receptionist" }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/# Mission/)).toBeInTheDocument();
     expect(screen.getByText(/# Instructions/)).toBeInTheDocument();
   });
@@ -69,7 +78,21 @@ describe("PlatformVoiceTemplatesManager", () => {
     const user = userEvent.setup();
     render(<PlatformVoiceTemplatesManager />);
 
-    await user.click(await screen.findByRole("button", { name: /new template/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /new template/i }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "About the use case template editor",
+      }),
+    ).toHaveClass("h-7", "w-7");
+    expect(screen.getByRole("tab", { name: "Template fields" })).toHaveClass(
+      "whitespace-nowrap",
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+      "w-full",
+      "sm:w-auto",
+    );
     await user.type(screen.getByLabelText("Name"), "HVAC Dispatcher");
     await user.type(screen.getByLabelText("Industry"), "hvac");
     await user.type(screen.getByLabelText("Instructions"), "## Triage");
@@ -95,15 +118,22 @@ describe("PlatformVoiceTemplatesManager", () => {
       custom_instructions: "## Escalation",
       is_active: false,
     };
-    vi.mocked(voiceTemplateService.updateTemplate).mockResolvedValue(updatedTemplate);
+    vi.mocked(voiceTemplateService.updateTemplate).mockResolvedValue(
+      updatedTemplate,
+    );
 
     render(<PlatformVoiceTemplatesManager />);
 
-    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Edit" }))[0],
+    );
     await user.clear(screen.getByLabelText("Name"));
     await user.type(screen.getByLabelText("Name"), updatedTemplate.name);
     await user.clear(screen.getByLabelText("Industry"));
-    await user.type(screen.getByLabelText("Industry"), updatedTemplate.industry);
+    await user.type(
+      screen.getByLabelText("Industry"),
+      updatedTemplate.industry,
+    );
     await user.clear(screen.getByLabelText("Instructions"));
     await user.type(
       screen.getByLabelText("Instructions"),
@@ -123,7 +153,9 @@ describe("PlatformVoiceTemplatesManager", () => {
         }),
       ),
     );
-    expect((await screen.findAllByText("Updated Dental Receptionist")).length).toBe(2);
+    expect(
+      (await screen.findAllByText("Updated Dental Receptionist")).length,
+    ).toBe(2);
     expect(screen.getAllByText("Inactive").length).toBeGreaterThan(0);
   });
 
@@ -141,25 +173,37 @@ describe("PlatformVoiceTemplatesManager", () => {
       new Error("catalog unavailable"),
     );
     const { unmount } = render(<PlatformVoiceTemplatesManager />);
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("catalog unavailable"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("catalog unavailable"),
+    );
     unmount();
   });
 
   it("shows an empty state when the catalog has no templates", async () => {
-    vi.mocked(voiceTemplateService.listAdminTemplates).mockResolvedValueOnce([]);
+    vi.mocked(voiceTemplateService.listAdminTemplates).mockResolvedValueOnce(
+      [],
+    );
 
     render(<PlatformVoiceTemplatesManager />);
 
     expect(await screen.findByText("No templates found.")).toBeInTheDocument();
-    expect(screen.getByText("Select a template to inspect its Markdown.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Select a template to inspect its Markdown."),
+    ).toBeInTheDocument();
   });
 
   it("requires the exact Delete phrase before deleting", async () => {
     const user = userEvent.setup();
     render(<PlatformVoiceTemplatesManager />);
 
-    await user.click(await screen.findByRole("button", { name: /delete dental receptionist/i }));
-    const deleteButton = screen.getByRole("button", { name: "Delete Use Case Template" });
+    await user.click(
+      await screen.findByRole("button", {
+        name: /delete dental receptionist/i,
+      }),
+    );
+    const deleteButton = screen.getByRole("button", {
+      name: "Delete Use Case Template",
+    });
     expect(deleteButton).toBeDisabled();
 
     const confirmation = screen.getByLabelText(/type.*delete.*confirm/i);
@@ -171,7 +215,9 @@ describe("PlatformVoiceTemplatesManager", () => {
     await user.click(deleteButton);
 
     await waitFor(() =>
-      expect(voiceTemplateService.deleteTemplate).toHaveBeenCalledWith(TEMPLATE.id),
+      expect(voiceTemplateService.deleteTemplate).toHaveBeenCalledWith(
+        TEMPLATE.id,
+      ),
     );
   });
 
@@ -182,9 +228,13 @@ describe("PlatformVoiceTemplatesManager", () => {
     );
     render(<PlatformVoiceTemplatesManager />);
 
-    await user.click(await screen.findByRole("button", { name: /new template/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /new template/i }),
+    );
     expect(screen.getByText("How this template is used")).toBeInTheDocument();
-    const usageNote = screen.getByRole("note", { name: "Template usage guidance" });
+    const usageNote = screen.getByRole("note", {
+      name: "Template usage guidance",
+    });
     expect(usageNote).toHaveClass("border-yellow-200", "bg-yellow-50");
     expect(
       screen.getByText(
@@ -210,7 +260,9 @@ describe("PlatformVoiceTemplatesManager", () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("template could not be saved"),
     );
-    expect(screen.getByRole("button", { name: "Create template" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create template" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
   });
 
@@ -218,10 +270,16 @@ describe("PlatformVoiceTemplatesManager", () => {
     const user = userEvent.setup();
     render(<PlatformVoiceTemplatesManager />);
 
-    await user.click(await screen.findByRole("button", { name: /delete dental receptionist/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /delete dental receptionist/i,
+      }),
+    );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(voiceTemplateService.deleteTemplate).not.toHaveBeenCalled();
-    expect(screen.getAllByText("Dental Receptionist").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Dental Receptionist").length).toBeGreaterThan(
+      0,
+    );
   });
 });

@@ -186,26 +186,26 @@ export function PlanVersionEntitlementEditor({
                     : ""
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 items-start gap-2">
                     <GripVertical
                       className="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-muted-foreground"
                       aria-hidden="true"
                     />
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-sm">
+                        <span className="break-words text-sm font-medium">
                           {def.display_name}
                         </span>
                         <Badge variant="outline">{def.kind}</Badge>
                         <Badge variant="secondary">{def.value_type}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="mt-1 break-all text-xs text-muted-foreground">
                         {item.key}
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex w-full shrink-0 justify-end gap-1 sm:w-auto">
                     <Button
                       type="button"
                       size="icon"
@@ -291,8 +291,8 @@ export function PlanVersionEntitlementEditor({
       )}
 
       {availableToAdd.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-2 pt-2 border-t">
-          <div className="space-y-1 min-w-[220px] flex-1">
+        <div className="flex flex-wrap items-end gap-2 border-t pt-2">
+          <div className="min-w-0 flex-1 space-y-1 sm:min-w-[220px]">
             <Label htmlFor="add-entitlement">Add entitlement</Label>
             <Select value={addKey} onValueChange={setAddKey}>
               <SelectTrigger id="add-entitlement" className="w-full">
@@ -310,6 +310,7 @@ export function PlanVersionEntitlementEditor({
           <Button
             type="button"
             variant="outline"
+            className="w-full sm:w-auto"
             onClick={handleAdd}
             disabled={!addKey}
           >
