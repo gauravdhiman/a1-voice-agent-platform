@@ -68,7 +68,9 @@ describe("ToolCard premium gating", () => {
     expect(
       container.querySelector('[data-testid="tool-configuration-issues"]'),
     ).not.toBeNull();
-    expect(screen.getByText("spreadsheet destination is not set")).not.toBeNull();
+    expect(
+      screen.getByText("spreadsheet destination is not set"),
+    ).not.toBeNull();
   });
 
   it("shows no issue list for a complete attachment", () => {
@@ -98,7 +100,9 @@ describe("ToolCard premium gating", () => {
 
     // The connect action is replaced with a locked upgrade hint.
     expect(screen.queryByText("Connect")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Premium/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Premium/i }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the normal Connect action when the plan entitles premium tools", () => {
@@ -114,5 +118,13 @@ describe("ToolCard premium gating", () => {
     renderToolCard({ tool: { ...baseTool, is_premium: false } });
 
     expect(screen.queryByText("Premium")).not.toBeInTheDocument();
+  });
+
+  it("gives the tool action a full-width mobile layout", () => {
+    renderToolCard();
+
+    expect(screen.getByRole("button", { name: "Connect" }).className).toContain(
+      "w-full",
+    );
   });
 });

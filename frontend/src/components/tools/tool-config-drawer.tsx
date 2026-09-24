@@ -39,7 +39,6 @@ import {
   filterMcpFunctions,
   McpFunctionSearch,
 } from "@/components/tools/mcp-function-search";
-import { ExpandableDescription } from "@/components/tools/expandable-description";
 import {
   getResendEmailConfigError,
   parseResendEmailRoutes,
@@ -111,9 +110,7 @@ export function ToolConfigDrawer({
 }: ToolConfigDrawerProps) {
   const [storedLocalConfig, setStoredLocalConfig] = React.useState<
     Record<string, unknown>
-  >(
-    () => agentTool?.config ?? {},
-  );
+  >(() => agentTool?.config ?? {});
   const [localConfigOwnerId, setLocalConfigOwnerId] = React.useState(
     () => agentTool?.id,
   );
@@ -232,6 +229,7 @@ export function ToolConfigDrawer({
   const saveButton = (
     <Button
       size="sm"
+      className="w-full sm:w-auto"
       onClick={handleSaveConfig}
       disabled={
         isSaving || Boolean(resendConfigError) || !canSaveGoogleSheetsConfig
@@ -293,12 +291,7 @@ export function ToolConfigDrawer({
   };
 
   const handleToggleAllFunctions = async (isEnabled: boolean) => {
-    if (
-      !agentTool ||
-      !isToolEnabled ||
-      !canEdit ||
-      isBulkTogglingFunctions
-    ) {
+    if (!agentTool || !isToolEnabled || !canEdit || isBulkTogglingFunctions) {
       return;
     }
 
@@ -409,687 +402,726 @@ export function ToolConfigDrawer({
   };
 
   const authConfig = getAuthStatusConfig();
+  const displayToolName = tool.name.replace(/_/g, " ");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex flex-col w-full sm:max-w-2xl">
-        <SheetHeader className="px-6 pt-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
+      <SheetContent className="flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 px-4 pb-3 pt-4 pr-12 sm:px-6 sm:pb-4 sm:pt-6 sm:pr-14">
+          <div className="flex min-w-0 items-center gap-3 text-left">
+            <div className="shrink-0 rounded-lg bg-primary/10 p-2">
               <Settings className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <SheetTitle className="text-lg">
-                {tool.name.replace(/_/g, " ")}
+            <div className="min-w-0 flex-1">
+              <SheetTitle className="truncate text-base sm:text-lg">
+                {displayToolName}
               </SheetTitle>
-              <SheetDescription asChild>
-                <ExpandableDescription
-                  description={tool.description}
-                  descriptionId={`tool-drawer-description-${tool.id}`}
-                  textClassName="text-xs text-muted-foreground"
-                />
+              <SheetDescription className="sr-only">
+                {tool.description || `Configure ${displayToolName}.`}
               </SheetDescription>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-xs text-muted-foreground">
+                  Tool configuration
+                </span>
+                {tool.description && (
+                  <TooltipProvider delayDuration={250}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex shrink-0 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          aria-label={`About ${displayToolName}`}
+                        >
+                          <CircleHelp
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="bottom"
+                        align="start"
+                        className="max-w-xs text-xs leading-relaxed"
+                      >
+                        {tool.description}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
             </div>
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-          {tool.is_published === false && (
-            <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
-              <EyeOff className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
-                <p className="font-medium">
-                  Unpublished — still mapped to this agent
-                </p>
-                <p>
-                  This tool was unpublished from the platform catalog, so new
-                  agents can no longer add it. This agent keeps using it until
-                  you disconnect it here.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {isOAuth && (
-            <div
-              className={cn(
-                "flex items-center justify-between gap-4 p-4 rounded-lg border",
-                authConfig.bgColor,
-              )}
-            >
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className={`h-4 w-4 ${authConfig.iconColor}`} />
-                  <span className="text-sm font-medium">
-                    {authConfig.message}
-                  </span>
-                  {authenticated && (
-                    <Badge variant="secondary" className="h-5 text-[10px]">
-                      Active
-                    </Badge>
-                  )}
-                </div>
-                {authConfig.showExpiry && authConfig.expiryText && (
-                  <div className="text-xs text-muted-foreground flex items-center">
-                    <Clock className="h-3 w-3 mr-1" />
-                    Expires in {authConfig.expiryText}
-                  </div>
-                )}
-                <div
-                  className={cn(
-                    "mt-1 rounded-md border px-2.5 py-2 text-xs",
-                    oauthRefreshMode === "automatic"
-                      ? "border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200"
-                      : "border-amber-200 bg-amber-50/70 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200",
-                  )}
-                >
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <RefreshCw className="h-3 w-3" />
-                    {oauthRefreshModeLabel}
-                  </div>
-                  <p className="mt-1 leading-relaxed">
-                    {oauthRefreshMessage}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-6 sm:px-6 sm:py-5 sm:pb-8">
+          <div className="space-y-6">
+            {tool.is_published === false && (
+              <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+                <EyeOff className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                  <p className="font-medium">
+                    Unpublished — still mapped to this agent
+                  </p>
+                  <p>
+                    This tool was unpublished from the platform catalog, so new
+                    agents can no longer add it. This agent keeps using it until
+                    you disconnect it here.
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                {authConfig.showButton && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={handleOAuth}
-                    disabled={isConnecting || !canEdit}
-                  >
-                    {isConnecting ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    ) : authConfig.buttonText === "Refresh" ? (
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                    ) : (
-                      <Lock className="h-3.5 w-3.5 mr-1" />
-                    )}
-                    {isConnecting ? "Authenticating..." : authConfig.buttonText}
-                  </Button>
-                )}
-                {authenticated && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 text-xs text-muted-foreground"
-                    onClick={handleLogout}
-                    disabled={!canEdit}
-                  >
-                    <LogOut className="h-3.5 w-3.5 mr-1" />
-                    Log out
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+            )}
 
-          {isApiKey && (
-            <div
-              className={cn(
-                "space-y-3 p-4 rounded-lg border",
-                authenticated
-                  ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
-                  : platformApiKeyFallbackAvailable
-                    ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
-                    : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
-              )}
-            >
-              {!authenticated && !showApiKeyInput && (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center space-x-2">
+            {isOAuth && (
+              <div
+                className={cn(
+                  "flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between",
+                  authConfig.bgColor,
+                )}
+              >
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                     <ShieldCheck
-                      className={cn(
-                        "h-4 w-4",
-                        platformApiKeyFallbackAvailable
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-red-600 dark:text-red-400",
-                      )}
+                      className={`h-4 w-4 ${authConfig.iconColor}`}
                     />
-                    <span className="text-sm font-medium">
-                      {platformApiKeyFallbackAvailable
-                        ? "Organization API Key (optional)"
-                        : "Organization API Key Required"}
+                    <span className="min-w-0 break-words text-sm font-medium">
+                      {authConfig.message}
                     </span>
+                    {authenticated && (
+                      <Badge variant="secondary" className="h-5 text-[10px]">
+                        Active
+                      </Badge>
+                    )}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={() => setShowApiKeyInput(true)}
-                    disabled={!canEdit}
+                  {authConfig.showExpiry && authConfig.expiryText && (
+                    <div className="text-xs text-muted-foreground flex items-center">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Expires in {authConfig.expiryText}
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "mt-1 rounded-md border px-2.5 py-2 text-xs",
+                      oauthRefreshMode === "automatic"
+                        ? "border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200"
+                        : "border-amber-200 bg-amber-50/70 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200",
+                    )}
                   >
-                    <Lock className="h-3.5 w-3.5 mr-1" />
-                    Configure API Key
-                  </Button>
-                </div>
-              )}
-
-              {!authenticated &&
-                platformApiKeyFallbackAvailable &&
-                !showApiKeyInput && (
-                  <p className="text-xs text-amber-800 dark:text-amber-200">
-                    Your organization key overrides the platform fallback. Leave
-                    it blank to use the platform key when one is configured.
-                  </p>
-                )}
-
-              {authenticated && (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center space-x-2">
-                    <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <span className="text-sm font-medium">
-                      API Key Configured
-                    </span>
-                    <Badge variant="secondary" className="h-5 text-[10px]">
-                      Active
-                    </Badge>
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <RefreshCw className="h-3 w-3" />
+                      {oauthRefreshModeLabel}
+                    </div>
+                    <p className="mt-1 leading-relaxed">
+                      {oauthRefreshMessage}
+                    </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 text-xs text-muted-foreground"
-                    onClick={handleClearApiKey}
-                    disabled={!canEdit}
-                  >
-                    <LogOut className="h-3.5 w-3.5 mr-1" />
-                    Clear
-                  </Button>
                 </div>
-              )}
-
-              {showApiKeyInput && (
-                <div className="space-y-2 bg-background rounded-lg border p-4">
-                  <Label htmlFor={`api-key-${tool.id}`}>API Key</Label>
-                  <Input
-                    id={`api-key-${tool.id}`}
-                    type="password"
-                    placeholder="Enter your API key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    disabled={!canEdit}
-                    className="h-9 text-sm"
-                  />
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleSaveApiKey}
-                      disabled={!apiKey.trim() || isSavingApiKey || !canEdit}
-                    >
-                      {isSavingApiKey ? (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      ) : null}
-                      Save API Key
-                    </Button>
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                  {authConfig.showButton && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {
-                        setShowApiKeyInput(false);
-                        setApiKey("");
-                      }}
+                      className="h-8 min-w-0 flex-1 text-xs sm:flex-none"
+                      onClick={handleOAuth}
+                      disabled={isConnecting || !canEdit}
                     >
-                      Cancel
+                      {isConnecting ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : authConfig.buttonText === "Refresh" ? (
+                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                      ) : (
+                        <Lock className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      {isConnecting
+                        ? "Authenticating..."
+                        : authConfig.buttonText}
+                    </Button>
+                  )}
+                  {authenticated && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 min-w-0 flex-1 text-xs text-muted-foreground sm:flex-none"
+                      onClick={handleLogout}
+                      disabled={!canEdit}
+                    >
+                      <LogOut className="h-3.5 w-3.5 mr-1" />
+                      Log out
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isApiKey && (
+              <div
+                className={cn(
+                  "space-y-3 p-4 rounded-lg border",
+                  authenticated
+                    ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                    : platformApiKeyFallbackAvailable
+                      ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                      : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+                )}
+              >
+                {!authenticated && !showApiKeyInput && (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <ShieldCheck
+                        className={cn(
+                          "h-4 w-4",
+                          platformApiKeyFallbackAvailable
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-red-600 dark:text-red-400",
+                        )}
+                      />
+                      <span className="text-sm font-medium">
+                        {platformApiKeyFallbackAvailable
+                          ? "Organization API Key (optional)"
+                          : "Organization API Key Required"}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 w-full text-xs sm:w-auto"
+                      onClick={() => setShowApiKeyInput(true)}
+                      disabled={!canEdit}
+                    >
+                      <Lock className="h-3.5 w-3.5 mr-1" />
+                      Configure API Key
                     </Button>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
 
-          {tool.tool_source === "mcp" && !hasFunctions && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <div className="space-y-1 text-xs text-amber-800 dark:text-amber-200">
-                <p className="font-medium">Tool catalog unavailable</p>
-                <p>
-                  The MCP server&apos;s functions have not been discovered yet.
-                  Ask a platform administrator to{" "}
-                  {isOAuth
-                    ? "complete OAuth discovery"
-                    : "run Test connection & discover tools"}{" "}
-                  before configuring individual functions.
-                </p>
-              </div>
-            </div>
-          )}
+                {!authenticated &&
+                  platformApiKeyFallbackAvailable &&
+                  !showApiKeyInput && (
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      Your organization key overrides the platform fallback.
+                      Leave it blank to use the platform key when one is
+                      configured.
+                    </p>
+                  )}
 
-          {schema?.properties && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-sm font-medium">
-                  <Settings className="h-4 w-4" />
-                  <span>Configuration</span>
-                </div>
-                {hasUnsavedChanges && canEdit && (
-                  isGoogleSheetsTool && !googleSheetsConfigReady ? (
-                    <TooltipProvider delayDuration={250}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span
-                            aria-label="Why is Save disabled?"
-                            className="inline-flex cursor-not-allowed"
-                            tabIndex={0}
-                          >
-                            {saveButton}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {googleSheetsSaveBlockReason ||
-                            "Discover columns and resolve the setup message before saving."}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    saveButton
-                  )
+                {authenticated && (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span className="text-sm font-medium">
+                        API Key Configured
+                      </span>
+                      <Badge variant="secondary" className="h-5 text-[10px]">
+                        Active
+                      </Badge>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-full text-xs text-muted-foreground sm:w-auto"
+                      onClick={handleClearApiKey}
+                      disabled={!canEdit}
+                    >
+                      <LogOut className="h-3.5 w-3.5 mr-1" />
+                      Clear
+                    </Button>
+                  </div>
+                )}
+
+                {showApiKeyInput && (
+                  <div className="space-y-2 bg-background rounded-lg border p-4">
+                    <Label htmlFor={`api-key-${tool.id}`}>API Key</Label>
+                    <Input
+                      id={`api-key-${tool.id}`}
+                      type="password"
+                      placeholder="Enter your API key"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      disabled={!canEdit}
+                      className="h-9 text-sm"
+                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={handleSaveApiKey}
+                        disabled={!apiKey.trim() || isSavingApiKey || !canEdit}
+                      >
+                        {isSavingApiKey ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : null}
+                        Save API Key
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          setShowApiKeyInput(false);
+                          setApiKey("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
-              {isResendEmailTool && resendCredentialConfigured === false && (
-                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p className="text-xs text-amber-800 dark:text-amber-200">
-                    This organization has not configured a Resend API key. Add
-                    it under{" "}
-                    <a
-                      className="font-medium underline underline-offset-2"
-                      href={
-                        organizationId
-                          ? `/organization?org_id=${organizationId}&tab=credentials`
-                          : "/organization?tab=credentials"
-                      }
-                    >
-                      Organization → Credentials
-                    </a>{" "}
-                    before testing delivery.
-                  </p>
-                </div>
-              )}
-              {isResendEmailTool ? (
-                <ResendEmailConfigEditor
-                  routes={resendRoutes}
-                  fromEmail={resendFromEmail}
-                  fromName={resendFromName}
-                  onFromEmailChange={(value) =>
-                    handleResendSenderChange("from_email", value)
-                  }
-                  onFromNameChange={(value) =>
-                    handleResendSenderChange("from_name", value)
-                  }
-                  onChange={handleResendRoutesChange}
-                  canEdit={canEdit}
-                />
-              ) : isGoogleSheetsTool && agentTool && onDiscoverGoogleSheetHeaders ? (
-                <GoogleSheetsConfigEditor
-                  key={agentTool.id}
-                  agentToolId={agentTool.id}
-                  config={localConfig}
-                  isOpen={open}
-                  hasUnsavedChanges={hasUnsavedChanges}
-                  authenticated={authenticated}
-                  canEdit={canEdit}
-                  onConfigChange={handleConfigChange}
-                  onReadinessChange={handleGoogleSheetsReadinessChange}
-                  onDiscover={onDiscoverGoogleSheetHeaders}
-                />
-              ) : (
-                <TooltipProvider delayDuration={300}>
-                  <div className="grid gap-3">
-                    {Object.entries(schema.properties).map(([key, prop]) => {
-                      const fieldLabel = prop.title || formatConfigLabel(key);
-                      const isRequired =
-                        prop.required === true ||
-                        schema.required?.includes(key) ||
-                        /^required(?:[.:]|\s)/.test(
-                          prop.description?.trim().toLowerCase() ?? "",
-                        );
-                      const helpText =
-                        prop.description ||
-                        `Configure ${fieldLabel.toLowerCase()}.`;
-                      const placeholder =
-                        prop.default !== undefined
-                          ? String(prop.default)
-                          : `Enter ${fieldLabel.toLowerCase()}`;
-                      return (
-                        <div key={key} className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <Label
-                              htmlFor={`drawer-${tool.id}-${key}`}
-                              className="text-[10px] uppercase text-muted-foreground"
-                            >
-                              {fieldLabel}
-                            </Label>
-                            <span
-                              className={cn(
-                                "rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
-                                isRequired
-                                  ? "bg-primary/10 text-primary"
-                                  : "bg-muted text-muted-foreground",
-                              )}
-                            >
-                              {isRequired ? "Required" : "Optional"}
-                            </span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="inline-flex text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                  aria-label={`Help for ${fieldLabel}`}
-                                >
-                                  <CircleHelp
-                                    className="h-3.5 w-3.5"
-                                    aria-hidden="true"
-                                  />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                align="start"
-                                className="max-w-sm text-xs leading-relaxed"
-                              >
-                                {helpText}
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <Input
-                            id={`drawer-${tool.id}-${key}`}
-                            placeholder={placeholder}
-                            value={
-                              (localConfig[key] as string) ||
-                              (prop.default as string) ||
-                              ""
-                            }
-                            onChange={(e) =>
-                              handleConfigChange(key, e.target.value)
-                            }
-                            className="h-9 text-sm"
-                            disabled={!canEdit}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </TooltipProvider>
-              )}
-              {hasUnsavedChanges && (
-                <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  Unsaved configuration changes
-                </div>
-              )}
-            </div>
-          )}
+            )}
 
-          {hasFunctions && (
-            <div className="space-y-3">
-              {/* Function Selection Guidance */}
-              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                <div className="text-xs text-amber-800 space-y-1">
-                  <p className="font-medium">Select Only Required Functions</p>
+            {tool.tool_source === "mcp" && !hasFunctions && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="space-y-1 text-xs text-amber-800 dark:text-amber-200">
+                  <p className="font-medium">Tool catalog unavailable</p>
                   <p>
-                    Enabling all functions can confuse the agent. Disable
-                    functions that are not needed for the specific role of this
-                    agent. For example, a scheduling agent only needs calendar
-                    functions, not email management.
+                    The MCP server&apos;s functions have not been discovered
+                    yet. Ask a platform administrator to{" "}
+                    {isOAuth
+                      ? "complete OAuth discovery"
+                      : "run Test connection & discover tools"}{" "}
+                    before configuring individual functions.
                   </p>
                 </div>
               </div>
+            )}
 
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center space-x-2 text-sm font-medium">
-                  <Settings className="h-4 w-4" />
-                  <span>Available Functions</span>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <div className="flex items-center gap-2">
-                    <Label
-                      htmlFor="drawer-toggle-all-functions"
-                      className="cursor-pointer text-xs font-medium"
-                    >
-                      All functions
-                    </Label>
-                    <Switch
-                      id="drawer-toggle-all-functions"
-                      checked={allFunctionsEnabled}
-                      onCheckedChange={(checked) =>
-                        void handleToggleAllFunctions(checked)
-                      }
-                      disabled={
-                        !isToolEnabled ||
-                        !canEdit ||
-                        isBulkTogglingFunctions
-                      }
-                      aria-label={
-                        allFunctionsEnabled
-                          ? "Disable all functions"
-                          : "Enable all functions"
-                      }
-                    />
+            {schema?.properties && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 text-sm font-medium">
+                    <Settings className="h-4 w-4" />
+                    <span>Configuration</span>
                   </div>
-                  <Badge variant="secondary" className="h-5 text-[10px]">
-                    {enabledFunctionCount} / {functions.length}
-                  </Badge>
-                </div>
-              </div>
-              <McpFunctionSearch
-                value={functionSearch}
-                onChange={setFunctionSearch}
-                matchCount={filteredFunctions.length}
-                totalCount={functions.length}
-              />
-              <div className="space-y-2">
-                {filteredFunctions.map((func) => {
-                  const isUnselected = toolUnselectedFunctions.includes(
-                    func.name,
-                  );
-                  const isEnabled = !isUnselected;
-                  const isExpanded = expandedFunctionName === func.name;
-                  const properties = func.parameters?.properties || {};
-                  const propertyEntries = Object.entries(properties);
-                  const required = new Set(func.parameters?.required || []);
-                  const description =
-                    func.description || "No description provided.";
-                  const hasLongDescription = description.length > 180;
-                  const descriptionExpanded =
-                    expandedDescriptionName === func.name;
-                  const descriptionPreview = hasLongDescription
-                    ? `${description.slice(0, 180).trimEnd()}…`
-                    : description;
-                  const detailsId = `agent-tool-function-details-${func.name.replace(
-                    /[^a-zA-Z0-9_-]/g,
-                    "-",
-                  )}`;
-                  const descriptionId = `${detailsId}-description`;
-
-                  return (
-                    <div
-                      key={func.name}
-                      className={cn(
-                        "rounded-lg border transition-colors",
-                        isEnabled
-                          ? "border-primary/20 bg-primary/5"
-                          : "border-muted/60 bg-muted/20",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3 p-3">
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                          aria-expanded={isExpanded}
-                          aria-controls={detailsId}
-                          onClick={() =>
-                            setExpandedFunctionName((current) =>
-                              current === func.name ? null : func.name,
-                            )
-                          }
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={cn(
-                                "rounded p-1",
-                                isEnabled ? "bg-primary" : "bg-muted",
-                              )}
+                  {hasUnsavedChanges &&
+                    canEdit &&
+                    (isGoogleSheetsTool && !googleSheetsConfigReady ? (
+                      <TooltipProvider delayDuration={250}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              aria-label="Why is Save disabled?"
+                              className="inline-flex w-full cursor-not-allowed sm:w-auto"
+                              tabIndex={0}
                             >
+                              {saveButton}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {googleSheetsSaveBlockReason ||
+                              "Discover columns and resolve the setup message before saving."}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      saveButton
+                    ))}
+                </div>
+                {isResendEmailTool && resendCredentialConfigured === false && (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      This organization has not configured a Resend API key. Add
+                      it under{" "}
+                      <a
+                        className="font-medium underline underline-offset-2"
+                        href={
+                          organizationId
+                            ? `/organization?org_id=${organizationId}&tab=credentials`
+                            : "/organization?tab=credentials"
+                        }
+                      >
+                        Organization → Credentials
+                      </a>{" "}
+                      before testing delivery.
+                    </p>
+                  </div>
+                )}
+                {isResendEmailTool ? (
+                  <ResendEmailConfigEditor
+                    routes={resendRoutes}
+                    fromEmail={resendFromEmail}
+                    fromName={resendFromName}
+                    onFromEmailChange={(value) =>
+                      handleResendSenderChange("from_email", value)
+                    }
+                    onFromNameChange={(value) =>
+                      handleResendSenderChange("from_name", value)
+                    }
+                    onChange={handleResendRoutesChange}
+                    canEdit={canEdit}
+                  />
+                ) : isGoogleSheetsTool &&
+                  agentTool &&
+                  onDiscoverGoogleSheetHeaders ? (
+                  <GoogleSheetsConfigEditor
+                    key={agentTool.id}
+                    agentToolId={agentTool.id}
+                    config={localConfig}
+                    isOpen={open}
+                    hasUnsavedChanges={hasUnsavedChanges}
+                    authenticated={authenticated}
+                    canEdit={canEdit}
+                    onConfigChange={handleConfigChange}
+                    onReadinessChange={handleGoogleSheetsReadinessChange}
+                    onDiscover={onDiscoverGoogleSheetHeaders}
+                  />
+                ) : (
+                  <TooltipProvider delayDuration={300}>
+                    <div className="grid gap-3">
+                      {Object.entries(schema.properties).map(([key, prop]) => {
+                        const fieldLabel = prop.title || formatConfigLabel(key);
+                        const isRequired =
+                          prop.required === true ||
+                          schema.required?.includes(key) ||
+                          /^required(?:[.:]|\s)/.test(
+                            prop.description?.trim().toLowerCase() ?? "",
+                          );
+                        const helpText =
+                          prop.description ||
+                          `Configure ${fieldLabel.toLowerCase()}.`;
+                        const placeholder =
+                          prop.default !== undefined
+                            ? String(prop.default)
+                            : `Enter ${fieldLabel.toLowerCase()}`;
+                        return (
+                          <div key={key} className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <Label
+                                htmlFor={`drawer-${tool.id}-${key}`}
+                                className="text-[10px] uppercase text-muted-foreground"
+                              >
+                                {fieldLabel}
+                              </Label>
                               <span
                                 className={cn(
-                                  "text-[10px] font-medium",
-                                  isEnabled
-                                    ? "text-primary-foreground"
-                                    : "text-muted-foreground",
+                                  "rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+                                  isRequired
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-muted text-muted-foreground",
                                 )}
                               >
-                                {func.name}
+                                {isRequired ? "Required" : "Optional"}
                               </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="inline-flex text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                    aria-label={`Help for ${fieldLabel}`}
+                                    title={helpText}
+                                  >
+                                    <CircleHelp
+                                      className="h-3.5 w-3.5"
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  align="start"
+                                  className="max-w-sm text-xs leading-relaxed"
+                                >
+                                  {helpText}
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
-                            {!isEnabled && (
-                              <Badge
-                                variant="secondary"
-                                className="h-5 text-[10px]"
-                              >
-                                Disabled
-                              </Badge>
-                            )}
+                            <Input
+                              id={`drawer-${tool.id}-${key}`}
+                              placeholder={placeholder}
+                              value={
+                                (localConfig[key] as string) ||
+                                (prop.default as string) ||
+                                ""
+                              }
+                              onChange={(e) =>
+                                handleConfigChange(key, e.target.value)
+                              }
+                              className="h-9 text-sm"
+                              disabled={!canEdit}
+                            />
                           </div>
-                          <p
-                            id={descriptionId}
-                            className={cn(
-                              "mt-1 text-xs text-muted-foreground",
-                              !descriptionExpanded && "line-clamp-2",
-                            )}
-                          >
-                            {descriptionExpanded
-                              ? description
-                              : descriptionPreview}
-                          </p>
-                          <p className="mt-2 text-[10px] text-muted-foreground">
-                            {propertyEntries.length > 0
-                              ? `${propertyEntries.length} parameter${propertyEntries.length === 1 ? "" : "s"}`
-                              : "No input parameters"}
-                            <span className="mx-1.5 text-border">·</span>
-                            {isExpanded ? "Hide details" : "View details"}
-                          </p>
-                        </button>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Switch
-                            id={`drawer-func-${func.name}`}
-                            checked={isEnabled}
-                            onCheckedChange={(checked) =>
-                              onToggleFunction(tool.id, func.name, checked)
-                            }
-                            aria-label={
-                              isEnabled
-                                ? `Disable ${func.name}`
-                                : `Enable ${func.name}`
-                            }
-                            disabled={
-                              !isToolEnabled ||
-                              !canEdit ||
-                              isBulkTogglingFunctions
-                            }
-                            className="mt-1"
-                          />
-                          <ChevronDown
-                            className={cn(
-                              "mt-1 h-4 w-4 text-muted-foreground transition-transform",
-                              isExpanded && "rotate-180 text-primary",
-                            )}
-                          />
-                        </div>
-                      </div>
-                      {hasLongDescription && (
-                        <div className="px-3 pb-3 -mt-1">
+                        );
+                      })}
+                    </div>
+                  </TooltipProvider>
+                )}
+                {hasUnsavedChanges && (
+                  <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Unsaved configuration changes
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasFunctions && (
+              <div className="space-y-3">
+                {/* Function Selection Guidance */}
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-amber-800 space-y-1">
+                    <p className="font-medium">
+                      Select Only Required Functions
+                    </p>
+                    <p>
+                      Enabling all functions can confuse the agent. Disable
+                      functions that are not needed for the specific role of
+                      this agent. For example, a scheduling agent only needs
+                      calendar functions, not email management.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 text-sm font-medium">
+                    <Settings className="h-4 w-4" />
+                    <span>Available Functions</span>
+                  </div>
+                  <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="drawer-toggle-all-functions"
+                        className="cursor-pointer text-xs font-medium"
+                      >
+                        All functions
+                      </Label>
+                      <Switch
+                        id="drawer-toggle-all-functions"
+                        checked={allFunctionsEnabled}
+                        onCheckedChange={(checked) =>
+                          void handleToggleAllFunctions(checked)
+                        }
+                        disabled={
+                          !isToolEnabled || !canEdit || isBulkTogglingFunctions
+                        }
+                        aria-label={
+                          allFunctionsEnabled
+                            ? "Disable all functions"
+                            : "Enable all functions"
+                        }
+                      />
+                    </div>
+                    <Badge variant="secondary" className="h-5 text-[10px]">
+                      {enabledFunctionCount} / {functions.length}
+                    </Badge>
+                  </div>
+                </div>
+                <McpFunctionSearch
+                  value={functionSearch}
+                  onChange={setFunctionSearch}
+                  matchCount={filteredFunctions.length}
+                  totalCount={functions.length}
+                />
+                <div className="space-y-2">
+                  {filteredFunctions.map((func) => {
+                    const isUnselected = toolUnselectedFunctions.includes(
+                      func.name,
+                    );
+                    const isEnabled = !isUnselected;
+                    const isExpanded = expandedFunctionName === func.name;
+                    const properties = func.parameters?.properties || {};
+                    const propertyEntries = Object.entries(properties);
+                    const required = new Set(func.parameters?.required || []);
+                    const description =
+                      func.description || "No description provided.";
+                    const hasLongDescription = description.length > 180;
+                    const descriptionExpanded =
+                      expandedDescriptionName === func.name;
+                    const descriptionPreview = hasLongDescription
+                      ? `${description.slice(0, 180).trimEnd()}…`
+                      : description;
+                    const detailsId = `agent-tool-function-details-${func.name.replace(
+                      /[^a-zA-Z0-9_-]/g,
+                      "-",
+                    )}`;
+                    const descriptionId = `${detailsId}-description`;
+
+                    return (
+                      <div
+                        key={func.name}
+                        className={cn(
+                          "rounded-lg border transition-colors",
+                          isEnabled
+                            ? "border-primary/20 bg-primary/5"
+                            : "border-muted/60 bg-muted/20",
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3 p-3">
                           <button
                             type="button"
-                            className="text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            aria-controls={descriptionId}
-                            aria-expanded={descriptionExpanded}
+                            className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                            aria-expanded={isExpanded}
+                            aria-controls={detailsId}
                             onClick={() =>
-                              setExpandedDescriptionName((current) =>
+                              setExpandedFunctionName((current) =>
                                 current === func.name ? null : func.name,
                               )
                             }
                           >
-                            {descriptionExpanded
-                              ? "Hide full description"
-                              : "Show full description"}
-                          </button>
-                        </div>
-                      )}
-                      {isExpanded && (
-                        <div
-                          id={detailsId}
-                          className="border-t px-3 pb-3 pt-2.5"
-                        >
-                          {propertyEntries.length > 0 ? (
-                            <div className="space-y-2">
-                              {propertyEntries.map(([name, property]) => (
-                                <div
-                                  key={name}
-                                  className="rounded-md border bg-background/70 px-2.5 py-2"
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={cn(
+                                  "rounded p-1",
+                                  isEnabled ? "bg-primary" : "bg-muted",
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "text-[10px] font-medium",
+                                    isEnabled
+                                      ? "text-primary-foreground"
+                                      : "text-muted-foreground",
+                                  )}
                                 >
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-mono text-[11px] font-medium">
-                                      {name}
-                                    </span>
-                                    <Badge
-                                      variant="secondary"
-                                      className="h-5 text-[10px]"
-                                    >
-                                      {property.type || "any"}
-                                    </Badge>
-                                    {required.has(name) && (
+                                  {func.name}
+                                </span>
+                              </div>
+                              {!isEnabled && (
+                                <Badge
+                                  variant="secondary"
+                                  className="h-5 text-[10px]"
+                                >
+                                  Disabled
+                                </Badge>
+                              )}
+                            </div>
+                            <p
+                              id={descriptionId}
+                              className={cn(
+                                "mt-1 text-xs text-muted-foreground",
+                                !descriptionExpanded && "line-clamp-2",
+                              )}
+                            >
+                              {descriptionExpanded
+                                ? description
+                                : descriptionPreview}
+                            </p>
+                            <p className="mt-2 text-[10px] text-muted-foreground">
+                              {propertyEntries.length > 0
+                                ? `${propertyEntries.length} parameter${propertyEntries.length === 1 ? "" : "s"}`
+                                : "No input parameters"}
+                              <span className="mx-1.5 text-border">·</span>
+                              {isExpanded ? "Hide details" : "View details"}
+                            </p>
+                          </button>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Switch
+                              id={`drawer-func-${func.name}`}
+                              checked={isEnabled}
+                              onCheckedChange={(checked) =>
+                                onToggleFunction(tool.id, func.name, checked)
+                              }
+                              aria-label={
+                                isEnabled
+                                  ? `Disable ${func.name}`
+                                  : `Enable ${func.name}`
+                              }
+                              disabled={
+                                !isToolEnabled ||
+                                !canEdit ||
+                                isBulkTogglingFunctions
+                              }
+                              className="mt-1"
+                            />
+                            <ChevronDown
+                              className={cn(
+                                "mt-1 h-4 w-4 text-muted-foreground transition-transform",
+                                isExpanded && "rotate-180 text-primary",
+                              )}
+                            />
+                          </div>
+                        </div>
+                        {hasLongDescription && (
+                          <div className="px-3 pb-3 -mt-1">
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              aria-controls={descriptionId}
+                              aria-expanded={descriptionExpanded}
+                              onClick={() =>
+                                setExpandedDescriptionName((current) =>
+                                  current === func.name ? null : func.name,
+                                )
+                              }
+                            >
+                              {descriptionExpanded
+                                ? "Hide full description"
+                                : "Show full description"}
+                            </button>
+                          </div>
+                        )}
+                        {isExpanded && (
+                          <div
+                            id={detailsId}
+                            className="border-t px-3 pb-3 pt-2.5"
+                          >
+                            {propertyEntries.length > 0 ? (
+                              <div className="space-y-2">
+                                {propertyEntries.map(([name, property]) => (
+                                  <div
+                                    key={name}
+                                    className="rounded-md border bg-background/70 px-2.5 py-2"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-mono text-[11px] font-medium">
+                                        {name}
+                                      </span>
                                       <Badge
-                                        variant="outline"
-                                        className="h-5 border-amber-300 bg-amber-50 text-[10px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                                        variant="secondary"
+                                        className="h-5 text-[10px]"
                                       >
-                                        required
+                                        {property.type || "any"}
                                       </Badge>
+                                      {required.has(name) && (
+                                        <Badge
+                                          variant="outline"
+                                          className="h-5 border-amber-300 bg-amber-50 text-[10px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                                        >
+                                          required
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {property.description && (
+                                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                                        {property.description}
+                                      </p>
                                     )}
                                   </div>
-                                  {property.description && (
-                                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                                      {property.description}
-                                    </p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-muted-foreground">
-                              This function does not declare input parameters.
-                            </p>
-                          )}
-                        </div>
-                      )}
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-muted-foreground">
+                                This function does not declare input parameters.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {filteredFunctions.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-6 text-center">
+                      <p className="text-sm font-medium">No functions found</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Try a different name, description, or parameter.
+                      </p>
                     </div>
-                  );
-                })}
-                {filteredFunctions.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-6 text-center">
-                    <p className="text-sm font-medium">No functions found</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Try a different name, description, or parameter.
-                    </p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {!isToolEnabled && (
-            <div className="flex items-center justify-center p-4 bg-muted/20 rounded-lg border border-dashed">
-              <p className="text-sm text-muted-foreground">
-                Enable this tool to use its features
-              </p>
-            </div>
-          )}
+            {!isToolEnabled && (
+              <div className="flex items-center justify-center p-4 bg-muted/20 rounded-lg border border-dashed">
+                <p className="text-sm text-muted-foreground">
+                  Enable this tool to use its features
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <SheetFooter className="px-6 pb-6 space-y-3">
+        <SheetFooter className="shrink-0 gap-3 border-t bg-background/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
           {agentTool && (
             <DeleteButton
               onClick={onDisconnect}

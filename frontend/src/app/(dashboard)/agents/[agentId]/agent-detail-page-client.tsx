@@ -413,7 +413,9 @@ export default function AgentDetailPage({ children }: AgentDetailPageProps) {
               <Bot className="h-6 w-6 text-primary" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold sm:text-2xl">{agent.name}</h1>
+              <h1 className="truncate text-xl font-bold sm:text-2xl">
+                {agent.name}
+              </h1>
               <p className="text-sm text-muted-foreground">
                 {organization?.name || "Unknown Organization"}
               </p>
@@ -459,13 +461,41 @@ export default function AgentDetailPage({ children }: AgentDetailPageProps) {
           onValueChange={handleTabChange}
           className="space-y-6"
         >
-          <TabsList className="w-full justify-start overflow-x-auto" data-tour="agent-detail-tabs">
-            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="persona">Persona</TabsTrigger>
-            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="skills">Skills</TabsTrigger>
-            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="tools">Tools</TabsTrigger>
-            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="settings">Settings</TabsTrigger>
+          <TabsList
+            className="w-full justify-start overflow-x-auto"
+            data-tour="agent-detail-tabs"
+          >
+            <TabsTrigger
+              className="shrink-0 px-3 sm:px-4 lg:px-6"
+              value="persona"
+            >
+              Persona
+            </TabsTrigger>
+            <TabsTrigger
+              className="shrink-0 px-3 sm:px-4 lg:px-6"
+              value="skills"
+            >
+              Skills
+            </TabsTrigger>
+            <TabsTrigger
+              className="shrink-0 px-3 sm:px-4 lg:px-6"
+              value="tools"
+            >
+              Tools
+            </TabsTrigger>
+            <TabsTrigger
+              className="shrink-0 px-3 sm:px-4 lg:px-6"
+              value="settings"
+            >
+              Settings
+            </TabsTrigger>
             {recordingsTabVisible && (
-              <TabsTrigger className="shrink-0 px-3 sm:px-6" value="recordings">Call History</TabsTrigger>
+              <TabsTrigger
+                className="shrink-0 px-3 sm:px-4 lg:px-6"
+                value="recordings"
+              >
+                Call History
+              </TabsTrigger>
             )}
           </TabsList>
 
