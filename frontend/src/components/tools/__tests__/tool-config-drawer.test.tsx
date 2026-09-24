@@ -219,6 +219,11 @@ describe("ToolConfigDrawer", () => {
     const agentFields = screen.getByRole("combobox", { name: "Agent fields" });
     expect(agentFields.textContent).toContain("All 3 columns selected");
     await user.click(agentFields);
+    const agentFieldList = Array.from(
+      document.querySelectorAll("[cmdk-list]"),
+    ).pop();
+    expect(agentFieldList?.closest('[role="dialog"]')).toBeTruthy();
+    expect(agentFieldList?.className).toContain("overscroll-y-contain");
     await user.click(await screen.findByRole("option", { name: "Customer" }));
     expect(agentFields.textContent).toContain("2 of 3 columns selected");
 
@@ -226,6 +231,11 @@ describe("ToolConfigDrawer", () => {
       name: "Required fields",
     });
     await user.click(requiredFields);
+    const requiredFieldList = Array.from(
+      document.querySelectorAll("[cmdk-list]"),
+    ).pop();
+    expect(requiredFieldList?.closest('[role="dialog"]')).toBeTruthy();
+    expect(requiredFieldList?.className).toContain("overscroll-y-contain");
     await user.click(await screen.findByRole("option", { name: "Items" }));
     expect(requiredFields.textContent).toContain("1 of 2 columns selected");
   });
