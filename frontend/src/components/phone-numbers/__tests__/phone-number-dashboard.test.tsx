@@ -111,6 +111,9 @@ describe("<PhoneNumberDashboard> (N1 #2 — write-action gate)", () => {
     expect(
       screen.getByRole("button", { name: /search & purchase/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phone-number-empty-actions").className,
+    ).toContain("flex-col");
   });
 
   it("hides empty-state phone actions when canManage is false", () => {

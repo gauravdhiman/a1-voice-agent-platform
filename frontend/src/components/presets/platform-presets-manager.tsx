@@ -476,10 +476,10 @@ export function PlatformPresetsManager({
                   // which seeds the author form and saves via the default path.
                   <div
                     key={preset.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5"
+                    className="flex min-w-0 flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-sm font-medium">
                           {DEFAULT_PRESET_DISPLAY.name}
                         </span>
@@ -496,7 +496,7 @@ export function PlatformPresetsManager({
                         {DEFAULT_PRESET_DISPLAY.description}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                       <Button
                         size="sm"
                         variant="ghost"
@@ -510,6 +510,7 @@ export function PlatformPresetsManager({
                       <Button
                         size="sm"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => startEditDefault(preset)}
                         disabled={isBusy}
                       >
@@ -521,10 +522,10 @@ export function PlatformPresetsManager({
                 ) : (
                   <div
                     key={preset.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/20"
+                    className="flex min-w-0 flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-sm font-medium">
                           {preset.name}
                         </span>
@@ -546,10 +547,11 @@ export function PlatformPresetsManager({
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                       <Button
                         size="sm"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => handlePublishToggle(preset)}
                         disabled={isBusy}
                       >

@@ -229,13 +229,15 @@ export function ToolCard({
       )}
     >
       <div className="p-4">
-        <div className="flex items-start gap-3 mb-3">
-          <div className={cn("p-2.5 rounded-lg", statusConfig.iconBoxBg)}>
+        <div className="mb-3 flex min-w-0 items-start gap-3">
+          <div
+            className={cn("shrink-0 rounded-lg p-2.5", statusConfig.iconBoxBg)}
+          >
             <Wrench className="h-4 w-4" />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <h4 className="font-semibold text-sm">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+              <h4 className="min-w-0 break-words text-sm font-semibold">
                 {tool.name.replace(/_/g, " ")}
               </h4>
               {tool.tool_source === "mcp" && (
@@ -333,11 +335,11 @@ export function ToolCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <Badge
             variant={statusConfig.badgeVariant}
             className={cn(
-              "flex items-center gap-1.5",
+              "flex max-w-full items-center gap-1.5 self-start",
               statusConfig.badgeBg,
               statusConfig.badgeText,
             )}
@@ -352,7 +354,7 @@ export function ToolCard({
               variant="outline"
               onClick={onClick}
               disabled={isConnecting}
-              className="shrink-0"
+              className="w-full shrink-0 lg:w-auto"
               title="Upgrade your plan to connect premium tools"
             >
               <Lock className="h-3 w-3 mr-1" />
@@ -364,7 +366,7 @@ export function ToolCard({
               variant={isConfigured || requiresApiKey ? "outline" : "default"}
               onClick={onClick}
               disabled={disabled || isConnecting}
-              className="shrink-0"
+              className="w-full shrink-0 lg:w-auto"
             >
               {isConnecting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

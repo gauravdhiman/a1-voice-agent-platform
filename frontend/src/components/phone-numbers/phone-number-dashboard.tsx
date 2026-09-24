@@ -169,14 +169,21 @@ export function PhoneNumberDashboard({
             <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">No phone numbers yet</p>
             {canManage && (
-              <div className="flex justify-center gap-2">
-                <Button onClick={() => setSearchDialogOpen(true)}>
+              <div
+                className="flex w-full flex-col justify-center gap-2 sm:flex-row"
+                data-testid="phone-number-empty-actions"
+              >
+                <Button
+                  onClick={() => setSearchDialogOpen(true)}
+                  className="w-full sm:w-auto"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Search & Purchase
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setImportDialogOpen(true)}
+                  className="w-full sm:w-auto"
                 >
                   <Link2 className="h-4 w-4 mr-2" />
                   Connect Existing
@@ -189,10 +196,14 @@ export function PhoneNumberDashboard({
         <div className="space-y-4">
           <div className="flex justify-end">
             {canManage && (
-              <div className="flex gap-2">
+              <div
+                className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end"
+                data-testid="phone-number-management-actions"
+              >
                 <Button
                   variant="outline"
                   onClick={() => setSearchDialogOpen(true)}
+                  className="w-full sm:w-auto"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Search & Purchase
@@ -200,6 +211,7 @@ export function PhoneNumberDashboard({
                 <Button
                   variant="outline"
                   onClick={() => setImportDialogOpen(true)}
+                  className="w-full sm:w-auto"
                 >
                   <Link2 className="h-4 w-4 mr-2" />
                   Connect Existing
@@ -281,13 +293,14 @@ export function PhoneNumberDashboard({
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                       {canManage &&
                         !number.assigned_agent_id &&
                         number.status !== "cancelled" && (
                           <Button
                             size="sm"
                             variant="outline"
+                            className="w-full sm:w-auto"
                             onClick={() => handleAssign(number)}
                           >
                             <UserPlus className="w-4 h-4 mr-1" />
@@ -299,7 +312,7 @@ export function PhoneNumberDashboard({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-red-600 border-red-200 hover:bg-red-50"
+                          className="w-full border-red-200 text-red-600 hover:bg-red-50 sm:w-auto"
                           onClick={() => handleCancel(number)}
                         >
                           <Trash2 className="w-4 h-4 mr-1" />

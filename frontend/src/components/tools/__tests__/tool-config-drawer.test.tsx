@@ -39,9 +39,43 @@ const googleSheetsTool = {
 } as never;
 
 describe("ToolConfigDrawer", () => {
-  it("keeps configuration guidance available in field tooltips", async () => {
-    const user = userEvent.setup();
+  it("keeps the drawer header compact and the destructive action in the footer", () => {
+    render(
+      <ToolConfigDrawer
+        open
+        onOpenChange={vi.fn()}
+        tool={googleSheetsTool}
+        agentTool={
+          {
+            id: "agent-tool-1",
+            config: {},
+            auth_status: AuthStatus.AUTHENTICATED,
+            token_expires_at: null,
+            is_enabled: true,
+            unselected_functions: [],
+          } as never
+        }
+        onSaveConfig={vi.fn()}
+        onToggleFunction={vi.fn()}
+        onToggleAllFunctions={vi.fn()}
+        onOAuth={vi.fn()}
+        onLogout={vi.fn()}
+        onSetApiKey={vi.fn()}
+        onDisconnect={vi.fn()}
+        canEdit
+      />,
+    );
 
+    expect(
+      screen.getByRole("button", { name: "About Google Sheets" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("dialog").className).toContain("h-[100dvh]");
+    expect(
+      screen.getByRole("button", { name: "Disconnect Tool" }).className,
+    ).toContain("w-full");
+  });
+
+  it("keeps configuration guidance available in field tooltips", () => {
     render(
       <ToolConfigDrawer
         open
@@ -72,10 +106,7 @@ describe("ToolConfigDrawer", () => {
     expect(screen.getAllByText("Required", { exact: true })).toHaveLength(1);
     expect(screen.getAllByText("Optional", { exact: true })).toHaveLength(2);
 
-    await user.hover(helpButton);
-
-    const tooltip = await screen.findByRole("tooltip", { hidden: true });
-    expect(tooltip.textContent).toContain(
+    expect(helpButton.getAttribute("title")).toBe(
       "Required. Paste the full Google Sheets URL or spreadsheet ID.",
     );
   });
@@ -255,7 +286,9 @@ describe("ToolConfigDrawer", () => {
       name: "Required fields",
     });
     const saveButton = screen.getByRole("button", { name: "Save" });
-    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() =>
+      expect((saveButton as HTMLButtonElement).disabled).toBe(false),
+    );
 
     await user.click(requiredFields);
     await user.click(screen.getByRole("button", { name: "Select all" }));
@@ -428,9 +461,7 @@ describe("ToolConfigDrawer", () => {
       await screen.findByText("Select at least one Agent field."),
     ).toBeTruthy();
     const saveButton = screen.getByRole("button", { name: "Save" });
-    expect(
-      (saveButton as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
     await user.hover(saveButton.parentElement as HTMLElement);
     expect((await screen.findByRole("tooltip")).textContent).toContain(
       "Select at least one Agent field.",
@@ -594,9 +625,7 @@ describe("ToolConfigDrawer", () => {
     });
 
     await user.click(agentFields);
-    expect(
-      screen.queryByRole("option", { name: "Quantity" }),
-    ).toBeNull();
+    expect(screen.queryByRole("option", { name: "Quantity" })).toBeNull();
     expect(
       screen.getByRole("option", { name: "Special Instructions" }),
     ).toBeTruthy();
@@ -604,20 +633,20 @@ describe("ToolConfigDrawer", () => {
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Discover columns" }));
     expect(await screen.findByText("Spreadsheet request failed.")).toBeTruthy();
-    expect(
-      screen.queryByRole("combobox", { name: "Agent fields" }),
-    ).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Agent fields" })).toBeNull();
 
     await user.clear(
-      screen.getByRole("textbox", { name: "Google Sheets URL or spreadsheet ID" }),
+      screen.getByRole("textbox", {
+        name: "Google Sheets URL or spreadsheet ID",
+      }),
     );
     await user.type(
-      screen.getByRole("textbox", { name: "Google Sheets URL or spreadsheet ID" }),
+      screen.getByRole("textbox", {
+        name: "Google Sheets URL or spreadsheet ID",
+      }),
       "another-sheet-id-123456",
     );
-    expect(
-      screen.queryByRole("combobox", { name: "Agent fields" }),
-    ).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Agent fields" })).toBeNull();
     expect(
       screen.getByText(
         "Discover the current columns and select agent fields before saving this spreadsheet.",
@@ -725,9 +754,7 @@ describe("ToolConfigDrawer", () => {
       />,
     );
 
-    expect(
-      await screen.findByText("All 12 columns selected"),
-    ).toBeTruthy();
+    expect(await screen.findByText("All 12 columns selected")).toBeTruthy();
 
     rerender(
       <ToolConfigDrawer
@@ -819,7 +846,8 @@ describe("ToolConfigDrawer", () => {
     });
     await user.click(screen.getByRole("button", { name: "Discover columns" }));
     expect(
-      (await screen.findByRole("combobox", { name: "Agent fields" })).textContent,
+      (await screen.findByRole("combobox", { name: "Agent fields" }))
+        .textContent,
     ).toContain("All 8 columns selected");
     expect(onDiscover).toHaveBeenLastCalledWith(
       "sofia-sheets-tool",

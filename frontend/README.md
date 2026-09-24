@@ -36,6 +36,13 @@ usable breakpoint. Keep new private-page content inside the shrinkable
 `dashboard-page` container and preserve explicit overflow surfaces for dense
 tables rather than allowing the document itself to overflow.
 
+The agent `ToolConfigDrawer` follows the same constraint: its header stays
+compact (the full tool description is available from the help tooltip), the
+configuration body owns the scroll region, and the disconnect action lives in
+its own non-overlapping footer. Tool, phone-number, and voice-preset card
+actions use full-width mobile stacks and return to inline actions at larger
+breakpoints.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
