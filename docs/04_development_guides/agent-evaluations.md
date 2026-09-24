@@ -19,6 +19,13 @@ The evaluation system therefore separates four questions:
 No single test can answer all four questions. A green deterministic suite is a
 strong signal for the first two, but it is not evidence that Gemini Live, STT,
 TTS, network latency, or a particular prompt will always behave correctly.
+For a tool-enabled behavior change, the implementing and reviewing agents
+should also use the [integration-function acceptance gate](testing.md#integration-function-acceptance-gate).
+The deterministic suites prove the adapter and tool contract; the gate makes
+the agent verify semantic fit, runtime wiring, realistic side effects, and the
+applicable no-tool/dependency-failure paths. A stateful fake is sufficient for
+deterministic application behavior, while provider-specific behavior remains
+UNVERIFIED unless the required live lane runs.
 
 ## Current implementation
 

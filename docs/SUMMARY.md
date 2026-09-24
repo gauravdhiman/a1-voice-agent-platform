@@ -154,6 +154,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 3. **[Development Setup](05_operations/deployment/worktree-and-release-strategy.md)** - Isolated local dev environment setup
 4. **[Test User Cleanup](04_development_guides/cleanup_test_user.md)** - Remove test/sandbox users and their resources
 5. **[Agent Evaluations](04_development_guides/agent-evaluations.md)** - Deterministic tool workflows and model trace checks
+6. **[Integration-function acceptance gate](04_development_guides/testing.md#integration-function-acceptance-gate)** - Agent checklist for semantic fit, runtime wiring, side effects, and evidence-based review
 
 ## 🎯 Quick Start Guide
 
@@ -266,7 +267,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 - **Setup**: See **[Getting Started Dev](03_development/getting_started.md)**
 - **Deployment**: See **[Deployment docs](05_operations/deployment/README.md)**
 - **Development**: See **[Development Guides](04_development_guides/)**
-- **Testing**: See **[Testing Guide](04_development_guides/testing.md)**, **[Agent Evaluations](04_development_guides/agent-evaluations.md)**, and **[Comprehensive Testing Plan](04_development_guides/TESTING_PLAN.md)**
+- **Testing**: See **[Testing Guide](04_development_guides/testing.md)**, the **[Integration-function acceptance gate](04_development_guides/testing.md#integration-function-acceptance-gate)**, **[Agent Evaluations](04_development_guides/agent-evaluations.md)**, and **[Comprehensive Testing Plan](04_development_guides/TESTING_PLAN.md)**
 - **Troubleshooting**: See relevant feature documentation
 
 ## 📝 Contributing to Documentation
