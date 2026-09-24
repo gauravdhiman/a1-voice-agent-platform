@@ -36,12 +36,13 @@ automatic. Connections without a renewal grant, with unsupported metadata,
 without a verifiable expiry, or with a failed renewal attempt require
 reconnection.
 
-Platform administrators also receive alerts at the configured platform email,
-Telegram chat, and optional SMS destination. Telegram and SMS use a durable
-claimed outbox with bounded retries. Organization admins currently receive
-email only because organization-level Telegram/SMS destinations are not
-configured in the product. Per-organization notification frequency and
-WhatsApp delivery are not part of this integration.
+Platform admins receive alerts at the configured platform email, Telegram,
+and optional SMS destinations. Organization admins continue to receive email;
+they can add a shared email inbox and opt in to SMS and Telegram destinations
+under Organization → Notifications. These channels use a durable outbox with
+independent delivery state and bounded retries. Platform admins manage the
+provider credentials under Platform → Notifications. Per-organization
+notification frequency and WhatsApp delivery are not part of this integration.
 
 ## Agent-facing Resend email tool
 

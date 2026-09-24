@@ -192,6 +192,16 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows notification settings to organization administrators", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    expect(await screen.findByRole("tab", { name: "Notifications" })).toBeTruthy();
+  });
+
   it("uses ?org_id= when present, ignoring currentOrganization.id", async () => {
     globalThis.__orgPageSearchParams = "org_id=org-2";
     mocks.mockOrgsById["org-2"] = OTHER_ORG;

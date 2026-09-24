@@ -382,9 +382,11 @@ Delivery uses the `tools.oauth_reauthorization_required` event and an
 idempotency key per connection, lifecycle phase, expiry timestamp, and
 organization admin. The email contains only safe tool/agent status and a
 reconnect link; it never contains OAuth credentials or provider error payloads.
-The current Telegram path is limited to platform signup alerts and there is no
-WhatsApp adapter. Organization channel preferences and reminder-frequency
-settings remain a separate notification-platform task.
+OAuth alerts can also reach configured platform and organization SMS/Telegram
+destinations through the durable outbox. Organization admins set shared
+destinations under Organization → Notifications; platform admins manage
+provider credentials under Platform → Notifications. There is no WhatsApp
+adapter or per-organization reminder-frequency setting.
 
 This covers all standards-compliant OAuth 2.0 refresh-token integrations that
 return a durable `refresh_token` and publish a usable token endpoint. It cannot

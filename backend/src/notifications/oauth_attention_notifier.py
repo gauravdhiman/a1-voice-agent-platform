@@ -19,6 +19,9 @@ from uuid import UUID
 
 from src.notifications.models import SendNotificationRequest
 from src.notifications.oauth_attention_outbox import oauth_attention_outbox
+from src.notifications.organization_settings_service import (
+    organization_notification_settings_service,
+)
 from src.notifications.platform_settings_service import (
     platform_notification_settings_service,
 )
@@ -58,10 +61,11 @@ class OAuthAttentionNotifier:
     adapter, and retry scheduler.
 
     Recipient policy:
-        Every organization administrator receives an email. The configured
-        platform administrator receives email plus the platform Telegram chat
-        and optional SMS destination. Tenant details are included only in the
-        explicit platform alert so support can diagnose the connection.
+        Every organization administrator receives an email. An optional shared
+        organization alert email receives the same notice, and opted-in
+        organization SMS/Telegram channels are delivered through the durable
+        outbox. The configured platform administrator receives email plus the
+        platform Telegram chat and optional SMS destination.
 
     Security:
         Access tokens, refresh tokens, client secrets, endpoint URLs, and
@@ -77,6 +81,7 @@ class OAuthAttentionNotifier:
         organization_name_resolver: Optional[Callable[[UUID], Awaitable[str]]] = None,
         platform_settings_service: Any = None,
         platform_channel_outbox: Any = None,
+        organization_settings_service: Any = None,
     ) -> None:
         """Initialize the notifier with replaceable delivery dependencies.
 
@@ -99,6 +104,11 @@ class OAuthAttentionNotifier:
             platform_settings_service or platform_notification_settings_service
         )
         self.platform_channel_outbox = platform_channel_outbox or oauth_attention_outbox
+        self.organization_settings_service = (
+            organization_settings_service
+            if organization_settings_service is not None
+            else organization_notification_settings_service
+        )
         self._organization_name_cache: Dict[UUID, str] = {}
 
     async def notify(
@@ -142,10 +152,10 @@ class OAuthAttentionNotifier:
                 organization_name = await self.organization_name_resolver(
                     organization_id
                 )
-            except Exception:
+            except Exception as exc:
                 logger.warning(
-                    "Could not resolve organization name for OAuth attention notice",
-                    exc_info=True,
+                    "Could not resolve org name for OAuth notice (%s)",
+                    type(exc).__name__,
                 )
         sensitive_config = getattr(agent_tool, "sensitive_config", None) or {}
         expires_at = self._safe_expiry(sensitive_config.get("expires_at"))
@@ -191,9 +201,10 @@ class OAuthAttentionNotifier:
                 members, _ = await self.user_role_service.get_users_by_organization(
                     organization_id
                 )
-            except Exception:
-                logger.exception(
-                    "Could not resolve organization admins for OAuth attention notice"
+            except Exception as exc:
+                logger.error(
+                    "Could not resolve organization admins for OAuth notice (%s)",
+                    type(exc).__name__,
                 )
                 members = []
 
@@ -227,11 +238,59 @@ class OAuthAttentionNotifier:
                         result.sent += 1
                     else:
                         result.failed += 1
-                except Exception:
+                except Exception as exc:
                     result.failed += 1
-                    logger.exception(
-                        "Failed to send OAuth attention notice to an organization admin"
+                    logger.error(
+                        "Failed to send OAuth notice to an organization admin (%s)",
+                        type(exc).__name__,
                     )
+
+            try:
+                organization_settings = (
+                    await self.organization_settings_service.get_settings(
+                        UUID(str(organization_id))
+                    )
+                )
+                organization_alert_email = organization_settings.alert_email
+            except Exception as exc:
+                organization_alert_email = None
+                result.failed += 1
+                logger.error(
+                    "Could not load organization OAuth alert settings (%s)",
+                    type(exc).__name__,
+                )
+
+            if organization_alert_email:
+                shared_email = str(organization_alert_email).strip()
+                admin_emails = {
+                    str(getattr(member, "email", "") or "").strip().casefold()
+                    for member in admins
+                }
+                if shared_email.casefold() not in admin_emails:
+                    try:
+                        delivery = await self.notification_sender.send_notification(
+                            SendNotificationRequest(
+                                event_key=OAUTH_ATTENTION_EVENT_KEY,
+                                recipient_email=shared_email,
+                                recipient_name="Organization notification contact",
+                                organization_id=organization_id,
+                                template_variables=template_variables,
+                                idempotency_key=(
+                                    f"{event_key}:organization-email:"
+                                    f"{shared_email.casefold()}"
+                                ),
+                            )
+                        )
+                        if delivery and delivery.success:
+                            result.sent += 1
+                        else:
+                            result.failed += 1
+                    except Exception as exc:
+                        result.failed += 1
+                        logger.error(
+                            "Failed to send OAuth notice to organization contact (%s)",
+                            type(exc).__name__,
+                        )
         else:
             result.skipped += 1
 
@@ -239,10 +298,13 @@ class OAuthAttentionNotifier:
             platform_email = (
                 await self.platform_settings_service.get_platform_admin_email()
             )
-        except Exception:
+        except Exception as exc:
             platform_email = None
             result.failed += 1
-            logger.exception("Could not load the platform OAuth alert email")
+            logger.error(
+                "Could not load platform OAuth alert settings (%s)",
+                type(exc).__name__,
+            )
         if platform_email:
             try:
                 delivery = await self.notification_sender.send_notification(
@@ -259,10 +321,11 @@ class OAuthAttentionNotifier:
                     result.sent += 1
                 else:
                     result.failed += 1
-            except Exception:
+            except Exception as exc:
                 result.failed += 1
-                logger.exception(
-                    "Failed to send OAuth attention notice to platform admin"
+                logger.error(
+                    "Failed to send OAuth notice to platform admin (%s)",
+                    type(exc).__name__,
                 )
         else:
             result.skipped += 1
@@ -283,9 +346,12 @@ class OAuthAttentionNotifier:
                         "action_url": action_url,
                     },
                 )
-            except Exception:
+            except Exception as exc:
                 result.failed += 1
-                logger.exception("Could not enqueue OAuth platform-channel alert")
+                logger.error(
+                    "Could not enqueue OAuth alert (%s)",
+                    type(exc).__name__,
+                )
 
         return result
 

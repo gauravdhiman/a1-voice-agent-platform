@@ -1,5 +1,6 @@
 """Tests for OAuth connection-attention notifications."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -66,6 +67,12 @@ def _notifier(**kwargs):
         SimpleNamespace(get_platform_admin_email=AsyncMock(return_value=None)),
     )
     kwargs.setdefault("platform_channel_outbox", SimpleNamespace(enqueue=AsyncMock()))
+    kwargs.setdefault(
+        "organization_settings_service",
+        SimpleNamespace(
+            get_settings=AsyncMock(return_value=SimpleNamespace(alert_email=None))
+        ),
+    )
     return OAuthAttentionNotifier(**kwargs)
 
 
@@ -272,6 +279,75 @@ async def test_notifier_sends_one_email_per_org_admin_without_token_values():
 
 
 @pytest.mark.asyncio
+async def test_notifier_sends_optional_shared_organization_alert_email():
+    """A shared inbox gets an additional email without replacing admin emails."""
+    sender_call = AsyncMock(return_value=SimpleNamespace(success=True))
+    admin = _member("Org Admin", ["org_admin"])
+    role_service = SimpleNamespace(
+        get_users_by_organization=AsyncMock(return_value=([admin], None))
+    )
+    notifier = _notifier(
+        notification_sender=SimpleNamespace(send_notification=sender_call),
+        user_role_service=role_service,
+        organization_name_resolver=AsyncMock(return_value="Example Organization"),
+        organization_settings_service=SimpleNamespace(
+            get_settings=AsyncMock(
+                return_value=SimpleNamespace(alert_email="operations@example.com")
+            )
+        ),
+    )
+
+    result = await notifier.notify(
+        _agent_tool(expires_in_minutes=10, has_refresh_token=False),
+        phase=OAuthAttentionNotificationPhase.EXPIRING,
+        minutes_until_expiry=10,
+        reason="Reconnect the tool to restore access.",
+    )
+
+    assert result.sent == 2
+    assert {call.args[0].recipient_email for call in sender_call.await_args_list} == {
+        admin.email,
+        "operations@example.com",
+    }
+    shared_request = next(
+        call.args[0]
+        for call in sender_call.await_args_list
+        if call.args[0].recipient_email == "operations@example.com"
+    )
+    assert shared_request.user_id is None
+    assert "organization-email:operations@example.com" in shared_request.idempotency_key
+
+
+@pytest.mark.asyncio
+async def test_notifier_deduplicates_shared_email_matching_an_admin():
+    """A case-only shared-email match does not deliver the same event twice."""
+    sender_call = AsyncMock(return_value=SimpleNamespace(success=True))
+    admin = _member("Org Admin", ["org_admin"])
+    role_service = SimpleNamespace(
+        get_users_by_organization=AsyncMock(return_value=([admin], None))
+    )
+    notifier = _notifier(
+        notification_sender=SimpleNamespace(send_notification=sender_call),
+        user_role_service=role_service,
+        organization_settings_service=SimpleNamespace(
+            get_settings=AsyncMock(
+                return_value=SimpleNamespace(alert_email=admin.email.upper())
+            )
+        ),
+    )
+
+    result = await notifier.notify(
+        _agent_tool(expires_in_minutes=10, has_refresh_token=False),
+        phase=OAuthAttentionNotificationPhase.EXPIRING,
+        minutes_until_expiry=10,
+        reason="Reconnect the tool to restore access.",
+    )
+
+    assert result.sent == 1
+    sender_call.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_notifier_uses_a_distinct_idempotency_key_after_expiry():
     """The expired notice is independent from the earlier warning."""
     sender_call = AsyncMock(return_value=SimpleNamespace(success=True))
@@ -319,6 +395,9 @@ async def test_notifier_emails_platform_admin_and_queues_safe_channel_alerts():
         organization_name_resolver=AsyncMock(return_value="Example Organization"),
         platform_settings_service=platform_settings,
         platform_channel_outbox=channel_outbox,
+        organization_settings_service=SimpleNamespace(
+            get_settings=AsyncMock(return_value=SimpleNamespace(alert_email=None))
+        ),
     )
     tool = _agent_tool(expires_in_minutes=-1, has_refresh_token=True)
     tool.oauth_credential_version = 12
@@ -514,3 +593,41 @@ async def test_failed_automatic_refresh_notifies_when_reauthentication_is_needed
 
     notifier.notify.assert_awaited_once()
     assert "renew" in notifier.notify.await_args.kwargs["reason"].lower()
+
+
+@pytest.mark.asyncio
+async def test_notifier_redacts_recipient_and_provider_errors(caplog):
+    """OAuth delivery logs omit recipient addresses and raw provider failures."""
+    caplog.set_level(logging.ERROR, logger="src.notifications.oauth_attention_notifier")
+    admin = _member("Sensitive Admin", ["org_admin"])
+    role_service = SimpleNamespace(
+        get_users_by_organization=AsyncMock(return_value=([admin], None))
+    )
+    sender = SimpleNamespace(
+        send_notification=AsyncMock(
+            side_effect=RuntimeError("provider rejected secret@example.com")
+        )
+    )
+    notifier = _notifier(
+        notification_sender=sender,
+        user_role_service=role_service,
+        organization_name_resolver=AsyncMock(return_value="Example Organization"),
+        organization_settings_service=SimpleNamespace(
+            get_settings=AsyncMock(
+                return_value=SimpleNamespace(alert_email="alerts@example.com")
+            )
+        ),
+    )
+
+    result = await notifier.notify(
+        _agent_tool(expires_in_minutes=10, has_refresh_token=False),
+        phase=OAuthAttentionNotificationPhase.EXPIRING,
+        minutes_until_expiry=10,
+        reason="Reconnect the tool to restore access.",
+    )
+
+    assert result.failed == 2
+    assert admin.email not in caplog.text
+    assert "alerts@example.com" not in caplog.text
+    assert "secret@example.com" not in caplog.text
+    assert "RuntimeError" in caplog.text

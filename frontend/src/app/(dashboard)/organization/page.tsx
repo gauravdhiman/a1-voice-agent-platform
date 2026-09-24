@@ -9,6 +9,7 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
 import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
 import { PublicPageSettingsCard } from "@/components/organizations/public-page-settings-card";
+import { OrganizationNotificationSettingsForm } from "@/components/notifications/organization-notification-settings-form";
 import {
   normalizeOrganizationSlug,
   publicOrgPagePath,
@@ -149,11 +150,9 @@ export default function OrganizationPage() {
   const [removingProviderCred, setRemovingProviderCred] =
     useState<ProviderCredentialKey | null>(null);
 
-  // Org page tab state ("info" | "credentials"). Synced to `?tab=` so the two
-  // cards are deep-linkable. Legacy `?tab=` values (phone-numbers/skills/
-  // ai-agent) are redirected to their top-level routes by `legacyTabRedirect`
-  // above; `info`/`credentials` fall through (no redirect) and set the tab.
-  const [activeTab, setActiveTab] = useState<"info" | "credentials" | "public">("info");
+  // Organization settings tabs sync to `?tab=` for deep links. Legacy tabs for
+  // phone numbers, skills, and the voice agent redirect to their top-level routes.
+  const [activeTab, setActiveTab] = useState<"info" | "credentials" | "public" | "notifications">("info");
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -193,11 +192,9 @@ export default function OrganizationPage() {
 
   // Sync tab state with URL. The Phone Numbers, Skills, and AI Voice
   // Agent tabs are now top-level routes (N1 redesign): when the URL
-  // carries one of those tabs, we redirect to the canonical route
-  // instead of rendering a tab body. `overview` (and an absent `tab`)
-  // are the only values that render this page. The decision is in
-  // `legacy-tab-redirect.ts` so the redirect contract is unit-tested
-  // independently of the page.
+  // carries one of those tabs, we redirect to the canonical route. The current
+  // settings tabs stay on this page and are selected in the effect below. The
+  // redirect decision is in `legacy-tab-redirect.ts` for isolated coverage.
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     const target = legacyTabRedirect(tabParam, orgId, searchParams);
@@ -206,14 +203,11 @@ export default function OrganizationPage() {
     }
   }, [searchParams, orgId, router]);
 
-  // Sync the org-page tab ("info" | "credentials") from `?tab=`. Legacy values
-  // are redirected above; only an explicit `info`/`credentials` flips the tab —
-  // an absent or unknown `tab` leaves the current tab alone (the useState
-  // default is "info", and tab switches drive `handleTabChange`). Mirrors the
-  // agent-detail `?tab=` idiom.
+  // Sync recognized organization settings tabs from `?tab=`. Legacy values are
+  // redirected above; an absent or unknown tab leaves the current tab alone.
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "info" || tabParam === "credentials" || tabParam === "public") {
+    if (tabParam === "info" || tabParam === "credentials" || tabParam === "public" || tabParam === "notifications") {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -222,7 +216,7 @@ export default function OrganizationPage() {
   // active params) so the deep link stays valid.
   const handleTabChange = useCallback(
     (value: string) => {
-      setActiveTab(value as "info" | "credentials" | "public");
+      setActiveTab(value as "info" | "credentials" | "public" | "notifications");
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", value);
       router.push(`/organization?${params.toString()}`, { scroll: false });
@@ -616,11 +610,10 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      {/* N1 redesign: the org page is settings-only. Phone Numbers, Skills,
-          and AI Voice Agent moved to top-level routes; `legacy-tab-redirect.ts`
-          handles the legacy `?tab=...` URLs. The two remaining settings cards
-          (Organization Info + Third-party API Credentials) are organized into
-          a tabbed layout synced to `?tab=info|credentials`. */}
+      {/* Phone Numbers, Skills, and AI Voice Agent moved to top-level routes;
+          `legacy-tab-redirect.ts` handles their old `?tab=...` URLs. Organization
+          information, API credentials, public page, and admin notifications are
+          deep-linkable tabs on this page. */}
       <AnimatedTabs
         value={activeTab}
         onValueChange={handleTabChange}
@@ -629,6 +622,9 @@ export default function OrganizationPage() {
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger className="shrink-0 px-3 sm:px-6" value="info">Organization Info</TabsTrigger>
           <TabsTrigger className="shrink-0 px-3 sm:px-6" value="credentials">API Credentials</TabsTrigger>
+          {(isOrgAdmin || isPlatformAdmin) && (
+            <TabsTrigger className="shrink-0 px-3 sm:px-6" value="notifications">Notifications</TabsTrigger>
+          )}
           <TabsTrigger className="shrink-0 px-3 sm:px-6" value="public">Public Page</TabsTrigger>
         </TabsList>
 
@@ -1019,6 +1015,12 @@ During monsoon season (July-September), we have extended hours for flood-related
             canUpdate={canUpdateOrganization}
           />
         </TabsContent>
+
+        {(isOrgAdmin || isPlatformAdmin) && orgId ? (
+          <TabsContent value="notifications">
+            <OrganizationNotificationSettingsForm organizationId={orgId} />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="public">
           {organizationData?.organization ? (

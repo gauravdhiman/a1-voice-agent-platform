@@ -209,24 +209,26 @@ These unusable or ambiguous states trigger immediate notices without waiting
 for the normal expiry window. Failure text is classified and safe; provider
 response bodies and OAuth secrets are never included.
 
-Organization admins receive email through the durable notification service.
-The configured platform-admin email receives the same connection-specific
-recovery instructions. The platform Telegram chat receives alerts when its
-existing Telegram notifications are enabled and configured. Platform SMS is
-optional: set an E.164 destination and opt in on the Platform Notification
-Settings page, then configure `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and
-`TWILIO_SMS_FROM_NUMBER` on the backend. SMS currently targets the platform
-admin only; organization admins have no per-organization phone or Telegram
-destination setting.
+Every organization admin receives email through the durable notification
+service. An organization admin can add a shared alert inbox and opt in to SMS
+or Telegram on **Organization → Notifications** (`/organization?tab=notifications`).
+The shared inbox is an additional email recipient; it does not replace admin
+account emails. Platform admins set their alert email and optional SMS/Telegram
+destinations on **Platform → Notifications**. The platform admin manages the
+shared Telegram bot token and Twilio credentials; organization admins only
+supply their own destination and opt-in.
 
-Telegram and SMS alerts are recorded in the service-role-only
+SMS and Telegram alerts are recorded in the service-role-only
 `oauth_attention_outbox`, attempted immediately, and retried by the existing
 notification scheduler with a Postgres `SKIP LOCKED` claim and bounded
-exponential delay. Email retries remain in `notification_logs`. Delivery is
-at-least-once if a provider accepts a message but the database acknowledgment
-is lost; each connection generation and alert category is otherwise
-idempotently queued. All messages include the organization, agent, tool, why
-action is needed, exact next step, and link to the agent Tools page.
+exponential delay. Platform and organization delivery state is tracked
+independently per channel. An opted-in channel stays pending when provider
+credentials are unavailable so it can recover after platform configuration is
+restored. Email retries remain in `notification_logs`. Delivery is at-least-once
+if a provider accepts a message but the database acknowledgment is lost; each
+connection generation and alert category is otherwise idempotently queued.
+Messages include the organization, agent, tool, why action is needed, next step,
+and link to the agent Tools page, never OAuth credentials.
 
 The email event key is `tools.oauth_reauthorization_required`. Its migration
 seeds the event, while the built-in template remains editable through the

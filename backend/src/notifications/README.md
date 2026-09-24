@@ -6,18 +6,15 @@ retry scheduler evaluates the 20%, 10%, and 5% thresholds and delivers to
 organization admins. Resend is the initial adapter behind a provider-neutral
 email contract.
 
-OAuth connection-attention reminders use this same notification service. The
-token refresh worker checks every enabled, authenticated OAuth connection on
-its normal cycle. A connection that cannot be renewed automatically is sent to
-organization admins once when it is inside the 30-minute attention window and
-once again after it expires. Stable idempotency keys prevent duplicate emails;
-the existing notification retry scheduler handles delivery failures.
-
-The current integration delivers these reminders by email. The existing
-Telegram implementation is a separate platform-admin signup-alert path, and
-there is no WhatsApp adapter yet. Organization notification preferences,
-channel selection, and configurable reminder frequency are intentionally left
-for a separate notification-platform task.
+OAuth connection-attention reminders use the durable notification service.
+The token refresh worker checks enabled, authenticated OAuth connections on its
+normal cycle. It emails every organization admin when a connection enters the
+attention window and again when it expires or needs immediate reauthorization.
+An organization admin can add a shared inbox and opt in to SMS or Telegram on
+**Organization → Notifications**. Platform admins set provider credentials and
+their own destinations on **Platform → Notifications**. Email retries use
+`notification_logs`; SMS and Telegram retries use `oauth_attention_outbox`,
+with independent state for each platform and organization channel.
 
 ## Quick Setup
 
@@ -41,8 +38,9 @@ cd backend
 alembic upgrade head
 ```
 
-This creates notification tables, `email_verification_tokens`, and
-`platform_notification_settings`.
+This creates notification tables, `email_verification_tokens`,
+`platform_notification_settings`, `organization_notification_settings`, and the
+OAuth attention delivery outbox.
 
 Migration `20260811000004` also seeds the required `credits.low_balance` event;
 `20260817000001` seeds the OAuth connection-attention event. The event seed
@@ -60,10 +58,13 @@ Platform admins: open **Platform → Notifications** (`/platform/notifications`)
 
 - Platform-admin **recipient email** for demo and interest lead alerts
 - Verification email **from address** and **from name** (Resend)
-- Telegram **bot token**, **chat ID**, and enable/disable alerts
+- Telegram **bot token**, platform **chat ID**, and platform alert opt-in
+- Platform-admin OAuth alert email and optional SMS destination
 
-OAuth attention reminders do not currently use these Telegram settings; they
-are sent through the durable email notification path.
+Organization admins configure an optional shared inbox, SMS number, and
+Telegram chat on **Organization → Notifications** (`/organization?tab=notifications`).
+They do not configure provider credentials. Organization-admin account emails
+remain recipients even when no shared inbox is set.
 
 Public demo and interest-form submissions are retained in `interest_leads` and
 then notify the configured recipient and/or Telegram chat. Email requires the
@@ -105,8 +106,12 @@ Triggered on:
 - User joins via invitation (signup or existing user accepting invite)
 - Public demo and interest-form submissions
 
-Configure at `/platform/notifications`. Alerts are skipped when disabled or
-bot token/chat ID is missing.
+Configure platform signup alerts at `/platform/notifications`. Platform
+OAuth alerts use the platform admin's own Telegram/SMS opt-ins. Organization
+OAuth alerts use each organization's opt-ins from
+`/organization?tab=notifications`; an organization Telegram destination uses
+the platform-managed bot token. An opted-in channel with missing provider
+credentials stays pending in the durable outbox for retry after configuration.
 
 ## Delivery reliability
 
@@ -145,8 +150,10 @@ await notification_service.send_notification(
 
 | Method | Path | Access | Description |
 | ------ | ---- | ------ | ----------- |
-| GET | `/api/v1/notifications/admin/settings` | platform_admin | Read notification settings |
-| PUT | `/api/v1/notifications/admin/settings` | platform_admin | Update settings |
+| GET | `/api/v1/notifications/admin/settings` | platform_admin | Read platform notification settings |
+| PUT | `/api/v1/notifications/admin/settings` | platform_admin | Update platform settings and provider credentials |
+| GET | `/api/v1/notifications/organizations/{organization_id}/settings` | target org_admin or platform_admin | Read organization alert destinations |
+| PUT | `/api/v1/notifications/organizations/{organization_id}/settings` | target org_admin or platform_admin | Update organization alert destinations |
 | POST | `/api/v1/auth/verify-email` | Public | Verify email token |
 | POST | `/api/v1/auth/resend-verification` | Public | Resend verification email |
 

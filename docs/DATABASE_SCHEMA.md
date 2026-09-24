@@ -1431,12 +1431,35 @@ SMS delivery also requires backend Twilio credentials and
 `TWILIO_SMS_FROM_NUMBER`. The API's `sms_sender_configured` status does not
 expose provider credentials.
 
+### organization_notification_settings
+
+One row per organization for optional OAuth recovery destinations. Existing
+organization admins continue to receive email; `alert_email` adds a shared
+inbox. Phone and Telegram destinations are used only when their explicit opt-in
+is enabled. Provider credentials remain platform-managed.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| organization_id | UUID | PRIMARY KEY, FK → organizations.id (CASCADE) | Owning organization |
+| alert_email | VARCHAR(320) | NULLABLE, max length 320 | Additional email destination |
+| sms_phone | VARCHAR(32) | NULLABLE, E.164 check | Optional SMS destination |
+| sms_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE; requires `sms_phone` | Organization SMS opt-in |
+| telegram_chat_id | VARCHAR(100) | NULLABLE, numeric chat ID or `@username` check | Optional Telegram destination |
+| telegram_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE; requires `telegram_chat_id` | Organization Telegram opt-in |
+| updated_by | UUID | NULLABLE, FK → auth.users.id (SET NULL) | Last administrator who changed settings |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Audit timestamps |
+
+**RLS**: Enabled; only backend `service_role` has a policy. API routes authorize
+the target organization admin or a platform admin. Partial updates use an
+atomic SQL upsert function so simultaneous changes to separate fields do not
+overwrite one another.
+
 ### oauth_attention_outbox
 
-Durable platform-channel delivery queue for OAuth connection alerts. Each
+Durable platform and organization channel-delivery queue for OAuth connection alerts. Each
 credential generation and alert category has a unique `event_key`. The payload
 contains safe display metadata and recovery instructions; it never contains
-OAuth tokens, client secrets, or provider response bodies.
+contact destinations, OAuth tokens, client secrets, or provider response bodies.
 
 | Column | Type | Constraints | Description |
 | --- | --- | --- | --- |
@@ -1445,10 +1468,10 @@ OAuth tokens, client secrets, or provider response bodies.
 | agent_tool_id | UUID | NOT NULL, FK → agent_tools.id (CASCADE) | OAuth connection requiring attention |
 | organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning tenant |
 | payload | JSONB | NOT NULL | Safe organization/agent/tool labels, status, recovery steps, and action link |
-| telegram_state | TEXT | NOT NULL, DEFAULT 'pending' | `pending`, `sent`, or `skipped` |
-| sms_state | TEXT | NOT NULL, DEFAULT 'pending' | `pending`, `sent`, or `skipped` |
-| telegram_attempts | INTEGER | NOT NULL, DEFAULT 0 | Attempt counter |
-| sms_attempts | INTEGER | NOT NULL, DEFAULT 0 | Attempt counter |
+| telegram_state / organization_telegram_state | TEXT | NOT NULL, DEFAULT 'pending' | Independent platform and organization Telegram states |
+| sms_state / organization_sms_state | TEXT | NOT NULL, DEFAULT 'pending' | Independent platform and organization SMS states |
+| telegram_attempts / organization_telegram_attempts | INTEGER | NOT NULL, DEFAULT 0 | Independent Telegram attempt counters |
+| sms_attempts / organization_sms_attempts | INTEGER | NOT NULL, DEFAULT 0 | Independent SMS attempt counters |
 | available_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Earliest retry time |
 | lease_claim | TEXT | NULLABLE | Worker claim token |
 | lease_until | TIMESTAMPTZ | NULLABLE | Claim expiration for crash recovery |
@@ -2133,6 +2156,7 @@ erDiagram
 92. `20260922000001` - Update the existing system-default realtime voice preset to Google `gemini-3.8-live` with the `Zephyr` voice while preserving its other runtime settings. Explicit agent presets are unchanged.
 93. `20260923000001` - Add `organizations.provider_credentials_descriptions` (JSONB NULLABLE) for non-secret per-provider reference notes on the API Credentials screen. Notes are edited through `provider_credentials_descriptions_input` and stored separately from encrypted provider keys.
 94. `20260924000001` - Fence OAuth refreshes with credential generations and lease-checked SQL writes; persist ambiguous/re-auth-required states, add platform-admin SMS settings, and create a claimed durable Telegram/SMS OAuth alert outbox.
+95. `20260924000002` - Add tenant-scoped optional OAuth alert destinations, atomic partial settings updates, and independent organization Telegram/SMS outbox state and retry counters.
 
 ---
 
