@@ -119,6 +119,7 @@ interface HeaderMultiSelectProps {
   disabled?: boolean;
   label: string;
   placeholder: string;
+  portalContainer?: HTMLElement | null;
 }
 
 /** Compact searchable multi-select for potentially large header lists. */
@@ -129,6 +130,7 @@ function HeaderMultiSelect({
   disabled = false,
   label,
   placeholder,
+  portalContainer,
 }: HeaderMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const selectedKeys = new Set(selected.map(canonical));
@@ -174,6 +176,7 @@ function HeaderMultiSelect({
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        portalContainer={portalContainer}
         className="w-[min(22rem,calc(100vw-3rem))] p-0"
       >
         <Command>
@@ -201,7 +204,7 @@ function HeaderMultiSelect({
               </button>
             </div>
           </div>
-          <CommandList className="max-h-64">
+          <CommandList className="max-h-64 overscroll-y-contain">
             <CommandEmpty>No matching columns.</CommandEmpty>
             {headers.map((header, index) => {
               const isSelected = selectedKeys.has(canonical(header));
@@ -345,6 +348,7 @@ export function GoogleSheetsConfigEditor({
   );
   const discoveryRequestId = React.useRef(0);
   const autoDiscoveryAttempted = React.useRef(false);
+  const popoverContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(
     () => () => {
@@ -750,7 +754,7 @@ export function GoogleSheetsConfigEditor({
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="space-y-5">
+      <div ref={popoverContainerRef} className="space-y-5">
       <div
         role="status"
         aria-live="polite"
@@ -951,6 +955,7 @@ export function GoogleSheetsConfigEditor({
                     disabled={!canEdit}
                     label="Agent fields"
                     placeholder="Select agent fields"
+                    portalContainer={popoverContainerRef.current}
                   />
                 </div>
               </div>
@@ -983,6 +988,7 @@ export function GoogleSheetsConfigEditor({
                     disabled={!canEdit}
                     label="Required fields"
                     placeholder="No required fields"
+                    portalContainer={popoverContainerRef.current}
                   />
                 </div>
                 {agentFields.length === 0 && (
