@@ -53,7 +53,8 @@ class TestPlatformNotificationSettingsService:
     ):
         table_mock = MagicMock()
         mock_supabase_client.table.return_value = table_mock
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row()
         )
 
@@ -69,7 +70,8 @@ class TestPlatformNotificationSettingsService:
     ):
         table_mock = MagicMock()
         mock_supabase_client.table.return_value = table_mock
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row()
         )
 
@@ -88,7 +90,8 @@ class TestPlatformNotificationSettingsService:
     ):
         table_mock = MagicMock()
         mock_supabase_client.table.return_value = table_mock
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row(
                 verification_from_email="verify@example.com",
                 verification_from_name="Platform",
@@ -103,7 +106,8 @@ class TestPlatformNotificationSettingsService:
     ):
         table_mock = MagicMock()
         mock_supabase_client.table.return_value = table_mock
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row(
                 verification_from_email="verify@example.com",
                 verification_from_name=None,
@@ -122,7 +126,8 @@ class TestPlatformNotificationSettingsService:
         table_mock.update.return_value.eq.return_value.execute.return_value = (
             MagicMock()
         )
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row(
                 verification_from_email=None,
                 verification_from_name=None,
@@ -158,7 +163,8 @@ class TestPlatformNotificationSettingsService:
         table_mock.update.return_value.eq.return_value.execute.return_value = (
             MagicMock()
         )
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row()
         )
 
@@ -175,6 +181,39 @@ class TestPlatformNotificationSettingsService:
         assert "telegram_chat_id" not in update_data
         assert "telegram_bot_token_encrypted" not in update_data
         assert update_data["telegram_notifications_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_update_settings_saves_e164_platform_sms_opt_in(
+        self, settings_service, mock_supabase_client
+    ):
+        table_mock = MagicMock()
+        mock_supabase_client.table.return_value = table_mock
+        table_mock.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
+            data=_settings_row(
+                platform_admin_sms_phone="+15551234567",
+                platform_admin_sms_notifications_enabled=True,
+            )
+        )
+
+        payload = PlatformNotificationSettingsUpdate(
+            platform_admin_sms_phone="+15551234567",
+            platform_admin_sms_notifications_enabled=True,
+        )
+        result = await settings_service.update_settings(payload, ADMIN_ID)
+
+        update_data = table_mock.update.call_args.args[0]
+        assert update_data["platform_admin_sms_phone"] == "+15551234567"
+        assert update_data["platform_admin_sms_notifications_enabled"] is True
+        assert result.platform_admin_sms_phone == "+15551234567"
+        assert result.platform_admin_sms_notifications_enabled is True
+
+    def test_sms_destination_must_be_e164(self):
+        with pytest.raises(ValueError):
+            PlatformNotificationSettingsUpdate(platform_admin_sms_phone="5551234567")
 
 
 class TestExtractTelegramBotId:
@@ -193,7 +232,8 @@ class TestExtractTelegramBotId:
         table_mock.update.return_value.eq.return_value.execute.return_value = (
             MagicMock()
         )
-        table_mock.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+        settings_query = table_mock.select.return_value.eq.return_value.single
+        settings_query.return_value.execute.return_value = MagicMock(
             data=_settings_row(telegram_bot_token_encrypted="new-encrypted")
         )
 

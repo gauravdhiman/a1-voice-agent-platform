@@ -500,6 +500,7 @@ class TestToolService:
         agent_id = uuid4()
         tool_id = uuid4()
         agent_tool_id = uuid4()
+        organization_id = uuid4()
         mock_response = MagicMock()
         mock_response.data = [
             {
@@ -523,6 +524,10 @@ class TestToolService:
                     "created_at": "2024-01-01T00:00:00Z",
                     "updated_at": "2024-01-01T00:00:00Z",
                 },
+                "voice_agents": {
+                    "name": "Support Agent",
+                    "organization_id": str(organization_id),
+                },
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-01T00:00:00Z",
             }
@@ -542,7 +547,12 @@ class TestToolService:
         assert result.tool is not None
         assert result.tool.name == "Google_Sheets"
         assert result.sensitive_config == {"access_token": "token"}
+        assert result.agent_name == "Support Agent"
+        assert result.organization_id == organization_id
         mock_supabase_client.table.assert_called_once_with("agent_tools")
+        mock_supabase_client.table.return_value.select.assert_called_once_with(
+            "*, tool:platform_tools(*), voice_agents(name,organization_id)"
+        )
 
     async def test_update_agent_tool(self, tool_service, mock_supabase_client):
         """Test updating agent tool."""
@@ -1482,7 +1492,7 @@ class TestPlatformToolPublishLifecycle:
     async def test_merge_stored_mcp_secret_headers_literal(
         self, tool_service, mock_supabase_client
     ):
-        """Discover merge applies literal stored secrets when the form left them blank."""
+        """Keep stored secrets when the form leaves them blank."""
         tool_id = uuid4()
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(
             data=[{"id": str(tool_id), "mcp_server_secret_headers": "enc"}]

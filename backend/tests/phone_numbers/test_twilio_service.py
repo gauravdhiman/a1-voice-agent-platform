@@ -1,10 +1,9 @@
 """Unit tests for the production Twilio phone-number provider adapter."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.phone_numbers.twilio_service import TwilioService
 
 
@@ -205,7 +204,8 @@ class TestTwilioServiceRelease:
         twilio_service.client.incoming_phone_numbers.assert_called_once_with(
             "PN1234567890"
         )
-        twilio_service.client.incoming_phone_numbers.return_value.delete.assert_called_once()
+        incoming_numbers = twilio_service.client.incoming_phone_numbers
+        incoming_numbers.return_value.delete.assert_called_once()
 
     def test_release_requires_configuration(
         self, twilio_service_not_configured: TwilioService
@@ -252,3 +252,70 @@ class TestTwilioServiceGet:
         """Lookup is rejected when the provider is not configured."""
         with pytest.raises(ValueError, match="Twilio is not configured"):
             twilio_service_not_configured.get_phone_number("PN1234567890")
+
+
+class TestTwilioServiceSms:
+    """Bounded SMS delivery for the OAuth admin-alert outbox."""
+
+    @pytest.mark.asyncio
+    async def test_send_sms_uses_configured_sender_and_auth(
+        self, twilio_service: TwilioService
+    ):
+        response = SimpleNamespace(status_code=201)
+        with patch(
+            "src.phone_numbers.twilio_service.settings.twilio_sms_from_number",
+            "+15557654321",
+        ), patch("src.phone_numbers.twilio_service.httpx.AsyncClient") as client_class:
+            client = AsyncMock()
+            client.post.return_value = response
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = None
+            client_class.return_value = client
+
+            sent = await twilio_service.send_sms(
+                "+15551234567", "OAuth connection needs attention"
+            )
+
+        assert sent is True
+        client.post.assert_awaited_once_with(
+            "https://api.twilio.com/2010-04-01/Accounts/"
+            "AC_test_account_sid/Messages.json",
+            data={
+                "To": "+15551234567",
+                "From": "+15557654321",
+                "Body": "OAuth connection needs attention",
+            },
+            auth=("AC_test_account_sid", "test_auth_token"),
+        )
+
+    @pytest.mark.asyncio
+    async def test_send_sms_fails_closed_without_a_sender(
+        self, twilio_service: TwilioService
+    ):
+        with patch(
+            "src.phone_numbers.twilio_service.settings.twilio_sms_from_number", None
+        ), patch("src.phone_numbers.twilio_service.httpx.AsyncClient") as client_class:
+            sent = await twilio_service.send_sms("+15551234567", "Message")
+
+        assert sent is False
+        client_class.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_sms_does_not_log_provider_response_body(
+        self, twilio_service: TwilioService, caplog
+    ):
+        response = SimpleNamespace(status_code=400, text="secret provider details")
+        with patch(
+            "src.phone_numbers.twilio_service.settings.twilio_sms_from_number",
+            "+15557654321",
+        ), patch("src.phone_numbers.twilio_service.httpx.AsyncClient") as client_class:
+            client = AsyncMock()
+            client.post.return_value = response
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = None
+            client_class.return_value = client
+
+            sent = await twilio_service.send_sms("+15551234567", "Message")
+
+        assert sent is False
+        assert "secret provider details" not in caplog.text

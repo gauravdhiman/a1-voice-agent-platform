@@ -18,6 +18,10 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from uuid import UUID
 
 from src.notifications.models import SendNotificationRequest
+from src.notifications.oauth_attention_outbox import oauth_attention_outbox
+from src.notifications.platform_settings_service import (
+    platform_notification_settings_service,
+)
 from src.notifications.service import notification_service
 from src.rbac.user_roles.service import user_role_service as default_user_role_service
 
@@ -33,6 +37,7 @@ class OAuthAttentionNotificationPhase(str, Enum):
 
     EXPIRING = "expiring"
     EXPIRED = "expired"
+    ACTION_REQUIRED = "action_required"
 
 
 @dataclass
@@ -53,12 +58,10 @@ class OAuthAttentionNotifier:
     adapter, and retry scheduler.
 
     Recipient policy:
-        Agent-specific connection notices go to administrators of the
-        organization that owns the agent. Platform-wide escalation is not
-        inferred here because sending every organization's connection details
-        to platform administrators would be noisy and unnecessarily disclose
-        tenant information. A future platform escalation policy can use the
-        same event and delivery service.
+        Every organization administrator receives an email. The configured
+        platform administrator receives email plus the platform Telegram chat
+        and optional SMS destination. Tenant details are included only in the
+        explicit platform alert so support can diagnose the connection.
 
     Security:
         Access tokens, refresh tokens, client secrets, endpoint URLs, and
@@ -72,6 +75,8 @@ class OAuthAttentionNotifier:
         notification_sender: Any = None,
         user_role_service: Any = None,
         organization_name_resolver: Optional[Callable[[UUID], Awaitable[str]]] = None,
+        platform_settings_service: Any = None,
+        platform_channel_outbox: Any = None,
     ) -> None:
         """Initialize the notifier with replaceable delivery dependencies.
 
@@ -90,6 +95,10 @@ class OAuthAttentionNotifier:
         self.organization_name_resolver = (
             organization_name_resolver or self._get_organization_name
         )
+        self.platform_settings_service = (
+            platform_settings_service or platform_notification_settings_service
+        )
+        self.platform_channel_outbox = platform_channel_outbox or oauth_attention_outbox
         self._organization_name_cache: Dict[UUID, str] = {}
 
     async def notify(
@@ -99,8 +108,9 @@ class OAuthAttentionNotifier:
         phase: OAuthAttentionNotificationPhase,
         minutes_until_expiry: Optional[float],
         reason: str,
+        immediate: bool = False,
     ) -> OAuthAttentionNotificationResult:
-        """Notify organization admins about one OAuth connection.
+        """Notify organization admins and configured platform channels.
 
         Args:
             agent_tool: Internal agent-tool context containing the agent,
@@ -113,8 +123,11 @@ class OAuthAttentionNotifier:
             reason: Safe, platform-generated explanation of why automatic
                 renewal is unavailable or has failed.
 
+            immediate: Whether the stored connection state is unusable or its
+                refresh outcome is ambiguous and needs prompt remediation.
+
         Returns:
-            Counters describing successful, failed, and skipped recipients.
+            Counters describing successful, failed, and skipped deliveries.
 
         Raises:
             No delivery exception is propagated for an individual recipient.
@@ -123,60 +136,26 @@ class OAuthAttentionNotifier:
         """
         result = OAuthAttentionNotificationResult()
         organization_id = getattr(agent_tool, "organization_id", None)
-        if not organization_id:
-            logger.warning(
-                "Cannot send OAuth attention notice for tool %s: organization "
-                "context is unavailable",
-                self._tool_name(agent_tool),
-            )
-            result.skipped += 1
-            return result
-
-        try:
-            members, error = await self.user_role_service.get_users_by_organization(
-                organization_id
-            )
-        except Exception:
-            logger.exception(
-                "Could not resolve organization admins for OAuth attention notice"
-            )
-            result.failed += 1
-            return result
-
-        if error or not members:
-            logger.warning(
-                "No organization members available for OAuth attention notice " "(%s)",
-                error or "empty member list",
-            )
-            result.skipped += 1
-            return result
-
-        admins = [
-            member
-            for member in members
-            if any(getattr(role, "name", None) == "org_admin" for role in member.roles)
-        ]
-        if not admins:
-            logger.warning(
-                "No organization admins available for OAuth attention notice"
-            )
-            result.skipped += 1
-            return result
-
-        try:
-            organization_name = await self.organization_name_resolver(organization_id)
-        except Exception:
-            logger.warning(
-                "Could not resolve organization name for OAuth attention notice",
-                exc_info=True,
-            )
-            organization_name = "your organization"
-
+        organization_name = "your organization"
+        if organization_id:
+            try:
+                organization_name = await self.organization_name_resolver(
+                    organization_id
+                )
+            except Exception:
+                logger.warning(
+                    "Could not resolve organization name for OAuth attention notice",
+                    exc_info=True,
+                )
         sensitive_config = getattr(agent_tool, "sensitive_config", None) or {}
         expires_at = self._safe_expiry(sensitive_config.get("expires_at"))
         expiry_key = str(int(expires_at)) if expires_at is not None else "unknown"
         phase_key = phase.value if isinstance(phase, Enum) else str(phase)
-        status_text = self._status_text(phase, minutes_until_expiry)
+        status_text = (
+            "requires immediate administrator action"
+            if immediate
+            else self._status_text(phase, minutes_until_expiry)
+        )
         expires_text = self._expires_text(expires_at)
         tool_name = self._tool_name(agent_tool)
         agent_name = getattr(agent_tool, "agent_name", None) or str(
@@ -186,33 +165,96 @@ class OAuthAttentionNotifier:
             f"{settings.app_base_url.rstrip('/')}/agents/"
             f"{getattr(agent_tool, 'agent_id', '')}?tab=tools"
         )
+        credential_version = int(getattr(agent_tool, "oauth_credential_version", 0))
+        event_code = str(
+            getattr(agent_tool, "oauth_refresh_error_code", None)
+            or ("action_required" if immediate else phase_key)
+        )
+        event_key = (
+            f"oauth-attention:{agent_tool.id}:v{credential_version}:"
+            f"{event_code}:{expiry_key}"
+        )
+        template_variables = {
+            "user_name": "there",
+            "tool_name": tool_name,
+            "agent_name": agent_name,
+            "organization_name": organization_name,
+            "status_text": status_text,
+            "expires_at": expires_text,
+            "reason": reason,
+            "action_url": action_url,
+            "app_name": settings.app_name,
+        }
 
-        for member in admins:
-            recipient_name = self._member_name(member)
+        if organization_id:
             try:
-                request = SendNotificationRequest(
-                    event_key=OAUTH_ATTENTION_EVENT_KEY,
-                    recipient_email=member.email,
-                    recipient_name=recipient_name,
-                    organization_id=organization_id,
-                    user_id=member.id,
-                    template_variables={
-                        "user_name": recipient_name or "there",
-                        "tool_name": tool_name,
-                        "agent_name": agent_name,
-                        "organization_name": organization_name,
-                        "status_text": status_text,
-                        "expires_at": expires_text,
-                        "reason": reason,
-                        "action_url": action_url,
-                        "app_name": settings.app_name,
-                    },
-                    idempotency_key=(
-                        f"oauth-attention:{agent_tool.id}:{phase_key}:{expiry_key}:"
-                        f"{member.id}"
-                    ),
+                members, _ = await self.user_role_service.get_users_by_organization(
+                    organization_id
                 )
-                delivery = await self.notification_sender.send_notification(request)
+            except Exception:
+                logger.exception(
+                    "Could not resolve organization admins for OAuth attention notice"
+                )
+                members = []
+
+            admins = [
+                member
+                for member in members or []
+                if any(
+                    getattr(role, "name", None) == "org_admin"
+                    for role in getattr(member, "roles", [])
+                )
+            ]
+            if not admins:
+                result.skipped += 1
+            for member in admins:
+                recipient_name = self._member_name(member)
+                try:
+                    request = SendNotificationRequest(
+                        event_key=OAUTH_ATTENTION_EVENT_KEY,
+                        recipient_email=member.email,
+                        recipient_name=recipient_name,
+                        organization_id=organization_id,
+                        user_id=member.id,
+                        template_variables={
+                            **template_variables,
+                            "user_name": recipient_name or "there",
+                        },
+                        idempotency_key=f"{event_key}:org:{member.id}",
+                    )
+                    delivery = await self.notification_sender.send_notification(request)
+                    if delivery and delivery.success:
+                        result.sent += 1
+                    else:
+                        result.failed += 1
+                except Exception:
+                    result.failed += 1
+                    logger.exception(
+                        "Failed to send OAuth attention notice to an organization admin"
+                    )
+        else:
+            result.skipped += 1
+
+        try:
+            platform_email = (
+                await self.platform_settings_service.get_platform_admin_email()
+            )
+        except Exception:
+            platform_email = None
+            result.failed += 1
+            logger.exception("Could not load the platform OAuth alert email")
+        if platform_email:
+            try:
+                delivery = await self.notification_sender.send_notification(
+                    SendNotificationRequest(
+                        event_key=OAUTH_ATTENTION_EVENT_KEY,
+                        recipient_email=platform_email,
+                        recipient_name="Platform administrator",
+                        organization_id=organization_id,
+                        template_variables=template_variables,
+                        idempotency_key=f"{event_key}:platform-email:{platform_email}",
+                    )
+                )
                 if delivery and delivery.success:
                     result.sent += 1
                 else:
@@ -220,8 +262,30 @@ class OAuthAttentionNotifier:
             except Exception:
                 result.failed += 1
                 logger.exception(
-                    "Failed to send OAuth attention notice to an organization admin"
+                    "Failed to send OAuth attention notice to platform admin"
                 )
+        else:
+            result.skipped += 1
+
+        if organization_id:
+            try:
+                await self.platform_channel_outbox.enqueue(
+                    event_key=event_key,
+                    agent_tool_id=str(agent_tool.id),
+                    organization_id=str(organization_id),
+                    payload={
+                        "organization_name": organization_name,
+                        "agent_name": agent_name,
+                        "tool_name": tool_name,
+                        "status_text": status_text,
+                        "expires_at": expires_text,
+                        "reason": reason,
+                        "action_url": action_url,
+                    },
+                )
+            except Exception:
+                result.failed += 1
+                logger.exception("Could not enqueue OAuth platform-channel alert")
 
         return result
 

@@ -193,6 +193,37 @@ prints secret material. Do not add the historical fallback to a long-lived
 production environment; rotate the data and keep only the deployment-managed
 current key (plus explicitly controlled rotation fallbacks).
 
+### OAuth tool connection recovery
+
+The backend refresh loop is an in-process maintenance task. The supported
+Cloud Run deployment keeps one minimum backend instance and deploys it with
+`--no-cpu-throttling`, so the loop can run between HTTP requests. Keep this
+setting on backend revisions; request-based CPU allocation can suspend idle
+background work. See [Cloud Run billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings).
+
+If an alert says the provider result is unknown, reconnect the affected tool in
+the agent's **Tools** page. The platform intentionally stops reusing the old
+refresh grant because the provider may have rotated it before the connection
+failed. If the alert identifies an OAuth client configuration problem, verify
+the platform tool's client ID and secret and the provider's registered callback
+URL before reconnecting.
+
+If an alert says credentials are unreadable, check whether an `ENCRYPTION_KEY`
+change or deployment mismatch removed the key that encrypted the existing
+connection. Restore the previous key as a controlled `ENCRYPTION_KEY_FALLBACKS`
+entry and ensure backend and voice-ws use the same key set. The next OAuth scan
+clears the unreadable state when decryption succeeds. Reconnect the tool only
+when the old key cannot be recovered. Do not copy tokens into tickets or
+logs.
+
+Organization admins receive email. Configure the platform-admin email and
+Telegram settings on the Platform Notification Settings page. Platform SMS
+requires an E.164 destination, the explicit SMS opt-in, Twilio account
+credentials, and `TWILIO_SMS_FROM_NUMBER`. Telegram and SMS retries use the
+database outbox; email retries use the notification log scheduler. A provider
+may accept an alert just before the database acknowledgment is lost, so a rare
+duplicate message is possible.
+
 ## Mandatory release gate: AI agent calling
 
 AI agent calling is a production-critical path. A deployment is **not

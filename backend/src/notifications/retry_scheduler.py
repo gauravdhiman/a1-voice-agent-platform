@@ -58,6 +58,12 @@ class NotificationRetryScheduler:
             except Exception:
                 logger.exception("Low-credit notification outbox iteration failed")
             try:
+                from .oauth_attention_outbox import oauth_attention_outbox
+
+                await oauth_attention_outbox.process_pending()
+            except Exception:
+                logger.exception("OAuth attention outbox iteration failed")
+            try:
                 await asyncio.sleep(self.check_interval_hours * 3600)
             except asyncio.CancelledError:
                 break

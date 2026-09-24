@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 from uuid import UUID
 
 from shared.common.security import decrypt_data, encrypt_data
-from shared.config import supabase_config
+from shared.config import settings, supabase_config
 
 from .platform_settings_models import (
     PLATFORM_SETTINGS_SINGLETON_ID,
@@ -50,6 +50,15 @@ class PlatformNotificationSettingsService:
         return PlatformNotificationSettings(
             id=UUID(row["id"]),
             platform_admin_email=platform_admin_email,
+            platform_admin_sms_phone=row.get("platform_admin_sms_phone"),
+            platform_admin_sms_notifications_enabled=bool(
+                row.get("platform_admin_sms_notifications_enabled")
+            ),
+            sms_sender_configured=bool(
+                settings.twilio_account_sid
+                and settings.twilio_auth_token
+                and settings.twilio_sms_from_number
+            ),
             verification_from_email=from_email,
             verification_from_name=from_name,
             email_verification_active=verification_sender_configured(
@@ -84,6 +93,12 @@ class PlatformNotificationSettingsService:
 
         if "platform_admin_email" in fields_set:
             update_data["platform_admin_email"] = payload.platform_admin_email
+        if "platform_admin_sms_phone" in fields_set:
+            update_data["platform_admin_sms_phone"] = payload.platform_admin_sms_phone
+        if "platform_admin_sms_notifications_enabled" in fields_set:
+            update_data["platform_admin_sms_notifications_enabled"] = (
+                payload.platform_admin_sms_notifications_enabled
+            )
         if "verification_from_email" in fields_set:
             update_data["verification_from_email"] = payload.verification_from_email
         if "verification_from_name" in fields_set:
@@ -143,7 +158,7 @@ class PlatformNotificationSettingsService:
         return settings_row.verification_from_email, settings_row.verification_from_name
 
     async def get_platform_admin_email(self) -> Optional[str]:
-        """Return the configured recipient for platform-admin lead alerts."""
+        """Return the configured platform-admin email alert recipient."""
         settings_row = await self.get_settings()
         return settings_row.platform_admin_email
 

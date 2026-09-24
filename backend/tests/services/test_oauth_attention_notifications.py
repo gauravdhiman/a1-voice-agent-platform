@@ -59,6 +59,16 @@ def _agent_tool(
     )
 
 
+def _notifier(**kwargs):
+    """Build a notifier with isolated platform configuration and channel queue."""
+    kwargs.setdefault(
+        "platform_settings_service",
+        SimpleNamespace(get_platform_admin_email=AsyncMock(return_value=None)),
+    )
+    kwargs.setdefault("platform_channel_outbox", SimpleNamespace(enqueue=AsyncMock()))
+    return OAuthAttentionNotifier(**kwargs)
+
+
 @pytest.mark.asyncio
 async def test_auth_tool_loader_keeps_agent_and_organization_context():
     """Background OAuth checks receive context without changing public responses."""
@@ -95,9 +105,8 @@ async def test_auth_tool_loader_keeps_agent_and_organization_context():
             "updated_at": "2026-01-01T00:00:00Z",
         },
     }
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
-        row
-    ]
+    result_query = mock_client.table.return_value.select.return_value.eq.return_value
+    result_query.range.return_value.execute.return_value.data = [row]
 
     with patch(
         "shared.voice_agents.tool_service.decrypt_data",
@@ -126,6 +135,102 @@ async def test_auth_tool_loader_keeps_agent_and_organization_context():
 
 
 @pytest.mark.asyncio
+async def test_auth_tool_loader_distinguishes_missing_tokens_from_decryption_failure():
+    """A readable config without tokens is not an encryption-key incident."""
+    tool_service = ToolService()
+    mock_client = MagicMock()
+    tool_service.supabase_config = MagicMock()
+    tool_service.supabase_config.client = mock_client
+    tool_service.supabase_config.is_configured.return_value = True
+    row = {
+        "id": str(uuid4()),
+        "agent_id": str(uuid4()),
+        "tool_id": str(uuid4()),
+        "config": None,
+        "sensitive_config": "encrypted",
+        "is_enabled": True,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "voice_agents": {"name": "Agent", "organization_id": str(uuid4())},
+        "tool": {
+            "id": str(uuid4()),
+            "requires_auth": True,
+            "auth_type": "oauth2",
+            "name": "Calendar",
+            "auth_config": {"token_url": "https://oauth.example.com/token"},
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+    }
+    result_query = mock_client.table.return_value.select.return_value.eq.return_value
+    result_query.range.return_value.execute.return_value.data = [row]
+
+    with patch(
+        "shared.voice_agents.tool_service.decrypt_data",
+        return_value={"oauth_client_id": "client-id"},
+    ):
+        tools, error = await tool_service.get_all_agent_tools_with_auth()
+
+    assert error is None
+    assert len(tools) == 1
+    assert tools[0].oauth_credentials_unreadable is False
+
+
+@pytest.mark.asyncio
+async def test_auth_tool_loader_paginates_past_database_page_limit():
+    """A refresh cycle visits rows across PostgREST response pages."""
+    tool_service = ToolService()
+    mock_client = MagicMock()
+    tool_service.supabase_config = MagicMock()
+    tool_service.supabase_config.client = mock_client
+    tool_service.OAUTH_REFRESH_SCAN_PAGE_SIZE = 2
+    row_template = {
+        "agent_id": str(uuid4()),
+        "tool_id": str(uuid4()),
+        "config": None,
+        "sensitive_config": "encrypted",
+        "unselected_functions": None,
+        "is_enabled": True,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "last_refreshed_at": None,
+        "voice_agents": {"name": "Agent", "organization_id": str(uuid4())},
+        "tool": {
+            "requires_auth": True,
+            "auth_type": "oauth2",
+            "name": "Calendar",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+    }
+    rows = [dict(row_template, id=str(uuid4())) for _ in range(3)]
+    range_query = (
+        mock_client.table.return_value.select.return_value.eq.return_value.range
+    )
+    range_query.side_effect = [
+        SimpleNamespace(execute=MagicMock(return_value=SimpleNamespace(data=rows[:2]))),
+        SimpleNamespace(execute=MagicMock(return_value=SimpleNamespace(data=rows[2:]))),
+    ]
+
+    with patch(
+        "shared.voice_agents.tool_service.decrypt_data",
+        return_value={
+            "access_token": "access",
+            "refresh_token": "refresh",
+        },
+    ), patch("shared.voice_agents.tool_service.AgentTool") as agent_model, patch(
+        "shared.voice_agents.tool_service.PlatformTool"
+    ):
+        tools, error = await tool_service.get_all_agent_tools_with_auth()
+
+    assert error is None
+    assert len(tools) == 3
+    assert range_query.call_args_list[0].args == (0, 1)
+    assert range_query.call_args_list[1].args == (2, 3)
+    assert agent_model.call_count == 3
+
+
+@pytest.mark.asyncio
 async def test_notifier_sends_one_email_per_org_admin_without_token_values():
     """OAuth notices go to org admins and never include credential values."""
     sender_call = AsyncMock(return_value=SimpleNamespace(success=True))
@@ -136,7 +241,7 @@ async def test_notifier_sends_one_email_per_org_admin_without_token_values():
     role_service.get_users_by_organization = AsyncMock(
         return_value=([org_admin, regular_member], None)
     )
-    notifier = OAuthAttentionNotifier(
+    notifier = _notifier(
         notification_sender=sender,
         user_role_service=role_service,
         organization_name_resolver=AsyncMock(return_value="Example Organization"),
@@ -163,7 +268,7 @@ async def test_notifier_sends_one_email_per_org_admin_without_token_values():
     assert request.template_variables["agent_name"] == "Support Agent"
     assert "access-token" not in repr(request.template_variables)
     assert "refresh-token" not in repr(request.template_variables)
-    assert request.idempotency_key.startswith(f"oauth-attention:{tool.id}:expiring:")
+    assert request.idempotency_key.startswith(f"oauth-attention:{tool.id}:v0:expiring:")
 
 
 @pytest.mark.asyncio
@@ -174,7 +279,7 @@ async def test_notifier_uses_a_distinct_idempotency_key_after_expiry():
     admin = _member("Org Admin", ["org_admin"])
     role_service = MagicMock()
     role_service.get_users_by_organization = AsyncMock(return_value=([admin], None))
-    notifier = OAuthAttentionNotifier(
+    notifier = _notifier(
         notification_sender=sender,
         user_role_service=role_service,
         organization_name_resolver=AsyncMock(return_value="Example Organization"),
@@ -191,7 +296,79 @@ async def test_notifier_uses_a_distinct_idempotency_key_after_expiry():
     assert result.sent == 1
     request = sender_call.await_args.args[0]
     assert request.template_variables["status_text"] == "has expired"
-    assert request.idempotency_key.startswith(f"oauth-attention:{tool.id}:expired:")
+    assert request.idempotency_key.startswith(f"oauth-attention:{tool.id}:v0:expired:")
+
+
+@pytest.mark.asyncio
+async def test_notifier_emails_platform_admin_and_queues_safe_channel_alerts():
+    """Organization and platform admins receive durable, credential-free alerts."""
+    sender_call = AsyncMock(return_value=SimpleNamespace(success=True))
+    sender = SimpleNamespace(send_notification=sender_call)
+    role_service = SimpleNamespace(
+        get_users_by_organization=AsyncMock(
+            return_value=([_member("Org Admin", ["org_admin"])], None)
+        )
+    )
+    platform_settings = SimpleNamespace(
+        get_platform_admin_email=AsyncMock(return_value="platform@example.com")
+    )
+    channel_outbox = SimpleNamespace(enqueue=AsyncMock())
+    notifier = OAuthAttentionNotifier(
+        notification_sender=sender,
+        user_role_service=role_service,
+        organization_name_resolver=AsyncMock(return_value="Example Organization"),
+        platform_settings_service=platform_settings,
+        platform_channel_outbox=channel_outbox,
+    )
+    tool = _agent_tool(expires_in_minutes=-1, has_refresh_token=True)
+    tool.oauth_credential_version = 12
+    tool.oauth_refresh_error_code = "provider_invalid_grant"
+
+    result = await notifier.notify(
+        tool,
+        phase=OAuthAttentionNotificationPhase.ACTION_REQUIRED,
+        minutes_until_expiry=None,
+        reason="Reconnect the tool to restore access.",
+        immediate=True,
+    )
+
+    assert result.sent == 2
+    assert {call.args[0].recipient_email for call in sender_call.await_args_list} == {
+        "org.admin@example.com",
+        "platform@example.com",
+    }
+    channel_outbox.enqueue.assert_awaited_once()
+    payload = channel_outbox.enqueue.await_args.kwargs["payload"]
+    assert payload["status_text"] == "requires immediate administrator action"
+    assert "access-token" not in repr(payload)
+    assert "refresh-token" not in repr(payload)
+
+
+@pytest.mark.asyncio
+async def test_unusable_token_notifies_immediately_outside_expiry_window():
+    """A stored unrecoverable state bypasses the normal expiry notification window."""
+    tool = _agent_tool(expires_in_minutes=180, has_refresh_token=True)
+    tool.oauth_refresh_status = "outcome_unknown"
+    tool.oauth_refresh_error_code = "provider_request_outcome_unknown"
+    tool_service = SimpleNamespace(
+        get_all_agent_tools_with_auth=AsyncMock(return_value=([tool], None))
+    )
+    notifier = SimpleNamespace(notify=AsyncMock())
+    service = TokenRefreshService(tool_service, oauth_attention_notifier=notifier)
+
+    with patch("src.services.token_refresh_service.settings") as mock_settings:
+        mock_settings.token_refresh_max_concurrent_refreshes = 2
+        mock_settings.token_refresh_attention_window_minutes = 30
+        await service._refresh_expired_tokens()
+
+    notifier.notify.assert_awaited_once()
+    assert notifier.notify.await_args.kwargs["phase"] is (
+        OAuthAttentionNotificationPhase.ACTION_REQUIRED
+    )
+    assert notifier.notify.await_args.kwargs["immediate"] is True
+    assert (
+        "Do not retry the old permission" in notifier.notify.await_args.kwargs["reason"]
+    )
 
 
 @pytest.mark.asyncio

@@ -1,95 +1,102 @@
-# Token Refresh Distributed Lock
+# OAuth Token Refresh and Recovery
 
-**Problem:** `TokenRefreshService` runs a background loop in every backend
-instance that refreshes OAuth tokens before they expire. With multiple backend
-instances, two can refresh the **same** token at once. Most OAuth providers
-**rotate the refresh token** on each refresh, so concurrent refreshes invalidate
-each other, and the last DB write can persist a stale refresh token — the tool
-then silently breaks until the user re-authenticates.
+`TokenRefreshService` runs from the FastAPI lifespan and scans enabled OAuth
+connections on a configurable interval. Cloud Run backend deployments keep one
+minimum instance and use `--no-cpu-throttling` so the in-process loop can run
+between HTTP requests. The loop runs in every backend instance; Postgres
+coordinates work per connection.
 
-**Solution:** a Postgres-backed per-tool **lease lock** so only one instance
-refreshes a given token at a time.
+## Refresh concurrency and credential fencing
 
-## Why a row-lease (not `pg_advisory_lock`)
+The `token_refresh_leases` row and `claim_token_refresh` / `release_token_refresh`
+functions prevent two workers from refreshing one connection concurrently.
+This uses a row lease because Supabase/PostgREST pools database sessions, so a
+session-scoped advisory lock cannot safely span an external HTTP call.
 
-`pg_advisory_lock` requires the **same Postgres session** to acquire *and*
-release (or hold across the work). This app talks to Postgres through
-Supabase/PostgREST, which pools connections — each RPC call may land on a
-different session, so an advisory lock acquired in one call can't be reliably
-released or held across the external OAuth HTTP call. A row-based lease
-(`token_refresh_leases`) works with pooling: acquisition and release are
-independent atomic SQL statements, and the lease row survives across calls. It
-is still a Postgres-level lock (atomic conditional write), just pooling-friendly.
+The worker uses the initial scan only to find candidates. Once it claims a
+lease, it reloads the current connection and checks expiry and OAuth metadata
+again. It marks the refresh in progress through `begin_token_refresh`, which
+requires the current lease claim and credential generation.
 
-## How it works
+Each `agent_tools` row has an `oauth_credential_version`. A database trigger
+increments it and resets refresh failure state whenever `sensitive_config`
+changes, including an OAuth callback. `complete_token_refresh` atomically writes
+rotated credentials only when both the claim and source generation are still
+current. A stale worker therefore cannot replace credentials from a newer
+authorization or from a later lease holder.
 
-- Migration `20260623000001` creates `token_refresh_leases(agent_tool_id pk,
-  locked_at, claim)` and two plpgsql functions:
-  - `claim_token_refresh(p_tool_id, p_claim, p_lease_seconds=120) → jsonb`
-    — `INSERT … ON CONFLICT DO UPDATE … WHERE locked_at < now()-lease`.
-    Returns `{"claimed": true, "claim": <id>}` when this caller wins, else
-    `{"claimed": false, "claim": ""}`. Atomic, so only one concurrent caller
-    wins; the lease TTL means a crashed holder is re-acquirable after
-    `p_lease_seconds`.
-  - `release_token_refresh(p_tool_id, p_claim) → jsonb` — deletes the row only
-    if `claim` matches this caller (avoids releasing a lease another instance
-    re-acquired after this one's expired).
+The scheduler scan paginates `agent_tools`; every page is filtered to enabled
+OAuth connections with stored encrypted credentials. Refreshes run concurrently
+under `TOKEN_REFRESH_MAX_CONCURRENT_REFRESHES` (default 5). The lease defaults
+to 180 seconds and rejects values below that minimum. DNS validation is bounded
+to 10 seconds; HTTPX network-inactivity timeouts are 30 seconds, and the entire
+provider request/retry sequence has a 105-second wall-clock deadline. Only
+connection-establishment or local-pool failures known to have happened before
+request delivery are retried.
 
-- `ToolService.claim_refresh_lock(agent_tool_id)` generates a `uuid4` claim id,
-  calls the RPC, returns the claim id on success or `None` on failure
-  (**fail-closed**: skip refresh rather than race).
-- `ToolService.release_refresh_lock(agent_tool_id, claim_id)` releases only its
-  own lease.
-- `TokenRefreshService._check_and_refresh_token` claims **just before** the
-  external OAuth HTTP call and releases in a **`finally`** (success or failure).
+## Provider outcomes and recovery
 
-## Tests (TDD, red→green)
+OAuth refresh tokens can rotate when used. A read/write timeout, provider 5xx,
+malformed success response, or process crash while a row is marked
+`refreshing` can leave the outcome ambiguous. The worker does not replay the old
+refresh token in those cases. After the lease expires, the next worker marks
+`outcome_unknown`, stops automatic refresh, and sends an immediate admin alert.
+This conservative policy can require reauthorization if the process crashed
+after marking the attempt but before sending the request; that rare false
+positive is safer than replaying a possibly rotated refresh token.
 
-`backend/tests/services/test_token_refresh_lock.py` — 9 tests covering claim
-(granted / held-by-another / fail-closed on error), release (owned / not-owned /
-error), and the refresh integration (skip when locked; refresh-then-release on
-success; release even on refresh failure). The existing
-`test_check_and_refresh_token_success` was updated to mock + assert the lock.
+The internal `oauth_refresh_status` values are:
 
-## Applying
+| State | Meaning | Recovery |
+| --- | --- | --- |
+| `ready` | No unresolved refresh failure | Normal scheduled refresh continues |
+| `refreshing` | Provider request may be in flight | Wait for the lease; a later owner classifies an abandoned attempt as unknown |
+| `outcome_unknown` | Provider may have rotated the grant but persistence is unconfirmed | Reconnect the tool; do not reuse the old refresh token |
+| `reauth_required` | Provider returned `invalid_grant` | Reconnect the tool to grant permission again |
+| `configuration_error` | Provider rejected client or endpoint configuration | Platform admin checks client ID, secret, and registered callback URL, then reconnects |
+| `credentials_unreadable` | Stored ciphertext cannot be decrypted with the active/fallback Fernet keys | Restore the previous key or add it to `ENCRYPTION_KEY_FALLBACKS`; the next scan clears the state once decryption succeeds, otherwise reconnect |
 
-```bash
-alembic upgrade head   # applies 20260623000001
-```
+An explicit HTTP 429 is deferred to the next normal scan. Connection failures
+known to occur before request delivery can be retried with bounded backoff.
+Provider revocation, account policy, outages, and expired grants cannot be
+recovered automatically; the recorded state and alerts tell an administrator
+what to do next.
 
-The lock is internal; only the backend service role (which bypasses RLS) uses
-the table/functions.
+## Administrator notifications
 
-## Post-review hardening
+`OAuthAttentionNotifier` sends the seeded
+`tools.oauth_reauthorization_required` email event to each organization admin
+and the configured platform-admin email. Email delivery uses the existing
+`NotificationService` and notification-log retry loop.
 
-After the code review (`docs/06_review/token-refresh-lock-review.md`):
+The platform Telegram chat receives OAuth alerts when the existing Telegram
+notifications are enabled and configured. Optional platform-admin SMS requires
+an E.164 destination and explicit opt-in in Platform Notification Settings,
+plus backend Twilio credentials and `TWILIO_SMS_FROM_NUMBER`. Organization
+admins currently receive email; the product has no organization-level
+Telegram or SMS destination setting.
 
-- **Lost-rotated-token is now observable.** If the DB write fails after a
-  successful OAuth refresh, `_update_agent_tool` returns `False` and the caller
-  logs **CRITICAL** (the stored refresh_token is now invalid → user must
-  re-auth). It does not silently report success.
-- **Disabled tools are skipped.** `get_all_agent_tools_with_auth` filters
-  `is_enabled = true` (DB + Python) so disabled integrations aren't refreshed.
-- **Lease TTL is configurable** via `TOKEN_REFRESH_LOCK_LEASE_SECONDS`
-  (default 120). Set it above your slowest OAuth round-trip so the lease can't
-  expire mid-refresh.
-- **HTTP call is bounded** — `_refresh_oauth_token` uses `httpx.Timeout(30.0)`.
-- **Log noise reduced** — per-tool "Processing" log is DEBUG.
-- **Parallel refresh** — `_refresh_expired_tokens` uses `asyncio.gather` with a
-  semaphore (`TOKEN_REFRESH_MAX_CONCURRENT_REFRESHES`, default 5) to refresh
-  multiple tokens concurrently instead of one-by-one.
-- **Method decomposition** — `_check_and_refresh_token` (~150 lines) was split
-  into 3 focused methods:
-  - `_is_token_expiring(agent_tool)` — checks whether the token is within the
-    expiry window
-  - `_resolve_oauth_config(agent_tool)` — resolves provider, token URL and
-    builds the refresh payload
-  - `_perform_token_refresh(agent_tool, oauth_data, token_url, ...)` — acquires
-    the lease, refreshes, persists, and releases
+Telegram/SMS alerts are inserted into `oauth_attention_outbox` with safe display
+fields and action instructions. The existing notification scheduler claims
+rows with `FOR UPDATE SKIP LOCKED`, attempts new alerts immediately, and retries
+failed channels with bounded exponential backoff. Delivery is at-least-once if
+a provider accepts a message but its database acknowledgment is lost. Alerts
+never contain OAuth tokens, client secrets, endpoint URLs, or raw provider
+responses.
 
-### Known limitations (accepted)
+## Schema and tests
 
-- **Crash between OAuth refresh and DB write:** if the process dies after the
-  provider rotates the refresh_token but before the DB write, the new token is
-  lost and the next cycle retries with the old (possibly invalid) token. The
-  CRITICAL log makes this observable; a temp-token store would fully close it.
+Migration `20260924000001` adds refresh generation/status fields, database
+fencing functions, optional platform SMS settings, and the service-role-only
+OAuth channel outbox. See [Database Schema](../DATABASE_SCHEMA.md) and the
+[notification system guide](../02_core_systems/notification_system.md).
+
+Regression coverage lives in:
+
+- `backend/tests/services/test_token_refresh_service.py`
+- `backend/tests/services/test_token_refresh_lock.py`
+- `backend/tests/services/test_token_refresh_review_fixes.py`
+- `backend/tests/services/test_oauth_attention_notifications.py`
+- `backend/tests/notifications/test_oauth_attention_outbox.py`
+- `backend/tests/notifications/test_platform_settings_service.py`
+- `backend/tests/phone_numbers/test_twilio_service.py`

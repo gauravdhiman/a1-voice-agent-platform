@@ -7,6 +7,9 @@ import { apiClient } from "@/lib/api/client";
 export interface PlatformNotificationSettings {
   id: string;
   platform_admin_email?: string | null;
+  platform_admin_sms_phone?: string | null;
+  platform_admin_sms_notifications_enabled: boolean;
+  sms_sender_configured: boolean;
   verification_from_email?: string | null;
   verification_from_name?: string | null;
   email_verification_active: boolean;
@@ -21,6 +24,8 @@ export interface PlatformNotificationSettings {
 
 export interface PlatformNotificationSettingsUpdate {
   platform_admin_email?: string | null;
+  platform_admin_sms_phone?: string | null;
+  platform_admin_sms_notifications_enabled?: boolean;
   verification_from_email?: string | null;
   verification_from_name?: string | null;
   telegram_chat_id?: string | null;

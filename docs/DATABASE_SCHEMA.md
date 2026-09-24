@@ -655,6 +655,10 @@ Junction table mapping voice agents to platform tools with configuration.
 | unselected_functions | ARRAY(VARCHAR) | NULLABLE                         | Functions excluded from tool        |
 | is_enabled           | BOOLEAN        | NOT NULL, DEFAULT TRUE           | Tool enabled for this agent         |
 | last_refreshed_at    | TIMESTAMPTZ    | NULLABLE                         | Last OAuth token refresh time       |
+| oauth_credential_version | BIGINT      | NOT NULL, DEFAULT 0              | Credential generation used to fence refresh writes |
+| oauth_refresh_status | TEXT           | NOT NULL, DEFAULT 'ready'        | Lifecycle state: ready, refreshing, outcome_unknown, reauth_required, configuration_error, credentials_unreadable |
+| oauth_refresh_started_at | TIMESTAMPTZ | NULLABLE                       | Start time for a provider refresh with an ambiguous result |
+| oauth_refresh_error_code | TEXT        | NULLABLE                         | Safe failure category for admin recovery guidance |
 | created_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Creation timestamp                  |
 | updated_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Last update timestamp               |
 
@@ -665,7 +669,14 @@ Junction table mapping voice agents to platform tools with configuration.
 
 **RLS**: Enabled
 **Unique Constraint**: `(agent_id, tool_id)` named `uq_agent_tool`
+**Check Constraint**: `ck_agent_tools_oauth_refresh_status` restricts refresh lifecycle values.
 **Real-time**: Enabled
+
+The `trg_reset_oauth_refresh_state_on_credentials_change` trigger increments
+`oauth_credential_version` and clears refresh failure state whenever a user
+reauthorizes or another service replaces `sensitive_config`. A refresh write
+must present its lease claim and the generation it read, so stale workers cannot
+overwrite a newer authorization.
 
 **Visibility behavior**: an existing attachment is not deleted or disabled
 when its platform tool is unpublished or hidden by its organization. The
@@ -725,6 +736,23 @@ so refresh is not blocked forever.
   — atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE locked_at < now()-lease`. Returns `{"claimed": bool, "claim": text}`.
 - `release_token_refresh(p_tool_id uuid, p_claim text) → jsonb`
   — deletes the lease row only if `claim` matches this caller. Returns `{"released": bool}`.
+- `begin_token_refresh(p_tool_id uuid, p_claim text, p_expected_version bigint, p_lease_seconds int) → jsonb`
+  — marks a refresh in progress only for the current lease and credential generation.
+- `complete_token_refresh(p_tool_id uuid, p_claim text, p_expected_version bigint, p_encrypted_config text, p_refreshed_at timestamptz, p_lease_seconds int) → jsonb`
+  — atomically writes rotated credentials only while both fences remain current.
+- `update_token_refresh_status(...) → jsonb`
+  — stores a classified outcome under the active lease.
+- `mark_oauth_credentials_unreadable(p_tool_id uuid, p_expected_version bigint) → jsonb`
+  — marks decryption failure only if the credential generation has not changed.
+- `recover_oauth_credentials_unreadable(p_tool_id uuid, p_expected_version bigint) → jsonb`
+  — clears the decryption failure state only after the same credential generation
+  has successfully decrypted in the application.
+
+Statuses `outcome_unknown`, `reauth_required`, `configuration_error`, and
+`credentials_unreadable` stop automatic reuse of the old grant and trigger
+immediate admin notification. A new OAuth callback increments the generation
+and resets the status to `ready`; restoring a compatible encryption key also
+clears `credentials_unreadable` after the next successful application decrypt.
 
 ---
 
@@ -1385,17 +1413,54 @@ recipient, verification sender, and Telegram alerts).
 | Column                         | Type         | Constraints              | Description                                      |
 | ------------------------------ | ------------ | ------------------------ | ------------------------------------------------ |
 | id                             | UUID         | PRIMARY KEY              | Fixed singleton ID (`00000000-0000-0000-0000-000000000001`) |
-| platform_admin_email           | VARCHAR(320) | NULLABLE                 | Recipient for platform-admin demo and interest-lead alerts |
+| platform_admin_email           | VARCHAR(320) | NULLABLE                 | Recipient for platform-admin demo, interest-lead, and OAuth alerts |
+| platform_admin_sms_phone       | VARCHAR(32)  | NULLABLE                 | Optional platform-admin OAuth alert destination in E.164 format |
+| platform_admin_sms_notifications_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit platform-admin SMS opt-in for OAuth attention alerts |
 | verification_from_email        | VARCHAR(255) | NULLABLE                 | Resend sender for verification emails            |
 | verification_from_name         | VARCHAR(100) | NULLABLE                 | Display name for verification emails             |
 | telegram_bot_token_encrypted   | TEXT         | NULLABLE                 | Fernet-encrypted Telegram bot token              |
 | telegram_chat_id               | VARCHAR(100) | NULLABLE                 | Telegram chat/group ID for admin alerts          |
-| telegram_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Enable/disable Telegram signup and lead alerts  |
+| telegram_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Enable/disable Telegram signup, lead, and OAuth alerts |
 | updated_by                     | UUID         | NULLABLE                 | Last platform admin who updated settings         |
 | created_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Creation timestamp                               |
 | updated_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Last update timestamp                            |
 
 **RLS**: Service role only (backend reads/writes via service key).
+
+SMS delivery also requires backend Twilio credentials and
+`TWILIO_SMS_FROM_NUMBER`. The API's `sms_sender_configured` status does not
+expose provider credentials.
+
+### oauth_attention_outbox
+
+Durable platform-channel delivery queue for OAuth connection alerts. Each
+credential generation and alert category has a unique `event_key`. The payload
+contains safe display metadata and recovery instructions; it never contains
+OAuth tokens, client secrets, or provider response bodies.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY | Queue row identifier |
+| event_key | TEXT | UNIQUE, NOT NULL | Idempotency key for the connection generation and alert category |
+| agent_tool_id | UUID | NOT NULL, FK → agent_tools.id (CASCADE) | OAuth connection requiring attention |
+| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning tenant |
+| payload | JSONB | NOT NULL | Safe organization/agent/tool labels, status, recovery steps, and action link |
+| telegram_state | TEXT | NOT NULL, DEFAULT 'pending' | `pending`, `sent`, or `skipped` |
+| sms_state | TEXT | NOT NULL, DEFAULT 'pending' | `pending`, `sent`, or `skipped` |
+| telegram_attempts | INTEGER | NOT NULL, DEFAULT 0 | Attempt counter |
+| sms_attempts | INTEGER | NOT NULL, DEFAULT 0 | Attempt counter |
+| available_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Earliest retry time |
+| lease_claim | TEXT | NULLABLE | Worker claim token |
+| lease_until | TIMESTAMPTZ | NULLABLE | Claim expiration for crash recovery |
+| last_error_code | TEXT | NULLABLE | Safe generic channel-delivery category |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Queue timestamps |
+| delivered_at | TIMESTAMPTZ | NULLABLE | Set when all configured channels are sent or skipped |
+
+**RLS**: Enabled with no client policies; backend service role only.
+`claim_oauth_attention_outbox` uses `FOR UPDATE SKIP LOCKED` to claim bounded
+batches across backend instances. Failed sends remain pending with bounded
+exponential retry. Delivery is at-least-once if a provider accepted a message
+but the database acknowledgment was lost.
 
 ---
 
@@ -2067,6 +2132,7 @@ erDiagram
 91. `20260920000001` - Replace the Jordan-specific Google Sheets catalog path with the configurable `Google_Sheets` row contract (`read_rows`, `find_rows`, `create_row`, and `update_row`), allow `sheet_row_created` demo receipts, and retire the legacy `Google_Sheets_lead_capture` catalog row while keeping saved links runtime-compatible.
 92. `20260922000001` - Update the existing system-default realtime voice preset to Google `gemini-3.8-live` with the `Zephyr` voice while preserving its other runtime settings. Explicit agent presets are unchanged.
 93. `20260923000001` - Add `organizations.provider_credentials_descriptions` (JSONB NULLABLE) for non-secret per-provider reference notes on the API Credentials screen. Notes are edited through `provider_credentials_descriptions_input` and stored separately from encrypted provider keys.
+94. `20260924000001` - Fence OAuth refreshes with credential generations and lease-checked SQL writes; persist ambiguous/re-auth-required states, add platform-admin SMS settings, and create a claimed durable Telegram/SMS OAuth alert outbox.
 
 ---
 

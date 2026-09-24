@@ -60,6 +60,10 @@ def _agent_tool(
     now = datetime.now(timezone.utc)
     at = MagicMock(spec=AgentTool)
     at.id = uuid4()
+    at.oauth_credential_version = 2
+    at.oauth_refresh_status = "ready"
+    at.oauth_refresh_error_code = None
+    at.oauth_credentials_unreadable = False
     at.tool = pt
     at.is_enabled = is_enabled
     sensitive_config = {
@@ -230,6 +234,10 @@ class TestPerformTokenRefresh:
         tool_service = MagicMock()
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.set_oauth_refresh_status = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.persist_refreshed_oauth_credentials = AsyncMock(return_value=True)
         svc = TokenRefreshService(tool_service)
         at = _agent_tool()
         with patch.object(
@@ -247,6 +255,10 @@ class TestPerformTokenRefresh:
         tool_service = MagicMock()
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.set_oauth_refresh_status = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.set_oauth_refresh_status = AsyncMock(return_value=True)
         svc = TokenRefreshService(tool_service)
         at = _agent_tool()
         with patch.object(
@@ -255,7 +267,10 @@ class TestPerformTokenRefresh:
             new_callable=AsyncMock,
             return_value={"access_token": "new", "expires_in": 3600},
         ), patch.object(
-            svc, "_update_agent_tool", new_callable=AsyncMock, return_value=False
+            tool_service,
+            "persist_refreshed_oauth_credentials",
+            new_callable=AsyncMock,
+            return_value=False,
         ):
             result = await svc._perform_token_refresh(
                 at,
@@ -269,6 +284,8 @@ class TestPerformTokenRefresh:
         tool_service = MagicMock()
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.persist_refreshed_oauth_credentials = AsyncMock(return_value=True)
         svc = TokenRefreshService(tool_service)
         at = _agent_tool()
         with patch.object(
@@ -277,7 +294,10 @@ class TestPerformTokenRefresh:
             new_callable=AsyncMock,
             return_value={"access_token": "new", "expires_in": 3600},
         ), patch.object(
-            svc, "_update_agent_tool", new_callable=AsyncMock, return_value=True
+            tool_service,
+            "persist_refreshed_oauth_credentials",
+            new_callable=AsyncMock,
+            return_value=True,
         ):
             result = await svc._perform_token_refresh(
                 at,
@@ -299,9 +319,16 @@ class TestReviewFix1DbUpdateFailure:
         tool_service = MagicMock()
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.get_agent_tool_with_sensitive_config = AsyncMock(
+            return_value=(None, None)
+        )
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.set_oauth_refresh_status = AsyncMock(return_value=True)
+        tool_service.persist_refreshed_oauth_credentials = AsyncMock(return_value=False)
         svc = TokenRefreshService(tool_service)
 
         at = _agent_tool()
+        tool_service.get_agent_tool_with_sensitive_config.return_value = (at, None)
         with patch("src.services.token_refresh_service.get_oauth_manager") as gm:
             mgr = MagicMock()
             mgr.extract_oauth_config.return_value = (
@@ -317,14 +344,10 @@ class TestReviewFix1DbUpdateFailure:
                     "refresh_token": "rotated",
                     "expires_in": 3600,
                 }
-                with patch.object(
-                    svc, "_update_agent_tool", new_callable=AsyncMock
-                ) as m_update:
-                    m_update.return_value = False
-                    caplog.set_level(
-                        logging.CRITICAL, logger="src.services.token_refresh_service"
-                    )
-                    result = await svc._check_and_refresh_token(at)
+                caplog.set_level(
+                    logging.CRITICAL, logger="src.services.token_refresh_service"
+                )
+                result = await svc._check_and_refresh_token(at)
 
         assert result is False
         assert any(r.levelno == logging.CRITICAL for r in caplog.records)
@@ -350,7 +373,8 @@ class TestReviewFix2ExcludeDisabledTools:
             "tool": {"requires_auth": True, "auth_type": "oauth2"},
         }
         disabled_row = dict(enabled_row, id="t2", is_enabled=False)
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        query = mock_client.table.return_value.select.return_value.eq.return_value
+        query.range.return_value.execute.return_value.data = [
             enabled_row,
             disabled_row,
         ]
@@ -477,9 +501,9 @@ class TestReviewFix3LeaseConfigurable:
         with patch("src.services.token_refresh_service.settings") as mock_settings:
             mock_settings.token_refresh_expiry_window_minutes = 15
             mock_settings.token_refresh_check_interval_minutes = 5
-            mock_settings.token_refresh_lock_lease_seconds = 90
+            mock_settings.token_refresh_lock_lease_seconds = 240
             mock_settings.token_refresh_max_concurrent_refreshes = 5
             await svc._check_and_refresh_token(at)
 
         tool_service.claim_refresh_lock.assert_awaited_once()
-        assert tool_service.claim_refresh_lock.await_args.kwargs["lease_seconds"] == 90
+        assert tool_service.claim_refresh_lock.await_args.kwargs["lease_seconds"] == 240

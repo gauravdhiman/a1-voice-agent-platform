@@ -66,7 +66,7 @@ Comprehensive documentation organized by feature.
 9. **[Platform Skills Fork Model](03_implementation/platform_skills_fork_model.md)** - Platform skills fork/refresh architecture and UI flow
 10. **[Platform Skills Management (Admin)](02_features/voice_agents/platform_skills_admin.md)** - Shared `<SkillEditor>` master-detail UI used by both the platform-admin page and the org skills tab (`OrganizationSkillsTab`); platform-admin-only with frontend + backend RBAC
 11. **[Voice Templates Management (Admin)](02_features/voice_agents/voice_templates_admin.md)** - Platform-admin CRUD for Markdown-backed templates used by agent creation and editing
-12. **[Token Refresh Lock](03_implementation/token_refresh_lock.md)** - Postgres-backed per-tool lease lock preventing the multi-instance OAuth token-refresh race (lease vs advisory-lock rationale)
+12. **[OAuth Token Refresh and Recovery](03_implementation/token_refresh_lock.md)** - Per-connection leases, credential-generation fencing, ambiguous-outcome recovery, and durable admin alerts
 13. **[Voice Engine](02_core_systems/voice_engine.md)** - Realtime (end-to-end) + modular pipeline engines, the session-builder seam, provider factory, and per-agent `speech_config` (Phase 1 done)
 14. **[Free-Tier Credit Refresh](03_implementation/free_tier_credit_refresh.md)** - pg_cron-triggered monthly credit renewal; atomic RPC race hardening
 15. **[Credit Usage Enforcement and Notifications](03_implementation/credit_usage_enforcement_and_notifications.md)** - system-wide usage rates, final-call settlement, phone-number grace periods, and durable low-credit emails
