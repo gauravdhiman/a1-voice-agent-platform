@@ -4,41 +4,41 @@
  * Platform-wide settings hub for notification delivery and phone-number policy.
  */
 
-import { useSearchParams } from "next/navigation";
-import { Bell, Phone } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { PlatformNotificationSettingsForm } from "@/components/notifications/platform-notification-settings-form";
 import { PlatformPhoneNumberSettingsForm } from "@/components/phone-numbers/platform-phone-number-settings-form";
-import { SettingsSectionNavigation } from "@/components/settings/settings-section-navigation";
-import type { SettingsNavigationSection } from "@/components/settings/settings-section-navigation";
+import {
+  AnimatedTabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { useAuth } from "@/contexts/auth-context";
 
-const PLATFORM_SETTINGS_SECTIONS: readonly SettingsNavigationSection[] = [
-  {
-    id: "notifications",
-    label: "Notifications",
-    description: "Alert destinations, email delivery, SMS, and Telegram.",
-    icon: Bell,
-  },
-  {
-    id: "phone-numbers",
-    label: "Phone numbers",
-    description: "Rental grace periods and release retry timing.",
-    icon: Phone,
-  },
-];
+const PLATFORM_SETTINGS_TABS = ["notifications", "phone-numbers"] as const;
+
+type PlatformSettingsTab = (typeof PLATFORM_SETTINGS_TABS)[number];
 
 /** Show all platform-wide settings behind a single platform-admin entry. */
 export default function PlatformSettingsPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const requestedSection = searchParams.get("section");
-  const activeSection = PLATFORM_SETTINGS_SECTIONS.some(
-    (section) => section.id === requestedSection,
+  const activeSectionFromUrl: PlatformSettingsTab = PLATFORM_SETTINGS_TABS.includes(
+    requestedSection as PlatformSettingsTab,
   )
-    ? requestedSection!
+    ? (requestedSection as PlatformSettingsTab)
     : "notifications";
+  const [activeSection, setActiveSection] =
+    useState<PlatformSettingsTab>(activeSectionFromUrl);
+
+  useEffect(() => {
+    setActiveSection(activeSectionFromUrl);
+  }, [activeSectionFromUrl]);
 
   if (!user?.hasRole("platform_admin")) {
     return (
@@ -50,12 +50,17 @@ export default function PlatformSettingsPage() {
     );
   }
 
-  const hrefForSection = (sectionId: string) =>
-    `/platform/settings?section=${encodeURIComponent(sectionId)}`;
-
-  const activeTitle =
-    PLATFORM_SETTINGS_SECTIONS.find((section) => section.id === activeSection)
-      ?.label ?? "Platform settings";
+  const handleTabChange = (value: string) => {
+    const nextSection = PLATFORM_SETTINGS_TABS.includes(
+      value as PlatformSettingsTab,
+    )
+      ? (value as PlatformSettingsTab)
+      : "notifications";
+    setActiveSection(nextSection);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("section", nextSection);
+    router.push(`/platform/settings?${params.toString()}`, { scroll: false });
+  };
 
   return (
     <div className="space-y-6">
@@ -66,28 +71,44 @@ export default function PlatformSettingsPage() {
         </p>
       </header>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <SettingsSectionNavigation
-          ariaLabel="Platform settings"
-          sections={PLATFORM_SETTINGS_SECTIONS}
-          activeSection={activeSection}
-          hrefForSection={hrefForSection}
-        />
-        <section
-          aria-labelledby="platform-settings-section-title"
-          className="min-w-0"
-          data-testid={`platform-settings-${activeSection}`}
+      <AnimatedTabs
+        value={activeSection}
+        onValueChange={handleTabChange}
+        className="space-y-6"
+      >
+        <TabsList
+          aria-label="Platform settings"
+          className="w-full justify-start overflow-x-auto"
         >
-          <h2 id="platform-settings-section-title" className="sr-only">
-            {activeTitle}
-          </h2>
-          {activeSection === "notifications" ? (
-            <PlatformNotificationSettingsForm />
-          ) : (
-            <PlatformPhoneNumberSettingsForm />
-          )}
-        </section>
-      </div>
+          <TabsTrigger
+            className="shrink-0 px-3 sm:px-6"
+            value="notifications"
+          >
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger
+            className="shrink-0 px-3 sm:px-6"
+            value="phone-numbers"
+          >
+            Phone numbers
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent
+          value="notifications"
+          className="min-w-0"
+          data-testid="platform-settings-notifications"
+        >
+          <PlatformNotificationSettingsForm />
+        </TabsContent>
+        <TabsContent
+          value="phone-numbers"
+          className="min-w-0"
+          data-testid="platform-settings-phone-numbers"
+        >
+          <PlatformPhoneNumberSettingsForm />
+        </TabsContent>
+      </AnimatedTabs>
     </div>
   );
 }

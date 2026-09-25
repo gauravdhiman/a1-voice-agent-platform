@@ -1433,26 +1433,31 @@ expose provider credentials.
 
 ### organization_notification_settings
 
-One row per organization for optional OAuth recovery destinations. Existing
-organization admins continue to receive email; `alert_email` adds a shared
-inbox. Phone and Telegram destinations are used only when their explicit opt-in
-is enabled. Provider credentials remain platform-managed.
+One row per organization for critical notification contacts. Organization admin
+account emails receive alerts automatically; `alert_email` adds a shared inbox.
+Saving an SMS phone number enables SMS, and clearing it disables SMS. Telegram
+is enabled when both a chat destination and the organization's encrypted bot
+token are present. The organization owns its Telegram bot; SMS sending uses the
+platform's Twilio integration.
 
 | Column | Type | Constraints | Description |
 | --- | --- | --- | --- |
 | organization_id | UUID | PRIMARY KEY, FK → organizations.id (CASCADE) | Owning organization |
 | alert_email | VARCHAR(320) | NULLABLE, max length 320 | Additional email destination |
-| sms_phone | VARCHAR(32) | NULLABLE, E.164 check | Optional SMS destination |
-| sms_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE; requires `sms_phone` | Organization SMS opt-in |
-| telegram_chat_id | VARCHAR(100) | NULLABLE, numeric chat ID or `@username` check | Optional Telegram destination |
-| telegram_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE; requires `telegram_chat_id` | Organization Telegram opt-in |
+| sms_phone | VARCHAR(32) | NULLABLE, E.164 check | SMS destination; presence enables SMS |
+| telegram_chat_id | VARCHAR(100) | NULLABLE, numeric chat ID or `@username` check | Telegram destination; required with the bot token |
+| telegram_bot_token_encrypted | TEXT | NULLABLE | Organization-owned Telegram bot token encrypted with the application key |
 | updated_by | UUID | NULLABLE, FK → auth.users.id (SET NULL) | Last administrator who changed settings |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Audit timestamps |
 
 **RLS**: Enabled; only backend `service_role` has a policy. API routes authorize
 the target organization admin or a platform admin. Partial updates use an
 atomic SQL upsert function so simultaneous changes to separate fields do not
-overwrite one another.
+overwrite one another. Migration `20260925000001` removes independent channel
+switches and clears destinations that were explicitly opted out before moving
+to destination-driven activation. Its downgrade refuses to discard or silently
+disable a saved organization Telegram destination or bot token because the
+legacy schema cannot safely restore the previous channel state.
 
 ### oauth_attention_outbox
 
@@ -2157,6 +2162,7 @@ erDiagram
 93. `20260923000001` - Add `organizations.provider_credentials_descriptions` (JSONB NULLABLE) for non-secret per-provider reference notes on the API Credentials screen. Notes are edited through `provider_credentials_descriptions_input` and stored separately from encrypted provider keys.
 94. `20260924000001` - Fence OAuth refreshes with credential generations and lease-checked SQL writes; persist ambiguous/re-auth-required states, add platform-admin SMS settings, and create a claimed durable Telegram/SMS OAuth alert outbox.
 95. `20260924000002` - Add tenant-scoped optional OAuth alert destinations, atomic partial settings updates, and independent organization Telegram/SMS outbox state and retry counters.
+96. `20260925000001` - Store each organization's encrypted Telegram bot token and derive SMS/Telegram activation from configured destination fields.
 
 ---
 
@@ -2471,4 +2477,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-09-08
+**Last Updated**: 2026-09-25

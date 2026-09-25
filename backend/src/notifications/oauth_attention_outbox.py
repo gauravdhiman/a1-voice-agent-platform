@@ -127,17 +127,20 @@ class OAuthAttentionOutbox:
         failed = False
         message = self._message(payload)
         platform_settings = None
-        organization_settings = None
+        organization_delivery_settings = None
 
-        if states["sms"] == "pending":
+        if states["sms"] == "pending" or states["organization_sms"] == "pending":
             try:
                 platform_settings = await self.platform_settings_service.get_settings()
             except Exception as exc:
                 logger.error(
-                    "Could not load platform OAuth SMS settings (%s)",
+                    "Could not load platform SMS settings (%s)",
                     type(exc).__name__,
                 )
-                attempted["sms"] = True
+                if states["sms"] == "pending":
+                    attempted["sms"] = True
+                if states["organization_sms"] == "pending":
+                    attempted["organization_sms"] = True
                 failed = True
 
         if (
@@ -145,8 +148,8 @@ class OAuthAttentionOutbox:
             or states["organization_sms"] == "pending"
         ):
             try:
-                organization_settings = (
-                    await self.organization_settings_service.get_settings(
+                organization_delivery_settings = (
+                    await self.organization_settings_service.get_delivery_settings(
                         UUID(str(row["organization_id"]))
                     )
                 )
@@ -209,44 +212,41 @@ class OAuthAttentionOutbox:
                     attempted["sms"] = True
                     failed = True
 
-        if organization_settings is not None:
+        if organization_delivery_settings is not None:
             if states["organization_telegram"] == "pending":
-                chat_id = organization_settings.telegram_chat_id
-                if not organization_settings.telegram_enabled or not chat_id:
+                chat_id = organization_delivery_settings.telegram_chat_id
+                bot_token = organization_delivery_settings.telegram_bot_token
+                if (
+                    not chat_id
+                    or not organization_delivery_settings.telegram_bot_token_stored
+                ):
                     states["organization_telegram"] = "skipped"
-                elif not organization_settings.telegram_bot_configured:
+                elif not bot_token:
                     attempted["organization_telegram"] = True
                     failed = True
                 else:
                     try:
                         attempted["organization_telegram"] = True
-                        credential_loader = (
-                            self.platform_settings_service.get_telegram_credentials
+                        sent = await self.telegram_sender.send_message(
+                            bot_token, chat_id, message
                         )
-                        token, _, _ = await credential_loader()
-                        if not token:
-                            failed = True
-                        else:
-                            sent = await self.telegram_sender.send_message(
-                                token, chat_id, message
-                            )
-                            states["organization_telegram"] = (
-                                "sent" if sent else "pending"
-                            )
-                            failed = failed or not sent
+                        states["organization_telegram"] = "sent" if sent else "pending"
+                        failed = failed or not sent
                     except Exception as exc:
                         logger.warning(
-                            "Organization OAuth Telegram alert delivery failed (%s)",
+                            "Organization Telegram alert delivery failed (%s)",
                             type(exc).__name__,
                         )
                         attempted["organization_telegram"] = True
                         failed = True
 
             if states["organization_sms"] == "pending":
-                phone = organization_settings.sms_phone
-                if not organization_settings.sms_enabled or not phone:
+                phone = organization_delivery_settings.sms_phone
+                if not phone:
                     states["organization_sms"] = "skipped"
-                elif not organization_settings.sms_sender_configured:
+                elif (
+                    not platform_settings or not platform_settings.sms_sender_configured
+                ):
                     attempted["organization_sms"] = True
                     failed = True
                 else:

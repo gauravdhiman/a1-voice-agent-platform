@@ -1,19 +1,30 @@
 """Persistence for organization-level critical notification destinations."""
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
+from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
 
 from .organization_settings_models import (
     OrganizationNotificationSettings,
     OrganizationNotificationSettingsUpdate,
 )
-from .platform_settings_service import platform_notification_settings_service
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OrganizationNotificationDeliverySettings:
+    """One consistent snapshot of private destinations used by the outbox."""
+
+    sms_phone: Optional[str]
+    telegram_chat_id: Optional[str]
+    telegram_bot_token: Optional[str]
+    telegram_bot_token_stored: bool
 
 
 class OrganizationNotificationSettingsService:
@@ -21,18 +32,8 @@ class OrganizationNotificationSettingsService:
 
     TABLE = "organization_notification_settings"
 
-    def __init__(
-        self,
-        *,
-        platform_settings_service: Any = None,
-        supabase_config_override: Any = None,
-    ) -> None:
-        """Initialize with replaceable provider-settings and database dependencies."""
-        self.platform_settings_service = (
-            platform_settings_service
-            if platform_settings_service is not None
-            else platform_notification_settings_service
-        )
+    def __init__(self, *, supabase_config_override: Any = None) -> None:
+        """Initialize with a replaceable database dependency."""
         self._supabase_config = (
             supabase_config_override
             if supabase_config_override is not None
@@ -47,51 +48,63 @@ class OrganizationNotificationSettingsService:
             raise ValueError("Supabase is not configured")
         return client
 
-    async def get_settings(
-        self, organization_id: UUID
-    ) -> OrganizationNotificationSettings:
-        """Return destinations and current provider readiness for one organization."""
+    def _get_row(self, organization_id: UUID) -> dict[str, Any]:
+        """Load one organization settings row without returning secret material."""
         response = (
             self.supabase.table(self.TABLE)
-            .select("*")
+            .select(
+                "organization_id, alert_email, sms_phone, telegram_chat_id, "
+                "telegram_bot_token_encrypted, updated_by, created_at, updated_at"
+            )
             .eq("organization_id", str(organization_id))
             .limit(1)
             .execute()
         )
         data = getattr(response, "data", None)
         row = data[0] if isinstance(data, list) and data else data or {}
-        if not isinstance(row, dict):
-            row = {}
+        return row if isinstance(row, dict) else {}
 
-        try:
-            platform_settings = await self.platform_settings_service.get_settings()
-            sms_sender_configured = bool(
-                getattr(platform_settings, "sms_sender_configured", False)
-            )
-            telegram_bot_configured = bool(
-                getattr(platform_settings, "telegram_bot_token_configured", False)
-            )
-        except Exception as exc:
-            logger.warning(
-                "Could not resolve notification provider readiness (%s)",
-                type(exc).__name__,
-            )
-            sms_sender_configured = False
-            telegram_bot_configured = False
+    @staticmethod
+    def _decrypt_telegram_bot_token(encrypted_token: Optional[str]) -> Optional[str]:
+        """Decrypt an organization bot token without logging secret values."""
+        if not encrypted_token:
+            return None
+        payload = decrypt_data(encrypted_token)
+        token = payload.get("token")
+        return token if isinstance(token, str) and token else None
 
+    async def get_settings(
+        self, organization_id: UUID
+    ) -> OrganizationNotificationSettings:
+        """Return saved destinations and whether an organization bot token exists."""
+        row = self._get_row(organization_id)
+        encrypted_token = row.get("telegram_bot_token_encrypted")
         now = datetime.now(timezone.utc)
         return OrganizationNotificationSettings(
             organization_id=organization_id,
             alert_email=row.get("alert_email") or None,
             sms_phone=row.get("sms_phone") or None,
-            sms_enabled=bool(row.get("sms_enabled", False)),
             telegram_chat_id=row.get("telegram_chat_id") or None,
-            telegram_enabled=bool(row.get("telegram_enabled", False)),
-            sms_sender_configured=sms_sender_configured,
-            telegram_bot_configured=telegram_bot_configured,
+            # The API reports whether a credential is stored without requiring
+            # it to decrypt successfully. Delivery handles unreadable tokens
+            # independently so they do not hide contact settings or block SMS.
+            telegram_bot_configured=bool(encrypted_token),
             updated_by=row.get("updated_by"),
             created_at=row.get("created_at") or now,
             updated_at=row.get("updated_at") or now,
+        )
+
+    async def get_delivery_settings(
+        self, organization_id: UUID
+    ) -> OrganizationNotificationDeliverySettings:
+        """Read channel destinations and the encrypted Telegram token together."""
+        row = self._get_row(organization_id)
+        encrypted_token = row.get("telegram_bot_token_encrypted")
+        return OrganizationNotificationDeliverySettings(
+            sms_phone=row.get("sms_phone") or None,
+            telegram_chat_id=row.get("telegram_chat_id") or None,
+            telegram_bot_token=self._decrypt_telegram_bot_token(encrypted_token),
+            telegram_bot_token_stored=bool(encrypted_token),
         )
 
     async def update_settings(
@@ -100,25 +113,15 @@ class OrganizationNotificationSettingsService:
         payload: OrganizationNotificationSettingsUpdate,
         updated_by: UUID,
     ) -> OrganizationNotificationSettings:
-        """Atomically apply supplied fields and enforce enabled-channel destinations."""
+        """Atomically save destinations and encrypt any supplied bot token."""
         patch = payload.model_dump(mode="json", exclude_unset=True)
-        current = await self.get_settings(organization_id)
-        values = {
-            "sms_phone": current.sms_phone,
-            "sms_enabled": current.sms_enabled,
-            "telegram_chat_id": current.telegram_chat_id,
-            "telegram_enabled": current.telegram_enabled,
-        }
-        values.update(patch)
-
-        if values["sms_enabled"] and not values["sms_phone"]:
-            raise ValueError("Enter a phone number before enabling SMS alerts.")
-        if values["telegram_enabled"] and not values["telegram_chat_id"]:
-            raise ValueError(
-                "Enter a Telegram chat ID before enabling Telegram alerts."
+        if "telegram_bot_token" in patch:
+            token = patch.pop("telegram_bot_token")
+            patch["telegram_bot_token_encrypted"] = (
+                encrypt_data({"token": token}) if token else None
             )
         if not patch:
-            return current
+            return await self.get_settings(organization_id)
 
         try:
             response = self.supabase.rpc(
@@ -134,13 +137,11 @@ class OrganizationNotificationSettingsService:
                 raise RuntimeError(str(error))
         except Exception as exc:
             error_text = str(exc).lower()
-            if "ck_org_notification_sms_enabled_has_phone" in error_text:
+            if "ck_org_notification_sms_phone_e164" in error_text:
+                raise ValueError("Enter a valid phone number in E.164 format.") from exc
+            if "ck_org_notification_telegram_destination" in error_text:
                 raise ValueError(
-                    "Enter a phone number before enabling SMS alerts."
-                ) from exc
-            if "ck_org_notification_telegram_enabled_has_chat_id" in error_text:
-                raise ValueError(
-                    "Enter a Telegram chat ID before enabling Telegram alerts."
+                    "Enter a valid Telegram chat ID or channel username."
                 ) from exc
             logger.error(
                 "Could not update organization notification settings (%s)",

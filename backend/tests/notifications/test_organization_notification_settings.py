@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -38,13 +38,11 @@ class _Query:
     def __init__(self, rows=None, data=None):
         self.rows = rows or []
         self.data = data
-        self.filters = []
 
     def select(self, _fields):
         return self
 
-    def eq(self, field, value):
-        self.filters.append((field, value))
+    def eq(self, _field, _value):
         return self
 
     def limit(self, _limit):
@@ -69,45 +67,46 @@ class _Supabase:
         return _Query(data={"organization_id": arguments["p_organization_id"]})
 
 
-def _settings_row(organization_id):
+def _settings_row(organization_id, *, encrypted_token=None):
     return {
         "organization_id": str(organization_id),
         "alert_email": "ops@example.com",
         "sms_phone": "+15551234567",
-        "sms_enabled": False,
         "telegram_chat_id": "-100123456789",
-        "telegram_enabled": False,
+        "telegram_bot_token_encrypted": encrypted_token,
         "updated_by": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-def _platform_settings():
-    return SimpleNamespace(
-        sms_sender_configured=True,
-        telegram_bot_token_configured=True,
-    )
-
-
 def test_settings_update_trims_destinations_and_accepts_explicit_clears():
+    token = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
     payload = OrganizationNotificationSettingsUpdate.model_validate(
         {
             "alert_email": "  operations@example.com  ",
             "sms_phone": " +15551234567 ",
             "telegram_chat_id": " -100123456789 ",
+            "telegram_bot_token": f" {token} ",
         }
     )
 
     assert payload.alert_email == "operations@example.com"
     assert payload.sms_phone == "+15551234567"
     assert payload.telegram_chat_id == "-100123456789"
+    assert payload.telegram_bot_token == token
     cleared = OrganizationNotificationSettingsUpdate.model_validate(
-        {"alert_email": "", "sms_phone": "", "telegram_chat_id": ""}
+        {
+            "alert_email": "",
+            "sms_phone": "",
+            "telegram_chat_id": "",
+            "telegram_bot_token": "",
+        }
     )
     assert cleared.alert_email is None
     assert cleared.sms_phone is None
     assert cleared.telegram_chat_id is None
+    assert cleared.telegram_bot_token is None
 
 
 @pytest.mark.parametrize(
@@ -115,57 +114,112 @@ def test_settings_update_trims_destinations_and_accepts_explicit_clears():
     [
         {"sms_phone": "555-123-4567"},
         {"telegram_chat_id": "@abc"},
-        {"sms_enabled": None},
+        {"telegram_bot_token": "not-a-bot-token"},
+        {"sms_enabled": True},
+        {"telegram_enabled": True},
         {"unknown": "field"},
     ],
 )
-def test_settings_update_rejects_malformed_destinations_and_unknown_fields(payload):
+def test_settings_update_rejects_malformed_destinations_and_old_fields(payload):
     with pytest.raises(ValidationError):
         OrganizationNotificationSettingsUpdate.model_validate(payload)
 
 
 @pytest.mark.asyncio
-async def test_service_uses_atomic_partial_update_rpc():
+async def test_service_uses_atomic_partial_update_rpc_and_encrypts_bot_token(
+    monkeypatch,
+):
     organization_id = uuid4()
     user_id = uuid4()
-    client = _Supabase([_settings_row(organization_id)])
+    token = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
+    client = _Supabase([_settings_row(organization_id, encrypted_token="ciphertext")])
     service = OrganizationNotificationSettingsService(
-        platform_settings_service=SimpleNamespace(
-            get_settings=AsyncMock(return_value=_platform_settings())
-        ),
         supabase_config_override=SimpleNamespace(service_client=client, client=client),
     )
-    payload = OrganizationNotificationSettingsUpdate(sms_enabled=True)
+    monkeypatch.setattr(
+        "src.notifications.organization_settings_service.encrypt_data",
+        lambda value: "ciphertext" if value == {"token": token} else "unexpected",
+    )
 
-    await service.update_settings(organization_id, payload, user_id)
+    result = await service.update_settings(
+        organization_id,
+        OrganizationNotificationSettingsUpdate(
+            sms_phone="+15551234567", telegram_bot_token=token
+        ),
+        user_id,
+    )
 
     name, arguments = client.rpc_calls[0]
     assert name == "update_organization_notification_settings"
     assert arguments == {
         "p_organization_id": str(organization_id),
         "p_updated_by": str(user_id),
-        "p_updates": {"sms_enabled": True},
+        "p_updates": {
+            "sms_phone": "+15551234567",
+            "telegram_bot_token_encrypted": "ciphertext",
+        },
     }
+    assert token not in repr(arguments)
+    assert result.telegram_bot_configured is True
+    assert not hasattr(result, "telegram_bot_token")
 
 
 @pytest.mark.asyncio
-async def test_service_rejects_enabling_channel_without_destination_before_write():
+async def test_service_uses_null_to_remove_saved_telegram_token(monkeypatch):
     organization_id = uuid4()
-    client = _Supabase([_settings_row(organization_id) | {"sms_phone": None}])
+    client = _Supabase([_settings_row(organization_id)])
     service = OrganizationNotificationSettingsService(
-        platform_settings_service=SimpleNamespace(
-            get_settings=AsyncMock(return_value=_platform_settings())
-        ),
         supabase_config_override=SimpleNamespace(service_client=client, client=client),
     )
 
-    with pytest.raises(ValueError, match="phone number"):
-        await service.update_settings(
-            organization_id,
-            OrganizationNotificationSettingsUpdate(sms_enabled=True),
-            uuid4(),
-        )
-    assert client.rpc_calls == []
+    await service.update_settings(
+        organization_id,
+        OrganizationNotificationSettingsUpdate(telegram_bot_token=None),
+        uuid4(),
+    )
+
+    assert client.rpc_calls[0][1]["p_updates"] == {"telegram_bot_token_encrypted": None}
+
+
+@pytest.mark.asyncio
+async def test_settings_reports_saved_token_without_decrypting_it(monkeypatch):
+    organization_id = uuid4()
+    client = _Supabase([_settings_row(organization_id, encrypted_token="unreadable")])
+    service = OrganizationNotificationSettingsService(
+        supabase_config_override=SimpleNamespace(service_client=client, client=client),
+    )
+    decrypt = Mock(side_effect=AssertionError("must not decrypt for status"))
+    monkeypatch.setattr(
+        "src.notifications.organization_settings_service.decrypt_data",
+        decrypt,
+    )
+
+    result = await service.get_settings(organization_id)
+
+    assert result.telegram_bot_configured is True
+    assert result.sms_phone == "+15551234567"
+    decrypt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delivery_keeps_sms_destination_when_saved_token_is_unreadable(
+    monkeypatch,
+):
+    organization_id = uuid4()
+    client = _Supabase([_settings_row(organization_id, encrypted_token="unreadable")])
+    service = OrganizationNotificationSettingsService(
+        supabase_config_override=SimpleNamespace(service_client=client, client=client),
+    )
+    monkeypatch.setattr(
+        "src.notifications.organization_settings_service.decrypt_data",
+        lambda _value: {},
+    )
+
+    result = await service.get_delivery_settings(organization_id)
+
+    assert result.telegram_bot_token is None
+    assert result.telegram_bot_token_stored is True
+    assert result.sms_phone == "+15551234567"
 
 
 @pytest.mark.asyncio
@@ -203,7 +257,9 @@ async def test_update_route_translates_service_validation_to_422(monkeypatch):
     organization_id = uuid4()
     user_id = uuid4()
     service = SimpleNamespace(
-        update_settings=AsyncMock(side_effect=ValueError("Enter a phone number."))
+        update_settings=AsyncMock(
+            side_effect=ValueError("Enter a valid phone number in E.164 format.")
+        )
     )
     monkeypatch.setattr(
         "src.notifications.routes.organization_notification_settings_service", service
@@ -212,7 +268,7 @@ async def test_update_route_translates_service_validation_to_422(monkeypatch):
     with pytest.raises(HTTPException) as invalid:
         await update_organization_notification_settings(
             organization_id,
-            OrganizationNotificationSettingsUpdate(sms_enabled=True),
+            OrganizationNotificationSettingsUpdate(sms_phone="+15551234567"),
             (user_id, _Profile(organization_admins=[organization_id])),
         )
     assert invalid.value.status_code == 422

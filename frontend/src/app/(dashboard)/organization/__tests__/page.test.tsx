@@ -196,7 +196,23 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows notification settings inside the selected organization Settings section", async () => {
+  it("shows organization notifications as a peer tab", async () => {
+    globalThis.__orgPageSearchParams = "org_id=org-1&tab=notifications";
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    expect(
+      (await screen.findByRole("tab", { name: "Notifications" })).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("true");
+    expect(screen.getByText("Organization alert destinations")).toBeTruthy();
+  });
+
+  it("canonicalizes legacy settings section links to peer tabs", async () => {
     globalThis.__orgPageSearchParams =
       "org_id=org-1&tab=settings&section=notifications";
     const queryClient = new QueryClient({
@@ -205,25 +221,9 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
 
     render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
 
-    expect(await screen.findByRole("tab", { name: "Settings" })).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /Notifications/ }).getAttribute("aria-current"),
-    ).toBe("page");
-    expect(screen.getByText("Organization alert destinations")).toBeTruthy();
-  });
-
-
-  it("redirects legacy notification tabs into the Settings deep link", async () => {
-    globalThis.__orgPageSearchParams = "org_id=org-1&tab=notifications";
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
-
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith(
-        "/organization?org_id=org-1&tab=settings&section=notifications",
+        "/organization?org_id=org-1&tab=notifications",
         { scroll: false },
       );
     });
@@ -319,7 +319,7 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     });
   });
 
-  it("renders Settings + API Credentials and defaults to General settings", async () => {
+  it("renders organization settings as horizontal peer tabs and defaults to General", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -330,18 +330,17 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
       expect(screen.getAllByText("Acme").length).toBeGreaterThan(0);
     });
 
-    // Both top-level areas are present and General is selected by default.
+    for (const tabName of [
+      "General",
+      "API Credentials",
+      "Public page",
+      "Notifications",
+    ]) {
+      expect(screen.getByRole("tab", { name: tabName })).toBeTruthy();
+    }
     expect(
-      screen.getByRole("tab", { name: /^settings$/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: /api credentials/i }),
-    ).toBeInTheDocument();
-
-    expect(
-      screen.getByRole("link", { name: /^general/i }).getAttribute("aria-current"),
-    ).toBe("page");
-    // General settings are active by default; credentials remain a separate area.
+      screen.getByRole("tab", { name: "General" }).getAttribute("aria-selected"),
+    ).toBe("true");
     expect(screen.getByText(/Organization Information/i)).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "General organization settings" }),

@@ -73,21 +73,19 @@ def _settings(*, telegram=True, sms=False, sms_ready=False):
 
 
 def _organization_settings(
-    *, telegram=False, sms=False, sms_ready=False, telegram_ready=False
+    *, telegram=False, sms=False, token="organization-bot-token"
 ):
     return SimpleNamespace(
         telegram_chat_id="-100987654321" if telegram else None,
-        telegram_enabled=telegram,
-        telegram_bot_configured=telegram_ready,
+        telegram_bot_token=token if telegram else None,
+        telegram_bot_token_stored=telegram,
         sms_phone="+15557654321" if sms else None,
-        sms_enabled=sms,
-        sms_sender_configured=sms_ready,
     )
 
 
 def _patch_organization_settings(monkeypatch, settings=None):
     settings = settings or _organization_settings()
-    service = SimpleNamespace(get_settings=AsyncMock(return_value=settings))
+    service = SimpleNamespace(get_delivery_settings=AsyncMock(return_value=settings))
     monkeypatch.setattr(
         "src.notifications.oauth_attention_outbox."
         "organization_notification_settings_service",
@@ -197,12 +195,10 @@ async def test_outbox_delivers_organization_channels_even_when_platform_telegram
     )
     _patch_organization_settings(
         monkeypatch,
-        _organization_settings(
-            telegram=True, sms=True, sms_ready=True, telegram_ready=True
-        ),
+        _organization_settings(telegram=True, sms=True),
     )
     settings_service = SimpleNamespace(
-        get_settings=AsyncMock(return_value=_settings(sms=False)),
+        get_settings=AsyncMock(return_value=_settings(sms=False, sms_ready=True)),
         get_telegram_credentials=AsyncMock(
             return_value=("bot-token", "-100platform", False)
         ),
@@ -226,7 +222,10 @@ async def test_outbox_delivers_organization_channels_even_when_platform_telegram
 
     assert count == 1
     telegram_send.assert_awaited_once()
-    assert telegram_send.await_args.args[:2] == ("bot-token", "-100987654321")
+    assert telegram_send.await_args.args[:2] == (
+        "organization-bot-token",
+        "-100987654321",
+    )
     sms_send.assert_awaited_once_with(
         "+15557654321", OAuthAttentionOutbox._sms_message(row["payload"])
     )
@@ -234,6 +233,51 @@ async def test_outbox_delivers_organization_channels_even_when_platform_telegram
     assert completion["p_telegram_state"] == "skipped"
     assert completion["p_sms_state"] == "skipped"
     assert completion["p_organization_telegram_state"] == "sent"
+    assert completion["p_organization_sms_state"] == "sent"
+    assert completion["p_attempted_organization_telegram"] is True
+    assert completion["p_attempted_organization_sms"] is True
+
+
+@pytest.mark.asyncio
+async def test_unreadable_organization_bot_does_not_block_sms_delivery(monkeypatch):
+    """An unreadable Telegram secret retries only Telegram, not organization SMS."""
+    row = _row(telegram_state="skipped", sms_state="skipped")
+    client = _FakeSupabase([row])
+    monkeypatch.setattr(
+        "src.notifications.oauth_attention_outbox.supabase_config",
+        SimpleNamespace(service_client=client, client=client),
+    )
+    _patch_organization_settings(
+        monkeypatch,
+        _organization_settings(telegram=True, sms=True, token=None),
+    )
+    platform_service = SimpleNamespace(
+        get_settings=AsyncMock(return_value=_settings(sms_ready=True)),
+        get_telegram_credentials=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.notifications.oauth_attention_outbox."
+        "platform_notification_settings_service",
+        platform_service,
+    )
+    telegram_send = AsyncMock(return_value=True)
+    sms_send = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "src.notifications.oauth_attention_outbox.telegram_service.send_message",
+        telegram_send,
+    )
+    monkeypatch.setattr(
+        "src.phone_numbers.twilio_service.twilio_service.send_sms", sms_send
+    )
+
+    await OAuthAttentionOutbox().process_pending()
+
+    telegram_send.assert_not_awaited()
+    sms_send.assert_awaited_once_with(
+        "+15557654321", OAuthAttentionOutbox._sms_message(row["payload"])
+    )
+    completion = client.rpc_calls[-1][1]
+    assert completion["p_organization_telegram_state"] == "pending"
     assert completion["p_organization_sms_state"] == "sent"
     assert completion["p_attempted_organization_telegram"] is True
     assert completion["p_attempted_organization_sms"] is True
@@ -251,7 +295,9 @@ async def test_outbox_retries_when_organization_provider_settings_cannot_be_load
         SimpleNamespace(service_client=client, client=client),
     )
     organization_service = SimpleNamespace(
-        get_settings=AsyncMock(side_effect=RuntimeError("database unavailable"))
+        get_delivery_settings=AsyncMock(
+            side_effect=RuntimeError("database unavailable")
+        )
     )
     monkeypatch.setattr(
         "src.notifications.oauth_attention_outbox."

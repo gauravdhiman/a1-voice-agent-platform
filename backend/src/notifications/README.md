@@ -10,9 +10,11 @@ OAuth connection-attention reminders use the durable notification service.
 The token refresh worker checks enabled, authenticated OAuth connections on its
 normal cycle. It emails every organization admin when a connection enters the
 attention window and again when it expires or needs immediate reauthorization.
-An organization admin can add a shared inbox and opt in to SMS or Telegram on
-**Organization → Settings → Notifications**. Platform admins set provider credentials and
-their own destinations on **Platform → Settings → Notifications**. Email retries use
+An organization admin can add a shared inbox, phone number, and an
+organization-owned Telegram bot on **Organization → Notifications**. A saved
+phone number enables SMS; Telegram needs both its bot token and chat ID.
+Platform admins manage the platform email and SMS integrations plus their own
+destinations under **Platform → Settings**. Email retries use
 `notification_logs`; SMS and Telegram retries use `oauth_attention_outbox`,
 with independent state for each platform and organization channel.
 
@@ -61,9 +63,10 @@ Platform admins: open **Platform → Settings → Notifications** (`/platform/se
 - Telegram **bot token**, platform **chat ID**, and platform alert opt-in
 - Platform-admin OAuth alert email and optional SMS destination
 
-Organization admins configure an optional shared inbox, SMS number, and
-Telegram chat on **Organization → Settings → Notifications** (`/organization?tab=settings&section=notifications`).
-They do not configure provider credentials. Organization-admin account emails
+Organization admins configure an optional shared inbox and SMS number plus
+their own Telegram bot token and chat on **Organization → Notifications**
+(`/organization?tab=notifications`). Their Telegram token is stored encrypted;
+SMS uses the platform's Twilio integration. Organization-admin account emails
 remain recipients even when no shared inbox is set.
 
 Public demo and interest-form submissions are retained in `interest_leads` and
@@ -106,12 +109,12 @@ Triggered on:
 - User joins via invitation (signup or existing user accepting invite)
 - Public demo and interest-form submissions
 
-Configure platform signup alerts at `/platform/settings?section=notifications`. Platform
-OAuth alerts use the platform admin's own Telegram/SMS opt-ins. Organization
-OAuth alerts use each organization's opt-ins from
-`/organization?tab=settings&section=notifications`; an organization Telegram destination uses
-the platform-managed bot token. An opted-in channel with missing provider
-credentials stays pending in the durable outbox for retry after configuration.
+Configure platform signup alerts at `/platform/settings?section=notifications`.
+Platform OAuth alerts use the platform admin's own Telegram/SMS settings.
+Organization OAuth alerts use the contacts at `/organization?tab=notifications`.
+Organization Telegram delivery uses that organization's encrypted bot token
+and chat ID. SMS uses the platform Twilio integration. Configured channel
+attempts remain pending in the durable outbox for retry after delivery failures.
 
 ## Delivery reliability
 

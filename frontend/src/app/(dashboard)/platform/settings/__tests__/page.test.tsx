@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 declare global {
@@ -6,12 +7,15 @@ declare global {
   var __platformSettingsSearchParams: string | undefined;
 }
 
-const mocks = vi.hoisted(() => ({ platformAdmin: true }));
+const mocks = vi.hoisted(() => ({
+  platformAdmin: true,
+  push: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
     new URLSearchParams(globalThis.__platformSettingsSearchParams ?? ""),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mocks.push }),
 }));
 
 vi.mock("@/contexts/auth-context", () => ({
@@ -34,6 +38,7 @@ import PlatformSettingsPage from "../page";
 
 beforeEach(() => {
   mocks.platformAdmin = true;
+  mocks.push.mockClear();
   globalThis.__platformSettingsSearchParams = undefined;
 });
 
@@ -43,36 +48,34 @@ afterEach(() => {
 });
 
 describe("platform settings hub", () => {
-  it("shows notifications by default with links to all settings sections", () => {
+  it("shows horizontal settings tabs and notifications by default", () => {
     render(<PlatformSettingsPage />);
 
-    expect(
-      screen.getByRole("heading", { name: "Platform settings" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Platform settings" })).toBeTruthy();
     expect(screen.getByText("Notification settings form")).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: /Notifications/ })
-        .getAttribute("aria-current"),
-    ).toBe("page");
-    expect(
-      screen
-        .getByRole("link", { name: /Phone numbers/ })
-        .getAttribute("href"),
-    ).toContain("section=phone-numbers");
+      screen.getByRole("tab", { name: "Notifications" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(screen.getByRole("tab", { name: "Phone numbers" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Notifications/ })).toBeNull();
   });
 
-  it("opens the phone-number section from its deep link", () => {
+  it("opens the phone-number section from its deep link and persists tab selection", async () => {
     globalThis.__platformSettingsSearchParams = "section=phone-numbers";
-
+    const user = userEvent.setup();
     render(<PlatformSettingsPage />);
 
     expect(screen.getByText("Phone number settings form")).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: /Phone numbers/ })
-        .getAttribute("aria-current"),
-    ).toBe("page");
+      screen.getByRole("tab", { name: "Phone numbers" }).getAttribute("aria-selected"),
+    ).toBe("true");
+
+    await user.click(screen.getByRole("tab", { name: "Notifications" }));
+    expect(screen.getByText("Notification settings form")).toBeTruthy();
+    expect(mocks.push).toHaveBeenCalledWith(
+      "/platform/settings?section=notifications",
+      { scroll: false },
+    );
   });
 
   it("denies access to users without the platform-admin role", () => {

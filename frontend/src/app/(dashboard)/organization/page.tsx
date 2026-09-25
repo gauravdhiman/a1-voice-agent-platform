@@ -31,10 +31,6 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import {
-  SettingsSectionNavigation,
-  type SettingsNavigationSection,
-} from "@/components/settings/settings-section-navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,8 +43,6 @@ import {
 } from "@/components/ui/select";
 import {
   Building2,
-  Bell,
-  Globe,
   Users,
   Calendar,
   Activity,
@@ -88,32 +82,14 @@ import { organizationService } from "@/services/organization-service";
 import { legacyTabRedirect } from "./legacy-tab-redirect";
 import { toast } from "sonner";
 
-const ORGANIZATION_SETTINGS_SECTIONS: readonly SettingsNavigationSection[] = [
-  {
-    id: "general",
-    label: "General",
-    description: "Organization profile and business details.",
-    icon: Building2,
-  },
-  {
-    id: "public-page",
-    label: "Public page",
-    description: "Manage the public organization profile.",
-    icon: Globe,
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    description: "Choose recovery alert destinations.",
-    icon: Bell,
-  },
-];
+const ORGANIZATION_TABS = [
+  "general",
+  "credentials",
+  "public-page",
+  "notifications",
+] as const;
 
-const LEGACY_SETTINGS_TAB_SECTIONS: Readonly<Record<string, string>> = {
-  info: "general",
-  public: "public-page",
-  notifications: "notifications",
-};
+type OrganizationTab = (typeof ORGANIZATION_TABS)[number];
 
 // Use real services
 
@@ -183,19 +159,29 @@ export default function OrganizationPage() {
   const [removingProviderCred, setRemovingProviderCred] =
     useState<ProviderCredentialKey | null>(null);
 
-  // Organization settings tabs sync to `?tab=` for deep links. Legacy tabs for
-  // phone numbers, skills, and the voice agent redirect to their top-level routes.
-  const [activeTab, setActiveTab] = useState<"settings" | "credentials">(
-    "settings",
-  );
+  // All organization settings are peers in one horizontal tab row. Older
+  // `tab=settings&section=...` links are canonicalized in the effect below.
   const searchParamsString = searchParams.toString();
   const requestedTab = searchParams.get("tab");
   const requestedSettingsSection = searchParams.get("section");
-  const activeSettingsSection = ORGANIZATION_SETTINGS_SECTIONS.some(
-    (section) => section.id === requestedSettingsSection,
+  const legacySettingsTab =
+    requestedTab === "settings"
+      ? requestedSettingsSection
+      : requestedTab === "info"
+        ? "general"
+        : requestedTab === "public"
+          ? "public-page"
+          : null;
+  const activeTabFromUrl: OrganizationTab = ORGANIZATION_TABS.includes(
+    requestedTab as OrganizationTab,
   )
-    ? requestedSettingsSection!
-    : "general";
+    ? (requestedTab as OrganizationTab)
+    : legacySettingsTab &&
+        ORGANIZATION_TABS.includes(legacySettingsTab as OrganizationTab)
+      ? (legacySettingsTab as OrganizationTab)
+      : "general";
+  const [activeTab, setActiveTab] = useState<OrganizationTab>(activeTabFromUrl);
+  const settingsTabsListRef = useRef<HTMLDivElement>(null);
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -233,11 +219,9 @@ export default function OrganizationPage() {
     }
   }, [orgId, loadOrganizationData]);
 
-  // Sync tab state with URL. The Phone Numbers, Skills, and AI Voice
-  // Agent tabs are now top-level routes (N1 redesign): when the URL
-  // carries one of those tabs, we redirect to the canonical route. The current
-  // settings tabs stay on this page and are selected in the effect below. The
-  // redirect decision is in `legacy-tab-redirect.ts` for isolated coverage.
+  // Sync legacy tabs with their current destinations. Phone Numbers, Skills,
+  // and the AI Voice Agent remain separate routes; organization settings now
+  // use one canonical `?tab=` value per horizontal tab.
   useEffect(() => {
     const target = legacyTabRedirect(
       requestedTab,
@@ -249,54 +233,59 @@ export default function OrganizationPage() {
     }
   }, [requestedTab, searchParamsString, orgId, router]);
 
-  // Older organization tabs now resolve to the matching settings section.
+  // Older organization URLs used `tab=settings&section=...`; keep those deep
+  // links working while canonicalizing them to one top-level tab.
   useEffect(() => {
-    const legacySection = LEGACY_SETTINGS_TAB_SECTIONS[requestedTab ?? ""];
-    if (!legacySection) return;
+    let canonicalTab: OrganizationTab | null = null;
+    if (requestedTab === "settings") {
+      canonicalTab = ORGANIZATION_TABS.includes(
+        requestedSettingsSection as OrganizationTab,
+      )
+        ? (requestedSettingsSection as OrganizationTab)
+        : "general";
+    } else if (requestedTab === "info") {
+      canonicalTab = "general";
+    } else if (requestedTab === "public") {
+      canonicalTab = "public-page";
+    }
+    if (!canonicalTab) return;
 
     const params = new URLSearchParams(searchParamsString);
-    params.set("tab", "settings");
-    params.set("section", legacySection);
+    params.set("tab", canonicalTab);
+    params.delete("section");
     router.replace(`/organization?${params.toString()}`, { scroll: false });
-  }, [requestedTab, router, searchParamsString]);
+  }, [requestedSettingsSection, requestedTab, router, searchParamsString]);
 
   useEffect(() => {
-    if (requestedTab === "credentials" && activeTab !== "credentials") {
-      setActiveTab("credentials");
-    } else if (
-      (requestedTab === "settings" ||
-        LEGACY_SETTINGS_TAB_SECTIONS[requestedTab ?? ""]) &&
-      activeTab !== "settings"
-    ) {
-      setActiveTab("settings");
-    }
-  }, [activeTab, requestedTab]);
+    setActiveTab(activeTabFromUrl);
+  }, [activeTabFromUrl]);
+
+  useEffect(() => {
+    const keepActiveTabVisible = () => {
+      const activeTrigger =
+        settingsTabsListRef.current?.querySelector<HTMLElement>(
+          '[role="tab"][aria-selected="true"]',
+        );
+      activeTrigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    };
+    keepActiveTabVisible();
+    window.addEventListener("resize", keepActiveTabVisible, { passive: true });
+    return () => window.removeEventListener("resize", keepActiveTabVisible);
+  }, [activeTab]);
 
   // Switch the top-level area and keep its deep link in the URL.
   const handleTabChange = useCallback(
     (value: string) => {
-      const nextTab = value === "credentials" ? "credentials" : "settings";
+      const nextTab = ORGANIZATION_TABS.includes(value as OrganizationTab)
+        ? (value as OrganizationTab)
+        : "general";
       setActiveTab(nextTab);
       const params = new URLSearchParams(searchParamsString);
       params.set("tab", nextTab);
-      if (nextTab === "settings") {
-        params.set("section", activeSettingsSection);
-      } else {
-        params.delete("section");
-      }
+      params.delete("section");
       router.push(`/organization?${params.toString()}`, { scroll: false });
     },
-    [activeSettingsSection, router, searchParamsString],
-  );
-
-  const hrefForSettingsSection = useCallback(
-    (sectionId: string) => {
-      const params = new URLSearchParams(searchParamsString);
-      params.set("tab", "settings");
-      params.set("section", sectionId);
-      return `/organization?${params.toString()}`;
-    },
-    [searchParamsString],
+    [router, searchParamsString],
   );
 
   // Validate organization access when orgId is provided
@@ -685,38 +674,46 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      {/* Settings are grouped by purpose; provider API credentials remain a
-          separate destination because they have their own secure editing flow. */}
       <AnimatedTabs
         value={activeTab}
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="settings">
-            Settings
+        <TabsList
+          ref={settingsTabsListRef}
+          aria-label="Organization settings"
+          className="grid w-full grid-cols-2 overflow-visible sm:flex sm:flex-nowrap sm:justify-start sm:overflow-x-auto"
+        >
+          <TabsTrigger
+            className="min-w-0 justify-center px-2 sm:shrink-0 sm:px-6"
+            value="general"
+          >
+            General
           </TabsTrigger>
-          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="credentials">
+          <TabsTrigger
+            className="min-w-0 justify-center px-2 sm:shrink-0 sm:px-6"
+            value="credentials"
+          >
             API Credentials
           </TabsTrigger>
+          <TabsTrigger
+            className="min-w-0 justify-center px-2 sm:shrink-0 sm:px-6"
+            value="public-page"
+          >
+            Public page
+          </TabsTrigger>
+          {(isOrgAdmin || isPlatformAdmin) && (
+            <TabsTrigger
+              className="min-w-0 justify-center px-2 sm:shrink-0 sm:px-6"
+              value="notifications"
+            >
+              Notifications
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="settings" className="space-y-6">
-          <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
-            <SettingsSectionNavigation
-              ariaLabel="Organization settings"
-              sections={ORGANIZATION_SETTINGS_SECTIONS.filter(
-                (section) =>
-                  section.id !== "notifications" ||
-                  isOrgAdmin ||
-                  isPlatformAdmin,
-              )}
-              activeSection={activeSettingsSection}
-              hrefForSection={hrefForSettingsSection}
-            />
-            <div className="min-w-0">
-              {activeSettingsSection === "general" ? (
-                <section aria-label="General organization settings">
+        <TabsContent value="general" className="min-w-0">
+          <section aria-label="General organization settings">
                   <Card>
                     <CardHeader className="p-5 pb-3">
                       <div className="flex items-center justify-between">
@@ -1066,23 +1063,26 @@ During monsoon season (July-September), we have extended hours for flood-related
                     </CardFooter>
                         )}
                   </Card>
-                </section>
-              ) : activeSettingsSection === "notifications" ? (
-                (isOrgAdmin || isPlatformAdmin) && orgId ? (
-                  <OrganizationNotificationSettingsForm
-                    organizationId={orgId}
-                  />
-                ) : null
-              ) : organizationData?.organization ? (
-                <PublicPageSettingsCard
-                  organization={organizationData.organization}
-                  canEdit={canUpdateOrganization}
-                  onUpdated={loadOrganizationData}
-                />
-              ) : null}
-            </div>
-          </div>
+          </section>
         </TabsContent>
+
+        <TabsContent value="public-page" className="min-w-0">
+          {organizationData?.organization ? (
+            <PublicPageSettingsCard
+              organization={organizationData.organization}
+              canEdit={canUpdateOrganization}
+              onUpdated={loadOrganizationData}
+            />
+          ) : null}
+        </TabsContent>
+
+        {(isOrgAdmin || isPlatformAdmin) && (
+          <TabsContent value="notifications" className="min-w-0">
+            {orgId ? (
+              <OrganizationNotificationSettingsForm organizationId={orgId} />
+            ) : null}
+          </TabsContent>
+        )}
 
         {/* Third-party API Credentials tab — per-provider API keys for the
             modular voice engine (Deepgram, OpenAI, Cartesia, Cerebras). A
