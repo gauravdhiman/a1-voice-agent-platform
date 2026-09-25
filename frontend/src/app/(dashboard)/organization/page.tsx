@@ -9,6 +9,7 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
 import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
 import { PublicPageSettingsCard } from "@/components/organizations/public-page-settings-card";
+import { OrganizationNotificationSettingsForm } from "@/components/notifications/organization-notification-settings-form";
 import {
   normalizeOrganizationSlug,
   publicOrgPagePath,
@@ -30,6 +31,10 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
+import {
+  SettingsSectionNavigation,
+  type SettingsNavigationSection,
+} from "@/components/settings/settings-section-navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +47,8 @@ import {
 } from "@/components/ui/select";
 import {
   Building2,
+  Bell,
+  Globe,
   Users,
   Calendar,
   Activity,
@@ -80,6 +87,33 @@ import {
 import { organizationService } from "@/services/organization-service";
 import { legacyTabRedirect } from "./legacy-tab-redirect";
 import { toast } from "sonner";
+
+const ORGANIZATION_SETTINGS_SECTIONS: readonly SettingsNavigationSection[] = [
+  {
+    id: "general",
+    label: "General",
+    description: "Organization profile and business details.",
+    icon: Building2,
+  },
+  {
+    id: "public-page",
+    label: "Public page",
+    description: "Manage the public organization profile.",
+    icon: Globe,
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    description: "Choose recovery alert destinations.",
+    icon: Bell,
+  },
+];
+
+const LEGACY_SETTINGS_TAB_SECTIONS: Readonly<Record<string, string>> = {
+  info: "general",
+  public: "public-page",
+  notifications: "notifications",
+};
 
 // Use real services
 
@@ -149,11 +183,19 @@ export default function OrganizationPage() {
   const [removingProviderCred, setRemovingProviderCred] =
     useState<ProviderCredentialKey | null>(null);
 
-  // Org page tab state ("info" | "credentials"). Synced to `?tab=` so the two
-  // cards are deep-linkable. Legacy `?tab=` values (phone-numbers/skills/
-  // ai-agent) are redirected to their top-level routes by `legacyTabRedirect`
-  // above; `info`/`credentials` fall through (no redirect) and set the tab.
-  const [activeTab, setActiveTab] = useState<"info" | "credentials" | "public">("info");
+  // Organization settings tabs sync to `?tab=` for deep links. Legacy tabs for
+  // phone numbers, skills, and the voice agent redirect to their top-level routes.
+  const [activeTab, setActiveTab] = useState<"settings" | "credentials">(
+    "settings",
+  );
+  const searchParamsString = searchParams.toString();
+  const requestedTab = searchParams.get("tab");
+  const requestedSettingsSection = searchParams.get("section");
+  const activeSettingsSection = ORGANIZATION_SETTINGS_SECTIONS.some(
+    (section) => section.id === requestedSettingsSection,
+  )
+    ? requestedSettingsSection!
+    : "general";
 
   const loadOrganizationData = useCallback(async () => {
     if (!orgId) return;
@@ -193,41 +235,68 @@ export default function OrganizationPage() {
 
   // Sync tab state with URL. The Phone Numbers, Skills, and AI Voice
   // Agent tabs are now top-level routes (N1 redesign): when the URL
-  // carries one of those tabs, we redirect to the canonical route
-  // instead of rendering a tab body. `overview` (and an absent `tab`)
-  // are the only values that render this page. The decision is in
-  // `legacy-tab-redirect.ts` so the redirect contract is unit-tested
-  // independently of the page.
+  // carries one of those tabs, we redirect to the canonical route. The current
+  // settings tabs stay on this page and are selected in the effect below. The
+  // redirect decision is in `legacy-tab-redirect.ts` for isolated coverage.
   useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    const target = legacyTabRedirect(tabParam, orgId, searchParams);
+    const target = legacyTabRedirect(
+      requestedTab,
+      orgId,
+      new URLSearchParams(searchParamsString),
+    );
     if (target) {
       router.replace(target);
     }
-  }, [searchParams, orgId, router]);
+  }, [requestedTab, searchParamsString, orgId, router]);
 
-  // Sync the org-page tab ("info" | "credentials") from `?tab=`. Legacy values
-  // are redirected above; only an explicit `info`/`credentials` flips the tab —
-  // an absent or unknown `tab` leaves the current tab alone (the useState
-  // default is "info", and tab switches drive `handleTabChange`). Mirrors the
-  // agent-detail `?tab=` idiom.
+  // Older organization tabs now resolve to the matching settings section.
   useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "info" || tabParam === "credentials" || tabParam === "public") {
-      setActiveTab(tabParam);
-    }
-  }, [searchParams]);
+    const legacySection = LEGACY_SETTINGS_TAB_SECTIONS[requestedTab ?? ""];
+    if (!legacySection) return;
 
-  // Switch tab and persist it to `?tab=`, preserving `org_id` (and any other
-  // active params) so the deep link stays valid.
+    const params = new URLSearchParams(searchParamsString);
+    params.set("tab", "settings");
+    params.set("section", legacySection);
+    router.replace(`/organization?${params.toString()}`, { scroll: false });
+  }, [requestedTab, router, searchParamsString]);
+
+  useEffect(() => {
+    if (requestedTab === "credentials" && activeTab !== "credentials") {
+      setActiveTab("credentials");
+    } else if (
+      (requestedTab === "settings" ||
+        LEGACY_SETTINGS_TAB_SECTIONS[requestedTab ?? ""]) &&
+      activeTab !== "settings"
+    ) {
+      setActiveTab("settings");
+    }
+  }, [activeTab, requestedTab]);
+
+  // Switch the top-level area and keep its deep link in the URL.
   const handleTabChange = useCallback(
     (value: string) => {
-      setActiveTab(value as "info" | "credentials" | "public");
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", value);
+      const nextTab = value === "credentials" ? "credentials" : "settings";
+      setActiveTab(nextTab);
+      const params = new URLSearchParams(searchParamsString);
+      params.set("tab", nextTab);
+      if (nextTab === "settings") {
+        params.set("section", activeSettingsSection);
+      } else {
+        params.delete("section");
+      }
       router.push(`/organization?${params.toString()}`, { scroll: false });
     },
-    [router, searchParams],
+    [activeSettingsSection, router, searchParamsString],
+  );
+
+  const hrefForSettingsSection = useCallback(
+    (sectionId: string) => {
+      const params = new URLSearchParams(searchParamsString);
+      params.set("tab", "settings");
+      params.set("section", sectionId);
+      return `/organization?${params.toString()}`;
+    },
+    [searchParamsString],
   );
 
   // Validate organization access when orgId is provided
@@ -561,7 +630,7 @@ export default function OrganizationPage() {
                 {displayOrg.name}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Organization Configuration
+                Manage organization settings and API credentials
               </p>
             </div>
           </div>
@@ -616,239 +685,253 @@ export default function OrganizationPage() {
         </div>
       </div>
 
-      {/* N1 redesign: the org page is settings-only. Phone Numbers, Skills,
-          and AI Voice Agent moved to top-level routes; `legacy-tab-redirect.ts`
-          handles the legacy `?tab=...` URLs. The two remaining settings cards
-          (Organization Info + Third-party API Credentials) are organized into
-          a tabbed layout synced to `?tab=info|credentials`. */}
+      {/* Settings are grouped by purpose; provider API credentials remain a
+          separate destination because they have their own secure editing flow. */}
       <AnimatedTabs
         value={activeTab}
         onValueChange={handleTabChange}
         className="space-y-6"
       >
         <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="info">Organization Info</TabsTrigger>
-          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="credentials">API Credentials</TabsTrigger>
-          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="public">Public Page</TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="settings">
+            Settings
+          </TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="credentials">
+            API Credentials
+          </TabsTrigger>
         </TabsList>
 
-        {/* Organization Info tab */}
-        <TabsContent value="info">
-      <Card>
-        <CardHeader className="p-5 pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <CardTitle className="flex items-center space-x-2 text-lg">
-                <Building2 className="h-5 w-5" />
-                <span>Organization Information</span>
-              </CardTitle>
-              <CardDescription>
-                Your organization details and settings
-              </CardDescription>
-            </div>
-            {canUpdateOrganization && !isEditing && (
-              <Button variant="outline" size="sm" onClick={handleEdit}>
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-            <CardContent className="p-5 pt-0 space-y-4">
-              {isEditing ? (
-                <>
-                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
-                    <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-blue-800">
-                      The information you provide here helps AI agents represent your business accurately when speaking with callers.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                      id="name"
-                      value={editedOrg?.name || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({ ...editedOrg, name: e.target.value })
-                      }
-                      placeholder="Enter organization name"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={editedOrg?.description || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({
-                          ...editedOrg,
-                          description: e.target.value,
-                        })
-                      }
-                      placeholder="Tell us about your organization, like little background, about team etc. This will be used by AI agent for context."
-                      className="min-h-[100px]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="industry">Industry</Label>
-                      <Input
-                        id="industry"
-                        value={editedOrg?.industry || ""}
-                        onChange={(e) =>
-                          editedOrg &&
-                          setEditedOrg({
-                            ...editedOrg,
-                            industry: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., Real Estate, Healthcare"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="location">Location / Address</Label>
-                      <Input
-                        id="location"
-                        value={editedOrg?.location || ""}
-                        onChange={(e) =>
-                          editedOrg &&
-                          setEditedOrg({
-                            ...editedOrg,
-                            location: e.target.value,
-                          })
-                        }
-                        placeholder="123 Business St, City, State"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">Business timezone</Label>
-                    <Select
-                      value={editedOrg?.timezone ?? ORGANIZATION_TIMEZONE_UNSET}
-                      onValueChange={(value) =>
-                        editedOrg &&
-                        setEditedOrg({
-                          ...editedOrg,
-                          timezone: value,
-                        })
-                      }
-                    >
-                      <SelectTrigger id="timezone">
-                        <SelectValue placeholder="Select timezone" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ORGANIZATION_TIMEZONE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Used by voice agents for &quot;today&quot;, business hours, and
-                      calendar availability. Leave as platform default until you pick
-                      your zone.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="website">Website</Label>
-                    <Input
-                      id="website"
-                      type="url"
-                      value={editedOrg?.website || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({ ...editedOrg, website: e.target.value })
-                      }
-                      placeholder="https://www.example.com"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="slug">Organization slug</Label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border bg-muted/30 px-3 py-2">
-                        <span className="shrink-0 text-sm text-muted-foreground">
-                          /o/
-                        </span>
-                        <Input
-                          id="slug"
-                          value={editedOrg?.slug || ""}
-                          onChange={(e) =>
-                            editedOrg &&
-                            setEditedOrg({ ...editedOrg, slug: e.target.value })
-                          }
-                          placeholder="acme-support"
-                          className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                          spellCheck={false}
-                          autoComplete="off"
-                        />
+        <TabsContent value="settings" className="space-y-6">
+          <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+            <SettingsSectionNavigation
+              ariaLabel="Organization settings"
+              sections={ORGANIZATION_SETTINGS_SECTIONS.filter(
+                (section) =>
+                  section.id !== "notifications" ||
+                  isOrgAdmin ||
+                  isPlatformAdmin,
+              )}
+              activeSection={activeSettingsSection}
+              hrefForSection={hrefForSettingsSection}
+            />
+            <div className="min-w-0">
+              {activeSettingsSection === "general" ? (
+                <section aria-label="General organization settings">
+                  <Card>
+                    <CardHeader className="p-5 pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-1">
+                          <CardTitle className="flex items-center space-x-2 text-lg">
+                            <Building2 className="h-5 w-5" />
+                            <span>Organization Information</span>
+                          </CardTitle>
+                          <CardDescription>
+                            Your organization details and settings
+                          </CardDescription>
+                        </div>
+                        {canUpdateOrganization && !isEditing && (
+                          <Button variant="outline" size="sm" onClick={handleEdit}>
+                            <Edit3 className="h-4 w-4 mr-2" />
+                            Edit
+                          </Button>
+                        )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          if (!editedOrg) return;
-                          const suggested = suggestOrganizationSlugFromName(
-                            editedOrg.name,
-                          );
-                          if (suggested) {
-                            setEditedOrg({ ...editedOrg, slug: suggested });
-                          }
-                        }}
-                      >
-                        Suggest from name
-                      </Button>
-                    </div>
-                    {editedOrg?.slug ? (
-                      validateOrganizationSlug(
-                        normalizeOrganizationSlug(editedOrg.slug),
-                      ) ? (
-                        <p className="text-xs text-destructive">
-                          {validateOrganizationSlug(
-                            normalizeOrganizationSlug(editedOrg.slug),
-                          )}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Public page URL:{" "}
-                          <span className="font-mono">
-                            {publicOrgPagePath(
-                              normalizeOrganizationSlug(editedOrg.slug),
-                            )}
-                          </span>
-                          . Must be unique across all organizations.
-                        </p>
-                      )
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Used for your public page and API identifiers.
-                      </p>
-                    )}
-                  </div>
+                    </CardHeader>
+                    <CardContent className="p-5 pt-0 space-y-4">
+                      {isEditing ? (
+                        <>
+                          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
+                            <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-blue-800">
+                              The information you provide here helps AI agents represent your business accurately when speaking with callers.
+                            </p>
+                          </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="business_details">
-                      Business Context
-                    </Label>
-                    <Textarea
-                      id="business_details"
-                      value={editedOrg?.business_details || ""}
-                      onChange={(e) =>
-                        editedOrg &&
-                        setEditedOrg({
-                          ...editedOrg,
-                          business_details: e.target.value,
-                        })
-                      }
-                      placeholder={`Describe your business context that you want your AI agents to be aware of. Include the most common things like:
+                          <div className="space-y-2">
+                            <Label htmlFor="name">Name</Label>
+                            <Input
+                              id="name"
+                              value={editedOrg?.name || ""}
+                              onChange={(e) =>
+                                editedOrg &&
+                                setEditedOrg({ ...editedOrg, name: e.target.value })
+                              }
+                              placeholder="Enter organization name"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="description">Description</Label>
+                            <Textarea
+                              id="description"
+                              value={editedOrg?.description || ""}
+                              onChange={(e) =>
+                                editedOrg &&
+                                setEditedOrg({
+                                  ...editedOrg,
+                                  description: e.target.value,
+                                })
+                              }
+                              placeholder="Tell us about your organization, like little background, about team etc. This will be used by AI agent for context."
+                              className="min-h-[100px]"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="industry">Industry</Label>
+                              <Input
+                                id="industry"
+                                value={editedOrg?.industry || ""}
+                                onChange={(e) =>
+                                  editedOrg &&
+                                  setEditedOrg({
+                                    ...editedOrg,
+                                    industry: e.target.value,
+                                  })
+                                }
+                                placeholder="e.g., Real Estate, Healthcare"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="location">Location / Address</Label>
+                              <Input
+                                id="location"
+                                value={editedOrg?.location || ""}
+                                onChange={(e) =>
+                                  editedOrg &&
+                                  setEditedOrg({
+                                    ...editedOrg,
+                                    location: e.target.value,
+                                  })
+                                }
+                                placeholder="123 Business St, City, State"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="timezone">Business timezone</Label>
+                            <Select
+                              value={editedOrg?.timezone ?? ORGANIZATION_TIMEZONE_UNSET}
+                              onValueChange={(value) =>
+                                editedOrg &&
+                                setEditedOrg({
+                                  ...editedOrg,
+                                  timezone: value,
+                                })
+                              }
+                            >
+                              <SelectTrigger id="timezone">
+                                <SelectValue placeholder="Select timezone" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ORGANIZATION_TIMEZONE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Used by voice agents for &quot;today&quot;, business hours, and
+                              calendar availability. Leave as platform default until you pick
+                              your zone.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="website">Website</Label>
+                            <Input
+                              id="website"
+                              type="url"
+                              value={editedOrg?.website || ""}
+                              onChange={(e) =>
+                                editedOrg &&
+                                setEditedOrg({ ...editedOrg, website: e.target.value })
+                              }
+                              placeholder="https://www.example.com"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="slug">Organization slug</Label>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border bg-muted/30 px-3 py-2">
+                                <span className="shrink-0 text-sm text-muted-foreground">
+                                  /o/
+                                </span>
+                                <Input
+                                  id="slug"
+                                  value={editedOrg?.slug || ""}
+                                  onChange={(e) =>
+                                    editedOrg &&
+                                    setEditedOrg({ ...editedOrg, slug: e.target.value })
+                                  }
+                                  placeholder="acme-support"
+                                  className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                                  spellCheck={false}
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  if (!editedOrg) return;
+                                  const suggested = suggestOrganizationSlugFromName(
+                                    editedOrg.name,
+                                  );
+                                  if (suggested) {
+                                    setEditedOrg({ ...editedOrg, slug: suggested });
+                                  }
+                                }}
+                              >
+                                Suggest from name
+                              </Button>
+                            </div>
+                            {editedOrg?.slug ? (
+                              validateOrganizationSlug(
+                                normalizeOrganizationSlug(editedOrg.slug),
+                              ) ? (
+                                <p className="text-xs text-destructive">
+                                  {validateOrganizationSlug(
+                                    normalizeOrganizationSlug(editedOrg.slug),
+                                  )}
+                                </p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  Public page URL:{" "}
+                                  <span className="font-mono">
+                                    {publicOrgPagePath(
+                                      normalizeOrganizationSlug(editedOrg.slug),
+                                    )}
+                                  </span>
+                                  . Must be unique across all organizations.
+                                </p>
+                              )
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                Used for your public page and API identifiers.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="business_details">
+                              Business Context
+                            </Label>
+                            <Textarea
+                              id="business_details"
+                              value={editedOrg?.business_details || ""}
+                              onChange={(e) =>
+                                editedOrg &&
+                                setEditedOrg({
+                                  ...editedOrg,
+                                  business_details: e.target.value,
+                                })
+                              }
+                              placeholder={`Describe your business context that you want your AI agents to be aware of. Include the most common things like:
 
 • Short description of products and services you offer
 • Business hours (weekdays, weekends, holidays, seasonal variations)
@@ -864,125 +947,141 @@ We are a family-owned plumbing business serving the greater Phoenix area. Our re
 We offer 24/7 emergency services with premium rates after hours. We specialize in residential repairs, water heater installations, and drain cleaning. 
 All our technicians are licensed and background-checked. We offer a 90-day warranty on all repairs and free estimates for new installations. 
 During monsoon season (July-September), we have extended hours for flood-related emergencies..."`}
-                      className="min-h-[200px]"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Name
-                    </label>
-                    <p className="text-foreground">{displayOrg.name}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Description
-                    </label>
-                    <p className="text-foreground">
-                      {displayOrg.description || "No description"}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">
-                        Industry
-                      </label>
-                      <p className="text-foreground">
-                        {displayOrg.industry || "Not set"}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">
-                        Location
-                      </label>
-                      <p className="text-foreground">
-                        {displayOrg.location || "Not set"}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Timezone
-                    </label>
-                    <p className="text-foreground">
-                      {displayOrg.timezone
-                        ? ORGANIZATION_TIMEZONE_OPTIONS.find(
-                            (option) => option.value === displayOrg.timezone,
-                          )?.label ?? displayOrg.timezone
-                        : "Platform default"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Website
-                    </label>
-                    <p className="text-foreground">
-                      {displayOrg.website ? (
-                        <a
-                          href={displayOrg.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:text-primary/80 underline"
-                        >
-                          {displayOrg.website}
-                        </a>
+                              className="min-h-[200px]"
+                            />
+                          </div>
+                        </>
                       ) : (
-                        <span className="text-muted-foreground">No website</span>
+                        <>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Name
+                            </label>
+                            <p className="text-foreground">{displayOrg.name}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Description
+                            </label>
+                            <p className="text-foreground">
+                              {displayOrg.description || "No description"}
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                              <label className="text-sm font-medium text-muted-foreground">
+                                Industry
+                              </label>
+                              <p className="text-foreground">
+                                {displayOrg.industry || "Not set"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-muted-foreground">
+                                Location
+                              </label>
+                              <p className="text-foreground">
+                                {displayOrg.location || "Not set"}
+                              </p>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Timezone
+                            </label>
+                            <p className="text-foreground">
+                              {displayOrg.timezone
+                                ? ORGANIZATION_TIMEZONE_OPTIONS.find(
+                                    (option) => option.value === displayOrg.timezone,
+                                  )?.label ?? displayOrg.timezone
+                                : "Platform default"}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Website
+                            </label>
+                            <p className="text-foreground">
+                              {displayOrg.website ? (
+                                <a
+                                  href={displayOrg.website}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:text-primary/80 underline"
+                                >
+                                  {displayOrg.website}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">No website</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Slug
+                            </label>
+                            <p className="text-foreground font-mono">
+                              {displayOrg.slug}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Public page:{" "}
+                              <span className="font-mono">
+                                {publicOrgPagePath(displayOrg.slug)}
+                              </span>
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Business Context
+                            </label>
+                            <p className="text-foreground whitespace-pre-wrap">
+                              {displayOrg.business_details ||
+                                "No business context provided"}
+                            </p>
+                          </div>
+                        </>
                       )}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Slug
-                    </label>
-                    <p className="text-foreground font-mono">
-                      {displayOrg.slug}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Public page:{" "}
-                      <span className="font-mono">
-                        {publicOrgPagePath(displayOrg.slug)}
-                      </span>
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Business Context
-                    </label>
-                    <p className="text-foreground whitespace-pre-wrap">
-                      {displayOrg.business_details ||
-                        "No business context provided"}
-                    </p>
-                  </div>
-                </>
-              )}
-            </CardContent>
-            {isEditing && (
-              <CardFooter className="flex flex-col-reverse items-stretch gap-2 border-t bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancel}
-                  disabled={saving}
-                  className="flex items-center space-x-2"
-                >
-                  <X className="h-4 w-4" />
-                  <span>Cancel</span>
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex items-center space-x-2"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>{saving ? "Saving..." : "Save Changes"}</span>
-                </Button>
-              </CardFooter>
-            )}
-      </Card>
+                    </CardContent>
+                        {isEditing && (
+                    <CardFooter className="flex flex-col-reverse items-stretch gap-2 border-t bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancel}
+                        disabled={saving}
+                        className="flex items-center space-x-2"
+                      >
+                        <X className="h-4 w-4" />
+                        <span>Cancel</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center space-x-2"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>{saving ? "Saving..." : "Save Changes"}</span>
+                      </Button>
+                    </CardFooter>
+                        )}
+                  </Card>
+                </section>
+              ) : activeSettingsSection === "notifications" ? (
+                (isOrgAdmin || isPlatformAdmin) && orgId ? (
+                  <OrganizationNotificationSettingsForm
+                    organizationId={orgId}
+                  />
+                ) : null
+              ) : organizationData?.organization ? (
+                <PublicPageSettingsCard
+                  organization={organizationData.organization}
+                  canEdit={canUpdateOrganization}
+                  onUpdated={loadOrganizationData}
+                />
+              ) : null}
+            </div>
+          </div>
         </TabsContent>
 
         {/* Third-party API Credentials tab — per-provider API keys for the
@@ -1020,15 +1119,6 @@ During monsoon season (July-September), we have extended hours for flood-related
           />
         </TabsContent>
 
-        <TabsContent value="public">
-          {organizationData?.organization ? (
-            <PublicPageSettingsCard
-              organization={organizationData.organization}
-              canEdit={canUpdateOrganization}
-              onUpdated={loadOrganizationData}
-            />
-          ) : null}
-        </TabsContent>
       </AnimatedTabs>
 
       {/* Edit Dialog (for fallback) */}

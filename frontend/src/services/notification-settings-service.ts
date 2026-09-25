@@ -7,6 +7,9 @@ import { apiClient } from "@/lib/api/client";
 export interface PlatformNotificationSettings {
   id: string;
   platform_admin_email?: string | null;
+  platform_admin_sms_phone?: string | null;
+  platform_admin_sms_notifications_enabled: boolean;
+  sms_sender_configured: boolean;
   verification_from_email?: string | null;
   verification_from_name?: string | null;
   email_verification_active: boolean;
@@ -21,11 +24,35 @@ export interface PlatformNotificationSettings {
 
 export interface PlatformNotificationSettingsUpdate {
   platform_admin_email?: string | null;
+  platform_admin_sms_phone?: string | null;
+  platform_admin_sms_notifications_enabled?: boolean;
   verification_from_email?: string | null;
   verification_from_name?: string | null;
   telegram_chat_id?: string | null;
   telegram_notifications_enabled?: boolean;
   telegram_bot_token?: string | null;
+}
+
+export interface OrganizationNotificationSettings {
+  organization_id: string;
+  alert_email?: string | null;
+  sms_phone?: string | null;
+  sms_enabled: boolean;
+  telegram_chat_id?: string | null;
+  telegram_enabled: boolean;
+  sms_sender_configured: boolean;
+  telegram_bot_configured: boolean;
+  updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationNotificationSettingsUpdate {
+  alert_email?: string | null;
+  sms_phone?: string | null;
+  sms_enabled?: boolean;
+  telegram_chat_id?: string | null;
+  telegram_enabled?: boolean;
 }
 
 class NotificationSettingsService {
@@ -67,6 +94,54 @@ class NotificationSettingsService {
         success: false,
         error:
           error instanceof Error ? error.message : "Failed to save settings.",
+      };
+    }
+  }
+
+  async getOrganizationSettings(
+    organizationId: string,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    data?: OrganizationNotificationSettings;
+  }> {
+    try {
+      const response = await apiClient.get<OrganizationNotificationSettings>(
+        `/api/v1/notifications/organizations/${encodeURIComponent(organizationId)}/settings`,
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load organization notification settings.",
+      };
+    }
+  }
+
+  async updateOrganizationSettings(
+    organizationId: string,
+    payload: OrganizationNotificationSettingsUpdate,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    data?: OrganizationNotificationSettings;
+  }> {
+    try {
+      const response = await apiClient.put<OrganizationNotificationSettings>(
+        `/api/v1/notifications/organizations/${encodeURIComponent(organizationId)}/settings`,
+        payload,
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to save organization notification settings.",
       };
     }
   }

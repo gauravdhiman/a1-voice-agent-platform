@@ -23,12 +23,14 @@ export function PlatformNotificationSettingsForm() {
     null,
   );
   const [platformAdminEmail, setPlatformAdminEmail] = useState("");
+  const [platformAdminSmsPhone, setPlatformAdminSmsPhone] = useState("");
   const [verificationFromEmail, setVerificationFromEmail] = useState("");
   const [verificationFromName, setVerificationFromName] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
   const [telegramBotToken, setTelegramBotToken] = useState("");
   const [telegramBotEditing, setTelegramBotEditing] = useState(false);
   const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [platformAdminSmsEnabled, setPlatformAdminSmsEnabled] = useState(false);
   const [resendConfigured, setResendConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,6 +56,12 @@ export function PlatformNotificationSettingsForm() {
 
       setSettings(settingsResult.data);
       setPlatformAdminEmail(settingsResult.data.platform_admin_email || "");
+      setPlatformAdminSmsPhone(
+        settingsResult.data.platform_admin_sms_phone || "",
+      );
+      setPlatformAdminSmsEnabled(
+        settingsResult.data.platform_admin_sms_notifications_enabled,
+      );
       setVerificationFromEmail(settingsResult.data.verification_from_email || "");
       setVerificationFromName(settingsResult.data.verification_from_name || "");
       setTelegramChatId(settingsResult.data.telegram_chat_id || "");
@@ -72,6 +80,8 @@ export function PlatformNotificationSettingsForm() {
 
     const payload = {
       platform_admin_email: platformAdminEmail || null,
+      platform_admin_sms_phone: platformAdminSmsPhone || null,
+      platform_admin_sms_notifications_enabled: platformAdminSmsEnabled,
       verification_from_email: verificationFromEmail || null,
       verification_from_name: verificationFromName || null,
       telegram_chat_id: telegramChatId || null,
@@ -195,8 +205,8 @@ export function PlatformNotificationSettingsForm() {
               onChange={(e) => setPlatformAdminEmail(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              New demo and interest submissions are sent here when the Resend
-              API key and sender are configured.
+              Receives platform alerts when a connected tool needs OAuth
+              reauthorization. Lead notifications still require Resend.
             </p>
           </div>
           <div className="space-y-2">
@@ -272,6 +282,59 @@ export function PlatformNotificationSettingsForm() {
           }}
           pendingChange={botTokenPendingChange}
         />
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">SMS OAuth alerts</h2>
+          <p className="text-sm text-muted-foreground">
+            Send platform-admin alerts when a connected tool can no longer be
+            renewed automatically. Configure Twilio credentials and
+            <code className="mx-1 text-xs">TWILIO_SMS_FROM_NUMBER</code>
+            on the backend to enable delivery.
+          </p>
+          <div className="mt-2">
+            {settings?.sms_sender_configured ? (
+              <Badge className="bg-green-600 hover:bg-green-600/90">
+                Twilio sender configured
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Twilio sender not configured</Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <Label htmlFor="oauth_sms_enabled">Enable SMS OAuth alerts</Label>
+            <p className="text-sm text-muted-foreground">
+              SMS alerts go to the platform administrator destination below.
+            </p>
+          </div>
+          <Switch
+            id="oauth_sms_enabled"
+            checked={platformAdminSmsEnabled}
+            onCheckedChange={setPlatformAdminSmsEnabled}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="platform_admin_sms_phone">
+            Platform admin phone
+          </Label>
+          <Input
+            id="platform_admin_sms_phone"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+15551234567"
+            value={platformAdminSmsPhone}
+            onChange={(event) => setPlatformAdminSmsPhone(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Enter an E.164 number, including the country code. SMS is sent only
+            when enabled and Twilio is configured.
+          </p>
+        </div>
       </section>
 
       <Button type="submit" disabled={saving}>

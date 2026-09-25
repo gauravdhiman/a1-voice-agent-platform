@@ -9,7 +9,7 @@ The notification system delivers transactional emails to users for critical even
 - **Email verification**: Email/password signup sends a Resend verification link; sign-in is blocked until verified.
 - **Lead alerts**: Public demo and interest-form submissions are saved in `interest_leads` and then delivered to the configured platform-admin email and/or Telegram chat.
 - **Telegram alerts**: Platform admins can receive Telegram messages on new signups, invitation joins, and lead submissions.
-- **Settings UI**: Platform admins configure the lead recipient, verification sender, and Telegram credentials at `/platform/notifications`.
+- **Settings UI**: Platform admins configure the lead recipient, verification sender, and Telegram credentials at `/platform/settings?section=notifications`.
 
 Lead delivery is channel-independent. Email requires a configured recipient,
 Resend API key, and sender. Telegram requires the enabled switch, bot token,
@@ -25,8 +25,10 @@ The background token refresh worker checks all enabled, authenticated OAuth
 connections, including native and MCP tools. When a live connection cannot be
 renewed automatically, the existing durable email notification service alerts
 the owning organization's admins inside the 30-minute attention window and
-again after expiry. The event is
-`tools.oauth_reauthorization_required`; delivery is idempotent and retryable.
+again after expiry. Ambiguous refresh outcomes, rejected grants, unreadable
+credentials, and OAuth configuration errors trigger an immediate action notice
+with recovery steps. The event is `tools.oauth_reauthorization_required`; email
+delivery is idempotent and retryable.
 
 Unknown provider labels are not treated as manual by themselves. If the live
 connection has a refresh grant and standard OAuth renewal metadata, it remains
@@ -34,8 +36,13 @@ automatic. Connections without a renewal grant, with unsupported metadata,
 without a verifiable expiry, or with a failed renewal attempt require
 reconnection.
 
-Telegram/WhatsApp delivery and organization-configurable notification
-frequency are not part of this integration yet.
+Platform admins receive alerts at the configured platform email, Telegram,
+and optional SMS destinations. Organization admins continue to receive email;
+they can add a shared email inbox and opt in to SMS and Telegram destinations
+under Organization → Settings → Notifications. These channels use a durable outbox with
+independent delivery state and bounded retries. Platform admins manage the
+provider credentials under Platform → Settings → Notifications. Per-organization
+notification frequency and WhatsApp delivery are not part of this integration.
 
 ## Agent-facing Resend email tool
 

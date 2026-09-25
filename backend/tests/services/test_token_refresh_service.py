@@ -2,6 +2,7 @@
 Tests for token refresh service.
 """
 
+import asyncio
 import base64
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,7 +10,11 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from src.services.token_refresh_service import OAuthRefreshRequest, TokenRefreshService
+from src.services.token_refresh_service import (
+    OAuthRefreshError,
+    OAuthRefreshRequest,
+    TokenRefreshService,
+)
 
 from shared.voice_agents.tool_models import AgentTool, PlatformTool, ToolSource
 from shared.voice_agents.tool_service import ToolService
@@ -53,6 +58,10 @@ def sample_agent_tool():
 
     agent_tool = MagicMock(spec=AgentTool)
     agent_tool.id = uuid4()
+    agent_tool.oauth_credential_version = 1
+    agent_tool.oauth_refresh_status = "ready"
+    agent_tool.oauth_refresh_error_code = None
+    agent_tool.oauth_credentials_unreadable = False
     agent_tool.tool = platform_tool
     agent_tool.sensitive_config = {
         "access_token": "test_access_token",
@@ -230,6 +239,15 @@ class TestTokenRefreshService:
         token_refresh_service.tool_service.release_refresh_lock = AsyncMock(
             return_value=True
         )
+        token_refresh_service.tool_service.get_agent_tool_with_sensitive_config = (
+            AsyncMock(return_value=(sample_agent_tool, None))
+        )
+        token_refresh_service.tool_service.begin_oauth_refresh = AsyncMock(
+            return_value=True
+        )
+        token_refresh_service.tool_service.persist_refreshed_oauth_credentials = (
+            AsyncMock(return_value=True)
+        )
 
         # Mock the OAuth manager
         with patch(
@@ -254,21 +272,20 @@ class TestTokenRefreshService:
             ) as mock_refresh:
                 mock_refresh.return_value = new_tokens
 
-                with patch.object(
-                    token_refresh_service, "_update_agent_tool", new_callable=AsyncMock
-                ) as mock_update:
-                    result = await token_refresh_service._check_and_refresh_token(
-                        sample_agent_tool
-                    )
-                    assert result is True
+                result = await token_refresh_service._check_and_refresh_token(
+                    sample_agent_tool
+                )
+                assert result is True
 
-                    # Verify refresh was called
-                    mock_refresh.assert_called_once()
-                    # Verify update was called
-                    mock_update.assert_called_once()
-                    # Lock acquired before refresh and released after.
-                    token_refresh_service.tool_service.claim_refresh_lock.assert_awaited_once()
-                    token_refresh_service.tool_service.release_refresh_lock.assert_awaited_once()
+                # A fresh connection is loaded under the lease before provider I/O.
+                token_service = token_refresh_service.tool_service
+                load_tool = token_service.get_agent_tool_with_sensitive_config
+                load_tool.assert_awaited_once_with(sample_agent_tool.id)
+                token_service.begin_oauth_refresh.assert_awaited_once()
+                mock_refresh.assert_awaited_once()
+                token_service.persist_refreshed_oauth_credentials.assert_awaited_once()
+                token_service.claim_refresh_lock.assert_awaited_once()
+                token_service.release_refresh_lock.assert_awaited_once()
 
     async def test_resolve_mcp_oauth_refresh_config(self, token_refresh_service):
         """Build a generic MCP refresh request without provider credentials."""
@@ -443,7 +460,7 @@ class TestTokenRefreshService:
     async def test_resolve_registered_provider_from_tool_metadata_when_env_is_missing(
         self, token_refresh_service
     ):
-        """A registered provider can use row metadata when deployment credentials are absent."""
+        """Use provider metadata when deployment credentials are absent."""
         platform_tool = MagicMock(spec=PlatformTool)
         platform_tool.name = "Google-compatible tool"
         platform_tool.tool_source = ToolSource.LEGACY
@@ -892,10 +909,96 @@ class TestTokenRefreshService:
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
 
-            result = await token_refresh_service._refresh_oauth_token(
-                token_url, oauth_data
-            )
-            assert result is None
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(token_url, oauth_data)
+            assert error.value.status == "configuration_error"
+
+    @pytest.mark.parametrize(
+        ("status_code", "provider_error", "expected_status", "expected_code"),
+        [
+            (400, "invalid_grant", "reauth_required", "provider_invalid_grant"),
+            (
+                401,
+                "invalid_client",
+                "configuration_error",
+                "oauth_client_configuration_rejected",
+            ),
+            (429, None, "ready", "provider_rate_limited"),
+        ],
+    )
+    async def test_provider_failures_are_classified_without_replaying_request(
+        self,
+        token_refresh_service,
+        status_code,
+        provider_error,
+        expected_status,
+        expected_code,
+    ):
+        """Permanent, temporary, and reauthorization failures stay distinct."""
+        response = MagicMock(status_code=status_code)
+        response.json.return_value = {"error": provider_error} if provider_error else {}
+        with patch("httpx.AsyncClient") as client_class:
+            client = AsyncMock()
+            client.post.return_value = response
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = None
+            client_class.return_value = client
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(
+                    "https://oauth.example.com/token", {"grant_type": "refresh_token"}
+                )
+
+        assert error.value.status == expected_status
+        assert error.value.error_code == expected_code
+        assert error.value.request_definitely_not_processed is (
+            expected_status == "ready"
+        )
+        client.post.assert_awaited_once()
+
+    async def test_read_timeout_is_ambiguous_and_never_replayed(
+        self, token_refresh_service
+    ):
+        """A timeout after sending may hide refresh-token rotation."""
+        with patch("httpx.AsyncClient") as client_class:
+            client = AsyncMock()
+            client.post.side_effect = httpx.ReadTimeout("timed out")
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = None
+            client_class.return_value = client
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(
+                    "https://oauth.example.com/token", {"grant_type": "refresh_token"}
+                )
+
+        assert error.value.status == "outcome_unknown"
+        client.post.assert_awaited_once()
+
+    async def test_total_request_deadline_is_ambiguous_and_never_replayed(
+        self, token_refresh_service
+    ):
+        """A provider that trickles or stalls cannot hold the lease indefinitely."""
+
+        async def slow_post(*_args, **_kwargs):
+            await asyncio.sleep(1)
+
+        with patch(
+            "src.services.token_refresh_service."
+            "TOKEN_REFRESH_HTTP_TOTAL_TIMEOUT_SECONDS",
+            0.01,
+        ), patch("httpx.AsyncClient") as client_class:
+            client = AsyncMock()
+            client.post.side_effect = slow_post
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = None
+            client_class.return_value = client
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(
+                    "https://oauth.example.com/token", {"grant_type": "refresh_token"}
+                )
+
+        assert error.value.status == "outcome_unknown"
+        assert error.value.error_code == "provider_request_deadline_exceeded"
+        client.post.assert_awaited_once()
 
     async def test_refresh_oauth_token_rejects_private_dns_target(
         self, token_refresh_service
@@ -905,31 +1008,27 @@ class TestTokenRefreshService:
             "shared.voice_agents.tools.base.oauth_support._resolve_oauth_host",
             return_value=["10.20.30.40"],
         ), patch("httpx.AsyncClient") as async_client:
-            result = await token_refresh_service._refresh_oauth_token(
-                "https://oauth.example.com/token",
-                {"grant_type": "refresh_token"},
-            )
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(
+                    "https://oauth.example.com/token",
+                    {"grant_type": "refresh_token"},
+                )
 
-        assert result is None
+        assert error.value.status == "configuration_error"
+        assert error.value.error_code == "token_endpoint_invalid"
         async_client.assert_not_called()
 
     async def test_refresh_oauth_token_retries_transient_provider_failure(
         self, token_refresh_service
     ):
-        """Retry transport and 5xx failures without retrying client errors."""
+        """Do not replay a refresh request after an ambiguous provider 5xx."""
         token_url = "https://oauth.example.com/token"
         oauth_data = {"grant_type": "refresh_token", "refresh_token": "r"}
 
         failed_response = MagicMock(status_code=503, text="temporarily unavailable")
-        success_response = MagicMock(status_code=200)
-        success_response.json.return_value = {
-            "access_token": "new",
-            "expires_in": 3600,
-        }
-
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
-            mock_client.post.side_effect = [failed_response, success_response]
+            mock_client.post.return_value = failed_response
             mock_client.__aenter__.return_value = mock_client
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
@@ -937,13 +1036,14 @@ class TestTokenRefreshService:
                 "src.services.token_refresh_service.asyncio.sleep",
                 new_callable=AsyncMock,
             ) as sleep:
-                result = await token_refresh_service._refresh_oauth_token(
-                    token_url, oauth_data
-                )
+                with pytest.raises(OAuthRefreshError) as error:
+                    await token_refresh_service._refresh_oauth_token(
+                        token_url, oauth_data
+                    )
 
-        assert result == {"access_token": "new", "expires_in": 3600}
-        assert mock_client.post.await_count == 2
-        sleep.assert_awaited_once()
+        assert error.value.status == "outcome_unknown"
+        assert mock_client.post.await_count == 1
+        sleep.assert_not_awaited()
 
     async def test_refresh_oauth_token_sends_client_auth_headers(
         self, token_refresh_service
@@ -1015,12 +1115,14 @@ class TestTokenRefreshService:
                 "src.services.token_refresh_service.asyncio.sleep",
                 new_callable=AsyncMock,
             ) as sleep:
-                result = await token_refresh_service._refresh_oauth_token(
-                    "https://oauth.example.com/token",
-                    {"grant_type": "refresh_token"},
-                )
+                with pytest.raises(OAuthRefreshError) as error:
+                    await token_refresh_service._refresh_oauth_token(
+                        "https://oauth.example.com/token",
+                        {"grant_type": "refresh_token"},
+                    )
 
-        assert result is None
+        assert error.value.request_definitely_not_processed is True
+        assert error.value.status == "ready"
         assert mock_client.post.await_count == 3
         assert sleep.await_count == 2
 
@@ -1040,11 +1142,12 @@ class TestTokenRefreshService:
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
 
-            result = await token_refresh_service._refresh_oauth_token(
-                "https://oauth.example.com/token", {"grant_type": "refresh_token"}
-            )
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(
+                    "https://oauth.example.com/token", {"grant_type": "refresh_token"}
+                )
 
-        assert result is None
+        assert error.value.status == "outcome_unknown"
         assert "do-not-log-in-provider-error" not in caplog.text
 
     async def test_refresh_transport_logs_do_not_include_endpoint_query_data(
@@ -1063,9 +1166,10 @@ class TestTokenRefreshService:
                 "src.services.token_refresh_service.asyncio.sleep",
                 new_callable=AsyncMock,
             ):
-                await token_refresh_service._refresh_oauth_token(
-                    token_url, {"grant_type": "refresh_token"}
-                )
+                with pytest.raises(OAuthRefreshError):
+                    await token_refresh_service._refresh_oauth_token(
+                        token_url, {"grant_type": "refresh_token"}
+                    )
 
         assert "do-not-log" not in caplog.text
 
@@ -1083,11 +1187,12 @@ class TestTokenRefreshService:
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
 
-            result = await token_refresh_service._refresh_oauth_token(
-                "https://oauth.example.com/token", {"grant_type": "refresh_token"}
-            )
+            with pytest.raises(OAuthRefreshError) as error:
+                await token_refresh_service._refresh_oauth_token(
+                    "https://oauth.example.com/token", {"grant_type": "refresh_token"}
+                )
 
-        assert result is None
+        assert error.value.status == "outcome_unknown"
 
     async def test_perform_refresh_defaults_expiry_when_provider_omits_expires_in(
         self, token_refresh_service, tool_service, sample_agent_tool
@@ -1095,6 +1200,8 @@ class TestTokenRefreshService:
         """A successful response without expires_in remains refreshable."""
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.persist_refreshed_oauth_credentials = AsyncMock(return_value=True)
         at = sample_agent_tool
         at.sensitive_config["expires_at"] = datetime.now(timezone.utc).timestamp()
 
@@ -1106,12 +1213,7 @@ class TestTokenRefreshService:
                 "access_token": "new-access",
                 "refresh_token": "rotated-refresh",
             },
-        ), patch.object(
-            token_refresh_service,
-            "_update_agent_tool",
-            new_callable=AsyncMock,
-            return_value=True,
-        ) as update:
+        ):
             result = await token_refresh_service._perform_token_refresh(
                 at,
                 {"grant_type": "refresh_token"},
@@ -1119,7 +1221,9 @@ class TestTokenRefreshService:
             )
 
         assert result is True
-        updated_config = update.await_args.kwargs["sensitive_config"]
+        token_service = token_refresh_service.tool_service
+        refresh_call = token_service.persist_refreshed_oauth_credentials.await_args
+        updated_config = refresh_call.kwargs["sensitive_config"]
         assert updated_config["access_token"] == "new-access"
         assert updated_config["refresh_token"] == "rotated-refresh"
         assert updated_config["expires_at"] > datetime.now(timezone.utc).timestamp()
@@ -1130,18 +1234,15 @@ class TestTokenRefreshService:
         """Do not destroy a usable refresh token when a provider omits rotation."""
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.persist_refreshed_oauth_credentials = AsyncMock(return_value=True)
 
         with patch.object(
             token_refresh_service,
             "_refresh_oauth_token",
             new_callable=AsyncMock,
             return_value={"access_token": "new-access", "refresh_token": None},
-        ), patch.object(
-            token_refresh_service,
-            "_update_agent_tool",
-            new_callable=AsyncMock,
-            return_value=True,
-        ) as update:
+        ):
             result = await token_refresh_service._perform_token_refresh(
                 sample_agent_tool,
                 {"grant_type": "refresh_token"},
@@ -1149,7 +1250,9 @@ class TestTokenRefreshService:
             )
 
         assert result is True
-        updated_config = update.await_args.kwargs["sensitive_config"]
+        token_service = token_refresh_service.tool_service
+        refresh_call = token_service.persist_refreshed_oauth_credentials.await_args
+        updated_config = refresh_call.kwargs["sensitive_config"]
         assert updated_config["refresh_token"] == "test_refresh_token"
 
     async def test_perform_refresh_defaults_expiry_for_non_positive_expires_in(
@@ -1158,18 +1261,15 @@ class TestTokenRefreshService:
         """Treat zero or negative provider lifetimes as an omitted expiry."""
         tool_service.claim_refresh_lock = AsyncMock(return_value="claim-1")
         tool_service.release_refresh_lock = AsyncMock(return_value=True)
+        tool_service.begin_oauth_refresh = AsyncMock(return_value=True)
+        tool_service.persist_refreshed_oauth_credentials = AsyncMock(return_value=True)
 
         with patch.object(
             token_refresh_service,
             "_refresh_oauth_token",
             new_callable=AsyncMock,
             return_value={"access_token": "new-access", "expires_in": 0},
-        ), patch.object(
-            token_refresh_service,
-            "_update_agent_tool",
-            new_callable=AsyncMock,
-            return_value=True,
-        ) as update:
+        ):
             result = await token_refresh_service._perform_token_refresh(
                 sample_agent_tool,
                 {"grant_type": "refresh_token"},
@@ -1177,45 +1277,10 @@ class TestTokenRefreshService:
             )
 
         assert result is True
-        assert update.await_args.kwargs["sensitive_config"]["expires_at"] > (
-            datetime.now(timezone.utc).timestamp()
-        )
-
-    async def test_update_agent_tool_success(self, token_refresh_service, tool_service):
-        """Test successful agent tool update."""
-        agent_tool_id = uuid4()
-        sensitive_config = {
-            "access_token": "new_token",
-            "refresh_token": "new_refresh",
-            "expires_at": 1234567890.0,
-        }
-        tool_name = "Test Tool"
-
-        tool_service.update_agent_tool = AsyncMock(return_value=(None, None))
-
-        await token_refresh_service._update_agent_tool(
-            agent_tool_id, sensitive_config, tool_name
-        )
-
-        tool_service.update_agent_tool.assert_called_once()
-        call_args = tool_service.update_agent_tool.call_args
-        assert call_args[1]["agent_tool_id"] == agent_tool_id
-        assert call_args[1]["update_data"].sensitive_config == sensitive_config
-        assert call_args[1]["update_data"].last_refreshed_at is not None
-
-    async def test_update_agent_tool_failure(self, token_refresh_service, tool_service):
-        """Test agent tool update failure."""
-        agent_tool_id = uuid4()
-        sensitive_config = {"access_token": "new_token"}
-        tool_name = "Test Tool"
-
-        tool_service.update_agent_tool = AsyncMock(return_value=(None, "Update failed"))
-
-        await token_refresh_service._update_agent_tool(
-            agent_tool_id, sensitive_config, tool_name
-        )
-
-        tool_service.update_agent_tool.assert_called_once()
+        token_service = token_refresh_service.tool_service
+        refresh_call = token_service.persist_refreshed_oauth_credentials.await_args
+        persisted_config = refresh_call.kwargs["sensitive_config"]
+        assert persisted_config["expires_at"] > datetime.now(timezone.utc).timestamp()
 
     async def test_get_tools_requiring_auth_success(
         self, token_refresh_service, tool_service

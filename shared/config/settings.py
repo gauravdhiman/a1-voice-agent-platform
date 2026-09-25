@@ -86,7 +86,7 @@ class Settings(BaseSettings):
 
     # JWT Settings (Future auth integration)
     jwt_secret_key: Optional[str] = Field(default=None, description="JWT secret key")
-    # jwt_algorithm intentionally omitted — JWT verification hardcodes algorithms=["HS256"] in middleware.py
+    # jwt_algorithm is intentionally omitted: middleware.py verifies with HS256.
     jwt_expire_minutes: int = Field(default=30, description="JWT expiration in minutes")
 
     # External API Settings (Future integrations)
@@ -204,7 +204,9 @@ class Settings(BaseSettings):
     notification_retry_check_interval_minutes: float = Field(
         default=5,
         gt=0,
-        description="How often notification logs and low-credit outbox rows are processed",
+        description=(
+            "How often notification logs and low-credit outbox rows are processed"
+        ),
     )
 
     # OpenTelemetry Settings
@@ -323,7 +325,7 @@ class Settings(BaseSettings):
         default=5,
         ge=1,
         le=60,
-        description="Interval in minutes to check for tokens needing refresh (default: 5)",
+        description="Interval in minutes to check tokens for refresh (default: 5)",
     )
     token_refresh_expiry_window_minutes: int = Field(
         default=15,
@@ -341,12 +343,12 @@ class Settings(BaseSettings):
         ),
     )
     token_refresh_lock_lease_seconds: int = Field(
-        default=120,
-        ge=10,
+        default=180,
+        ge=180,
         le=600,
-        description="TTL (seconds) of the per-tool refresh lease lock. Must exceed "
-        "the slowest expected OAuth refresh round-trip so the lease does not expire "
-        "mid-refresh (default: 120).",
+        description="TTL (seconds) of the per-tool refresh lease lock. Must remain "
+        "at least 180 seconds to outlive the 105-second OAuth request deadline, "
+        "bounded DNS validation, and credential persistence (default: 180).",
     )
     token_refresh_max_concurrent_refreshes: int = Field(
         default=5,
@@ -365,6 +367,10 @@ class Settings(BaseSettings):
     )
     twilio_phone_number_sid: Optional[str] = Field(
         default=None, description="Default Twilio phone number SID"
+    )
+    twilio_sms_from_number: Optional[str] = Field(
+        default=None,
+        description="Twilio E.164 sender number used for platform SMS alerts",
     )
     twilio_webhook_signature_validation_enabled: bool = Field(
         default=True,

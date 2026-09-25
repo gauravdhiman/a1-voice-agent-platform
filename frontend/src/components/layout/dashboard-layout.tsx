@@ -207,9 +207,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       } else {
         breadcrumbs.push({ name: "Dashboard", href: null });
       }
-    } else if (pathname === "/platform/phone-numbers") {
+    } else if (pathname === "/platform/settings") {
       if (isPlatformAdmin) {
-        breadcrumbs.push({ name: "Phone Number Settings", href: null });
+        breadcrumbs.push({ name: "Platform Settings", href: null });
+        const section = searchParams.get("section");
+        if (section === "notifications") {
+          breadcrumbs.push({ name: "Notifications", href: null });
+        } else if (section === "phone-numbers") {
+          breadcrumbs.push({ name: "Phone numbers", href: null });
+        }
+      } else {
+        breadcrumbs.push({ name: "Dashboard", href: null });
+      }
+    } else if (
+      pathname === "/platform/notifications" ||
+      pathname === "/platform/phone-numbers"
+    ) {
+      if (isPlatformAdmin) {
+        breadcrumbs.push({ name: "Platform Settings", href: null });
       } else {
         breadcrumbs.push({ name: "Dashboard", href: null });
       }

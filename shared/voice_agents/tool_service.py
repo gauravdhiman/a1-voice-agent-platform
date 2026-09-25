@@ -5,7 +5,7 @@ Tool service for managing platform tools and agent-specific tool configurations.
 import logging
 import time
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from opentelemetry import trace
@@ -235,7 +235,8 @@ class ToolService:
     # / `release_token_refresh` Postgres functions (see Alembic migration
     # 20260623000001). Fail-closed: if the lock cannot be acquired/verified, refresh
     # is skipped rather than racing.
-    REFRESH_LOCK_LEASE_SECONDS: int = 120
+    REFRESH_LOCK_LEASE_SECONDS: int = 180
+    OAUTH_REFRESH_SCAN_PAGE_SIZE: int = 500
 
     @tracer.start_as_current_span("tool.claim_refresh_lock")
     async def claim_refresh_lock(
@@ -307,6 +308,142 @@ class ToolService:
             logger.error(
                 f"Error releasing refresh lock for {agent_tool_id}: {e}",
                 exc_info=True,
+            )
+            return False
+
+    async def begin_oauth_refresh(
+        self,
+        agent_tool_id: UUID,
+        claim_id: str,
+        credential_version: int,
+        lease_seconds: int,
+    ) -> bool:
+        """Mark a refresh in progress only while its lease and snapshot are current."""
+        try:
+            response = self.supabase.rpc(
+                "begin_token_refresh",
+                {
+                    "p_tool_id": str(agent_tool_id),
+                    "p_claim": claim_id,
+                    "p_expected_version": credential_version,
+                    "p_lease_seconds": lease_seconds,
+                },
+            ).execute()
+            data = getattr(response, "data", None)
+            return bool(data.get("begun")) if isinstance(data, dict) else bool(data)
+        except Exception as exc:
+            logger.error(
+                "Could not begin OAuth refresh for %s (%s)",
+                agent_tool_id,
+                type(exc).__name__,
+            )
+            return False
+
+    async def set_oauth_refresh_status(
+        self,
+        agent_tool_id: UUID,
+        claim_id: str,
+        credential_version: int,
+        status: str,
+        error_code: Optional[str],
+        lease_seconds: int,
+    ) -> bool:
+        """Persist a classified refresh result behind the current lease fence."""
+        try:
+            response = self.supabase.rpc(
+                "update_token_refresh_status",
+                {
+                    "p_tool_id": str(agent_tool_id),
+                    "p_claim": claim_id,
+                    "p_expected_version": credential_version,
+                    "p_status": status,
+                    "p_error_code": error_code,
+                    "p_lease_seconds": lease_seconds,
+                },
+            ).execute()
+            data = getattr(response, "data", None)
+            return bool(data.get("updated")) if isinstance(data, dict) else bool(data)
+        except Exception as exc:
+            logger.error(
+                "Could not persist OAuth refresh status for %s (%s)",
+                agent_tool_id,
+                type(exc).__name__,
+            )
+            return False
+
+    async def mark_oauth_credentials_unreadable(
+        self, agent_tool_id: UUID, credential_version: int
+    ) -> bool:
+        """Mark an OAuth credential row unreadable if its generation is unchanged."""
+        try:
+            response = self.supabase.rpc(
+                "mark_oauth_credentials_unreadable",
+                {
+                    "p_tool_id": str(agent_tool_id),
+                    "p_expected_version": credential_version,
+                },
+            ).execute()
+            data = getattr(response, "data", None)
+            return bool(data.get("updated")) if isinstance(data, dict) else bool(data)
+        except Exception as exc:
+            logger.error(
+                "Could not mark OAuth credentials unreadable for %s (%s)",
+                agent_tool_id,
+                type(exc).__name__,
+            )
+            return False
+
+    async def recover_oauth_credentials_unreadable(
+        self, agent_tool_id: UUID, credential_version: int
+    ) -> bool:
+        """Clear unreadable state after this credential generation decrypts."""
+        try:
+            response = self.supabase.rpc(
+                "recover_oauth_credentials_unreadable",
+                {
+                    "p_tool_id": str(agent_tool_id),
+                    "p_expected_version": credential_version,
+                },
+            ).execute()
+            data = getattr(response, "data", None)
+            return bool(data.get("updated")) if isinstance(data, dict) else bool(data)
+        except Exception as exc:
+            logger.error(
+                "Could not recover readable OAuth credentials for %s (%s)",
+                agent_tool_id,
+                type(exc).__name__,
+            )
+            return False
+
+    async def persist_refreshed_oauth_credentials(
+        self,
+        agent_tool_id: UUID,
+        claim_id: str,
+        credential_version: int,
+        sensitive_config: Dict[str, Any],
+        refreshed_at: datetime,
+        lease_seconds: int,
+    ) -> bool:
+        """Persist rotated credentials only if the lease and source generation match."""
+        try:
+            response = self.supabase.rpc(
+                "complete_token_refresh",
+                {
+                    "p_tool_id": str(agent_tool_id),
+                    "p_claim": claim_id,
+                    "p_expected_version": credential_version,
+                    "p_encrypted_config": encrypt_data(sensitive_config),
+                    "p_refreshed_at": refreshed_at.isoformat(),
+                    "p_lease_seconds": lease_seconds,
+                },
+            ).execute()
+            data = getattr(response, "data", None)
+            return bool(data.get("updated")) if isinstance(data, dict) else bool(data)
+        except Exception as exc:
+            logger.error(
+                "Could not persist refreshed OAuth credentials for %s (%s)",
+                agent_tool_id,
+                type(exc).__name__,
             )
             return False
 
@@ -1139,7 +1276,7 @@ class ToolService:
     async def update_platform_tool(
         self, tool_id: UUID, tool_data: PlatformToolCreate
     ) -> tuple[Optional[PlatformTool], Optional[str]]:
-        """Update a platform tool by id (platform-admin edit of a draft/published server).
+        """Update a platform tool by id for platform-admin editing.
 
         Mirrors :meth:`upsert_platform_tool`'s encryption + org-forcing but
         updates by ``id`` instead of upserting by name. Used by the
@@ -1466,7 +1603,7 @@ class ToolService:
             # Get agent tool configurations
             response = (
                 self.supabase.table("agent_tools")
-                .select("*, tool:platform_tools(*)")
+                .select("*, tool:platform_tools(*), voice_agents(name,organization_id)")
                 .eq("agent_id", str(agent_id))
                 .execute()
             )
@@ -1483,9 +1620,6 @@ class ToolService:
             for item in response.data:
                 # Extract tool details from the joined query
                 tool_data = item.pop("tool")
-
-                # Extract only non-secret token metadata for display.
-                token_expires_at = _token_expiry(item.get("sensitive_config"))
 
                 # Build response without sensitive config
                 auth_type = tool_data.get("auth_type") if tool_data else None
@@ -1553,7 +1687,7 @@ class ToolService:
             # Get agent tool configurations
             response = (
                 self.supabase.table("agent_tools")
-                .select("*, tool:platform_tools(*)")
+                .select("*, tool:platform_tools(*), voice_agents(name,organization_id)")
                 .eq("agent_id", str(agent_id))
                 .execute()
             )
@@ -1615,7 +1749,7 @@ class ToolService:
         try:
             response = (
                 self.supabase.table("agent_tools")
-                .select("*, tool:platform_tools(*)")
+                .select("*, tool:platform_tools(*), voice_agents(name,organization_id)")
                 .eq("id", str(agent_tool_id))
                 .limit(1)
                 .execute()
@@ -1625,13 +1759,19 @@ class ToolService:
 
             item = response.data[0]
             tool_data = item.pop("tool", None)
+            agent_data = item.get("voice_agents") or {}
+            if isinstance(agent_data, list):
+                agent_data = agent_data[0] if agent_data else {}
             sensitive_config = None
+            unreadable = False
             if item.get("sensitive_config"):
                 try:
                     decrypted_config = decrypt_data(item.get("sensitive_config"))
                     if isinstance(decrypted_config, dict):
                         sensitive_config = decrypted_config
+                    unreadable = not isinstance(decrypted_config, dict)
                 except Exception as exc:  # noqa: BLE001 - do not expose secrets
+                    unreadable = True
                     logger.error(
                         "Error decrypting sensitive config (%s)", type(exc).__name__
                     )
@@ -1647,6 +1787,13 @@ class ToolService:
                 last_refreshed_at=item.get("last_refreshed_at"),
                 created_at=item["created_at"],
                 updated_at=item["updated_at"],
+                agent_name=agent_data.get("name"),
+                organization_id=agent_data.get("organization_id"),
+                oauth_credential_version=item.get("oauth_credential_version", 0),
+                oauth_refresh_status=item.get("oauth_refresh_status", "ready"),
+                oauth_refresh_error_code=item.get("oauth_refresh_error_code"),
+                sensitive_config_ciphertext=item.get("sensitive_config"),
+                oauth_credentials_unreadable=unreadable,
             )
             if tool_data:
                 agent_tool.tool = PlatformTool(**tool_data)
@@ -1837,90 +1984,103 @@ class ToolService:
         try:
             # Get all agent_tools that require auth (requires filter)
             # Join with platform_tools to filter by requires_auth
-            response = (
-                self.supabase.table("agent_tools")
-                .select(
-                    "*, tool:platform_tools(*), " "voice_agents(name,organization_id)"
-                )
-                .eq("is_enabled", True)
-                .execute()
-            )
-
             agent_tools = []
-            for item in response.data:
-                # Defense-in-depth: skip disabled tools even if the DB filter changes.
-                if not item.get("is_enabled", True):
-                    continue
-
-                # Extract tool details from joined query
-                tool_data = item.get("tool")
-
-                # Filter to only tools requiring auth
-                if not tool_data or not tool_data.get("requires_auth", False):
-                    continue
-
-                # TokenRefreshService is OAuth-specific. Keep API-key and
-                # other manual credential tools out of its candidate set while
-                # still accepting future OAuth rows whose auth_type was not
-                # normalized but whose metadata clearly contains OAuth fields.
-                auth_type = str(tool_data.get("auth_type") or "").lower()
-                auth_config = tool_data.get("auth_config")
-                oauth_metadata_keys = {
-                    "token_url",
-                    "authorization_url",
-                    "oauth_mode",
-                    "oauth_refresh_mode",
-                    "oauth2",
-                }
-                has_oauth_metadata = isinstance(auth_config, dict) and bool(
-                    oauth_metadata_keys.intersection(auth_config)
-                )
-                if (
-                    auth_type not in {"oauth", "oauth2", "oauth_2"}
-                    and not has_oauth_metadata
-                ):
-                    continue
-
-                # Only process if there's sensitive_config (tokens exist)
-                if not item.get("sensitive_config"):
-                    continue
-
-                # Decrypt sensitive config
-                sensitive_config = None
-                try:
-                    decrypted_config = decrypt_data(item.get("sensitive_config"))
-                    if decrypted_config and isinstance(decrypted_config, dict):
-                        sensitive_config = decrypted_config
-                except Exception as e:
-                    logger.error(
-                        "Error decrypting sensitive config (%s)",
-                        type(e).__name__,
+            page_size = self.OAUTH_REFRESH_SCAN_PAGE_SIZE
+            page_start = 0
+            while True:
+                response = (
+                    self.supabase.table("agent_tools")
+                    .select(
+                        "*, tool:platform_tools(*), "
+                        "voice_agents(name,organization_id)"
                     )
-                    continue
+                    .eq("is_enabled", True)
+                    .range(page_start, page_start + page_size - 1)
+                    .execute()
+                )
+                rows = response.data or []
+                for item in rows:
+                    # Skip disabled tools even if the database filter changes.
+                    if not item.get("is_enabled", True):
+                        continue
 
-                # Build full AgentTool with sensitive config
-                agent_data = item.get("voice_agents") or {}
-                if isinstance(agent_data, list):
-                    agent_data = agent_data[0] if agent_data else {}
-                agent_tool_dict = {
-                    "id": item["id"],
-                    "agent_id": item["agent_id"],
-                    "tool_id": item["tool_id"],
-                    "config": item.get("config"),
-                    "sensitive_config": sensitive_config,
-                    "unselected_functions": item.get("unselected_functions"),
-                    "is_enabled": item.get("is_enabled", True),
-                    "created_at": item["created_at"],
-                    "updated_at": item["updated_at"],
-                    "last_refreshed_at": item.get("last_refreshed_at"),
-                    "agent_name": agent_data.get("name"),
-                    "organization_id": agent_data.get("organization_id"),
-                }
+                    tool_data = item.get("tool")
+                    if not tool_data or not tool_data.get("requires_auth", False):
+                        continue
 
-                agent_tool = AgentTool(**agent_tool_dict)
-                if tool_data:
-                    agent_tool.tool = PlatformTool(**tool_data)
-                agent_tools.append(agent_tool)
+                    # Keep API-key auth outside this OAuth-specific worker while
+                    # accepting future tools that provide OAuth metadata.
+                    auth_type = str(tool_data.get("auth_type") or "").lower()
+                    auth_config = tool_data.get("auth_config")
+                    oauth_metadata_keys = {
+                        "token_url",
+                        "authorization_url",
+                        "oauth_mode",
+                        "oauth_refresh_mode",
+                        "oauth2",
+                    }
+                    has_oauth_metadata = isinstance(auth_config, dict) and bool(
+                        oauth_metadata_keys.intersection(auth_config)
+                    )
+                    if (
+                        auth_type not in {"oauth", "oauth2", "oauth_2"}
+                        and not has_oauth_metadata
+                    ):
+                        continue
+
+                    ciphertext = item.get("sensitive_config")
+                    if not ciphertext:
+                        continue
+                    sensitive_config = None
+                    unreadable = False
+                    try:
+                        decrypted_config = decrypt_data(ciphertext)
+                        if isinstance(decrypted_config, dict):
+                            sensitive_config = decrypted_config
+                        unreadable = not isinstance(decrypted_config, dict)
+                    except Exception as exc:
+                        unreadable = True
+                        logger.error(
+                            "Error decrypting sensitive config (%s)",
+                            type(exc).__name__,
+                        )
+
+                    agent_data = item.get("voice_agents") or {}
+                    if isinstance(agent_data, list):
+                        agent_data = agent_data[0] if agent_data else {}
+                    agent_tool_dict = {
+                        "id": item["id"],
+                        "agent_id": item["agent_id"],
+                        "tool_id": item["tool_id"],
+                        "config": item.get("config"),
+                        "sensitive_config": sensitive_config,
+                        "unselected_functions": item.get("unselected_functions"),
+                        "is_enabled": item.get("is_enabled", True),
+                        "created_at": item["created_at"],
+                        "updated_at": item["updated_at"],
+                        "last_refreshed_at": item.get("last_refreshed_at"),
+                        "agent_name": agent_data.get("name"),
+                        "organization_id": agent_data.get("organization_id"),
+                        "oauth_credential_version": item.get(
+                            "oauth_credential_version", 0
+                        ),
+                        "oauth_refresh_status": item.get(
+                            "oauth_refresh_status", "ready"
+                        ),
+                        "oauth_refresh_error_code": item.get(
+                            "oauth_refresh_error_code"
+                        ),
+                        "sensitive_config_ciphertext": ciphertext,
+                        "oauth_credentials_unreadable": unreadable,
+                    }
+                    agent_tool = AgentTool(**agent_tool_dict)
+                    if tool_data:
+                        agent_tool.tool = PlatformTool(**tool_data)
+                    agent_tools.append(agent_tool)
+
+                if len(rows) < page_size:
+                    break
+                page_start += page_size
 
             return agent_tools, None
         except Exception as e:

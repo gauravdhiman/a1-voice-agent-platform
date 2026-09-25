@@ -50,6 +50,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 3600
 TOKEN_REFRESH_HTTP_MAX_RETRIES = 3
+TOKEN_REFRESH_DNS_TIMEOUT_SECONDS = 10.0
+TOKEN_REFRESH_HTTP_TIMEOUT_SECONDS = 30.0
+TOKEN_REFRESH_HTTP_TOTAL_TIMEOUT_SECONDS = 105.0
 
 
 class OAuthRefreshOutcome(str, Enum):
@@ -68,6 +71,22 @@ class OAuthPerformOutcome(str, Enum):
     SUCCEEDED = "succeeded"
     LOCK_UNAVAILABLE = "lock_unavailable"
     FAILED = "failed"
+
+
+class OAuthRefreshError(Exception):
+    """Classified provider failure that never retains provider response data."""
+
+    def __init__(
+        self,
+        status: str,
+        error_code: str,
+        *,
+        request_definitely_not_processed: bool = False,
+    ) -> None:
+        super().__init__(error_code)
+        self.status = status
+        self.error_code = error_code
+        self.request_definitely_not_processed = request_definitely_not_processed
 
 
 @dataclass(frozen=True)
@@ -93,16 +112,17 @@ class TokenRefreshService:
     don't experience authentication failures during their sessions.
 
     Provider-Agnostic Design:
-        This service works with ANY OAuth 2.0 provider (Google, Microsoft, GitHub, etc.)
-        by reading OAuth configuration dynamically from the database. No provider-specific
-        logic is hardcoded - the service uses standard OAuth 2.0 refresh flow with
-        parameters (token_url, client_id, client_secret) that are defined in each
-        tool's AuthConfig class.
+        This service works with any OAuth 2.0 provider (for example, Google,
+        Microsoft, and GitHub) by reading OAuth configuration from the database.
+        Provider-specific logic is not hardcoded: it uses the standard OAuth
+        refresh flow with parameters defined in each tool's AuthConfig.
 
         Configuration:
         Refresh timing is configurable via environment variables:
-        - TOKEN_REFRESH_CHECK_INTERVAL_MINUTES: How often to check for expiring tokens (default: 5)
-        - TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES: Refresh tokens expiring within this window (default: 15)
+        - TOKEN_REFRESH_CHECK_INTERVAL_MINUTES: Check frequency for expiring
+          tokens (default: 5).
+        - TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES: Refresh tokens inside this
+          expiry window (default: 15).
         - TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES: Notify admins when an
           unrenewable connection is inside this window (default: 30)
 
@@ -296,8 +316,8 @@ class TokenRefreshService:
     async def _check_and_refresh_token(self, agent_tool: AgentTool) -> bool:
         """Check if a token needs refresh and refresh it.
 
-        Orchestrates the full lifecycle: expiry check → OAuth config resolution
-        → lease acquisition → HTTP refresh → DB update → lease release.
+        Uses the initial scan only to identify candidates. The lease is acquired
+        before loading current credentials or resolving the provider request.
 
         Args:
             agent_tool: AgentTool instance to check and potentially refresh
@@ -306,23 +326,132 @@ class TokenRefreshService:
             True if token was refreshed, False otherwise
         """
         outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+        claim_id: Optional[str] = None
         try:
+            terminal_statuses = {
+                "outcome_unknown",
+                "reauth_required",
+                "configuration_error",
+            }
+            current_status = getattr(agent_tool, "oauth_refresh_status", "ready")
+            if current_status == "credentials_unreadable":
+                if getattr(agent_tool, "oauth_credentials_unreadable", False):
+                    outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                    return False
+                recovered = (
+                    await self.tool_service.recover_oauth_credentials_unreadable(
+                        agent_tool.id,
+                        getattr(agent_tool, "oauth_credential_version", 0),
+                    )
+                )
+                if not recovered:
+                    outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                    return False
+                agent_tool.oauth_refresh_status = "ready"
+                agent_tool.oauth_refresh_error_code = None
+            elif current_status in terminal_statuses:
+                outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                return False
+
+            if getattr(agent_tool, "oauth_credentials_unreadable", False):
+                marked = await self.tool_service.mark_oauth_credentials_unreadable(
+                    agent_tool.id,
+                    getattr(agent_tool, "oauth_credential_version", 0),
+                )
+                if marked:
+                    agent_tool.oauth_refresh_status = "credentials_unreadable"
+                    agent_tool.oauth_refresh_error_code = "encryption_key_unavailable"
+                outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                return False
+
             needs_refresh, _minutes_until_expiry = self._is_token_expiring(agent_tool)
             if not needs_refresh:
                 outcome = OAuthRefreshOutcome.NOT_DUE
                 return False
 
-            request = self._resolve_oauth_config(agent_tool)
+            claim_id = await self.tool_service.claim_refresh_lock(
+                agent_tool.id,
+                lease_seconds=settings.token_refresh_lock_lease_seconds,
+            )
+            if not claim_id:
+                outcome = OAuthRefreshOutcome.LOCK_UNAVAILABLE
+                self._perform_outcomes[agent_tool.id] = (
+                    OAuthPerformOutcome.LOCK_UNAVAILABLE
+                )
+                return False
+
+            current, error = (
+                await self.tool_service.get_agent_tool_with_sensitive_config(
+                    agent_tool.id
+                )
+            )
+            if error or current is None:
+                logger.error(
+                    "Could not reload OAuth connection after lease acquisition"
+                )
+                outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                return False
+
+            self._copy_refresh_state(current, agent_tool)
+            if current.oauth_credentials_unreadable:
+                marked = await self.tool_service.mark_oauth_credentials_unreadable(
+                    current.id, current.oauth_credential_version
+                )
+                if marked:
+                    current.oauth_refresh_status = "credentials_unreadable"
+                    current.oauth_refresh_error_code = "encryption_key_unavailable"
+                    self._copy_refresh_state(current, agent_tool)
+                outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                return False
+
+            if current.oauth_refresh_status == "refreshing":
+                # The previous worker's lease expired while its provider result
+                # was not committed. Reusing the old refresh token could replay
+                # a rotated grant, so stop and require a fresh authorization.
+                await self._record_refresh_failure(
+                    current,
+                    claim_id,
+                    "outcome_unknown",
+                    "worker_interrupted_during_refresh",
+                )
+                self._copy_refresh_state(current, agent_tool)
+                if current.oauth_refresh_status == "outcome_unknown":
+                    outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                    return False
+
+            if current.oauth_refresh_status in terminal_statuses:
+                outcome = OAuthRefreshOutcome.AUTOMATIC_REFRESH_FAILED
+                return False
+
+            needs_refresh, _minutes_until_expiry = self._is_token_expiring(current)
+            if not needs_refresh:
+                outcome = OAuthRefreshOutcome.NOT_DUE
+                return False
+
+            request = self._resolve_oauth_config(current)
             if request is None:
+                await self.tool_service.set_oauth_refresh_status(
+                    current.id,
+                    claim_id,
+                    current.oauth_credential_version,
+                    "reauth_required",
+                    "refresh_configuration_unavailable",
+                    settings.token_refresh_lock_lease_seconds,
+                )
+                current.oauth_refresh_status = "reauth_required"
+                current.oauth_refresh_error_code = "refresh_configuration_unavailable"
+                self._copy_refresh_state(current, agent_tool)
                 outcome = OAuthRefreshOutcome.MANUAL_REAUTH_REQUIRED
                 return False
 
             refreshed = await self._perform_token_refresh(
-                agent_tool,
+                current,
                 request.data,
                 request.token_url,
                 headers=request.headers,
+                claim_id=claim_id,
             )
+            self._copy_refresh_state(current, agent_tool)
             if refreshed:
                 outcome = OAuthRefreshOutcome.REFRESHED
             elif self._perform_outcomes.get(agent_tool.id) == (
@@ -334,13 +463,35 @@ class TokenRefreshService:
             return refreshed
         except Exception as e:
             logger.error(
-                "Error refreshing token for %s (%s)",
+                "Error refreshing token for %s (%s%s)",
                 agent_tool.tool.name,
                 type(e).__name__,
+                f" missing={e.name}" if isinstance(e, AttributeError) else "",
             )
             return False
         finally:
+            if claim_id:
+                await self.tool_service.release_refresh_lock(agent_tool.id, claim_id)
             self._refresh_outcomes[agent_tool.id] = outcome
+
+    @staticmethod
+    def _copy_refresh_state(source: AgentTool, target: AgentTool) -> None:
+        """Copy only internal OAuth state from a freshly loaded connection."""
+        target.sensitive_config = source.sensitive_config
+        target.sensitive_config_ciphertext = getattr(
+            source, "sensitive_config_ciphertext", None
+        )
+        target.oauth_credential_version = getattr(source, "oauth_credential_version", 0)
+        target.oauth_refresh_status = getattr(source, "oauth_refresh_status", "ready")
+        target.oauth_refresh_error_code = getattr(
+            source, "oauth_refresh_error_code", None
+        )
+        target.oauth_credentials_unreadable = getattr(
+            source, "oauth_credentials_unreadable", False
+        )
+        target.agent_name = getattr(source, "agent_name", None)
+        target.organization_id = getattr(source, "organization_id", None)
+        target.tool = getattr(source, "tool", None)
 
     def _is_token_expiring(self, agent_tool: AgentTool) -> tuple[bool, Optional[float]]:
         """Check whether the token for *agent_tool* needs refresh.
@@ -492,15 +643,45 @@ class TokenRefreshService:
             connections or an automatic attempt that actually failed. A lease
             held by another backend instance is not treated as a failure.
         """
+        critical_statuses = {
+            "outcome_unknown",
+            "reauth_required",
+            "configuration_error",
+            "credentials_unreadable",
+        }
+        current_status = getattr(agent_tool, "oauth_refresh_status", "ready")
+        immediate = current_status in critical_statuses
         attention = self._oauth_attention_window(agent_tool)
-        if attention is None:
+        if immediate:
+            phase = OAuthAttentionNotificationPhase.ACTION_REQUIRED
+            minutes_until_expiry = None
+        elif attention is not None:
+            phase, minutes_until_expiry = attention
+        else:
             return
 
-        phase, minutes_until_expiry = attention
         if outcome in {
             OAuthRefreshOutcome.REFRESHED,
             OAuthRefreshOutcome.LOCK_UNAVAILABLE,
         }:
+            return
+
+        if immediate:
+            reason = self._oauth_attention_reason(agent_tool)
+            try:
+                await self.oauth_attention_notifier.notify(
+                    agent_tool,
+                    phase=phase,
+                    minutes_until_expiry=minutes_until_expiry,
+                    reason=reason,
+                    immediate=True,
+                )
+            except Exception as exc:
+                logger.error(
+                    "OAuth action notice failed for %s (%s)",
+                    agent_tool.tool.name,
+                    type(exc).__name__,
+                )
             return
 
         request = None
@@ -538,6 +719,7 @@ class TokenRefreshService:
                 phase=phase,
                 minutes_until_expiry=minutes_until_expiry,
                 reason=reason,
+                immediate=False,
             )
         except Exception as e:
             # Notification failure must never stop refresh checks for other
@@ -551,6 +733,31 @@ class TokenRefreshService:
 
     def _oauth_attention_reason(self, agent_tool: AgentTool) -> str:
         """Explain a manual/unresolved renewal state without provider details."""
+        status = getattr(agent_tool, "oauth_refresh_status", "ready")
+        if status == "outcome_unknown":
+            return (
+                "The provider may have rotated the renewal permission, but the new "
+                "credentials could not be confirmed in the platform. Do not retry "
+                "the old permission. Reconnect this tool in the agent Tools page."
+            )
+        if status == "reauth_required":
+            return (
+                "The provider rejected the renewal permission. Reconnect this tool "
+                "in the agent Tools page to grant access again."
+            )
+        if status == "configuration_error":
+            return (
+                "The provider rejected the platform OAuth client configuration. "
+                "A platform administrator should verify the OAuth client ID, "
+                "client secret, and registered callback URL, then reconnect the tool."
+            )
+        if status == "credentials_unreadable":
+            return (
+                "The platform cannot decrypt this connection after an encryption "
+                "key change. Restore the previous ENCRYPTION_KEY or configure it "
+                "in ENCRYPTION_KEY_FALLBACKS; if the key is unavailable, reconnect "
+                "the tool."
+            )
         sensitive_config = agent_tool.sensitive_config or {}
         if not sensitive_config.get("refresh_token"):
             return (
@@ -575,7 +782,10 @@ class TokenRefreshService:
             self._auth_config_value(auth_config, "oauth_refresh_mode", "") or ""
         ).lower()
         if refresh_mode in {"manual", "none"}:
-            return "This provider requires manual reconnection when its permission expires."
+            return (
+                "This provider requires manual reconnection when its "
+                "permission expires."
+            )
 
         if not (
             self._auth_config_value(auth_config, "token_url")
@@ -929,8 +1139,9 @@ class TokenRefreshService:
         oauth_data: Dict[str, str],
         token_url: str,
         headers: Optional[Dict[str, str]] = None,
+        claim_id: Optional[str] = None,
     ) -> bool:
-        """Acquire the lease, refresh the token, persist it, and release the lease.
+        """Refresh and persist credentials behind the current database fence.
 
         This is the core "do the work" method — everything that follows the
         expiry check and config resolution.
@@ -941,31 +1152,71 @@ class TokenRefreshService:
             token_url: The OAuth provider's token endpoint.
             headers: Optional token endpoint headers, such as HTTP Basic
                 client authentication.
+            claim_id: Lease already acquired by the caller. Tests and internal
+                callers may omit it to have this method acquire its own lease.
 
         Returns:
             True on success, False on any failure.
         """
         tool_name = agent_tool.tool.name
 
-        claim_id = await self.tool_service.claim_refresh_lock(
-            agent_tool.id,
-            lease_seconds=settings.token_refresh_lock_lease_seconds,
-        )
+        owns_lease = False
+        if not claim_id:
+            claim_id = await self.tool_service.claim_refresh_lock(
+                agent_tool.id,
+                lease_seconds=settings.token_refresh_lock_lease_seconds,
+            )
+            owns_lease = True
         if not claim_id:
             logger.info(
-                f"Skipping refresh for {tool_name}: another instance holds the lock"
+                "Skipping refresh for %s: another instance holds the lease", tool_name
             )
             self._perform_outcomes[agent_tool.id] = OAuthPerformOutcome.LOCK_UNAVAILABLE
             return False
 
         try:
-            new_tokens = await self._refresh_oauth_token(
-                token_url=token_url,
-                oauth_data=oauth_data,
-                headers=headers,
+            began = await self.tool_service.begin_oauth_refresh(
+                agent_tool.id,
+                claim_id,
+                agent_tool.oauth_credential_version,
+                settings.token_refresh_lock_lease_seconds,
             )
+            if not began:
+                self._perform_outcomes[agent_tool.id] = (
+                    OAuthPerformOutcome.LOCK_UNAVAILABLE
+                )
+                return False
+            agent_tool.oauth_refresh_status = "refreshing"
+            agent_tool.oauth_refresh_error_code = None
+
+            try:
+                new_tokens = await self._refresh_oauth_token(
+                    token_url=token_url,
+                    oauth_data=oauth_data,
+                    headers=headers,
+                )
+            except OAuthRefreshError as exc:
+                status = "ready" if exc.request_definitely_not_processed else exc.status
+                await self._record_refresh_failure(
+                    agent_tool, claim_id, status, exc.error_code
+                )
+                logger.warning(
+                    "OAuth refresh failed for %s category=%s state=%s",
+                    tool_name,
+                    exc.error_code,
+                    status,
+                )
+                self._perform_outcomes[agent_tool.id] = OAuthPerformOutcome.FAILED
+                return False
+
             if not new_tokens or not new_tokens.get("access_token"):
-                logger.error(f"Failed to refresh token for tool {tool_name}")
+                await self._record_refresh_failure(
+                    agent_tool,
+                    claim_id,
+                    "outcome_unknown",
+                    "provider_response_missing_access_token",
+                )
+                logger.error("OAuth refresh returned no access token for %s", tool_name)
                 self._perform_outcomes[agent_tool.id] = OAuthPerformOutcome.FAILED
                 return False
 
@@ -995,25 +1246,90 @@ class TokenRefreshService:
                 sensitive_config["refresh_token"] = new_refresh_token
                 logger.info(f"Received new refresh_token for tool {tool_name}")
 
-            updated = await self._update_agent_tool(
+            refreshed_at = datetime.now(timezone.utc)
+            updated = await self.tool_service.persist_refreshed_oauth_credentials(
                 agent_tool_id=agent_tool.id,
+                claim_id=claim_id,
+                credential_version=agent_tool.oauth_credential_version,
                 sensitive_config=sensitive_config,
-                tool_name=tool_name,
+                refreshed_at=refreshed_at,
+                lease_seconds=settings.token_refresh_lock_lease_seconds,
             )
 
             if not updated:
+                # The database may have committed the update even if its response
+                # was lost. Marking the old generation is fenced, so a newer OAuth
+                # callback can never be overwritten by this recovery attempt.
+                await self._record_refresh_failure(
+                    agent_tool,
+                    claim_id,
+                    "outcome_unknown",
+                    "refreshed_credentials_persistence_unconfirmed",
+                )
                 logger.critical(
-                    f"Refreshed token for {tool_name} could not be persisted to the "
-                    f"DB (provider likely rotated the refresh_token). The stored "
-                    f"token is now invalid; the user must re-authenticate this tool."
+                    "Refreshed credentials for %s were not confirmed in storage",
+                    tool_name,
                 )
                 self._perform_outcomes[agent_tool.id] = OAuthPerformOutcome.FAILED
                 return False
 
+            agent_tool.sensitive_config = sensitive_config
+            agent_tool.oauth_credential_version += 1
+            agent_tool.oauth_refresh_status = "ready"
+            agent_tool.oauth_refresh_error_code = None
+            agent_tool.last_refreshed_at = refreshed_at
             self._perform_outcomes[agent_tool.id] = OAuthPerformOutcome.SUCCEEDED
             return True
         finally:
-            await self.tool_service.release_refresh_lock(agent_tool.id, claim_id)
+            if owns_lease:
+                await self.tool_service.release_refresh_lock(agent_tool.id, claim_id)
+
+    async def _record_refresh_failure(
+        self,
+        agent_tool: AgentTool,
+        claim_id: str,
+        status: str,
+        error_code: str,
+    ) -> None:
+        """Persist a classified outcome or alert from the current generation.
+
+        If the fence rejects the write, reload once. A newer callback means the
+        old refresh result is obsolete; otherwise keep the failure locally so
+        this cycle still alerts admins even during a database outage.
+        """
+        expected_version = getattr(agent_tool, "oauth_credential_version", 0)
+        updated = await self.tool_service.set_oauth_refresh_status(
+            agent_tool.id,
+            claim_id,
+            expected_version,
+            status,
+            error_code,
+            settings.token_refresh_lock_lease_seconds,
+        )
+        if updated:
+            agent_tool.oauth_refresh_status = status
+            agent_tool.oauth_refresh_error_code = error_code
+            return
+
+        latest = None
+        try:
+            loaded = await self.tool_service.get_agent_tool_with_sensitive_config(
+                agent_tool.id
+            )
+            if isinstance(loaded, tuple) and len(loaded) == 2:
+                latest, _ = loaded
+        except Exception:
+            latest = None
+        if (
+            latest is not None
+            and getattr(latest, "oauth_credential_version", expected_version)
+            != expected_version
+        ):
+            self._copy_refresh_state(latest, agent_tool)
+            return
+
+        agent_tool.oauth_refresh_status = status
+        agent_tool.oauth_refresh_error_code = error_code
 
     async def _refresh_oauth_token(
         self,
@@ -1029,124 +1345,149 @@ class TokenRefreshService:
 
         Args:
             token_url: OAuth provider's token endpoint (from tool's AuthConfig)
-            oauth_data: OAuth data dictionary for token refresh (created by centralized utility)
+            oauth_data: OAuth data for token refresh, created by the centralized
+                utility.
             headers: Optional token endpoint headers, such as HTTP Basic client
                 authentication.
 
         Returns:
-            Dictionary with new tokens if successful, None otherwise.
-            Typically includes: access_token, expires_in, optional refresh_token
+            A provider token object.
+
+        Raises:
+            OAuthRefreshError: Provider/network failure classified without retaining
+                or logging raw response content.
 
         Notes:
             - Uses standard OAuth 2.0 grant_type="refresh_token"
             - Works with any provider implementing OAuth 2.0 refresh flow
             - Provider-specific differences handled via centralized OAuth utilities
         """
-        # Bound the provider round-trip so a hung connection cannot stall the
-        # refresh loop (and outlive the lease TTL). 30s is generous for token
-        # endpoints; tune via settings if a provider needs more.
         request_kwargs: Dict[str, Any] = {"data": oauth_data}
         if headers:
             request_kwargs["headers"] = headers
 
-        valid, reason = validate_oauth_endpoint_url(token_url, resolve_dns=True)
+        # DNS lookup is synchronous in the shared validator. Move it off the
+        # event loop and bound it so it cannot hold a refresh lease indefinitely.
+        try:
+            async with asyncio.timeout(TOKEN_REFRESH_DNS_TIMEOUT_SECONDS):
+                valid, _reason = await asyncio.to_thread(
+                    validate_oauth_endpoint_url, token_url, resolve_dns=True
+                )
+        except TimeoutError:
+            raise OAuthRefreshError(
+                "ready",
+                "token_endpoint_dns_timeout",
+                request_definitely_not_processed=True,
+            ) from None
         if not valid:
-            logger.error("Refusing OAuth refresh to invalid endpoint: %s", reason)
-            return None
+            logger.error("Refusing OAuth refresh to invalid endpoint")
+            raise OAuthRefreshError("configuration_error", "token_endpoint_invalid")
 
+        # HTTPX's timeouts cap network inactivity for each phase, not the total
+        # wall-clock duration. Add a hard request deadline shorter than the
+        # minimum 180-second lease to prevent a slow provider from letting the
+        # row lease expire while this worker is still active.
+        try:
+            async with asyncio.timeout(TOKEN_REFRESH_HTTP_TOTAL_TIMEOUT_SECONDS):
+                response = await self._post_oauth_refresh_request(
+                    token_url, request_kwargs
+                )
+        except TimeoutError:
+            raise OAuthRefreshError(
+                "outcome_unknown", "provider_request_deadline_exceeded"
+            ) from None
+
+        if response.status_code == 200:
+            try:
+                payload = response.json()
+            except ValueError:
+                raise OAuthRefreshError(
+                    "outcome_unknown", "provider_response_invalid"
+                ) from None
+            if not isinstance(payload, dict):
+                raise OAuthRefreshError("outcome_unknown", "provider_response_invalid")
+            if not payload.get("access_token"):
+                raise OAuthRefreshError(
+                    "outcome_unknown", "provider_response_missing_access_token"
+                )
+            return payload
+
+        if response.status_code == 429:
+            raise OAuthRefreshError(
+                "ready",
+                "provider_rate_limited",
+                request_definitely_not_processed=True,
+            )
+        if response.status_code >= 500:
+            raise OAuthRefreshError(
+                "outcome_unknown", "provider_server_error_outcome_unknown"
+            )
+
+        provider_error = None
+        try:
+            body = response.json()
+            provider_error = body.get("error") if isinstance(body, dict) else None
+        except ValueError:
+            pass
+        if provider_error == "invalid_grant":
+            raise OAuthRefreshError("reauth_required", "provider_invalid_grant")
+        if provider_error in {
+            "invalid_client",
+            "unauthorized_client",
+        } or response.status_code in {401, 403}:
+            raise OAuthRefreshError(
+                "configuration_error", "oauth_client_configuration_rejected"
+            )
+        if 300 <= response.status_code < 400:
+            raise OAuthRefreshError("configuration_error", "token_endpoint_redirected")
+        if 400 <= response.status_code < 500:
+            raise OAuthRefreshError(
+                "configuration_error", "provider_rejected_refresh_request"
+            )
+
+        raise OAuthRefreshError("outcome_unknown", "provider_request_outcome_unknown")
+
+    async def _post_oauth_refresh_request(
+        self, token_url: str, request_kwargs: Dict[str, Any]
+    ) -> httpx.Response:
+        """Send a refresh grant with retries only before request delivery."""
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0), follow_redirects=False
+            timeout=httpx.Timeout(TOKEN_REFRESH_HTTP_TIMEOUT_SECONDS),
+            follow_redirects=False,
         ) as client:
             for attempt in range(TOKEN_REFRESH_HTTP_MAX_RETRIES):
                 try:
-                    response = await client.post(token_url, **request_kwargs)
-                except httpx.HTTPError as e:
+                    return await client.post(token_url, **request_kwargs)
+                except (
+                    httpx.ConnectError,
+                    httpx.ConnectTimeout,
+                    httpx.PoolTimeout,
+                ) as exc:
                     if attempt < TOKEN_REFRESH_HTTP_MAX_RETRIES - 1:
                         delay = 2**attempt
                         logger.warning(
-                            "Transient OAuth refresh transport failure; retrying "
+                            "OAuth refresh connect failed before delivery; retrying "
                             "in %s seconds (%s)",
                             delay,
-                            type(e).__name__,
+                            type(exc).__name__,
                         )
                         await asyncio.sleep(delay)
                         continue
-                    logger.error(
-                        "OAuth refresh transport failed (%s)", type(e).__name__
-                    )
-                    return None
+                    raise OAuthRefreshError(
+                        "ready",
+                        "provider_connection_unavailable",
+                        request_definitely_not_processed=True,
+                    ) from None
+                except httpx.HTTPError:
+                    raise OAuthRefreshError(
+                        "outcome_unknown", "provider_request_outcome_unknown"
+                    ) from None
 
-                if response.status_code == 200:
-                    try:
-                        payload = response.json()
-                    except ValueError as e:
-                        logger.error(
-                            "OAuth refresh returned invalid JSON (%s)",
-                            type(e).__name__,
-                        )
-                        return None
-                    if not isinstance(payload, dict):
-                        logger.error("OAuth refresh returned a non-object response")
-                        return None
-                    return payload
-
-                is_transient = (
-                    response.status_code == 429 or response.status_code >= 500
-                )
-                if is_transient and attempt < TOKEN_REFRESH_HTTP_MAX_RETRIES - 1:
-                    delay = 2**attempt
-                    logger.warning(
-                        "Transient OAuth refresh failure (status %s); retrying "
-                        "in %s seconds",
-                        response.status_code,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-
-                logger.error(
-                    "OAuth refresh failed with provider status %s",
-                    response.status_code,
-                )
-                return None
-
-        return None
-
-    async def _update_agent_tool(
-        self,
-        agent_tool_id: UUID,
-        sensitive_config: dict[str, str | float],
-        tool_name: str,
-    ) -> bool:
-        """Update agent tool with new tokens.
-
-        Args:
-            agent_tool_id: ID of the agent_tool to update (UUID)
-            sensitive_config: Decrypted dict with new tokens (will be encrypted by tool_service)
-            tool_name: Tool name for logging (passed from caller)
-
-        Returns:
-            True if the DB update succeeded, False otherwise. A False return after a
-            successful OAuth refresh is critical: the provider likely rotated the
-            refresh_token, so the unpersisted new token is lost and the stored one is
-            now invalid (the caller logs CRITICAL and the user must re-authenticate).
-        """
-        from shared.voice_agents.tool_models import AgentToolUpdate
-
-        update_data = AgentToolUpdate(
-            sensitive_config=sensitive_config,
-            last_refreshed_at=datetime.now(timezone.utc),
+        raise OAuthRefreshError(
+            "ready",
+            "provider_connection_unavailable",
+            request_definitely_not_processed=True,
         )
-
-        result, error = await self.tool_service.update_agent_tool(
-            agent_tool_id=agent_tool_id, update_data=update_data
-        )
-
-        if error:
-            logger.error("Failed to persist refreshed token for %s", tool_name)
-            return False
-        logger.info(f"Successfully refreshed {tool_name} token")
-        return True
 
 
 # Global instance

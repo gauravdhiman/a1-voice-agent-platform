@@ -174,7 +174,7 @@ describe("ProductTourProvider", () => {
       const latestProps = mockUseJoyride.mock.lastCall?.[0] as {
         steps: Array<{ id?: string }>;
       };
-      expect(latestProps.steps).toHaveLength(18);
+      expect(latestProps.steps).toHaveLength(17);
     });
   });
 

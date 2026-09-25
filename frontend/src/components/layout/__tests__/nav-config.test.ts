@@ -161,7 +161,9 @@ describe("nav-config", () => {
     expect(names).toContain("Platform Tools");
     expect(names).toContain("Voice Presets");
     expect(names).toContain("Use Case Templates");
-    expect(names).toContain("Notifications");
+    expect(names).toContain("Platform Settings");
+    expect(names).not.toContain("Notifications");
+    expect(names).not.toContain("Phone Number Settings");
     expect(names).toContain("Plan Catalog");
     expect(names).not.toContain("Entitlements");
   });

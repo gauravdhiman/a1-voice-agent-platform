@@ -318,6 +318,31 @@ class AgentTool(AgentToolBase):
         exclude=True,
         description="Owning organization for internal notifications",
     )
+    oauth_credential_version: int = Field(
+        default=0,
+        exclude=True,
+        description="Database generation used to fence OAuth refresh writes",
+    )
+    oauth_refresh_status: str = Field(
+        default="ready",
+        exclude=True,
+        description="Internal state of the latest OAuth refresh attempt",
+    )
+    oauth_refresh_error_code: Optional[str] = Field(
+        None,
+        exclude=True,
+        description="Safe internal category for the latest refresh failure",
+    )
+    sensitive_config_ciphertext: Optional[str] = Field(
+        None,
+        exclude=True,
+        description="Encrypted credential snapshot used for internal diagnosis",
+    )
+    oauth_credentials_unreadable: bool = Field(
+        default=False,
+        exclude=True,
+        description="Whether stored OAuth credentials could not be decrypted",
+    )
     tool: Optional[PlatformTool] = Field(None, description="Tool details")
 
 

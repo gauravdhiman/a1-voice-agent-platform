@@ -8,6 +8,7 @@ available phone numbers and purchasing them.
 import logging
 from typing import Optional
 
+import httpx
 from twilio.base.page import Page
 from twilio.rest import Client
 from twilio.rest.api.v2010.account.incoming_phone_number import (
@@ -55,6 +56,35 @@ class TwilioService:
         """
         return self.client is not None
 
+    async def send_sms(self, to_number: str, message: str) -> bool:
+        """Send a bounded, server-side SMS through the configured Twilio account."""
+        from_number = settings.twilio_sms_from_number
+        if not self.account_sid or not self.auth_token or not from_number:
+            return False
+        if not to_number.startswith("+") or not from_number.startswith("+"):
+            return False
+
+        url = (
+            "https://api.twilio.com/2010-04-01/Accounts/"
+            f"{self.account_sid}/Messages.json"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                response = await client.post(
+                    url,
+                    data={"To": to_number, "From": from_number, "Body": message},
+                    auth=(self.account_sid, self.auth_token),
+                )
+            if response.status_code != 201:
+                logger.warning(
+                    "Twilio SMS request failed with status %s", response.status_code
+                )
+                return False
+            return True
+        except httpx.HTTPError as exc:
+            logger.warning("Twilio SMS request failed (%s)", type(exc).__name__)
+            return False
+
     def search_available_numbers(
         self,
         country_code: str = "US",
@@ -81,7 +111,9 @@ class TwilioService:
 
         Example:
             >>> service = TwilioService()
-            >>> results = service.search_available_numbers(country_code="US", number_type="local")
+            >>> results = service.search_available_numbers(
+            ...     country_code="US", number_type="local"
+            ... )
             >>> for num in results:
             ...     print(num.phone_number)
         """
@@ -130,7 +162,8 @@ class TwilioService:
         """Purchase a phone number.
 
         Args:
-            phone_number: The phone number to purchase (E.164 format, e.g., +15551234567)
+            phone_number: Number to purchase in E.164 format, for example
+                ``+15551234567``.
             voice_application_sid: Optional Voice Application SID for handling calls
             sms_application_sid: Optional SMS Application SID for handling SMS
             voice_url: Optional public URL Twilio calls for inbound voice

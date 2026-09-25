@@ -287,7 +287,7 @@ describe("ToolConfigDrawer MCP credentials", () => {
     expect(description).toHaveTextContent(longDescription.trim());
   });
 
-  it("lets org admins expand the long tool description in the drawer header", async () => {
+  it("shows org admins the long tool description from the drawer header help control", async () => {
     const { userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     const longDescription =
@@ -308,19 +308,13 @@ describe("ToolConfigDrawer MCP credentials", () => {
       />,
     );
 
-    const showDescription = screen.getByRole("button", {
-      name: /show full description/i,
+    const aboutTool = screen.getByRole("button", {
+      name: /about weather mcp/i,
     });
-    expect(showDescription).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText(longDescription)).not.toBeInTheDocument();
+    await user.hover(aboutTool);
 
-    await user.click(showDescription);
-
-    expect(showDescription).toHaveAttribute("aria-expanded", "true");
-    const description = document.getElementById(
-      showDescription.getAttribute("aria-controls") || "",
-    );
-    expect(description).toHaveTextContent(longDescription.trim());
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(longDescription.trim());
   });
 
   it("filters org function cards from the drawer search", async () => {

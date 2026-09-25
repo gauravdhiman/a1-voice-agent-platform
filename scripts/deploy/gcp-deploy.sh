@@ -146,6 +146,7 @@ deploy_backend() {
     --cpu=1 \
     --min-instances=1 \
     --max-instances=10 \
+    --no-cpu-throttling \
     --env-vars-file="$backend_env"
 
   rm -f "$backend_env"

@@ -77,8 +77,7 @@ describe("product tour step definitions", () => {
       "platform-skills",
       "platform-tools",
       "voice-presets",
-      "notifications",
-      "platform-phone-numbers",
+      "platform-settings",
       "plan-catalog",
       "user-menu",
     ]);

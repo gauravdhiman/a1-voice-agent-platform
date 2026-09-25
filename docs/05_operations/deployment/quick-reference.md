@@ -127,7 +127,7 @@ The phone-number scheduler must be running after deployment. It renews
 platform-managed rentals, disables calls during unpaid grace, and retries
 `release_pending` provider releases. Customer-managed numbers are excluded
 from rental billing and provider release. Platform admins can change the grace
-period and both intervals at **Platform → Phone Number Settings**; the
+period and both intervals at **Platform → Settings → Phone numbers**; the
 environment variables above are deployment defaults and fallbacks.
 
 ## Prerequisites

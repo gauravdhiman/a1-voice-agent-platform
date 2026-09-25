@@ -35,18 +35,17 @@ class TelegramService:
                 response = await client.post(url, json=payload)
                 if response.status_code != 200:
                     logger.warning(
-                        "Telegram sendMessage failed: status=%s body=%s",
+                        "Telegram sendMessage failed: status=%s",
                         response.status_code,
-                        response.text[:500],
                     )
                     return False
                 body = response.json()
                 if not body.get("ok"):
-                    logger.warning("Telegram API returned ok=false: %s", body)
+                    logger.warning("Telegram API returned ok=false")
                     return False
                 return True
         except Exception as exc:
-            logger.error("Telegram sendMessage error: %s", exc, exc_info=True)
+            logger.error("Telegram sendMessage error (%s)", type(exc).__name__)
             return False
 
 

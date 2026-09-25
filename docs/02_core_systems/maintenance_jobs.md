@@ -1,9 +1,9 @@
 # Maintenance jobs and horizontal scaling plan
 
-This document records the current maintenance-job behavior and the shared
-lease design to implement immediately after the Twilio phone-number work is
-finalized. It is intentionally a plan; this change does not introduce the
-shared lease system.
+This document records current maintenance-job behavior and the target shared
+runner design. OAuth refresh now uses a per-connection lease plus a credential
+generation fence, and OAuth Telegram/SMS alerts use a claimed outbox. This
+change does not introduce a generic job runner for the remaining jobs.
 
 ## Current execution model
 
@@ -13,16 +13,17 @@ runs. The current jobs include:
 
 | Job | Current protection | Horizontal-scaling risk |
 | --- | --- | --- |
-| OAuth token refresh | Postgres per-`agent_tool` lease | Lowest risk; the existing lease is the reference implementation |
+| OAuth token refresh | Postgres per-`agent_tool` lease plus a credential-version write fence; DNS and provider calls have hard deadlines | Provider calls can still have ambiguous outcomes; those stop retries and trigger admin recovery |
 | Free-plan renewal | Idempotent credit-grant key | Period-window updates and duplicate scans can race |
 | Subscription plan migration | No durable claim | Two instances can perform the same Stripe/database migration |
 | Phone-number rental/release | Idempotent rental debit key | Twilio release and lifecycle updates can be attempted concurrently |
-| Notification retry and low-credit outbox | Delivery idempotency metadata, but no row claim before send | Duplicate provider sends remain possible |
+| Notification retry and low-credit outbox | Email idempotency metadata, but the general retry loop has no row claim; OAuth Telegram/SMS has a dedicated `SKIP LOCKED` outbox | Duplicate sends remain possible for the general retry loop and after a provider accepted an OAuth alert but acknowledgment was lost |
 
-The token-refresh lease protects a unit of work, but it does not coordinate the
-other jobs. Therefore the current fleet is not yet safe to scale horizontally
-for all maintenance work. A process restart also resets the in-memory cadence;
-there is no durable “next run” or run-history record for most jobs.
+The token-refresh lease protects a connection refresh, but it does not
+coordinate the other jobs. The current fleet is not yet safe to scale
+horizontally for all maintenance work. A process restart also resets the
+in-memory cadence; there is no durable “next run” or run-history record for
+most jobs.
 
 ## Target architecture
 
@@ -114,7 +115,9 @@ idempotency.
 - A staging deployment runs the jobs on at least two backend instances before
   production rollout.
 
-Until this work is implemented, keep the backend deployment shape single
-instance for maintenance-sensitive jobs, or treat duplicate execution as an
-explicit operational risk. This is the next platform-hardening task after the
-Twilio integration.
+Until this work is implemented, treat the remaining unclaimed maintenance
+jobs as unsafe for concurrent execution and keep their provider/database
+operations idempotent. OAuth token refresh and its Telegram/SMS alert outbox
+have their own Postgres coordination; that protection does not extend to the
+other rows in the table. A generic runner remains the next platform-hardening
+task after the Twilio integration.

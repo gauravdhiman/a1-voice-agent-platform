@@ -110,7 +110,7 @@ ENCRYPTION_KEY=your-fernet-key
 ```
 
 Platform admins can override the verification **from email/name** at
-`/platform/notifications` without redeploying. The Resend API key remains
+`/platform/settings?section=notifications` without redeploying. The Resend API key remains
 environment-only. The same page has a **Platform admin email** field for lead
 alerts. A lead email is sent only when that recipient, a sender, and
 `RESEND_API_KEY` are configured.
@@ -173,40 +173,69 @@ channel receives the Turnstile token.
 
 ### OAuth connection-attention reminders
 
-The token refresh worker checks every enabled, authenticated OAuth connection on
-its normal background cycle. Automatic renewal uses the narrower
-`TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES` window (15 minutes by default). The
-administrator-attention window is 30 minutes by default and is controlled by
-`TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES`.
+The FastAPI backend runs a refresh scan on its normal background cycle. Cloud
+Run backend deployments use one minimum instance with instance-based billing
+(`--no-cpu-throttling`) so idle request periods do not suspend the refresh
+loop. Multiple instances are safe: each connection uses a Postgres lease, and
+every refresh reloads its current credential generation after acquiring that
+lease.
 
-The worker does not notify simply because a provider is labeled `unknown`. It
-first tries the same provider-neutral OAuth resolution used for renewal. An
-MCP or native tool with a refresh grant and a standard token endpoint is
-treated as automatically renewable. A notice is sent when the live connection
-has no renewal grant, declares manual renewal, has incomplete/unsupported
-renewal metadata, has no verifiable expiry, or an automatic renewal attempt
-fails. Notices are sent at two lifecycle points: once while expiring and once
-after expiry.
+Automatic renewal uses the `TOKEN_REFRESH_EXPIRY_WINDOW_MINUTES` window (15
+minutes by default). The administrator-attention window is 30 minutes by
+default and is controlled by `TOKEN_REFRESH_ATTENTION_WINDOW_MINUTES`. Provider
+metadata is resolved before classifying a connection as manual; an unknown
+provider label with a standard refresh grant and token endpoint remains
+automatically renewable.
 
-Agent-specific notices go to the `org_admin` members of the organization that
-owns the agent. The message contains the organization, agent, tool, expiry
-status, safe action guidance, and a link to the agent Tools tab. It never
-contains access tokens, refresh tokens, client secrets, OAuth endpoints, or
-provider error payloads. Platform-admin escalation is deliberately not enabled
-for every tenant connection in this first integration to avoid unnecessary
-cross-organization disclosure and alert noise.
+Refresh completion is fenced by both the active lease claim and
+`agent_tools.oauth_credential_version`. A new OAuth callback increments the
+generation and resets stored refresh failure state, so a late refresh cannot
+overwrite a newer authorization. The worker retries only failures known to
+happen before the request reached the provider (connection establishment or
+local pool timeout); an explicit HTTP 429 is deferred to the next normal scan.
+It does not replay a request after a read/write timeout,
+provider 5xx, or malformed success response, because the provider may already
+have rotated the refresh token. It marks those results `outcome_unknown` and
+stops using the old grant until an administrator reconnects the tool.
 
-The event key is `tools.oauth_reauthorization_required`. Its migration seeds
-the event, while the built-in template remains editable through the existing
-notification administration workflow. Per-recipient idempotency keys combine
-the agent-tool connection, lifecycle phase, expiry timestamp, and recipient;
-the existing notification retry scheduler handles failed email delivery.
+The database also records `reauth_required`, `configuration_error`, and
+`credentials_unreadable`. An `invalid_grant` requires reconnecting the tool; a
+rejected OAuth client configuration tells the platform administrator to check
+the client ID, secret, and registered callback URL; an unreadable credential
+asks the operator to restore the previous `ENCRYPTION_KEY` or add it to
+`ENCRYPTION_KEY_FALLBACKS`. The next scan clears this state once the stored
+credentials decrypt; reconnect only if the key cannot be recovered.
+These unusable or ambiguous states trigger immediate notices without waiting
+for the normal expiry window. Failure text is classified and safe; provider
+response bodies and OAuth secrets are never included.
 
-This integration currently uses email only. The existing Telegram service is a
-separate platform-admin signup-alert path, and WhatsApp is not implemented.
-Organization-level channel preferences, reminder frequency settings, and
-Telegram/WhatsApp adapters should be delivered as a separate notification
-platform enhancement.
+Every organization admin receives email through the durable notification
+service. An organization admin can add a shared alert inbox and opt in to SMS
+or Telegram on **Organization → Settings → Notifications** (`/organization?tab=settings&section=notifications`).
+The shared inbox is an additional email recipient; it does not replace admin
+account emails. Platform admins set their alert email and optional SMS/Telegram
+destinations on **Platform → Settings → Notifications**. The platform admin manages the
+shared Telegram bot token and Twilio credentials; organization admins only
+supply their own destination and opt-in.
+
+SMS and Telegram alerts are recorded in the service-role-only
+`oauth_attention_outbox`, attempted immediately, and retried by the existing
+notification scheduler with a Postgres `SKIP LOCKED` claim and bounded
+exponential delay. Platform and organization delivery state is tracked
+independently per channel. An opted-in channel stays pending when provider
+credentials are unavailable so it can recover after platform configuration is
+restored. Email retries remain in `notification_logs`. Delivery is at-least-once
+if a provider accepts a message but the database acknowledgment is lost; each
+connection generation and alert category is otherwise idempotently queued.
+Messages include the organization, agent, tool, why action is needed, next step,
+and link to the agent Tools page, never OAuth credentials.
+
+The email event key is `tools.oauth_reauthorization_required`. Its migration
+seeds the event, while the built-in template remains editable through the
+existing notification administration workflow. Providers can revoke grants or
+become unavailable, so automated refresh cannot guarantee a grant remains
+valid forever; the durable status and alert path tells both admin scopes how to
+recover.
 
 ### 2. Run Database Migration
 

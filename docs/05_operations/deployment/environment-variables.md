@@ -61,6 +61,7 @@ manual deployment, it is the local `.env.prod` file.
 | `TWILIO_ACCOUNT_SID`                                 | Twilio account SID                                                                                           | No                                    |
 | `TWILIO_AUTH_TOKEN`                                  | Twilio auth token                                                                                            | **Yes**                               |
 | `TWILIO_PHONE_NUMBER_SID`                            | Default Twilio phone number SID                                                                              | No                                    |
+| `TWILIO_SMS_FROM_NUMBER`                             | Optional Twilio E.164 sender for platform-admin OAuth recovery alerts                                        | No                                    |
 | `TWILIO_WEBHOOK_SIGNATURE_VALIDATION_ENABLED`        | Validate `X-Twilio-Signature` on voice callbacks; default `true`                                             | No                                    |
 | `API_BASE_URL`                                       | Public backend URL used for Twilio voice and status callbacks                                                | **Yes for phone-number provisioning** |
 | `PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS`          | Deployment fallback cadence for rental billing checks; default `24`                                          | No                                    |
@@ -86,7 +87,7 @@ manual deployment, it is the local `.env.prod` file.
 | `ENVIRONMENT`                                        | `production`                                                                                                 | No                                    |
 | `DEBUG`                                              | `false`                                                                                                      | No                                    |
 | `MCP_ALLOW_LOCAL_URLS`                               | Keep `false` in production                                                                                   | No                                    |
-| `TOKEN_REFRESH_*`                                    | OAuth token refresh tuning (see `.env.prod.example`)                                                         | No                                    |
+| `TOKEN_REFRESH_*`                                    | OAuth refresh tuning; the lease must be at least 180 seconds and defaults to 180 (`.env.prod.example`)       | No                                    |
 | `VOICE_RECORDING_ENABLED`                            | Platform safety gate for persisting mixed call audio; the agent-level recording setting must also be enabled | No                                    |
 | `RECORDING_STORAGE_BACKEND`                          | `r2` for staging/production; `local` for local development                                                   | No                                    |
 | `RECORDING_R2_ENDPOINT`                              | Shared account S3 endpoint: `https://<account-id>.r2.cloudflarestorage.com`                                  | No                                    |

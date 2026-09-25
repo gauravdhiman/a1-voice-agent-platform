@@ -35,7 +35,14 @@ class PlatformNotificationSettings(BaseModel):
     id: UUID
     platform_admin_email: Optional[EmailStr] = Field(
         None,
-        description="Recipient for platform-admin lead submission alerts",
+        description="Recipient for platform-admin lead and OAuth recovery alerts",
+    )
+    platform_admin_sms_phone: Optional[str] = Field(
+        None, description="Platform administrator SMS destination in E.164 format"
+    )
+    platform_admin_sms_notifications_enabled: bool = False
+    sms_sender_configured: bool = Field(
+        False, description="Whether Twilio credentials and an SMS sender are configured"
     )
     verification_from_email: Optional[EmailStr] = None
     verification_from_name: Optional[str] = Field(None, max_length=100)
@@ -60,8 +67,16 @@ class PlatformNotificationSettingsUpdate(BaseModel):
 
     platform_admin_email: Optional[EmailStr] = Field(
         None,
-        description="Recipient for platform-admin lead submission alerts",
+        description="Recipient for platform-admin lead and OAuth recovery alerts",
     )
+    platform_admin_sms_phone: Optional[str] = Field(
+        None,
+        min_length=8,
+        max_length=16,
+        pattern=r"^\+[1-9]\d{1,14}$",
+        description="Platform administrator SMS destination in E.164 format",
+    )
+    platform_admin_sms_notifications_enabled: Optional[bool] = None
     verification_from_email: Optional[EmailStr] = None
     verification_from_name: Optional[str] = Field(None, max_length=100)
     telegram_chat_id: Optional[str] = Field(None, max_length=100)

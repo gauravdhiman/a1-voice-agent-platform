@@ -20,6 +20,9 @@ const updateSettingsMock = vi.mocked(notificationSettingsService.updateSettings)
 const settings = {
   id: "00000000-0000-0000-0000-000000000001",
   platform_admin_email: "admin@example.com",
+  platform_admin_sms_phone: null,
+  platform_admin_sms_notifications_enabled: false,
+  sms_sender_configured: true,
   verification_from_email: "noreply@example.com",
   verification_from_name: "24x7 AI",
   email_verification_active: true,
@@ -56,6 +59,24 @@ describe("PlatformNotificationSettingsForm", () => {
     await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
     expect(updateSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({ platform_admin_email: "leads@example.com" }),
+    );
+  });
+
+  it("saves an opted-in platform SMS destination in E.164 form", async () => {
+    const user = userEvent.setup();
+    render(<PlatformNotificationSettingsForm />);
+
+    const phone = await screen.findByLabelText("Platform admin phone");
+    await user.type(phone, "+15551234567");
+    await user.click(screen.getByRole("switch", { name: "Enable SMS OAuth alerts" }));
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform_admin_sms_phone: "+15551234567",
+        platform_admin_sms_notifications_enabled: true,
+      }),
     );
   });
 });

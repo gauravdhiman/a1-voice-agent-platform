@@ -7,11 +7,8 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
-
-from shared.config import settings
 
 from .models import (
     NotificationCategory,
@@ -23,9 +20,12 @@ from .models import (
     NotificationTemplate,
     NotificationTemplateCreate,
     NotificationTemplateUpdate,
-    SendNotificationRequest,
-    SendNotificationResponse,
 )
+from .organization_settings_models import (
+    OrganizationNotificationSettings,
+    OrganizationNotificationSettingsUpdate,
+)
+from .organization_settings_service import organization_notification_settings_service
 from .platform_settings_models import (
     PlatformNotificationSettings,
     PlatformNotificationSettingsUpdate,
@@ -84,6 +84,60 @@ async def update_platform_notification_settings(
     return await platform_notification_settings_service.update_settings(
         payload, user_id
     )
+
+
+def _assert_organization_notification_settings_access(
+    user_profile: UserProfile, organization_id: UUID
+) -> None:
+    """Require a platform admin or admin of the target organization."""
+    if user_profile.has_role("platform_admin"):
+        return
+    if not user_profile.has_role("org_admin", str(organization_id)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Only administrators of this organization can manage "
+                "notification settings"
+            ),
+        )
+
+
+@router.get(
+    "/organizations/{organization_id}/settings",
+    response_model=OrganizationNotificationSettings,
+)
+async def get_organization_notification_settings(
+    organization_id: UUID,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Read critical notification destinations for one organization."""
+    _, user_profile = user_auth
+    _assert_organization_notification_settings_access(user_profile, organization_id)
+    return await organization_notification_settings_service.get_settings(
+        organization_id
+    )
+
+
+@router.put(
+    "/organizations/{organization_id}/settings",
+    response_model=OrganizationNotificationSettings,
+)
+async def update_organization_notification_settings(
+    organization_id: UUID,
+    payload: OrganizationNotificationSettingsUpdate,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Update critical notification destinations for one organization."""
+    user_id, user_profile = user_auth
+    _assert_organization_notification_settings_access(user_profile, organization_id)
+    try:
+        return await organization_notification_settings_service.update_settings(
+            organization_id, payload, user_id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 # ============================================================================

@@ -357,7 +357,7 @@ export default function PlatformDashboardPage() {
           </section>
           <section className="rounded-xl border bg-card p-5 sm:p-6 xl:col-span-7">
             <h2 className="font-semibold">Platform operations</h2><p className="mt-1 text-sm text-muted-foreground">Move from aggregate activity to organization-level administration.</p>
-            <div className="mt-4 flex flex-wrap gap-4 text-sm"><Link className="inline-flex items-center gap-1 underline" href="/organizations">Organizations <ArrowUpRight className="h-4 w-4" /></Link><Link className="inline-flex items-center gap-1 underline" href="/organizations/credits">Credit management <ArrowUpRight className="h-4 w-4" /></Link><Link className="inline-flex items-center gap-1 underline" href="/platform/phone-numbers">Phone number settings <ArrowUpRight className="h-4 w-4" /></Link></div>
+            <div className="mt-4 flex flex-wrap gap-4 text-sm"><Link className="inline-flex items-center gap-1 underline" href="/organizations">Organizations <ArrowUpRight className="h-4 w-4" /></Link><Link className="inline-flex items-center gap-1 underline" href="/organizations/credits">Credit management <ArrowUpRight className="h-4 w-4" /></Link><Link className="inline-flex items-center gap-1 underline" href="/platform/settings?section=phone-numbers">Platform settings <ArrowUpRight className="h-4 w-4" /></Link></div>
           </section>
         </div>
       )}

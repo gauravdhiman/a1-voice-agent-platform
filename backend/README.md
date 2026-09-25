@@ -8,6 +8,12 @@ settles admitted calls fully at teardown, and runs a five-minute notification
 outbox/retry loop for low-credit warnings at 20%, 10%, and 5%. See
 [`docs/03_implementation/credit_usage_enforcement_and_notifications.md`](../docs/03_implementation/credit_usage_enforcement_and_notifications.md).
 
+OAuth connections refresh through a Postgres lease and credential-generation
+fence. Ambiguous provider outcomes stop automatic reuse and notify organization
+admins by email plus configured platform-admin channels. See
+[`docs/03_implementation/token_refresh_lock.md`](../docs/03_implementation/token_refresh_lock.md)
+for failure classification, alert routing, and recovery steps.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
