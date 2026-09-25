@@ -19,6 +19,9 @@ def main() -> int:
             continue
         k, _, v = line.partition("=")
         if k.strip() == key:
+            v = v.strip()
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                v = v[1:-1]
             print(v.strip())
             return 0
     return 1

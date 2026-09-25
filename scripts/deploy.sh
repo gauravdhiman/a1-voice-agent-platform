@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Single entry point for production deployment (247ai.live).
 #
-# Credentials live only in .env.prod (gitignored). This script never prints secrets.
+# Local/manual deployments may use .env.prod (gitignored); managed cloud
+# deployments resolve runtime secrets from GCP Secret Manager and OCI Vault.
+# This script never prints secret values.
 #
 # Usage:
 #   ./scripts/deploy.sh [component] [options]

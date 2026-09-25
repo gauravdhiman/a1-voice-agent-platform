@@ -1,0 +1,21 @@
+# Docker build contexts are independent of Git's ignore rules.
+# Never send local credentials, deployment env files, or repository metadata to
+# the Docker daemon. Runtime secrets are injected by the deployment platform.
+**/.env
+**/.env.*
+**/.env*
+**/.env.*.local
+**/.env*.bak
+**/.env*.backup
+**/.git
+**/.gitignore
+**/.worktrees
+.local-data
+graphify-out
+.agents
+.codex
+node_modules
+frontend/.next
+frontend/node_modules
+**/__pycache__
+**/.pytest_cache

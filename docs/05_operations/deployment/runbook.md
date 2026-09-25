@@ -16,10 +16,12 @@ flowchart LR
         FE["frontend-247ai<br/>www.247ai.live"]
         BE["backend-247ai<br/>api.247ai.live"]
         AR[Artifact Registry<br/>cognients/*]
+        GSM[(GCP Secret Manager)]
     end
     subgraph OCI["Oracle Free Tier (us-ashburn-1, ARM A1 Flex)"]
         CADDY[Caddy :443<br/>auto Let's Encrypt]
         VW[voice-ws :7860<br/>Pipecat WebSocket]
+        OSM[(OCI Vault)]
     end
     subgraph External
         SB[(Supabase cloud DB + Auth)]
@@ -43,6 +45,8 @@ flowchart LR
     VW --> SB
     AR --> FE
     AR --> BE
+    GSM --> BE
+    OSM --> VW
 ```
 
 | Component | Host | Domain |
@@ -63,15 +67,27 @@ the VM terminates TLS (auto Let's Encrypt) and reverse-proxies to `voice-ws:7860
 The normal release path is **merge to protected `main`** → **local staging
 validation** (`./scripts/validate-staging.sh` which runs `--env staging` with
 the cloud staging database) → release smoke tests → manual
-**`Promote to production`** GitHub Actions workflow. Credentials stay in
-protected GitHub environment secrets for production and in the gitignored
-`.env.staging` / `.env.prod` files for local use; they are never committed.
+**`Promote to production`** GitHub Actions workflow. Non-secret deployment
+configuration stays in the reviewed `deploy/config/` files, while runtime
+secrets live in GCP Secret Manager and OCI Vault. Complete `.env.staging` /
+`.env.prod` files remain gitignored for local/manual operation and are never
+committed.
 
 `./scripts/deploy.sh` remains the single lower-level entry point for operator
-recovery or explicitly approved local deployment work. Credentials stay in
-**`.env.prod`** only when using it locally (gitignored). Copy
-**`.env.prod.example`** to `.env.prod` and fill in values — never commit
-`.env.prod`.
+recovery or explicitly approved local deployment work. Build a private runtime
+file from the versioned config and an ignored secret overlay:
+
+```bash
+cp deploy/config/secrets.example .env.prod.secrets
+# Edit .env.prod.secrets on the secure operator workstation.
+python3 scripts/deploy/build-env-file.py \
+  --config-file deploy/config/production.env \
+  --secret-file .env.prod.secrets \
+  --output .env.prod
+```
+
+Never commit `.env.prod` or `.env.prod.secrets`. Managed cloud deployments use
+the secret-manager flow described in [secret management](secret-management.md).
 
 See [quick-reference.md](quick-reference.md) for the command cheat sheet.
 
@@ -87,8 +103,9 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | 2 | Cloud Run domain mappings (`api` + `www` + apex) | `./scripts/deploy.sh domains` |
 | 3 | Cloudflare DNS (`api`, `www`, apex, and `voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
-| 5 | Production DB migrations + phone-number verification + public demo bootstrap | Migrations and verification run in the protected `Promote to production` workflow; the GCP backend deployment then syncs the native tools and all three public demos. Manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by `./scripts/deploy.sh verify-data --env-file .env.prod` and an approved GCP/backend deployment. |
-| 6 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
+| 5 | GCP Secret Manager + OCI Vault + runtime identities | See [secret management](secret-management.md); provision versions, IAM, the OCI dynamic group, and instance-principal access before the first managed release. |
+| 6 | Production DB migrations + credential/phone verification + public demo bootstrap | Migrations and verification run in the protected `Promote to production` workflow; the GCP backend deployment then syncs the native tools and all three public demos. Manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by both read-only verifiers and an approved GCP/backend deployment. |
+| 7 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
 ## Scripts and artifacts
 
 | Path | Purpose |
@@ -100,10 +117,15 @@ LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipeca
 | `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend to Cloud Run |
 | `scripts/deploy/sync-release-fixtures.sh` | Explicit bootstrap for native tools and the three public demo agents |
 | `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
+| `scripts/deploy/render-gcp-env.py` | Render a short-lived migration env from GCP Secret Manager |
+| `scripts/deploy/sync-gcp-secrets.py` | Preview/apply secret versions during initial provisioning |
+| `scripts/deploy/sync-oci-secrets.py` | Preview/apply voice-ws secret versions in OCI Vault |
 | `scripts/deploy/gcp-map-domains.sh` | Cloud Run domain mappings |
 | `scripts/deploy/run-alembic-cloud.sh` | Alembic against Supabase |
 | `scripts/deploy/verify_phone_number_backfill.py` | Read-only postcondition check for the legacy agent phone-number backfill |
+| `scripts/deploy/verify_org_credential_migration.py` | Read-only postcondition check for plaintext organization credentials |
 | `scripts/deploy/oci-deploy-voice-ws.sh` | Sync + build voice-ws on OCI VM |
+| `scripts/deploy/oci-fetch-vault-env.sh` | Resolve the VM's secret manifest from OCI Vault |
 | `scripts/oci-env.sh` | OCI CLI session auth helper |
 | `deploy/oci/docker-compose.voice-ws.yml` | voice-ws + Caddy stack |
 | `deploy/oci/Caddyfile` | TLS reverse proxy for `voice.247ai.live` |
@@ -150,13 +172,35 @@ preflight conflict policy, make the change atomic/idempotent, add a read-only
 postcondition verifier, and wire both migration and verification into the
 production deployment gate.
 
+## Organization credential migration
+
+Migration `20260922000002` completes the earlier encrypted provider-credentials
+backfill without dropping the legacy column during a rolling deploy. It
+preserves existing encrypted providers, refuses to clear a row whose ciphertext
+cannot be decrypted with the deployment keyring, and then clears
+`organizations.google_api_key` in the same transaction. The compatibility
+column remains empty until a later release removes the old write path.
+
+The protected workflow runs:
+
+```bash
+python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.prod
+./scripts/deploy.sh migrate --env-file .env.prod
+python3 scripts/deploy/verify_org_credential_migration.py --env-file .env.prod
+```
+
+The verifier never prints organization IDs, ciphertext, or decrypted values.
+If it fails, stop the release and investigate the key/version mismatch before
+retrying; do not clear the legacy column manually.
+
 ## Environment configuration
 
 - **Production env file:** `.env.prod` at repo root (gitignored). Never commit.
 - **Template:** `.env.prod.example` (placeholders only).
 - **Variable reference:** [environment-variables.md](environment-variables.md)
 
-Production non-secret values (secrets stay in `.env.prod` only):
+Production non-secret values belong in the reviewed, version-controlled
+`deploy/config/production.env` file:
 
 | Variable | Production value |
 |----------|------------------|
@@ -172,13 +216,15 @@ Production non-secret values (secrets stay in `.env.prod` only):
 | `MCP_ALLOW_LOCAL_URLS` | `false` |
 
 `JWT_SECRET_KEY` is shared by backend and voice-ws. Both services receive it
-via `gcp-env-from-cloud.py`.
+from GCP Secret Manager / OCI Vault in the managed cloud path. See
+[secret management](secret-management.md) for the required mirrored values.
 
 ### Encryption-key recovery and rotation
 
 `ENCRYPTION_KEY` and `ENCRYPTION_KEY_FALLBACKS` are server-side variables and
-must be sent to both backend and voice-ws. The deployment filter validates the
-current key before generating service environments. If an older release wrote
+must be available to both backend and voice-ws. The managed deployment renders
+them from both secret managers; the deployment filter validates the current key
+before generating service environments. If an older release wrote
 encrypted data while using the removed development fallback, preview and then
 run the guarded one-time repair with the current production key:
 
@@ -223,6 +269,21 @@ credentials, and `TWILIO_SMS_FROM_NUMBER`. Telegram and SMS retries use the
 database outbox; email retries use the notification log scheduler. A provider
 may accept an alert just before the database acknowledgment is lost, so a rare
 duplicate message is possible.
+
+For a normal planned `K1` to `K2` rotation, use the general command instead:
+
+```bash
+python3 scripts/deploy/rotate-encrypted-data.py --env-file .env.rotation
+python3 scripts/deploy/rotate-encrypted-data.py \
+  --env-file .env.rotation \
+  --apply
+```
+
+The `.env.rotation` file is a short-lived operator file rendered from the
+managed secret stores and must contain only the database URL, the new current
+Fernet key, and the old key in `ENCRYPTION_KEY_FALLBACKS`. Follow the complete
+dual-cloud procedure in [secret management](secret-management.md) and remove
+the file immediately after the verified run.
 
 ## Mandatory release gate: AI agent calling
 
@@ -359,8 +420,12 @@ on the VM, then `docker compose up -d --build`.
 ## Security reminders
 
 - **Never commit** `.env.prod` or credential copies.
-- Store production env in the protected GitHub `production` environment secret
-  `ENV_PROD` for CI.
+- Store non-secret deployment configuration in the reviewed
+  `deploy/config/production.env` file; store runtime values in GCP Secret
+  Manager and OCI Vault. GitHub should contain only deployment identities,
+  approvals, and unavoidable transport credentials.
+- Keep Cloud Run runtime IAM and the OCI dynamic-group policy limited to the
+  secrets each service needs.
 - Rotate secrets if any env file was ever pushed to a remote.
 
 ## Related documentation

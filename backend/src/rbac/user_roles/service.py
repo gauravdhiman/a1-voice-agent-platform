@@ -961,7 +961,14 @@ class UserRoleService:
             # Get organizations where the user has roles
             response = (
                 self.supabase.table("user_roles")
-                .select("organizations(*)")
+                .select(
+                    "organizations("
+                    "id,name,description,slug,website,is_active,industry,location,"
+                    "timezone,business_details,onboarding_completed,"
+                    "public_page_enabled,public_page_passphrase_enabled,"
+                    "created_at,updated_at"
+                    ")"
+                )
                 .eq("user_id", str(user_id))
                 .not_.is_("organization_id", "null")
                 .execute()
@@ -985,7 +992,12 @@ class UserRoleService:
                         location=org_dict.get("location"),
                         timezone=org_dict.get("timezone"),
                         business_details=org_dict.get("business_details"),
-                        google_api_key=org_dict.get("google_api_key"),
+                        public_page_enabled=bool(
+                            org_dict.get("public_page_enabled", False)
+                        ),
+                        public_page_passphrase_enabled=bool(
+                            org_dict.get("public_page_passphrase_enabled", False)
+                        ),
                         onboarding_completed=org_dict.get(
                             "onboarding_completed", False
                         ),

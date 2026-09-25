@@ -38,7 +38,11 @@ def _pipeline(
 
 
 def _org(creds: dict):
-    return SimpleNamespace(provider_credentials="encrypted-blob"), creds
+    # An empty credential map represents an unconfigured organization. A
+    # non-empty blob with no decryptable payload is a different, fail-closed
+    # state covered by the key-resolver tests.
+    blob = "encrypted-blob" if creds else None
+    return SimpleNamespace(provider_credentials=blob), creds
 
 
 @pytest.fixture

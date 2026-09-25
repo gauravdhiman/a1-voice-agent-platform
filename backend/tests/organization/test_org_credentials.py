@@ -3,8 +3,7 @@
 Covers the organization-service write path (a Google key supplied via the
 legacy ``google_api_key`` field is validated, encrypted into
 ``provider_credentials["google"]``, and the plaintext column is cleared) and
-the read path (``_organization_from_dict`` resolves the Google key back out of
-the decrypted blob, falling back to the plaintext column for un-migrated rows).
+the read path (provider status is derived without exposing credential values).
 """
 
 from datetime import datetime, timezone
@@ -12,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from src.organization.models import OrganizationUpdate
+from src.organization.models import Organization, OrganizationUpdate
 from src.organization.service import OrganizationService
 
 
@@ -351,19 +350,26 @@ class TestOrgProviderCredentialsWrite:
 
 
 class TestOrgProviderCredentialsRead:
-    """_organization_from_dict resolves the Google key from the blob."""
+    """_organization_from_dict keeps credential material out of public models."""
 
-    def test_reads_google_key_from_decrypted_blob(self):
+    def test_reads_google_status_from_decrypted_blob_without_public_secret(self):
         with patch("src.organization.service.decrypt_data") as mock_dec:
             mock_dec.return_value = {"google": "GEM_FROM_BLOB"}
             org = OrganizationService._organization_from_dict(
                 _row(uuid4(), provider_credentials="ENC_BLOB", google_api_key=None)
             )
-        assert org.google_api_key == "GEM_FROM_BLOB"
+        assert org.google_api_key is None
         assert org.provider_credentials == "ENC_BLOB"
+        assert org.provider_credentials_status["google"] is True
+        serialized = org.model_dump()
+        assert "google_api_key" not in serialized
+        assert "provider_credentials" not in serialized
+        public = Organization.model_validate(org).model_dump()
+        assert "google_api_key" not in public
+        assert "provider_credentials" not in public
 
     def test_falls_back_to_plaintext_column_when_no_blob(self):
-        """Un-migrated rows still surface the legacy plaintext google_api_key."""
+        """Un-migrated rows retain a transitional runtime-only fallback."""
         with patch("src.organization.service.decrypt_data") as mock_dec:
             org = OrganizationService._organization_from_dict(
                 _row(uuid4(), provider_credentials=None, google_api_key="PLAINTEXT_KEY")
@@ -458,17 +464,28 @@ class TestMergeProviderCredentials:
             )
         mock_enc.assert_called_once_with({"google": "G1", "openai": "O1"})
 
-    def test_merge_decrypt_failure_starts_from_empty(self):
+    def test_merge_decrypt_failure_fails_closed(self):
         with patch("src.organization.service.decrypt_data") as mock_dec, patch(
             "src.organization.service.encrypt_data"
         ) as mock_enc:
             mock_dec.side_effect = Exception("bad key")
             mock_enc.return_value = "ENC"
-            OrganizationService._merge_provider_credentials(
-                "CORRUPT_BLOB", {"google": "G1"}
-            )
-        # Existing blob undecryptable → start fresh, only the new key remains.
-        mock_enc.assert_called_once_with({"google": "G1"})
+            with pytest.raises(ValueError, match="could not be decrypted"):
+                OrganizationService._merge_provider_credentials(
+                    "CORRUPT_BLOB", {"google": "G1"}
+                )
+        # An unreadable existing blob must never be replaced by a fresh one.
+        mock_enc.assert_not_called()
+
+    def test_merge_empty_decrypted_blob_fails_closed(self):
+        with patch("src.organization.service.decrypt_data", return_value={}), patch(
+            "src.organization.service.encrypt_data"
+        ) as mock_enc:
+            with pytest.raises(ValueError, match="could not be decrypted"):
+                OrganizationService._merge_provider_credentials(
+                    "EMPTY_BLOB", {"google": "G1"}
+                )
+        mock_enc.assert_not_called()
 
 
 class TestMergeProviderCredentialDescriptions:
@@ -587,3 +604,28 @@ class TestProviderCredentialsStatus:
             )
         for value in org.provider_credentials_status.values():
             assert isinstance(value, bool)
+
+
+@pytest.mark.asyncio
+async def test_google_key_validation_uses_header_not_query_string(
+    organization_service,
+):
+    """Provider validation must not place the credential in a URL or trace."""
+    response = MagicMock(status_code=200)
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+    client_context = MagicMock()
+    client_context.__aenter__ = AsyncMock(return_value=client)
+    client_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("httpx.AsyncClient", return_value=client_context):
+        is_valid, error = await organization_service.validate_google_api_key(
+            "google-test-key"
+        )
+
+    assert is_valid is True
+    assert error is None
+    client.get.assert_awaited_once_with(
+        "https://generativelanguage.googleapis.com/v1/models",
+        headers={"x-goog-api-key": "google-test-key"},
+    )

@@ -39,6 +39,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-production-ref
     environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID || 'project-bb848762-18cb-4cd6-858' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,15 +53,31 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Write .env.prod from GitHub environment secret
-        env:
-          ENV_PROD: ${{ secrets.ENV_PROD }}
+      - name: Authenticate to Google Cloud for managed secret access
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Render migration environment from managed secrets
         run: |
-          test -n "${ENV_PROD:-}" || {
-            echo "The production environment secret ENV_PROD is required." >&2
+          config_file=deploy/config/production.env
+          python3 scripts/deploy/validate-versioned-config.py \
+            --config-file "$config_file" \
+            --environment production \
+            --project "$GCP_PROJECT_ID"
+          secret_prefix="$(python3 scripts/deploy/read-env-cloud.py "$config_file" GCP_SECRET_NAME_PREFIX)"
+          test -n "$secret_prefix" || {
+            echo "GCP_SECRET_NAME_PREFIX is required in $config_file." >&2
             exit 1
           }
-          printf '%s\n' "$ENV_PROD" > .env.prod
+          python3 scripts/deploy/render-gcp-env.py \
+            --config-file "$config_file" \
+            --output .env.prod \
+            --project "$GCP_PROJECT_ID" \
+            --secret-prefix "$secret_prefix"
 
       - name: Install migration dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
@@ -71,6 +92,9 @@ jobs:
 
       - name: Verify phone-number data migration
         run: python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.prod
+
+      - name: Verify organization credential migration
+        run: python3 scripts/deploy/verify_org_credential_migration.py --env-file .env.prod
 
   deploy-gcp-production:
     runs-on: ubuntu-latest
@@ -100,28 +124,40 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Write .env.prod from GitHub environment secret
-        env:
-          ENV_PROD: ${{ secrets.ENV_PROD }}
-        run: printf '%s\n' "$ENV_PROD" > .env.prod
+      - name: Render deployment environment from managed secrets
+        run: |
+          config_file=deploy/config/production.env
+          python3 scripts/deploy/validate-versioned-config.py \
+            --config-file "$config_file" \
+            --environment production \
+            --project "$GCP_PROJECT_ID"
+          secret_prefix="$(python3 scripts/deploy/read-env-cloud.py "$config_file" GCP_SECRET_NAME_PREFIX)"
+          test -n "$secret_prefix" || {
+            echo "GCP_SECRET_NAME_PREFIX is required in $config_file." >&2
+            exit 1
+          }
+          python3 scripts/deploy/render-gcp-env.py \
+            --config-file "$config_file" \
+            --output .env.prod \
+            --project "$GCP_PROJECT_ID" \
+            --secret-prefix "$secret_prefix"
 
       - name: Add production PostHog settings to the frontend build environment
         env:
-          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
-          NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
+          LEGACY_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
         run: |
-          test -n "${NEXT_PUBLIC_POSTHOG_KEY:-}" || {
-            echo "The production environment secret NEXT_PUBLIC_POSTHOG_KEY is required." >&2
-            exit 1
-          }
+          config_key="$(python3 scripts/deploy/read-env-cloud.py deploy/config/production.env NEXT_PUBLIC_POSTHOG_KEY 2>/dev/null || true)"
+          config_host="$(python3 scripts/deploy/read-env-cloud.py deploy/config/production.env NEXT_PUBLIC_POSTHOG_HOST 2>/dev/null || true)"
+          export POSTHOG_KEY="${config_key:-${LEGACY_POSTHOG_KEY:-}}"
+          export POSTHOG_HOST="${config_host:-https://us.i.posthog.com}"
           python3 - <<'PY'
           import os
           from pathlib import Path
 
           path = Path(".env.prod")
           values = {
-              "NEXT_PUBLIC_POSTHOG_KEY": os.environ["NEXT_PUBLIC_POSTHOG_KEY"],
-              "NEXT_PUBLIC_POSTHOG_HOST": os.environ["NEXT_PUBLIC_POSTHOG_HOST"],
+              "NEXT_PUBLIC_POSTHOG_KEY": os.environ.get("POSTHOG_KEY", ""),
+              "NEXT_PUBLIC_POSTHOG_HOST": os.environ["POSTHOG_HOST"],
           }
           lines = [
               line
@@ -166,25 +202,21 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Prepare .env.prod and SSH key
+      - name: Prepare non-secret deployment config and SSH key
         if: steps.check-oci-ssh.outputs.configured == 'true'
         env:
-          ENV_PROD: ${{ secrets.ENV_PROD }}
           OCI_SSH_KEY_SECRET: ${{ secrets.OCI_SSH_KEY }}
         run: |
-          printf '%s\n' "$ENV_PROD" > .env.prod
+          cp deploy/config/production.env .env.prod
           mkdir -p ~/.ssh
           printf '%s\n' "$OCI_SSH_KEY_SECRET" > ~/.ssh/oci_voice_ws
           chmod 600 ~/.ssh/oci_voice_ws
-
-      - name: Install OCI deployment migration dependencies
-        if: steps.check-oci-ssh.outputs.configured == 'true'
-        run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
 
       - name: Deploy voice-ws to production OCI VM
         if: steps.check-oci-ssh.outputs.configured == 'true'
         env:
           OCI_SSH_KEY: ~/.ssh/oci_voice_ws
+          SKIP_DEPLOYMENT_MIGRATIONS: "true"
         run: |
           chmod +x scripts/deploy.sh
           ./scripts/deploy.sh voice-ws --env-file .env.prod

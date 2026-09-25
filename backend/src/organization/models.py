@@ -5,9 +5,10 @@ Pydantic models for Organization functionality.
 from typing import Optional
 from uuid import UUID
 
-from shared.organization.models import (  # noqa: F401
-    Organization,
+from shared.organization.models import Organization  # noqa: F401
+from shared.organization.models import (
     OrganizationCreate,
+    OrganizationRuntime,
     OrganizationUpdate,
 )
 

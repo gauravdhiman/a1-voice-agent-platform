@@ -8,11 +8,12 @@ encrypted ``provider_credentials`` blob and the platform env vars to produce the
   each stage's provider, with deprecated ``livekit_inference`` normalized to
   direct providers via :func:`normalize_stage_provider`);
 - prefer the org's decrypted key unless ``use_platform_credits``;
-- fall back to the platform env var;
+- fall back to the platform env var only when no encrypted org blob exists;
+- fail closed when an existing encrypted org blob cannot be decrypted;
 - **omit** a provider when neither org nor env has it (the registry's guard
   raises the clear error — no new error path here);
-- read Google from the decrypted ``provider_credentials`` blob, NOT the legacy
-  plaintext ``google_api_key`` column.
+- read Google from the decrypted ``provider_credentials`` blob, with only a
+  transitional fallback for pre-migration rows.
 """
 
 from types import SimpleNamespace
@@ -182,7 +183,7 @@ class TestKeyResolver:
     def test_google_read_from_decrypted_blob_not_plaintext_column(
         self, patch_decrypt, clean_env
     ):
-        """Google comes from provider_credentials['google'], never google_api_key.
+        """Google comes from provider_credentials['google'] when present.
 
         The fake org has NO ``google_api_key`` attribute; if the resolver tried to
         read it, getattr would return None and the test would fail to find the key.
@@ -240,13 +241,24 @@ class TestKeyResolver:
         assert api_keys == {"openai": "oa", "cartesia": "ca"}
         assert "silero" not in api_keys
 
-    def test_decrypt_failure_yields_empty_creds(self, patch_decrypt, clean_env):
-        """A decryption error falls back to no org creds (env still works)."""
+    def test_decrypt_failure_fails_closed_without_platform_fallback(
+        self, patch_decrypt, clean_env
+    ):
+        """An unreadable org blob must not silently switch billing to the platform."""
         clean_env.setenv("GEMINI_API_KEY", "plat-gemini")
         org, _creds = _org({})
         patch_decrypt.side_effect = ValueError("bad key")
         api_keys = resolve_api_keys(_realtime(), org=org)
-        assert api_keys == {"google": "plat-gemini"}
+        assert api_keys == {}
+
+    def test_decrypt_failure_returns_no_native_tool_credential(
+        self, patch_decrypt, clean_env
+    ):
+        """Native tools also fail closed when the organization blob is unreadable."""
+        del clean_env
+        org, _creds = _org({})
+        patch_decrypt.side_effect = ValueError("bad key")
+        assert resolve_org_provider_credential(org, "resend") is None
 
 
 class TestNormalizeStageProvider:

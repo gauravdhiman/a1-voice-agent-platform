@@ -127,10 +127,13 @@ are never persisted in or returned by the call-log API. Migration
 the factory expects. Realtime resolves the provider selected by the config
 (`google` or `openai`); pipeline resolves each stage. It reads all per-org provider keys from one Fernet-encrypted
 `organizations.provider_credentials` blob (via `decrypt_data`), with platform env
-fallback and the `use_platform_credits` toggle. **Only the providers the config
-needs appear**; missing providers are omitted (the factory fails fast with a
-clear error). Legacy `livekit_inference` stages are normalized to direct providers
-via `normalize_stage_provider()`; voice-ws (Pipecat) credentials are no longer used.
+fallback only when the organization has no configured blob, and the
+`use_platform_credits` toggle. **Only the providers the config needs appear**;
+missing providers are omitted (the factory fails fast with a clear error). A
+non-empty blob that cannot be decrypted fails closed and never silently falls
+back to a platform key. Legacy `livekit_inference` stages are normalized to
+direct providers via `normalize_stage_provider()`; voice-ws (Pipecat)
+credentials are no longer used.
 
 ### `voice-ws/src/speech/factory.py` — Pipecat provider factory
 
@@ -374,8 +377,9 @@ warmup) are **future hardening**, not prerequisites for the core capability.
 - `backend/tests/organization/test_org_credentials.py` — writing `google_api_key`
   stores encrypted `provider_credentials["google"]` + clears plaintext column;
   empty key clears; `provider_credentials_input` merged; invalid key rejected;
-  read path resolves from decrypted blob / plaintext fallback / decrypt-failure
-  fallback; `_merge_provider_credentials` preserve/clear/empty/decrypt-failure.
+  read path resolves from decrypted blob / transitional plaintext fallback;
+  unreadable blobs fail closed; `_merge_provider_credentials`
+  preserve/clear/empty/decrypt-failure.
 
 ### Phase 4 follow-up tests (system default + org tabs)
 

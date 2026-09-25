@@ -14,12 +14,19 @@ This document explains how to configure environment variables for different deve
 
 ## Environment Variable Files
 
-The root files are the source of truth for Docker, direct backend commands, and
-deployment:
+The version-controlled files under `deploy/config/` are the source of truth
+for non-secret configuration. The root runtime files are private overlays or
+generated outputs:
 
 1. `.env.local` — local Supabase and local application URLs.
 2. `.env.staging` — cloud staging Supabase with the application still running locally.
 3. `.env.prod` — production Supabase and production URLs; deployment defaults here.
+
+The corresponding checked-in configuration files are
+`deploy/config/local.env`, `deploy/config/staging.env`, and
+`deploy/config/production.env`. They contain no secret values. The root files
+remain useful to Docker and direct commands because they combine that safe
+configuration with local or managed secret values at runtime.
 
 Use `./start.sh start dev --env staging` to test staging. Do not copy any of
 these files into `.env`. The service-specific `backend/.env` and
@@ -40,9 +47,11 @@ unclear ownership.
 
 ### Decisions
 
-1. **Use exactly three canonical root runtime files.** `.env.local` selects the
-   local Supabase instance, `.env.staging` selects cloud staging while the app
-   still runs locally, and `.env.prod` selects the production Supabase project.
+1. **Use exactly three canonical versioned config files.** `deploy/config/local.env`,
+   `deploy/config/staging.env`, and `deploy/config/production.env` define the
+   non-secret settings for each environment. The matching root runtime files
+   select the environment and add private values only when local/manual
+   execution requires them.
 2. **Use `.env.prod`, not `.env.cloud`, for production.** The name describes the
    deployment lifecycle rather than the hosting provider and keeps the three
    environment names symmetrical.
@@ -62,15 +71,17 @@ unclear ownership.
    `247ai-local`, `247ai-staging`, and `247ai-production` so changing the
    selected database cannot accidentally reuse containers from another
    environment.
-7. **Keep real files private and templates complete.** The three runtime files
-   are gitignored; the three `.example` files are committed documentation and
-   must contain placeholders only. Their key sets are kept identical and are
-   checked by `scripts/tests/test_environment_contract.sh`.
-8. **Use `.env.prod` consistently in deployment automation.** The deploy script,
+7. **Keep real runtime files private and config files reviewable.** The three
+   root runtime files are gitignored; the three `.example` files remain
+   complete compatibility templates with placeholders only. The versioned
+   `deploy/config/*.env` files contain the reviewed non-secret values and
+   empty declarations for optional managed secrets.
+8. **Use managed secret stores in deployment automation.** The deploy script,
    production Compose file, migration helpers, GitHub Actions workflow, and
-   deployment docs all use `.env.prod`. CI stores its contents in the
-   `ENV_PROD` production-environment secret. The production PostHog project key
-   is a separate protected secret injected into the frontend build.
+   deployment docs use the versioned config plus GCP Secret Manager/OCI Vault.
+   CI does not store a complete environment bundle. The production PostHog
+   project key remains a separate protected build input because it is a
+   browser-visible value and is injected into the frontend build.
 9. **Keep worktree provider settings synchronized.** The full isolated
    worktree launcher reads non-placeholder voice-provider credentials from the
    worktree `.env.local` or the main checkout `.env.local`, refreshes them into
@@ -91,8 +102,10 @@ target, not a fourth environment file. They consume the selected
 - Deploy with `./scripts/deploy.sh`, which defaults to `.env.prod`; use
   `--env-file PATH` only for an explicit override.
 - Do not use `.env.prod` for local feature testing. Use `.env.staging` instead.
-- If the repository still has a GitHub secret named `ENV_CLOUD`, rename it to
-  `ENV_PROD` before running the deployment workflow.
+- To create a local/manual runtime file, merge a versioned config with an
+  ignored secret overlay using `scripts/deploy/build-env-file.py`. Never put
+  secret values in `deploy/config/` or commit a root runtime file. See the
+  [secret-management guide](deployment/secret-management.md).
 
 ### Environment selection commands
 
@@ -119,11 +132,12 @@ templates contain both variables; the advanced standalone frontend template
 local or staging events, or leave those keys empty, so non-production activity
 does not mix with production analytics.
 
-For a direct production build, set both variables in `.env.prod`. The protected
-production workflow injects `NEXT_PUBLIC_POSTHOG_KEY` from its matching GitHub
-environment secret and uses the US Cloud host. Next.js embeds `NEXT_PUBLIC_`
-values into its client bundle at build time, so changing the production
-environment after the image is built requires rebuilding and redeploying it.
+For a direct production build, set both variables in the selected versioned
+config or the generated `.env.prod`. The production workflow reads the
+versioned config and temporarily supports the legacy GitHub environment value
+as a migration fallback. Next.js embeds `NEXT_PUBLIC_` values into its client
+bundle at build time, so changing the production environment after the image
+is built requires rebuilding and redeploying it.
 The Docker Compose and GCP deployment paths pass both values into that build.
 
 `docker compose -f docker-compose.dev.yml` defaults to `.env.local`, while

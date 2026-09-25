@@ -34,6 +34,11 @@ jobs:
   migrate-staging:
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.STAGING_GCP_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,15 +46,31 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Write .env.staging from GitHub environment secret
-        env:
-          ENV_STAGING: ${{ secrets.ENV_STAGING }}
+      - name: Authenticate to Google Cloud for managed secret access
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Render migration environment from managed secrets
         run: |
-          test -n "${ENV_STAGING:-}" || {
-            echo "The staging environment secret ENV_STAGING is required." >&2
+          config_file=deploy/config/staging.env
+          python3 scripts/deploy/validate-versioned-config.py \
+            --config-file "$config_file" \
+            --environment staging \
+            --project "$GCP_PROJECT_ID"
+          secret_prefix="$(python3 scripts/deploy/read-env-cloud.py "$config_file" GCP_SECRET_NAME_PREFIX)"
+          test -n "$secret_prefix" || {
+            echo "GCP_SECRET_NAME_PREFIX is required in $config_file." >&2
             exit 1
           }
-          printf '%s\n' "$ENV_STAGING" > .env.staging
+          python3 scripts/deploy/render-gcp-env.py \
+            --config-file "$config_file" \
+            --output .env.staging \
+            --project "$GCP_PROJECT_ID" \
+            --secret-prefix "$secret_prefix"
 
       - name: Install migration dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
@@ -64,6 +85,9 @@ jobs:
 
       - name: Verify phone-number data migration
         run: python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
+
+      - name: Verify organization credential migration
+        run: python3 scripts/deploy/verify_org_credential_migration.py --env-file .env.staging
 
   deploy-gcp-staging:
     runs-on: ubuntu-latest
@@ -100,10 +124,23 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Write .env.staging from GitHub environment secret
-        env:
-          ENV_STAGING: ${{ secrets.ENV_STAGING }}
-        run: printf '%s\n' "$ENV_STAGING" > .env.staging
+      - name: Render deployment environment from managed secrets
+        run: |
+          config_file=deploy/config/staging.env
+          python3 scripts/deploy/validate-versioned-config.py \
+            --config-file "$config_file" \
+            --environment staging \
+            --project "$GCP_PROJECT_ID"
+          secret_prefix="$(python3 scripts/deploy/read-env-cloud.py "$config_file" GCP_SECRET_NAME_PREFIX)"
+          test -n "$secret_prefix" || {
+            echo "GCP_SECRET_NAME_PREFIX is required in $config_file." >&2
+            exit 1
+          }
+          python3 scripts/deploy/render-gcp-env.py \
+            --config-file "$config_file" \
+            --output .env.staging \
+            --project "$GCP_PROJECT_ID" \
+            --secret-prefix "$secret_prefix"
 
       - name: Deploy backend and frontend to staging Cloud Run
         run: |
@@ -134,13 +171,12 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.check-oci-ssh.outputs.configured == 'true'
 
-      - name: Prepare .env.staging and SSH key
+      - name: Prepare non-secret deployment config and SSH key
         if: steps.check-oci-ssh.outputs.configured == 'true'
         env:
-          ENV_STAGING: ${{ secrets.ENV_STAGING }}
           OCI_SSH_KEY_SECRET: ${{ secrets.STAGING_OCI_SSH_KEY }}
         run: |
-          printf '%s\n' "$ENV_STAGING" > .env.staging
+          cp deploy/config/staging.env .env.staging
           mkdir -p ~/.ssh
           printf '%s\n' "$OCI_SSH_KEY_SECRET" > ~/.ssh/oci_voice_ws_staging
           chmod 600 ~/.ssh/oci_voice_ws_staging
@@ -149,6 +185,7 @@ jobs:
         if: steps.check-oci-ssh.outputs.configured == 'true'
         env:
           OCI_SSH_KEY: ~/.ssh/oci_voice_ws_staging
+          SKIP_DEPLOYMENT_MIGRATIONS: "true"
         run: |
           chmod +x scripts/deploy.sh
           ./scripts/deploy.sh voice-ws --env-file .env.staging
