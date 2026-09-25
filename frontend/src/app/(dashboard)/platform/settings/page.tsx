@@ -66,7 +66,7 @@ export default function PlatformSettingsPage() {
         </p>
       </header>
 
-      <div className="grid items-start gap-6 md:grid-cols-[14rem_minmax(0,1fr)]">
+      <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
         <SettingsSectionNavigation
           ariaLabel="Platform settings"
           sections={PLATFORM_SETTINGS_SECTIONS}

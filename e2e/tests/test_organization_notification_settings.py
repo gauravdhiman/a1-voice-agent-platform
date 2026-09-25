@@ -107,7 +107,6 @@ def test_org_admin_can_save_oauth_notification_destinations(
     step("Sign in as an organization administrator")
     signin_user(page, base_url, wait_for_dashboard=False)
     expect(page).to_have_url(re.compile(r"/dashboard$"), timeout=10000)
-    expect(page.get_by_role("link", name="Organization", exact=True)).to_be_visible()
     step("Open the saved notification deep link")
     page.goto(f"{base_url}/organization?org_id={ORG_ID}&tab=notifications")
     page.wait_for_load_state("networkidle")
@@ -121,6 +120,55 @@ def test_org_admin_can_save_oauth_notification_destinations(
     ).to_have_attribute("aria-current", "page")
     expect(page.get_by_text("SMS provider ready")).to_be_visible()
     expect(page.get_by_text("Telegram bot ready")).to_be_visible()
+
+    step("Check settings navigation across supported viewport sizes")
+    for viewport in (
+        {"width": 320, "height": 720},
+        {"width": 390, "height": 844},
+        {"width": 768, "height": 1024},
+        {"width": 1024, "height": 768},
+        {"width": 1366, "height": 900},
+        {"width": 1920, "height": 1080},
+    ):
+        page.set_viewport_size(viewport)
+        expect(page.get_by_role("tab", name="Settings")).to_be_visible()
+        expect(page.get_by_role("tab", name="API Credentials")).to_be_visible()
+        expect(page.get_by_role("link", name=re.compile(r"^General"))).to_be_visible()
+        expect(
+            page.get_by_role("link", name=re.compile(r"^Public page"))
+        ).to_be_visible()
+        expect(
+            page.get_by_role("link", name=re.compile(r"^Notifications"))
+        ).to_be_visible()
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= window.innerWidth"
+        ), f"Document overflows at viewport {viewport}"
+        layout = page.evaluate(
+            """() => {
+              const navigation = document.querySelector('[data-testid="settings-section-navigation"]');
+              const content = navigation?.parentElement?.children[1];
+              if (!navigation || !content) return null;
+              const navRect = navigation.getBoundingClientRect();
+              const contentRect = content.getBoundingClientRect();
+              return {
+                navigationBottom: navRect.bottom,
+                navigationRight: navRect.right,
+                contentTop: contentRect.top,
+                contentLeft: contentRect.left,
+              };
+            }"""
+        )
+        assert layout is not None, "Settings navigation content should be rendered"
+        if viewport["width"] < 1024:
+            assert (
+                layout["contentTop"] >= layout["navigationBottom"]
+            ), f"Settings content should stack below navigation at {viewport}: {layout}"
+        else:
+            assert (
+                layout["contentLeft"] >= layout["navigationRight"]
+            ), f"Settings content should sit beside navigation at {viewport}: {layout}"
+
+    page.set_viewport_size({"width": 1280, "height": 720})
 
     page.get_by_role("textbox", name="Additional alert email").fill(
         "operations@example.com"

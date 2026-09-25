@@ -702,7 +702,7 @@ export default function OrganizationPage() {
         </TabsList>
 
         <TabsContent value="settings" className="space-y-6">
-          <div className="grid items-start gap-6 md:grid-cols-[14rem_minmax(0,1fr)]">
+          <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
             <SettingsSectionNavigation
               ariaLabel="Organization settings"
               sections={ORGANIZATION_SETTINGS_SECTIONS.filter(

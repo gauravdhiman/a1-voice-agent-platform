@@ -40,10 +40,10 @@ export function SettingsSectionNavigation({
   return (
     <nav
       aria-label={ariaLabel}
-      className="w-full md:w-56 md:shrink-0"
+      className="w-full lg:w-56 lg:shrink-0"
       data-testid="settings-section-navigation"
     >
-      <div className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
+      <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-col">
         {sections.map((section) => {
           const isActive = section.id === activeSection;
           const Icon = section.icon;
@@ -54,7 +54,7 @@ export function SettingsSectionNavigation({
               href={hrefForSection(section.id)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex min-w-40 shrink-0 items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors md:w-full",
+                "flex min-w-0 items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors lg:w-full",
                 isActive
                   ? "border-primary/25 bg-primary/5 text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -71,7 +71,7 @@ export function SettingsSectionNavigation({
                 <span className="block text-sm font-medium">
                   {section.label}
                 </span>
-                <span className="mt-0.5 hidden text-xs leading-5 text-muted-foreground md:block">
+                <span className="mt-0.5 hidden text-xs leading-5 text-muted-foreground lg:block">
                   {section.description}
                 </span>
               </span>
