@@ -1,18 +1,23 @@
 "use client";
 
 /**
- * Organization admin settings for critical OAuth connection alerts.
+ * Organization admin settings for critical notification contacts.
  */
 
 import React, { useEffect, useState } from "react";
-import { Bell, Loader2, Mail, MessageCircle, Phone, Save } from "lucide-react";
+import { Bell, Loader2, Mail, MessageCircle, Phone, Save, Trash2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   notificationSettingsService,
   type OrganizationNotificationSettings,
@@ -25,38 +30,40 @@ interface OrganizationNotificationSettingsFormProps {
 type NotificationDraft = {
   alertEmail: string;
   smsPhone: string;
-  smsEnabled: boolean;
   telegramChatId: string;
-  telegramEnabled: boolean;
+  telegramBotToken: string;
+  clearTelegramBotToken: boolean;
 };
 
 const EMPTY_DRAFT: NotificationDraft = {
   alertEmail: "",
   smsPhone: "",
-  smsEnabled: false,
   telegramChatId: "",
-  telegramEnabled: false,
+  telegramBotToken: "",
+  clearTelegramBotToken: false,
 };
 
 function toDraft(settings: OrganizationNotificationSettings): NotificationDraft {
   return {
     alertEmail: settings.alert_email ?? "",
     smsPhone: settings.sms_phone ?? "",
-    smsEnabled: settings.sms_enabled,
     telegramChatId: settings.telegram_chat_id ?? "",
-    telegramEnabled: settings.telegram_enabled,
+    // A saved credential is never returned by the API.
+    telegramBotToken: "",
+    clearTelegramBotToken: false,
   };
 }
 
 /**
- * Loads and saves tenant destinations for OAuth recovery messages.
- * Organization admin account emails remain included automatically; the shared
- * email field adds a team inbox as another recipient.
+ * Loads and saves an organization's critical notification contacts. Admin
+ * account emails remain recipients, while the optional email adds a shared
+ * inbox. SMS and Telegram are enabled by their required saved details.
  */
 export function OrganizationNotificationSettingsForm({
   organizationId,
 }: OrganizationNotificationSettingsFormProps) {
-  const [settings, setSettings] = useState<OrganizationNotificationSettings | null>(null);
+  const [settings, setSettings] =
+    useState<OrganizationNotificationSettings | null>(null);
   const [draft, setDraft] = useState<NotificationDraft>(EMPTY_DRAFT);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
@@ -71,7 +78,8 @@ export function OrganizationNotificationSettingsForm({
       setError(null);
       setSettings(null);
       setDraft(EMPTY_DRAFT);
-      const result = await notificationSettingsService.getOrganizationSettings(organizationId);
+      const result =
+        await notificationSettingsService.getOrganizationSettings(organizationId);
       if (!current) return;
       if (!result.success || !result.data) {
         setError(result.error || "Failed to load notification settings.");
@@ -97,24 +105,18 @@ export function OrganizationNotificationSettingsForm({
     event.preventDefault();
     setError(null);
     setSuccess(null);
-    if (draft.smsEnabled && !draft.smsPhone.trim()) {
-      setError("Enter a phone number before enabling SMS alerts.");
-      return;
-    }
-    if (draft.telegramEnabled && !draft.telegramChatId.trim()) {
-      setError("Enter a Telegram chat ID before enabling Telegram alerts.");
-      return;
-    }
-
     setSaving(true);
     const result = await notificationSettingsService.updateOrganizationSettings(
       organizationId,
       {
         alert_email: draft.alertEmail.trim() || null,
         sms_phone: draft.smsPhone.trim() || null,
-        sms_enabled: draft.smsEnabled,
         telegram_chat_id: draft.telegramChatId.trim() || null,
-        telegram_enabled: draft.telegramEnabled,
+        ...(draft.clearTelegramBotToken
+          ? { telegram_bot_token: null }
+          : draft.telegramBotToken.trim()
+            ? { telegram_bot_token: draft.telegramBotToken.trim() }
+            : {}),
       },
     );
     setSaving(false);
@@ -124,7 +126,7 @@ export function OrganizationNotificationSettingsForm({
     }
     setSettings(result.data);
     setDraft(toDraft(result.data));
-    setSuccess("Organization notification settings saved.");
+    setSuccess("Notification settings saved.");
   };
 
   if (loading) {
@@ -140,7 +142,9 @@ export function OrganizationNotificationSettingsForm({
     return (
       <div className="max-w-3xl space-y-3">
         <Alert variant="destructive" role="alert">
-          <AlertDescription>{error || "Notification settings are unavailable."}</AlertDescription>
+          <AlertDescription>
+            {error || "Notification settings are unavailable."}
+          </AlertDescription>
         </Alert>
         <Button
           type="button"
@@ -158,10 +162,12 @@ export function OrganizationNotificationSettingsForm({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Bell className="h-5 w-5" />
-          Critical access alerts
+          Critical notifications
         </CardTitle>
         <CardDescription>
-          Choose where your team receives OAuth connection recovery notices. Organization admins continue to receive email automatically.
+          Add contact details for important updates about your organization.
+          Organization admins also receive critical notifications at their
+          account email addresses.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -173,17 +179,21 @@ export function OrganizationNotificationSettingsForm({
           )}
           {success && (
             <Alert className="border-green-200 bg-green-50" role="status">
-              <AlertDescription className="text-green-800">{success}</AlertDescription>
+              <AlertDescription className="text-green-800">
+                {success}
+              </AlertDescription>
             </Alert>
           )}
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
-              <h2 className="font-semibold">Shared email inbox</h2>
+              <h2 className="font-semibold">Email</h2>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="organization-alert-email">Additional alert email</Label>
+              <Label htmlFor="organization-alert-email">
+                Additional email address
+              </Label>
               <Input
                 id="organization-alert-email"
                 type="email"
@@ -195,34 +205,16 @@ export function OrganizationNotificationSettingsForm({
                 disabled={saving}
               />
               <p className="text-xs text-muted-foreground">
-                This address receives the same recovery email as organization admins.
+                Add a shared inbox alongside organization admins&apos; account email
+                addresses.
               </p>
             </div>
           </section>
 
-          <section className="space-y-4 border-t pt-6">
-            <div className="flex flex-wrap items-center gap-2">
+          <section className="space-y-3 border-t pt-6">
+            <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-muted-foreground" />
-              <h2 className="font-semibold">SMS alerts</h2>
-              {settings?.sms_sender_configured ? (
-                <Badge className="bg-green-600 hover:bg-green-600/90">SMS provider ready</Badge>
-              ) : (
-                <Badge variant="secondary">SMS provider not configured</Badge>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-              <div className="space-y-1">
-                <Label htmlFor="organization-sms-enabled">Enable SMS alerts</Label>
-                <p className="text-sm text-muted-foreground">
-                  Send urgent connection recovery notices to this number.
-                </p>
-              </div>
-              <Switch
-                id="organization-sms-enabled"
-                checked={draft.smsEnabled}
-                onCheckedChange={(checked) => updateDraft("smsEnabled", checked)}
-                disabled={saving}
-              />
+              <h2 className="font-semibold">SMS</h2>
             </div>
             <div className="space-y-2">
               <Label htmlFor="organization-sms-phone">Phone number</Label>
@@ -230,6 +222,7 @@ export function OrganizationNotificationSettingsForm({
                 id="organization-sms-phone"
                 type="tel"
                 autoComplete="tel"
+                inputMode="tel"
                 maxLength={16}
                 placeholder="+15551234567"
                 value={draft.smsPhone}
@@ -237,37 +230,85 @@ export function OrganizationNotificationSettingsForm({
                 disabled={saving}
               />
               <p className="text-xs text-muted-foreground">
-                Use E.164 format with country code. The platform admin configures the Twilio sender.
+                Enter a phone number in international format to receive SMS
+                notifications. Clear the number to turn SMS off.
               </p>
             </div>
           </section>
 
-          <section className="space-y-4 border-t pt-6">
-            <div className="flex flex-wrap items-center gap-2">
+          <section className="space-y-3 border-t pt-6">
+            <div className="flex items-center gap-2">
               <MessageCircle className="h-4 w-4 text-muted-foreground" />
-              <h2 className="font-semibold">Telegram alerts</h2>
-              {settings?.telegram_bot_configured ? (
-                <Badge className="bg-green-600 hover:bg-green-600/90">Telegram bot ready</Badge>
-              ) : (
-                <Badge variant="secondary">Telegram bot not configured</Badge>
-              )}
+              <h2 className="font-semibold">Telegram</h2>
             </div>
-            <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-              <div className="space-y-1">
-                <Label htmlFor="organization-telegram-enabled">Enable Telegram alerts</Label>
-                <p className="text-sm text-muted-foreground">
-                  Send urgent connection recovery notices to this chat or group.
-                </p>
+            <p className="text-sm text-muted-foreground">
+              Create a bot with{" "}
+              <a
+                href="https://t.me/BotFather"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-primary underline underline-offset-4"
+              >
+                BotFather
+              </a>
+              , add it to the chat or group, and enter the bot token and chat ID
+              below. Both are required. Remove the saved bot token or clear the
+              chat ID to turn Telegram notifications off.
+            </p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="organization-telegram-bot-token">
+                  Telegram bot token
+                </Label>
+                {settings.telegram_bot_configured && !draft.clearTelegramBotToken && (
+                  <Badge variant="secondary">Token saved</Badge>
+                )}
               </div>
-              <Switch
-                id="organization-telegram-enabled"
-                checked={draft.telegramEnabled}
-                onCheckedChange={(checked) => updateDraft("telegramEnabled", checked)}
+              <Input
+                id="organization-telegram-bot-token"
+                type="password"
+                autoComplete="new-password"
+                maxLength={256}
+                placeholder={
+                  settings.telegram_bot_configured
+                    ? "Enter a new token to replace the saved one"
+                    : "Enter your bot token"
+                }
+                value={draft.telegramBotToken}
+                onChange={(event) => {
+                  updateDraft("telegramBotToken", event.target.value);
+                  if (event.target.value) {
+                    updateDraft("clearTelegramBotToken", false);
+                  }
+                }}
                 disabled={saving}
               />
+              {settings.telegram_bot_configured && !draft.clearTelegramBotToken && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="px-0 text-destructive hover:text-destructive"
+                  onClick={() => {
+                    updateDraft("telegramBotToken", "");
+                    updateDraft("clearTelegramBotToken", true);
+                  }}
+                  disabled={saving}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Remove saved token
+                </Button>
+              )}
+              {draft.clearTelegramBotToken && (
+                <p className="text-xs text-muted-foreground" role="status">
+                  The saved token will be removed when you save.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="organization-telegram-chat-id">Chat ID or channel username</Label>
+              <Label htmlFor="organization-telegram-chat-id">
+                Chat ID or channel username
+              </Label>
               <Input
                 id="organization-telegram-chat-id"
                 maxLength={100}
@@ -276,19 +317,8 @@ export function OrganizationNotificationSettingsForm({
                 onChange={(event) => updateDraft("telegramChatId", event.target.value)}
                 disabled={saving}
               />
-              <p className="text-xs text-muted-foreground">
-                Add the platform configured bot to the chat first. The platform admin manages the bot in Platform → Settings → Notifications.
-              </p>
             </div>
           </section>
-
-          {!settings?.sms_sender_configured || !settings?.telegram_bot_configured ? (
-            <Alert>
-              <AlertDescription className="text-sm">
-                SMS and Telegram delivery need provider credentials configured by a platform admin. Email notices remain available while a provider is being set up.
-              </AlertDescription>
-            </Alert>
-          ) : null}
 
           <div className="flex justify-end border-t pt-5">
             <Button type="submit" disabled={saving}>

@@ -36,13 +36,14 @@ automatic. Connections without a renewal grant, with unsupported metadata,
 without a verifiable expiry, or with a failed renewal attempt require
 reconnection.
 
-Platform admins receive alerts at the configured platform email, Telegram,
-and optional SMS destinations. Organization admins continue to receive email;
-they can add a shared email inbox and opt in to SMS and Telegram destinations
-under Organization → Settings → Notifications. These channels use a durable outbox with
-independent delivery state and bounded retries. Platform admins manage the
-provider credentials under Platform → Settings → Notifications. Per-organization
-notification frequency and WhatsApp delivery are not part of this integration.
+Platform admins receive alerts at their configured email, Telegram, and
+optional SMS destinations. Organization admins continue to receive email and
+can add a shared inbox, phone number, and organization-owned Telegram bot under
+Organization → Notifications. A phone number enables SMS; Telegram requires
+both the bot token and chat destination. These channels use a durable outbox
+with independent delivery state and bounded retries. Platform SMS uses the
+platform Twilio integration. Per-organization notification frequency and
+WhatsApp delivery are not part of this integration.
 
 ## Agent-facing Resend email tool
 

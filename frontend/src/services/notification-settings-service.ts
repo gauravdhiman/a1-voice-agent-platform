@@ -37,10 +37,7 @@ export interface OrganizationNotificationSettings {
   organization_id: string;
   alert_email?: string | null;
   sms_phone?: string | null;
-  sms_enabled: boolean;
   telegram_chat_id?: string | null;
-  telegram_enabled: boolean;
-  sms_sender_configured: boolean;
   telegram_bot_configured: boolean;
   updated_by?: string | null;
   created_at: string;
@@ -50,9 +47,8 @@ export interface OrganizationNotificationSettings {
 export interface OrganizationNotificationSettingsUpdate {
   alert_email?: string | null;
   sms_phone?: string | null;
-  sms_enabled?: boolean;
   telegram_chat_id?: string | null;
-  telegram_enabled?: boolean;
+  telegram_bot_token?: string | null;
 }
 
 class NotificationSettingsService {
