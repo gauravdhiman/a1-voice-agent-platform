@@ -219,6 +219,25 @@ export function PlatformPlansManager() {
     void loadCatalog();
   }, [loadCatalog]);
 
+  React.useEffect(() => {
+    if (loadingVersion || !selectedVersionId) return;
+    const mediaQuery =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(max-width: 1279px)")
+        : null;
+    if (!mediaQuery?.matches) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="plan-version-details-card"]')
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loadingVersion, selectedVersionId]);
+
   const applyVersionToForm = React.useCallback(
     (version: PlanVersionDetail, productStripeId?: string | null) => {
       setSelectedVersion(version);
@@ -506,7 +525,7 @@ export function PlatformPlansManager() {
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(320px,1.2fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(280px,1fr)_minmax(320px,1.2fr)]">
         <PlanProductsListPanel
           products={products}
           cadenceTab={cadenceTab}
@@ -517,7 +536,10 @@ export function PlatformPlansManager() {
           productBillingBySlug={productBillingBySlug}
         />
 
-        <Card className="min-w-0">
+        <Card
+          data-testid="plan-version-details-card"
+          className="min-w-0 scroll-mt-4"
+        >
           <CardHeader>
             <CardTitle className="text-lg">Version details</CardTitle>
           </CardHeader>

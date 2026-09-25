@@ -1440,7 +1440,7 @@ export function PlatformToolsManager({
               {platformTools.map((tool) => (
                 <div
                   key={tool.id}
-                  className="flex flex-col items-start justify-between gap-4 rounded-2xl border bg-background p-4 transition-colors hover:bg-muted/20 sm:flex-row sm:items-center"
+                  className="flex min-w-0 flex-col items-start justify-between gap-4 rounded-2xl border bg-background p-4 transition-colors hover:bg-muted/20 lg:flex-row lg:items-center"
                 >
                   <div className="w-full min-w-0 flex-1">
                     <div className="mb-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -1517,13 +1517,13 @@ export function PlatformToolsManager({
                         </div>
                       )}
                   </div>
-                  <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+                  <div className="flex w-full min-w-0 shrink-0 flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:justify-end">
                     {tool.tool_source === "mcp" &&
                       tool.auth_type === "oauth2" && (
                         <Button
                           size="sm"
                           variant="outline"
-                          className="w-full sm:w-auto"
+                          className="w-full lg:w-auto"
                           onClick={() =>
                             void handlePlatformOAuthDiscovery(tool.id)
                           }
@@ -1549,7 +1549,7 @@ export function PlatformToolsManager({
                     <Button
                       size="sm"
                       variant={tool.is_premium ? "default" : "outline"}
-                      className="w-full sm:w-auto"
+                      className="w-full lg:w-auto"
                       onClick={() => handlePremiumToggle(tool)}
                       disabled={isBusy}
                       title={
@@ -1564,7 +1564,7 @@ export function PlatformToolsManager({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full sm:w-auto"
+                      className="w-full lg:w-auto"
                       onClick={() => handlePublishToggle(tool)}
                       disabled={isBusy}
                     >
@@ -1584,7 +1584,7 @@ export function PlatformToolsManager({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-full sm:w-auto"
+                        className="w-full lg:w-auto"
                         onClick={() => startEdit(tool)}
                         disabled={isBusy}
                         aria-label="Edit"
@@ -1600,7 +1600,7 @@ export function PlatformToolsManager({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="w-full sm:w-auto"
+                        className="w-full lg:w-auto"
                         onClick={() => handleDelete(tool)}
                         disabled={isBusy}
                         aria-label="Delete"

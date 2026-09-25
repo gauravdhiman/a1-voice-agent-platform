@@ -335,7 +335,7 @@ export function ToolCard({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <Badge
             variant={statusConfig.badgeVariant}
             className={cn(
@@ -354,7 +354,7 @@ export function ToolCard({
               variant="outline"
               onClick={onClick}
               disabled={isConnecting}
-              className="w-full shrink-0 lg:w-auto"
+              className="w-full shrink-0 xl:w-auto"
               title="Upgrade your plan to connect premium tools"
             >
               <Lock className="h-3 w-3 mr-1" />
@@ -366,7 +366,7 @@ export function ToolCard({
               variant={isConfigured || requiresApiKey ? "outline" : "default"}
               onClick={onClick}
               disabled={disabled || isConnecting}
-              className="w-full shrink-0 lg:w-auto"
+              className="w-full shrink-0 xl:w-auto"
             >
               {isConnecting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

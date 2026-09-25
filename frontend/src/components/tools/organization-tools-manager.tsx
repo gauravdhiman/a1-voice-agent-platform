@@ -129,13 +129,13 @@ export function OrganizationToolsManager({
               return (
                 <div
                   key={tool.id}
-                  className="flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/30"
+                  className="flex min-w-0 items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/30"
                 >
                   <div className="rounded-lg border bg-muted/30 p-2.5">
                     <Wrench className="h-4 w-4 text-muted-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <h3 className="truncate font-medium capitalize">
                         {toolLabel(tool)}
                       </h3>
