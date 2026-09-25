@@ -477,6 +477,9 @@ Frontend:
   Keep accessibility, loading, error, empty, and permission states.
 - This repository uses Tailwind CSS v4: plugins belong in globals.css via
   @plugin; theme changes use @theme; do not add v3 plugin configuration.
+- `DataTable` owns the bounded horizontal scroll surface for dense tables; when
+  nesting the shared `Table` component inside it, disable the table wrapper's
+  overflow so row action columns remain reachable on small screens.
 
 Reliability and performance:
 

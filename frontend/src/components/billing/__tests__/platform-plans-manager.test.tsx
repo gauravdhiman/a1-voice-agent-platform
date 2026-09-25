@@ -1,5 +1,5 @@
 import * as React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { PlatformPlansManager } from "../platform-plans-manager";
@@ -186,6 +186,38 @@ describe("PlatformPlansManager", () => {
     expect(
       screen.queryByText("Stripe Product not linked"),
     ).not.toBeInTheDocument();
+  });
+
+  it("brings selected version details into view on narrow layouts", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    try {
+      render(<PlatformPlansManager />);
+      await user.click(
+        await screen.findByRole("button", { name: "Select published version" }),
+      );
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalled();
+      });
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      scrollIntoView.mockRestore();
+    }
   });
 
   it("creates the free product draft in free billing mode", async () => {

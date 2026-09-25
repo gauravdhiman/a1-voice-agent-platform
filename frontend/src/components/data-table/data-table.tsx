@@ -75,7 +75,10 @@ export function DataTable<TData, TValue>({
       />
       <div className="responsive-data-table mt-4 overflow-hidden rounded-xl border">
         <div className="responsive-data-table__scroll overflow-x-auto">
-          <Table className="min-w-[42rem]">
+          <Table
+            wrapperClassName="overflow-visible"
+            className="min-w-[42rem]"
+          >
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
